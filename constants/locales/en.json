@@ -1,0 +1,90 @@
+{
+    "tabs": {
+        "home": "Home",
+        "capture": "Capture",
+        "map": "Map",
+        "settings": "Settings"
+    },
+    "home": {
+        "title": "Your Notes",
+        "count": "{{count}} notes saved",
+        "count_one": "{{count}} note saved",
+        "emptyTitle": "No notes yet",
+        "emptySubtitle": "Write down what she likes or dislikes\nat each restaurant — we'll remind you!",
+        "createFirst": "Add your first note",
+        "unknownLocation": "Unknown location"
+    },
+    "capture": {
+        "switchCamera": "Camera",
+        "switchText": "Text",
+        "restaurantPlaceholder": "Restaurant name (e.g. Phở Hòa)",
+        "textPlaceholder": "What does she like/dislike here?\ne.g. No onions, extra chili 🌶️",
+        "currentLocation": "Using current location",
+        "unknownPlace": "Unknown Place",
+        "save": "Save Note 💛",
+        "saved": "✓ Saved!",
+        "savedMsg": "We'll remind you next time you're here!",
+        "error": "Error",
+        "noLocation": "Could not get your location",
+        "noText": "Please write a note",
+        "noPhoto": "Please take a photo first",
+        "saveFailed": "Something went wrong",
+        "cameraPermission": "Camera access is needed to take photos",
+        "grantAccess": "Grant Access",
+        "retake": "Retake"
+    },
+    "map": {
+        "photoNote": "Photo Note",
+        "unknownLocation": "Unknown",
+        "tapToOpen": "Tap to open →",
+        "note": "note",
+        "notes": "notes"
+    },
+    "noteDetail": {
+        "deleteTitle": "Delete Note",
+        "deleteMsg": "This note and its reminder will be permanently removed.",
+        "notFound": "Note not found",
+        "unknownLocation": "Unknown Location",
+        "delete": "Delete Note",
+        "restaurant": "Restaurant"
+    },
+    "settings": {
+        "title": "Settings",
+        "preferences": "PREFERENCES",
+        "language": "Language",
+        "theme": "Theme",
+        "system": "System",
+        "dark": "Dark",
+        "light": "Light",
+        "data": "DATA",
+        "noteCount": "Saved Notes",
+        "clearAll": "Clear All Notes",
+        "clearAllTitle": "Clear All Notes",
+        "clearAllMsg": "All your food notes will be permanently deleted. This action cannot be undone.",
+        "account": "ACCOUNT",
+        "login": "Sign In",
+        "about": "So you never forget what she likes 💛"
+    },
+    "auth": {
+        "title": "ACTE",
+        "subtitle": "So you never forget what she likes",
+        "signInGoogle": "Sign in with Google",
+        "signingIn": "Signing in..."
+    },
+    "onboarding": {
+        "title1": "She doesn't like onions? 🧅",
+        "subtitle1": "Write it down before you forget!\nACTE helps you remember her food preferences at every restaurant.",
+        "title2": "We'll remind you 💛",
+        "subtitle2": "Next time you arrive at that restaurant, you'll get a notification with your notes — no more \"anh chả thương em\" moments!",
+        "title3": "Small things matter 🫶",
+        "subtitle3": "Because remembering no onions in her phở is how you say \"I love you\".",
+        "getStarted": "Get Started",
+        "next": "Next",
+        "skip": "Skip"
+    },
+    "common": {
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "goBack": "Go Back"
+    }
+}

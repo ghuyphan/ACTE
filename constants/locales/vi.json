@@ -1,0 +1,90 @@
+{
+    "tabs": {
+        "home": "Trang chủ",
+        "capture": "Ghi chú",
+        "map": "Bản đồ",
+        "settings": "Cài đặt"
+    },
+    "home": {
+        "title": "Ghi chú của bạn",
+        "count": "{{count}} ghi chú đã lưu",
+        "count_one": "{{count}} ghi chú đã lưu",
+        "emptyTitle": "Chưa có ghi chú nào",
+        "emptySubtitle": "Ghi lại những gì em ấy thích hoặc không thích\nở mỗi quán ăn — mình sẽ nhắc bạn!",
+        "createFirst": "Thêm ghi chú đầu tiên",
+        "unknownLocation": "Địa điểm không xác định"
+    },
+    "capture": {
+        "switchCamera": "Camera",
+        "switchText": "Văn bản",
+        "restaurantPlaceholder": "Tên quán (VD:Phở Anh Hai)",
+        "textPlaceholder": "Em ấy thích/ghét gì ở đây?\nVD: Không hành, thêm ớt 🌶️",
+        "currentLocation": "Đang dùng vị trí hiện tại",
+        "unknownPlace": "Không rõ địa điểm",
+        "save": "Lưu ghi chú 💛",
+        "saved": "✓ Đã lưu!",
+        "savedMsg": "Lần sau tới đây mình sẽ nhắc bạn!",
+        "error": "Lỗi",
+        "noLocation": "Không thể lấy vị trí của bạn",
+        "noText": "Vui lòng nhập nội dung",
+        "noPhoto": "Vui lòng chụp ảnh trước",
+        "saveFailed": "Đã xảy ra lỗi",
+        "cameraPermission": "Cần quyền truy cập camera để chụp ảnh",
+        "grantAccess": "Cấp quyền",
+        "retake": "Chụp lại"
+    },
+    "map": {
+        "photoNote": "Ghi chú ảnh",
+        "unknownLocation": "Không rõ",
+        "tapToOpen": "Nhấn để mở →",
+        "note": "ghi chú",
+        "notes": "ghi chú"
+    },
+    "noteDetail": {
+        "deleteTitle": "Xóa ghi chú",
+        "deleteMsg": "Ghi chú này và nhắc nhở sẽ bị xóa vĩnh viễn.",
+        "notFound": "Không tìm thấy ghi chú",
+        "unknownLocation": "Địa điểm không xác định",
+        "delete": "Xóa ghi chú",
+        "restaurant": "Quán ăn"
+    },
+    "settings": {
+        "title": "Cài đặt",
+        "preferences": "TÙY CHỌN",
+        "language": "Ngôn ngữ",
+        "theme": "Giao diện",
+        "system": "Hệ thống",
+        "dark": "Tối",
+        "light": "Sáng",
+        "data": "DỮ LIỆU",
+        "noteCount": "Ghi chú đã lưu",
+        "clearAll": "Xóa tất cả ghi chú",
+        "clearAllTitle": "Xóa tất cả ghi chú",
+        "clearAllMsg": "Tất cả ghi chú ăn uống sẽ bị xóa vĩnh viễn. Không thể hoàn tác.",
+        "account": "TÀI KHOẢN",
+        "login": "Đăng nhập",
+        "about": "Để anh không bao giờ quên em thích gì 💛"
+    },
+    "auth": {
+        "title": "ACTE",
+        "subtitle": "Để anh không bao giờ quên em thích gì",
+        "signInGoogle": "Đăng nhập với Google",
+        "signingIn": "Đang đăng nhập..."
+    },
+    "onboarding": {
+        "title1": "Em ghét hành? 🧅",
+        "subtitle1": "Ghi lại trước khi quên!\nACTE giúp anh nhớ sở thích ăn uống của em ấy ở mỗi quán.",
+        "title2": "Mình sẽ nhắc anh 💛",
+        "subtitle2": "Lần sau tới quán đó, anh sẽ nhận thông báo với ghi chú — không còn \"anh chả thương em\" nữa!",
+        "title3": "Điều nhỏ bé nhưng quan trọng 🫶",
+        "subtitle3": "Vì nhớ rằng em không ăn hành trong phở chính là cách anh nói \"anh yêu em\".",
+        "getStarted": "Bắt đầu",
+        "next": "Tiếp theo",
+        "skip": "Bỏ qua"
+    },
+    "common": {
+        "cancel": "Hủy",
+        "delete": "Xóa",
+        "goBack": "Quay lại"
+    }
+}
