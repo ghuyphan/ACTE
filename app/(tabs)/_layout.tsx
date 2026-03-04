@@ -1,31 +1,48 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from '../../hooks/useTheme';
+import { DynamicColorIOS, Platform } from 'react-native';
+import { Colors, useTheme } from '../../hooks/useTheme';
 
 export default function TabLayout() {
   const { t } = useTranslation();
-  const { colors, isDark } = useTheme();
+  // isDark is no longer strictly needed for the tab bar styling here
+  const { colors } = useTheme();
+
+  const dynamicPrimary = Platform.OS === 'ios'
+    ? DynamicColorIOS({ light: Colors.light.primary, dark: Colors.dark.primary })
+    : colors.primary;
+
+  const dynamicSecondaryText = Platform.OS === 'ios'
+    ? DynamicColorIOS({ light: Colors.light.secondaryText, dark: Colors.dark.secondaryText })
+    : colors.secondaryText;
+
+  const dynamicTabBarBg = Platform.OS === 'ios'
+    ? DynamicColorIOS({ light: Colors.light.tabBarBg, dark: Colors.dark.tabBarBg })
+    : colors.tabBarBg;
 
   return (
     <NativeTabs
       minimizeBehavior="onScrollDown"
-      blurEffect={isDark ? 'systemMaterialDark' : 'systemMaterialLight'}
-      backgroundColor={colors.tabBarBg}
-      tintColor={colors.primary}
-      iconColor={{ default: colors.secondaryText, selected: colors.primary }}
+      // 'systemChromeMaterial' natively adapts to light/dark mode automatically on iOS
+      blurEffect={Platform.OS === 'ios' ? 'systemChromeMaterial' : undefined}
+      backgroundColor={dynamicTabBarBg}
+      tintColor={dynamicPrimary}
+      iconColor={{ default: dynamicSecondaryText, selected: dynamicPrimary }}
       labelStyle={{
-        default: { color: colors.secondaryText },
-        selected: { color: colors.primary },
+        default: { color: dynamicSecondaryText },
+        selected: { color: dynamicPrimary },
       }}
     >
       <NativeTabs.Trigger name="index" disableTransparentOnScrollEdge>
         <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} />
         <NativeTabs.Trigger.Label>{t('tabs.home', 'Home')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="map">
         <NativeTabs.Trigger.Icon sf={{ default: 'map', selected: 'map.fill' }} />
         <NativeTabs.Trigger.Label>{t('tabs.map', 'Map')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="settings">
         <NativeTabs.Trigger.Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} />
         <NativeTabs.Trigger.Label>{t('tabs.settings', 'Settings')}</NativeTabs.Trigger.Label>
