@@ -159,12 +159,14 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 16,
         letterSpacing: -0.5,
+        fontFamily: 'System',
     },
     subtitle: {
         fontSize: 18,
         textAlign: 'center',
         lineHeight: 28,
         fontWeight: '500',
+        fontFamily: 'System',
     },
     bottom: {
         alignItems: 'center',
@@ -199,6 +201,7 @@ const styles = StyleSheet.create({
     buttonText: {
         fontSize: 18,
         fontWeight: '700',
+        fontFamily: 'System',
     },
     skipContainer: {
         height: 50,
@@ -211,6 +214,7 @@ const styles = StyleSheet.create({
     skipText: {
         fontSize: 16,
         fontWeight: '600',
+        fontFamily: 'System',
     },
     skipPlaceholder: {
         height: 48,

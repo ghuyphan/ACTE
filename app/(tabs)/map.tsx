@@ -87,9 +87,7 @@ export default function MapScreen() {
                             onPress={() => router.push(`/note/${note.id}` as any)}
                             tooltip={false}
                         >
-                            <GlassView style={styles.callout}
-                                glassEffectStyle="regular"
-                                colorScheme={isDark ? 'dark' : 'light'}>
+                            <View style={styles.callout}>
                                 <Text style={styles.calloutTitle} numberOfLines={1}>
                                     🍜 {note.locationName || t('map.unknownLocation', 'Unknown')}
                                 </Text>
@@ -99,7 +97,7 @@ export default function MapScreen() {
                                         : '📷 ' + t('map.photoNote', 'Photo Note')}
                                 </Text>
                                 <Text style={styles.calloutHint}>{t('map.tapToOpen', 'Tap to open →')}</Text>
-                            </GlassView>
+                            </View>
                         </Callout>
                     </Marker>
                 ))}
@@ -168,16 +166,19 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#1C1C1E',
         marginBottom: 4,
+        fontFamily: 'System',
     },
     calloutLocation: {
         fontSize: 13,
         color: '#8E8E93',
         marginBottom: 6,
+        fontFamily: 'System',
     },
     calloutHint: {
         fontSize: 12,
         color: '#FF9F0A',
         fontWeight: '600',
+        fontFamily: 'System',
     },
     countBadge: {
         position: 'absolute',
@@ -194,6 +195,7 @@ const styles = StyleSheet.create({
     countText: {
         fontSize: 15,
         fontWeight: '600',
+        fontFamily: 'System',
     },
     fabContainer: {
         position: 'absolute',
@@ -236,10 +238,12 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         textAlign: 'center',
         marginBottom: 6,
+        fontFamily: 'System',
     },
     emptySubtitle: {
         fontSize: 14,
         textAlign: 'center',
         lineHeight: 20,
+        fontFamily: 'System',
     },
 });

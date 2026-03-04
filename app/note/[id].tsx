@@ -441,9 +441,10 @@ const styles = StyleSheet.create({
     noteText: {
         color: '#FFFFFF',
         fontSize: 22,
-        fontWeight: '800',
+        fontWeight: '700',
         textAlign: 'center',
         lineHeight: 30,
+        fontFamily: 'System',
         textShadowColor: 'rgba(0,0,0,0.2)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 4,
@@ -452,9 +453,10 @@ const styles = StyleSheet.create({
     editTextInput: {
         color: '#FFFFFF',
         fontSize: 22,
-        fontWeight: '800',
+        fontWeight: '700',
         textAlign: 'center',
         lineHeight: 30,
+        fontFamily: 'System',
         textShadowColor: 'rgba(0,0,0,0.2)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 4,
@@ -488,11 +490,13 @@ const styles = StyleSheet.create({
     infoText: {
         fontSize: 16,
         flex: 1,
+        fontFamily: 'System',
     },
     editLocationInput: {
         fontSize: 16,
         fontWeight: '700',
         flex: 1,
+        fontFamily: 'System',
     },
     deleteButton: {
         flexDirection: 'row',
@@ -505,6 +509,7 @@ const styles = StyleSheet.create({
     deleteText: {
         fontSize: 17,
         fontWeight: '600',
+        fontFamily: 'System',
     },
 
     // ─── Skeleton ────────────────────────

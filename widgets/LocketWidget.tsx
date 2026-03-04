@@ -131,9 +131,9 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                         </HStack>
                         <Spacer />
                     </HStack>
-                ) : <Spacer />}
+                ) : null}
 
-                <Spacer modifiers={[frame({ height: 12 })]} />
+                <Spacer />
 
                 {/* Main content */}
                 {isPhoto ? (

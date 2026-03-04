@@ -112,12 +112,14 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         letterSpacing: 2,
         marginBottom: 12,
+        fontFamily: 'System',
     },
     subtitle: {
         fontSize: 18,
         fontWeight: '500',
         textAlign: 'center',
         lineHeight: 26,
+        fontFamily: 'System',
     },
     bottom: {
         width: '100%',
@@ -142,5 +144,6 @@ const styles = StyleSheet.create({
     googleButtonText: {
         fontSize: 18,
         fontWeight: '700',
+        fontFamily: 'System',
     },
 });

@@ -605,9 +605,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   logoText: {
-    fontSize: 22,
     fontWeight: '800',
     letterSpacing: 1,
+    fontFamily: 'System',
   },
   headerActions: {
     flexDirection: 'row',
@@ -663,9 +663,8 @@ const styles = StyleSheet.create({
     lineHeight: 34,
     width: '100%',
     color: '#FFF',
-    textShadowColor: 'rgba(0,0,0,0.15)',
-    textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,
+    fontFamily: 'System',
   },
   cardTextCenter: {
     flex: 1,
@@ -765,6 +764,7 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 19,
     fontWeight: '800',
+    fontFamily: 'System',
   },
 
   // ─── Below-card section (capture) ──────
@@ -797,6 +797,7 @@ const styles = StyleSheet.create({
   belowCardLocationText: {
     fontSize: 13,
     fontWeight: '600',
+    fontFamily: 'System',
   },
   belowCardShutterRow: {
     alignItems: 'center',
@@ -869,6 +870,7 @@ const styles = StyleSheet.create({
   metadataPillDate: {
     fontSize: 13,
     fontWeight: '500',
+    fontFamily: 'System',
   },
 
   // ─── Empty states ──────────────────────
@@ -876,6 +878,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     marginTop: 12,
+    fontFamily: 'System',
   },
   emptySubtitle: {
     fontSize: 14,

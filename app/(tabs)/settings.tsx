@@ -252,6 +252,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         paddingHorizontal: 20,
         marginBottom: 20,
+        fontFamily: 'System',
     },
     sectionTitle: {
         fontSize: 13,
@@ -260,6 +261,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         marginBottom: 6,
         marginTop: 24,
+        fontFamily: 'System',
     },
     section: {
         marginHorizontal: 16,
@@ -283,10 +285,12 @@ const styles = StyleSheet.create({
     rowLabel: {
         fontSize: 16,
         flex: 1,
+        fontFamily: 'System',
     },
     rowValue: {
         fontSize: 15,
         fontWeight: '600',
+        fontFamily: 'System',
     },
     aboutSection: {
         alignItems: 'center',
@@ -300,6 +304,7 @@ const styles = StyleSheet.create({
         fontSize: 22,
         fontWeight: '800',
         marginBottom: 20,
+        fontFamily: 'System',
     },
     primaryButton: {
         padding: 16,
@@ -311,6 +316,7 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 17,
         fontWeight: '700',
+        fontFamily: 'System',
     },
     secondaryButton: {
         padding: 16,
@@ -320,5 +326,6 @@ const styles = StyleSheet.create({
     secondaryButtonText: {
         fontSize: 17,
         fontWeight: '600',
+        fontFamily: 'System',
     },
 });
