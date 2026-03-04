@@ -66,7 +66,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
 
                     <Text
                         modifiers={[
-                            font({ weight: 'bold', size: 15, design: 'rounded' }),
+                            font({ weight: 'semibold', size: 15 }),
                             foregroundStyle('#FFFFFF'),
                             multilineTextAlignment('center'),
                             lineSpacing(4),
@@ -121,7 +121,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                         >
                             <Text
                                 modifiers={[
-                                    font({ weight: 'bold', size: 12, design: 'rounded' }),
+                                    font({ weight: 'medium', size: 12 }),
                                     foregroundStyle(isPhoto ? '#FFFFFF' : '#000000'),
                                     lineLimit(1),
                                 ]}
@@ -148,7 +148,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                             <Image systemName="photo.on.rectangle.angled" size={48} color="#FFFFFF" />
                             <Text
                                 modifiers={[
-                                    font({ weight: 'semibold', size: 16, design: 'rounded' }),
+                                    font({ weight: 'medium', size: 16 }),
                                     foregroundStyle('rgba(255,255,255,0.8)'),
                                     padding({ top: 12 }),
                                     shadow({ radius: 3, y: 1, color: 'rgba(0,0,0,0.5)' })
@@ -163,7 +163,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                         <Spacer />
                         <Text
                             modifiers={[
-                                font({ weight: 'heavy', size: 22, design: 'rounded' }),
+                                font({ weight: 'semibold', size: 22 }),
                                 foregroundStyle('#1C1C1E'),
                                 lineLimit(4),
                                 lineSpacing(2),

@@ -8,6 +8,7 @@ export default function TabLayout() {
 
   return (
     <NativeTabs
+      minimizeBehavior="onScrollDown"
       blurEffect={isDark ? 'systemMaterialDark' : 'systemMaterialLight'}
       backgroundColor={colors.tabBarBg}
       tintColor={colors.primary}

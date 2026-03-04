@@ -126,6 +126,7 @@ export default function HomeScreen() {
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const searchAnim = useRef(new Animated.Value(0)).current;
 
   // Capture state
   const [restaurantName, setRestaurantName] = useState('');
@@ -137,6 +138,8 @@ export default function HomeScreen() {
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const cameraRef = useRef<CameraView>(null);
   const isFocused = useIsFocused();
+  const flashAnim = useRef(new Animated.Value(0)).current;
+  const shutterScale = useRef(new Animated.Value(1)).current;
 
   const SNAP_HEIGHT = height - insets.top - 90; // NativeTabs handles bottom, only deduct top + tab bar
   const flatListRef = useRef<FlatList>(null);
@@ -171,10 +174,28 @@ export default function HomeScreen() {
     });
   };
 
+  const handleShutterPressIn = () => {
+    Animated.spring(shutterScale, { toValue: 0.85, tension: 300, friction: 15, useNativeDriver: true }).start();
+  };
+  const handleShutterPressOut = () => {
+    Animated.spring(shutterScale, { toValue: 1, tension: 200, friction: 12, useNativeDriver: true }).start();
+  };
+
   const takePicture = async () => {
     if (!cameraRef.current) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // Trigger capture flash animation
+    flashAnim.setValue(1);
+    Animated.timing(flashAnim, {
+      toValue: 0,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+
     const photo = await cameraRef.current.takePictureAsync();
+    // Reset shutter scale when photo is taken and UI transitions
+    shutterScale.setValue(1);
     if (photo?.uri) setCapturedPhoto(photo.uri);
   };
 
@@ -312,6 +333,14 @@ export default function HomeScreen() {
                 <Ionicons name="refresh" size={18} color="white" />
                 <Text style={styles.retakeBtnText}>{t('capture.retake', 'Retake')}</Text>
               </Pressable>
+
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  { backgroundColor: 'white', opacity: flashAnim, zIndex: 50 },
+                ]}
+              />
             </View>
           ) : needsCameraPermission ? (
             <View style={[styles.textCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -339,6 +368,14 @@ export default function HomeScreen() {
               >
                 <Ionicons name="camera-reverse" size={20} color="white" />
               </Pressable>
+
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  { backgroundColor: 'white', opacity: flashAnim, zIndex: 50 },
+                ]}
+              />
             </View>
           )}
         </Animated.View>
@@ -348,8 +385,13 @@ export default function HomeScreen() {
           {captureMode === 'camera' && !capturedPhoto ? (
             <View style={styles.belowCardShutterRow}>
               {permission?.granted ? (
-                <Pressable style={styles.shutterOuter} onPress={takePicture}>
-                  <View style={[styles.shutterInner, { backgroundColor: colors.primary }]} />
+                <Pressable
+                  onPressIn={handleShutterPressIn}
+                  onPressOut={handleShutterPressOut}
+                  onPress={takePicture}
+                  style={styles.shutterOuter}
+                >
+                  <Animated.View style={[styles.shutterInner, { backgroundColor: colors.primary, transform: [{ scale: shutterScale }] }]} />
                 </Pressable>
               ) : null}
             </View>
@@ -409,11 +451,57 @@ export default function HomeScreen() {
       {/* Absolute Positioned Header across the application */}
       <View style={[styles.floatingHeader, { paddingTop: insets.top + 8 }]}>
         <GlassView
-          style={styles.floatingHeaderGlassContainer}
+          style={[styles.floatingHeaderGlassContainer, { height: 60 }]}
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
         >
-          {isSearching ? (
+          {/* Default Header */}
+          <Animated.View
+            pointerEvents={isSearching ? 'none' : 'auto'}
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                paddingHorizontal: 20,
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                opacity: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+                transform: [{ translateY: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }) }]
+              }
+            ]}
+          >
+            <Text style={[styles.logoText, { color: colors.text }]}>ACTE 💛</Text>
+            <View style={styles.headerActions}>
+              <Pressable onPress={() => {
+                setIsSearching(true);
+                Animated.timing(searchAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+              }}>
+                <Ionicons name="search" size={20} color={colors.primary} />
+              </Pressable>
+              <Pressable onPress={toggleCaptureMode} style={[styles.modeToggleBtn, { backgroundColor: colors.primary + '18' }]}>
+                <Ionicons
+                  name={captureMode === 'text' ? 'camera-outline' : 'document-text-outline'}
+                  size={20}
+                  color={colors.primary}
+                />
+              </Pressable>
+            </View>
+          </Animated.View>
+
+          {/* Search Header */}
+          <Animated.View
+            pointerEvents={isSearching ? 'auto' : 'none'}
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                paddingHorizontal: 20,
+                flexDirection: 'row',
+                alignItems: 'center',
+                opacity: searchAnim,
+                transform: [{ translateY: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }]
+              }
+            ]}
+          >
             <View style={styles.searchContainer}>
               <Ionicons name="search" size={16} color={colors.secondaryText} />
               <View style={{ flex: 1, justifyContent: 'center' }}>
@@ -423,42 +511,24 @@ export default function HomeScreen() {
                   placeholderTextColor={colors.secondaryText}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  autoFocus
+                  autoFocus={isSearching}
                   returnKeyType="search"
                 />
               </View>
               <Pressable
                 onPress={() => {
                   Keyboard.dismiss();
-                  // Delay state change so keyboard fully dismisses before unmounting
-                  setTimeout(() => {
+                  Animated.timing(searchAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
                     setIsSearching(false);
                     setSearchQuery('');
-                    // Scroll back to top so capture card is visible at correct position
                     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-                  }, 300);
+                  });
                 }}
               >
                 <Ionicons name="close-circle" size={20} color={colors.secondaryText} />
               </Pressable>
             </View>
-          ) : (
-            <>
-              <Text style={[styles.logoText, { color: colors.text }]}>ACTE 💛</Text>
-              <View style={styles.headerActions}>
-                <Pressable onPress={() => { setIsSearching(true); }}>
-                  <Ionicons name="search" size={20} color={colors.primary} />
-                </Pressable>
-                <Pressable onPress={toggleCaptureMode} style={[styles.modeToggleBtn, { backgroundColor: colors.primary + '18' }]}>
-                  <Ionicons
-                    name={captureMode === 'text' ? 'camera-outline' : 'document-text-outline'}
-                    size={20}
-                    color={colors.primary}
-                  />
-                </Pressable>
-              </View>
-            </>
-          )}
+          </Animated.View>
         </GlassView>
       </View>
 
@@ -526,18 +596,13 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   floatingHeaderGlassContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
     borderRadius: 30, // fully rounded stadium borders
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 5,
-    minHeight: 48,
+    overflow: 'hidden',
   },
   logoText: {
     fontSize: 22,

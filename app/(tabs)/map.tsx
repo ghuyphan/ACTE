@@ -87,7 +87,9 @@ export default function MapScreen() {
                             onPress={() => router.push(`/note/${note.id}` as any)}
                             tooltip={false}
                         >
-                            <View style={styles.callout}>
+                            <GlassView style={styles.callout}
+                                glassEffectStyle="regular"
+                                colorScheme={isDark ? 'dark' : 'light'}>
                                 <Text style={styles.calloutTitle} numberOfLines={1}>
                                     🍜 {note.locationName || t('map.unknownLocation', 'Unknown')}
                                 </Text>
@@ -97,7 +99,7 @@ export default function MapScreen() {
                                         : '📷 ' + t('map.photoNote', 'Photo Note')}
                                 </Text>
                                 <Text style={styles.calloutHint}>{t('map.tapToOpen', 'Tap to open →')}</Text>
-                            </View>
+                            </GlassView>
                         </Callout>
                     </Marker>
                 ))}
@@ -105,7 +107,7 @@ export default function MapScreen() {
 
             {/* Note count overlay */}
             <GlassView
-                style={[styles.countBadge, { top: insets.top + 12 }]}
+                style={[styles.countBadge, { top: insets.top + 8 }]}
                 glassEffectStyle="regular"
                 colorScheme={isDark ? 'dark' : 'light'}
             >
@@ -116,7 +118,7 @@ export default function MapScreen() {
             </GlassView>
 
             {/* Location FAB */}
-            <Pressable style={[styles.fabContainer, { top: insets.top + 12 }]} onPress={goToMyLocation}>
+            <Pressable style={[styles.fabContainer, { top: insets.top + 8 }]} onPress={goToMyLocation}>
                 <GlassView
                     style={styles.fab}
                     glassEffectStyle="regular"
