@@ -1,6 +1,7 @@
 import { LocationGeofencingEventType, LocationRegion } from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
+import i18n from '../constants/i18n';
 import { getNoteById } from '../services/database';
 
 export const GEOFENCE_TASK_NAME = 'BACKGROUND_GEOFENCE_TASK';
@@ -32,22 +33,22 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
             console.log('You entered region:', region.identifier);
 
             // Look up the actual note content
-            let title = '💛 Anh ơi, nhớ nha!';
-            let body = 'Bạn có ghi chú ở đây — mở ra xem nè!';
+            let title = i18n.t('notification.title');
+            let body = i18n.t('notification.body');
             const regionId = region.identifier ?? '';
 
             try {
                 const note = regionId ? await getNoteById(regionId) : null;
                 if (note) {
-                    const location = note.locationName || 'quán này';
+                    const location = note.locationName || i18n.t('widget.unknownPlace');
                     if (note.type === 'text') {
-                        title = `💛 ${location}`;
+                        title = i18n.t('notification.textTitle', { location });
                         body = note.content.length > 120
                             ? note.content.substring(0, 120) + '…'
                             : note.content;
                     } else {
-                        title = `📷 ${location}`;
-                        body = 'Bạn đã chụp ảnh ở đây — mở ra xem!';
+                        title = i18n.t('notification.photoTitle', { location });
+                        body = i18n.t('notification.photoBody');
                     }
                 }
             } catch (err) {

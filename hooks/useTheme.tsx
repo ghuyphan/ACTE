@@ -64,7 +64,7 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
 };
 
 // Curated gradient palettes for text-note card backgrounds
-export const CardGradients = [
+export const CardGradients: [string, string][] = [
     ['#667eea', '#764ba2'],  // Purple dream
     ['#f093fb', '#f5576c'],  // Pink sunset
     ['#4facfe', '#00f2fe'],  // Ocean blue
@@ -84,12 +84,16 @@ const THEME_STORAGE_KEY = 'settings.theme';
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const systemColorScheme = useColorScheme();
     const [theme, setThemeState] = useState<ThemeType>('system');
+    const [themeReady, setThemeReady] = useState(false);
 
     useEffect(() => {
         AsyncStorage.getItem(THEME_STORAGE_KEY).then((savedTheme) => {
             if (savedTheme) {
                 setThemeState(savedTheme as ThemeType);
             }
+            setThemeReady(true);
+        }).catch(() => {
+            setThemeReady(true);
         });
     }, []);
 
@@ -100,6 +104,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     const isDark = theme === 'system' ? systemColorScheme === 'dark' : theme === 'dark';
     const colors = isDark ? Colors.dark : Colors.light;
+
+    // Block rendering until the saved theme is loaded to prevent
+    // the white flash when the theme snaps from default to saved value
+    if (!themeReady) {
+        return null;
+    }
 
     return (
         <ThemeContext.Provider value={{ theme, isDark, setTheme, colors }}>

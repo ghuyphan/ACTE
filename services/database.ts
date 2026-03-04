@@ -11,6 +11,7 @@ export interface Note {
     latitude: number;
     longitude: number;
     radius: number;           // geofence radius in meters
+    isFavorite: boolean;
     createdAt: string;        // ISO timestamp
     updatedAt: string | null;
 }
@@ -40,11 +41,23 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         latitude REAL NOT NULL,
         longitude REAL NOT NULL,
         radius REAL NOT NULL DEFAULT 150,
+        is_favorite INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_notes_created ON notes(created_at DESC);
     `);
+
+        // Migration: add is_favorite column if missing (existing databases)
+        try {
+            const tableInfo = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(notes)`);
+            const columns = tableInfo.map((col) => col.name);
+            if (!columns.includes('is_favorite')) {
+                await db.execAsync(`ALTER TABLE notes ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0`);
+            }
+        } catch (e) {
+            console.warn('Migration check failed:', e);
+        }
     }
     return db;
 }
@@ -63,6 +76,7 @@ function rowToNote(row: any): Note {
         latitude: row.latitude,
         longitude: row.longitude,
         radius: row.radius,
+        isFavorite: row.is_favorite === 1,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     };
@@ -75,8 +89,8 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
     const now = new Date().toISOString();
 
     await database.runAsync(
-        `INSERT INTO notes (id, type, content, location_name, latitude, longitude, radius, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO notes (id, type, content, location_name, latitude, longitude, radius, is_favorite, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
         id,
         input.type,
         input.content,
@@ -95,6 +109,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         latitude: input.latitude,
         longitude: input.longitude,
         radius: input.radius ?? 150,
+        isFavorite: false,
         createdAt: now,
         updatedAt: null,
     };
@@ -136,6 +151,34 @@ export async function updateNote(
         `UPDATE notes SET ${setClauses.join(', ')} WHERE id = ?`,
         ...values
     );
+}
+
+export async function toggleFavorite(id: string): Promise<boolean> {
+    const database = await getDB();
+    const row = await database.getFirstAsync<{ is_favorite: number }>(
+        'SELECT is_favorite FROM notes WHERE id = ?',
+        id
+    );
+    if (!row) return false;
+    const newValue = row.is_favorite === 1 ? 0 : 1;
+    await database.runAsync(
+        'UPDATE notes SET is_favorite = ?, updated_at = ? WHERE id = ?',
+        newValue,
+        new Date().toISOString(),
+        id
+    );
+    return newValue === 1;
+}
+
+export async function searchNotes(query: string): Promise<Note[]> {
+    const database = await getDB();
+    const pattern = `%${query}%`;
+    const rows = await database.getAllAsync(
+        `SELECT * FROM notes WHERE content LIKE ? OR location_name LIKE ? ORDER BY created_at DESC`,
+        pattern,
+        pattern
+    );
+    return rows.map(rowToNote);
 }
 
 export async function deleteNote(id: string): Promise<void> {

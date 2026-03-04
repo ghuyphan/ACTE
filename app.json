@@ -87,7 +87,8 @@
       "expo-image",
       "expo-web-browser",
       "./plugins/withAllowNonModularIncludes.js",
-      "./plugins/withSafeFirebaseInitialization.js"
+      "./plugins/withSafeFirebaseInitialization.js",
+      "./plugins/withExpoWidgetsBundleFix.js"
     ],
     "experiments": {
       "typedRoutes": true,

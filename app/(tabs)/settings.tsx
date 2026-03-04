@@ -138,8 +138,9 @@ export default function SettingsScreen() {
             <View style={[styles.section, { backgroundColor: colors.card }]}>
                 <SettingRow
                     icon="person-outline"
-                    iconColor={colors.primary}
+                    iconColor={colors.secondaryText}
                     label={t('settings.login', 'Sign In')}
+                    value={t('settings.notSignedIn', 'Not signed in')}
                     onPress={() => router.push('/auth')}
                     isLast
                 />

@@ -125,6 +125,21 @@ export default function MapScreen() {
                     <Ionicons name="location" size={22} color={colors.primary} />
                 </GlassView>
             </Pressable>
+
+            {/* Empty state overlay */}
+            {notes.length === 0 && (
+                <View style={styles.emptyOverlay} pointerEvents="none">
+                    <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(28,28,30,0.9)' : 'rgba(255,255,255,0.92)' }]}>
+                        <Ionicons name="map-outline" size={40} color={colors.primary} style={{ marginBottom: 8 }} />
+                        <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                            {t('map.emptyTitle', 'No notes on the map yet')}
+                        </Text>
+                        <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
+                            {t('map.emptySubtitle', 'Your saved notes will appear as pins here')}
+                        </Text>
+                    </View>
+                </View>
+            )}
         </View>
     );
 }
@@ -195,5 +210,34 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         overflow: 'hidden',
+    },
+    // ─── Empty state ──────────────────────
+    emptyOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    emptyCard: {
+        paddingHorizontal: 32,
+        paddingVertical: 28,
+        borderRadius: 24,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
+        elevation: 8,
+        maxWidth: 280,
+    },
+    emptyTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+        textAlign: 'center',
+        marginBottom: 6,
+    },
+    emptySubtitle: {
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 20,
     },
 });

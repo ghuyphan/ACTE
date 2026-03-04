@@ -12,13 +12,16 @@
         "emptyTitle": "No notes yet",
         "emptySubtitle": "Write down what she likes or dislikes\nat each restaurant — we'll remind you!",
         "createFirst": "Add your first note",
-        "unknownLocation": "Unknown location"
+        "unknownLocation": "Unknown location",
+        "searchPlaceholder": "Search notes...",
+        "noResults": "No notes found",
+        "noResultsMsg": "Try a different keyword"
     },
     "capture": {
         "switchCamera": "Camera",
         "switchText": "Text",
         "restaurantPlaceholder": "Restaurant name (e.g. Phở Hòa)",
-        "textPlaceholder": "What does she like/dislike here?\ne.g. No onions, extra chili 🌶️",
+        "textPlaceholder": "Note about this place...",
         "currentLocation": "Using current location",
         "unknownPlace": "Unknown Place",
         "save": "Save Note 💛",
@@ -38,7 +41,9 @@
         "unknownLocation": "Unknown",
         "tapToOpen": "Tap to open →",
         "note": "note",
-        "notes": "notes"
+        "notes": "notes",
+        "emptyTitle": "No notes on the map yet",
+        "emptySubtitle": "Your saved notes will appear as pins here"
     },
     "noteDetail": {
         "deleteTitle": "Delete Note",
@@ -46,7 +51,16 @@
         "notFound": "Note not found",
         "unknownLocation": "Unknown Location",
         "delete": "Delete Note",
-        "restaurant": "Restaurant"
+        "restaurant": "Restaurant",
+        "edit": "Edit",
+        "save": "Save",
+        "editContent": "Edit note content...",
+        "editLocation": "Edit location name...",
+        "share": "Share",
+        "favorite": "Favorite",
+        "unfavorite": "Unfavorite",
+        "sharePhotoMsg": "📷 Photo Memory at {{location}}",
+        "updated": "Note updated!"
     },
     "settings": {
         "title": "Settings",
@@ -63,6 +77,7 @@
         "clearAllMsg": "All your food notes will be permanently deleted. This action cannot be undone.",
         "account": "ACCOUNT",
         "login": "Sign In",
+        "notSignedIn": "Not signed in",
         "about": "So you never forget what she likes 💛"
     },
     "auth": {
@@ -82,9 +97,23 @@
         "next": "Next",
         "skip": "Skip"
     },
+    "notification": {
+        "title": "💛 Hey, remember!",
+        "body": "You have a note here — open to see!",
+        "textTitle": "💛 {{location}}",
+        "photoTitle": "📷 {{location}}",
+        "photoBody": "You took a photo here — open to see!"
+    },
+    "widget": {
+        "idleText": "Note it down before she gets upset 💛",
+        "savedCount": "{{count}} notes saved",
+        "memoryReminder": "A memory reminds you 💛",
+        "unknownPlace": "Unknown Place"
+    },
     "common": {
         "cancel": "Cancel",
         "delete": "Delete",
-        "goBack": "Go Back"
+        "goBack": "Go Back",
+        "done": "Done"
     }
 }

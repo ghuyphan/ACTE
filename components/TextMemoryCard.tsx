@@ -1,11 +1,10 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useTheme } from '../hooks/useTheme';
+import { CardGradients, useTheme } from '../hooks/useTheme';
 
 interface TextMemoryCardProps {
     text: string;
-    locationName: string;
-    date: string;
     noteId?: string;
 }
 
@@ -17,58 +16,46 @@ function hashToIndex(str: string, max: number): number {
     return Math.abs(hash) % max;
 }
 
-export default function TextMemoryCard({ text, locationName, date, noteId }: TextMemoryCardProps) {
-    const { colors, isDark } = useTheme();
-    const bgColor = colors.primary;
-    const textColor = isDark ? '#000000' : '#1C1C1E';
-    const subtitleColor = isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.5)';
+export default function TextMemoryCard({ text, noteId }: TextMemoryCardProps) {
+    const { isDark } = useTheme();
+
+    // Pick a unique gradient based on the note content or id
+    const gradientIndex = hashToIndex(noteId || text, CardGradients.length);
+    const gradient = CardGradients[gradientIndex];
 
     return (
-        <View style={[styles.card, { backgroundColor: bgColor }]}>
-            <View style={[styles.restaurantBadge, { maxWidth: '90%', backgroundColor: isDark ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.45)' }]}>
-                <Text style={[styles.restaurantText, { color: textColor, textShadowRadius: 0 }]} numberOfLines={1} ellipsizeMode="tail">📍 {locationName}</Text>
-            </View>
-            <Text style={[styles.memoryText, { color: textColor, textShadowRadius: 0 }]} numberOfLines={5}>
-                {text}
-            </Text>
-            <View style={styles.footer}>
-                <Text style={[styles.dateText, { color: subtitleColor }]}>{date}</Text>
-            </View>
+        <View style={styles.card}>
+            <LinearGradient
+                colors={gradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.gradient}
+            >
+                <Text style={styles.memoryText} numberOfLines={5}>
+                    {text}
+                </Text>
+            </LinearGradient>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     card: {
-        borderRadius: 28,
-        padding: 28,
+        borderRadius: 40,
+        borderCurve: 'continuous',
+        overflow: 'hidden',
         width: '100%',
         height: '100%',
-        justifyContent: 'center',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.12,
         shadowRadius: 20,
         elevation: 8,
     },
-    restaurantBadge: {
-        position: 'absolute',
-        top: 24,
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 24,
-        alignSelf: 'center',
-    },
-
-    restaurantText: {
-        fontWeight: '700',
-        fontSize: 16,
-        letterSpacing: 0,
-        textShadowColor: 'rgba(0,0,0,0.4)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 6,
+    gradient: {
+        flex: 1,
+        padding: 28,
+        justifyContent: 'center',
     },
     memoryText: {
         color: '#FFFFFF',
@@ -78,22 +65,6 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 32,
         textShadowColor: 'rgba(0,0,0,0.2)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 4,
-    },
-    footer: {
-        position: 'absolute',
-        bottom: 28,
-        left: 28,
-        right: 28,
-        alignItems: 'center',
-    },
-    dateText: {
-        color: 'rgba(255,255,255,0.8)',
-        fontSize: 14,
-        fontWeight: '700',
-        letterSpacing: 0.2,
-        textShadowColor: 'rgba(0,0,0,0.3)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 4,
     },

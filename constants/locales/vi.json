@@ -12,13 +12,16 @@
         "emptyTitle": "Chưa có ghi chú nào",
         "emptySubtitle": "Ghi lại những gì em ấy thích hoặc không thích\nở mỗi quán ăn — mình sẽ nhắc bạn!",
         "createFirst": "Thêm ghi chú đầu tiên",
-        "unknownLocation": "Địa điểm không xác định"
+        "unknownLocation": "Địa điểm không xác định",
+        "searchPlaceholder": "Tìm kiếm ghi chú...",
+        "noResults": "Không tìm thấy ghi chú",
+        "noResultsMsg": "Thử từ khóa khác nhé"
     },
     "capture": {
         "switchCamera": "Camera",
         "switchText": "Văn bản",
-        "restaurantPlaceholder": "Tên quán (VD:Phở Anh Hai)",
-        "textPlaceholder": "Em ấy thích/ghét gì ở đây?\nVD: Không hành, thêm ớt 🌶️",
+        "restaurantPlaceholder": "Tên quán (VD: Phở Anh Hai)",
+        "textPlaceholder": "Ghi chú về quán này...",
         "currentLocation": "Đang dùng vị trí hiện tại",
         "unknownPlace": "Không rõ địa điểm",
         "save": "Lưu ghi chú 💛",
@@ -38,7 +41,9 @@
         "unknownLocation": "Không rõ",
         "tapToOpen": "Nhấn để mở →",
         "note": "ghi chú",
-        "notes": "ghi chú"
+        "notes": "ghi chú",
+        "emptyTitle": "Chưa có ghi chú nào trên bản đồ",
+        "emptySubtitle": "Các ghi chú đã lưu sẽ hiện dưới dạng ghim ở đây"
     },
     "noteDetail": {
         "deleteTitle": "Xóa ghi chú",
@@ -46,7 +51,16 @@
         "notFound": "Không tìm thấy ghi chú",
         "unknownLocation": "Địa điểm không xác định",
         "delete": "Xóa ghi chú",
-        "restaurant": "Quán ăn"
+        "restaurant": "Quán ăn",
+        "edit": "Sửa",
+        "save": "Lưu",
+        "editContent": "Sửa nội dung ghi chú...",
+        "editLocation": "Sửa tên địa điểm...",
+        "share": "Chia sẻ",
+        "favorite": "Yêu thích",
+        "unfavorite": "Bỏ yêu thích",
+        "sharePhotoMsg": "📷 Ảnh kỷ niệm tại {{location}}",
+        "updated": "Đã cập nhật!"
     },
     "settings": {
         "title": "Cài đặt",
@@ -63,6 +77,7 @@
         "clearAllMsg": "Tất cả ghi chú ăn uống sẽ bị xóa vĩnh viễn. Không thể hoàn tác.",
         "account": "TÀI KHOẢN",
         "login": "Đăng nhập",
+        "notSignedIn": "Chưa đăng nhập",
         "about": "Để anh không bao giờ quên em thích gì 💛"
     },
     "auth": {
@@ -82,9 +97,23 @@
         "next": "Tiếp theo",
         "skip": "Bỏ qua"
     },
+    "notification": {
+        "title": "💛 Anh ơi, nhớ nha!",
+        "body": "Bạn có ghi chú ở đây — mở ra xem nè!",
+        "textTitle": "💛 {{location}}",
+        "photoTitle": "📷 {{location}}",
+        "photoBody": "Bạn đã chụp ảnh ở đây — mở ra xem!"
+    },
+    "widget": {
+        "idleText": "Ghi chú kẻo em dỗi nè 💛",
+        "savedCount": "{{count}} ghi chú đã lưu",
+        "memoryReminder": "Kỷ niệm nhắc nhở anh 💛",
+        "unknownPlace": "Không rõ địa điểm"
+    },
     "common": {
         "cancel": "Hủy",
         "delete": "Xóa",
-        "goBack": "Quay lại"
+        "goBack": "Quay lại",
+        "done": "Xong"
     }
 }
