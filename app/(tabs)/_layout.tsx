@@ -1,11 +1,22 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useTranslation } from 'react-i18next';
+import { useTheme } from '../../hooks/useTheme';
 
 export default function TabLayout() {
   const { t } = useTranslation();
+  const { colors, isDark } = useTheme();
 
   return (
-    <NativeTabs>
+    <NativeTabs
+      blurEffect={isDark ? 'systemMaterialDark' : 'systemMaterialLight'}
+      backgroundColor={colors.tabBarBg}
+      tintColor={colors.primary}
+      iconColor={{ default: colors.secondaryText, selected: colors.primary }}
+      labelStyle={{
+        default: { color: colors.secondaryText },
+        selected: { color: colors.primary },
+      }}
+    >
       <NativeTabs.Trigger name="index" disableTransparentOnScrollEdge>
         <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} />
         <NativeTabs.Trigger.Label>{t('tabs.home', 'Home')}</NativeTabs.Trigger.Label>

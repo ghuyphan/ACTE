@@ -6,17 +6,20 @@ const GoogleSignin = {
     signIn: async () => ({ user: { name: 'Demo User' } }),
 };
 
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '../../hooks/useTheme';
+import { Colors } from '../../hooks/useTheme';
 
 export default function LoginScreen() {
     const router = useRouter();
     const { t } = useTranslation();
-    const { colors, isDark } = useTheme();
+    const colors = Colors.dark;
+    const isDark = true;
     const insets = useSafeAreaInsets();
     const [isSigninInProgress, setIsSigninInProgress] = useState(false);
 
@@ -39,20 +42,41 @@ export default function LoginScreen() {
     };
 
     return (
-        <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-            <View style={styles.content}>
-                <Text style={[styles.title, { color: colors.text }]}>{t('auth.title')}</Text>
-                <Text style={[styles.subtitle, { color: colors.secondaryText }]}>{t('auth.subtitle')}</Text>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <LinearGradient
+                colors={
+                    isDark
+                        ? [colors.background, colors.card, '#2c2c3e']
+                        : ['#ffffff', '#fcfcfc', '#f0f0f5']
+                }
+                style={StyleSheet.absoluteFillObject}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+            />
+
+            <View style={[styles.content, { paddingTop: insets.top }]}>
+                <View style={[styles.iconContainer, { backgroundColor: isDark ? '#ffffff10' : '#00000008' }]}>
+                    <Ionicons name="heart" size={64} color={colors.primary} />
+                </View>
+                <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'ACTE')}</Text>
+                <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
+                    {t('auth.subtitle', 'For everything she loves.')}
+                </Text>
             </View>
 
-            <View style={[styles.bottom, { paddingBottom: insets.bottom + 24 }]}>
+            <View style={[styles.bottom, { paddingBottom: insets.bottom + 32 }]}>
                 <Pressable
-                    style={[styles.googleButton, { backgroundColor: colors.text }]}
+                    style={({ pressed }) => [
+                        styles.googleButton,
+                        { backgroundColor: colors.text },
+                        pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }
+                    ]}
                     onPress={signIn}
                     disabled={isSigninInProgress}
                 >
+                    <Ionicons name="logo-google" size={20} color={colors.background} style={styles.btnIcon} />
                     <Text style={[styles.googleButtonText, { color: colors.background }]}>
-                        {isSigninInProgress ? t('auth.signingIn') : t('auth.signInGoogle')}
+                        {isSigninInProgress ? t('auth.signingIn', 'Signing in...') : t('auth.signInGoogle', 'Continue with Google')}
                     </Text>
                 </Pressable>
             </View>
@@ -63,36 +87,60 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        justifyContent: 'space-between',
-        padding: 24,
     },
     content: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        paddingHorizontal: 32,
+    },
+    iconContainer: {
+        width: 120,
+        height: 120,
+        borderRadius: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 32,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+        elevation: 10,
     },
     title: {
-        fontSize: 42,
-        fontWeight: '800',
+        fontSize: 48,
+        fontWeight: '900',
         letterSpacing: 2,
-        marginBottom: 10,
+        marginBottom: 12,
     },
     subtitle: {
-        fontSize: 17,
+        fontSize: 18,
+        fontWeight: '500',
         textAlign: 'center',
-        lineHeight: 24,
+        lineHeight: 26,
     },
     bottom: {
         width: '100%',
+        paddingHorizontal: 24,
     },
     googleButton: {
-        paddingVertical: 16,
-        borderRadius: 999,
+        flexDirection: 'row',
+        paddingVertical: 18,
+        borderRadius: 16,
         width: '100%',
         alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        elevation: 5,
+    },
+    btnIcon: {
+        marginRight: 10,
     },
     googleButtonText: {
-        fontSize: 17,
+        fontSize: 18,
         fontWeight: '700',
     },
 });

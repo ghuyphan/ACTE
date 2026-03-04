@@ -344,12 +344,12 @@ export default function HomeScreen() {
         </Animated.View>
 
         {/* Compact action below card */}
-        <View style={styles.belowCardSection}>
+        <Animated.View style={[styles.belowCardSection, { opacity: captureOpacity }]}>
           {captureMode === 'camera' && !capturedPhoto ? (
             <View style={styles.belowCardShutterRow}>
               {permission?.granted ? (
                 <Pressable style={styles.shutterOuter} onPress={takePicture}>
-                  <View style={[styles.shutterInner, { backgroundColor: isDark ? '#fff' : '#1C1C1E' }]} />
+                  <View style={[styles.shutterInner, { backgroundColor: colors.primary }]} />
                 </Pressable>
               ) : null}
             </View>
@@ -357,14 +357,14 @@ export default function HomeScreen() {
             <Pressable
               style={[
                 styles.belowCardSaveButton,
-                { backgroundColor: isDark ? '#fff' : '#1C1C1E' },
+                { backgroundColor: isDark ? '#ffffff' : '#000000' },
                 saving && { opacity: 0.6 }
               ]}
               onPress={saveNote}
               disabled={saving}
             >
               {saving ? (
-                <ActivityIndicator color={isDark ? '#000' : '#fff'} />
+                <ActivityIndicator color={isDark ? '#000000' : '#ffffff'} />
               ) : (
                 <Text style={[styles.saveButtonText, { color: isDark ? '#000' : '#fff' }]}>
                   {t('capture.save', 'Save Note 💛')}
@@ -372,7 +372,7 @@ export default function HomeScreen() {
               )}
             </Pressable>
           )}
-        </View>
+        </Animated.View>
       </View >
     );
   };
@@ -707,6 +707,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: HORIZONTAL_PADDING + 4,
     paddingTop: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 90, // Prevents layout shift between camera shutter and save button
   },
   belowCardInput: {
     flexDirection: 'row',

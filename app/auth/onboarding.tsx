@@ -1,22 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useTheme } from '../../hooks/useTheme';
+import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import { Colors } from '../../hooks/useTheme';
 
 const { width } = Dimensions.get('window');
 const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
 
 const SLIDES = [
-    { emoji: '🧅', titleKey: 'onboarding.title1', subtitleKey: 'onboarding.subtitle1' },
-    { emoji: '💛', titleKey: 'onboarding.title2', subtitleKey: 'onboarding.subtitle2' },
-    { emoji: '🫶', titleKey: 'onboarding.title3', subtitleKey: 'onboarding.subtitle3' },
+    { emoji: '🪴', titleKey: 'onboarding.title1', subtitleKey: 'onboarding.subtitle1' },
+    { emoji: '☕️', titleKey: 'onboarding.title2', subtitleKey: 'onboarding.subtitle2' },
+    { emoji: '💛', titleKey: 'onboarding.title3', subtitleKey: 'onboarding.subtitle3' },
 ];
 
 export default function OnboardingScreen() {
     const { t } = useTranslation();
-    const { colors, isDark } = useTheme();
+    const colors = Colors.dark;
+    const isDark = true;
     const router = useRouter();
     const [step, setStep] = useState(0);
 
@@ -37,14 +40,42 @@ export default function OnboardingScreen() {
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <LinearGradient
+                colors={
+                    isDark
+                        ? [colors.background, colors.card, '#2c2c3e']
+                        : ['#ffffff', '#fcfcfc', '#f0f0f5']
+                }
+                style={StyleSheet.absoluteFillObject}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+            />
+
             <View style={styles.content}>
-                <Text style={styles.emoji}>{slide.emoji}</Text>
-                <Text style={[styles.title, { color: colors.text }]}>
+                <Animated.View
+                    key={'icon-' + step}
+                    entering={FadeInDown.springify().mass(0.8)}
+                    exiting={FadeOutDown.duration(200)}
+                    style={styles.emojiContainer}
+                >
+                    <Text style={styles.emoji}>{slide.emoji}</Text>
+                </Animated.View>
+
+                <Animated.Text
+                    key={'title-' + step}
+                    entering={FadeInDown.delay(100).springify()}
+                    style={[styles.title, { color: colors.text }]}
+                >
                     {t(slide.titleKey)}
-                </Text>
-                <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
+                </Animated.Text>
+
+                <Animated.Text
+                    key={'subtitle-' + step}
+                    entering={FadeInDown.delay(200).springify()}
+                    style={[styles.subtitle, { color: colors.secondaryText }]}
+                >
                     {t(slide.subtitleKey)}
-                </Text>
+                </Animated.Text>
             </View>
 
             <View style={styles.bottom}>
@@ -64,7 +95,11 @@ export default function OnboardingScreen() {
 
                 {/* Next Button */}
                 <Pressable
-                    style={[styles.button, { backgroundColor: colors.primary }]}
+                    style={({ pressed }) => [
+                        styles.button,
+                        { backgroundColor: colors.primary },
+                        pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }
+                    ]}
                     onPress={nextStep}
                 >
                     <Text style={[styles.buttonText, { color: isDark ? '#000' : '#fff' }]}>
@@ -75,13 +110,20 @@ export default function OnboardingScreen() {
                 </Pressable>
 
                 {/* Skip */}
-                {step < SLIDES.length - 1 && (
-                    <Pressable onPress={completeOnboarding} style={styles.skipButton}>
-                        <Text style={[styles.skipText, { color: colors.secondaryText }]}>
-                            {t('onboarding.skip', 'Skip')}
-                        </Text>
-                    </Pressable>
-                )}
+                <View style={styles.skipContainer}>
+                    {step < SLIDES.length - 1 ? (
+                        <Pressable onPress={completeOnboarding} style={({ pressed }) => [
+                            styles.skipButton,
+                            pressed && { opacity: 0.7 }
+                        ]}>
+                            <Text style={[styles.skipText, { color: colors.secondaryText }]}>
+                                {t('onboarding.skip', 'Skip')}
+                            </Text>
+                        </Pressable>
+                    ) : (
+                        <View style={styles.skipPlaceholder} />
+                    )}
+                </View>
             </View>
         </View>
     );
@@ -91,20 +133,28 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         justifyContent: 'space-between',
-        padding: 24,
-        paddingTop: 100,
     },
     content: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        paddingHorizontal: 32,
+        paddingTop: 80,
+    },
+    emojiContainer: {
+        width: 140,
+        height: 140,
+        borderRadius: 44,
+        backgroundColor: 'rgba(150, 150, 150, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 40,
     },
     emoji: {
-        fontSize: 80,
-        marginBottom: 24,
+        fontSize: 72,
     },
     title: {
-        fontSize: 32,
+        fontSize: 34,
         fontWeight: '800',
         textAlign: 'center',
         marginBottom: 16,
@@ -114,15 +164,16 @@ const styles = StyleSheet.create({
         fontSize: 18,
         textAlign: 'center',
         lineHeight: 28,
-        paddingHorizontal: 20,
+        fontWeight: '500',
     },
     bottom: {
         alignItems: 'center',
-        paddingBottom: 40,
+        paddingBottom: 48,
+        paddingHorizontal: 24,
     },
     dots: {
         flexDirection: 'row',
-        marginBottom: 32,
+        marginBottom: 36,
         gap: 8,
     },
     dot: {
@@ -131,25 +182,37 @@ const styles = StyleSheet.create({
         borderRadius: 4,
     },
     activeDot: {
-        width: 24,
+        width: 28,
         borderRadius: 4,
     },
     button: {
         width: '100%',
         paddingVertical: 18,
-        borderRadius: 999,
+        borderRadius: 16,
         alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        elevation: 5,
     },
     buttonText: {
         fontSize: 18,
         fontWeight: '700',
     },
+    skipContainer: {
+        height: 50,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     skipButton: {
-        marginTop: 16,
-        padding: 8,
+        padding: 12,
     },
     skipText: {
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: '600',
+    },
+    skipPlaceholder: {
+        height: 48,
     },
 });

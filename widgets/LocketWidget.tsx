@@ -1,11 +1,14 @@
-import { HStack, Spacer, Text, VStack } from '@expo/ui/swift-ui';
+import { HStack, Image, Rectangle, Spacer, Text, VStack, ZStack } from '@expo/ui/swift-ui';
 import {
     background,
     containerRelativeFrame,
     cornerRadius,
     font,
     foregroundStyle,
+    frame,
     lineLimit,
+    lineSpacing,
+    multilineTextAlignment,
     padding,
     shadow
 } from '@expo/ui/swift-ui/modifiers';
@@ -17,7 +20,7 @@ interface WidgetProps {
     date: string;
     noteCount: number;
     nearbyPlacesCount: number;
-    backgroundImageUrl?: string;
+    backgroundImageUrl?: string; // Currently not supported natively by expo-widgets JS side
     isIdleState: boolean;
     idleText: string;
     savedCountText: string;
@@ -32,120 +35,151 @@ const LocketWidget = (props: { props: WidgetProps }) => {
         isIdleState, idleText, savedCountText, memoryReminderText,
     } = props.props ?? {};
 
-    // Fallback detection (if text is empty, it's either idle or a photo in previous format)
     const isPhoto = text === '📸 Photo Memory' || text === '';
     const hasNote = noteCount > 0;
 
-    // Idle / Empty State (Dark Premium Theme)
+    // ─── Idle / Empty State ─────────────────────────────
     if (!hasNote || (isIdleState && !text && !locationName)) {
         return (
-            <VStack
+            <ZStack
                 modifiers={[
                     containerRelativeFrame({ axes: 'both' }),
-                    background('#1C1C1E'), // Native full-bleed background
-                    cornerRadius(20),
-                    padding({ all: 20 }),
                 ]}
             >
-                <Spacer />
-                <Text
+                <Rectangle
                     modifiers={[
-                        font({ weight: 'heavy', size: 24 }),
-                        foregroundStyle('#FFC107'), // Brand yellow
+                        foregroundStyle({
+                            type: 'linearGradient',
+                            colors: ['#2C2C2E', '#1A1A1C'],
+                            startPoint: { x: 0, y: 0 },
+                            endPoint: { x: 1, y: 1 }
+                        })
                     ]}
-                >
-                    ACTE 💛
-                </Text>
-                <Text
-                    modifiers={[
-                        font({ weight: 'medium', size: 14 }),
-                        foregroundStyle('rgba(255,255,255,0.6)'),
-                        padding({ top: 4 })
-                    ]}
-                >
-                    {idleText || 'Note it down before she gets upset 💛'}
-                </Text>
-                <Spacer />
-                <Text
-                    modifiers={[
-                        font({ weight: 'bold', size: 11 }),
-                        foregroundStyle('rgba(255,255,255,0.3)'),
-                    ]}
-                >
-                    {savedCountText || `${noteCount} notes saved`}
-                </Text>
-            </VStack>
+                />
+
+                <VStack modifiers={[padding({ all: 32 })]}>
+                    <Spacer />
+
+                    <Image systemName="sparkles" size={32} color="#FFCA28" />
+
+                    <Spacer modifiers={[frame({ height: 16 })]} />
+
+                    <Text
+                        modifiers={[
+                            font({ weight: 'bold', size: 15, design: 'rounded' }),
+                            foregroundStyle('#FFFFFF'),
+                            multilineTextAlignment('center'),
+                            lineSpacing(4),
+                            padding({ horizontal: 16 })
+                        ]}
+                    >
+                        {idleText || 'Ghi lại trước khi nàng giận nè💛'}
+                    </Text>
+
+                    <Spacer />
+                </VStack>
+            </ZStack>
         );
     }
 
-    // Active Memory State (Rich Warm Theme)
+    // ─── Active Memory State ────────────────────────────
     return (
-        <VStack
+        <ZStack
             modifiers={[
                 containerRelativeFrame({ axes: 'both' }),
-                background('#FFC107'), // Native full-bleed background
-                cornerRadius(20),
-                padding({ all: 16 }),
             ]}
         >
-            {/* Header: Location Pill */}
-            {locationName ? (
-                <HStack modifiers={[padding({ bottom: 8 })]}>
-                    <Text
-                        modifiers={[
-                            font({ weight: 'bold', size: 12 }),
-                            foregroundStyle('#FFFFFF'),
-                            background('rgba(0,0,0,0.25)'), // Translucent pill style
-                            cornerRadius(12),
-                            padding({ horizontal: 8, vertical: 4 }),
-                            lineLimit(1),
-                        ]}
-                    >
-                        📍 {locationName}{nearbyPlacesCount > 0 ? ` (+${nearbyPlacesCount})` : ''}
-                    </Text>
-                    <Spacer />
-                </HStack>
-            ) : <Spacer />}
-
-            <Spacer />
-
-            {/* Main Content */}
-            {isPhoto ? (
-                <Text
-                    modifiers={[
-                        font({ weight: 'heavy', size: 20 }),
-                        foregroundStyle('#1C1C1E'),
-                        shadow({ radius: 1, color: 'rgba(255,255,255,0.4)', x: 0, y: 1 }) // Letterpress effect
-                    ]}
-                >
-                    📸 Nhấn để xem ảnh nè
-                </Text>
-            ) : (
-                <Text
-                    modifiers={[
-                        font({ weight: 'heavy', size: 20 }),
-                        foregroundStyle('#1C1C1E'),
-                        lineLimit(3),
-                        shadow({ radius: 1, color: 'rgba(255,255,255,0.4)', x: 0, y: 1 })
-                    ]}
-                >
-                    {text}
-                </Text>
-            )}
-
-            <Spacer />
-
-            {/* Footer: Date & Metadata */}
-            <Text
+            {/* Premium Gradient Background */}
+            <Rectangle
                 modifiers={[
-                    font({ weight: 'bold', size: 13 }),
-                    foregroundStyle('rgba(0,0,0,0.5)'),
+                    foregroundStyle({
+                        type: 'linearGradient',
+                        colors: isPhoto ? ['#1A1A1C', '#000000'] : ['#FFD54F', '#FFB300'],
+                        startPoint: { x: 0, y: 0 },
+                        endPoint: { x: 0, y: 1 }
+                    })
+                ]}
+            />
+
+            {/* Content layer */}
+            <VStack
+                modifiers={[
+                    padding({ all: 16 }),
+                    frame({ maxWidth: 9999, maxHeight: 9999 }),
                 ]}
             >
-                {isIdleState ? (memoryReminderText || 'A memory reminds you 💛') : date}
-                {!isIdleState && noteCount > 1 ? ` • ${savedCountText || `${noteCount} notes`}` : ''}
-            </Text>
-        </VStack>
+                {/* Header: Cute badge */}
+                {locationName ? (
+                    <HStack>
+                        <Spacer />
+                        <HStack
+                            modifiers={[
+                                padding({ horizontal: 12, vertical: 6 }),
+                                background(isPhoto ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)'),
+                                cornerRadius(14),
+                            ]}
+                        >
+                            <Text
+                                modifiers={[
+                                    font({ weight: 'bold', size: 12, design: 'rounded' }),
+                                    foregroundStyle(isPhoto ? '#FFFFFF' : '#000000'),
+                                    lineLimit(1),
+                                ]}
+                            >
+                                ✨ {isPhoto ? "Ngắm ảnh đỡ nhớ 💛" : "Dành cho em 💛"}
+                            </Text>
+                        </HStack>
+                        <Spacer />
+                    </HStack>
+                ) : <Spacer />}
+
+                <Spacer modifiers={[frame({ height: 12 })]} />
+
+                {/* Main content */}
+                {isPhoto ? (
+                    <ZStack
+                        modifiers={[
+                            frame({ maxWidth: 9999, maxHeight: 9999 }),
+                            cornerRadius(16),
+                            background('rgba(0,0,0,0.2)'), // fallback placeholder
+                        ]}
+                    >
+                        <VStack>
+                            <Image systemName="photo.on.rectangle.angled" size={48} color="#FFFFFF" />
+                            <Text
+                                modifiers={[
+                                    font({ weight: 'semibold', size: 16, design: 'rounded' }),
+                                    foregroundStyle('rgba(255,255,255,0.8)'),
+                                    padding({ top: 12 }),
+                                    shadow({ radius: 3, y: 1, color: 'rgba(0,0,0,0.5)' })
+                                ]}
+                            >
+                                Ảnh Mới 💛
+                            </Text>
+                        </VStack>
+                    </ZStack>
+                ) : (
+                    <HStack>
+                        <Spacer />
+                        <Text
+                            modifiers={[
+                                font({ weight: 'heavy', size: 22, design: 'rounded' }),
+                                foregroundStyle('#1C1C1E'),
+                                lineLimit(4),
+                                lineSpacing(2),
+                                multilineTextAlignment('center'),
+                                shadow({ radius: 2, y: 1, color: 'rgba(0,0,0,0.1)' })
+                            ]}
+                        >
+                            {text}
+                        </Text>
+                        <Spacer />
+                    </HStack>
+                )}
+
+                <Spacer />
+            </VStack>
+        </ZStack>
     );
 };
 

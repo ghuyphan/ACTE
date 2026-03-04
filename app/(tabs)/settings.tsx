@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useRouter } from 'expo-router';
+import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import SettingsBottomSheet from '../../components/SettingsBottomSheet';
 import { useNotes } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
 
@@ -38,6 +41,8 @@ function SettingRow({ icon, iconColor, label, value, onPress, danger, isLast }: 
     );
 }
 
+type BottomSheetType = 'language' | 'theme' | 'clear';
+
 export default function SettingsScreen() {
     const { t, i18n } = useTranslation();
     const { theme, setTheme, colors, isDark } = useTheme();
@@ -45,15 +50,12 @@ export default function SettingsScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
-    const toggleLanguage = () => {
-        const nextLang = i18n.language === 'en' ? 'vi' : 'en';
-        i18n.changeLanguage(nextLang);
-    };
+    const bottomSheetRef = useRef<BottomSheetModal>(null);
+    const [sheetType, setSheetType] = useState<BottomSheetType>('language');
 
-    const cycleTheme = () => {
-        if (theme === 'system') setTheme('light');
-        else if (theme === 'light') setTheme('dark');
-        else setTheme('system');
+    const openSheet = (type: BottomSheetType) => {
+        setSheetType(type);
+        bottomSheetRef.current?.present();
     };
 
     const themeLabel =
@@ -63,99 +65,181 @@ export default function SettingsScreen() {
                 ? t('settings.dark', 'Dark')
                 : t('settings.light', 'Light');
 
-    const handleClearAll = () => {
-        Alert.alert(
-            t('settings.clearAllTitle', 'Clear All Notes'),
-            t('settings.clearAllMsg', 'All your notes will be permanently deleted.'),
-            [
-                { text: t('common.cancel', 'Cancel'), style: 'cancel' },
-                {
-                    text: t('common.delete', 'Delete All'),
-                    style: 'destructive',
-                    onPress: () => deleteAllNotes(),
-                },
-            ]
-        );
+    const renderSheetContent = () => {
+        if (sheetType === 'language') {
+            return (
+                <View>
+                    <Text style={[styles.sheetTitle, { color: colors.text }]}>
+                        {t('settings.language', 'Language')}
+                    </Text>
+                    <View style={[styles.section, { backgroundColor: colors.card, marginHorizontal: 0 }]}>
+                        <SettingRow
+                            icon="language-outline"
+                            iconColor={colors.primary}
+                            label="English"
+                            value={i18n.language === 'en' ? '✓' : ''}
+                            onPress={() => { i18n.changeLanguage('en'); bottomSheetRef.current?.dismiss(); }}
+                        />
+                        <SettingRow
+                            icon="language-outline"
+                            iconColor={colors.primary}
+                            label="Tiếng Việt"
+                            value={i18n.language === 'vi' ? '✓' : ''}
+                            onPress={() => { i18n.changeLanguage('vi'); bottomSheetRef.current?.dismiss(); }}
+                            isLast
+                        />
+                    </View>
+                </View>
+            );
+        }
+        if (sheetType === 'theme') {
+            return (
+                <View>
+                    <Text style={[styles.sheetTitle, { color: colors.text }]}>
+                        {t('settings.theme', 'Theme')}
+                    </Text>
+                    <View style={[styles.section, { backgroundColor: colors.card, marginHorizontal: 0 }]}>
+                        <SettingRow
+                            icon="phone-portrait-outline"
+                            iconColor={colors.primary}
+                            label={t('settings.system', 'System')}
+                            value={theme === 'system' ? '✓' : ''}
+                            onPress={() => { setTheme('system'); bottomSheetRef.current?.dismiss(); }}
+                        />
+                        <SettingRow
+                            icon="sunny-outline"
+                            iconColor={colors.primary}
+                            label={t('settings.light', 'Light')}
+                            value={theme === 'light' ? '✓' : ''}
+                            onPress={() => { setTheme('light'); bottomSheetRef.current?.dismiss(); }}
+                        />
+                        <SettingRow
+                            icon="moon-outline"
+                            iconColor={colors.primary}
+                            label={t('settings.dark', 'Dark')}
+                            value={theme === 'dark' ? '✓' : ''}
+                            onPress={() => { setTheme('dark'); bottomSheetRef.current?.dismiss(); }}
+                            isLast
+                        />
+                    </View>
+                </View>
+            );
+        }
+        if (sheetType === 'clear') {
+            return (
+                <View>
+                    <Text style={[styles.sheetTitle, { color: colors.danger }]}>
+                        {t('settings.clearAllTitle', 'Clear All Notes')}
+                    </Text>
+                    <Text style={{ fontSize: 16, marginBottom: 24, color: colors.secondaryText, lineHeight: 24 }}>
+                        {t('settings.clearAllMsg', 'All your notes will be permanently deleted.')}
+                    </Text>
+                    <Pressable
+                        style={[{ backgroundColor: colors.danger }, styles.primaryButton]}
+                        onPress={() => { deleteAllNotes(); bottomSheetRef.current?.dismiss(); }}
+                    >
+                        <Text style={styles.primaryButtonText}>
+                            {t('common.delete', 'Delete All')}
+                        </Text>
+                    </Pressable>
+                    <Pressable
+                        style={[{ backgroundColor: colors.border }, styles.secondaryButton]}
+                        onPress={() => bottomSheetRef.current?.dismiss()}
+                    >
+                        <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
+                            {t('common.cancel', 'Cancel')}
+                        </Text>
+                    </Pressable>
+                </View>
+            );
+        }
+        return null;
     };
 
     return (
-        <ScrollView
-            style={[styles.container, { backgroundColor: colors.background }]}
-            contentContainerStyle={{ paddingTop: 16, paddingBottom: 40 }}
-        >
-            <Text style={[styles.title, { color: colors.text }]}>
-                {t('settings.title', 'Settings')}
-            </Text>
-
-            {/* Preferences */}
-            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
-                {t('settings.preferences', 'PREFERENCES')}
-            </Text>
-            <View style={[styles.section, { backgroundColor: colors.card }]}>
-                <SettingRow
-                    icon="language-outline"
-                    iconColor={colors.primary}
-                    label={t('settings.language', 'Language')}
-                    value={i18n.language === 'en' ? 'English' : 'Tiếng Việt'}
-                    onPress={toggleLanguage}
-                />
-                <SettingRow
-                    icon={isDark ? 'moon-outline' : 'sunny-outline'}
-                    iconColor={colors.primary}
-                    label={t('settings.theme', 'Theme')}
-                    value={themeLabel}
-                    onPress={cycleTheme}
-                    isLast
-                />
-            </View>
-
-            {/* Data */}
-            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
-                {t('settings.data', 'DATA')}
-            </Text>
-            <View style={[styles.section, { backgroundColor: colors.card }]}>
-                <SettingRow
-                    icon="document-text-outline"
-                    iconColor={colors.primary}
-                    label={t('settings.noteCount', 'Saved Notes')}
-                    value={`${notes.length}`}
-                    onPress={() => { }}
-                />
-                <SettingRow
-                    icon="trash-outline"
-                    iconColor={colors.danger}
-                    label={t('settings.clearAll', 'Clear All Notes')}
-                    onPress={handleClearAll}
-                    danger
-                    isLast
-                />
-            </View>
-
-            {/* Account */}
-            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
-                {t('settings.account', 'ACCOUNT')}
-            </Text>
-            <View style={[styles.section, { backgroundColor: colors.card }]}>
-                <SettingRow
-                    icon="person-outline"
-                    iconColor={colors.secondaryText}
-                    label={t('settings.login', 'Sign In')}
-                    value={t('settings.notSignedIn', 'Not signed in')}
-                    onPress={() => router.push('/auth')}
-                    isLast
-                />
-            </View>
-
-            {/* About */}
-            <View style={styles.aboutSection}>
-                <Text style={[styles.aboutText, { color: colors.secondaryText }]}>
-                    ACTE v1.0.0
+        <View style={styles.container}>
+            <ScrollView
+                style={[styles.container, { backgroundColor: colors.background }]}
+                contentContainerStyle={{ paddingTop: 16, paddingBottom: 40 }}
+            >
+                <Text style={[styles.title, { color: colors.text }]}>
+                    {t('settings.title', 'Settings')}
                 </Text>
-                <Text style={[styles.aboutText, { color: colors.secondaryText }]}>
-                    {t('settings.about', 'So you never forget what she likes 💛')}
+
+                {/* Preferences */}
+                <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
+                    {t('settings.preferences', 'PREFERENCES')}
                 </Text>
-            </View>
-        </ScrollView>
+                <View style={[styles.section, { backgroundColor: colors.card }]}>
+                    <SettingRow
+                        icon="language-outline"
+                        iconColor={colors.primary}
+                        label={t('settings.language', 'Language')}
+                        value={i18n.language === 'en' ? 'English' : 'Tiếng Việt'}
+                        onPress={() => openSheet('language')}
+                    />
+                    <SettingRow
+                        icon={isDark ? 'moon-outline' : 'sunny-outline'}
+                        iconColor={colors.primary}
+                        label={t('settings.theme', 'Theme')}
+                        value={themeLabel}
+                        onPress={() => openSheet('theme')}
+                        isLast
+                    />
+                </View>
+
+                {/* Data */}
+                <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
+                    {t('settings.data', 'DATA')}
+                </Text>
+                <View style={[styles.section, { backgroundColor: colors.card }]}>
+                    <SettingRow
+                        icon="document-text-outline"
+                        iconColor={colors.primary}
+                        label={t('settings.noteCount', 'Saved Notes')}
+                        value={`${notes.length}`}
+                        onPress={() => { }}
+                    />
+                    <SettingRow
+                        icon="trash-outline"
+                        iconColor={colors.danger}
+                        label={t('settings.clearAll', 'Clear All Notes')}
+                        onPress={() => openSheet('clear')}
+                        danger
+                        isLast
+                    />
+                </View>
+
+                {/* Account */}
+                <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
+                    {t('settings.account', 'ACCOUNT')}
+                </Text>
+                <View style={[styles.section, { backgroundColor: colors.card }]}>
+                    <SettingRow
+                        icon="person-outline"
+                        iconColor={colors.secondaryText}
+                        label={t('settings.login', 'Sign In')}
+                        value={t('settings.notSignedIn', 'Not signed in')}
+                        onPress={() => router.push('/auth')}
+                        isLast
+                    />
+                </View>
+
+                {/* About */}
+                <View style={styles.aboutSection}>
+                    <Text style={[styles.aboutText, { color: colors.secondaryText }]}>
+                        ACTE v1.0.0
+                    </Text>
+                    <Text style={[styles.aboutText, { color: colors.secondaryText }]}>
+                        {t('settings.about', 'So you never forget what she likes 💛')}
+                    </Text>
+                </View>
+            </ScrollView>
+
+            <SettingsBottomSheet ref={bottomSheetRef}>
+                {renderSheetContent()}
+            </SettingsBottomSheet>
+        </View>
     );
 }
 
@@ -211,5 +295,30 @@ const styles = StyleSheet.create({
     },
     aboutText: {
         fontSize: 13,
+    },
+    sheetTitle: {
+        fontSize: 22,
+        fontWeight: '800',
+        marginBottom: 20,
+    },
+    primaryButton: {
+        padding: 16,
+        borderRadius: 16,
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    primaryButtonText: {
+        color: '#fff',
+        fontSize: 17,
+        fontWeight: '700',
+    },
+    secondaryButton: {
+        padding: 16,
+        borderRadius: 16,
+        alignItems: 'center',
+    },
+    secondaryButtonText: {
+        fontSize: 17,
+        fontWeight: '600',
     },
 });
