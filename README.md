@@ -1,51 +1,72 @@
-# Welcome to your Expo app 👋
+# ACTE - Location-Based Memory Tracker �
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+ACTE is a React Native iOS/Android application built with [Expo](https://expo.dev) that allows users to capture, store, and revisit memories (text and photos) linked to specific geographic locations.
 
-## Get started
+## 🌟 Key Features
 
-1. Install dependencies
+- **Location-Based Memories:** Capture text notes or photos, automatically tagged with your current location and reverse-geocoded place names.
+- **Interactive Map View:** Browse all your saved memories geographically on an interactive map.
+- **Home Screen Widgets:** Features a custom iOS/Android widget (similar to Locket) that displays your recent memories directly on your device's home screen.
+- **Background Geofencing:** Keeps track of your locations and can notify you when you are near past memories.
+- **Firebase Authentication:** Secure user authentication with Google Sign-In support.
+- **Offline-First & Fast:** Uses local SQLite database for blazing-fast access to your journal entries.
+- **Sleek UI/UX:** Fully responsive design with Dark/Light mode support, smooth bottom-sheet interactions, and haptic feedback.
+- **Multilingual:** Internationalization (i18n) support out of the box.
 
+## 🛠️ Tech Stack
+
+- **Framework:** [React Native](https://reactnative.dev) + [Expo](https://expo.dev) + [Expo Router](https://docs.expo.dev/router/introduction/)
+- **Navigation:** File-based routing with `@react-navigation`
+- **Authentication:** Firebase Auth (`@react-native-firebase/auth`) + Google Sign-In
+- **Database / Storage:** `expo-sqlite` & `@react-native-async-storage`
+- **Native Device Features:** 
+  - `expo-camera` (Photo capture)
+  - `expo-location` (GPS & Geofencing)
+  - `expo-widgets` (Home screen widgets)
+  - `expo-haptics` (Tactile feedback)
+  - `expo-notifications` (Push notifications & deep linking)
+- **UI & Animations:** `expo-glass-effect`, `react-native-reanimated`, `react-native-gesture-handler`
+
+## 📂 Project Structure
+
+For developers looking to contribute or understand the codebase quickly, here is the high-level directory structure:
+
+```text
+├── app/                  # Expo Router navigation (Screens)
+│   ├── (tabs)/           # Main tab screens (Home Feed, Map, Settings)
+│   ├── auth/             # Login, Sign-up, Onboarding screens
+│   ├── note/             # Note details modal screen
+│   ├── settings-*.tsx    # Native liquid glass bottom sheet modals
+│   └── _layout.tsx       # Root layout, theme providers, & app init
+├── components/           # Reusable React components
+│   ├── ui/               # Generic UI elements
+│   ├── TextMemoryCard.tsx# UI for text-based memories
+│   └── ImageMemoryCard.tsx # UI for photo-based memories
+├── constants/            # Theming, Colors, Typography, i18n configs
+├── hooks/                # Custom React Hooks (useNotes, useGeofence, useTheme)
+├── services/             # Core business logic
+│   ├── database.ts       # SQLite DB initialization and queries
+│   └── widgetService.ts  # Logic for pushing data to native widgets
+├── utils/                # Helper functions (e.g., backgroundGeofence.ts)
+├── widgets/              # Expo Widgets code (LocketWidget.tsx)
+└── package.json          # Project dependencies & scripts
+```
+
+## 🚀 Getting Started
+
+1. **Install dependencies**
    ```bash
    npm install
    ```
 
-2. Start the app
-
+2. **Start the development server**
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+3. **Run on a device or emulator:**
+   - In the terminal output, you can press `i` to open iOS simulator or `a` to open Android emulator.
+   - Alternatively, scan the QR code using the Expo Go app.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
-# ACTE
+---
+*Built with ❤️ using Expo.*

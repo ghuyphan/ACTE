@@ -1,11 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GlassView } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
-import { Colors } from '../../hooks/useTheme';
+import { useTheme } from '../../hooks/useTheme';
 
 const { width } = Dimensions.get('window');
 const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
@@ -18,8 +19,7 @@ const SLIDES = [
 
 export default function OnboardingScreen() {
     const { t } = useTranslation();
-    const colors = Colors.dark;
-    const isDark = true;
+    const { colors, isDark } = useTheme();
     const router = useRouter();
     const [step, setStep] = useState(0);
 
@@ -56,8 +56,9 @@ export default function OnboardingScreen() {
                     key={'icon-' + step}
                     entering={FadeInDown.springify().mass(0.8)}
                     exiting={FadeOutDown.duration(200)}
-                    style={styles.emojiContainer}
+                    style={[styles.emojiContainer, { overflow: 'hidden' }]}
                 >
+                    <GlassView style={StyleSheet.absoluteFillObject} colorScheme={isDark ? 'dark' : 'light'} />
                     <Text style={styles.emoji}>{slide.emoji}</Text>
                 </Animated.View>
 
@@ -145,7 +146,6 @@ const styles = StyleSheet.create({
         width: 140,
         height: 140,
         borderRadius: 44,
-        backgroundColor: 'rgba(150, 150, 150, 0.1)',
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 40,

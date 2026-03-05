@@ -78,7 +78,8 @@ function AnimatedNoteCard({ item, index, onPress, colors, isDark, t }: {
 
       {/* Below-card metadata */}
       <Animated.View style={[styles.belowCardMetaContainer, { opacity }]}>
-        <View style={[styles.metadataPill, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}>
+        <View style={[styles.metadataPill, { overflow: 'hidden' }]}>
+          <GlassView style={StyleSheet.absoluteFillObject} colorScheme={isDark ? 'dark' : 'light'} />
           <Ionicons name="location" size={14} color={colors.secondaryText} />
           <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
             {item.locationName ?? t('home.unknownLocation', 'Unknown location')}
@@ -389,7 +390,7 @@ export default function HomeScreen() {
                   onPressIn={handleShutterPressIn}
                   onPressOut={handleShutterPressOut}
                   onPress={takePicture}
-                  style={styles.shutterOuter}
+                  style={[styles.shutterOuter, { borderColor: colors.border }]}
                 >
                   <Animated.View style={[styles.shutterInner, { backgroundColor: colors.primary, transform: [{ scale: shutterScale }] }]} />
                 </Pressable>
@@ -399,14 +400,14 @@ export default function HomeScreen() {
             <Pressable
               style={[
                 styles.belowCardSaveButton,
-                { backgroundColor: isDark ? '#ffffff' : '#000000' },
+                { overflow: 'hidden', backgroundColor: isDark ? '#fff' : '#000' },
                 saving && { opacity: 0.6 }
               ]}
               onPress={saveNote}
               disabled={saving}
             >
               {saving ? (
-                <ActivityIndicator color={isDark ? '#000000' : '#ffffff'} />
+                <ActivityIndicator color={isDark ? '#000' : '#fff'} />
               ) : (
                 <Text style={[styles.saveButtonText, { color: isDark ? '#000' : '#fff' }]}>
                   {t('capture.save', 'Save Note 💛')}
@@ -729,7 +730,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     gap: 5,
   },
   retakeBtnText: {
@@ -831,7 +832,6 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -839,6 +839,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
+    backgroundColor: '#fff',
   },
 
   // ─── Below-card metadata (notes) ───────

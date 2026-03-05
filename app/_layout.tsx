@@ -1,4 +1,4 @@
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+
 import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
 import { SplashScreen, Stack, useRouter } from 'expo-router';
@@ -79,7 +79,7 @@ function AppContent() {
     <NavThemeProvider value={navTheme}>
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+        <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="auth/index" />
           <Stack.Screen name="auth/onboarding" />
@@ -87,10 +87,11 @@ function AppContent() {
           <Stack.Screen
             name="note/[id]"
             options={{
-              presentation: 'modal',
-              animation: 'slide_from_bottom',
+              presentation: 'transparentModal',
+              animation: 'none',
             }}
           />
+
         </Stack>
       </View>
     </NavThemeProvider>
@@ -102,9 +103,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <I18nextProvider i18n={i18n}>
         <ThemeProvider>
-          <BottomSheetModalProvider>
-            <AppContent />
-          </BottomSheetModalProvider>
+          <AppContent />
         </ThemeProvider>
       </I18nextProvider>
     </GestureHandlerRootView>

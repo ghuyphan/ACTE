@@ -1,3 +1,5 @@
+import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
+import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
@@ -111,6 +113,16 @@ export default function NoteDetailScreen() {
     const router = useRouter();
     const [note, setNote] = useState<Note | null>(null);
     const [loading, setLoading] = useState(true);
+
+    // Native Bottom Sheet State
+    const [isPresented, setIsPresented] = useState(true);
+
+    const handleDismiss = (val: boolean) => {
+        setIsPresented(val);
+        if (!val) {
+            router.back();
+        }
+    };
 
     // Edit state
     const [isEditing, setIsEditing] = useState(false);
@@ -226,27 +238,43 @@ export default function NoteDetailScreen() {
 
     if (loading) {
         return (
-            <View style={[styles.container, { backgroundColor: colors.background }]}>
-                <View style={styles.handleBar}>
-                    <View style={[styles.handle, { backgroundColor: colors.border }]} />
-                </View>
-                <SkeletonCard colors={colors} />
-            </View>
+            <Host style={{ flex: 1, backgroundColor: 'transparent' }} colorScheme={isDark ? 'dark' : 'light'}>
+                <BottomSheet isPresented={isPresented} onIsPresentedChange={handleDismiss} fitToContents>
+                    <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
+                        <RNHostView matchContents>
+                            <View style={[styles.container, { backgroundColor: 'transparent' }]}>
+                                <View style={styles.handleBar}>
+                                    <View style={[styles.handle, { backgroundColor: colors.border }]} />
+                                </View>
+                                <SkeletonCard colors={colors} />
+                            </View>
+                        </RNHostView>
+                    </Group>
+                </BottomSheet>
+            </Host>
         );
     }
 
     if (!note) {
         return (
-            <View style={[styles.center, { backgroundColor: colors.background }]}>
-                <Text style={{ color: colors.secondaryText, fontSize: 17 }}>
-                    {t('noteDetail.notFound', 'Note not found')}
-                </Text>
-                <Pressable onPress={() => router.back()} style={{ marginTop: 20 }}>
-                    <Text style={{ color: colors.primary, fontSize: 17, fontWeight: '600' }}>
-                        {t('common.goBack', 'Go Back')}
-                    </Text>
-                </Pressable>
-            </View>
+            <Host style={{ flex: 1, backgroundColor: 'transparent' }} colorScheme={isDark ? 'dark' : 'light'}>
+                <BottomSheet isPresented={isPresented} onIsPresentedChange={handleDismiss} fitToContents>
+                    <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
+                        <RNHostView matchContents>
+                            <View style={[styles.center, { backgroundColor: 'transparent', minHeight: 200 }]}>
+                                <Text style={{ color: colors.secondaryText, fontSize: 17 }}>
+                                    {t('noteDetail.notFound', 'Note not found')}
+                                </Text>
+                                <Pressable onPress={() => handleDismiss(false)} style={{ marginTop: 20 }}>
+                                    <Text style={{ color: colors.primary, fontSize: 17, fontWeight: '600' }}>
+                                        {t('common.goBack', 'Go Back')}
+                                    </Text>
+                                </Pressable>
+                            </View>
+                        </RNHostView>
+                    </Group>
+                </BottomSheet>
+            </Host>
         );
     }
 
@@ -255,147 +283,150 @@ export default function NoteDetailScreen() {
     const gradient = CardGradients[gradientIndex];
 
     return (
-        <KeyboardAvoidingView
-            style={[styles.container, { backgroundColor: colors.background }]}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-            {/* Handle bar */}
-            <View style={styles.handleBar}>
-                <View style={[styles.handle, { backgroundColor: colors.border }]} />
-            </View>
-
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-            >
-                {/* Note Content — animated entrance */}
-                <Animated.View style={{ opacity: cardOpacity, transform: [{ scale: cardScale }] }}>
-                    {note.type === 'photo' ? (
-                        <View style={styles.photoContainer}>
-                            <Image
-                                source={{ uri: note.content }}
-                                style={styles.photo}
-                                contentFit="cover"
-                                transition={300}
-                            />
-                        </View>
-                    ) : (
-                        <View style={styles.textContainer}>
-                            <LinearGradient
-                                colors={gradient}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                                style={styles.textGradient}
-                            >
-                                <TextInput
-                                    style={[styles.editTextInput, { color: '#FFFFFF' }]}
-                                    value={isEditing ? editContent : note.content}
-                                    onChangeText={isEditing ? setEditContent : undefined}
-                                    editable={isEditing}
-                                    multiline
-                                    scrollEnabled={false}
-                                    placeholder={isEditing ? t('noteDetail.editContent', 'Edit note content...') : undefined}
-                                    placeholderTextColor="rgba(255,255,255,0.5)"
-                                    maxLength={300}
-                                />
-                            </LinearGradient>
-                        </View>
-                    )}
-                </Animated.View>
-
-                {/* Action buttons row — animated entrance */}
-                <View style={styles.actionRow}>
-                    {/* Favorite */}
-                    <AnimatedActionButton
-                        onPress={handleToggleFavorite}
-                        style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
-                        delay={100}
-                    >
-                        <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-                            <Ionicons
-                                name={note.isFavorite ? 'heart' : 'heart-outline'}
-                                size={20}
-                                color={note.isFavorite ? '#FF3B30' : colors.secondaryText}
-                            />
-                        </Animated.View>
-                    </AnimatedActionButton>
-
-                    {/* Edit / Save */}
-                    {note.type === 'text' && (
-                        <AnimatedActionButton
-                            onPress={isEditing ? handleSaveEdit : () => setIsEditing(true)}
-                            style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
-                            delay={150}
+        <Host style={{ flex: 1, backgroundColor: 'transparent' }} colorScheme={isDark ? 'dark' : 'light'}>
+            <BottomSheet isPresented={isPresented} onIsPresentedChange={handleDismiss} fitToContents>
+                <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
+                    <RNHostView matchContents>
+                        <KeyboardAvoidingView
+                            style={[styles.container, { backgroundColor: 'transparent' }]}
+                            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                         >
-                            <Ionicons
-                                name={isEditing ? 'checkmark' : 'create-outline'}
-                                size={20}
-                                color={isEditing ? colors.success : colors.secondaryText}
-                            />
-                        </AnimatedActionButton>
-                    )}
+                            <ScrollView
+                                contentContainerStyle={styles.scrollContent}
+                                showsVerticalScrollIndicator={false}
+                            >
+                                {/* Note Content — animated entrance */}
+                                <Animated.View style={{ opacity: cardOpacity, transform: [{ scale: cardScale }] }}>
+                                    {note.type === 'photo' ? (
+                                        <View style={styles.photoContainer}>
+                                            <Image
+                                                source={{ uri: note.content }}
+                                                style={styles.photo}
+                                                contentFit="cover"
+                                                transition={300}
+                                            />
+                                        </View>
+                                    ) : (
+                                        <View style={styles.textContainer}>
+                                            <LinearGradient
+                                                colors={gradient}
+                                                start={{ x: 0, y: 0 }}
+                                                end={{ x: 1, y: 1 }}
+                                                style={styles.textGradient}
+                                            >
+                                                <TextInput
+                                                    style={[styles.editTextInput, { color: '#FFFFFF' }]}
+                                                    value={isEditing ? editContent : note.content}
+                                                    onChangeText={isEditing ? setEditContent : undefined}
+                                                    editable={isEditing}
+                                                    multiline
+                                                    scrollEnabled={false}
+                                                    placeholder={isEditing ? t('noteDetail.editContent', 'Edit note content...') : undefined}
+                                                    placeholderTextColor="rgba(255,255,255,0.5)"
+                                                    maxLength={300}
+                                                />
+                                            </LinearGradient>
+                                        </View>
+                                    )}
+                                </Animated.View>
 
-                    {/* Share */}
-                    <AnimatedActionButton
-                        onPress={handleShare}
-                        style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
-                        delay={200}
-                    >
-                        <Ionicons name="share-outline" size={20} color={colors.secondaryText} />
-                    </AnimatedActionButton>
-                </View>
+                                {/* Action buttons row — animated entrance */}
+                                <View style={styles.actionRow}>
+                                    {/* Favorite */}
+                                    <AnimatedActionButton
+                                        onPress={handleToggleFavorite}
+                                        style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
+                                        delay={100}
+                                    >
+                                        <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+                                            <Ionicons
+                                                name={note.isFavorite ? 'heart' : 'heart-outline'}
+                                                size={20}
+                                                color={note.isFavorite ? '#FF3B30' : colors.secondaryText}
+                                            />
+                                        </Animated.View>
+                                    </AnimatedActionButton>
 
-                {/* Info Section — animated entrance */}
-                <Animated.View style={{ opacity: infoOpacity, transform: [{ translateY: infoTranslateY }] }}>
-                    <View style={styles.infoSection}>
-                        <View style={styles.infoRow}>
-                            <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
-                            <TextInput
-                                style={[styles.editLocationInput, { color: colors.text }]}
-                                value={isEditing ? editLocation : (note.locationName || t('noteDetail.unknownLocation', 'Unknown Location'))}
-                                onChangeText={isEditing ? setEditLocation : undefined}
-                                editable={isEditing}
-                                placeholder={isEditing ? t('noteDetail.editLocation', 'Edit location name...') : undefined}
-                                placeholderTextColor={colors.secondaryText}
-                                maxLength={100}
-                            />
-                        </View>
+                                    {/* Edit / Save */}
+                                    {note.type === 'text' && (
+                                        <AnimatedActionButton
+                                            onPress={isEditing ? handleSaveEdit : () => setIsEditing(true)}
+                                            style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
+                                            delay={150}
+                                        >
+                                            <Ionicons
+                                                name={isEditing ? 'checkmark' : 'create-outline'}
+                                                size={20}
+                                                color={isEditing ? colors.success : colors.secondaryText}
+                                            />
+                                        </AnimatedActionButton>
+                                    )}
 
-                        <View style={styles.infoRow}>
-                            <Ionicons name="time-outline" size={20} color={colors.secondaryText} />
-                            <Text style={[styles.infoText, { color: colors.secondaryText }]}>{dateStr}</Text>
-                        </View>
+                                    {/* Share */}
+                                    <AnimatedActionButton
+                                        onPress={handleShare}
+                                        style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
+                                        delay={200}
+                                    >
+                                        <Ionicons name="share-outline" size={20} color={colors.secondaryText} />
+                                    </AnimatedActionButton>
+                                </View>
 
-                        <View style={styles.infoRow}>
-                            <Ionicons name="location-outline" size={20} color={colors.secondaryText} />
-                            <Text style={[styles.infoText, { color: colors.secondaryText }]}>
-                                {note.latitude.toFixed(5)}, {note.longitude.toFixed(5)}
-                            </Text>
-                        </View>
-                    </View>
+                                {/* Info Section — animated entrance */}
+                                <Animated.View style={{ opacity: infoOpacity, transform: [{ translateY: infoTranslateY }] }}>
+                                    <View style={styles.infoSection}>
+                                        <View style={styles.infoRow}>
+                                            <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
+                                            <TextInput
+                                                style={[styles.editLocationInput, { color: colors.text }]}
+                                                value={isEditing ? editLocation : (note.locationName || t('noteDetail.unknownLocation', 'Unknown Location'))}
+                                                onChangeText={isEditing ? setEditLocation : undefined}
+                                                editable={isEditing}
+                                                placeholder={isEditing ? t('noteDetail.editLocation', 'Edit location name...') : undefined}
+                                                placeholderTextColor={colors.secondaryText}
+                                                maxLength={100}
+                                            />
+                                        </View>
 
-                    {/* Delete Button */}
-                    <Pressable
-                        style={[styles.deleteButton, { backgroundColor: colors.danger + '15' }]}
-                        onPress={handleDelete}
-                    >
-                        <Ionicons name="trash-outline" size={20} color={colors.danger} />
-                        <Text style={[styles.deleteText, { color: colors.danger }]}>
-                            {t('noteDetail.delete', 'Delete Note')}
-                        </Text>
-                    </Pressable>
-                </Animated.View>
-            </ScrollView>
-        </KeyboardAvoidingView>
+                                        <View style={styles.infoRow}>
+                                            <Ionicons name="time-outline" size={20} color={colors.secondaryText} />
+                                            <Text style={[styles.infoText, { color: colors.secondaryText }]}>{dateStr}</Text>
+                                        </View>
+
+                                        <View style={styles.infoRow}>
+                                            <Ionicons name="location-outline" size={20} color={colors.secondaryText} />
+                                            <Text style={[styles.infoText, { color: colors.secondaryText }]}>
+                                                {note.latitude.toFixed(5)}, {note.longitude.toFixed(5)}
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    {/* Delete Button */}
+                                    <Pressable
+                                        style={[styles.deleteButton, { backgroundColor: colors.danger + '15' }]}
+                                        onPress={handleDelete}
+                                    >
+                                        <Ionicons name="trash-outline" size={20} color={colors.danger} />
+                                        <Text style={[styles.deleteText, { color: colors.danger }]}>
+                                            {t('noteDetail.delete', 'Delete Note')}
+                                        </Text>
+                                    </Pressable>
+                                </Animated.View>
+                            </ScrollView>
+                        </KeyboardAvoidingView>
+                    </RNHostView>
+                </Group>
+            </BottomSheet>
+        </Host>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
+        // Removed flex: 1 to prevent RNHostView matchContents height collapse
     },
     center: {
-        flex: 1,
+        // Removed flex: 1 to prevent RNHostView matchContents height collapse
         justifyContent: 'center',
         alignItems: 'center',
     },

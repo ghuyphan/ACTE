@@ -1,11 +1,13 @@
+import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
+import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
-import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import SettingsBottomSheet from '../../components/SettingsBottomSheet';
+import SettingsClearSheet from '../../components/SettingsClearSheet';
+import SettingsLanguageSheet from '../../components/SettingsLanguageSheet';
+import SettingsThemeSheet from '../../components/SettingsThemeSheet';
 import { useNotes } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
 
@@ -41,22 +43,16 @@ function SettingRow({ icon, iconColor, label, value, onPress, danger, isLast }: 
     );
 }
 
-type BottomSheetType = 'language' | 'theme' | 'clear';
 
 export default function SettingsScreen() {
     const { t, i18n } = useTranslation();
-    const { theme, setTheme, colors, isDark } = useTheme();
-    const { deleteAllNotes, notes } = useNotes();
+    const { theme, colors, isDark } = useTheme();
+    const { notes } = useNotes();
     const router = useRouter();
-    const insets = useSafeAreaInsets();
 
-    const bottomSheetRef = useRef<BottomSheetModal>(null);
-    const [sheetType, setSheetType] = useState<BottomSheetType>('language');
-
-    const openSheet = (type: BottomSheetType) => {
-        setSheetType(type);
-        bottomSheetRef.current?.present();
-    };
+    const [showTheme, setShowTheme] = useState(false);
+    const [showLanguage, setShowLanguage] = useState(false);
+    const [showClear, setShowClear] = useState(false);
 
     const themeLabel =
         theme === 'system'
@@ -65,99 +61,8 @@ export default function SettingsScreen() {
                 ? t('settings.dark', 'Dark')
                 : t('settings.light', 'Light');
 
-    const renderSheetContent = () => {
-        if (sheetType === 'language') {
-            return (
-                <View>
-                    <Text style={[styles.sheetTitle, { color: colors.text }]}>
-                        {t('settings.language', 'Language')}
-                    </Text>
-                    <View style={[styles.section, { backgroundColor: colors.card, marginHorizontal: 0 }]}>
-                        <SettingRow
-                            icon="language-outline"
-                            iconColor={colors.primary}
-                            label="English"
-                            value={i18n.language === 'en' ? '✓' : ''}
-                            onPress={() => { i18n.changeLanguage('en'); bottomSheetRef.current?.dismiss(); }}
-                        />
-                        <SettingRow
-                            icon="language-outline"
-                            iconColor={colors.primary}
-                            label="Tiếng Việt"
-                            value={i18n.language === 'vi' ? '✓' : ''}
-                            onPress={() => { i18n.changeLanguage('vi'); bottomSheetRef.current?.dismiss(); }}
-                            isLast
-                        />
-                    </View>
-                </View>
-            );
-        }
-        if (sheetType === 'theme') {
-            return (
-                <View>
-                    <Text style={[styles.sheetTitle, { color: colors.text }]}>
-                        {t('settings.theme', 'Theme')}
-                    </Text>
-                    <View style={[styles.section, { backgroundColor: colors.card, marginHorizontal: 0 }]}>
-                        <SettingRow
-                            icon="phone-portrait-outline"
-                            iconColor={colors.primary}
-                            label={t('settings.system', 'System')}
-                            value={theme === 'system' ? '✓' : ''}
-                            onPress={() => { setTheme('system'); bottomSheetRef.current?.dismiss(); }}
-                        />
-                        <SettingRow
-                            icon="sunny-outline"
-                            iconColor={colors.primary}
-                            label={t('settings.light', 'Light')}
-                            value={theme === 'light' ? '✓' : ''}
-                            onPress={() => { setTheme('light'); bottomSheetRef.current?.dismiss(); }}
-                        />
-                        <SettingRow
-                            icon="moon-outline"
-                            iconColor={colors.primary}
-                            label={t('settings.dark', 'Dark')}
-                            value={theme === 'dark' ? '✓' : ''}
-                            onPress={() => { setTheme('dark'); bottomSheetRef.current?.dismiss(); }}
-                            isLast
-                        />
-                    </View>
-                </View>
-            );
-        }
-        if (sheetType === 'clear') {
-            return (
-                <View>
-                    <Text style={[styles.sheetTitle, { color: colors.danger }]}>
-                        {t('settings.clearAllTitle', 'Clear All Notes')}
-                    </Text>
-                    <Text style={{ fontSize: 16, marginBottom: 24, color: colors.secondaryText, lineHeight: 24 }}>
-                        {t('settings.clearAllMsg', 'All your notes will be permanently deleted.')}
-                    </Text>
-                    <Pressable
-                        style={[{ backgroundColor: colors.danger }, styles.primaryButton]}
-                        onPress={() => { deleteAllNotes(); bottomSheetRef.current?.dismiss(); }}
-                    >
-                        <Text style={styles.primaryButtonText}>
-                            {t('common.delete', 'Delete All')}
-                        </Text>
-                    </Pressable>
-                    <Pressable
-                        style={[{ backgroundColor: colors.border }, styles.secondaryButton]}
-                        onPress={() => bottomSheetRef.current?.dismiss()}
-                    >
-                        <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
-                            {t('common.cancel', 'Cancel')}
-                        </Text>
-                    </Pressable>
-                </View>
-            );
-        }
-        return null;
-    };
-
     return (
-        <View style={styles.container}>
+        <Host style={styles.container} colorScheme={isDark ? 'dark' : 'light'}>
             <ScrollView
                 style={[styles.container, { backgroundColor: colors.background }]}
                 contentContainerStyle={{ paddingTop: 16, paddingBottom: 40 }}
@@ -176,14 +81,14 @@ export default function SettingsScreen() {
                         iconColor={colors.primary}
                         label={t('settings.language', 'Language')}
                         value={i18n.language === 'en' ? 'English' : 'Tiếng Việt'}
-                        onPress={() => openSheet('language')}
+                        onPress={() => setShowLanguage(true)}
                     />
                     <SettingRow
                         icon={isDark ? 'moon-outline' : 'sunny-outline'}
                         iconColor={colors.primary}
                         label={t('settings.theme', 'Theme')}
                         value={themeLabel}
-                        onPress={() => openSheet('theme')}
+                        onPress={() => setShowTheme(true)}
                         isLast
                     />
                 </View>
@@ -204,7 +109,7 @@ export default function SettingsScreen() {
                         icon="trash-outline"
                         iconColor={colors.danger}
                         label={t('settings.clearAll', 'Clear All Notes')}
-                        onPress={() => openSheet('clear')}
+                        onPress={() => setShowClear(true)}
                         danger
                         isLast
                     />
@@ -236,10 +141,30 @@ export default function SettingsScreen() {
                 </View>
             </ScrollView>
 
-            <SettingsBottomSheet ref={bottomSheetRef}>
-                {renderSheetContent()}
-            </SettingsBottomSheet>
-        </View>
+            <BottomSheet isPresented={showTheme} onIsPresentedChange={setShowTheme} fitToContents>
+                <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
+                    <RNHostView matchContents>
+                        <SettingsThemeSheet onClose={() => setShowTheme(false)} />
+                    </RNHostView>
+                </Group>
+            </BottomSheet>
+
+            <BottomSheet isPresented={showLanguage} onIsPresentedChange={setShowLanguage} fitToContents>
+                <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
+                    <RNHostView matchContents>
+                        <SettingsLanguageSheet onClose={() => setShowLanguage(false)} />
+                    </RNHostView>
+                </Group>
+            </BottomSheet>
+
+            <BottomSheet isPresented={showClear} onIsPresentedChange={setShowClear} fitToContents>
+                <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
+                    <RNHostView matchContents>
+                        <SettingsClearSheet onClose={() => setShowClear(false)} />
+                    </RNHostView>
+                </Group>
+            </BottomSheet>
+        </Host>
     );
 }
 
@@ -299,33 +224,5 @@ const styles = StyleSheet.create({
     },
     aboutText: {
         fontSize: 13,
-    },
-    sheetTitle: {
-        fontSize: 22,
-        fontWeight: '800',
-        marginBottom: 20,
-        fontFamily: 'System',
-    },
-    primaryButton: {
-        padding: 16,
-        borderRadius: 16,
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    primaryButtonText: {
-        color: '#fff',
-        fontSize: 17,
-        fontWeight: '700',
-        fontFamily: 'System',
-    },
-    secondaryButton: {
-        padding: 16,
-        borderRadius: 16,
-        alignItems: 'center',
-    },
-    secondaryButtonText: {
-        fontSize: 17,
-        fontWeight: '600',
-        fontFamily: 'System',
     },
 });

@@ -129,7 +129,8 @@ export default function MapScreen() {
             {/* Empty state overlay */}
             {notes.length === 0 && (
                 <View style={styles.emptyOverlay} pointerEvents="none">
-                    <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(28,28,30,0.9)' : 'rgba(255,255,255,0.92)' }]}>
+                    <View style={[styles.emptyCard, { overflow: 'hidden' }]}>
+                        <GlassView style={StyleSheet.absoluteFillObject} colorScheme={isDark ? 'dark' : 'light'} />
                         <Ionicons name="map-outline" size={40} color={colors.primary} style={{ marginBottom: 8 }} />
                         <Text style={[styles.emptyTitle, { color: colors.text }]}>
                             {t('map.emptyTitle', 'No notes on the map yet')}
@@ -164,7 +165,7 @@ const styles = StyleSheet.create({
     calloutTitle: {
         fontSize: 15,
         fontWeight: '700',
-        color: '#1C1C1E',
+        color: '#1C1C1E', // Callouts are always light themed natively, so keeping slightly dark text
         marginBottom: 4,
         fontFamily: 'System',
     },
@@ -176,7 +177,7 @@ const styles = StyleSheet.create({
     },
     calloutHint: {
         fontSize: 12,
-        color: '#FF9F0A',
+        color: '#FF9F0A', // Keep this or use colors.primary
         fontWeight: '600',
         fontFamily: 'System',
     },

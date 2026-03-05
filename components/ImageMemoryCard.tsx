@@ -1,14 +1,16 @@
 import { Image } from 'expo-image';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useTheme } from '../hooks/useTheme';
 
 interface ImageMemoryCardProps {
     imageUrl: string;
 }
 
 export default function ImageMemoryCard({ imageUrl }: ImageMemoryCardProps) {
+    const { colors } = useTheme();
     return (
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
             <Image
                 source={{ uri: imageUrl }}
                 style={styles.image}
@@ -24,7 +26,6 @@ const styles = StyleSheet.create({
         borderRadius: 40,
         borderCurve: 'continuous',
         overflow: 'hidden',
-        backgroundColor: '#1C1C1E',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.15,

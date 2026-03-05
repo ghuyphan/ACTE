@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useColorScheme } from 'react-native';
+import { Appearance, useColorScheme } from 'react-native';
 
 type ThemeType = 'light' | 'dark' | 'system';
 
@@ -91,6 +91,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         AsyncStorage.getItem(THEME_STORAGE_KEY).then((savedTheme) => {
             if (savedTheme) {
                 setThemeState(savedTheme as ThemeType);
+                // @ts-ignore - React Native 0.83+ allows undefined/null to reset to system default but types may be sticter
+                Appearance.setColorScheme(savedTheme === 'system' ? undefined : savedTheme as 'light' | 'dark');
+            } else {
+                // @ts-ignore
+                Appearance.setColorScheme(undefined);
             }
             setThemeReady(true);
         }).catch(() => {
@@ -100,6 +105,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     const setTheme = async (newTheme: ThemeType) => {
         setThemeState(newTheme);
+        // @ts-ignore
+        Appearance.setColorScheme(newTheme === 'system' ? undefined : newTheme);
         await AsyncStorage.setItem(THEME_STORAGE_KEY, newTheme);
     };
 
