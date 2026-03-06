@@ -1,54 +1,23 @@
-import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
-import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
-import { Ionicons } from '@expo/vector-icons';
+import { BottomSheet, Button, Group, Host, HStack, List, RNHostView, Section, Spacer, Image as SwiftUIImage, Text as SwiftUIText, VStack } from '@expo/ui/swift-ui';
+import { backgroundOverlay, cornerRadius, environment, font, foregroundStyle, frame, multilineTextAlignment, padding, presentationDragIndicator, scrollContentBackground } from '@expo/ui/swift-ui/modifiers';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SettingsClearSheet from '../../components/SettingsClearSheet';
 import SettingsLanguageSheet from '../../components/SettingsLanguageSheet';
 import SettingsThemeSheet from '../../components/SettingsThemeSheet';
 import { useNotes } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
-
-interface SettingRowProps {
-    icon: keyof typeof Ionicons.glyphMap;
-    iconColor: string;
-    label: string;
-    value?: string;
-    onPress: () => void;
-    danger?: boolean;
-    isLast?: boolean;
-}
-
-function SettingRow({ icon, iconColor, label, value, onPress, danger, isLast }: SettingRowProps) {
-    const { colors } = useTheme();
-    return (
-        <Pressable
-            style={[styles.row, !isLast && { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth }]}
-            onPress={onPress}
-        >
-            <View style={[styles.iconContainer, { backgroundColor: iconColor + '18' }]}>
-                <Ionicons name={icon} size={18} color={iconColor} />
-            </View>
-            <Text style={[styles.rowLabel, { color: danger ? colors.danger : colors.text }]}>
-                {label}
-            </Text>
-            {value ? (
-                <Text style={[styles.rowValue, { color: colors.primary }]}>{value}</Text>
-            ) : (
-                <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
-            )}
-        </Pressable>
-    );
-}
-
+import { isOlderIOS } from '../../utils/platform';
 
 export default function SettingsScreen() {
     const { t, i18n } = useTranslation();
     const { theme, colors, isDark } = useTheme();
     const { notes } = useNotes();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
 
     const [showTheme, setShowTheme] = useState(false);
     const [showLanguage, setShowLanguage] = useState(false);
@@ -62,109 +31,108 @@ export default function SettingsScreen() {
                 : t('settings.light', 'Light');
 
     return (
-        <Host style={styles.container} colorScheme={isDark ? 'dark' : 'light'}>
-            <ScrollView
-                style={[styles.container, { backgroundColor: colors.background }]}
-                contentContainerStyle={{ paddingTop: 16, paddingBottom: 40 }}
-            >
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <View style={{ paddingTop: insets.top + 16 }}>
                 <Text style={[styles.title, { color: colors.text }]}>
                     {t('settings.title', 'Settings')}
                 </Text>
+            </View>
+            <Host style={styles.container} colorScheme={isDark ? 'dark' : 'light'}>
+                <List modifiers={[scrollContentBackground('hidden')]}>
+                    {/* Preferences */}
+                    <Section title={t('settings.preferences', 'PREFERENCES')}>
+                        <Button onPress={() => setShowLanguage(true)}>
+                            <HStack>
+                                <HStack modifiers={[frame({ width: 30, height: 30, alignment: 'center' }), backgroundOverlay({ color: colors.primary + '18' }), cornerRadius(7), padding({ trailing: 12 })]}>
+                                    <SwiftUIImage systemName="globe" color={colors.primary} size={18} />
+                                </HStack>
+                                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>{t('settings.language', 'Language')}</SwiftUIText>
+                                <Spacer />
+                                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{i18n.language === 'en' ? 'English' : 'Tiếng Việt'}</SwiftUIText>
+                            </HStack>
+                        </Button>
+                        <Button onPress={() => setShowTheme(true)}>
+                            <HStack>
+                                <HStack modifiers={[frame({ width: 30, height: 30, alignment: 'center' }), backgroundOverlay({ color: colors.primary + '18' }), cornerRadius(7), padding({ trailing: 12 })]}>
+                                    <SwiftUIImage systemName={isDark ? 'moon' : 'sun.max'} color={colors.primary} size={18} />
+                                </HStack>
+                                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>{t('settings.theme', 'Theme')}</SwiftUIText>
+                                <Spacer />
+                                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{themeLabel}</SwiftUIText>
+                            </HStack>
+                        </Button>
+                    </Section>
 
-                {/* Preferences */}
-                <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
-                    {t('settings.preferences', 'PREFERENCES')}
-                </Text>
-                <View style={[styles.section, { backgroundColor: colors.card }]}>
-                    <SettingRow
-                        icon="language-outline"
-                        iconColor={colors.primary}
-                        label={t('settings.language', 'Language')}
-                        value={i18n.language === 'en' ? 'English' : 'Tiếng Việt'}
-                        onPress={() => setShowLanguage(true)}
-                    />
-                    <SettingRow
-                        icon={isDark ? 'moon-outline' : 'sunny-outline'}
-                        iconColor={colors.primary}
-                        label={t('settings.theme', 'Theme')}
-                        value={themeLabel}
-                        onPress={() => setShowTheme(true)}
-                        isLast
-                    />
-                </View>
+                    {/* Data */}
+                    <Section title={t('settings.data', 'DATA')}>
+                        <HStack>
+                            <HStack modifiers={[frame({ width: 30, height: 30, alignment: 'center' }), backgroundOverlay({ color: colors.primary + '18' }), cornerRadius(7), padding({ trailing: 12 })]}>
+                                <SwiftUIImage systemName="doc.text" color={colors.primary} size={18} />
+                            </HStack>
+                            <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>{t('settings.noteCount', 'Saved Notes')}</SwiftUIText>
+                            <Spacer />
+                            <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{`${notes.length}`}</SwiftUIText>
+                        </HStack>
+                        <Button onPress={() => setShowClear(true)}>
+                            <HStack>
+                                <HStack modifiers={[frame({ width: 30, height: 30, alignment: 'center' }), backgroundOverlay({ color: colors.danger + '18' }), cornerRadius(7), padding({ trailing: 12 })]}>
+                                    <SwiftUIImage systemName="trash" color={colors.danger} size={18} />
+                                </HStack>
+                                <SwiftUIText modifiers={[foregroundStyle(colors.danger)]}>{t('settings.clearAll', 'Clear All Notes')}</SwiftUIText>
+                            </HStack>
+                        </Button>
+                    </Section>
 
-                {/* Data */}
-                <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
-                    {t('settings.data', 'DATA')}
-                </Text>
-                <View style={[styles.section, { backgroundColor: colors.card }]}>
-                    <SettingRow
-                        icon="document-text-outline"
-                        iconColor={colors.primary}
-                        label={t('settings.noteCount', 'Saved Notes')}
-                        value={`${notes.length}`}
-                        onPress={() => { }}
-                    />
-                    <SettingRow
-                        icon="trash-outline"
-                        iconColor={colors.danger}
-                        label={t('settings.clearAll', 'Clear All Notes')}
-                        onPress={() => setShowClear(true)}
-                        danger
-                        isLast
-                    />
-                </View>
+                    {/* Account */}
+                    <Section
+                        title={t('settings.account', 'ACCOUNT')}
+                        footer={
+                            <HStack>
+                                <Spacer />
+                                <VStack modifiers={[padding({ top: 36, bottom: 40 })]}>
+                                    <SwiftUIText modifiers={[foregroundStyle(colors.secondaryText), font({ size: 13 }), multilineTextAlignment('center')]}>ACTE v1.0.0</SwiftUIText>
+                                    <SwiftUIText modifiers={[foregroundStyle(colors.secondaryText), font({ size: 13 }), multilineTextAlignment('center'), padding({ top: 4 })]}>{t('settings.about', 'So you never forget what she likes 💛')}</SwiftUIText>
+                                </VStack>
+                                <Spacer />
+                            </HStack>
+                        }
+                    >
+                        <Button onPress={() => router.push('/auth')}>
+                            <HStack>
+                                <HStack modifiers={[frame({ width: 30, height: 30, alignment: 'center' }), backgroundOverlay({ color: colors.secondaryText + '18' }), cornerRadius(7), padding({ trailing: 12 })]}>
+                                    <SwiftUIImage systemName="person" color={colors.secondaryText} size={18} />
+                                </HStack>
+                                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>{t('settings.login', 'Sign In')}</SwiftUIText>
+                                <Spacer />
+                                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{t('settings.notSignedIn', 'Not signed in')}</SwiftUIText>
+                            </HStack>
+                        </Button>
+                    </Section>
+                </List>
 
-                {/* Account */}
-                <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
-                    {t('settings.account', 'ACCOUNT')}
-                </Text>
-                <View style={[styles.section, { backgroundColor: colors.card }]}>
-                    <SettingRow
-                        icon="person-outline"
-                        iconColor={colors.secondaryText}
-                        label={t('settings.login', 'Sign In')}
-                        value={t('settings.notSignedIn', 'Not signed in')}
-                        onPress={() => router.push('/auth')}
-                        isLast
-                    />
-                </View>
-
-                {/* About */}
-                <View style={styles.aboutSection}>
-                    <Text style={[styles.aboutText, { color: colors.secondaryText }]}>
-                        ACTE v1.0.0
-                    </Text>
-                    <Text style={[styles.aboutText, { color: colors.secondaryText }]}>
-                        {t('settings.about', 'So you never forget what she likes 💛')}
-                    </Text>
-                </View>
-            </ScrollView>
-
-            <BottomSheet isPresented={showTheme} onIsPresentedChange={setShowTheme} fitToContents>
-                <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
-                    <RNHostView matchContents>
+                <BottomSheet isPresented={showTheme} onIsPresentedChange={setShowTheme} fitToContents>
+                    <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
                         <SettingsThemeSheet onClose={() => setShowTheme(false)} />
-                    </RNHostView>
-                </Group>
-            </BottomSheet>
+                    </Group>
+                </BottomSheet>
 
-            <BottomSheet isPresented={showLanguage} onIsPresentedChange={setShowLanguage} fitToContents>
-                <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
-                    <RNHostView matchContents>
+                <BottomSheet isPresented={showLanguage} onIsPresentedChange={setShowLanguage} fitToContents>
+                    <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
                         <SettingsLanguageSheet onClose={() => setShowLanguage(false)} />
-                    </RNHostView>
-                </Group>
-            </BottomSheet>
+                    </Group>
+                </BottomSheet>
 
-            <BottomSheet isPresented={showClear} onIsPresentedChange={setShowClear} fitToContents>
-                <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
-                    <RNHostView matchContents>
-                        <SettingsClearSheet onClose={() => setShowClear(false)} />
-                    </RNHostView>
-                </Group>
-            </BottomSheet>
-        </Host>
+                <BottomSheet isPresented={showClear} onIsPresentedChange={setShowClear} fitToContents>
+                    <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
+                        <RNHostView matchContents>
+                            <View style={isOlderIOS && { backgroundColor: colors.card, borderTopLeftRadius: 10, borderTopRightRadius: 10 }}>
+                                <SettingsClearSheet onClose={() => setShowClear(false)} />
+                            </View>
+                        </RNHostView>
+                    </Group>
+                </BottomSheet>
+            </Host>
+        </View>
     );
 }
 
@@ -178,51 +146,5 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         marginBottom: 20,
         fontFamily: 'System',
-    },
-    sectionTitle: {
-        fontSize: 13,
-        fontWeight: '500',
-        letterSpacing: 0.3,
-        paddingHorizontal: 20,
-        marginBottom: 6,
-        marginTop: 24,
-        fontFamily: 'System',
-    },
-    section: {
-        marginHorizontal: 16,
-        borderRadius: 14,
-        overflow: 'hidden',
-    },
-    row: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 13,
-        paddingHorizontal: 14,
-    },
-    iconContainer: {
-        width: 30,
-        height: 30,
-        borderRadius: 7,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    rowLabel: {
-        fontSize: 16,
-        flex: 1,
-        fontFamily: 'System',
-    },
-    rowValue: {
-        fontSize: 15,
-        fontWeight: '600',
-        fontFamily: 'System',
-    },
-    aboutSection: {
-        alignItems: 'center',
-        paddingVertical: 36,
-        gap: 4,
-    },
-    aboutText: {
-        fontSize: 13,
     },
 });

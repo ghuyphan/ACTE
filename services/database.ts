@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -64,7 +65,8 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function generateId(): string {
-    return `note-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    // Replaced Math.random with cryptographically secure UUID
+    return `note-${Date.now()}-${Crypto.randomUUID().substring(0, 8)}`;
 }
 
 function rowToNote(row: any): Note {

@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGeofence } from '../../hooks/useGeofence';
 import { useNotes } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
+import { isOlderIOS } from '../../utils/platform';
 
 const { width } = Dimensions.get('window');
 
@@ -109,6 +110,7 @@ export default function MapScreen() {
                 glassEffectStyle="regular"
                 colorScheme={isDark ? 'dark' : 'light'}
             >
+                {isOlderIOS && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)' }]} />}
                 <Ionicons name="pin" size={16} color={colors.primary} />
                 <Text style={[styles.countText, { color: colors.text }]}>
                     {notes.length} {notes.length === 1 ? t('map.note', 'note') : t('map.notes', 'notes')}
@@ -122,6 +124,7 @@ export default function MapScreen() {
                     glassEffectStyle="regular"
                     colorScheme={isDark ? 'dark' : 'light'}
                 >
+                    {isOlderIOS && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)' }]} />}
                     <Ionicons name="location" size={22} color={colors.primary} />
                 </GlassView>
             </Pressable>
@@ -130,6 +133,7 @@ export default function MapScreen() {
             {notes.length === 0 && (
                 <View style={styles.emptyOverlay} pointerEvents="none">
                     <View style={[styles.emptyCard, { overflow: 'hidden' }]}>
+                        {isOlderIOS && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)' }]} />}
                         <GlassView style={StyleSheet.absoluteFillObject} colorScheme={isDark ? 'dark' : 'light'} />
                         <Ionicons name="map-outline" size={40} color={colors.primary} style={{ marginBottom: 8 }} />
                         <Text style={[styles.emptyTitle, { color: colors.text }]}>

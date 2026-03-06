@@ -15,7 +15,6 @@
     },
     "android": {
       "package": "com.acte.app",
-      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -35,7 +34,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Memory Lane to use your location to find nearby memories.",
+          "locationAlwaysAndWhenInUsePermission": "Allow ACTE to use your location to save and find your nearby memories.",
           "isAndroidBackgroundLocationEnabled": true,
           "isIosBackgroundLocationEnabled": true
         }
@@ -64,8 +63,8 @@
               "name": "LocketWidget",
               "module": "./widgets/LocketWidget.tsx",
               "targetName": "LocketWidgetExtension",
-              "displayName": "ACTE Locket",
-              "description": "Live photos from friends on your Home Screen.",
+              "displayName": "ACTE Widget",
+              "description": "View your recently captured memories right on your Home Screen.",
               "supportedFamilies": [
                 "systemSmall",
                 "systemLarge"

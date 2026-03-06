@@ -2,6 +2,7 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useTranslation } from 'react-i18next';
 import { DynamicColorIOS, Platform } from 'react-native';
 import { Colors, useTheme } from '../../hooks/useTheme';
+import { isOlderIOS } from '../../utils/platform';
 
 export default function TabLayout() {
   const { t } = useTranslation();
@@ -22,9 +23,8 @@ export default function TabLayout() {
 
   return (
     <NativeTabs
-      minimizeBehavior="onScrollDown"
       // 'systemChromeMaterial' natively adapts to light/dark mode automatically on iOS
-      blurEffect={Platform.OS === 'ios' ? 'systemChromeMaterial' : undefined}
+      blurEffect={Platform.OS === 'ios' ? (isOlderIOS ? (colors === Colors.dark ? 'dark' : 'light') : 'systemChromeMaterial') : undefined}
       backgroundColor={dynamicTabBarBg}
       tintColor={dynamicPrimary}
       iconColor={{ default: dynamicSecondaryText, selected: dynamicPrimary }}

@@ -1,19 +1,15 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import app from '@react-native-firebase/app';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
-// TODO: Replace with your Firebase project configuration
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
+// React Native Firebase automatically initializes using the native 
+// google-services.json (Android) and GoogleService-Info.plist (iOS) files.
+// We simply initialize the services we need and export them.
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+const firebaseAuth = auth();
+const firebaseDb = firestore();
 
-export { auth, db };
+// Optional: Enable offline persistence explicitly (usually enabled by default on mobile)
+// firebaseDb.settings({ persistence: true });
+
+export { app, firebaseAuth as auth, firebaseDb as db };

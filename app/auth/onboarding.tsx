@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
+import { isOlderIOS } from '../../utils/platform';
 
 const { width } = Dimensions.get('window');
 const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
@@ -58,6 +59,7 @@ export default function OnboardingScreen() {
                     exiting={FadeOutDown.duration(200)}
                     style={[styles.emojiContainer, { overflow: 'hidden' }]}
                 >
+                    <View style={[StyleSheet.absoluteFillObject, isOlderIOS && { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }]} />
                     <GlassView style={StyleSheet.absoluteFillObject} colorScheme={isDark ? 'dark' : 'light'} />
                     <Text style={styles.emoji}>{slide.emoji}</Text>
                 </Animated.View>

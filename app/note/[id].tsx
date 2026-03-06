@@ -25,6 +25,7 @@ import { useNotes } from '../../hooks/useNotes';
 import { CardGradients, useTheme } from '../../hooks/useTheme';
 import { Note } from '../../services/database';
 import { formatDate } from '../../utils/dateUtils';
+import { isOlderIOS } from '../../utils/platform';
 
 const { width } = Dimensions.get('window');
 const CARD_SIZE = width - 40;
@@ -242,7 +243,7 @@ export default function NoteDetailScreen() {
                 <BottomSheet isPresented={isPresented} onIsPresentedChange={handleDismiss} fitToContents>
                     <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
                         <RNHostView matchContents>
-                            <View style={[styles.container, { backgroundColor: 'transparent' }]}>
+                            <View style={[styles.container, { backgroundColor: isOlderIOS ? colors.card : 'transparent' }, isOlderIOS && { borderTopLeftRadius: 10, borderTopRightRadius: 10 }]}>
                                 <View style={styles.handleBar}>
                                     <View style={[styles.handle, { backgroundColor: colors.border }]} />
                                 </View>
@@ -261,7 +262,7 @@ export default function NoteDetailScreen() {
                 <BottomSheet isPresented={isPresented} onIsPresentedChange={handleDismiss} fitToContents>
                     <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
                         <RNHostView matchContents>
-                            <View style={[styles.center, { backgroundColor: 'transparent', minHeight: 200 }]}>
+                            <View style={[styles.center, { backgroundColor: isOlderIOS ? colors.card : 'transparent', minHeight: 200 }, isOlderIOS && { borderTopLeftRadius: 10, borderTopRightRadius: 10 }]}>
                                 <Text style={{ color: colors.secondaryText, fontSize: 17 }}>
                                     {t('noteDetail.notFound', 'Note not found')}
                                 </Text>
@@ -288,7 +289,7 @@ export default function NoteDetailScreen() {
                 <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
                     <RNHostView matchContents>
                         <KeyboardAvoidingView
-                            style={[styles.container, { backgroundColor: 'transparent' }]}
+                            style={[styles.container, { backgroundColor: isOlderIOS ? colors.card : 'transparent' }, isOlderIOS && { borderTopLeftRadius: 10, borderTopRightRadius: 10 }]}
                             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                         >
                             <ScrollView

@@ -1,12 +1,6 @@
-// Mock GoogleSignin for Expo Go preview
-const statusCodes = { SIGN_IN_CANCELLED: 1, IN_PROGRESS: 2, PLAY_SERVICES_NOT_AVAILABLE: 3 };
-const GoogleSignin = {
-    configure: () => { },
-    hasPlayServices: async () => true,
-    signIn: async () => ({ user: { name: 'Demo User' } }),
-};
-
 import { Ionicons } from '@expo/vector-icons';
+import auth from '@react-native-firebase/auth';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -14,6 +8,13 @@ import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../hooks/useTheme';
+
+// Configure Google Sign-In
+GoogleSignin.configure({
+    // IMPORTANT: Replace this with your actual Web Client ID from Firebase Console.
+    // Go to Firebase Console -> Authentication -> Sign-in method -> Google -> Web SDK configuration -> Web client ID
+    webClientId: '380816810604-jcr2hrg0ofnh9iblp1vd67nq294qad60.apps.googleusercontent.com',
+});
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -26,15 +27,45 @@ export default function LoginScreen() {
     const signIn = async () => {
         try {
             setIsSigninInProgress(true);
-            await GoogleSignin.hasPlayServices();
-            const userInfo = await GoogleSignin.signIn();
-            console.log('User signed in:', userInfo);
+
+            // 1. Check if user's device has Google Play Services (required for Android)
+            await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+            // 2. Start the native Google Sign-In flow
+            const response = await GoogleSignin.signIn();
+
+            // Handle v13+ library response format where cancellations don't throw an error
+            if ('type' in response && response.type === 'cancelled') {
+                console.log('User cancelled the login flow');
+                return;
+            }
+
+            // 3. Extract the ID Token safely by casting to 'any' to satisfy TypeScript's strict checks
+            // This safely supports both v13+ (response.data.idToken) and v12- (response.idToken)
+            const idToken = (response as any).data?.idToken || (response as any).idToken;
+
+            if (!idToken) {
+                throw new Error('No ID token returned from Google Sign-In');
+            }
+
+            // 4. Create a Firebase credential with the Google ID token
+            const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+
+            // 5. Sign-in the user to Firebase
+            await auth().signInWithCredential(googleCredential);
+
+            console.log('User signed in to Firebase successfully!');
             router.replace('/(tabs)');
         } catch (error: any) {
+            // Catch block remains for backward compatibility with v12 and below
             if (error.code === statusCodes.SIGN_IN_CANCELLED) {
                 console.log('User cancelled the login flow');
+            } else if (error.code === statusCodes.IN_PROGRESS) {
+                console.log('Sign in is already in progress');
+            } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+                console.log('Google Play Services not available or outdated');
             } else {
-                console.log('Error:', error);
+                console.error('Firebase Auth Error:', error);
             }
         } finally {
             setIsSigninInProgress(false);

@@ -31,6 +31,7 @@ import { useNotes } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
 import { Note } from '../../services/database';
 import { formatDate } from '../../utils/dateUtils';
+import { isOlderIOS } from '../../utils/platform';
 
 // ─── Animated Note Card ──────────────────────────
 function AnimatedNoteCard({ item, index, onPress, colors, isDark, t }: {
@@ -79,6 +80,7 @@ function AnimatedNoteCard({ item, index, onPress, colors, isDark, t }: {
       {/* Below-card metadata */}
       <Animated.View style={[styles.belowCardMetaContainer, { opacity }]}>
         <View style={[styles.metadataPill, { overflow: 'hidden' }]}>
+          {isOlderIOS && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }]} />}
           <GlassView style={StyleSheet.absoluteFillObject} colorScheme={isDark ? 'dark' : 'light'} />
           <Ionicons name="location" size={14} color={colors.secondaryText} />
           <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
@@ -239,6 +241,8 @@ export default function HomeScreen() {
     }
 
     setSaving(true);
+    let destinationPath: string | null = null;
+
     try {
       const lat = currentLocation.coords.latitude;
       const lon = currentLocation.coords.longitude;
@@ -246,13 +250,15 @@ export default function HomeScreen() {
       const locationName = restaurantName.trim() || geoName;
 
       let content = noteText.trim();
+
+      // Handle file moving before DB update
       if (captureMode === 'camera' && capturedPhoto) {
         const dir = `${FileSystem.documentDirectory}photos/`;
         await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
         const filename = `note-${Date.now()}.jpg`;
-        const dest = `${dir}${filename}`;
-        await FileSystem.copyAsync({ from: capturedPhoto, to: dest });
-        content = dest;
+        destinationPath = `${dir}${filename}`;
+        await FileSystem.copyAsync({ from: capturedPhoto, to: destinationPath });
+        content = destinationPath;
       }
 
       const note = await createNote({
@@ -274,6 +280,16 @@ export default function HomeScreen() {
       Alert.alert(t('capture.saved', '✓ Saved!'), t('capture.savedMsg'));
     } catch (error) {
       console.error('Save failed:', error);
+
+      // Rollback: Prevent storage leak by deleting the file if DB operation failed
+      if (destinationPath) {
+        try {
+          await FileSystem.deleteAsync(destinationPath, { idempotent: true });
+        } catch (cleanupError) {
+          console.warn('Failed to clean up orphaned photo file:', cleanupError);
+        }
+      }
+
       Alert.alert(t('capture.error'), t('capture.saveFailed'));
     } finally {
       setSaving(false);
@@ -314,6 +330,7 @@ export default function HomeScreen() {
                 glassEffectStyle="regular"
                 colorScheme="light"
               >
+                {isOlderIOS && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.7)', borderRadius: 20 }]} />}
                 <Ionicons name="restaurant-outline" size={14} color={isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.4)'} />
                 <TextInput
                   key={`restaurant-${isSearching}`}
@@ -456,6 +473,7 @@ export default function HomeScreen() {
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
         >
+          {isOlderIOS && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)' }]} />}
           {/* Default Header */}
           <Animated.View
             pointerEvents={isSearching ? 'none' : 'auto'}

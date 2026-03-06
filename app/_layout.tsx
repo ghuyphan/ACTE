@@ -81,7 +81,17 @@ function AppContent() {
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
-          <Stack.Screen name="auth/index" />
+          <Stack.Screen
+            name="auth/index"
+            options={{
+              headerShown: true,
+              headerTransparent: true,
+              headerTitle: '',
+              headerTintColor: colors.text,
+              headerBackButtonDisplayMode: 'minimal',
+              headerBackButtonMenuEnabled: false,
+            }}
+          />
           <Stack.Screen name="auth/onboarding" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen
