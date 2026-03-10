@@ -15,6 +15,7 @@ import {
   Dimensions,
   FlatList,
   Keyboard,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -32,6 +33,7 @@ import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useGeofence } from '../../hooks/useGeofence';
+import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { useNotes } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
 import { Note } from '../../services/database';
@@ -125,6 +127,7 @@ export default function HomeScreen() {
   const { notes, loading, refreshNotes, createNote } = useNotes();
   const { location, remindersEnabled, requestForegroundLocation, requestReminderPermissions } = useGeofence();
   const { alertProps, showAlert } = useAppSheetAlert();
+  const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const { captureOpacity, animateModeSwitch } = useCaptureAnimation();
@@ -511,7 +514,13 @@ export default function HomeScreen() {
         <AnimatedNoteCard
           item={item}
           index={index}
-          onPress={() => router.push(`/note/${item.id}` as any)}
+          onPress={() => {
+            if (Platform.OS === 'ios') {
+              openNoteDetail(item.id);
+              return;
+            }
+            router.push(`/note/${item.id}` as any);
+          }}
           colors={colors}
           t={t}
         />

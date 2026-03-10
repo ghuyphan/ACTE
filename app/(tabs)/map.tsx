@@ -4,11 +4,12 @@ import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Callout, Marker } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import InfoPill from '../../components/ui/InfoPill';
 import { useGeofence } from '../../hooks/useGeofence';
+import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { useNotes } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
@@ -19,6 +20,7 @@ export default function MapScreen() {
     const insets = useSafeAreaInsets();
     const { notes, loading } = useNotes();
     const { location } = useGeofence();
+    const { openNoteDetail } = useNoteDetailSheet();
     const router = useRouter();
     const mapRef = useRef<MapView>(null);
 
@@ -84,7 +86,13 @@ export default function MapScreen() {
                         pinColor={note.type === 'photo' ? '#FF6B6B' : colors.primary}
                     >
                         <Callout
-                            onPress={() => router.push(`/note/${note.id}` as any)}
+                            onPress={() => {
+                                if (Platform.OS === 'ios') {
+                                    openNoteDetail(note.id);
+                                    return;
+                                }
+                                router.push(`/note/${note.id}` as any);
+                            }}
                             tooltip={false}
                         >
                             <View style={styles.callout}>

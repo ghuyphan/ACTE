@@ -2,7 +2,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
 import * as SystemUI from 'expo-system-ui';
-import { SplashScreen, Stack, useRouter } from 'expo-router';
+import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
@@ -10,6 +10,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import i18n from '../constants/i18n';
 import { AuthProvider } from '../hooks/useAuth';
+import { NoteDetailSheetProvider, useNoteDetailSheet } from '../hooks/useNoteDetailSheet';
 import { ThemeProvider, useTheme } from '../hooks/useTheme';
 import { getDB } from '../services/database';
 import { syncGeofenceRegions } from '../services/geofenceService';
@@ -22,8 +23,8 @@ SplashScreen.preventAutoHideAsync();
 
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
+  const { openNoteDetail } = useNoteDetailSheet();
   const [dbReady, setDbReady] = useState(false);
-  const router = useRouter();
   const notificationResponseListener = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
@@ -56,14 +57,14 @@ function AppContent() {
       Notifications.addNotificationResponseReceivedListener((response) => {
         const noteId = response.notification.request.content.data?.noteId;
         if (noteId && typeof noteId === 'string') {
-          router.push(`/note/${noteId}` as any);
+          openNoteDetail(noteId);
         }
       });
 
     return () => {
       notificationResponseListener.current?.remove();
     };
-  }, [router]);
+  }, [openNoteDetail]);
 
   if (!dbReady) {
     return (
@@ -121,7 +122,9 @@ export default function RootLayout() {
       <I18nextProvider i18n={i18n}>
         <ThemeProvider>
           <AuthProvider>
-            <AppContent />
+            <NoteDetailSheetProvider>
+              <AppContent />
+            </NoteDetailSheetProvider>
           </AuthProvider>
         </ThemeProvider>
       </I18nextProvider>
