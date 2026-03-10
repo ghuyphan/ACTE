@@ -47,6 +47,18 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         updated_at TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_notes_created ON notes(created_at DESC);
+      CREATE TABLE IF NOT EXISTS sync_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity TEXT NOT NULL CHECK(entity IN ('note')),
+        entity_id TEXT,
+        operation TEXT NOT NULL CHECK(operation IN ('create', 'update', 'delete', 'deleteAll')),
+        payload TEXT,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'failed')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_sync_queue_status_created ON sync_queue(status, created_at ASC);
     `);
 
         // Migration: add is_favorite column if missing (existing databases)

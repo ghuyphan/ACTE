@@ -100,23 +100,27 @@ export async function updateWidgetData(): Promise<void> {
             const lon = currentLocation.coords.longitude;
 
             // Find nearby notes (within 500 meters roughly)
-            const nearbyNotes = notes.filter(n => getDistance(lat, lon, n.latitude, n.longitude) <= 500);
+            const nearbyNotes = notes
+                .map((note) => ({
+                    note,
+                    distance: getDistance(lat, lon, note.latitude, note.longitude),
+                }))
+                .filter((entry) => entry.distance <= 500)
+                .sort((a, b) => a.distance - b.distance);
 
             if (nearbyNotes.length > 0) {
-                // Already sorted by created_at DESC from getAllNotes
-                selectedNote = nearbyNotes[0];
+                selectedNote = nearbyNotes[0].note;
 
                 // Count unique nearby places
-                const uniquePlaces = new Set(nearbyNotes.map(n => n.locationName).filter(Boolean));
+                const uniquePlaces = new Set(nearbyNotes.map((entry) => entry.note.locationName).filter(Boolean));
                 nearbyPlacesCount = Math.max(0, uniquePlaces.size - 1);
             }
         }
 
-        // Idle State: pick a random note as "Memory of the Day"
+        // Deterministic idle fallback: use latest saved note to avoid widget flicker.
         if (!selectedNote) {
             isIdleState = true;
-            const randomIndex = Math.floor(Math.random() * notes.length);
-            selectedNote = notes[randomIndex];
+            selectedNote = notes[0];
         }
 
         const dateStr = formatDate(selectedNote.createdAt, 'short');

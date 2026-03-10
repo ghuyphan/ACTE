@@ -1,62 +1,131 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from 'expo-glass-effect';
-import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Callout, Marker } from 'react-native-maps';
+import MapView, { Callout, Marker, Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import InfoPill from '../../components/ui/InfoPill';
 import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
-import { useNotes } from '../../hooks/useNotes';
+import { useNotesStore } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
+
+const DEFAULT_REGION: Region = {
+    latitude: 10.762622,
+    longitude: 106.660172,
+    latitudeDelta: 0.05,
+    longitudeDelta: 0.05,
+};
 
 export default function MapScreen() {
     const { t } = useTranslation();
     const { colors, isDark } = useTheme();
     const insets = useSafeAreaInsets();
-    const { notes, loading } = useNotes();
-    const { location } = useGeofence();
+    const { notes, loading } = useNotesStore();
+    const { location, requestForegroundLocation, openAppSettings } = useGeofence();
     const { openNoteDetail } = useNoteDetailSheet();
     const router = useRouter();
     const mapRef = useRef<MapView>(null);
+    const [isMapReady, setIsMapReady] = useState(false);
+    const hasCenteredRef = useRef(false);
+
+    const initialRegion = useMemo<Region>(() => {
+        if (location) {
+            return {
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+                latitudeDelta: 0.02,
+                longitudeDelta: 0.02,
+            };
+        }
+
+        if (notes.length > 0) {
+            return {
+                latitude: notes[0].latitude,
+                longitude: notes[0].longitude,
+                latitudeDelta: 0.035,
+                longitudeDelta: 0.035,
+            };
+        }
+
+        return DEFAULT_REGION;
+    }, [location, notes]);
 
     const goToMyLocation = async () => {
-        let currentLoc = location;
-        if (!currentLoc) {
-            try {
-                currentLoc = await Location.getCurrentPositionAsync({});
-            } catch (error) {
-                console.warn('Could not get current location:', error);
+        let target = location;
+        if (!target) {
+            const result = await requestForegroundLocation();
+            target = result.location;
+            if (!target && result.requiresSettings) {
+                await openAppSettings();
+                return;
             }
         }
 
-        if (currentLoc) {
+        if (target) {
             mapRef.current?.animateToRegion({
-                latitude: currentLoc.coords.latitude,
-                longitude: currentLoc.coords.longitude,
+                latitude: target.coords.latitude,
+                longitude: target.coords.longitude,
                 latitudeDelta: 0.02,
                 longitudeDelta: 0.02,
             }, 1000);
         }
     };
 
-    const initialRegion = location
-        ? {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            latitudeDelta: 0.02,
-            longitudeDelta: 0.02,
+    useEffect(() => {
+        if (!isMapReady || hasCenteredRef.current || !mapRef.current) {
+            return;
         }
-        : {
-            latitude: 10.762622,  // Default: Ho Chi Minh City
-            longitude: 106.660172,
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-        };
+
+        if (location) {
+            mapRef.current.animateToRegion(
+                {
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                    latitudeDelta: 0.02,
+                    longitudeDelta: 0.02,
+                },
+                900
+            );
+            hasCenteredRef.current = true;
+            return;
+        }
+
+        if (notes.length > 1) {
+            mapRef.current.fitToCoordinates(
+                notes.map((note) => ({
+                    latitude: note.latitude,
+                    longitude: note.longitude,
+                })),
+                {
+                    edgePadding: { top: 120, right: 80, bottom: 160, left: 80 },
+                    animated: true,
+                }
+            );
+            hasCenteredRef.current = true;
+            return;
+        }
+
+        if (notes.length === 1) {
+            mapRef.current.animateToRegion(
+                {
+                    latitude: notes[0].latitude,
+                    longitude: notes[0].longitude,
+                    latitudeDelta: 0.025,
+                    longitudeDelta: 0.025,
+                },
+                900
+            );
+            hasCenteredRef.current = true;
+            return;
+        }
+
+        mapRef.current.animateToRegion(DEFAULT_REGION, 900);
+        hasCenteredRef.current = true;
+    }, [isMapReady, location, notes]);
 
     if (loading) {
         return (
@@ -72,6 +141,9 @@ export default function MapScreen() {
                 ref={mapRef}
                 style={styles.map}
                 initialRegion={initialRegion}
+                onMapReady={() => {
+                    setIsMapReady(true);
+                }}
                 showsUserLocation
                 showsMyLocationButton
                 userInterfaceStyle={isDark ? 'dark' : 'light'}

@@ -1,13 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as FileSystem from 'expo-file-system/legacy';
-import { GlassView } from 'expo-glass-effect';
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -16,224 +13,127 @@ import {
   FlatList,
   Keyboard,
   Platform,
-  Pressable,
-  RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
-  View
+  View,
 } from 'react-native';
-import Reanimated, { LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../../components/AppSheetAlert';
-import ImageMemoryCard from '../../components/ImageMemoryCard';
-import TextMemoryCard from '../../components/TextMemoryCard';
-import GlassHeader from '../../components/ui/GlassHeader';
-import InfoPill from '../../components/ui/InfoPill';
-import PrimaryButton from '../../components/ui/PrimaryButton';
-import { Layout, Typography } from '../../constants/theme';
+import CaptureCard from '../../components/home/CaptureCard';
+import HomeHeaderSearch from '../../components/home/HomeHeaderSearch';
+import NotesFeed from '../../components/home/NotesFeed';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
+import { useCaptureFlow } from '../../hooks/useCaptureFlow';
 import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
-import { useNotes } from '../../hooks/useNotes';
+import { useNotesStore } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
-import { Note } from '../../services/database';
-import { formatDate } from '../../utils/dateUtils';
-import { isOlderIOS } from '../../utils/platform';
 
-// ─── Animated Note Card ──────────────────────────
-function AnimatedNoteCard({ item, index, onPress, colors, t }: {
-  item: Note; index: number; onPress: () => void;
-  colors: any; t: any;
-}) {
-  const scale = useRef(new Animated.Value(0.9)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const pressScale = useRef(new Animated.Value(1)).current;
-  const mountIndex = useRef(index).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scale, { toValue: 1, tension: 80, friction: 10, delay: mountIndex * 50, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 1, duration: 300, delay: mountIndex * 50, useNativeDriver: true }),
-    ]).start();
-  }, [scale, opacity, mountIndex]);
-
-  const handlePressIn = () => {
-    Animated.spring(pressScale, { toValue: 0.98, tension: 300, friction: 15, useNativeDriver: true }).start();
-  };
-  const handlePressOut = () => {
-    Animated.spring(pressScale, { toValue: 1, tension: 200, friction: 12, useNativeDriver: true }).start();
-  };
-
-  const dateStr = formatDate(item.createdAt, 'short');
-
-  return (
-    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
-      <Animated.View
-        style={[styles.noteCardWrapper, { opacity, transform: [{ scale: Animated.multiply(scale, pressScale) }] }]}
-      >
-        {item.type === 'photo' ? (
-          <ImageMemoryCard imageUrl={item.content} />
-        ) : (
-          <TextMemoryCard text={item.content} noteId={item.id} />
-        )}
-
-        {/* Favorite badge */}
-        {item.isFavorite && (
-          <View style={styles.favBadge}>
-            <Ionicons name="heart" size={16} color="#FF3B30" />
-          </View>
-        )}
-      </Animated.View>
-
-      {/* Below-card metadata */}
-      <Animated.View style={[styles.belowCardMetaContainer, { opacity }]}>
-        <InfoPill icon="location" iconColor={colors.secondaryText} style={styles.metadataPill}>
-          <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
-            {item.locationName ?? t('home.unknownLocation', 'Unknown location')}
-          </Text>
-          <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-          <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>
-            {dateStr}
-          </Text>
-        </InfoPill>
-      </Animated.View>
-    </Pressable>
-  );
-}
-
-const { width, height } = Dimensions.get('window');
-const HORIZONTAL_PADDING = Layout.screenPadding - 8;
-const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
-
-type CaptureMode = 'text' | 'camera';
-
-// Animated mode switch opacity
-const useCaptureAnimation = () => {
-  const captureOpacity = useRef(new Animated.Value(1)).current;
-
-  const animateModeSwitch = (callback: () => void) => {
-    Animated.timing(captureOpacity, { toValue: 0, duration: 120, useNativeDriver: true }).start(() => {
-      callback();
-      Animated.spring(captureOpacity, { toValue: 1, tension: 200, friction: 15, useNativeDriver: true }).start();
-    });
-  };
-
-  return { captureOpacity, animateModeSwitch };
-};
+const { height } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { notes, loading, refreshNotes, createNote } = useNotes();
-  const { location, remindersEnabled, requestForegroundLocation, requestReminderPermissions } = useGeofence();
+  const { notes, loading, refreshNotes, createNote } = useNotesStore();
+  const {
+    location,
+    remindersEnabled,
+    requestForegroundLocation,
+    requestReminderPermissions,
+    openAppSettings,
+  } = useGeofence();
   const { alertProps, showAlert } = useAppSheetAlert();
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
-  const [refreshing, setRefreshing] = useState(false);
-  const { captureOpacity, animateModeSwitch } = useCaptureAnimation();
-
-  // Search state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const searchAnim = useRef(new Animated.Value(0)).current;
-
-  // Capture state
-  const [restaurantName, setRestaurantName] = useState('');
-  const [captureMode, setCaptureMode] = useState<CaptureMode>('text');
-  const [noteText, setNoteText] = useState('');
-  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [permission, requestPermission] = useCameraPermissions();
-  const [facing, setFacing] = useState<'back' | 'front'>('back');
-  const cameraRef = useRef<CameraView>(null);
   const isFocused = useIsFocused();
-  const flashAnim = useRef(new Animated.Value(0)).current;
-  const shutterScale = useRef(new Animated.Value(1)).current;
 
-  const SNAP_HEIGHT = height - insets.top - 90; // NativeTabs handles bottom, only deduct top + tab bar
+  const [refreshing, setRefreshing] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const searchAnim = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList>(null);
-
-  // Custom hook from React Navigation to allow tab bar tap to scroll back to top of this index tab
   useScrollToTop(flatListRef);
 
-  // Filter notes by search query
+  const {
+    captureMode,
+    restaurantName,
+    setRestaurantName,
+    noteText,
+    setNoteText,
+    capturedPhoto,
+    setCapturedPhoto,
+    facing,
+    setFacing,
+    permission,
+    requestPermission,
+    cameraRef,
+    captureOpacity,
+    flashAnim,
+    shutterScale,
+    toggleCaptureMode,
+    handleShutterPressIn,
+    handleShutterPressOut,
+    takePicture,
+    needsCameraPermission,
+    resetCapture,
+  } = useCaptureFlow();
+
+  const snapHeight = height - insets.top - 90;
+
   const filteredNotes = useMemo(() => {
-    if (!searchQuery.trim()) return notes;
-    const q = searchQuery.toLowerCase();
+    if (!searchQuery.trim()) {
+      return notes;
+    }
+    const query = searchQuery.toLowerCase();
     return notes.filter(
-      (n) =>
-        n.content.toLowerCase().includes(q) ||
-        (n.locationName && n.locationName.toLowerCase().includes(q))
+      (note) =>
+        note.content.toLowerCase().includes(query) ||
+        note.locationName?.toLowerCase().includes(query)
     );
   }, [notes, searchQuery]);
 
+  const displayedNotes = isSearching ? filteredNotes : notes;
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refreshNotes();
+    await refreshNotes(false);
     setRefreshing(false);
   }, [refreshNotes]);
 
-  // ─── Capture Logic ────────────────────────────────────────
-  const toggleCaptureMode = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-    animateModeSwitch(() => {
-      setCaptureMode((m) => (m === 'text' ? 'camera' : 'text'));
-      setCapturedPhoto(null);
-    });
-  };
-
-  const handleShutterPressIn = () => {
-    Animated.spring(shutterScale, { toValue: 0.85, tension: 300, friction: 15, useNativeDriver: true }).start();
-  };
-  const handleShutterPressOut = () => {
-    Animated.spring(shutterScale, { toValue: 1, tension: 200, friction: 12, useNativeDriver: true }).start();
-  };
-
-  const takePicture = async () => {
-    if (!cameraRef.current) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    // Trigger capture flash animation
-    flashAnim.setValue(1);
-    Animated.timing(flashAnim, {
-      toValue: 0,
-      duration: 400,
-      useNativeDriver: true,
-    }).start();
-
-    const photo = await cameraRef.current.takePictureAsync();
-    // Reset shutter scale when photo is taken and UI transitions
-    shutterScale.setValue(1);
-    if (photo?.uri) setCapturedPhoto(photo.uri);
-  };
-
-  const reverseGeocode = useCallback(async (lat: number, lon: number): Promise<string> => {
-    try {
-      const results = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
-      if (results.length > 0) {
-        const r = results[0];
-        const parts = [r.name, r.street, r.city].filter(Boolean);
-        return parts.join(', ') || t('capture.unknownPlace', 'Unknown Place');
-      }
-    } catch {
-      return t('capture.unknownPlace', 'Unknown Place');
-    }
-    return t('capture.unknownPlace', 'Unknown Place');
-  }, [t]);
-
-  const showDoneSheet = useCallback((variant: 'error' | 'warning' | 'success', title: string, message: string) => {
-    showAlert({
-      variant,
-      title,
-      message,
-      primaryAction: {
-        label: t('common.done', 'Done'),
-      },
-    });
-  }, [showAlert, t]);
+  const showDoneSheet = useCallback(
+    (
+      variant: 'error' | 'warning' | 'success',
+      title: string,
+      message: string,
+      withSettingsAction = false
+    ) => {
+      showAlert({
+        variant,
+        title,
+        message,
+        primaryAction: withSettingsAction
+          ? {
+              label: t('common.openSettings', 'Open Settings'),
+              onPress: async () => {
+                await openAppSettings();
+              },
+            }
+          : {
+              label: t('common.done', 'Done'),
+            },
+        secondaryAction: withSettingsAction
+          ? {
+              label: t('common.done', 'Done'),
+              variant: 'secondary',
+            }
+          : undefined,
+      });
+    },
+    [openAppSettings, showAlert, t]
+  );
 
   const showSavedSheet = useCallback(() => {
     if (remindersEnabled) {
@@ -258,8 +158,8 @@ export default function HomeScreen() {
       primaryAction: {
         label: t('capture.enableReminders', 'Enable reminders'),
         onPress: async () => {
-          const enabled = await requestReminderPermissions();
-          if (enabled) {
+          const result = await requestReminderPermissions();
+          if (result.enabled) {
             showAlert({
               variant: 'success',
               title: t('capture.remindersEnabledTitle', 'Reminders enabled'),
@@ -274,17 +174,27 @@ export default function HomeScreen() {
             return;
           }
 
-          showAlert({
-            variant: 'warning',
-            title: t('capture.remindersUnavailableTitle', 'Reminders still off'),
-            message: t(
+          if (result.requiresSettings) {
+            showDoneSheet(
+              'warning',
+              t('capture.remindersUnavailableTitle', 'Reminders still off'),
+              t(
+                'capture.remindersUnavailableSettingsMsg',
+                'Background location or notifications are blocked for ACTE. Open Settings to enable reminders.'
+              ),
+              true
+            );
+            return;
+          }
+
+          showDoneSheet(
+            'warning',
+            t('capture.remindersUnavailableTitle', 'Reminders still off'),
+            t(
               'capture.remindersUnavailableMsg',
               'Your note is still saved locally. ACTE needs background location and notifications to send reminders.'
-            ),
-            primaryAction: {
-              label: t('common.done', 'Done'),
-            },
-          });
+            )
+          );
         },
       },
       secondaryAction: {
@@ -292,23 +202,45 @@ export default function HomeScreen() {
         variant: 'secondary',
       },
     });
-  }, [remindersEnabled, requestReminderPermissions, showAlert, t]);
+  }, [remindersEnabled, requestReminderPermissions, showAlert, showDoneSheet, t]);
+
+  const reverseGeocode = useCallback(
+    async (lat: number, lon: number): Promise<string> => {
+      try {
+        const results = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
+        if (results.length > 0) {
+          const result = results[0];
+          const parts = [result.name, result.street, result.city].filter(Boolean);
+          return parts.join(', ') || t('capture.unknownPlace', 'Unknown Place');
+        }
+      } catch {
+        return t('capture.unknownPlace', 'Unknown Place');
+      }
+      return t('capture.unknownPlace', 'Unknown Place');
+    },
+    [t]
+  );
 
   const saveNote = useCallback(async () => {
     let currentLocation = location;
+    let requiresSettings = false;
 
     if (!currentLocation) {
-      currentLocation = await requestForegroundLocation();
-
-      if (!currentLocation) {
-        showDoneSheet(
-          'error',
-          t('capture.error', 'Error'),
-          t('capture.noLocation', 'Could not get your location')
-        );
-        return;
-      }
+      const locationResult = await requestForegroundLocation();
+      currentLocation = locationResult.location;
+      requiresSettings = locationResult.requiresSettings;
     }
+
+    if (!currentLocation) {
+      showDoneSheet(
+        'error',
+        t('capture.error', 'Error'),
+        t('capture.noLocation', 'Could not get your location'),
+        requiresSettings
+      );
+      return;
+    }
+
     if (captureMode === 'text' && !noteText.trim()) {
       showDoneSheet(
         'warning',
@@ -317,6 +249,7 @@ export default function HomeScreen() {
       );
       return;
     }
+
     if (captureMode === 'camera' && !capturedPhoto) {
       showDoneSheet(
         'warning',
@@ -332,17 +265,16 @@ export default function HomeScreen() {
     try {
       const lat = currentLocation.coords.latitude;
       const lon = currentLocation.coords.longitude;
-      const geoName = await reverseGeocode(lat, lon);
-      const locationName = restaurantName.trim() || geoName;
+      const geocodedName = await reverseGeocode(lat, lon);
+      const locationName = restaurantName.trim() || geocodedName;
 
       let content = noteText.trim();
 
-      // Handle file moving before DB update
       if (captureMode === 'camera' && capturedPhoto) {
-        const dir = `${FileSystem.documentDirectory}photos/`;
-        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+        const directory = `${FileSystem.documentDirectory}photos/`;
+        await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
         const filename = `note-${Date.now()}.jpg`;
-        destinationPath = `${dir}${filename}`;
+        destinationPath = `${directory}${filename}`;
         await FileSystem.copyAsync({ from: capturedPhoto, to: destinationPath });
         content = destinationPath;
       }
@@ -356,14 +288,10 @@ export default function HomeScreen() {
       });
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setNoteText('');
-      setRestaurantName('');
-      setCapturedPhoto(null);
+      resetCapture();
       showSavedSheet();
     } catch (error) {
       console.error('Save failed:', error);
-
-      // Rollback: Prevent storage leak by deleting the file if DB operation failed
       if (destinationPath) {
         try {
           await FileSystem.deleteAsync(destinationPath, { idempotent: true });
@@ -371,7 +299,6 @@ export default function HomeScreen() {
           console.warn('Failed to clean up orphaned photo file:', cleanupError);
         }
       }
-
       showDoneSheet(
         'error',
         t('capture.error', 'Error'),
@@ -380,158 +307,51 @@ export default function HomeScreen() {
     } finally {
       setSaving(false);
     }
-  }, [captureMode, capturedPhoto, createNote, location, noteText, requestForegroundLocation, restaurantName, reverseGeocode, showDoneSheet, showSavedSheet, t]);
+  }, [
+    location,
+    requestForegroundLocation,
+    showDoneSheet,
+    t,
+    captureMode,
+    noteText,
+    capturedPhoto,
+    reverseGeocode,
+    restaurantName,
+    createNote,
+    resetCapture,
+    showSavedSheet,
+  ]);
 
-  // ─── Render Snap Items ────────────────────────────────────
-  const needsCameraPermission = captureMode === 'camera' && (!permission || !permission.granted);
+  const handleOpenSearch = useCallback(() => {
+    setIsSearching(true);
+    Animated.timing(searchAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    flatListRef.current?.scrollToOffset({ offset: snapHeight, animated: true });
+  }, [searchAnim, snapHeight]);
 
-  const renderCaptureCard = () => {
-    return (
-      <View style={[styles.snapItem, { height: SNAP_HEIGHT, paddingTop: insets.top + 60 }]}>
+  const handleCloseSearch = useCallback(() => {
+    Keyboard.dismiss();
+    Animated.timing(searchAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
+      setIsSearching(false);
+      setSearchQuery('');
+    });
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [searchAnim]);
 
-        {/* Capture Area — animated crossfade on mode switch */}
-        <Animated.View style={[styles.captureArea, { opacity: captureOpacity }]} pointerEvents={isSearching ? 'none' : 'auto'}>
-          {captureMode === 'text' ? (
-            <View
-              style={[styles.textCard, { backgroundColor: colors.primary }]}
-            >
-              {/* Centered text area */}
-              <View style={styles.cardTextCenter}>
-                <TextInput
-                  key={`note-text-${isSearching}`}
-                  style={[styles.textInput, { color: isDark ? '#000' : '#1C1C1E' }]}
-                  placeholder={t('capture.textPlaceholder', 'Note about this place...')}
-                  placeholderTextColor="rgba(0,0,0,0.5)"
-                  multiline
-                  value={noteText}
-                  onChangeText={setNoteText}
-                  maxLength={300}
-                />
-              </View>
+  const handleToggleCaptureMode = useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    toggleCaptureMode();
+  }, [toggleCaptureMode]);
 
-              {/* Restaurant name — glass pill at bottom of card */}
-              <GlassView
-                style={styles.cardRestaurantPill}
-                glassEffectStyle="regular"
-                colorScheme="light"
-              >
-                {isOlderIOS && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.7)', borderRadius: 20 }]} />}
-                <Ionicons name="restaurant-outline" size={14} color={isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.4)'} />
-                <TextInput
-                  key={`restaurant-${isSearching}`}
-                  style={[styles.cardRestaurantInput, { color: isDark ? '#000' : '#1C1C1E' }]}
-                  placeholder={t('capture.restaurantPlaceholder', 'Restaurant name (e.g. Phở Hòa)')}
-                  placeholderTextColor={isDark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.3)'}
-                  value={restaurantName}
-                  onChangeText={setRestaurantName}
-                  maxLength={100}
-                />
-              </GlassView>
-            </View>
-          ) : capturedPhoto ? (
-            <View style={styles.cameraContainer}>
-              <Image source={{ uri: capturedPhoto }} style={styles.cameraPreview} contentFit="cover" />
-
-              <Pressable style={styles.retakeBtn} onPress={() => setCapturedPhoto(null)}>
-                <Ionicons name="refresh" size={18} color="white" />
-                <Text style={styles.retakeBtnText}>{t('capture.retake', 'Retake')}</Text>
-              </Pressable>
-
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  { backgroundColor: 'white', opacity: flashAnim, zIndex: 50 },
-                ]}
-              />
-            </View>
-          ) : needsCameraPermission ? (
-            <View style={[styles.textCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Ionicons name="camera" size={48} color={colors.secondaryText} />
-              <Text style={[styles.permissionText, { color: colors.text }]}>
-                {t('capture.cameraPermission', 'Camera access needed')}
-              </Text>
-              <PrimaryButton
-                label={t('capture.grantAccess', 'Grant Access')}
-                onPress={requestPermission}
-                style={styles.permissionButton}
-              />
-            </View>
-          ) : (
-            <View style={styles.cameraContainer}>
-              {isFocused && captureMode === 'camera' && (
-                <CameraView style={styles.cameraPreview} facing={facing} ref={cameraRef} />
-              )}
-              <Pressable
-                style={styles.flipBtn}
-                onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
-              >
-                <Ionicons name="camera-reverse" size={20} color="white" />
-              </Pressable>
-
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  { backgroundColor: 'white', opacity: flashAnim, zIndex: 50 },
-                ]}
-              />
-            </View>
-          )}
-        </Animated.View>
-
-        {/* Compact action below card */}
-        <Animated.View style={[styles.belowCardSection, { opacity: captureOpacity }]}>
-          {captureMode === 'camera' && !capturedPhoto ? (
-            <View style={styles.belowCardShutterRow}>
-              {permission?.granted ? (
-                <Pressable
-                  onPressIn={handleShutterPressIn}
-                  onPressOut={handleShutterPressOut}
-                  onPress={takePicture}
-                  style={[styles.shutterOuter, { borderColor: colors.border }]}
-                >
-                  <Animated.View style={[styles.shutterInner, { backgroundColor: colors.primary, transform: [{ scale: shutterScale }] }]} />
-                </Pressable>
-              ) : null}
-            </View>
-          ) : (
-            <PrimaryButton
-              label={t('capture.save', 'Save Note 💛')}
-              variant="neutral"
-              onPress={saveNote}
-              loading={saving}
-              style={styles.belowCardSaveButton}
-            />
-          )}
-        </Animated.View>
-      </View >
-    );
-  };
-
-  const renderNoteCard = ({ item, index }: { item: Note; index: number }) => {
-    return (
-      <View style={[styles.snapItem, { height: SNAP_HEIGHT, paddingTop: insets.top + 60 }]}>
-        <AnimatedNoteCard
-          item={item}
-          index={index}
-          onPress={() => {
-            if (Platform.OS === 'ios') {
-              openNoteDetail(item.id);
-              return;
-            }
-            router.push(`/note/${item.id}` as any);
-          }}
-          colors={colors}
-          t={t}
-        />
-      </View>
-    );
-  };
-
-  // Build data: capture card as first item, then filtered notes
-  const displayedNotes = isSearching ? filteredNotes : notes;
-  const listData = [{ id: '__capture__', type: 'capture' as const }, ...displayedNotes.map(n => ({ ...n, type: n.type as string }))];
+  const openNote = useCallback(
+    (noteId: string) => {
+      if (Platform.OS === 'ios') {
+        openNoteDetail(noteId);
+        return;
+      }
+      router.push(`/note/${noteId}` as any);
+    },
+    [openNoteDetail, router]
+  );
 
   if (loading) {
     return (
@@ -543,87 +363,36 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <GlassHeader topInset={insets.top}>
-        {/* Default Header */}
-        <Animated.View
-          pointerEvents={isSearching ? 'none' : 'auto'}
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              paddingHorizontal: Layout.screenPadding,
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              opacity: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-              transform: [{ translateY: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }) }]
-            }
-          ]}
-        >
-          <Text style={[styles.logoText, { color: colors.text }]}>ACTE 💛</Text>
-          <View style={styles.headerActions}>
-            <Pressable onPress={() => {
-              setIsSearching(true);
-              Animated.timing(searchAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
-              flatListRef.current?.scrollToOffset({ offset: SNAP_HEIGHT, animated: true });
-            }}>
-              <Ionicons name="search" size={20} color={colors.primary} />
-            </Pressable>
-            <Pressable onPress={toggleCaptureMode} style={[styles.modeToggleBtn, { backgroundColor: colors.primary + '18' }]}>
-              <Ionicons
-                name={captureMode === 'text' ? 'camera-outline' : 'document-text-outline'}
-                size={20}
-                color={colors.primary}
-              />
-            </Pressable>
-          </View>
-        </Animated.View>
+      <HomeHeaderSearch
+        topInset={insets.top}
+        isSearching={isSearching}
+        searchAnim={searchAnim}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onOpenSearch={handleOpenSearch}
+        onCloseSearch={handleCloseSearch}
+        onToggleCaptureMode={handleToggleCaptureMode}
+        captureMode={captureMode}
+        colors={colors}
+        t={t}
+      />
 
-        {/* Search Header */}
-        <Animated.View
-          pointerEvents={isSearching ? 'auto' : 'none'}
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              paddingHorizontal: Layout.screenPadding,
-              flexDirection: 'row',
-              alignItems: 'center',
-              opacity: searchAnim,
-              transform: [{ translateY: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }]
-            }
-          ]}
-        >
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={16} color={colors.secondaryText} />
-            <View style={{ flex: 1, justifyContent: 'center' }}>
-              <TextInput
-                style={[styles.searchInput, { color: colors.text }]}
-                placeholder={t('home.searchPlaceholder', 'Search notes...')}
-                placeholderTextColor={colors.secondaryText}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoFocus={isSearching}
-                returnKeyType="search"
-              />
-            </View>
-            <Pressable
-              onPress={() => {
-                Keyboard.dismiss();
-                Animated.timing(searchAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
-                  setIsSearching(false);
-                  setSearchQuery('');
-                });
-                flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-              }}
-            >
-              <Ionicons name="close-circle" size={20} color={colors.secondaryText} />
-            </Pressable>
-          </View>
-        </Animated.View>
-      </GlassHeader>
-
-      {/* Search empty state */}
       {isSearching && filteredNotes.length === 0 && searchQuery.trim() ? (
-        <View style={[styles.center, { backgroundColor: colors.background, position: 'absolute', top: SNAP_HEIGHT, left: 0, right: 0, bottom: 0, zIndex: 10 }]} pointerEvents="none">
+        <View
+          style={[
+            styles.center,
+            {
+              backgroundColor: colors.background,
+              position: 'absolute',
+              top: snapHeight,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 10,
+            },
+          ]}
+          pointerEvents="none"
+        >
           <Ionicons name="search-outline" size={48} color={colors.secondaryText} style={{ opacity: 0.5 }} />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>
             {t('home.noResults', 'No notes found')}
@@ -634,28 +403,56 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      <Reanimated.FlatList
-        ref={flatListRef}
-        data={listData}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => {
-          if (item.id === '__capture__') return renderCaptureCard();
-          return renderNoteCard({ item: item as Note, index });
-        }}
-        itemLayoutAnimation={LinearTransition.springify().damping(20).stiffness(150)}
-        snapToInterval={SNAP_HEIGHT}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: height - SNAP_HEIGHT }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
+      <NotesFeed
+        flatListRef={flatListRef}
+        captureItem={
+          <CaptureCard
+            snapHeight={snapHeight}
+            topInset={insets.top}
+            isSearching={isSearching}
+            captureMode={captureMode}
+            captureOpacity={captureOpacity}
+            colors={colors}
+            isDark={isDark}
+            t={t}
+            noteText={noteText}
+            onChangeNoteText={setNoteText}
+            restaurantName={restaurantName}
+            onChangeRestaurantName={setRestaurantName}
+            capturedPhoto={capturedPhoto}
+            onRetakePhoto={() => setCapturedPhoto(null)}
+            needsCameraPermission={needsCameraPermission}
+            onRequestCameraPermission={requestPermission}
+            isFocused={isFocused}
+            facing={facing}
+            onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
+            cameraRef={cameraRef}
+            flashAnim={flashAnim}
+            permissionGranted={Boolean(permission?.granted)}
+            onShutterPressIn={handleShutterPressIn}
+            onShutterPressOut={handleShutterPressOut}
+            onTakePicture={() => {
+              void takePicture();
+            }}
+            onSaveNote={() => {
+              void saveNote();
+            }}
+            saving={saving}
+            shutterScale={shutterScale}
           />
         }
+        notes={displayedNotes}
+        refreshing={refreshing}
+        onRefresh={() => {
+          void onRefresh();
+        }}
+        topInset={insets.top}
+        snapHeight={snapHeight}
+        onOpenNote={openNote}
+        colors={colors}
+        t={t}
       />
+
       <AppSheetAlert {...alertProps} />
     </View>
   );
@@ -671,274 +468,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  snapItem: {
-    width,
-    justifyContent: 'center',
-  },
-
-  logoText: {
-    ...Typography.pill,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  modeToggleBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  searchInput: {
-    ...Typography.body,
-    fontWeight: '500',
-    width: '100%',
-  },
-
-  // ─── Capture Area ───────────────────────
-  captureArea: {
-    height: CARD_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: HORIZONTAL_PADDING,
-  },
-  textCard: {
-    width: CARD_SIZE,
-    height: CARD_SIZE,
-    borderRadius: 40,
-    borderCurve: 'continuous',
-    padding: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-    position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  textInput: {
-    fontSize: 24,
-    fontWeight: '800',
-    textAlign: 'center',
-    lineHeight: 34,
-    width: '100%',
-    color: '#FFF',
-    textShadowRadius: 6,
-    fontFamily: 'System',
-  },
-  cardTextCenter: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-  },
-  cardRestaurantPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    width: '100%',
-    marginTop: 8,
-  },
-  cardRestaurantInput: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  cameraContainer: {
-    width: CARD_SIZE,
-    height: CARD_SIZE,
-    borderRadius: 40,
-    borderCurve: 'continuous',
-    overflow: 'hidden',
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
-    backgroundColor: '#000',
-  },
-  cameraPreview: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
-  flipBtn: {
-    position: 'absolute',
-    top: 24,
-    right: 16,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  retakeBtn: {
-    position: 'absolute',
-    top: 24,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    gap: 5,
-  },
-  retakeBtnText: {
-    color: 'white',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  permissionText: {
-    ...Typography.body,
-    textAlign: 'center',
-  },
-  permissionButton: {
-    marginTop: 16,
-    width: '100%',
-  },
-  shutterOuter: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    borderWidth: 4,
-    borderColor: 'rgba(150,150,150,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  shutterInner: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-  },
-  // ─── Below-card section (capture) ──────
-  belowCardSection: {
-    paddingHorizontal: HORIZONTAL_PADDING + 4,
-    paddingTop: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 90, // Prevents layout shift between camera shutter and save button
-  },
-  belowCardInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 20,
-  },
-  belowCardInputText: {
-    fontSize: 15,
-    fontWeight: '600',
-    width: '100%',
-  },
-  belowCardLocation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 4,
-  },
-  belowCardLocationText: {
-    fontSize: 13,
-    fontWeight: '600',
-    fontFamily: 'System',
-  },
-  belowCardShutterRow: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 4,
-  },
-  belowCardSaveButton: {
-    width: '100%',
-    borderRadius: 999,
-  },
-
-  // ─── Note Cards ─────────────────────────
-  noteCardWrapper: {
-    width: CARD_SIZE,
-    height: CARD_SIZE,
-    alignSelf: 'center',
-    justifyContent: 'center',
-  },
-  favBadge: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-    backgroundColor: '#fff',
-  },
-
-  // ─── Below-card metadata (notes) ───────
-  belowCardMetaContainer: {
-    alignItems: 'center', // Centers the pill horizontally
-    paddingTop: 16,
-  },
-  metadataPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    gap: 6,
-    maxWidth: '90%', // Prevents overflow if the location name is extremely long
-  },
-  metadataPillText: {
-    fontSize: 14,
-    fontWeight: '600',
-    flexShrink: 1, // Allows the location text to truncate with ellipsis
-  },
-  metadataPillDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    marginHorizontal: 2,
-    opacity: 0.5, // Subtle separator
-  },
-  metadataPillDate: {
-    ...Typography.body,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-
-  // ─── Empty states ──────────────────────
   emptyTitle: {
-    ...Typography.button,
     fontSize: 18,
     fontWeight: '700',
     marginTop: 12,
+    fontFamily: 'System',
   },
   emptySubtitle: {
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+    fontFamily: 'System',
   },
 });
+

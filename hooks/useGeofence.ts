@@ -1,7 +1,18 @@
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
+import { Linking } from 'react-native';
 import { getReminderPermissionState, syncGeofenceRegions } from '../services/geofenceService';
+
+export interface ForegroundLocationRequestResult {
+    location: Location.LocationObject | null;
+    requiresSettings: boolean;
+}
+
+export interface ReminderPermissionRequestResult {
+    enabled: boolean;
+    requiresSettings: boolean;
+}
 
 export function useGeofence() {
     const [hasLocationPermission, setHasLocationPermission] = useState(false);
@@ -17,6 +28,12 @@ export function useGeofence() {
 
     const refreshLocation = useCallback(async () => {
         try {
+            const known = await Location.getLastKnownPositionAsync();
+            if (known) {
+                setLocation(known);
+                return known;
+            }
+
             const currentLocation = await Location.getCurrentPositionAsync({});
             setLocation(currentLocation);
             return currentLocation;
@@ -28,14 +45,9 @@ export function useGeofence() {
     useEffect(() => {
         (async () => {
             const foregroundStatus = await Location.getForegroundPermissionsAsync();
-            let resolvedStatus = foregroundStatus.status;
-            if (resolvedStatus !== 'granted') {
-                const requestedStatus = await Location.requestForegroundPermissionsAsync();
-                resolvedStatus = requestedStatus.status;
-            }
-
-            setHasLocationPermission(resolvedStatus === 'granted');
-            if (resolvedStatus === 'granted') {
+            const granted = foregroundStatus.status === 'granted';
+            setHasLocationPermission(granted);
+            if (granted) {
                 await refreshLocation();
             }
 
@@ -43,20 +55,38 @@ export function useGeofence() {
         })();
     }, [refreshLocation, refreshPermissions]);
 
-    const requestReminderPermissions = useCallback(async () => {
+    const requestForegroundLocation = useCallback(async (): Promise<ForegroundLocationRequestResult> => {
         let foregroundStatus = await Location.getForegroundPermissionsAsync();
         if (foregroundStatus.status !== 'granted') {
             foregroundStatus = await Location.requestForegroundPermissionsAsync();
         }
 
-        if (foregroundStatus.status !== 'granted') {
-            setHasLocationPermission(false);
-            setRemindersEnabled(false);
-            return false;
+        const granted = foregroundStatus.status === 'granted';
+        setHasLocationPermission(granted);
+
+        if (!granted) {
+            return {
+                location: null,
+                requiresSettings: foregroundStatus.canAskAgain === false,
+            };
         }
 
-        setHasLocationPermission(true);
-        await refreshLocation();
+        const nextLocation = await refreshLocation();
+        return {
+            location: nextLocation,
+            requiresSettings: false,
+        };
+    }, [refreshLocation]);
+
+    const requestReminderPermissions = useCallback(async (): Promise<ReminderPermissionRequestResult> => {
+        const foregroundResult = await requestForegroundLocation();
+        if (!foregroundResult.location) {
+            setRemindersEnabled(false);
+            return {
+                enabled: false,
+                requiresSettings: foregroundResult.requiresSettings,
+            };
+        }
 
         let backgroundStatus = await Location.getBackgroundPermissionsAsync();
         if (backgroundStatus.status !== 'granted') {
@@ -76,23 +106,23 @@ export function useGeofence() {
             await syncGeofenceRegions();
         }
 
-        return enabled;
-    }, [refreshLocation]);
+        const requiresSettings =
+            (backgroundStatus.status !== 'granted' && backgroundStatus.canAskAgain === false) ||
+            (notificationStatus.status !== 'granted' && notificationStatus.canAskAgain === false);
 
-    const requestForegroundLocation = useCallback(async () => {
-        let foregroundStatus = await Location.getForegroundPermissionsAsync();
-        if (foregroundStatus.status !== 'granted') {
-            foregroundStatus = await Location.requestForegroundPermissionsAsync();
+        return {
+            enabled,
+            requiresSettings,
+        };
+    }, [requestForegroundLocation]);
+
+    const openAppSettings = useCallback(async () => {
+        try {
+            await Linking.openSettings();
+        } catch {
+            return;
         }
-
-        const granted = foregroundStatus.status === 'granted';
-        setHasLocationPermission(granted);
-        if (!granted) {
-            return null;
-        }
-
-        return refreshLocation();
-    }, [refreshLocation]);
+    }, []);
 
     return {
         location,
@@ -101,5 +131,6 @@ export function useGeofence() {
         refreshPermissions,
         requestForegroundLocation,
         requestReminderPermissions,
+        openAppSettings,
     };
 }

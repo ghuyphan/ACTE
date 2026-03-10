@@ -7,4 +7,10 @@ module.exports = defineConfig([
   {
     ignores: ['dist/*'],
   },
+  {
+    rules: {
+      // import/namespace currently mis-parses re-exported TSX modules under Expo flat config.
+      'import/namespace': 'off',
+    },
+  },
 ]);

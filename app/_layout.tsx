@@ -10,6 +10,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import i18n from '../constants/i18n';
 import { AuthProvider } from '../hooks/useAuth';
+import { NotesProvider } from '../hooks/useNotes';
 import { NoteDetailSheetProvider, useNoteDetailSheet } from '../hooks/useNoteDetailSheet';
 import { ThemeProvider, useTheme } from '../hooks/useTheme';
 import { getDB } from '../services/database';
@@ -122,9 +123,11 @@ export default function RootLayout() {
       <I18nextProvider i18n={i18n}>
         <ThemeProvider>
           <AuthProvider>
-            <NoteDetailSheetProvider>
-              <AppContent />
-            </NoteDetailSheetProvider>
+            <NotesProvider>
+              <NoteDetailSheetProvider>
+                <AppContent />
+              </NoteDetailSheetProvider>
+            </NotesProvider>
           </AuthProvider>
         </ThemeProvider>
       </I18nextProvider>

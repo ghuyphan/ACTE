@@ -279,15 +279,27 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         }
     }, []);
 
-    const animateDeleteOut = useCallback(() => new Promise<void>((resolve) => {
-        Animated.parallel([
-            Animated.timing(cardOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
-            Animated.timing(actionsOpacity, { toValue: 0, duration: 120, useNativeDriver: true }),
-            Animated.timing(infoOpacity, { toValue: 0, duration: 120, useNativeDriver: true }),
-            Animated.timing(infoTranslateY, { toValue: 12, duration: 150, useNativeDriver: true }),
-            Animated.timing(cardScale, { toValue: 0.98, duration: 150, useNativeDriver: true }),
-        ]).start(() => resolve());
-    }), [actionsOpacity, cardOpacity, cardScale, infoOpacity, infoTranslateY]);
+    const performDelete = useCallback(async (targetNoteId: string) => {
+        if (isDeleting) {
+            return;
+        }
+
+        setIsDeleting(true);
+        try {
+            await deleteNote(targetNoteId);
+            showInteractionFeedback('deleted');
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            onClose();
+        } catch (error) {
+            console.error('Delete failed:', error);
+            Alert.alert(
+                t('noteDetail.deleteErrorTitle', 'Delete failed'),
+                t('noteDetail.deleteErrorMsg', 'Unable to delete this note right now. Please try again.')
+            );
+        } finally {
+            setIsDeleting(false);
+        }
+    }, [deleteNote, isDeleting, onClose, showInteractionFeedback, t]);
 
     const handleDelete = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -301,17 +313,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                     style: 'destructive',
                     onPress: () => {
                         if (!note || isDeleting) return;
-                        const noteId = note.id;
-                        showInteractionFeedback('deleted');
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        // Close sheet first so the home screen is visible
-                        onClose();
-                        // Delay the actual delete so the user sees Reanimated.FlatList sliding remaining items
-                        setTimeout(() => {
-                            deleteNote(noteId).catch((err) =>
-                                console.error('Delete failed:', err)
-                            );
-                        }, 200);
+                        void performDelete(note.id);
                     },
                 },
             ]
