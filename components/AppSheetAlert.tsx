@@ -65,8 +65,7 @@ function AlertSheetBody({
       style={[
         styles.sheetCard,
         {
-          backgroundColor: colors.card,
-          borderColor: colors.border,
+          backgroundColor: isOlderIOS ? colors.card : 'transparent',
         },
       ]}
     >
