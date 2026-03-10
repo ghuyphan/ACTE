@@ -1,9 +1,9 @@
 {
     "tabs": {
-        "home": "Home",
-        "capture": "Capture",
-        "map": "Map",
-        "settings": "Settings"
+        "home": "Feed",
+        "capture": "Drop",
+        "map": "Spots",
+        "settings": "Profile"
     },
     "home": {
         "title": "Your Notes",
@@ -41,12 +41,15 @@
         "saveFailed": "Something went wrong",
         "cameraPermission": "Camera access is needed to take photos",
         "grantAccess": "Grant Access",
-        "retake": "Retake"
+        "retake": "Retake",
+        "notesHint": "Notes"
     },
     "map": {
         "photoNote": "Photo Note",
         "unknownLocation": "Unknown",
         "tapToOpen": "Tap to open →",
+        "openNote": "Open note",
+        "singleNote": "Pinned note",
         "note": "note",
         "notes": "notes",
         "emptyTitle": "No notes on the map yet",
@@ -61,6 +64,9 @@
         "restaurant": "Restaurant",
         "edit": "Edit",
         "save": "Save",
+        "editingHint": "Editing mode: update note and place",
+        "contentField": "Note",
+        "locationField": "Place",
         "editContent": "Edit note content...",
         "editLocation": "Edit location name...",
         "share": "Share",

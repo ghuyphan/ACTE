@@ -1,9 +1,9 @@
 {
     "tabs": {
-        "home": "Trang chủ",
-        "capture": "Ghi chú",
-        "map": "Bản đồ",
-        "settings": "Cài đặt"
+        "home": "Feed",
+        "capture": "Drop",
+        "map": "Spots",
+        "settings": "Profile"
     },
     "home": {
         "title": "Ghi chú của bạn",
@@ -41,12 +41,15 @@
         "saveFailed": "Đã xảy ra lỗi",
         "cameraPermission": "Cần quyền truy cập camera để chụp ảnh",
         "grantAccess": "Cấp quyền",
-        "retake": "Chụp lại"
+        "retake": "Chụp lại",
+        "notesHint": "Ghi chú"
     },
     "map": {
         "photoNote": "Ghi chú ảnh",
         "unknownLocation": "Không rõ",
         "tapToOpen": "Nhấn để mở →",
+        "openNote": "Mở ghi chú",
+        "singleNote": "Ghi chú đã ghim",
         "note": "ghi chú",
         "notes": "ghi chú",
         "emptyTitle": "Chưa có ghi chú nào trên bản đồ",
@@ -61,6 +64,9 @@
         "restaurant": "Quán ăn",
         "edit": "Sửa",
         "save": "Lưu",
+        "editingHint": "Đang chỉnh sửa: cập nhật ghi chú và địa điểm",
+        "contentField": "Nội dung",
+        "locationField": "Địa điểm",
         "editContent": "Sửa nội dung ghi chú...",
         "editLocation": "Sửa tên địa điểm...",
         "share": "Chia sẻ",

@@ -13,46 +13,46 @@ const { withXcodeProject } = require('expo/config-plugins');
  * to the ExpoWidgetsTarget that copies the JS file into the final
  * ExpoWidgets.bundle directory after it's been created.
  */
-const withExpoWidgetsBundleFix = (config) => {
-    return withXcodeProject(config, (config) => {
-        const project = config.modResults;
-        const targetName = 'ExpoWidgetsTarget';
+const TARGET_NAME = 'ExpoWidgetsTarget';
+const SCRIPT_NAME = 'Copy ExpoWidgets JS Bundle';
 
-        // Find the widget extension target
-        const targets = project.pbxNativeTargetSection();
-        let widgetTargetKey = null;
+const normalize = (value) =>
+    typeof value === 'string' ? value.replace(/^"(.*)"$/, '$1') : '';
 
-        for (const key in targets) {
-            if (targets[key].name === targetName) {
-                widgetTargetKey = key;
-                break;
-            }
+function ensureBundleCopyPhase(project, projectRoot) {
+    const targets = project.pbxNativeTargetSection();
+    let widgetTargetKey = null;
+
+    for (const key in targets) {
+        if (key.endsWith('_comment')) {
+            continue;
         }
-
-        if (!widgetTargetKey) {
-            console.warn(
-                `[withExpoWidgetsBundleFix] Could not find target "${targetName}". Skipping.`
-            );
-            return config;
+        const name = normalize(targets[key]?.name);
+        const productName = normalize(targets[key]?.productName);
+        if (name === TARGET_NAME || productName === TARGET_NAME) {
+            widgetTargetKey = key;
+            break;
         }
+    }
 
-        // Check if we already added this script phase
-        const buildPhases = targets[widgetTargetKey].buildPhases || [];
-        const alreadyAdded = buildPhases.some((phase) => {
-            const phaseObj = project.hash.project.objects['PBXShellScriptBuildPhase']?.[phase.value];
-            return phaseObj?.name === '"Copy ExpoWidgets JS Bundle"';
-        });
+    if (!widgetTargetKey) {
+        return false;
+    }
 
-        if (alreadyAdded) {
-            return config;
-        }
+    const buildPhases = targets[widgetTargetKey].buildPhases || [];
+    const alreadyAdded = buildPhases.some((phase) => {
+        const phaseObj = project.hash.project.objects['PBXShellScriptBuildPhase']?.[phase.value];
+        return normalize(phaseObj?.name) === SCRIPT_NAME;
+    });
+    if (alreadyAdded) {
+        return true;
+    }
 
-        // Add a shell script build phase to copy the JS bundle
-        const scriptContent = `
+    const scriptContent = `
 # Fix: Copy ExpoWidgets JS bundle into the resource bundle directory
 DEST_DIR="\${TARGET_BUILD_DIR}/\${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoWidgets.bundle"
 PODS_JS_SOURCE="$PODS_CONFIGURATION_BUILD_DIR/ExpoWidgets/ExpoWidgets.bundle/ExpoWidgets.bundle"
-NODE_JS_SOURCE="${config.modRequest.projectRoot}/node_modules/expo-widgets/bundle/build/ExpoWidgets.bundle"
+NODE_JS_SOURCE="${projectRoot}/node_modules/expo-widgets/bundle/build/ExpoWidgets.bundle"
 DEST_JS="$DEST_DIR/ExpoWidgets.bundle"
 
 if [ -f "$DEST_JS" ]; then
@@ -72,17 +72,21 @@ else
 fi
 `;
 
-        project.addBuildPhase(
-            [],
-            'PBXShellScriptBuildPhase',
-            'Copy ExpoWidgets JS Bundle',
-            widgetTargetKey,
-            {
-                shellPath: '/bin/sh',
-                shellScript: scriptContent,
-            }
-        );
+    project.addBuildPhase([], 'PBXShellScriptBuildPhase', SCRIPT_NAME, widgetTargetKey, {
+        shellPath: '/bin/sh',
+        shellScript: scriptContent,
+    });
+    return true;
+}
 
+const withExpoWidgetsBundleFix = (config) => {
+    return withXcodeProject(config, (config) => {
+        const applied = ensureBundleCopyPhase(config.modResults, config.modRequest.projectRoot);
+        if (!applied) {
+            console.warn(
+                `[withExpoWidgetsBundleFix] Could not find target "${TARGET_NAME}" in withXcodeProject step.`
+            );
+        }
         return config;
     });
 };

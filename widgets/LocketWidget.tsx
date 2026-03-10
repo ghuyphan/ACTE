@@ -1,15 +1,12 @@
-import { HStack, Image, Rectangle, Spacer, Text, VStack, ZStack } from '@expo/ui/swift-ui';
+import { Rectangle, Spacer, Text, VStack, ZStack } from '@expo/ui/swift-ui';
 import {
-    background,
-    cornerRadius,
     font,
     foregroundStyle,
     frame,
     lineLimit,
     lineSpacing,
     multilineTextAlignment,
-    padding,
-    shadow
+    padding
 } from '@expo/ui/swift-ui/modifiers';
 import { createWidget } from 'expo-widgets';
 
@@ -24,167 +21,80 @@ interface WidgetProps {
     idleText: string;
     savedCountText: string;
     memoryReminderText: string;
+    family?: string;
 }
 
 const LocketWidget = (props: { props: WidgetProps }) => {
     'widget';
 
+    const asString = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+    const truncate = (value: string, maxLength: number) => {
+        if (!value) return '';
+        if (value.length <= maxLength) return value;
+        return `${value.slice(0, Math.max(0, maxLength - 1))}…`;
+    };
+
     const {
-        text, locationName, date, noteCount, nearbyPlacesCount,
-        isIdleState, idleText, savedCountText, memoryReminderText,
+        text,
+        noteCount,
+        isIdleState,
+        family,
     } = props.props ?? {};
 
-    const safeText = typeof text === 'string' ? text : '';
-    const safeLocationName = typeof locationName === 'string' ? locationName : '';
+    const isLarge = asString(family) === 'systemLarge';
+    const safeText = truncate(asString(text), isLarge ? 140 : 72);
     const safeNoteCount = typeof noteCount === 'number' ? noteCount : 0;
-    const safeIdleText = typeof idleText === 'string' && idleText.trim().length > 0
-        ? idleText
-        : 'Save memories before they fade 💛';
-    const isPhoto = safeText === '📸 Photo Memory' || safeText.trim().length === 0;
-    const hasNote = safeNoteCount > 0;
+    const isPhoto = safeText.length === 0;
+    const showIdle = safeNoteCount <= 0 || (isIdleState && !safeText);
+    const bodyText = showIdle ? 'Ảnh chả thương em?' : (isPhoto ? '📸 Nhớ tấm này nha' : safeText);
+    const compactPad = isLarge ? 18 : 14;
+    const bodyFontSize = isLarge ? 30 : 24;
+    const backgroundColors = showIdle
+        ? ['#FFF8F1', '#FEEBD9']
+        : isPhoto
+            ? ['#FFF8F1', '#FBE9D8']
+            : ['#FFFCF7', '#FFF1E0'];
 
-    // ─── Idle / Empty State ─────────────────────────────
-    if (!hasNote || (isIdleState && !safeText && !safeLocationName)) {
-        return (
-            <ZStack
-                modifiers={[
-                    frame({ maxWidth: 9999, maxHeight: 9999 }),
-                ]}
-            >
-                <Rectangle
-                    modifiers={[
-                        frame({ maxWidth: 9999, maxHeight: 9999 }),
-                        foregroundStyle({
-                            type: 'linearGradient',
-                            colors: ['#2C2C2E', '#1A1A1C'],
-                            startPoint: { x: 0, y: 0 },
-                            endPoint: { x: 1, y: 1 }
-                        })
-                    ]}
-                />
-
-                <VStack modifiers={[padding({ all: 32 })]}>
-                    <Spacer />
-
-                    <Image systemName="sparkles" size={32} color="#FFCA28" />
-
-                    <Spacer modifiers={[frame({ height: 16 })]} />
-
-                    <Text
-                        modifiers={[
-                            font({ weight: 'semibold', size: 15 }),
-                            foregroundStyle('#FFFFFF'),
-                            multilineTextAlignment('center'),
-                            lineSpacing(4),
-                            padding({ horizontal: 16 })
-                        ]}
-                    >
-                        {safeIdleText}
-                    </Text>
-
-                    <Spacer />
-                </VStack>
-            </ZStack>
-        );
-    }
-
-    // ─── Active Memory State ────────────────────────────
     return (
         <ZStack
             modifiers={[
                 frame({ maxWidth: 9999, maxHeight: 9999 }),
+                padding({ all: -22 }),
             ]}
         >
-            {/* Premium Gradient Background */}
             <Rectangle
                 modifiers={[
                     frame({ maxWidth: 9999, maxHeight: 9999 }),
                     foregroundStyle({
                         type: 'linearGradient',
-                        colors: isPhoto ? ['#1A1A1C', '#000000'] : ['#FFD54F', '#FFB300'],
+                        colors: backgroundColors,
                         startPoint: { x: 0, y: 0 },
-                        endPoint: { x: 0, y: 1 }
+                        endPoint: { x: 1, y: 1 }
                     })
                 ]}
             />
 
-            {/* Content layer */}
             <VStack
                 modifiers={[
-                    padding({ all: 16 }),
+                    padding({ all: compactPad }),
                     frame({ maxWidth: 9999, maxHeight: 9999 }),
                 ]}
             >
-                {/* Header: Cute badge */}
-                {safeLocationName ? (
-                    <HStack>
-                        <Spacer />
-                        <HStack
-                            modifiers={[
-                                padding({ horizontal: 12, vertical: 6 }),
-                                background(isPhoto ? '#FFFFFF33' : '#0000001A'),
-                                cornerRadius(14),
-                            ]}
-                        >
-                            <Text
-                                modifiers={[
-                                    font({ weight: 'medium', size: 12 }),
-                                    foregroundStyle(isPhoto ? '#FFFFFF' : '#000000'),
-                                    lineLimit(1),
-                                ]}
-                            >
-                                ✨ {isPhoto ? "Ngắm ảnh đỡ nhớ 💛" : "Dành cho em 💛"}
-                            </Text>
-                        </HStack>
-                        <Spacer />
-                    </HStack>
-                ) : null}
-
                 <Spacer />
 
-                {/* Main content */}
-                {isPhoto ? (
-                    <ZStack
-                        modifiers={[
-                            frame({ maxWidth: 9999, maxHeight: 9999 }),
-                            cornerRadius(16),
-                            background('#00000033'),
-                        ]}
-                    >
-                        <VStack>
-                            <Image systemName="photo.on.rectangle.angled" size={48} color="#FFFFFF" />
-                            <Text
-                                modifiers={[
-                                    font({ weight: 'medium', size: 16 }),
-                                    foregroundStyle('#FFFFFFCC'),
-                                    padding({ top: 12 }),
-                                    shadow({ radius: 3, y: 1, color: '#00000099' })
-                                ]}
-                            >
-                                Photo Memory 💛
-                            </Text>
-                        </VStack>
-                    </ZStack>
-                ) : (
-                    <HStack>
-                        <Spacer />
-                        <Text
-                            modifiers={[
-                                font({ weight: 'semibold', size: 22 }),
-                                foregroundStyle('#1C1C1E'),
-                                lineLimit(4),
-                                lineSpacing(2),
-                                multilineTextAlignment('center'),
-                                shadow({ radius: 2, y: 1, color: '#00000026' })
-                            ]}
-                        >
-                            {safeText || 'Memory saved 💛'}
-                        </Text>
-                        <Spacer />
-                    </HStack>
-                )}
-
-                <Spacer />
+                <Text
+                    modifiers={[
+                        font({ weight: 'semibold', size: bodyFontSize }),
+                        foregroundStyle('#2A1A11'),
+                        frame({ maxWidth: 9999 }),
+                        lineLimit(isLarge ? 3 : 2),
+                        lineSpacing(2),
+                        multilineTextAlignment('leading'),
+                        padding({ horizontal: 2 }),
+                    ]}
+                >
+                    {bodyText}
+                </Text>
             </VStack>
         </ZStack>
     );

@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
+import { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import GlassHeader from '../ui/GlassHeader';
 
@@ -34,6 +35,36 @@ export default function HomeHeaderSearch({
   colors,
   t,
 }: HomeHeaderSearchProps) {
+  const modeIconScale = useRef(new Animated.Value(1)).current;
+  const modeIconRotate = useRef(new Animated.Value(0)).current;
+  const didMountRef = useRef(false);
+
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+
+    modeIconScale.setValue(0.88);
+    modeIconRotate.setValue(0);
+
+    Animated.parallel([
+      Animated.spring(modeIconScale, {
+        toValue: 1,
+        tension: 260,
+        friction: 18,
+        useNativeDriver: true,
+      }),
+      Animated.timing(modeIconRotate, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      modeIconRotate.setValue(0);
+    });
+  }, [captureMode, modeIconRotate, modeIconScale]);
+
   return (
     <GlassHeader topInset={topInset}>
       <Animated.View
@@ -58,11 +89,25 @@ export default function HomeHeaderSearch({
             onPress={onToggleCaptureMode}
             style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
           >
-            <Ionicons
-              name={captureMode === 'text' ? 'camera-outline' : 'document-text-outline'}
-              size={20}
-              color={colors.primary}
-            />
+            <Animated.View
+              style={{
+                transform: [
+                  { scale: modeIconScale },
+                  {
+                    rotate: modeIconRotate.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['-14deg', '0deg'],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Ionicons
+                name={captureMode === 'text' ? 'camera-outline' : 'document-text-outline'}
+                size={20}
+                color={colors.primary}
+              />
+            </Animated.View>
           </Pressable>
         </View>
       </Animated.View>
@@ -147,4 +192,3 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
   },
 });
-

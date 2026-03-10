@@ -188,6 +188,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
     const actionsOpacity = useRef(new Animated.Value(0)).current;
     const heartScale = useRef(new Animated.Value(1)).current;
     const editModeAnim = useRef(new Animated.Value(0)).current;
+    const contentInputRef = useRef<TextInput>(null);
+    const locationInputRef = useRef<TextInput>(null);
     const sheetBackgroundStyle = isOlderIOS ? { backgroundColor: colors.card } : null;
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -272,6 +274,22 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
             useNativeDriver: true,
         }).start();
     }, [editModeAnim, isEditing, reduceMotionEnabled]);
+
+    useEffect(() => {
+        if (!isEditing) {
+            return;
+        }
+
+        const focusTimer = setTimeout(() => {
+            if (note?.type === 'text') {
+                contentInputRef.current?.focus();
+                return;
+            }
+            locationInputRef.current?.focus();
+        }, 70);
+
+        return () => clearTimeout(focusTimer);
+    }, [isEditing, note?.type]);
 
     useEffect(() => () => {
         if (feedbackTimeoutRef.current) {
@@ -450,8 +468,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                     end={{ x: 1, y: 1 }}
                                     style={styles.textGradient}
                                 >
+                                    {isEditing ? (
+                                        <Text style={styles.editFieldBadge}>
+                                            {t('noteDetail.contentField', 'Note')}
+                                        </Text>
+                                    ) : null}
                                     <TextInput
-                                        style={styles.editTextInput}
+                                        ref={contentInputRef}
+                                        style={[styles.editTextInput, isEditing ? styles.editTextInputActive : null]}
                                         value={isEditing ? editContent : note.content}
                                         onChangeText={isEditing ? setEditContent : undefined}
                                         editable={isEditing}
@@ -527,11 +551,49 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                         </AnimatedActionButton>
                     </Animated.View>
 
+                    {isEditing ? (
+                        <Animated.View style={{ opacity: editModeAnim }}>
+                            <View
+                                style={[
+                                    styles.editingHintCard,
+                                    {
+                                        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                                        borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
+                                    },
+                                ]}
+                            >
+                                <Ionicons name="create-outline" size={16} color={colors.primary} />
+                                <Text style={[styles.editingHintText, { color: colors.secondaryText }]}>
+                                    {t('noteDetail.editingHint', 'Editing mode: update note and place')}
+                                </Text>
+                            </View>
+                        </Animated.View>
+                    ) : null}
+
                     <Animated.View style={{ opacity: infoOpacity, transform: [{ translateY: infoTranslateY }] }}>
                         <View style={styles.infoSection}>
-                            <View style={styles.infoRow}>
+                            {isEditing ? (
+                                <Text style={[styles.editFieldLabel, { color: colors.secondaryText }]}>
+                                    {t('noteDetail.locationField', 'Place')}
+                                </Text>
+                            ) : null}
+                            <View
+                                style={[
+                                    styles.infoRow,
+                                    isEditing
+                                        ? [
+                                            styles.infoRowEditing,
+                                            {
+                                                backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)',
+                                                borderColor: `${colors.primary}66`,
+                                            },
+                                        ]
+                                        : null,
+                                ]}
+                            >
                                 <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
                                 <TextInput
+                                    ref={locationInputRef}
                                     style={[styles.editLocationInput, { color: colors.text }]}
                                     value={isEditing ? editLocation : (note.locationName || t('noteDetail.unknownLocation', 'Unknown Location'))}
                                     onChangeText={isEditing ? setEditLocation : undefined}
@@ -540,6 +602,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                     placeholderTextColor={colors.secondaryText}
                                     maxLength={100}
                                 />
+                                {isEditing ? <Ionicons name="create-outline" size={16} color={colors.primary} /> : null}
                             </View>
 
                             <View style={styles.infoRow}>
@@ -625,6 +688,21 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    editFieldBadge: {
+        position: 'absolute',
+        top: 12,
+        left: 14,
+        backgroundColor: 'rgba(0,0,0,0.25)',
+        color: 'rgba(255,255,255,0.9)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: '700',
+        overflow: 'hidden',
+        zIndex: 2,
+        fontFamily: 'System',
+    },
     editTextInput: {
         color: '#FFFFFF',
         fontSize: 22,
@@ -635,6 +713,13 @@ const styles = StyleSheet.create({
         textShadowColor: 'rgba(0,0,0,0.2)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 4,
+    },
+    editTextInputActive: {
+        paddingHorizontal: 12,
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.55)',
+        borderRadius: 16,
+        backgroundColor: 'rgba(0,0,0,0.12)',
     },
     actionRow: {
         flexDirection: 'row',
@@ -658,14 +743,43 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    editingHintCard: {
+        borderWidth: 1,
+        borderRadius: 14,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        marginBottom: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    editingHintText: {
+        ...Typography.body,
+        fontSize: 13,
+        flex: 1,
+    },
     infoSection: {
         gap: 16,
         marginBottom: 32,
+    },
+    editFieldLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.6,
+        marginBottom: -6,
+        fontFamily: 'System',
     },
     infoRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
+    },
+    infoRowEditing: {
+        borderWidth: 1.5,
+        borderRadius: 14,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
     },
     infoText: {
         ...Typography.body,

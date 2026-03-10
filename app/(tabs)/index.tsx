@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -13,6 +13,7 @@ import {
   FlatList,
   Keyboard,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -52,8 +53,10 @@ export default function HomeScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
+  const [isCaptureVisible, setIsCaptureVisible] = useState(true);
 
   const searchAnim = useRef(new Animated.Value(0)).current;
+  const hintAnim = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<FlatList>(null);
   useScrollToTop(flatListRef);
 
@@ -71,6 +74,8 @@ export default function HomeScreen() {
     requestPermission,
     cameraRef,
     captureOpacity,
+    captureScale,
+    captureTranslateY,
     flashAnim,
     shutterScale,
     toggleCaptureMode,
@@ -96,6 +101,15 @@ export default function HomeScreen() {
   }, [notes, searchQuery]);
 
   const displayedNotes = isSearching ? filteredNotes : notes;
+  const shouldShowNotesHint = displayedNotes.length > 0 && isCaptureVisible;
+
+  useEffect(() => {
+    Animated.timing(hintAnim, {
+      toValue: shouldShowNotesHint ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [hintAnim, shouldShowNotesHint]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -342,6 +356,11 @@ export default function HomeScreen() {
     toggleCaptureMode();
   }, [toggleCaptureMode]);
 
+  const handleOpenNotes = useCallback(() => {
+    Keyboard.dismiss();
+    flatListRef.current?.scrollToOffset({ offset: snapHeight, animated: true });
+  }, [snapHeight]);
+
   const openNote = useCallback(
     (noteId: string) => {
       if (Platform.OS === 'ios') {
@@ -406,40 +425,70 @@ export default function HomeScreen() {
       <NotesFeed
         flatListRef={flatListRef}
         captureItem={
-          <CaptureCard
-            snapHeight={snapHeight}
-            topInset={insets.top}
-            isSearching={isSearching}
-            captureMode={captureMode}
-            captureOpacity={captureOpacity}
-            colors={colors}
-            isDark={isDark}
-            t={t}
-            noteText={noteText}
-            onChangeNoteText={setNoteText}
-            restaurantName={restaurantName}
-            onChangeRestaurantName={setRestaurantName}
-            capturedPhoto={capturedPhoto}
-            onRetakePhoto={() => setCapturedPhoto(null)}
-            needsCameraPermission={needsCameraPermission}
-            onRequestCameraPermission={requestPermission}
-            isFocused={isFocused}
-            facing={facing}
-            onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
-            cameraRef={cameraRef}
-            flashAnim={flashAnim}
-            permissionGranted={Boolean(permission?.granted)}
-            onShutterPressIn={handleShutterPressIn}
-            onShutterPressOut={handleShutterPressOut}
-            onTakePicture={() => {
-              void takePicture();
-            }}
-            onSaveNote={() => {
-              void saveNote();
-            }}
-            saving={saving}
-            shutterScale={shutterScale}
-          />
+          <View style={styles.captureItemWrapper}>
+            <CaptureCard
+              snapHeight={snapHeight}
+              topInset={insets.top}
+              isSearching={isSearching}
+              captureMode={captureMode}
+              captureOpacity={captureOpacity}
+              captureScale={captureScale}
+              captureTranslateY={captureTranslateY}
+              colors={colors}
+              isDark={isDark}
+              t={t}
+              noteText={noteText}
+              onChangeNoteText={setNoteText}
+              restaurantName={restaurantName}
+              onChangeRestaurantName={setRestaurantName}
+              capturedPhoto={capturedPhoto}
+              onRetakePhoto={() => setCapturedPhoto(null)}
+              needsCameraPermission={needsCameraPermission}
+              onRequestCameraPermission={requestPermission}
+              isFocused={isFocused}
+              facing={facing}
+              onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
+              cameraRef={cameraRef}
+              flashAnim={flashAnim}
+              permissionGranted={Boolean(permission?.granted)}
+              onShutterPressIn={handleShutterPressIn}
+              onShutterPressOut={handleShutterPressOut}
+              onTakePicture={() => {
+                void takePicture();
+              }}
+              onSaveNote={() => {
+                void saveNote();
+              }}
+              saving={saving}
+              shutterScale={shutterScale}
+            />
+            {displayedNotes.length > 0 ? (
+              <Animated.View
+                pointerEvents={shouldShowNotesHint ? 'auto' : 'none'}
+                style={[
+                  styles.homeNotesHintWrap,
+                  {
+                    opacity: hintAnim,
+                    transform: [
+                      {
+                        translateY: hintAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [-8, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                <Pressable style={styles.homeNotesHintButton} onPress={handleOpenNotes} hitSlop={10}>
+                  <Text style={[styles.homeNotesHintText, { color: colors.text }]}>
+                    {t('capture.notesHint', 'Notes')}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.text} />
+                </Pressable>
+              </Animated.View>
+            ) : null}
+          </View>
         }
         notes={displayedNotes}
         refreshing={refreshing}
@@ -451,6 +500,7 @@ export default function HomeScreen() {
         onOpenNote={openNote}
         colors={colors}
         t={t}
+        onCaptureVisibilityChange={setIsCaptureVisible}
       />
 
       <AppSheetAlert {...alertProps} />
@@ -461,6 +511,25 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  captureItemWrapper: {
+    width: '100%',
+  },
+  homeNotesHintWrap: {
+    position: 'absolute',
+    bottom: -34,
+    alignSelf: 'center',
+  },
+  homeNotesHintButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 2,
+  },
+  homeNotesHintText: {
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 20,
+    fontFamily: 'System',
   },
   center: {
     flex: 1,
@@ -481,4 +550,3 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
   },
 });
-

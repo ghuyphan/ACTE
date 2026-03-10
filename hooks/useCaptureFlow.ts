@@ -15,15 +15,25 @@ export function useCaptureFlow() {
 
   const cameraRef = useRef<CameraView>(null);
   const captureOpacity = useRef(new Animated.Value(1)).current;
+  const captureScale = useRef(new Animated.Value(1)).current;
+  const captureTranslateY = useRef(new Animated.Value(0)).current;
   const flashAnim = useRef(new Animated.Value(0)).current;
   const shutterScale = useRef(new Animated.Value(1)).current;
 
   const animateModeSwitch = useCallback((callback: () => void) => {
-    Animated.timing(captureOpacity, { toValue: 0, duration: 120, useNativeDriver: true }).start(() => {
+    Animated.parallel([
+      Animated.timing(captureOpacity, { toValue: 0, duration: 110, useNativeDriver: true }),
+      Animated.timing(captureScale, { toValue: 0.97, duration: 110, useNativeDriver: true }),
+      Animated.timing(captureTranslateY, { toValue: -10, duration: 110, useNativeDriver: true }),
+    ]).start(() => {
       callback();
-      Animated.spring(captureOpacity, { toValue: 1, tension: 200, friction: 15, useNativeDriver: true }).start();
+      Animated.parallel([
+        Animated.spring(captureOpacity, { toValue: 1, tension: 210, friction: 17, useNativeDriver: true }),
+        Animated.spring(captureScale, { toValue: 1, tension: 210, friction: 17, useNativeDriver: true }),
+        Animated.spring(captureTranslateY, { toValue: 0, tension: 210, friction: 17, useNativeDriver: true }),
+      ]).start();
     });
-  }, [captureOpacity]);
+  }, [captureOpacity, captureScale, captureTranslateY]);
 
   const toggleCaptureMode = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -94,6 +104,8 @@ export function useCaptureFlow() {
     requestPermission,
     cameraRef,
     captureOpacity,
+    captureScale,
+    captureTranslateY,
     flashAnim,
     shutterScale,
     animateModeSwitch,
@@ -105,4 +117,3 @@ export function useCaptureFlow() {
     resetCapture,
   };
 }
-

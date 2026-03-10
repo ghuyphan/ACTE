@@ -27,6 +27,8 @@ interface CaptureCardProps {
   isSearching: boolean;
   captureMode: 'text' | 'camera';
   captureOpacity: Animated.Value;
+  captureScale: Animated.Value;
+  captureTranslateY: Animated.Value;
   colors: {
     primary: string;
     card: string;
@@ -64,6 +66,8 @@ export default function CaptureCard({
   isSearching,
   captureMode,
   captureOpacity,
+  captureScale,
+  captureTranslateY,
   colors,
   isDark,
   t,
@@ -91,7 +95,13 @@ export default function CaptureCard({
   return (
     <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
       <Animated.View
-        style={[styles.captureArea, { opacity: captureOpacity }]}
+        style={[
+          styles.captureArea,
+          {
+            opacity: captureOpacity,
+            transform: [{ translateY: captureTranslateY }, { scale: captureScale }],
+          },
+        ]}
         pointerEvents={isSearching ? 'none' : 'auto'}
       >
         {captureMode === 'text' ? (
@@ -185,7 +195,15 @@ export default function CaptureCard({
         )}
       </Animated.View>
 
-      <Animated.View style={[styles.belowCardSection, { opacity: captureOpacity }]}>
+      <Animated.View
+        style={[
+          styles.belowCardSection,
+          {
+            opacity: captureOpacity,
+            transform: [{ translateY: captureTranslateY }, { scale: captureScale }],
+          },
+        ]}
+      >
         {captureMode === 'camera' && !capturedPhoto ? (
           <View style={styles.belowCardShutterRow}>
             {permissionGranted ? (
@@ -253,6 +271,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
     lineHeight: 34,
+    paddingTop: 0,
+    paddingBottom: 0,
     width: '100%',
     textShadowRadius: 6,
     fontFamily: 'System',
@@ -277,6 +297,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
+    lineHeight: 18,
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   cameraContainer: {
     width: CARD_SIZE,
@@ -367,4 +390,3 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
 });
-

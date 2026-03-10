@@ -128,6 +128,7 @@ interface NotesFeedProps {
     secondaryText: string;
   };
   t: TFunction;
+  onCaptureVisibilityChange?: (isVisible: boolean) => void;
 }
 
 export default function NotesFeed({
@@ -141,11 +142,26 @@ export default function NotesFeed({
   onOpenNote,
   colors,
   t,
+  onCaptureVisibilityChange,
 }: NotesFeedProps) {
   const listData = [{ id: '__capture__', kind: 'capture' as const }, ...notes.map((note) => ({
     ...note,
     kind: 'note' as const,
   }))];
+
+  const captureVisibilityRef = useRef(onCaptureVisibilityChange);
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 30 });
+
+  useEffect(() => {
+    captureVisibilityRef.current = onCaptureVisibilityChange;
+  }, [onCaptureVisibilityChange]);
+
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: { item?: { id?: string } }[] }) => {
+      const isCaptureVisible = viewableItems.some((entry) => entry.item?.id === '__capture__');
+      captureVisibilityRef.current?.(isCaptureVisible);
+    }
+  ).current;
 
   return (
     <Reanimated.FlatList
@@ -175,6 +191,8 @@ export default function NotesFeed({
       snapToAlignment="start"
       decelerationRate="fast"
       showsVerticalScrollIndicator={false}
+      onViewableItemsChanged={onViewableItemsChanged}
+      viewabilityConfig={viewabilityConfig.current}
       contentContainerStyle={{ paddingBottom: height - snapHeight }}
       refreshControl={
         <RefreshControl
