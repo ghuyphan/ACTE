@@ -21,6 +21,7 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
@@ -87,7 +88,8 @@
       "expo-web-browser",
       "./plugins/withAllowNonModularIncludes.js",
       "./plugins/withSafeFirebaseInitialization.js",
-      "./plugins/withExpoWidgetsBundleFix.js"
+      "./plugins/withExpoWidgetsBundleFix.js",
+      "./plugins/withRNFirebaseAsStaticFramework.js"
     ],
     "experiments": {
       "typedRoutes": true,
