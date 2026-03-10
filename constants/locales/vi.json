@@ -128,6 +128,11 @@
         "memoryReminder": "Kỷ niệm nhắc nhở anh 💛",
         "unknownPlace": "Không rõ địa điểm"
     },
+    "feedback": {
+        "favorited": "Đã yêu thích",
+        "unfavorited": "Đã bỏ yêu thích",
+        "deleted": "Đã xóa"
+    },
     "common": {
         "cancel": "Hủy",
         "delete": "Xóa",

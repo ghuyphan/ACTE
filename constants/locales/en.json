@@ -128,6 +128,11 @@
         "memoryReminder": "A memory reminds you 💛",
         "unknownPlace": "Unknown Place"
     },
+    "feedback": {
+        "favorited": "Favorited",
+        "unfavorited": "Unfavorited",
+        "deleted": "Deleted"
+    },
     "common": {
         "cancel": "Cancel",
         "delete": "Delete",

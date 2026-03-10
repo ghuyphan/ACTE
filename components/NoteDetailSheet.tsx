@@ -4,11 +4,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+    Alert,
     Animated,
     Dimensions,
+    Easing,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -19,14 +21,15 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import AppSheetAlert from './AppSheetAlert';
 import { Layout, Typography } from '../constants/theme';
-import { useAppSheetAlert } from '../hooks/useAppSheetAlert';
 import { useNotes } from '../hooks/useNotes';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { CardGradients, useTheme } from '../hooks/useTheme';
 import { Note } from '../services/database';
 import { formatDate } from '../utils/dateUtils';
+import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
 import { isOlderIOS } from '../utils/platform';
+import TransientStatusChip from './ui/TransientStatusChip';
 
 const { width } = Dimensions.get('window');
 const CARD_SIZE = width - Layout.screenPadding * 2;
@@ -75,40 +78,88 @@ function AnimatedActionButton({
     children,
     style,
     delay = 0,
+    disabled = false,
 }: {
     onPress: () => void;
     children: React.ReactNode;
     style: object;
     delay?: number;
+    disabled?: boolean;
 }) {
     const scale = useRef(new Animated.Value(0)).current;
     const pressScale = useRef(new Animated.Value(1)).current;
+    const reduceMotionEnabled = useReducedMotion();
 
     useEffect(() => {
-        Animated.spring(scale, {
+        Animated.timing(scale, {
             toValue: 1,
             delay,
-            tension: 200,
-            friction: 12,
+            duration: reduceMotionEnabled ? 110 : 140,
+            easing: Easing.out(Easing.cubic),
             useNativeDriver: true,
         }).start();
-    }, [scale, delay]);
+    }, [delay, reduceMotionEnabled, scale]);
 
     return (
         <Pressable
             onPress={onPress}
+            disabled={disabled}
             onPressIn={() => {
-                Animated.spring(pressScale, { toValue: 0.85, tension: 300, friction: 10, useNativeDriver: true }).start();
+                Animated.timing(pressScale, {
+                    toValue: reduceMotionEnabled ? 0.97 : 0.93,
+                    duration: 80,
+                    easing: Easing.out(Easing.quad),
+                    useNativeDriver: true
+                }).start();
             }}
             onPressOut={() => {
-                Animated.spring(pressScale, { toValue: 1, tension: 200, friction: 8, useNativeDriver: true }).start();
+                Animated.timing(pressScale, {
+                    toValue: 1,
+                    duration: 110,
+                    easing: Easing.out(Easing.quad),
+                    useNativeDriver: true
+                }).start();
             }}
         >
-            <Animated.View style={[style, { transform: [{ scale: Animated.multiply(scale, pressScale) }] }]}>
+            <Animated.View
+                style={[
+                    style,
+                    {
+                        opacity: disabled ? 0.45 : 1,
+                        transform: [{ scale: Animated.multiply(scale, pressScale) }]
+                    }
+                ]}
+            >
                 {children}
             </Animated.View>
         </Pressable>
     );
+}
+
+interface FeedbackState {
+    type: InteractionFeedbackType;
+    token: number;
+}
+
+function getFeedbackPresentation(t: any, type: InteractionFeedbackType) {
+    if (type === 'favorited') {
+        return {
+            label: t('feedback.favorited', 'Favorited'),
+            icon: 'heart' as const,
+        };
+    }
+
+    if (type === 'unfavorited') {
+        return {
+            label: t('feedback.unfavorited', 'Unfavorited'),
+            icon: 'heart-outline' as const,
+        };
+    }
+
+    return {
+        label: t('feedback.deleted', 'Deleted'),
+        icon: 'trash-outline' as const,
+    };
 }
 
 interface NoteDetailSheetProps {
@@ -121,19 +172,37 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
     const { getNoteById, deleteNote, updateNote, toggleFavorite } = useNotes();
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
-    const { alertProps, showAlert } = useAppSheetAlert();
+    const reduceMotionEnabled = useReducedMotion();
     const [note, setNote] = useState<Note | null>(null);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [editContent, setEditContent] = useState('');
     const [editLocation, setEditLocation] = useState('');
+    const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
 
     const cardScale = useRef(new Animated.Value(0.92)).current;
     const cardOpacity = useRef(new Animated.Value(0)).current;
     const infoTranslateY = useRef(new Animated.Value(20)).current;
     const infoOpacity = useRef(new Animated.Value(0)).current;
+    const actionsOpacity = useRef(new Animated.Value(0)).current;
     const heartScale = useRef(new Animated.Value(1)).current;
+    const editModeAnim = useRef(new Animated.Value(0)).current;
     const sheetBackgroundStyle = isOlderIOS ? { backgroundColor: colors.card } : null;
+    const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const showInteractionFeedback = useCallback((type: InteractionFeedbackType) => {
+        if (feedbackTimeoutRef.current) {
+            clearTimeout(feedbackTimeoutRef.current);
+        }
+
+        emitInteractionFeedback(type);
+        setInteractionFeedback({ type, token: Date.now() });
+        feedbackTimeoutRef.current = setTimeout(() => {
+            setInteractionFeedback(null);
+            feedbackTimeoutRef.current = null;
+        }, 1200);
+    }, []);
 
     useEffect(() => {
         if (!visible || !noteId) {
@@ -142,10 +211,13 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
 
         setLoading(true);
         setIsEditing(false);
-        cardScale.setValue(0.92);
+        setIsDeleting(false);
+        cardScale.setValue(0.97);
         cardOpacity.setValue(0);
-        infoTranslateY.setValue(20);
+        infoTranslateY.setValue(12);
         infoOpacity.setValue(0);
+        actionsOpacity.setValue(0);
+        editModeAnim.setValue(0);
 
         getNoteById(noteId).then((nextNote) => {
             setNote(nextNote);
@@ -156,52 +228,121 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
             setLoading(false);
 
             Animated.parallel([
-                Animated.spring(cardScale, { toValue: 1, tension: 80, friction: 10, useNativeDriver: true }),
-                Animated.timing(cardOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-                Animated.timing(infoOpacity, { toValue: 1, duration: 400, delay: 200, useNativeDriver: true }),
-                Animated.spring(infoTranslateY, { toValue: 0, tension: 80, friction: 12, delay: 200, useNativeDriver: true }),
+                Animated.timing(cardScale, {
+                    toValue: 1,
+                    duration: reduceMotionEnabled ? 140 : 180,
+                    easing: Easing.out(Easing.cubic),
+                    useNativeDriver: true
+                }),
+                Animated.timing(cardOpacity, {
+                    toValue: 1,
+                    duration: reduceMotionEnabled ? 140 : 180,
+                    easing: Easing.out(Easing.cubic),
+                    useNativeDriver: true
+                }),
+                Animated.timing(actionsOpacity, {
+                    toValue: 1,
+                    duration: reduceMotionEnabled ? 120 : 160,
+                    delay: 70,
+                    easing: Easing.out(Easing.cubic),
+                    useNativeDriver: true
+                }),
+                Animated.timing(infoOpacity, {
+                    toValue: 1,
+                    duration: reduceMotionEnabled ? 140 : 180,
+                    delay: 100,
+                    easing: Easing.out(Easing.cubic),
+                    useNativeDriver: true
+                }),
+                Animated.timing(infoTranslateY, {
+                    toValue: 0,
+                    duration: reduceMotionEnabled ? 140 : 180,
+                    delay: 100,
+                    easing: Easing.out(Easing.cubic),
+                    useNativeDriver: true
+                }),
             ]).start();
         });
-    }, [cardOpacity, cardScale, getNoteById, infoOpacity, infoTranslateY, noteId, visible]);
+    }, [actionsOpacity, cardOpacity, cardScale, editModeAnim, getNoteById, infoOpacity, infoTranslateY, noteId, reduceMotionEnabled, visible]);
+
+    useEffect(() => {
+        Animated.timing(editModeAnim, {
+            toValue: isEditing ? 1 : 0,
+            duration: reduceMotionEnabled ? 100 : 180,
+            useNativeDriver: true,
+        }).start();
+    }, [editModeAnim, isEditing, reduceMotionEnabled]);
+
+    useEffect(() => () => {
+        if (feedbackTimeoutRef.current) {
+            clearTimeout(feedbackTimeoutRef.current);
+        }
+    }, []);
+
+    const animateDeleteOut = useCallback(() => new Promise<void>((resolve) => {
+        Animated.parallel([
+            Animated.timing(cardOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+            Animated.timing(actionsOpacity, { toValue: 0, duration: 120, useNativeDriver: true }),
+            Animated.timing(infoOpacity, { toValue: 0, duration: 120, useNativeDriver: true }),
+            Animated.timing(infoTranslateY, { toValue: 12, duration: 150, useNativeDriver: true }),
+            Animated.timing(cardScale, { toValue: 0.98, duration: 150, useNativeDriver: true }),
+        ]).start(() => resolve());
+    }), [actionsOpacity, cardOpacity, cardScale, infoOpacity, infoTranslateY]);
 
     const handleDelete = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        showAlert({
-            variant: 'error',
-            title: t('noteDetail.deleteTitle', 'Delete Note'),
-            message: t('noteDetail.deleteMsg', 'This note and its geofence will be permanently removed.'),
-            primaryAction: {
-                label: t('common.delete', 'Delete'),
-                variant: 'destructive',
-                onPress: async () => {
-                    if (note) {
-                        await deleteNote(note.id);
+        Alert.alert(
+            t('noteDetail.deleteTitle', 'Delete Note'),
+            t('noteDetail.deleteMsg', 'This note and its geofence will be permanently removed.'),
+            [
+                { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+                {
+                    text: t('common.delete', 'Delete'),
+                    style: 'destructive',
+                    onPress: () => {
+                        if (!note || isDeleting) return;
+                        const noteId = note.id;
+                        showInteractionFeedback('deleted');
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        // Close sheet first so the home screen is visible
                         onClose();
-                    }
+                        // Delay the actual delete so the user sees Reanimated.FlatList sliding remaining items
+                        setTimeout(() => {
+                            deleteNote(noteId).catch((err) =>
+                                console.error('Delete failed:', err)
+                            );
+                        }, 200);
+                    },
                 },
-            },
-            secondaryAction: {
-                label: t('common.cancel', 'Cancel'),
-                variant: 'secondary',
-            },
-        });
+            ]
+        );
     };
 
     const handleToggleFavorite = async () => {
-        if (!note) return;
+        if (!note || isDeleting) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         Animated.sequence([
-            Animated.spring(heartScale, { toValue: 1.4, tension: 300, friction: 5, useNativeDriver: true }),
-            Animated.spring(heartScale, { toValue: 1, tension: 200, friction: 8, useNativeDriver: true }),
+            Animated.timing(heartScale, {
+                toValue: reduceMotionEnabled ? 1.1 : 1.14,
+                duration: 90,
+                easing: Easing.out(Easing.quad),
+                useNativeDriver: true
+            }),
+            Animated.timing(heartScale, {
+                toValue: 1,
+                duration: 120,
+                easing: Easing.out(Easing.quad),
+                useNativeDriver: true
+            }),
         ]).start();
 
         const newValue = await toggleFavorite(note.id);
         setNote((prev) => (prev ? { ...prev, isFavorite: newValue } : prev));
+        showInteractionFeedback(newValue ? 'favorited' : 'unfavorited');
     };
 
     const handleSaveEdit = async () => {
-        if (!note) return;
+        if (!note || isDeleting) return;
         const updates: Partial<Pick<Note, 'content' | 'locationName'>> = {};
 
         if (note.type === 'text' && editContent.trim() !== note.content) {
@@ -222,7 +363,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
     };
 
     const handleShare = async () => {
-        if (!note) return;
+        if (!note || isDeleting) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
         const locationStr = note.locationName || t('noteDetail.unknownLocation');
@@ -271,12 +412,28 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         const dateStr = formatDate(note.createdAt, 'long');
         const gradientIndex = hashToIndex(note.id, CardGradients.length);
         const gradient = CardGradients[gradientIndex];
+        const editIconStyle = {
+            opacity: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+            transform: [{ scale: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.72] }) }],
+        };
+        const saveIconStyle = {
+            opacity: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
+            transform: [{ scale: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }) }],
+        };
 
         return (
             <KeyboardAvoidingView
                 style={[styles.sheetSurface, sheetBackgroundStyle]}
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
+                {interactionFeedback ? (
+                    <View pointerEvents="none" style={styles.feedbackOverlay}>
+                        <TransientStatusChip
+                            key={interactionFeedback.token}
+                            {...getFeedbackPresentation(t, interactionFeedback.type)}
+                        />
+                    </View>
+                ) : null}
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                     <Animated.View style={{ opacity: cardOpacity, transform: [{ scale: cardScale }] }}>
                         {note.type === 'photo' ? (
@@ -307,11 +464,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                         )}
                     </Animated.View>
 
-                    <View style={styles.actionRow}>
+                    <Animated.View style={[styles.actionRow, { opacity: actionsOpacity }]}>
                         <AnimatedActionButton
                             onPress={handleToggleFavorite}
                             style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
                             delay={100}
+                            disabled={isDeleting}
                         >
                             <Animated.View style={{ transform: [{ scale: heartScale }] }}>
                                 <Ionicons
@@ -327,12 +485,24 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                 onPress={isEditing ? handleSaveEdit : () => setIsEditing(true)}
                                 style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
                                 delay={150}
+                                disabled={isDeleting}
                             >
-                                <Ionicons
-                                    name={isEditing ? 'checkmark' : 'create-outline'}
-                                    size={20}
-                                    color={isEditing ? colors.success : colors.secondaryText}
-                                />
+                                <View style={styles.editIconStack}>
+                                    <Animated.View style={[styles.editIconLayer, editIconStyle]}>
+                                        <Ionicons
+                                            name="create-outline"
+                                            size={20}
+                                            color={colors.secondaryText}
+                                        />
+                                    </Animated.View>
+                                    <Animated.View style={[styles.editIconLayer, saveIconStyle]}>
+                                        <Ionicons
+                                            name="checkmark"
+                                            size={20}
+                                            color={colors.success}
+                                        />
+                                    </Animated.View>
+                                </View>
                             </AnimatedActionButton>
                         ) : null}
 
@@ -340,10 +510,20 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                             onPress={handleShare}
                             style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
                             delay={200}
+                            disabled={isDeleting}
                         >
                             <Ionicons name="share-outline" size={20} color={colors.secondaryText} />
                         </AnimatedActionButton>
-                    </View>
+
+                        <AnimatedActionButton
+                            onPress={handleDelete}
+                            style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
+                            delay={250}
+                            disabled={isDeleting}
+                        >
+                            <Ionicons name="trash-outline" size={20} color={colors.danger} />
+                        </AnimatedActionButton>
+                    </Animated.View>
 
                     <Animated.View style={{ opacity: infoOpacity, transform: [{ translateY: infoTranslateY }] }}>
                         <View style={styles.infoSection}>
@@ -373,15 +553,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                             </View>
                         </View>
 
-                        <Pressable
-                            style={[styles.deleteButton, { backgroundColor: `${colors.danger}15` }]}
-                            onPress={handleDelete}
-                        >
-                            <Ionicons name="trash-outline" size={20} color={colors.danger} />
-                            <Text style={[styles.deleteText, { color: colors.danger }]}>
-                                {t('noteDetail.delete', 'Delete Note')}
-                            </Text>
-                        </Pressable>
                     </Animated.View>
                 </ScrollView>
             </KeyboardAvoidingView>
@@ -399,7 +570,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                     </Group>
                 </BottomSheet>
             </Host>
-            <AppSheetAlert {...alertProps} />
         </View>
     );
 }
@@ -420,6 +590,14 @@ const styles = StyleSheet.create({
         padding: Layout.screenPadding,
         paddingTop: 16,
         paddingBottom: 60,
+    },
+    feedbackOverlay: {
+        position: 'absolute',
+        top: 14,
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        zIndex: 10,
     },
     photoContainer: {
         width: CARD_SIZE,
@@ -469,6 +647,15 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    editIconStack: {
+        width: 20,
+        height: 20,
+    },
+    editIconLayer: {
+        ...StyleSheet.absoluteFillObject,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     infoSection: {
         gap: 16,
         marginBottom: 32,
@@ -486,19 +673,6 @@ const styles = StyleSheet.create({
         ...Typography.body,
         fontWeight: '700',
         flex: 1,
-    },
-    deleteButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        borderRadius: 14,
-        gap: 8,
-    },
-    deleteText: {
-        fontSize: 17,
-        fontWeight: '600',
-        fontFamily: 'System',
     },
     skeletonCard: {
         width: CARD_SIZE,

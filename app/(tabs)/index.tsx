@@ -23,6 +23,7 @@ import {
   TextInput,
   View
 } from 'react-native';
+import Reanimated, { LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../../components/AppSheetAlert';
 import ImageMemoryCard from '../../components/ImageMemoryCard';
@@ -48,13 +49,14 @@ function AnimatedNoteCard({ item, index, onPress, colors, t }: {
   const scale = useRef(new Animated.Value(0.9)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const pressScale = useRef(new Animated.Value(1)).current;
+  const mountIndex = useRef(index).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(scale, { toValue: 1, tension: 80, friction: 10, delay: index * 50, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 1, duration: 300, delay: index * 50, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, tension: 80, friction: 10, delay: mountIndex * 50, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 300, delay: mountIndex * 50, useNativeDriver: true }),
     ]).start();
-  }, [scale, opacity, index]);
+  }, [scale, opacity, mountIndex]);
 
   const handlePressIn = () => {
     Animated.spring(pressScale, { toValue: 0.98, tension: 300, friction: 15, useNativeDriver: true }).start();
@@ -384,12 +386,11 @@ export default function HomeScreen() {
   const needsCameraPermission = captureMode === 'camera' && (!permission || !permission.granted);
 
   const renderCaptureCard = () => {
-    if (isSearching) return <View key="__capture__" style={{ height: 0, overflow: 'hidden' }} />;
     return (
       <View style={[styles.snapItem, { height: SNAP_HEIGHT, paddingTop: insets.top + 60 }]}>
 
         {/* Capture Area — animated crossfade on mode switch */}
-        <Animated.View style={[styles.captureArea, { opacity: captureOpacity }]}>
+        <Animated.View style={[styles.captureArea, { opacity: captureOpacity }]} pointerEvents={isSearching ? 'none' : 'auto'}>
           {captureMode === 'text' ? (
             <View
               style={[styles.textCard, { backgroundColor: colors.primary }]}
@@ -543,85 +544,86 @@ export default function HomeScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <GlassHeader topInset={insets.top}>
-          {/* Default Header */}
-          <Animated.View
-            pointerEvents={isSearching ? 'none' : 'auto'}
-            style={[
-              StyleSheet.absoluteFill,
-              {
-                paddingHorizontal: Layout.screenPadding,
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                opacity: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-                transform: [{ translateY: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }) }]
-              }
-            ]}
-          >
-            <Text style={[styles.logoText, { color: colors.text }]}>ACTE 💛</Text>
-            <View style={styles.headerActions}>
-              <Pressable onPress={() => {
-                setIsSearching(true);
-                Animated.timing(searchAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
-              }}>
-                <Ionicons name="search" size={20} color={colors.primary} />
-              </Pressable>
-              <Pressable onPress={toggleCaptureMode} style={[styles.modeToggleBtn, { backgroundColor: colors.primary + '18' }]}>
-                <Ionicons
-                  name={captureMode === 'text' ? 'camera-outline' : 'document-text-outline'}
-                  size={20}
-                  color={colors.primary}
-                />
-              </Pressable>
-            </View>
-          </Animated.View>
+        {/* Default Header */}
+        <Animated.View
+          pointerEvents={isSearching ? 'none' : 'auto'}
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              paddingHorizontal: Layout.screenPadding,
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              opacity: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+              transform: [{ translateY: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }) }]
+            }
+          ]}
+        >
+          <Text style={[styles.logoText, { color: colors.text }]}>ACTE 💛</Text>
+          <View style={styles.headerActions}>
+            <Pressable onPress={() => {
+              setIsSearching(true);
+              Animated.timing(searchAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+              flatListRef.current?.scrollToOffset({ offset: SNAP_HEIGHT, animated: true });
+            }}>
+              <Ionicons name="search" size={20} color={colors.primary} />
+            </Pressable>
+            <Pressable onPress={toggleCaptureMode} style={[styles.modeToggleBtn, { backgroundColor: colors.primary + '18' }]}>
+              <Ionicons
+                name={captureMode === 'text' ? 'camera-outline' : 'document-text-outline'}
+                size={20}
+                color={colors.primary}
+              />
+            </Pressable>
+          </View>
+        </Animated.View>
 
-          {/* Search Header */}
-          <Animated.View
-            pointerEvents={isSearching ? 'auto' : 'none'}
-            style={[
-              StyleSheet.absoluteFill,
-              {
-                paddingHorizontal: Layout.screenPadding,
-                flexDirection: 'row',
-                alignItems: 'center',
-                opacity: searchAnim,
-                transform: [{ translateY: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }]
-              }
-            ]}
-          >
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={16} color={colors.secondaryText} />
-              <View style={{ flex: 1, justifyContent: 'center' }}>
-                <TextInput
-                  style={[styles.searchInput, { color: colors.text }]}
-                  placeholder={t('home.searchPlaceholder', 'Search notes...')}
-                  placeholderTextColor={colors.secondaryText}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  autoFocus={isSearching}
-                  returnKeyType="search"
-                />
-              </View>
-              <Pressable
-                onPress={() => {
-                  Keyboard.dismiss();
-                  Animated.timing(searchAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
-                    setIsSearching(false);
-                    setSearchQuery('');
-                    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-                  });
-                }}
-              >
-                <Ionicons name="close-circle" size={20} color={colors.secondaryText} />
-              </Pressable>
+        {/* Search Header */}
+        <Animated.View
+          pointerEvents={isSearching ? 'auto' : 'none'}
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              paddingHorizontal: Layout.screenPadding,
+              flexDirection: 'row',
+              alignItems: 'center',
+              opacity: searchAnim,
+              transform: [{ translateY: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }]
+            }
+          ]}
+        >
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={16} color={colors.secondaryText} />
+            <View style={{ flex: 1, justifyContent: 'center' }}>
+              <TextInput
+                style={[styles.searchInput, { color: colors.text }]}
+                placeholder={t('home.searchPlaceholder', 'Search notes...')}
+                placeholderTextColor={colors.secondaryText}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus={isSearching}
+                returnKeyType="search"
+              />
             </View>
-          </Animated.View>
+            <Pressable
+              onPress={() => {
+                Keyboard.dismiss();
+                Animated.timing(searchAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
+                  setIsSearching(false);
+                  setSearchQuery('');
+                });
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+              }}
+            >
+              <Ionicons name="close-circle" size={20} color={colors.secondaryText} />
+            </Pressable>
+          </View>
+        </Animated.View>
       </GlassHeader>
 
       {/* Search empty state */}
       {isSearching && filteredNotes.length === 0 && searchQuery.trim() ? (
-        <View style={[styles.center, { backgroundColor: colors.background }]}>
+        <View style={[styles.center, { backgroundColor: colors.background, position: 'absolute', top: SNAP_HEIGHT, left: 0, right: 0, bottom: 0, zIndex: 10 }]} pointerEvents="none">
           <Ionicons name="search-outline" size={48} color={colors.secondaryText} style={{ opacity: 0.5 }} />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>
             {t('home.noResults', 'No notes found')}
@@ -630,29 +632,30 @@ export default function HomeScreen() {
             {t('home.noResultsMsg', 'Try a different keyword')}
           </Text>
         </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={listData}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item, index }) => {
-            if (item.id === '__capture__') return renderCaptureCard();
-            return renderNoteCard({ item: item as Note, index });
-          }}
-          snapToInterval={SNAP_HEIGHT}
-          snapToAlignment="start"
-          decelerationRate="fast"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: height - SNAP_HEIGHT }}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-            />
-          }
-        />
-      )}
+      ) : null}
+
+      <Reanimated.FlatList
+        ref={flatListRef}
+        data={listData}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item, index }) => {
+          if (item.id === '__capture__') return renderCaptureCard();
+          return renderNoteCard({ item: item as Note, index });
+        }}
+        itemLayoutAnimation={LinearTransition.springify().damping(20).stiffness(150)}
+        snapToInterval={SNAP_HEIGHT}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: height - SNAP_HEIGHT }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
+      />
       <AppSheetAlert {...alertProps} />
     </View>
   );

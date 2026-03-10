@@ -122,10 +122,10 @@ export default function AppSheetAlert({
                     styles.iosContainer,
                     isOlderIOS
                       ? {
-                          backgroundColor: colors.card,
-                          borderTopLeftRadius: 10,
-                          borderTopRightRadius: 10,
-                        }
+                        backgroundColor: colors.card,
+                        borderTopLeftRadius: 10,
+                        borderTopRightRadius: 10,
+                      }
                       : null,
                   ]}
                 >
