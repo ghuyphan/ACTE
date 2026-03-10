@@ -5,6 +5,7 @@ import { Note } from '../services/database';
 
 const mockSyncGeofenceRegions = jest.fn();
 const mockClearGeofenceRegions = jest.fn();
+const mockSkipImmediateReminderForNewNote = jest.fn();
 const mockUpdateWidgetData = jest.fn();
 const mockRecordChange = jest.fn();
 const mockCleanupOrphanPhotoFiles = jest.fn();
@@ -22,6 +23,7 @@ jest.mock('expo-file-system/legacy', () => ({
 jest.mock('../services/geofenceService', () => ({
   syncGeofenceRegions: (...args: unknown[]) => mockSyncGeofenceRegions(...args),
   clearGeofenceRegions: (...args: unknown[]) => mockClearGeofenceRegions(...args),
+  skipImmediateReminderForNewNote: (...args: unknown[]) => mockSkipImmediateReminderForNewNote(...args),
 }));
 
 jest.mock('../services/widgetService', () => ({
@@ -108,6 +110,7 @@ beforeEach(() => {
   mockDeleteAsync.mockResolvedValue(undefined);
   mockSyncGeofenceRegions.mockResolvedValue(true);
   mockClearGeofenceRegions.mockResolvedValue(undefined);
+  mockSkipImmediateReminderForNewNote.mockResolvedValue(undefined);
   mockUpdateWidgetData.mockResolvedValue(undefined);
   mockRecordChange.mockResolvedValue(undefined);
 });

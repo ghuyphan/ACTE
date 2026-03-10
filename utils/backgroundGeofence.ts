@@ -4,13 +4,14 @@ import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import i18n from '../constants/i18n';
 import { getNoteById } from '../services/database';
+import { getGeofenceCooldownKey, getLocationCooldownId, getSkipNextEnterKey } from './geofenceKeys';
 
 export const GEOFENCE_TASK_NAME = 'BACKGROUND_GEOFENCE_TASK';
 const NOTE_NOTIFICATION_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const LOCATION_NOTIFICATION_COOLDOWN_MS = 30 * 60 * 1000;
 
 function getCooldownKey(scope: 'note' | 'location', id: string) {
-    return `geofence.cooldown.${scope}.${id}`;
+    return getGeofenceCooldownKey(scope, id);
 }
 
 async function isOnCooldown(scope: 'note' | 'location', id: string, durationMs: number) {
@@ -25,18 +26,6 @@ async function isOnCooldown(scope: 'note' | 'location', id: string, durationMs: 
 
 async function setCooldown(scope: 'note' | 'location', id: string) {
     await AsyncStorage.setItem(getCooldownKey(scope, id), String(Date.now()));
-}
-
-function getLocationCooldownId(locationName: string | null, latitude?: number, longitude?: number) {
-    if (locationName?.trim()) {
-        return locationName.trim().toLowerCase();
-    }
-
-    if (typeof latitude === 'number' && typeof longitude === 'number') {
-        return `${latitude.toFixed(3)}:${longitude.toFixed(3)}`;
-    }
-
-    return 'unknown-location';
 }
 
 // Configure how notifications appear when the app is in the foreground
@@ -69,6 +58,16 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
             let title = i18n.t('notification.title');
             let body = i18n.t('notification.body');
             const regionId = region.identifier ?? '';
+
+            if (regionId) {
+                const skipNextEnterKey = getSkipNextEnterKey(regionId);
+                const shouldSkip = await AsyncStorage.getItem(skipNextEnterKey);
+                if (shouldSkip === '1') {
+                    await AsyncStorage.removeItem(skipNextEnterKey);
+                    return;
+                }
+            }
+
             const isNoteCoolingDown = regionId
                 ? await isOnCooldown('note', regionId, NOTE_NOTIFICATION_COOLDOWN_MS)
                 : false;

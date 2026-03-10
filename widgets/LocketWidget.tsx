@@ -1,7 +1,6 @@
 import { HStack, Image, Rectangle, Spacer, Text, VStack, ZStack } from '@expo/ui/swift-ui';
 import {
     background,
-    containerRelativeFrame,
     cornerRadius,
     font,
     foregroundStyle,
@@ -35,19 +34,26 @@ const LocketWidget = (props: { props: WidgetProps }) => {
         isIdleState, idleText, savedCountText, memoryReminderText,
     } = props.props ?? {};
 
-    const isPhoto = text === '📸 Photo Memory' || text === '';
-    const hasNote = noteCount > 0;
+    const safeText = typeof text === 'string' ? text : '';
+    const safeLocationName = typeof locationName === 'string' ? locationName : '';
+    const safeNoteCount = typeof noteCount === 'number' ? noteCount : 0;
+    const safeIdleText = typeof idleText === 'string' && idleText.trim().length > 0
+        ? idleText
+        : 'Save memories before they fade 💛';
+    const isPhoto = safeText === '📸 Photo Memory' || safeText.trim().length === 0;
+    const hasNote = safeNoteCount > 0;
 
     // ─── Idle / Empty State ─────────────────────────────
-    if (!hasNote || (isIdleState && !text && !locationName)) {
+    if (!hasNote || (isIdleState && !safeText && !safeLocationName)) {
         return (
             <ZStack
                 modifiers={[
-                    containerRelativeFrame({ axes: 'both' }),
+                    frame({ maxWidth: 9999, maxHeight: 9999 }),
                 ]}
             >
                 <Rectangle
                     modifiers={[
+                        frame({ maxWidth: 9999, maxHeight: 9999 }),
                         foregroundStyle({
                             type: 'linearGradient',
                             colors: ['#2C2C2E', '#1A1A1C'],
@@ -73,7 +79,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                             padding({ horizontal: 16 })
                         ]}
                     >
-                        {idleText || 'Ghi lại trước khi nàng giận nè💛'}
+                        {safeIdleText}
                     </Text>
 
                     <Spacer />
@@ -86,12 +92,13 @@ const LocketWidget = (props: { props: WidgetProps }) => {
     return (
         <ZStack
             modifiers={[
-                containerRelativeFrame({ axes: 'both' }),
+                frame({ maxWidth: 9999, maxHeight: 9999 }),
             ]}
         >
             {/* Premium Gradient Background */}
             <Rectangle
                 modifiers={[
+                    frame({ maxWidth: 9999, maxHeight: 9999 }),
                     foregroundStyle({
                         type: 'linearGradient',
                         colors: isPhoto ? ['#1A1A1C', '#000000'] : ['#FFD54F', '#FFB300'],
@@ -109,13 +116,13 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                 ]}
             >
                 {/* Header: Cute badge */}
-                {locationName ? (
+                {safeLocationName ? (
                     <HStack>
                         <Spacer />
                         <HStack
                             modifiers={[
                                 padding({ horizontal: 12, vertical: 6 }),
-                                background(isPhoto ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)'),
+                                background(isPhoto ? '#FFFFFF33' : '#0000001A'),
                                 cornerRadius(14),
                             ]}
                         >
@@ -141,7 +148,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                         modifiers={[
                             frame({ maxWidth: 9999, maxHeight: 9999 }),
                             cornerRadius(16),
-                            background('rgba(0,0,0,0.2)'), // fallback placeholder
+                            background('#00000033'),
                         ]}
                     >
                         <VStack>
@@ -149,12 +156,12 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                             <Text
                                 modifiers={[
                                     font({ weight: 'medium', size: 16 }),
-                                    foregroundStyle('rgba(255,255,255,0.8)'),
+                                    foregroundStyle('#FFFFFFCC'),
                                     padding({ top: 12 }),
-                                    shadow({ radius: 3, y: 1, color: 'rgba(0,0,0,0.5)' })
+                                    shadow({ radius: 3, y: 1, color: '#00000099' })
                                 ]}
                             >
-                                Ảnh Mới 💛
+                                Photo Memory 💛
                             </Text>
                         </VStack>
                     </ZStack>
@@ -168,10 +175,10 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                                 lineLimit(4),
                                 lineSpacing(2),
                                 multilineTextAlignment('center'),
-                                shadow({ radius: 2, y: 1, color: 'rgba(0,0,0,0.1)' })
+                                shadow({ radius: 2, y: 1, color: '#00000026' })
                             ]}
                         >
-                            {text}
+                            {safeText || 'Memory saved 💛'}
                         </Text>
                         <Spacer />
                     </HStack>

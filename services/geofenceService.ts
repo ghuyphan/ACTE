@@ -3,6 +3,7 @@ import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { getAllNotes } from './database';
 import { GEOFENCE_TASK_NAME } from '../utils/backgroundGeofence';
+import { getSkipNextEnterKey } from '../utils/geofenceKeys';
 
 export interface ReminderPermissionState {
   foregroundGranted: boolean;
@@ -74,6 +75,19 @@ export async function syncGeofenceRegions(): Promise<boolean> {
   await Location.startGeofencingAsync(GEOFENCE_TASK_NAME, regions);
   await AsyncStorage.setItem(GEOFENCE_SIGNATURE_STORAGE_KEY, signature);
   return true;
+}
+
+export async function skipImmediateReminderForNewNote(noteId: string): Promise<void> {
+  if (!noteId) {
+    return;
+  }
+
+  const { remindersEnabled } = await getReminderPermissionState();
+  if (!remindersEnabled) {
+    return;
+  }
+
+  await AsyncStorage.setItem(getSkipNextEnterKey(noteId), '1');
 }
 
 export async function clearGeofenceRegions(): Promise<void> {

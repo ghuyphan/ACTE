@@ -50,19 +50,22 @@ const withExpoWidgetsBundleFix = (config) => {
         // Add a shell script build phase to copy the JS bundle
         const scriptContent = `
 # Fix: Copy ExpoWidgets JS bundle into the resource bundle directory
-SOURCE_JS="$PODS_CONFIGURATION_BUILD_DIR/ExpoWidgets/ExpoWidgets.bundle"
 DEST_DIR="\${TARGET_BUILD_DIR}/\${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoWidgets.bundle"
+PODS_JS_SOURCE="$PODS_CONFIGURATION_BUILD_DIR/ExpoWidgets/ExpoWidgets.bundle/ExpoWidgets.bundle"
+NODE_JS_SOURCE="${config.modRequest.projectRoot}/node_modules/expo-widgets/bundle/build/ExpoWidgets.bundle"
+DEST_JS="$DEST_DIR/ExpoWidgets.bundle"
 
-if [ -d "$DEST_DIR" ] && [ -f "$SOURCE_JS/ExpoWidgets.bundle" ]; then
+if [ -f "$DEST_JS" ]; then
   echo "ExpoWidgets JS bundle already present, skipping copy."
 elif [ -d "$DEST_DIR" ]; then
-  # The resource bundle directory exists but the JS file is missing
-  JS_SOURCE="${config.modRequest.projectRoot}/node_modules/expo-widgets/bundle/build/ExpoWidgets.bundle"
-  if [ -f "$JS_SOURCE" ]; then
-    echo "Copying ExpoWidgets JS bundle from source..."
-    cp "$JS_SOURCE" "$DEST_DIR/ExpoWidgets.bundle"
+  if [ -f "$PODS_JS_SOURCE" ]; then
+    echo "Copying ExpoWidgets JS bundle from Pods build products..."
+    cp "$PODS_JS_SOURCE" "$DEST_JS"
+  elif [ -f "$NODE_JS_SOURCE" ]; then
+    echo "Copying ExpoWidgets JS bundle from node_modules source..."
+    cp "$NODE_JS_SOURCE" "$DEST_JS"
   else
-    echo "warning: ExpoWidgets JS bundle source not found at $JS_SOURCE"
+    echo "warning: ExpoWidgets JS bundle source not found in Pods or node_modules"
   fi
 else
   echo "warning: ExpoWidgets.bundle directory not found at $DEST_DIR"

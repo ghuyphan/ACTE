@@ -12,7 +12,11 @@ import {
   toggleFavorite as dbToggleFav,
   updateNote as dbUpdate,
 } from '../services/database';
-import { clearGeofenceRegions, syncGeofenceRegions } from '../services/geofenceService';
+import {
+  clearGeofenceRegions,
+  skipImmediateReminderForNewNote,
+  syncGeofenceRegions,
+} from '../services/geofenceService';
 import { cleanupOrphanPhotoFiles } from '../services/mediaIntegrity';
 import { getSyncService } from '../services/syncService';
 import { updateWidgetData } from '../services/widgetService';
@@ -84,6 +88,7 @@ function useNotesStoreValue(): NotesStoreValue {
       setNotes((prev) => [note, ...prev]);
 
       void updateWidgetData();
+      void skipImmediateReminderForNewNote(note.id);
       void syncGeofenceRegions();
       void syncService.recordChange({
         type: 'create',
@@ -246,4 +251,3 @@ export function useNotesStore() {
 }
 
 export const useNotes = useNotesStore;
-
