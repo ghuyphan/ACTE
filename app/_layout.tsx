@@ -1,6 +1,7 @@
 
 import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
+import * as SystemUI from 'expo-system-ui';
 import { SplashScreen, Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
@@ -8,8 +9,10 @@ import { I18nextProvider } from 'react-i18next';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import i18n from '../constants/i18n';
+import { AuthProvider } from '../hooks/useAuth';
 import { ThemeProvider, useTheme } from '../hooks/useTheme';
 import { getDB } from '../services/database';
+import { syncGeofenceRegions } from '../services/geofenceService';
 import { updateWidgetData } from '../services/widgetService';
 import '../utils/backgroundGeofence';
 import '../widgets/LocketWidget';
@@ -27,8 +30,8 @@ function AppContent() {
     getDB()
       .then(() => {
         setDbReady(true);
-        // Push latest note data to the widget on app launch
-        updateWidgetData();
+        void updateWidgetData();
+        void syncGeofenceRegions();
       })
       .catch((err) => {
         console.error('Database init failed:', err);
@@ -37,6 +40,10 @@ function AppContent() {
   }, []);
 
   // Handle splash screen
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(colors.background);
+  }, [colors.background]);
+
   useEffect(() => {
     if (themeReady && dbReady) {
       SplashScreen.hideAsync();
@@ -113,7 +120,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <I18nextProvider i18n={i18n}>
         <ThemeProvider>
-          <AppContent />
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
         </ThemeProvider>
       </I18nextProvider>
     </GestureHandlerRootView>

@@ -4,15 +4,14 @@ import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Callout, Marker } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import InfoPill from '../../components/ui/InfoPill';
 import { useGeofence } from '../../hooks/useGeofence';
 import { useNotes } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
-
-const { width } = Dimensions.get('window');
 
 export default function MapScreen() {
     const { t } = useTranslation();
@@ -104,18 +103,11 @@ export default function MapScreen() {
                 ))}
             </MapView>
 
-            {/* Note count overlay */}
-            <GlassView
-                style={[styles.countBadge, { top: insets.top + 8 }]}
-                glassEffectStyle="regular"
-                colorScheme={isDark ? 'dark' : 'light'}
-            >
-                {isOlderIOS && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)' }]} />}
-                <Ionicons name="pin" size={16} color={colors.primary} />
+            <InfoPill icon="pin" iconColor={colors.primary} style={[styles.countBadge, { top: insets.top + 8 }]}>
                 <Text style={[styles.countText, { color: colors.text }]}>
                     {notes.length} {notes.length === 1 ? t('map.note', 'note') : t('map.notes', 'notes')}
                 </Text>
-            </GlassView>
+            </InfoPill>
 
             {/* Location FAB */}
             <Pressable style={[styles.fabContainer, { top: insets.top + 8 }]} onPress={goToMyLocation}>
@@ -133,8 +125,6 @@ export default function MapScreen() {
             {notes.length === 0 && (
                 <View style={styles.emptyOverlay} pointerEvents="none">
                     <View style={[styles.emptyCard, { overflow: 'hidden' }]}>
-                        {isOlderIOS && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)' }]} />}
-                        <GlassView style={StyleSheet.absoluteFillObject} colorScheme={isDark ? 'dark' : 'light'} />
                         <Ionicons name="map-outline" size={40} color={colors.primary} style={{ marginBottom: 8 }} />
                         <Text style={[styles.emptyTitle, { color: colors.text }]}>
                             {t('map.emptyTitle', 'No notes on the map yet')}

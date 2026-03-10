@@ -19,7 +19,7 @@ export default function Index() {
                 } else {
                     setIsFirstLaunch(true);
                 }
-            } catch (error) {
+            } catch {
                 setIsFirstLaunch(false);
             }
         }
@@ -37,10 +37,6 @@ export default function Index() {
     if (isFirstLaunch) {
         return <Redirect href="/auth/onboarding" />;
     }
-
-    // TODO: Add an auth check here later when Firebase is connected
-    // If user is logged in -> Redirect to '/(tabs)'
-    // Else -> Redirect to '/auth'
 
     return <Redirect href="/(tabs)" />;
 }

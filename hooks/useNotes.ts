@@ -1,5 +1,4 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Location from 'expo-location';
 import { useCallback, useEffect, useState } from 'react';
 import { DeviceEventEmitter } from 'react-native';
 import {
@@ -14,12 +13,14 @@ import {
     getAllNotes,
     Note,
 } from '../services/database';
+import { clearGeofenceRegions, syncGeofenceRegions } from '../services/geofenceService';
+import { getSyncService } from '../services/syncService';
 import { updateWidgetData } from '../services/widgetService';
-import { GEOFENCE_TASK_NAME } from '../utils/backgroundGeofence';
 
 export function useNotes() {
     const [notes, setNotes] = useState<Note[]>([]);
     const [loading, setLoading] = useState(true);
+    const syncService = getSyncService();
 
     const refreshNotes = useCallback(async (showLoading = true) => {
         try {
@@ -48,10 +49,17 @@ export function useNotes() {
             const note = await dbCreate(input);
             setNotes((prev) => [note, ...prev]);
             DeviceEventEmitter.emit('NOTES_CHANGED');
-            updateWidgetData();
+            void updateWidgetData();
+            void syncGeofenceRegions();
+            void syncService.recordChange({
+                type: 'create',
+                entity: 'note',
+                entityId: note.id,
+                timestamp: new Date().toISOString(),
+            });
             return note;
         },
-        []
+        [syncService]
     );
 
     const updateNote = useCallback(
@@ -69,9 +77,15 @@ export function useNotes() {
                 )
             );
             DeviceEventEmitter.emit('NOTES_CHANGED');
-            updateWidgetData();
+            void updateWidgetData();
+            void syncService.recordChange({
+                type: 'update',
+                entity: 'note',
+                entityId: id,
+                timestamp: new Date().toISOString(),
+            });
         },
-        []
+        [syncService]
     );
 
     const toggleFavorite = useCallback(async (id: string) => {
@@ -80,8 +94,14 @@ export function useNotes() {
             prev.map((n) => (n.id === id ? { ...n, isFavorite: newValue } : n))
         );
         DeviceEventEmitter.emit('NOTES_CHANGED');
+        void syncService.recordChange({
+            type: 'update',
+            entity: 'note',
+            entityId: id,
+            timestamp: new Date().toISOString(),
+        });
         return newValue;
-    }, []);
+    }, [syncService]);
 
     const searchNotes = useCallback(async (query: string) => {
         if (!query.trim()) {
@@ -107,8 +127,15 @@ export function useNotes() {
         await dbDelete(id);
         setNotes((prev) => prev.filter((n) => n.id !== id));
         DeviceEventEmitter.emit('NOTES_CHANGED');
-        updateWidgetData();
-    }, []);
+        void updateWidgetData();
+        void syncGeofenceRegions();
+        void syncService.recordChange({
+            type: 'delete',
+            entity: 'note',
+            entityId: id,
+            timestamp: new Date().toISOString(),
+        });
+    }, [syncService]);
 
     const deleteAllNotes = useCallback(async () => {
         // Clean up all photo files
@@ -126,21 +153,17 @@ export function useNotes() {
             }
         }
 
-        // Clear all geofences
-        try {
-            const hasTask = await Location.hasStartedGeofencingAsync(GEOFENCE_TASK_NAME);
-            if (hasTask) {
-                await Location.stopGeofencingAsync(GEOFENCE_TASK_NAME);
-            }
-        } catch (e) {
-            console.warn('Failed to clear geofences:', e);
-        }
-
         await dbDeleteAll();
         setNotes([]);
         DeviceEventEmitter.emit('NOTES_CHANGED');
-        updateWidgetData();
-    }, []);
+        await clearGeofenceRegions();
+        void updateWidgetData();
+        void syncService.recordChange({
+            type: 'deleteAll',
+            entity: 'note',
+            timestamp: new Date().toISOString(),
+        });
+    }, [syncService]);
 
     const getNoteById = useCallback(async (id: string) => {
         return dbGetById(id);

@@ -1,15 +1,38 @@
-import app from '@react-native-firebase/app';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import firebaseApp from '@react-native-firebase/app';
+import authModule from '@react-native-firebase/auth';
+import firestoreModule from '@react-native-firebase/firestore';
 
-// React Native Firebase automatically initializes using the native 
-// google-services.json (Android) and GoogleService-Info.plist (iOS) files.
-// We simply initialize the services we need and export them.
+export function hasFirebaseApp(): boolean {
+  try {
+    const apps = (firebaseApp as unknown as { apps?: unknown[] }).apps;
+    return Array.isArray(apps) && apps.length > 0;
+  } catch {
+    return false;
+  }
+}
 
-const firebaseAuth = auth();
-const firebaseDb = firestore();
+export function getFirebaseAuth() {
+  if (!hasFirebaseApp()) {
+    return null;
+  }
 
-// Optional: Enable offline persistence explicitly (usually enabled by default on mobile)
-// firebaseDb.settings({ persistence: true });
+  try {
+    return authModule();
+  } catch {
+    return null;
+  }
+}
 
-export { app, firebaseAuth as auth, firebaseDb as db };
+export function getFirestore() {
+  if (!hasFirebaseApp()) {
+    return null;
+  }
+
+  try {
+    return firestoreModule();
+  } catch {
+    return null;
+  }
+}
+
+export { firebaseApp };

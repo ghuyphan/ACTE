@@ -1,7 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { CardGradients, useTheme } from '../hooks/useTheme';
+import { Layout, Shadows } from '../constants/theme';
+import { CardGradients } from '../hooks/useTheme';
 
 interface TextMemoryCardProps {
     text: string;
@@ -17,8 +18,6 @@ function hashToIndex(str: string, max: number): number {
 }
 
 export default function TextMemoryCard({ text, noteId }: TextMemoryCardProps) {
-    const { isDark } = useTheme();
-
     // Pick a unique gradient based on the note content or id
     const gradientIndex = hashToIndex(noteId || text, CardGradients.length);
     const gradient = CardGradients[gradientIndex];
@@ -41,16 +40,12 @@ export default function TextMemoryCard({ text, noteId }: TextMemoryCardProps) {
 
 const styles = StyleSheet.create({
     card: {
-        borderRadius: 40,
+        borderRadius: Layout.cardRadius,
         borderCurve: 'continuous',
         overflow: 'hidden',
         width: '100%',
         height: '100%',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.12,
-        shadowRadius: 20,
-        elevation: 8,
+        ...Shadows.card,
     },
     gradient: {
         flex: 1,

@@ -7,7 +7,7 @@ import { useTheme } from '../hooks/useTheme';
 
 export default function SettingsClearSheet({ onClose }: { onClose: () => void }) {
     const { t } = useTranslation();
-    const { colors, isDark } = useTheme();
+    const { colors } = useTheme();
     const { deleteAllNotes } = useNotes();
 
     return (

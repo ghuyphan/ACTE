@@ -1,115 +1,128 @@
 import { Ionicons } from '@expo/vector-icons';
-import auth from '@react-native-firebase/auth';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors } from '../../hooks/useTheme';
-
-// Configure Google Sign-In
-GoogleSignin.configure({
-    // IMPORTANT: Replace this with your actual Web Client ID from Firebase Console.
-    // Go to Firebase Console -> Authentication -> Sign-in method -> Google -> Web SDK configuration -> Web client ID
-    webClientId: '380816810604-jcr2hrg0ofnh9iblp1vd67nq294qad60.apps.googleusercontent.com',
-});
+import PrimaryButton from '../../components/ui/PrimaryButton';
+import { Layout, Shadows, Typography } from '../../constants/theme';
+import { useAuth } from '../../hooks/useAuth';
+import { useTheme } from '../../hooks/useTheme';
 
 export default function LoginScreen() {
     const router = useRouter();
     const { t } = useTranslation();
-    const colors = Colors.dark;
-    const isDark = true;
+    const { colors, isDark } = useTheme();
+    const { user, isReady, isAvailable, signIn, signOut } = useAuth();
     const insets = useSafeAreaInsets();
     const [isSigninInProgress, setIsSigninInProgress] = useState(false);
+    const [authMessage, setAuthMessage] = useState<string | null>(null);
 
-    const signIn = async () => {
-        try {
-            setIsSigninInProgress(true);
+    const handleSignIn = async () => {
+        setAuthMessage(null);
+        setIsSigninInProgress(true);
+        const result = await signIn();
+        setIsSigninInProgress(false);
 
-            // 1. Check if user's device has Google Play Services (required for Android)
-            await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-
-            // 2. Start the native Google Sign-In flow
-            const response = await GoogleSignin.signIn();
-
-            // Handle v13+ library response format where cancellations don't throw an error
-            if ('type' in response && response.type === 'cancelled') {
-                console.log('User cancelled the login flow');
-                return;
-            }
-
-            // 3. Extract the ID Token safely by casting to 'any' to satisfy TypeScript's strict checks
-            // This safely supports both v13+ (response.data.idToken) and v12- (response.idToken)
-            const idToken = (response as any).data?.idToken || (response as any).idToken;
-
-            if (!idToken) {
-                throw new Error('No ID token returned from Google Sign-In');
-            }
-
-            // 4. Create a Firebase credential with the Google ID token
-            const googleCredential = auth.GoogleAuthProvider.credential(idToken);
-
-            // 5. Sign-in the user to Firebase
-            await auth().signInWithCredential(googleCredential);
-
-            console.log('User signed in to Firebase successfully!');
+        if (result.status === 'success') {
             router.replace('/(tabs)');
-        } catch (error: any) {
-            // Catch block remains for backward compatibility with v12 and below
-            if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-                console.log('User cancelled the login flow');
-            } else if (error.code === statusCodes.IN_PROGRESS) {
-                console.log('Sign in is already in progress');
-            } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-                console.log('Google Play Services not available or outdated');
-            } else {
-                console.error('Firebase Auth Error:', error);
-            }
-        } finally {
-            setIsSigninInProgress(false);
+            return;
         }
+
+        if (result.status === 'cancelled') {
+            return;
+        }
+
+        setAuthMessage(
+            result.message ?? t('auth.signInFailed', 'Unable to sign in right now. Please try again later.')
+        );
     };
+
+    const gradientColors: [string, string, string] = isDark
+        ? [colors.background, colors.card, '#1A1A1A']
+        : [colors.background, colors.surface, '#F5F0E6'];
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <LinearGradient
-                colors={
-                    isDark
-                        ? [colors.background, colors.card, '#2c2c3e']
-                        : ['#ffffff', '#fcfcfc', '#f0f0f5']
-                }
+                colors={gradientColors}
                 style={StyleSheet.absoluteFillObject}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
             />
 
             <View style={[styles.content, { paddingTop: insets.top }]}>
-                <View style={[styles.iconContainer, { backgroundColor: isDark ? '#ffffff10' : '#00000008' }]}>
+                <View style={[styles.iconContainer, { backgroundColor: colors.primarySoft }]}>
                     <Ionicons name="heart" size={64} color={colors.primary} />
                 </View>
                 <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'ACTE')}</Text>
                 <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-                    {t('auth.subtitle', 'For everything she loves.')}
+                    {t('auth.subtitle', 'So you never forget what she likes')}
                 </Text>
+                {!isAvailable ? (
+                    <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Text style={[styles.infoTitle, { color: colors.text }]}>
+                            {t('auth.localModeTitle', 'Local mode is ready')}
+                        </Text>
+                        <Text style={[styles.infoText, { color: colors.secondaryText }]}>
+                            {t(
+                                'auth.localModeMsg',
+                                'This build is using local-first mode. You can keep capturing notes without signing in.'
+                            )}
+                        </Text>
+                    </View>
+                ) : null}
+                {user ? (
+                    <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Text style={[styles.infoTitle, { color: colors.text }]}>
+                            {t('auth.signedInAs', 'Signed in as')}
+                        </Text>
+                        <Text style={[styles.infoText, { color: colors.secondaryText }]}>
+                            {user.displayName || user.email || t('settings.login', 'Sign In')}
+                        </Text>
+                    </View>
+                ) : null}
+                {authMessage ? (
+                    <Text style={[styles.errorText, { color: colors.danger }]}>{authMessage}</Text>
+                ) : null}
             </View>
 
             <View style={[styles.bottom, { paddingBottom: insets.bottom + 32 }]}>
-                <Pressable
-                    style={({ pressed }) => [
-                        styles.googleButton,
-                        { backgroundColor: colors.text },
-                        pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }
-                    ]}
-                    onPress={signIn}
-                    disabled={isSigninInProgress}
-                >
-                    <Ionicons name="logo-google" size={20} color={colors.background} style={styles.btnIcon} />
-                    <Text style={[styles.googleButtonText, { color: colors.background }]}>
-                        {isSigninInProgress ? t('auth.signingIn', 'Signing in...') : t('auth.signInGoogle', 'Continue with Google')}
-                    </Text>
-                </Pressable>
+                {!isAvailable ? (
+                    <PrimaryButton
+                        label={t('auth.continueLocal', 'Continue in local mode')}
+                        onPress={() => router.replace('/(tabs)')}
+                        variant="neutral"
+                    />
+                ) : user ? (
+                    <>
+                        <PrimaryButton
+                            label={t('auth.continueApp', 'Continue to ACTE')}
+                            onPress={() => router.replace('/(tabs)')}
+                            variant="neutral"
+                            style={styles.bottomButton}
+                        />
+                        <PrimaryButton
+                            label={t('auth.signOut', 'Sign out')}
+                            onPress={() => {
+                                void signOut();
+                            }}
+                            variant="secondary"
+                        />
+                    </>
+                ) : (
+                    <PrimaryButton
+                        label={
+                            !isReady || isSigninInProgress
+                                ? t('auth.signingIn', 'Signing in...')
+                                : t('auth.signInGoogle', 'Sign in with Google')
+                        }
+                        onPress={handleSignIn}
+                        loading={!isReady || isSigninInProgress}
+                        variant="neutral"
+                    />
+                )}
             </View>
         </View>
     );
@@ -123,58 +136,50 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: 32,
+        paddingHorizontal: Layout.screenPadding + 12,
     },
     iconContainer: {
         width: 120,
         height: 120,
-        borderRadius: 40,
+        borderRadius: Layout.cardRadius,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 32,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        elevation: 10,
+        ...Shadows.card,
     },
     title: {
-        fontSize: 48,
-        fontWeight: '900',
-        letterSpacing: 2,
+        ...Typography.heroTitle,
         marginBottom: 12,
-        fontFamily: 'System',
     },
     subtitle: {
-        fontSize: 18,
-        fontWeight: '500',
+        ...Typography.heroSubtitle,
         textAlign: 'center',
-        lineHeight: 26,
-        fontFamily: 'System',
+    },
+    infoCard: {
+        width: '100%',
+        marginTop: 28,
+        padding: 20,
+        borderRadius: 24,
+        borderWidth: 1,
+    },
+    infoTitle: {
+        ...Typography.button,
+        marginBottom: 8,
+    },
+    infoText: {
+        ...Typography.body,
+    },
+    errorText: {
+        ...Typography.body,
+        marginTop: 16,
+        textAlign: 'center',
     },
     bottom: {
         width: '100%',
-        paddingHorizontal: 24,
+        paddingHorizontal: Layout.screenPadding + 4,
+        gap: 12,
     },
-    googleButton: {
-        flexDirection: 'row',
-        paddingVertical: 18,
-        borderRadius: 16,
+    bottomButton: {
         width: '100%',
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 5,
-    },
-    btnIcon: {
-        marginRight: 10,
-    },
-    googleButtonText: {
-        fontSize: 18,
-        fontWeight: '700',
-        fontFamily: 'System',
     },
 });

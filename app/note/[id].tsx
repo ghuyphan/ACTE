@@ -8,7 +8,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    Alert,
     Animated,
     Dimensions,
     KeyboardAvoidingView,
@@ -21,14 +20,16 @@ import {
     TextInput,
     View,
 } from 'react-native';
+import AppSheetAlert from '../../components/AppSheetAlert';
+import { Layout, Typography } from '../../constants/theme';
+import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useNotes } from '../../hooks/useNotes';
 import { CardGradients, useTheme } from '../../hooks/useTheme';
 import { Note } from '../../services/database';
 import { formatDate } from '../../utils/dateUtils';
-import { isOlderIOS } from '../../utils/platform';
 
 const { width } = Dimensions.get('window');
-const CARD_SIZE = width - 40;
+const CARD_SIZE = width - Layout.screenPadding * 2;
 
 function hashToIndex(str: string, max: number): number {
     let hash = 0;
@@ -112,6 +113,7 @@ export default function NoteDetailScreen() {
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
     const router = useRouter();
+    const { alertProps, showAlert } = useAppSheetAlert();
     const [note, setNote] = useState<Note | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -158,28 +160,30 @@ export default function NoteDetailScreen() {
                 ]).start();
             });
         }
-    }, [id, getNoteById]);
+    }, [cardOpacity, cardScale, getNoteById, id, infoOpacity, infoTranslateY]);
 
     const handleDelete = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        Alert.alert(
-            t('noteDetail.deleteTitle', 'Delete Note'),
-            t('noteDetail.deleteMsg', 'This note and its geofence will be permanently removed.'),
-            [
-                { text: t('common.cancel', 'Cancel'), style: 'cancel' },
-                {
-                    text: t('common.delete', 'Delete'),
-                    style: 'destructive',
-                    onPress: async () => {
-                        if (note) {
-                            await deleteNote(note.id);
-                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                            router.back();
-                        }
-                    },
+        showAlert({
+            variant: 'error',
+            title: t('noteDetail.deleteTitle', 'Delete Note'),
+            message: t('noteDetail.deleteMsg', 'This note and its geofence will be permanently removed.'),
+            primaryAction: {
+                label: t('common.delete', 'Delete'),
+                variant: 'destructive',
+                onPress: async () => {
+                    if (note) {
+                        await deleteNote(note.id);
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        router.back();
+                    }
                 },
-            ]
-        );
+            },
+            secondaryAction: {
+                label: t('common.cancel', 'Cancel'),
+                variant: 'secondary',
+            },
+        });
     };
 
     const handleToggleFavorite = async () => {
@@ -243,15 +247,13 @@ export default function NoteDetailScreen() {
                 <BottomSheet isPresented={isPresented} onIsPresentedChange={handleDismiss} fitToContents>
                     <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
                         <RNHostView matchContents>
-                            <View style={[styles.container, { backgroundColor: isOlderIOS ? colors.card : 'transparent' }, isOlderIOS && { borderTopLeftRadius: 10, borderTopRightRadius: 10 }]}>
-                                <View style={styles.handleBar}>
-                                    <View style={[styles.handle, { backgroundColor: colors.border }]} />
-                                </View>
+                            <View style={[styles.sheetSurface, { backgroundColor: colors.card }]}>
                                 <SkeletonCard colors={colors} />
                             </View>
                         </RNHostView>
                     </Group>
                 </BottomSheet>
+                <AppSheetAlert {...alertProps} />
             </Host>
         );
     }
@@ -262,7 +264,7 @@ export default function NoteDetailScreen() {
                 <BottomSheet isPresented={isPresented} onIsPresentedChange={handleDismiss} fitToContents>
                     <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
                         <RNHostView matchContents>
-                            <View style={[styles.center, { backgroundColor: isOlderIOS ? colors.card : 'transparent', minHeight: 200 }, isOlderIOS && { borderTopLeftRadius: 10, borderTopRightRadius: 10 }]}>
+                            <View style={[styles.center, styles.sheetSurface, { backgroundColor: colors.card, minHeight: 200 }]}>
                                 <Text style={{ color: colors.secondaryText, fontSize: 17 }}>
                                     {t('noteDetail.notFound', 'Note not found')}
                                 </Text>
@@ -275,6 +277,7 @@ export default function NoteDetailScreen() {
                         </RNHostView>
                     </Group>
                 </BottomSheet>
+                <AppSheetAlert {...alertProps} />
             </Host>
         );
     }
@@ -289,7 +292,7 @@ export default function NoteDetailScreen() {
                 <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
                     <RNHostView matchContents>
                         <KeyboardAvoidingView
-                            style={[styles.container, { backgroundColor: isOlderIOS ? colors.card : 'transparent' }, isOlderIOS && { borderTopLeftRadius: 10, borderTopRightRadius: 10 }]}
+                            style={[styles.sheetSurface, { backgroundColor: colors.card }]}
                             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                         >
                             <ScrollView
@@ -418,31 +421,26 @@ export default function NoteDetailScreen() {
                     </RNHostView>
                 </Group>
             </BottomSheet>
+            <AppSheetAlert {...alertProps} />
         </Host>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        // Removed flex: 1 to prevent RNHostView matchContents height collapse
+    sheetSurface: {
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        overflow: 'hidden',
     },
     center: {
-        // Removed flex: 1 to prevent RNHostView matchContents height collapse
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    handleBar: {
-        alignItems: 'center',
-        paddingTop: 12,
-        paddingBottom: 8,
-    },
-    handle: {
-        width: 40,
-        height: 5,
-        borderRadius: 3,
+        paddingHorizontal: Layout.screenPadding,
+        paddingVertical: 32,
     },
     scrollContent: {
-        padding: 20,
+        padding: Layout.screenPadding,
+        paddingTop: 16,
         paddingBottom: 60,
     },
     photoContainer: {
@@ -520,15 +518,13 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     infoText: {
-        fontSize: 16,
+        ...Typography.body,
         flex: 1,
-        fontFamily: 'System',
     },
     editLocationInput: {
-        fontSize: 16,
+        ...Typography.body,
         fontWeight: '700',
         flex: 1,
-        fontFamily: 'System',
     },
     deleteButton: {
         flexDirection: 'row',

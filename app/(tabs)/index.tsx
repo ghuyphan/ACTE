@@ -11,7 +11,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Dimensions,
   FlatList,
@@ -24,8 +23,14 @@ import {
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AppSheetAlert from '../../components/AppSheetAlert';
 import ImageMemoryCard from '../../components/ImageMemoryCard';
 import TextMemoryCard from '../../components/TextMemoryCard';
+import GlassHeader from '../../components/ui/GlassHeader';
+import InfoPill from '../../components/ui/InfoPill';
+import PrimaryButton from '../../components/ui/PrimaryButton';
+import { Layout, Typography } from '../../constants/theme';
+import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useGeofence } from '../../hooks/useGeofence';
 import { useNotes } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
@@ -34,9 +39,9 @@ import { formatDate } from '../../utils/dateUtils';
 import { isOlderIOS } from '../../utils/platform';
 
 // ─── Animated Note Card ──────────────────────────
-function AnimatedNoteCard({ item, index, onPress, colors, isDark, t }: {
+function AnimatedNoteCard({ item, index, onPress, colors, t }: {
   item: Note; index: number; onPress: () => void;
-  colors: any; isDark: boolean; t: any;
+  colors: any; t: any;
 }) {
   const scale = useRef(new Animated.Value(0.9)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -79,10 +84,7 @@ function AnimatedNoteCard({ item, index, onPress, colors, isDark, t }: {
 
       {/* Below-card metadata */}
       <Animated.View style={[styles.belowCardMetaContainer, { opacity }]}>
-        <View style={[styles.metadataPill, { overflow: 'hidden' }]}>
-          {isOlderIOS && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }]} />}
-          <GlassView style={StyleSheet.absoluteFillObject} colorScheme={isDark ? 'dark' : 'light'} />
-          <Ionicons name="location" size={14} color={colors.secondaryText} />
+        <InfoPill icon="location" iconColor={colors.secondaryText} style={styles.metadataPill}>
           <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
             {item.locationName ?? t('home.unknownLocation', 'Unknown location')}
           </Text>
@@ -90,14 +92,14 @@ function AnimatedNoteCard({ item, index, onPress, colors, isDark, t }: {
           <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>
             {dateStr}
           </Text>
-        </View>
+        </InfoPill>
       </Animated.View>
     </Pressable>
   );
 }
 
 const { width, height } = Dimensions.get('window');
-const HORIZONTAL_PADDING = 12;
+const HORIZONTAL_PADDING = Layout.screenPadding - 8;
 const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
 
 type CaptureMode = 'text' | 'camera';
@@ -121,7 +123,8 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { notes, loading, refreshNotes, createNote } = useNotes();
-  const { location, hasPermissions, registerGeofence } = useGeofence();
+  const { location, remindersEnabled, requestForegroundLocation, requestReminderPermissions } = useGeofence();
+  const { alertProps, showAlert } = useAppSheetAlert();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const { captureOpacity, animateModeSwitch } = useCaptureAnimation();
@@ -202,7 +205,7 @@ export default function HomeScreen() {
     if (photo?.uri) setCapturedPhoto(photo.uri);
   };
 
-  const reverseGeocode = async (lat: number, lon: number): Promise<string> => {
+  const reverseGeocode = useCallback(async (lat: number, lon: number): Promise<string> => {
     try {
       const results = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
       if (results.length > 0) {
@@ -210,33 +213,111 @@ export default function HomeScreen() {
         const parts = [r.name, r.street, r.city].filter(Boolean);
         return parts.join(', ') || t('capture.unknownPlace', 'Unknown Place');
       }
-    } catch (e) {
-      console.warn('Reverse geocode failed:', e);
+    } catch {
+      return t('capture.unknownPlace', 'Unknown Place');
     }
     return t('capture.unknownPlace', 'Unknown Place');
-  };
+  }, [t]);
 
-  const saveNote = async () => {
+  const showDoneSheet = useCallback((variant: 'error' | 'warning' | 'success', title: string, message: string) => {
+    showAlert({
+      variant,
+      title,
+      message,
+      primaryAction: {
+        label: t('common.done', 'Done'),
+      },
+    });
+  }, [showAlert, t]);
+
+  const showSavedSheet = useCallback(() => {
+    if (remindersEnabled) {
+      showAlert({
+        variant: 'success',
+        title: t('capture.saved', 'Saved!'),
+        message: t('capture.savedMsg', "We'll remind you next time you're here!"),
+        primaryAction: {
+          label: t('common.done', 'Done'),
+        },
+      });
+      return;
+    }
+
+    showAlert({
+      variant: 'success',
+      title: t('capture.savedLocalTitle', 'Saved locally'),
+      message: t(
+        'capture.savedLocalMsg',
+        'Your note is saved on this device. Enable reminders to get notified when you revisit this place.'
+      ),
+      primaryAction: {
+        label: t('capture.enableReminders', 'Enable reminders'),
+        onPress: async () => {
+          const enabled = await requestReminderPermissions();
+          if (enabled) {
+            showAlert({
+              variant: 'success',
+              title: t('capture.remindersEnabledTitle', 'Reminders enabled'),
+              message: t(
+                'capture.remindersEnabledMsg',
+                'ACTE will remind you when you return to saved places.'
+              ),
+              primaryAction: {
+                label: t('common.done', 'Done'),
+              },
+            });
+            return;
+          }
+
+          showAlert({
+            variant: 'warning',
+            title: t('capture.remindersUnavailableTitle', 'Reminders still off'),
+            message: t(
+              'capture.remindersUnavailableMsg',
+              'Your note is still saved locally. ACTE needs background location and notifications to send reminders.'
+            ),
+            primaryAction: {
+              label: t('common.done', 'Done'),
+            },
+          });
+        },
+      },
+      secondaryAction: {
+        label: t('common.done', 'Done'),
+        variant: 'secondary',
+      },
+    });
+  }, [remindersEnabled, requestReminderPermissions, showAlert, t]);
+
+  const saveNote = useCallback(async () => {
     let currentLocation = location;
 
     if (!currentLocation) {
-      // Proactively try to request permission and get location if it's missing
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        currentLocation = await Location.getCurrentPositionAsync({});
-      }
+      currentLocation = await requestForegroundLocation();
 
       if (!currentLocation) {
-        Alert.alert(t('capture.error'), t('capture.noLocation'));
+        showDoneSheet(
+          'error',
+          t('capture.error', 'Error'),
+          t('capture.noLocation', 'Could not get your location')
+        );
         return;
       }
     }
     if (captureMode === 'text' && !noteText.trim()) {
-      Alert.alert(t('capture.error'), t('capture.noText'));
+      showDoneSheet(
+        'warning',
+        t('capture.error', 'Error'),
+        t('capture.noText', 'Please write a note')
+      );
       return;
     }
     if (captureMode === 'camera' && !capturedPhoto) {
-      Alert.alert(t('capture.error'), t('capture.noPhoto'));
+      showDoneSheet(
+        'warning',
+        t('capture.error', 'Error'),
+        t('capture.noPhoto', 'Please take a photo first')
+      );
       return;
     }
 
@@ -261,7 +342,7 @@ export default function HomeScreen() {
         content = destinationPath;
       }
 
-      const note = await createNote({
+      await createNote({
         type: captureMode === 'camera' ? 'photo' : 'text',
         content,
         locationName,
@@ -269,15 +350,11 @@ export default function HomeScreen() {
         longitude: lon,
       });
 
-      if (hasPermissions) {
-        await registerGeofence(note.id, lat, lon);
-      }
-
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setNoteText('');
       setRestaurantName('');
       setCapturedPhoto(null);
-      Alert.alert(t('capture.saved', '✓ Saved!'), t('capture.savedMsg'));
+      showSavedSheet();
     } catch (error) {
       console.error('Save failed:', error);
 
@@ -290,11 +367,15 @@ export default function HomeScreen() {
         }
       }
 
-      Alert.alert(t('capture.error'), t('capture.saveFailed'));
+      showDoneSheet(
+        'error',
+        t('capture.error', 'Error'),
+        t('capture.saveFailed', 'Something went wrong')
+      );
     } finally {
       setSaving(false);
     }
-  };
+  }, [captureMode, capturedPhoto, createNote, location, noteText, requestForegroundLocation, restaurantName, reverseGeocode, showDoneSheet, showSavedSheet, t]);
 
   // ─── Render Snap Items ────────────────────────────────────
   const needsCameraPermission = captureMode === 'camera' && (!permission || !permission.granted);
@@ -366,14 +447,11 @@ export default function HomeScreen() {
               <Text style={[styles.permissionText, { color: colors.text }]}>
                 {t('capture.cameraPermission', 'Camera access needed')}
               </Text>
-              <Pressable
-                style={[styles.permissionBtn, { backgroundColor: colors.primary }]}
+              <PrimaryButton
+                label={t('capture.grantAccess', 'Grant Access')}
                 onPress={requestPermission}
-              >
-                <Text style={{ color: isDark ? '#000' : '#fff', fontWeight: '700', fontSize: 15 }}>
-                  {t('capture.grantAccess', 'Grant Access')}
-                </Text>
-              </Pressable>
+                style={styles.permissionButton}
+              />
             </View>
           ) : (
             <View style={styles.cameraContainer}>
@@ -414,23 +492,13 @@ export default function HomeScreen() {
               ) : null}
             </View>
           ) : (
-            <Pressable
-              style={[
-                styles.belowCardSaveButton,
-                { overflow: 'hidden', backgroundColor: isDark ? '#fff' : '#000' },
-                saving && { opacity: 0.6 }
-              ]}
+            <PrimaryButton
+              label={t('capture.save', 'Save Note 💛')}
+              variant="neutral"
               onPress={saveNote}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator color={isDark ? '#000' : '#fff'} />
-              ) : (
-                <Text style={[styles.saveButtonText, { color: isDark ? '#000' : '#fff' }]}>
-                  {t('capture.save', 'Save Note 💛')}
-                </Text>
-              )}
-            </Pressable>
+              loading={saving}
+              style={styles.belowCardSaveButton}
+            />
           )}
         </Animated.View>
       </View >
@@ -445,7 +513,6 @@ export default function HomeScreen() {
           index={index}
           onPress={() => router.push(`/note/${item.id}` as any)}
           colors={colors}
-          isDark={isDark}
           t={t}
         />
       </View>
@@ -466,21 +533,14 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Absolute Positioned Header across the application */}
-      <View style={[styles.floatingHeader, { paddingTop: insets.top + 8 }]}>
-        <GlassView
-          style={[styles.floatingHeaderGlassContainer, { height: 60 }]}
-          glassEffectStyle="regular"
-          colorScheme={isDark ? 'dark' : 'light'}
-        >
-          {isOlderIOS && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)' }]} />}
+      <GlassHeader topInset={insets.top}>
           {/* Default Header */}
           <Animated.View
             pointerEvents={isSearching ? 'none' : 'auto'}
             style={[
               StyleSheet.absoluteFill,
               {
-                paddingHorizontal: 20,
+                paddingHorizontal: Layout.screenPadding,
                 flexDirection: 'row',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -513,7 +573,7 @@ export default function HomeScreen() {
             style={[
               StyleSheet.absoluteFill,
               {
-                paddingHorizontal: 20,
+                paddingHorizontal: Layout.screenPadding,
                 flexDirection: 'row',
                 alignItems: 'center',
                 opacity: searchAnim,
@@ -548,8 +608,7 @@ export default function HomeScreen() {
               </Pressable>
             </View>
           </Animated.View>
-        </GlassView>
-      </View>
+      </GlassHeader>
 
       {/* Search empty state */}
       {isSearching && filteredNotes.length === 0 && searchQuery.trim() ? (
@@ -585,6 +644,7 @@ export default function HomeScreen() {
           }
         />
       )}
+      <AppSheetAlert {...alertProps} />
     </View>
   );
 }
@@ -604,29 +664,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // ─── Header ─────────────────────────────
-  floatingHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    paddingHorizontal: HORIZONTAL_PADDING,
-    paddingBottom: 8,
-  },
-  floatingHeaderGlassContainer: {
-    borderRadius: 30, // fully rounded stadium borders
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-    overflow: 'hidden',
-  },
   logoText: {
+    ...Typography.pill,
     fontWeight: '800',
     letterSpacing: 1,
-    fontFamily: 'System',
   },
   headerActions: {
     flexDirection: 'row',
@@ -647,7 +688,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchInput: {
-    fontSize: 16,
+    ...Typography.body,
     fontWeight: '500',
     width: '100%',
   },
@@ -757,14 +798,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   permissionText: {
-    fontSize: 16,
+    ...Typography.body,
     textAlign: 'center',
-    lineHeight: 24,
   },
-  permissionBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 999,
+  permissionButton: {
+    marginTop: 16,
+    width: '100%',
   },
   shutterOuter: {
     width: 68,
@@ -780,12 +819,6 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 27,
   },
-  saveButtonText: {
-    fontSize: 19,
-    fontWeight: '800',
-    fontFamily: 'System',
-  },
-
   // ─── Below-card section (capture) ──────
   belowCardSection: {
     paddingHorizontal: HORIZONTAL_PADDING + 4,
@@ -824,16 +857,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   belowCardSaveButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 40,
+    width: '100%',
     borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 5,
   },
 
   // ─── Note Cards ─────────────────────────
@@ -887,17 +912,17 @@ const styles = StyleSheet.create({
     opacity: 0.5, // Subtle separator
   },
   metadataPillDate: {
+    ...Typography.body,
     fontSize: 13,
     fontWeight: '500',
-    fontFamily: 'System',
   },
 
   // ─── Empty states ──────────────────────
   emptyTitle: {
+    ...Typography.button,
     fontSize: 18,
     fontWeight: '700',
     marginTop: 12,
-    fontFamily: 'System',
   },
   emptySubtitle: {
     fontSize: 14,

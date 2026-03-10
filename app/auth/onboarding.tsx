@@ -4,12 +4,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import PrimaryButton from '../../components/ui/PrimaryButton';
+import { Layout, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
 
-const { width } = Dimensions.get('window');
 const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
 
 const SLIDES = [
@@ -26,7 +27,7 @@ export default function OnboardingScreen() {
 
     const completeOnboarding = async () => {
         await AsyncStorage.setItem(HAS_LAUNCHED_KEY, 'true');
-        router.replace('/auth');
+        router.replace('/(tabs)');
     };
 
     const nextStep = () => {
@@ -44,8 +45,8 @@ export default function OnboardingScreen() {
             <LinearGradient
                 colors={
                     isDark
-                        ? [colors.background, colors.card, '#2c2c3e']
-                        : ['#ffffff', '#fcfcfc', '#f0f0f5']
+                        ? [colors.background, colors.card, '#1A1A1A']
+                        : [colors.background, colors.surface, '#F5F0E6']
                 }
                 style={StyleSheet.absoluteFillObject}
                 start={{ x: 0, y: 0 }}
@@ -97,20 +98,14 @@ export default function OnboardingScreen() {
                 </View>
 
                 {/* Next Button */}
-                <Pressable
-                    style={({ pressed }) => [
-                        styles.button,
-                        { backgroundColor: colors.primary },
-                        pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }
-                    ]}
-                    onPress={nextStep}
-                >
-                    <Text style={[styles.buttonText, { color: isDark ? '#000' : '#fff' }]}>
-                        {step === SLIDES.length - 1
+                <PrimaryButton
+                    label={
+                        step === SLIDES.length - 1
                             ? t('onboarding.getStarted', 'Get Started')
-                            : t('onboarding.next', 'Next')}
-                    </Text>
-                </Pressable>
+                            : t('onboarding.next', 'Next')
+                    }
+                    onPress={nextStep}
+                />
 
                 {/* Skip */}
                 <View style={styles.skipContainer}>
@@ -156,24 +151,23 @@ const styles = StyleSheet.create({
         fontSize: 72,
     },
     title: {
+        ...Typography.screenTitle,
         fontSize: 34,
         fontWeight: '800',
         textAlign: 'center',
         marginBottom: 16,
         letterSpacing: -0.5,
-        fontFamily: 'System',
     },
     subtitle: {
-        fontSize: 18,
+        ...Typography.heroSubtitle,
         textAlign: 'center',
         lineHeight: 28,
         fontWeight: '500',
-        fontFamily: 'System',
     },
     bottom: {
         alignItems: 'center',
         paddingBottom: 48,
-        paddingHorizontal: 24,
+        paddingHorizontal: Layout.screenPadding + 4,
     },
     dots: {
         flexDirection: 'row',
@@ -188,22 +182,6 @@ const styles = StyleSheet.create({
     activeDot: {
         width: 28,
         borderRadius: 4,
-    },
-    button: {
-        width: '100%',
-        paddingVertical: 18,
-        borderRadius: 16,
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 5,
-    },
-    buttonText: {
-        fontSize: 18,
-        fontWeight: '700',
-        fontFamily: 'System',
     },
     skipContainer: {
         height: 50,

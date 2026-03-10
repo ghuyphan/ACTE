@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { Layout, Shadows } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 
 interface ImageMemoryCardProps {
@@ -23,14 +24,10 @@ export default function ImageMemoryCard({ imageUrl }: ImageMemoryCardProps) {
 
 const styles = StyleSheet.create({
     card: {
-        borderRadius: 40,
+        borderRadius: Layout.cardRadius,
         borderCurve: 'continuous',
         overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.15,
-        shadowRadius: 20,
-        elevation: 8,
+        ...Shadows.card,
         width: '100%',
         height: '100%',
     },
