@@ -34,6 +34,16 @@ export interface WidgetProps {
     memoryReminderText: string;
 }
 
+interface LocationCoords {
+    latitude: number;
+    longitude: number;
+}
+
+interface WidgetSelectionResult {
+    selectedNote: Note | null;
+    nearbyPlacesCount: number;
+}
+
 const IOS_WIDGET_APP_GROUP_ID = 'group.com.acte.app';
 const WIDGET_IMAGE_DIRECTORY_NAME = 'widget-images';
 const WIDGET_IMAGE_FILENAME = 'latest-photo.jpg';
@@ -59,6 +69,69 @@ function getTranslatedWidgetStrings(noteCount: number) {
         idleText: i18n.t('widget.idleText'),
         savedCountText: i18n.t('widget.savedCount', { count: noteCount }),
         memoryReminderText: i18n.t('widget.memoryReminder'),
+    };
+}
+
+function getLatestNote(notes: Note[]): Note | null {
+    if (notes.length === 0) {
+        return null;
+    }
+
+    return notes.reduce((latest, candidate) =>
+        new Date(candidate.createdAt).getTime() > new Date(latest.createdAt).getTime()
+            ? candidate
+            : latest
+    );
+}
+
+function getLatestTextNote(notes: Note[]): Note | null {
+    const validTextNotes = notes.filter(
+        (note) => note.type === 'text' && note.content.trim().length > 0
+    );
+    return getLatestNote(validTextNotes);
+}
+
+export function selectWidgetNote(options: {
+    notes: Note[];
+    currentLocation?: LocationCoords | null;
+    nearbyRadiusMeters?: number;
+}): WidgetSelectionResult {
+    const { notes, currentLocation = null, nearbyRadiusMeters = 500 } = options;
+
+    if (notes.length === 0) {
+        return { selectedNote: null, nearbyPlacesCount: 0 };
+    }
+
+    if (currentLocation) {
+        const nearbyNotes = notes
+            .map((note) => ({
+                note,
+                distance: getDistance(
+                    currentLocation.latitude,
+                    currentLocation.longitude,
+                    note.latitude,
+                    note.longitude
+                ),
+            }))
+            .filter((entry) => entry.distance <= nearbyRadiusMeters)
+            .sort((a, b) => a.distance - b.distance);
+
+        if (nearbyNotes.length > 0) {
+            const uniquePlaces = new Set(
+                nearbyNotes
+                    .map((entry) => entry.note.locationName)
+                    .filter((value): value is string => Boolean(value && value.trim()))
+            );
+            return {
+                selectedNote: nearbyNotes[0].note,
+                nearbyPlacesCount: Math.max(0, uniquePlaces.size - 1),
+            };
+        }
+    }
+
+    return {
+        selectedNote: getLatestNote(notes),
+        nearbyPlacesCount: 0,
     };
 }
 
@@ -165,53 +238,42 @@ export async function updateWidgetData(): Promise<void> {
             console.warn('[widgetService] Location fetch failed:', e);
         }
 
-        let selectedNote: Note | null = null;
-        let nearbyPlacesCount = 0;
-        let isIdleState = false;
-        // Prefer the newest photo note when available so the widget stays visual.
-        const latestPhotoNote = notes.find((note) => note.type === 'photo' && Boolean(note.content));
+        const { selectedNote, nearbyPlacesCount } = selectWidgetNote({
+            notes,
+            currentLocation: currentLocation
+                ? {
+                    latitude: currentLocation.coords.latitude,
+                    longitude: currentLocation.coords.longitude,
+                }
+                : null,
+            nearbyRadiusMeters: 500,
+        });
 
-        if (currentLocation && !latestPhotoNote) {
-            const lat = currentLocation.coords.latitude;
-            const lon = currentLocation.coords.longitude;
-
-            // Find nearby notes (within 500 meters roughly)
-            const nearbyNotes = notes
-                .map((note) => ({
-                    note,
-                    distance: getDistance(lat, lon, note.latitude, note.longitude),
-                }))
-                .filter((entry) => entry.distance <= 500)
-                .sort((a, b) => a.distance - b.distance);
-
-            if (nearbyNotes.length > 0) {
-                selectedNote = nearbyNotes[0].note;
-
-                // Count unique nearby places
-                const uniquePlaces = new Set(nearbyNotes.map((entry) => entry.note.locationName).filter(Boolean));
-                nearbyPlacesCount = Math.max(0, uniquePlaces.size - 1);
-            }
-        }
-
-        if (!selectedNote && latestPhotoNote) {
-            selectedNote = latestPhotoNote;
-        }
-
-        // Deterministic idle fallback: use latest saved note to avoid widget flicker.
         if (!selectedNote) {
-            isIdleState = true;
-            selectedNote = notes[0];
+            // Guard for corrupted data edge cases; normal flow returns early when notes are empty.
+            widget.updateSnapshot({
+                props: {
+                    text: '',
+                    locationName: '',
+                    date: '',
+                    noteCount: notes.length,
+                    nearbyPlacesCount: 0,
+                    isIdleState: true,
+                    ...translatedStrings,
+                },
+            });
+            return;
         }
 
         const dateStr = formatDate(selectedNote.createdAt, 'short');
 
         const props: WidgetProps = {
-            text: selectedNote.type === 'text' ? selectedNote.content : '',
+            text: selectedNote.type === 'text' ? selectedNote.content.trim() : '',
             locationName: selectedNote.locationName ?? i18n.t('capture.unknownPlace'),
             date: dateStr,
             noteCount: notes.length,
             nearbyPlacesCount,
-            isIdleState,
+            isIdleState: false,
             ...translatedStrings,
         };
 
@@ -224,9 +286,7 @@ export async function updateWidgetData(): Promise<void> {
                 if (photoBase64) {
                     props.backgroundImageBase64 = photoBase64;
                 } else {
-                    const fallbackTextNote = notes.find(
-                        (note) => note.type === 'text' && note.content.trim().length > 0
-                    );
+                    const fallbackTextNote = getLatestTextNote(notes);
                     if (fallbackTextNote) {
                         props.text = fallbackTextNote.content.trim();
                         props.locationName =

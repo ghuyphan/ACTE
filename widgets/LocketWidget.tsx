@@ -17,6 +17,7 @@ interface WidgetProps {
     noteCount: number;
     nearbyPlacesCount: number;
     backgroundImageUrl?: string; // Currently not supported natively by expo-widgets JS side
+    backgroundImageBase64?: string;
     isIdleState: boolean;
     idleText: string;
     savedCountText: string;
@@ -36,6 +37,8 @@ const LocketWidget = (props: { props: WidgetProps }) => {
 
     const {
         text,
+        backgroundImageUrl,
+        backgroundImageBase64,
         noteCount,
         isIdleState,
         family,
@@ -44,16 +47,18 @@ const LocketWidget = (props: { props: WidgetProps }) => {
     const isLarge = asString(family) === 'systemLarge';
     const safeText = truncate(asString(text), isLarge ? 140 : 72);
     const safeNoteCount = typeof noteCount === 'number' ? noteCount : 0;
-    const isPhoto = safeText.length === 0;
-    const showIdle = safeNoteCount <= 0 || (isIdleState && !safeText);
+    const hasImage = Boolean(asString(backgroundImageUrl) || asString(backgroundImageBase64));
+    const showIdle = safeNoteCount <= 0 || (isIdleState && !safeText && !hasImage);
+    const isTextNote = !showIdle && !hasImage && safeText.length > 0;
+    const isPhoto = !showIdle && hasImage;
     const bodyText = showIdle ? 'Ảnh chả thương em?' : (isPhoto ? '📸 Nhớ tấm này nha' : safeText);
     const compactPad = isLarge ? 18 : 14;
-    const bodyFontSize = isLarge ? 30 : 24;
-    const backgroundColors = showIdle
-        ? ['#FFF8F1', '#FEEBD9']
-        : isPhoto
-            ? ['#FFF8F1', '#FBE9D8']
-            : ['#FFFCF7', '#FFF1E0'];
+    const bodyFontSize = isLarge ? 26 : 18;
+    const backgroundColors = isTextNote || showIdle
+        ? ['#F5EFE8', '#ECE5DC']
+        : ['#FBF7F2', '#F2E8DB'];
+    const countFontSize = isLarge ? 12 : 10;
+    const usesTextSurface = isTextNote || showIdle;
 
     return (
         <ZStack
@@ -80,21 +85,59 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                     frame({ maxWidth: 9999, maxHeight: 9999 }),
                 ]}
             >
-                <Spacer />
+                {usesTextSurface ? (
+                    <>
+                        <Spacer />
 
-                <Text
-                    modifiers={[
-                        font({ weight: 'semibold', size: bodyFontSize }),
-                        foregroundStyle('#2A1A11'),
-                        frame({ maxWidth: 9999 }),
-                        lineLimit(isLarge ? 3 : 2),
-                        lineSpacing(2),
-                        multilineTextAlignment('leading'),
-                        padding({ horizontal: 2 }),
-                    ]}
-                >
-                    {bodyText}
-                </Text>
+                        <Text
+                            modifiers={[
+                                font({ weight: 'medium', size: bodyFontSize }),
+                                foregroundStyle('#2A1A11'),
+                                frame({ maxWidth: 9999 }),
+                                lineLimit(isLarge ? 4 : 2),
+                                lineSpacing(2),
+                                multilineTextAlignment('center'),
+                                padding({ horizontal: isLarge ? 26 : 18 }),
+                            ]}
+                        >
+                            {bodyText}
+                        </Text>
+
+                        <Spacer />
+
+                        {isTextNote ? (
+                            <Text
+                                modifiers={[
+                                    font({ weight: 'medium', size: countFontSize }),
+                                    foregroundStyle('#736355'),
+                                    frame({ maxWidth: 9999 }),
+                                    multilineTextAlignment('center'),
+                                    padding({ bottom: isLarge ? 2 : 0 }),
+                                ]}
+                            >
+                                {`${safeNoteCount}`}
+                            </Text>
+                        ) : null}
+                    </>
+                ) : (
+                    <>
+                        <Spacer />
+
+                        <Text
+                            modifiers={[
+                                font({ weight: 'medium', size: isLarge ? 22 : 17 }),
+                                foregroundStyle('#2A1A11'),
+                                frame({ maxWidth: 9999 }),
+                                lineLimit(isLarge ? 3 : 2),
+                                lineSpacing(1),
+                                multilineTextAlignment('leading'),
+                                padding({ horizontal: 4 }),
+                            ]}
+                        >
+                            {bodyText}
+                        </Text>
+                    </>
+                )}
             </VStack>
         </ZStack>
     );

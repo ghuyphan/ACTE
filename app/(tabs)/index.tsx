@@ -480,11 +480,12 @@ export default function HomeScreen() {
                   },
                 ]}
               >
-                <Pressable style={styles.homeNotesHintButton} onPress={handleOpenNotes} hitSlop={10}>
-                  <Text style={[styles.homeNotesHintText, { color: colors.text }]}>
-                    {t('capture.notesHint', 'Notes')}
-                  </Text>
-                  <Ionicons name="chevron-down" size={16} color={colors.text} />
+                <Pressable
+                  style={styles.homeNotesHintButton}
+                  onPress={handleOpenNotes}
+                  hitSlop={20}
+                >
+                  <Ionicons name="chevron-down" size={22} color={colors.text} />
                 </Pressable>
               </Animated.View>
             ) : null}
@@ -517,19 +518,14 @@ const styles = StyleSheet.create({
   },
   homeNotesHintWrap: {
     position: 'absolute',
-    bottom: -34,
+    bottom: -12,
     alignSelf: 'center',
   },
   homeNotesHintButton: {
+    width: 56,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 2,
-  },
-  homeNotesHintText: {
-    fontSize: 16,
-    fontWeight: '700',
-    lineHeight: 20,
-    fontFamily: 'System',
   },
   center: {
     flex: 1,
