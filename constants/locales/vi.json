@@ -3,7 +3,7 @@
         "home": "Feed",
         "capture": "Drop",
         "map": "Spots",
-        "settings": "Profile"
+        "settings": "Cài đặt"
     },
     "home": {
         "title": "Ghi chú của bạn",
@@ -103,14 +103,39 @@
         "clearAllTitle": "Xóa tất cả ghi chú",
         "clearAllMsg": "Tất cả ghi chú ăn uống sẽ bị xóa vĩnh viễn. Không thể hoàn tác.",
         "account": "TÀI KHOẢN",
+        "profile": "Hồ sơ",
         "login": "Đăng nhập",
         "manageAccount": "Quản lý tài khoản",
         "notSignedIn": "Chưa đăng nhập",
         "signedIn": "Đã đăng nhập",
+        "syncNow": "Đồng bộ với Firebase",
+        "syncing": "Đang đồng bộ...",
+        "syncDetail": "Tải các ghi chú cục bộ mới nhất của bạn lên tài khoản Firebase đã đăng nhập.",
+        "syncSignInTitle": "Đăng nhập để đồng bộ",
+        "syncSignInMsg": "Kết nối tài khoản Google trước khi đồng bộ ghi chú lên Firebase.",
+        "syncUnavailableTitle": "Không thể dùng đồng bộ Firebase",
+        "syncUnavailableMsg": "Đồng bộ Firebase chưa khả dụng trong bản dựng này.",
+        "syncFailedTitle": "Đồng bộ thất bại",
+        "syncFailedMsg": "Hiện không thể đồng bộ với Firebase. Vui lòng thử lại sau.",
+        "syncSuccessTitle": "Đồng bộ hoàn tất",
+        "syncSuccessMsgOne": "Đã đồng bộ 1 ghi chú lên Firebase.",
+        "syncSuccessMsgOther": "Đã đồng bộ {{count}} ghi chú lên Firebase.",
         "localMode": "Chế độ cục bộ",
         "localModeShort": "Sẵn sàng ngoại tuyến",
         "localModeDetail": "Bản dựng này đã sẵn sàng dùng ngoại tuyến. Đồng bộ tùy chọn có thể được thêm sau mà không ảnh hưởng tới ghi chú cục bộ của bạn.",
         "about": "Để anh không bao giờ quên em thích gì 💛"
+    },
+    "profile": {
+        "title": "Hồ sơ",
+        "description": "Quản lý tài khoản Google đang kết nối với Charmly.",
+        "accountTitle": "Tài khoản đã kết nối",
+        "name": "Tên",
+        "noName": "Tài khoản Google",
+        "email": "Email",
+        "syncHint": "Dùng phần Cài đặt để đồng bộ ghi chú cục bộ của bạn với Firebase.",
+        "signedOutTitle": "Chưa kết nối tài khoản",
+        "signedOutMsg": "Đăng nhập với Google để bật đồng bộ Firebase cho thiết bị này.",
+        "logout": "Đăng xuất"
     },
     "auth": {
         "title": "Charmly",

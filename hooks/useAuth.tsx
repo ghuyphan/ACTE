@@ -1,26 +1,17 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { GoogleSignin, statusCodes, type User as GoogleUser } from '@react-native-google-signin/google-signin';
+import authModule, { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
 import { GOOGLE_WEB_CLIENT_ID, isGoogleSigninConfigured } from '../constants/auth';
+import { getFirebaseAuth, hasFirebaseApp } from '../utils/firebase';
 
 export interface AuthActionResult {
   status: 'success' | 'cancelled' | 'unavailable' | 'error';
   message?: string;
 }
 
-export interface AuthUser {
-  id: string;
-  email: string;
-  displayName: string | null;
-  photoURL: string | null;
-  givenName: string | null;
-  familyName: string | null;
-  provider: 'google';
-}
-
 interface AuthContextValue {
-  user: AuthUser | null;
+  user: FirebaseAuthTypes.User | null;
   isReady: boolean;
   isAvailable: boolean;
   signIn: () => Promise<AuthActionResult>;
@@ -28,92 +19,32 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const AUTH_STORAGE_KEY = 'auth.user';
+const isSupportedPlatform = Platform.OS === 'ios';
+const isAuthConfigured = isSupportedPlatform && isGoogleSigninConfigured && hasFirebaseApp();
 
-const isAuthConfigured = isGoogleSigninConfigured;
-
-if (isAuthConfigured) {
-  try {
-    GoogleSignin.configure({
-      webClientId: GOOGLE_WEB_CLIENT_ID,
-    });
-  } catch {
-    // Leave the SDK unconfigured and surface the error when sign-in is attempted.
-  }
-}
-
-function mapGoogleUser(googleUser: GoogleUser): AuthUser {
-  return {
-    id: googleUser.user.id,
-    email: googleUser.user.email,
-    displayName: googleUser.user.name,
-    photoURL: googleUser.user.photo,
-    givenName: googleUser.user.givenName,
-    familyName: googleUser.user.familyName,
-    provider: 'google',
-  };
-}
-
-async function persistUser(user: AuthUser | null) {
-  if (!user) {
-    await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
-    return;
-  }
-
-  await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+if (isSupportedPlatform && isGoogleSigninConfigured) {
+  GoogleSignin.configure({
+    webClientId: GOOGLE_WEB_CLIENT_ID,
+  });
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isReady, setIsReady] = useState(!isAuthConfigured);
+  const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
+  const [isReady, setIsReady] = useState(!isSupportedPlatform);
 
   useEffect(() => {
-    let isMounted = true;
+    const firebaseAuth = getFirebaseAuth();
+    if (!isSupportedPlatform || !firebaseAuth) {
+      setIsReady(true);
+      return;
+    }
 
-    const restoreUser = async () => {
-      if (!isAuthConfigured) {
-        if (isMounted) {
-          setIsReady(true);
-        }
-        return;
-      }
+    const unsubscribe = firebaseAuth.onAuthStateChanged((nextUser) => {
+      setUser(nextUser);
+      setIsReady(true);
+    });
 
-      try {
-        const currentGoogleUser = GoogleSignin.getCurrentUser();
-        if (currentGoogleUser) {
-          const nextUser = mapGoogleUser(currentGoogleUser);
-          await persistUser(nextUser);
-          if (isMounted) {
-            setUser(nextUser);
-          }
-          return;
-        }
-
-        const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-        if (!storedUser) {
-          return;
-        }
-
-        try {
-          const nextUser = JSON.parse(storedUser) as AuthUser;
-          if (isMounted) {
-            setUser(nextUser);
-          }
-        } catch {
-          await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
-        }
-      } finally {
-        if (isMounted) {
-          setIsReady(true);
-        }
-      }
-    };
-
-    void restoreUser();
-
-    return () => {
-      isMounted = false;
-    };
+    return unsubscribe;
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -122,27 +53,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isReady,
       isAvailable: isAuthConfigured,
       signIn: async () => {
-        if (!isAuthConfigured) {
+        if (!isSupportedPlatform) {
+          return {
+            status: 'unavailable',
+            message: 'Firebase Google sign-in is only enabled on iOS in this build.',
+          };
+        }
+
+        if (!isGoogleSigninConfigured) {
           return {
             status: 'unavailable',
             message: 'Google Sign-In is not configured in this build.',
           };
         }
 
-        try {
-          if (Platform.OS === 'android') {
-            await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-          }
+        if (!hasFirebaseApp()) {
+          return {
+            status: 'unavailable',
+            message: 'Firebase is not initialized yet. Rebuild the iOS app after updating GoogleService-Info.plist.',
+          };
+        }
 
+        const firebaseAuth = getFirebaseAuth();
+        if (!firebaseAuth) {
+          return {
+            status: 'unavailable',
+            message: 'Firebase Authentication is unavailable in this build.',
+          };
+        }
+
+        try {
           const response = await GoogleSignin.signIn();
 
           if (response.type === 'cancelled') {
             return { status: 'cancelled' };
           }
 
-          const nextUser = mapGoogleUser(response.data);
-          setUser(nextUser);
-          await persistUser(nextUser);
+          const idToken = response.data.idToken;
+          if (!idToken) {
+            return {
+              status: 'error',
+              message: 'Google Sign-In did not return an ID token. Update constants/auth.ts with your Firebase Web client ID.',
+            };
+          }
+
+          const credential = authModule.GoogleAuthProvider.credential(idToken);
+          await firebaseAuth.signInWithCredential(credential);
           return { status: 'success' };
         } catch (error: unknown) {
           if (typeof error === 'object' && error && 'code' in error) {
@@ -165,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (code === 'DEVELOPER_ERROR' || code === '10' || code === '12500') {
               return {
                 status: 'error',
-                message: 'Google Sign-In is not fully configured for this development build yet.',
+                message: 'Google Sign-In is not fully configured yet. Check your iOS bundle ID, reversed client ID, and Web client ID.',
               };
             }
           }
@@ -177,14 +133,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
       signOut: async () => {
+        const firebaseAuth = getFirebaseAuth();
+
         try {
           await GoogleSignin.signOut();
         } catch {
-          // Ignore Google sign-out failures and still clear the local session.
+          // Ignore Google sign-out failures and still clear the Firebase session.
         }
 
-        setUser(null);
-        await persistUser(null);
+        if (firebaseAuth) {
+          await firebaseAuth.signOut();
+        }
       },
     }),
     [isReady, user]

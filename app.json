@@ -75,6 +75,7 @@
           ]
         }
       ],
+      "./plugins/withCustomWidgetSwift.js",
       "expo-camera",
       [
         "expo-build-properties",

@@ -85,6 +85,7 @@ export default function MapPreviewCard({
   const { width: windowWidth } = useWindowDimensions();
   const railOffsetY = useSharedValue(0);
   const prevBottomOffsetRef = useRef(bottomOffset);
+  const skippedInitialBottomShiftRef = useRef(false);
   const previewListRef = useRef<FlatList<PreviewRailItem>>(null);
   const previewDraggingRef = useRef(false);
 
@@ -144,6 +145,16 @@ export default function MapPreviewCard({
     const prevBottom = prevBottomOffsetRef.current;
     const delta = prevBottom - bottomOffset;
     prevBottomOffsetRef.current = bottomOffset;
+
+    if (delta === 0) {
+      return;
+    }
+
+    if (!skippedInitialBottomShiftRef.current) {
+      skippedInitialBottomShiftRef.current = true;
+      railOffsetY.value = 0;
+      return;
+    }
 
     railOffsetY.value = delta;
     if (reduceMotionEnabled) {

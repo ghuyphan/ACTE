@@ -1,4 +1,7 @@
+import firestoreModule from '@react-native-firebase/firestore';
+import { Note } from './database';
 import { getDB } from './database';
+import { getFirestore } from '../utils/firebase';
 
 export type SyncChangeType = 'create' | 'update' | 'delete' | 'deleteAll';
 export type SyncQueueStatus = 'pending' | 'processing' | 'failed';
@@ -35,6 +38,19 @@ export interface SyncRepository {
 export interface SyncService {
   isAvailable: boolean;
   recordChange: (change: SyncChange) => Promise<void>;
+}
+
+export interface FirebaseSyncUser {
+  uid: string;
+  displayName: string | null;
+  email: string | null;
+  photoURL: string | null;
+}
+
+export interface FirebaseSyncResult {
+  status: 'success' | 'unavailable' | 'error';
+  message?: string;
+  syncedCount?: number;
 }
 
 function rowToQueueItem(row: any): SyncQueueItem {
@@ -122,6 +138,97 @@ const localFirstSyncService: SyncService = {
     }
   },
 };
+
+function serializeNoteForFirebase(note: Note) {
+  return {
+    id: note.id,
+    type: note.type,
+    content: note.content,
+    locationName: note.locationName,
+    latitude: note.latitude,
+    longitude: note.longitude,
+    radius: note.radius,
+    isFavorite: note.isFavorite,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
+    syncedAt: firestoreModule.FieldValue.serverTimestamp(),
+  };
+}
+
+export async function syncNotesToFirebase(
+  user: FirebaseSyncUser | null,
+  notes: Note[]
+): Promise<FirebaseSyncResult> {
+  if (!user) {
+    return {
+      status: 'unavailable',
+      message: 'Sign in with Google before syncing your notes.',
+    };
+  }
+
+  const firestore = getFirestore();
+  if (!firestore) {
+    return {
+      status: 'unavailable',
+      message: 'Firebase sync is unavailable in this build.',
+    };
+  }
+
+  try {
+    const syncRepository = getSyncRepository();
+    const pendingChanges = await syncRepository.listPending(5000);
+    const notesCollection = firestore.collection('users').doc(user.uid).collection('notes');
+    const deletedNoteIds = new Set(
+      pendingChanges
+        .filter((change) => change.operation === 'delete' && change.entityId)
+        .map((change) => change.entityId as string)
+    );
+    const shouldDeleteAll = pendingChanges.some((change) => change.operation === 'deleteAll');
+
+    if (shouldDeleteAll) {
+      const remoteSnapshot = await notesCollection.get();
+      for (const doc of remoteSnapshot.docs) {
+        await doc.ref.delete();
+      }
+    } else {
+      for (const noteId of deletedNoteIds) {
+        await notesCollection.doc(noteId).delete();
+      }
+    }
+
+    for (const note of notes) {
+      await notesCollection.doc(note.id).set(serializeNoteForFirebase(note), { merge: true });
+    }
+
+    await firestore.collection('users').doc(user.uid).set(
+      {
+        displayName: user.displayName ?? null,
+        email: user.email ?? null,
+        photoURL: user.photoURL ?? null,
+        noteCount: notes.length,
+        lastSyncedAt: firestoreModule.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    await syncRepository.clearAll();
+
+    return {
+      status: 'success',
+      syncedCount: notes.length,
+      message:
+        notes.length === 1
+          ? 'Synced 1 note to Firebase.'
+          : `Synced ${notes.length} notes to Firebase.`,
+    };
+  } catch (error) {
+    console.warn('[syncService] Firebase sync failed:', error);
+    return {
+      status: 'error',
+      message: 'Unable to sync with Firebase right now. Please try again later.',
+    };
+  }
+}
 
 export function getSyncRepository(): SyncRepository {
   return sqliteSyncRepository;

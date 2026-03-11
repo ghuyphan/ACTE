@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { Href, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
@@ -14,7 +14,7 @@ export default function LoginScreen() {
     const router = useRouter();
     const { t } = useTranslation();
     const { colors, isDark } = useTheme();
-    const { user, isReady, isAvailable, signIn, signOut } = useAuth();
+    const { user, isReady, isAvailable, signIn } = useAuth();
     const insets = useSafeAreaInsets();
     const [isSigninInProgress, setIsSigninInProgress] = useState(false);
     const [authMessage, setAuthMessage] = useState<string | null>(null);
@@ -60,19 +60,6 @@ export default function LoginScreen() {
                 <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
                     {t('auth.subtitle', 'So you never forget what she likes')}
                 </Text>
-                {isAvailable && !user ? (
-                    <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                        <Text style={[styles.infoTitle, { color: colors.text }]}>
-                            {t('auth.devModeTitle', 'Development sign-in')}
-                        </Text>
-                        <Text style={[styles.infoText, { color: colors.secondaryText }]}>
-                            {t(
-                                'auth.devModeMsg',
-                                'Google sign-in in this build only stores your account on this device. Cloud sync can be connected later.'
-                            )}
-                        </Text>
-                    </View>
-                ) : null}
                 {!isAvailable ? (
                     <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                         <Text style={[styles.infoTitle, { color: colors.text }]}>
@@ -111,16 +98,14 @@ export default function LoginScreen() {
                 ) : user ? (
                     <>
                         <PrimaryButton
-                            label={t('auth.continueApp', 'Continue to Charmly')}
-                            onPress={() => router.replace('/(tabs)')}
+                            label={t('settings.manageAccount', 'Manage account')}
+                            onPress={() => router.replace('/auth/profile' as Href)}
                             variant="neutral"
                             style={styles.bottomButton}
                         />
                         <PrimaryButton
-                            label={t('auth.signOut', 'Sign out')}
-                            onPress={() => {
-                                void signOut();
-                            }}
+                            label={t('auth.continueApp', 'Continue to Charmly')}
+                            onPress={() => router.replace('/(tabs)')}
                             variant="secondary"
                         />
                     </>

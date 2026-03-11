@@ -1,5 +1,7 @@
+// This must be the Web OAuth client ID from your Firebase/Google Cloud project.
 export const GOOGLE_WEB_CLIENT_ID =
-  '380816810604-jcr2hrg0ofnh9iblp1vd67nq294qad60.apps.googleusercontent.com';
+  '109971343259-8p53qceictfcdsvajerujvjdhmjjai2n.apps.googleusercontent.com';
+
 
 export const isGoogleSigninConfigured = Boolean(
   GOOGLE_WEB_CLIENT_ID &&

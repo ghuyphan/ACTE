@@ -12,6 +12,15 @@ type QueueRow = {
 
 let queueRows: QueueRow[] = [];
 let queueId = 1;
+const mockRemoteNotes = new Map<string, unknown>();
+
+const mockRemoteSet = jest.fn(async (id: string, data: unknown, _options?: unknown) => {
+  mockRemoteNotes.set(id, data);
+});
+const mockRemoteDelete = jest.fn(async (id: string) => {
+  mockRemoteNotes.delete(id);
+});
+const mockUserSet = jest.fn(async (_data?: unknown, _options?: unknown) => undefined);
 
 const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   if (sql.includes('INSERT INTO sync_queue')) {
@@ -73,12 +82,46 @@ jest.mock('../services/database', () => ({
   }),
 }));
 
-import { getSyncRepository, getSyncService } from '../services/syncService';
+jest.mock('../utils/firebase', () => ({
+  getFirestore: () => ({
+    collection: () => ({
+      doc: () => ({
+        collection: () => ({
+          doc: (id: string) => ({
+            set: (data: unknown, options: unknown) => mockRemoteSet(id, data, options),
+            delete: () => mockRemoteDelete(id),
+          }),
+          get: async () => ({
+            docs: Array.from(mockRemoteNotes.keys()).map((id) => ({
+              id,
+              ref: {
+                delete: () => mockRemoteDelete(id),
+              },
+            })),
+          }),
+        }),
+        set: (data: unknown, options: unknown) => mockUserSet(data, options),
+      }),
+    }),
+  }),
+}));
+
+jest.mock('@react-native-firebase/firestore', () => ({
+  __esModule: true,
+  default: {
+    FieldValue: {
+      serverTimestamp: () => 'SERVER_TIMESTAMP',
+    },
+  },
+}));
+
+import { getSyncRepository, getSyncService, syncNotesToFirebase } from '../services/syncService';
 
 beforeEach(() => {
   jest.clearAllMocks();
   queueRows = [];
   queueId = 1;
+  mockRemoteNotes.clear();
 });
 
 describe('syncService', () => {
@@ -126,6 +169,68 @@ describe('syncService', () => {
     expect(queueRows[0].last_error).toBe('network failed');
 
     await repo.markDone(pending[0].id);
+    expect(queueRows).toHaveLength(0);
+  });
+
+  it('syncs queued deletions and current notes to Firebase', async () => {
+    mockRemoteNotes.set('note-deleted', { id: 'note-deleted' });
+
+    const repo = getSyncRepository();
+    await repo.enqueue({
+      type: 'delete',
+      entity: 'note',
+      entityId: 'note-deleted',
+      timestamp: '2026-03-10T02:00:00.000Z',
+    });
+
+    const result = await syncNotesToFirebase(
+      {
+        uid: 'user-1',
+        displayName: 'Test User',
+        email: 'test@example.com',
+        photoURL: null,
+      },
+      [
+        {
+          id: 'note-1',
+          type: 'text',
+          content: 'hello',
+          locationName: 'Saigon',
+          latitude: 10.77,
+          longitude: 106.69,
+          radius: 150,
+          isFavorite: false,
+          createdAt: '2026-03-10T00:00:00.000Z',
+          updatedAt: null,
+        },
+      ]
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        syncedCount: 1,
+      })
+    );
+    expect(mockRemoteDelete).toHaveBeenCalledWith('note-deleted');
+    expect(mockRemoteSet).toHaveBeenCalledWith(
+      'note-1',
+      expect.objectContaining({
+        id: 'note-1',
+        content: 'hello',
+        syncedAt: 'SERVER_TIMESTAMP',
+      }),
+      { merge: true }
+    );
+    expect(mockUserSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        displayName: 'Test User',
+        email: 'test@example.com',
+        noteCount: 1,
+        lastSyncedAt: 'SERVER_TIMESTAMP',
+      }),
+      { merge: true }
+    );
     expect(queueRows).toHaveLength(0);
   });
 });

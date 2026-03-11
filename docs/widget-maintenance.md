@@ -8,7 +8,7 @@ If you only have a few minutes, read these in this order:
 
 1. `services/widgetService.ts`
 2. `widgets/LocketWidget.tsx`
-3. `ios/ExpoWidgetsTarget/LocketWidget.swift`
+3. `widgets/ios/LocketWidget.swift`
 4. `__tests__/widgetService.test.ts`
 
 Usually that is enough.
@@ -54,9 +54,11 @@ Important:
 - the actual iOS runtime look is mostly controlled by Swift, not this file
 - `backgroundImageUrl` is passed through here, but the real image rendering on iOS happens in Swift
 
-### `ios/ExpoWidgetsTarget/LocketWidget.swift`
+### `widgets/ios/LocketWidget.swift`
 
-This is the real iOS widget runtime.
+This is the source of truth for the real iOS widget runtime.
+
+It gets copied into `ios/ExpoWidgetsTarget/LocketWidget.swift` by `plugins/withCustomWidgetSwift.js` after `prebuild`.
 
 It owns:
 
@@ -70,7 +72,8 @@ Important:
 
 - the payload is nested, so parsing must handle `props.props`
 - if this parser is wrong, the widget often falls back to idle text even when data exists
-- this file is currently git-ignored in this repo, so local edits here will not show up in git status for teammates unless that ignore rule changes
+- the generated copy in `ios/ExpoWidgetsTarget/LocketWidget.swift` is git-ignored
+- persistent changes belong in `widgets/ios/LocketWidget.swift`
 
 ### `__tests__/widgetService.test.ts`
 
@@ -93,7 +96,7 @@ Flow:
 3. Note mutations in `hooks/useNotesStore.tsx` also call `updateWidgetData()`.
 4. `updateWidgetData()` builds widget props and writes them with `widget.updateSnapshot({ props })`.
 5. Expo Widgets stores the timeline.
-6. `ios/ExpoWidgetsTarget/LocketWidget.swift` reads that timeline from shared defaults and renders it.
+6. `widgets/ios/LocketWidget.swift` reads that timeline from shared defaults and renders it.
 
 Mutation triggers already wired:
 
@@ -111,7 +114,7 @@ If you add a new note mutation path elsewhere, make sure it also calls `updateWi
 
 Edit:
 
-- `ios/ExpoWidgetsTarget/LocketWidget.swift`
+- `widgets/ios/LocketWidget.swift`
 - then keep `widgets/LocketWidget.tsx` visually aligned
 
 ### Change which note gets shown
@@ -126,7 +129,7 @@ Edit:
 Check in this order:
 
 1. `services/widgetService.ts`
-2. `ios/ExpoWidgetsTarget/LocketWidget.swift`
+2. `widgets/ios/LocketWidget.swift`
 
 Things to verify:
 
@@ -160,7 +163,7 @@ Edit:
 That means:
 
 - local native widget fixes can work on your machine
-- those changes may not be committed unless the ignore rule is changed or the file is force-added
+- those changes will be lost on the next `prebuild` unless they are copied back into `widgets/ios/LocketWidget.swift`
 
 Always mention this explicitly when reporting widget work.
 
@@ -238,4 +241,3 @@ Use this shortcut:
 - visual-only change: edit Swift first, then TSX
 - data/selection change: edit `widgetService.ts` first, then tests
 - blank/photo bug: inspect shared-container copy + Swift parsing before touching UI
-

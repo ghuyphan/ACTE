@@ -3,7 +3,7 @@
         "home": "Feed",
         "capture": "Drop",
         "map": "Spots",
-        "settings": "Profile"
+        "settings": "Settings"
     },
     "home": {
         "title": "Your Notes",
@@ -103,14 +103,39 @@
         "clearAllTitle": "Clear All Notes",
         "clearAllMsg": "All your food notes will be permanently deleted. This action cannot be undone.",
         "account": "ACCOUNT",
+        "profile": "Profile",
         "login": "Sign In",
         "manageAccount": "Manage account",
         "notSignedIn": "Not signed in",
         "signedIn": "Signed in",
+        "syncNow": "Sync with Firebase",
+        "syncing": "Syncing...",
+        "syncDetail": "Upload your latest local notes to the signed-in Firebase account.",
+        "syncSignInTitle": "Sign in to sync",
+        "syncSignInMsg": "Connect your Google account before syncing notes to Firebase.",
+        "syncUnavailableTitle": "Firebase sync unavailable",
+        "syncUnavailableMsg": "Firebase sync is not available in this build.",
+        "syncFailedTitle": "Sync failed",
+        "syncFailedMsg": "Unable to sync with Firebase right now. Please try again later.",
+        "syncSuccessTitle": "Sync complete",
+        "syncSuccessMsgOne": "Synced 1 note to Firebase.",
+        "syncSuccessMsgOther": "Synced {{count}} notes to Firebase.",
         "localMode": "Local mode",
         "localModeShort": "Offline ready",
         "localModeDetail": "This build is ready to use offline. Optional sync can be added later without changing your local notes.",
         "about": "So you never forget what she likes 💛"
+    },
+    "profile": {
+        "title": "Profile",
+        "description": "Manage the Google account connected to Charmly.",
+        "accountTitle": "Connected account",
+        "name": "Name",
+        "noName": "Google account",
+        "email": "Email",
+        "syncHint": "Use Settings to sync your local notes with Firebase.",
+        "signedOutTitle": "No account connected",
+        "signedOutMsg": "Sign in with Google to connect Firebase sync for this device.",
+        "logout": "Log out"
     },
     "auth": {
         "title": "Charmly",
