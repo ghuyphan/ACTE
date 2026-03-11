@@ -1,5 +1,5 @@
 # Project Context & AI Agent Skills
-This file (`SKILL.md`) serves as a comprehensive guide and context rule sheet for any subsequent AI agents (or human developers) working on **ACTE**. Follow these exact best practices when iterating or adding features to this repository.
+This file (`SKILL.md`) serves as a comprehensive guide and context rule sheet for any subsequent AI agents (or human developers) working on **Charmly**. Follow these exact best practices when iterating or adding features to this repository.
 
 ## 1. 🏗️ Tech Stack
 - **Framework:** React Native + Expo (SDK 55) + Expo Router
@@ -40,4 +40,4 @@ This file (`SKILL.md`) serves as a comprehensive guide and context rule sheet fo
 - `hooks/` → Reusable custom hooks holding React state and side effects.
 - `services/` → Logic that doesn't rely strictly on React lifecycles (DB operations, Widgets data parsing).
 
-*Follow these principles to ensure consistency, fast iterations, and a cohesive user experience across ACTE.*
+*Follow these principles to ensure consistency, fast iterations, and a cohesive user experience across Charmly.*

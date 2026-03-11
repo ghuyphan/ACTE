@@ -182,7 +182,7 @@ export default function HomeScreen() {
               title: t('capture.remindersEnabledTitle', 'Reminders enabled'),
               message: t(
                 'capture.remindersEnabledMsg',
-                'ACTE will remind you when you return to saved places.'
+                'Charmly will remind you when you return to saved places.'
               ),
               primaryAction: {
                 label: t('common.done', 'Done'),
@@ -197,7 +197,7 @@ export default function HomeScreen() {
               t('capture.remindersUnavailableTitle', 'Reminders still off'),
               t(
                 'capture.remindersUnavailableSettingsMsg',
-                'Background location or notifications are blocked for ACTE. Open Settings to enable reminders.'
+                'Background location or notifications are blocked for Charmly. Open Settings to enable reminders.'
               ),
               true
             );
@@ -209,7 +209,7 @@ export default function HomeScreen() {
             t('capture.remindersUnavailableTitle', 'Reminders still off'),
             t(
               'capture.remindersUnavailableMsg',
-              'Your note is still saved locally. ACTE needs background location and notifications to send reminders.'
+              'Your note is still saved locally. Charmly needs background location and notifications to send reminders.'
             )
           );
         },

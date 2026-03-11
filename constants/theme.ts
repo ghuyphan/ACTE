@@ -1,5 +1,5 @@
 /**
- * Design tokens for the ACTE app.
+ * Design tokens for the Charmly app.
  * Primary theme logic lives in hooks/useTheme.tsx — this file provides
  * supplementary constants (fonts, spacing, radii).
  */

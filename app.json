@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "ACTE",
-    "slug": "ACTE",
+    "name": "Charmly",
+    "slug": "charmly",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "acte",
+    "scheme": "charmly",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -35,7 +35,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow ACTE to use your location to save and find your nearby memories.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Charmly to use your location to save and find your nearby memories.",
           "isAndroidBackgroundLocationEnabled": true,
           "isIosBackgroundLocationEnabled": true
         }

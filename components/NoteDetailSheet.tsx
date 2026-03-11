@@ -389,8 +389,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         const locationStr = note.locationName || t('noteDetail.unknownLocation');
         const message =
             note.type === 'text'
-                ? `📍 ${locationStr}\n\n${note.content}\n\n— ACTE 💛`
-                : `${t('noteDetail.sharePhotoMsg', { location: locationStr })}\n\n— ACTE 💛`;
+                ? `📍 ${locationStr}\n\n${note.content}\n\n— Charmly 💛`
+                : `${t('noteDetail.sharePhotoMsg', { location: locationStr })}\n\n— Charmly 💛`;
 
         try {
             await Share.share({ message });

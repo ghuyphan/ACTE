@@ -83,7 +83,7 @@ export default function HomeHeaderSearch({
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
         >
-          <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>ACTE 💛</Text>
+          <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>Charmly 💛</Text>
         </GlassView>
         <Host
           matchContents
@@ -115,7 +115,7 @@ export default function HomeHeaderSearch({
     <>
       {useDetachedWordmark ? (
         <View pointerEvents="none" style={[styles.detachedBrandWrap, { top: topInset + 6 }]}>
-          <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>ACTE 💛</Text>
+          <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>Charmly 💛</Text>
         </View>
       ) : null}
 
@@ -137,7 +137,7 @@ export default function HomeHeaderSearch({
           },
         ]}
       >
-        {!useDetachedWordmark ? <Text style={[styles.logoText, { color: colors.text }]}>ACTE 💛</Text> : null}
+        {!useDetachedWordmark ? <Text style={[styles.logoText, { color: colors.text }]}>Charmly 💛</Text> : null}
         <View style={styles.headerActions}>
           {showSearchButton ? (
             <Pressable onPress={onOpenSearch}>

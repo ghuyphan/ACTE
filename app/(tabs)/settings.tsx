@@ -285,7 +285,7 @@ export default function SettingsScreen() {
                             <HStack>
                                 <Spacer />
                                 <VStack modifiers={[padding({ top: 36, bottom: 40 })]}>
-                                    <SwiftUIText modifiers={[foregroundStyle(colors.secondaryText), font({ size: 13 }), multilineTextAlignment('center')]}>ACTE v1.0.0</SwiftUIText>
+                                    <SwiftUIText modifiers={[foregroundStyle(colors.secondaryText), font({ size: 13 }), multilineTextAlignment('center')]}>Charmly v1.0.0</SwiftUIText>
                                     <SwiftUIText modifiers={[foregroundStyle(colors.secondaryText), font({ size: 13 }), multilineTextAlignment('center'), padding({ top: 4 })]}>{t('settings.about', 'So you never forget what she likes 💛')}</SwiftUIText>
                                 </VStack>
                                 <Spacer />

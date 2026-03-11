@@ -65,9 +65,18 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
 }
 
 function getTranslatedWidgetStrings(noteCount: number) {
+    const language = (i18n.language || 'en').toLowerCase();
+    let savedCountText = i18n.t('widget.savedCount', { count: noteCount });
+
+    if (language.startsWith('vi')) {
+        savedCountText = `${noteCount} ghi chú`;
+    } else if (language.startsWith('en')) {
+        savedCountText = `${noteCount} ${noteCount === 1 ? 'note' : 'notes'}`;
+    }
+
     return {
         idleText: i18n.t('widget.idleText'),
-        savedCountText: i18n.t('widget.savedCount', { count: noteCount }),
+        savedCountText,
         memoryReminderText: i18n.t('widget.memoryReminder'),
     };
 }

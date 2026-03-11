@@ -1,6 +1,6 @@
-# ACTE - Location-Based Memory Tracker �
+# Charmly - Location-Based Memory Tracker
 
-ACTE is a React Native iOS/Android application built with [Expo](https://expo.dev) that allows users to capture, store, and revisit memories (text and photos) linked to specific geographic locations.
+Charmly is a React Native iOS/Android application built with [Expo](https://expo.dev) that allows users to capture, store, and revisit memories (text and photos) linked to specific geographic locations.
 
 ## 🌟 Key Features
 

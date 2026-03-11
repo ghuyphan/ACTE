@@ -56,7 +56,7 @@ export default function LoginScreen() {
                 <View style={[styles.iconContainer, { backgroundColor: colors.primarySoft }]}>
                     <Ionicons name="heart" size={64} color={colors.primary} />
                 </View>
-                <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'ACTE')}</Text>
+                <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Charmly')}</Text>
                 <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
                     {t('auth.subtitle', 'So you never forget what she likes')}
                 </Text>
@@ -98,7 +98,7 @@ export default function LoginScreen() {
                 ) : user ? (
                     <>
                         <PrimaryButton
-                            label={t('auth.continueApp', 'Continue to ACTE')}
+                            label={t('auth.continueApp', 'Continue to Charmly')}
                             onPress={() => router.replace('/(tabs)')}
                             variant="neutral"
                             style={styles.bottomButton}

@@ -1,4 +1,4 @@
-# ACTE Release Checklist
+# Charmly Release Checklist
 
 ## Core Flows
 - [ ] Onboarding appears on first launch and routes to app after completion.
@@ -25,4 +25,3 @@
 - [ ] `npm run lint` passes.
 - [ ] `npx tsc --noEmit` passes.
 - [ ] `npm test -- --runInBand` passes.
-

@@ -248,4 +248,17 @@ describe('widgetService', () => {
       })
     );
   });
+
+  it('formats a compact count label for the widget badge', async () => {
+    await updateWidgetData();
+
+    expect(mockUpdateSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        props: expect.objectContaining({
+          noteCount: 2,
+          savedCountText: '2 notes',
+        }),
+      })
+    );
+  });
 });
