@@ -3,6 +3,8 @@ import { useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { GlassView } from 'expo-glass-effect';
+import { isOlderIOS } from '../../utils/platform';
+import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
 import { useTheme } from '../../hooks/useTheme';
 import type { MapFilterState, MapFilterType } from '../../hooks/map/mapDomain';
 
@@ -12,6 +14,7 @@ interface MapFilterBarProps {
   onToggleFavorites: () => void;
   onInteraction?: () => void;
   top?: number;
+  countLabel: string;
 }
 
 interface FilterChipProps {
@@ -45,16 +48,16 @@ function FilterChip({ label, active, onPress, icon, testID }: FilterChipProps) {
         onPressIn={() => animatePressScale(0.96)}
         onPressOut={() => animatePressScale(1)}
       >
-        <GlassView
-          glassEffectStyle="regular"
-          colorScheme={isDark ? 'dark' : 'light'}
+        <View
           style={[
             styles.chipOuter,
             {
               backgroundColor: active
-                ? `${colors.primary}20`
-                : 'transparent',
-              borderColor: active ? `${colors.primary}50` : isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
+                ? `${colors.primary}1A`
+                : isDark
+                  ? 'rgba(255,255,255,0.05)'
+                  : 'rgba(255,255,255,0.58)',
+              borderColor: active ? `${colors.primary}55` : getOverlayBorderColor(isDark),
             },
           ]}
         >
@@ -69,7 +72,7 @@ function FilterChip({ label, active, onPress, icon, testID }: FilterChipProps) {
           <Text style={[styles.chipText, { color: active ? colors.primary : colors.text }]} numberOfLines={1}>
             {label}
           </Text>
-        </GlassView>
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -81,8 +84,10 @@ export default function MapFilterBar({
   onToggleFavorites,
   onInteraction,
   top = 0,
+  countLabel,
 }: MapFilterBarProps) {
   const { t } = useTranslation();
+  const { colors, isDark } = useTheme();
 
   const chips = useMemo(
     () => [
@@ -132,8 +137,31 @@ export default function MapFilterBar({
   );
 
   return (
-    <View style={[styles.container, { top }]} pointerEvents="box-none">
-      <View style={styles.panelWrap}>
+    <View style={[styles.wrapper, top > 0 ? { marginTop: top } : null]} pointerEvents="box-none">
+      <GlassView
+        testID="map-top-header"
+        glassEffectStyle="regular"
+        colorScheme={isDark ? 'dark' : 'light'}
+        style={[styles.container, { borderColor: getOverlayBorderColor(isDark) }]}
+      >
+        {isOlderIOS ? (
+          <View
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                borderRadius: mapOverlayTokens.overlayRadius,
+                backgroundColor: getOverlayFallbackColor(isDark),
+              },
+            ]}
+          />
+        ) : null}
+        <View style={styles.countRow}>
+          <Ionicons name="pin" size={14} color={colors.primary} />
+          <Text testID="map-inline-count" style={[styles.countText, { color: colors.text }]}>
+            {countLabel}
+          </Text>
+        </View>
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -150,54 +178,47 @@ export default function MapFilterBar({
             />
           ))}
         </ScrollView>
-      </View>
+      </GlassView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    width: '100%',
+  },
   container: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    zIndex: 12,
+    borderWidth: 1,
+    borderRadius: mapOverlayTokens.overlayRadius,
+    padding: mapOverlayTokens.overlayPadding,
+    gap: mapOverlayTokens.overlayGap,
+    minHeight: mapOverlayTokens.overlayMinHeight,
+    overflow: 'hidden',
+    ...mapOverlayTokens.overlayShadow,
   },
-  panelWrap: {
-    borderRadius: 20,
-    marginLeft: -4,
-  },
-  labelRow: {
+  countRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 4,
+    gap: 6,
   },
-  labelText: {
-    fontSize: 11,
+  countText: {
+    fontSize: 14,
     fontWeight: '700',
-    letterSpacing: 0.2,
-    textTransform: 'uppercase',
     fontFamily: 'System',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 2,
+    paddingRight: 2,
   },
   chipOuter: {
-    minHeight: 36,
+    minHeight: 34,
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 999,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     borderWidth: 1,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
   },
   chipText: {
     fontSize: 13,

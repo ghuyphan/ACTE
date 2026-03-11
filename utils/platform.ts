@@ -4,3 +4,6 @@ import { Platform } from 'react-native';
 // where advanced materials like 'systemChromeMaterial' or certain UIVisualEffectView behaviors
 // may fail or appear completely transparent.
 export const isOlderIOS = Platform.OS === 'ios' && parseInt(String(Platform.Version), 10) <= 18;
+
+// Native tab search input in Expo Router requires iOS 26+ behavior.
+export const isIOS26OrNewer = Platform.OS === 'ios' && parseInt(String(Platform.Version), 10) >= 26;

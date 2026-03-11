@@ -12,6 +12,7 @@ interface HomeHeaderSearchProps {
   onSearchChange: (nextQuery: string) => void;
   onOpenSearch: () => void;
   onCloseSearch: () => void;
+  showSearchButton?: boolean;
   onToggleCaptureMode: () => void;
   captureMode: 'text' | 'camera';
   colors: {
@@ -30,6 +31,7 @@ export default function HomeHeaderSearch({
   onSearchChange,
   onOpenSearch,
   onCloseSearch,
+  showSearchButton = true,
   onToggleCaptureMode,
   captureMode,
   colors,
@@ -82,9 +84,11 @@ export default function HomeHeaderSearch({
       >
         <Text style={[styles.logoText, { color: colors.text }]}>ACTE 💛</Text>
         <View style={styles.headerActions}>
-          <Pressable onPress={onOpenSearch}>
-            <Ionicons name="search" size={20} color={colors.primary} />
-          </Pressable>
+          {showSearchButton ? (
+            <Pressable onPress={onOpenSearch}>
+              <Ionicons name="search" size={20} color={colors.primary} />
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={onToggleCaptureMode}
             style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}

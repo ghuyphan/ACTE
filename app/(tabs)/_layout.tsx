@@ -2,7 +2,7 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useTranslation } from 'react-i18next';
 import { DynamicColorIOS, Platform } from 'react-native';
 import { Colors, useTheme } from '../../hooks/useTheme';
-import { isOlderIOS } from '../../utils/platform';
+import { isIOS26OrNewer, isOlderIOS } from '../../utils/platform';
 
 export default function TabLayout() {
   const { t } = useTranslation();
@@ -47,6 +47,10 @@ export default function TabLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} />
         <NativeTabs.Trigger.Label>{t('tabs.settings', 'Settings')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+
+      {isIOS26OrNewer ? (
+        <NativeTabs.Trigger name="search" role="search" disableAutomaticContentInsets />
+      ) : null}
     </NativeTabs>
   );
 }

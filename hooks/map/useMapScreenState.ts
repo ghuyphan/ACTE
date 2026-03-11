@@ -32,7 +32,6 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [selectedNoteIndex, setSelectedNoteIndex] = useState(0);
   const [visibleRegion, setVisibleRegion] = useState<Region | null>(null);
-  const [isNearbyCollapsed, setIsNearbyCollapsed] = useState(false);
   const lastMarkerTapAtRef = useRef(0);
 
   const initialRegion = useMemo(() => getInitialMapRegion(location, notes), [location, notes]);
@@ -202,8 +201,6 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
     clusterNodes,
     pointGroupMap,
     nearbyItems,
-    isNearbyCollapsed,
-    setIsNearbyCollapsed,
     filteredNotes,
     filteredCount,
     hasActiveFilters: filterState.type !== 'all' || filterState.favoritesOnly,

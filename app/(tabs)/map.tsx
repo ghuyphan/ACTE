@@ -5,21 +5,25 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, LayoutAnimation, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import type MapView from 'react-native-maps';
 import Reanimated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import type MapView from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapCanvas from '../../components/map/MapCanvas';
 import MapFilterBar from '../../components/map/MapFilterBar';
 import MapPreviewCard from '../../components/map/MapPreviewCard';
-import NearbyRail from '../../components/map/NearbyRail';
-import { useGeofence } from '../../hooks/useGeofence';
-import { useMapScreenState } from '../../hooks/map/useMapScreenState';
-import { DEFAULT_REGION, regionToZoom } from '../../hooks/map/mapDomain';
+import {
+  getOverlayBorderColor,
+  getOverlayFallbackColor,
+  mapOverlayTokens,
+} from '../../components/map/overlayTokens';
 import type { MapClusterNode } from '../../hooks/map/mapDomain';
+import { DEFAULT_REGION, regionToZoom } from '../../hooks/map/mapDomain';
+import { useMapScreenState } from '../../hooks/map/useMapScreenState';
+import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
@@ -54,24 +58,20 @@ export default function MapScreen() {
     selectedGroup,
     selectedNote,
     selectedNoteIndex,
-    selectedNoteId,
     openPrevInGroup,
     openNextInGroup,
     handleLeafMarkerPress,
     handleClusterMarkerPress,
     handleMapPress,
-    selectNoteById,
     clusterNodes,
     nearbyItems,
-    isNearbyCollapsed,
-    setIsNearbyCollapsed,
-    filteredNotes,
     filteredCount,
     hasActiveFilters,
   } = useMapScreenState({ notes, location });
 
   const mapAnimationDuration = reduceMotionEnabled ? 0 : 900;
-  const previewBottomOffset = isNearbyCollapsed ? insets.bottom + 84 : insets.bottom + 196;
+  const previewBottomOffset = insets.bottom + 12;
+  const [activeNearbyNoteId, setActiveNearbyNoteId] = useState<string | null>(null);
 
   const emitLightHaptic = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -88,12 +88,43 @@ export default function MapScreen() {
     [openNoteDetail, router]
   );
 
-  const handleOpenSelectedNote = useCallback(() => {
-    if (!selectedNote) {
+  const activeNearbyItem = useMemo(() => {
+    if (nearbyItems.length === 0) {
+      return null;
+    }
+
+    if (activeNearbyNoteId) {
+      return nearbyItems.find((item) => item.note.id === activeNearbyNoteId) ?? nearbyItems[0];
+    }
+
+    return nearbyItems[0];
+  }, [activeNearbyNoteId, nearbyItems]);
+
+  useEffect(() => {
+    if (nearbyItems.length === 0) {
+      if (activeNearbyNoteId !== null) {
+        setActiveNearbyNoteId(null);
+      }
       return;
     }
-    openNote(selectedNote.id);
-  }, [openNote, selectedNote]);
+
+    if (activeNearbyNoteId && nearbyItems.some((item) => item.note.id === activeNearbyNoteId)) {
+      return;
+    }
+
+    setActiveNearbyNoteId(nearbyItems[0].note.id);
+  }, [activeNearbyNoteId, nearbyItems]);
+
+  const handleOpenPreview = useCallback(() => {
+    if (selectedNote) {
+      openNote(selectedNote.id);
+      return;
+    }
+
+    if (activeNearbyItem) {
+      openNote(activeNearbyItem.note.id);
+    }
+  }, [activeNearbyItem, openNote, selectedNote]);
 
   const goToMyLocation = useCallback(async () => {
     let target = location;
@@ -156,26 +187,31 @@ export default function MapScreen() {
     [emitLightHaptic, handleLeafMarkerPress]
   );
 
-  const handlePressNearbyNote = useCallback(
+  const handleFocusNearbyNote = useCallback(
     (noteId: string) => {
-      const note = filteredNotes.find((item) => item.id === noteId);
-      if (note && mapRef.current) {
-        const baseRegion = visibleRegion ?? initialRegion;
-        const nextRegion = {
-          latitude: note.latitude,
-          longitude: note.longitude,
-          latitudeDelta: Math.max(Math.min(baseRegion.latitudeDelta, 0.025), MIN_ZOOM_DELTA),
-          longitudeDelta: Math.max(Math.min(baseRegion.longitudeDelta, 0.025), MIN_ZOOM_DELTA),
-        };
-
-        mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 500);
-        setVisibleRegion(nextRegion);
+      const nearbyItem = nearbyItems.find((item) => item.note.id === noteId);
+      if (!nearbyItem) {
+        return;
       }
 
-      selectNoteById(noteId);
-      openNote(noteId);
+      setActiveNearbyNoteId(noteId);
+
+      if (!mapRef.current) {
+        return;
+      }
+
+      const baseRegion = visibleRegion ?? initialRegion;
+      const nextRegion = {
+        latitude: nearbyItem.latitude,
+        longitude: nearbyItem.longitude,
+        latitudeDelta: Math.max(Math.min(baseRegion.latitudeDelta, 0.025), MIN_ZOOM_DELTA),
+        longitudeDelta: Math.max(Math.min(baseRegion.longitudeDelta, 0.025), MIN_ZOOM_DELTA),
+      };
+
+      mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 420);
+      setVisibleRegion(nextRegion);
     },
-    [filteredNotes, initialRegion, openNote, reduceMotionEnabled, selectNoteById, setVisibleRegion, visibleRegion]
+    [initialRegion, nearbyItems, reduceMotionEnabled, setVisibleRegion, visibleRegion]
   );
 
   useEffect(() => {
@@ -269,51 +305,17 @@ export default function MapScreen() {
         colors={colors}
       />
 
-      <MapFilterBar
-        top={insets.top + 58}
-        filterState={filterState}
-        onChangeType={setFilterType}
-        onToggleFavorites={toggleFavoritesOnly}
-        onInteraction={emitLightHaptic}
-      />
-
-      <MapPreviewCard
-        selectedGroup={selectedGroup}
-        selectedNote={selectedNote}
-        selectedNoteIndex={selectedNoteIndex}
-        bottomOffset={previewBottomOffset}
-        onPrev={openPrevInGroup}
-        onNext={openNextInGroup}
-        onOpen={handleOpenSelectedNote}
-        onInteraction={emitLightHaptic}
-      />
-
-      <NearbyRail
-        items={nearbyItems}
-        selectedNoteId={selectedNoteId}
-        collapsed={isNearbyCollapsed}
-        onToggleCollapsed={() => {
-          setIsNearbyCollapsed((current) => !current);
-        }}
-        onPressNote={handlePressNearbyNote}
-        onInteraction={emitLightHaptic}
-      />
-
-      <View
-        style={[
-          styles.countBadge,
-          {
-            top: insets.top + 8,
-            backgroundColor: isDark ? 'rgba(26,26,30,0.98)' : 'rgba(255,252,246,0.98)',
-            borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
-          },
-        ]}
-      >
-        <Ionicons name="pin" size={15} color={colors.primary} />
-        <Text style={[styles.countText, { color: colors.text }]}>{countLabel}</Text>
+      <View style={[styles.topHeader, { top: insets.top + 8 }]} pointerEvents="box-none">
+        <MapFilterBar
+          filterState={filterState}
+          countLabel={countLabel}
+          onChangeType={setFilterType}
+          onToggleFavorites={toggleFavoritesOnly}
+          onInteraction={emitLightHaptic}
+        />
       </View>
 
-      <Reanimated.View style={[styles.fabContainer, { top: insets.top + 8 }, fabAnimatedStyle]}>
+      <Reanimated.View style={[styles.fabContainer, { top: insets.top + 20 }, fabAnimatedStyle]}>
         <Pressable
           testID="map-recenter"
           onPress={goToMyLocation}
@@ -331,7 +333,7 @@ export default function MapScreen() {
           }}
         >
           <GlassView
-            style={styles.fab}
+            style={[styles.fab, { borderColor: getOverlayBorderColor(isDark) }]}
             glassEffectStyle="regular"
             colorScheme={isDark ? 'dark' : 'light'}
           >
@@ -339,7 +341,10 @@ export default function MapScreen() {
               <View
                 style={[
                   StyleSheet.absoluteFillObject,
-                  { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)' },
+                  {
+                    borderRadius: 22,
+                    backgroundColor: getOverlayFallbackColor(isDark),
+                  },
                 ]}
               />
             ) : null}
@@ -347,6 +352,20 @@ export default function MapScreen() {
           </GlassView>
         </Pressable>
       </Reanimated.View>
+
+      <MapPreviewCard
+        selectedGroup={selectedGroup}
+        selectedNote={selectedNote}
+        selectedNoteIndex={selectedNoteIndex}
+        nearbyItems={nearbyItems}
+        activeNearbyNoteId={activeNearbyNoteId}
+        bottomOffset={previewBottomOffset}
+        onPrev={openPrevInGroup}
+        onNext={openNextInGroup}
+        onOpen={handleOpenPreview}
+        onFocusNearbyNote={handleFocusNearbyNote}
+        onInteraction={emitLightHaptic}
+      />
 
       {notes.length === 0 ? (
         <View style={styles.emptyOverlay} pointerEvents="none">
@@ -409,45 +428,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  countBadge: {
-    position: 'absolute',
-    left: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
-    zIndex: 12,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 4,
-  },
-  countText: {
-    fontSize: 15,
-    fontWeight: '700',
-    fontFamily: 'System',
-  },
   fabContainer: {
     position: 'absolute',
     right: 14,
     zIndex: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
   },
   fab: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
+    borderWidth: 1,
+    ...mapOverlayTokens.overlayShadow,
+  },
+  topHeader: {
+    position: 'absolute',
+    left: 14,
+    right: 72,
+    zIndex: 12,
   },
   emptyOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -53,7 +53,7 @@ export default function MapCanvas({
       onMapReady={onMapReady}
       onRegionChangeComplete={onRegionChangeComplete}
       showsUserLocation
-      showsMyLocationButton
+      showsMyLocationButton={false}
       userInterfaceStyle={isDark ? 'dark' : 'light'}
     >
       {markerNodes.map((node) => {

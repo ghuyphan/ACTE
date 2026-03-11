@@ -29,6 +29,7 @@ import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
+import { isIOS26OrNewer } from '../../utils/platform';
 
 const { height } = Dimensions.get('window');
 
@@ -48,6 +49,8 @@ export default function HomeScreen() {
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
   const isFocused = useIsFocused();
+  const useNativeTabSearch = isIOS26OrNewer;
+  const useInlineHeaderSearch = !useNativeTabSearch;
 
   const [refreshing, setRefreshing] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -100,7 +103,7 @@ export default function HomeScreen() {
     );
   }, [notes, searchQuery]);
 
-  const displayedNotes = isSearching ? filteredNotes : notes;
+  const displayedNotes = useInlineHeaderSearch && isSearching ? filteredNotes : notes;
   const shouldShowNotesHint = displayedNotes.length > 0 && isCaptureVisible;
 
   useEffect(() => {
@@ -337,19 +340,25 @@ export default function HomeScreen() {
   ]);
 
   const handleOpenSearch = useCallback(() => {
+    if (!useInlineHeaderSearch) {
+      return;
+    }
     setIsSearching(true);
     Animated.timing(searchAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
     flatListRef.current?.scrollToOffset({ offset: snapHeight, animated: true });
-  }, [searchAnim, snapHeight]);
+  }, [searchAnim, snapHeight, useInlineHeaderSearch]);
 
   const handleCloseSearch = useCallback(() => {
+    if (!useInlineHeaderSearch) {
+      return;
+    }
     Keyboard.dismiss();
     Animated.timing(searchAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
       setIsSearching(false);
       setSearchQuery('');
     });
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-  }, [searchAnim]);
+  }, [searchAnim, useInlineHeaderSearch]);
 
   const handleToggleCaptureMode = useCallback(() => {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -390,13 +399,14 @@ export default function HomeScreen() {
         onSearchChange={setSearchQuery}
         onOpenSearch={handleOpenSearch}
         onCloseSearch={handleCloseSearch}
+        showSearchButton={useInlineHeaderSearch}
         onToggleCaptureMode={handleToggleCaptureMode}
         captureMode={captureMode}
         colors={colors}
         t={t}
       />
 
-      {isSearching && filteredNotes.length === 0 && searchQuery.trim() ? (
+      {useInlineHeaderSearch && isSearching && filteredNotes.length === 0 && searchQuery.trim() ? (
         <View
           style={[
             styles.center,

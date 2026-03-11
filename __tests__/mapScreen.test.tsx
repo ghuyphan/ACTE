@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 
 const mockOpenNoteDetail = jest.fn();
 const mockRouterPush = jest.fn();
@@ -13,6 +13,14 @@ jest.mock('expo-glass-effect', () => {
   const { View } = require('react-native');
   return {
     GlassView: ({ children, ...props }: any) => <View {...props}>{children}</View>,
+  };
+});
+
+jest.mock('expo-image', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    Image: ({ children, ...props }: any) => <View {...props}>{children}</View>,
   };
 });
 
@@ -139,7 +147,10 @@ jest.mock('react-native-maps', () => {
     }, []);
 
     return (
-      <View testID={props.testID ?? 'mock-map-view'}>
+      <View
+        testID={props.testID ?? 'mock-map-view'}
+        onRegionChangeComplete={props.onRegionChangeComplete}
+      >
         <Pressable testID="mock-map-press" onPress={() => props.onPress?.({})} />
         {props.children}
       </View>
@@ -172,8 +183,13 @@ describe('MapScreen', () => {
     jest.clearAllMocks();
   });
 
-  it('updates filtered count and supports clearing filters', async () => {
-    const { getByTestId, getByText } = render(<MapScreen />);
+  it('renders unified map header and supports clearing filters', async () => {
+    const { getByTestId, getByText, queryByTestId } = render(<MapScreen />);
+
+    const topHeader = getByTestId('map-top-header');
+    expect(within(topHeader).getByTestId('map-inline-count')).toBeTruthy();
+    expect(within(topHeader).getByTestId('map-filter-all')).toBeTruthy();
+    expect(queryByTestId('map-count-badge')).toBeNull();
 
     expect(getByText('2 notes')).toBeTruthy();
 
@@ -194,23 +210,117 @@ describe('MapScreen', () => {
     });
   });
 
-  it('opens a note from nearby rail and preview card', async () => {
-    const { getByTestId, getAllByTestId } = render(<MapScreen />);
+  it('keeps recenter control operable', async () => {
+    const { getByTestId } = render(<MapScreen />);
 
-    fireEvent.press(getByTestId('nearby-note-text-1'));
+    fireEvent.press(getByTestId('map-recenter'));
 
     await waitFor(() => {
-      const openCalls = mockOpenNoteDetail.mock.calls.length + mockRouterPush.mock.calls.length;
-      expect(openCalls).toBeGreaterThan(0);
+      const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
+      expect(lastCall?.[0]?.latitude).toBeCloseTo(10.7605, 3);
+      expect(lastCall?.[0]?.longitude).toBeCloseTo(106.6605, 3);
     });
+  });
+
+  it('renders nearby mode in preview and opens only on explicit open action', async () => {
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
+
+    expect(queryByTestId('nearby-rail')).toBeNull();
+    expect(getByTestId('map-preview-nearby-list')).toBeTruthy();
+    expect(String(getByTestId('map-preview-nearby-index').props.children)).toMatch(/^1\/\d+$/);
+
+    fireEvent.press(getByTestId('map-preview-nearby-text-1'));
+    expect(mockOpenNoteDetail).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+
+    fireEvent.press(getByTestId('map-preview-open'));
+    await waitFor(() => {
+      expect(mockOpenNoteDetail).toHaveBeenCalledWith('text-1');
+    });
+  });
+
+  it('swipes nearby preview and pans map to focused note', async () => {
+    const { getByTestId } = render(<MapScreen />);
+    const nearbyList = getByTestId('map-preview-nearby-list');
+    const snapInterval = nearbyList.props.snapToInterval;
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08,
+      });
+    });
+
+    act(() => {
+      nearbyList.props.onScrollBeginDrag({
+        nativeEvent: {},
+      });
+      nearbyList.props.onMomentumScrollEnd({
+        nativeEvent: {
+          contentOffset: {
+            x: snapInterval,
+            y: 0,
+          },
+        },
+      });
+    });
+
+    fireEvent.press(getByTestId('map-preview-open'));
+    await waitFor(() => {
+      const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
+      expect(lastCall?.[0]?.latitude).toBeCloseTo(10.8, 2);
+      expect(lastCall?.[0]?.longitude).toBeCloseTo(106.7, 2);
+      expect(mockOpenNoteDetail).toHaveBeenCalledWith('photo-1');
+    });
+  });
+
+  it('switches between marker group mode and nearby mode', async () => {
+    const nowSpy = jest.spyOn(Date, 'now');
+    let now = 1000;
+    nowSpy.mockImplementation(() => now);
+
+    const { getAllByTestId, getByTestId, queryByTestId } = render(<MapScreen />);
+
+    expect(getByTestId('map-preview-nearby-list')).toBeTruthy();
 
     const leafMarkers = getAllByTestId(/leaf-marker-/);
     fireEvent.press(leafMarkers[0]);
 
-    fireEvent.press(getByTestId('map-preview-open'));
     await waitFor(() => {
-      const openCalls = mockOpenNoteDetail.mock.calls.length + mockRouterPush.mock.calls.length;
-      expect(openCalls).toBeGreaterThan(1);
+      expect(queryByTestId('map-preview-nearby-list')).toBeNull();
+    });
+
+    now = 1400;
+    fireEvent.press(getByTestId('mock-map-press'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-nearby-list')).toBeTruthy();
+    });
+
+    nowSpy.mockRestore();
+  });
+
+  it('falls back focused nearby note when filters remove current focus', async () => {
+    const { getByTestId } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08,
+      });
+    });
+
+    fireEvent.press(getByTestId('map-preview-nearby-photo-1'));
+
+    fireEvent.press(getByTestId('map-filter-text'));
+    fireEvent.press(getByTestId('map-preview-open'));
+
+    await waitFor(() => {
+      expect(mockOpenNoteDetail).toHaveBeenCalledWith('text-1');
     });
   });
 });
