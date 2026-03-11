@@ -1,7 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Button, Host, Image as SwiftUIImage } from '@expo/ui/swift-ui';
+import { buttonStyle, clipShape, controlSize, frame, tint } from '@expo/ui/swift-ui/modifiers';
+import { GlassView } from 'expo-glass-effect';
 import { TFunction } from 'i18next';
 import { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { isIOS26OrNewer } from '../../utils/platform';
 import GlassHeader from '../ui/GlassHeader';
 
 interface HomeHeaderSearchProps {
@@ -20,6 +24,7 @@ interface HomeHeaderSearchProps {
     primary: string;
     secondaryText: string;
   };
+  isDark: boolean;
   t: TFunction;
 }
 
@@ -35,11 +40,14 @@ export default function HomeHeaderSearch({
   onToggleCaptureMode,
   captureMode,
   colors,
+  isDark,
   t,
 }: HomeHeaderSearchProps) {
   const modeIconScale = useRef(new Animated.Value(1)).current;
   const modeIconRotate = useRef(new Animated.Value(0)).current;
   const didMountRef = useRef(false);
+  const useDetachedWordmark = isIOS26OrNewer;
+  const useDetachedControls = isIOS26OrNewer && !showSearchButton;
 
   useEffect(() => {
     if (!didMountRef.current) {
@@ -67,13 +75,60 @@ export default function HomeHeaderSearch({
     });
   }, [captureMode, modeIconRotate, modeIconScale]);
 
+  if (useDetachedControls) {
+    return (
+      <View pointerEvents="box-none" style={[styles.detachedTopRow, { top: topInset + 6 }]}>
+        <GlassView
+          style={styles.detachedBrandGlass}
+          glassEffectStyle="regular"
+          colorScheme={isDark ? 'dark' : 'light'}
+        >
+          <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>ACTE 💛</Text>
+        </GlassView>
+        <Host
+          matchContents
+          colorScheme={isDark ? 'dark' : 'light'}
+          style={styles.detachedSwiftModeToggleHost}
+        >
+          <Button
+            onPress={onToggleCaptureMode}
+            modifiers={[
+              buttonStyle('glass'),
+              controlSize('large'),
+              frame({ width: 44, height: 44 }),
+              clipShape('circle'),
+              tint(colors.primary),
+            ]}
+          >
+            <SwiftUIImage
+              systemName={captureMode === 'text' ? 'camera' : 'doc.text'}
+              color={colors.primary}
+              size={18}
+            />
+          </Button>
+        </Host>
+      </View>
+    );
+  }
+
   return (
-    <GlassHeader topInset={topInset}>
+    <>
+      {useDetachedWordmark ? (
+        <View pointerEvents="none" style={[styles.detachedBrandWrap, { top: topInset + 6 }]}>
+          <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>ACTE 💛</Text>
+        </View>
+      ) : null}
+
+      <GlassHeader
+        topInset={topInset}
+        style={useDetachedWordmark ? styles.detachedHeaderOffset : undefined}
+      >
       <Animated.View
         pointerEvents={isSearching ? 'none' : 'auto'}
         style={[
           StyleSheet.absoluteFill,
           styles.defaultHeader,
+          useDetachedWordmark ? styles.defaultHeaderDetached : null,
           {
             opacity: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
             transform: [
@@ -82,37 +137,61 @@ export default function HomeHeaderSearch({
           },
         ]}
       >
-        <Text style={[styles.logoText, { color: colors.text }]}>ACTE 💛</Text>
+        {!useDetachedWordmark ? <Text style={[styles.logoText, { color: colors.text }]}>ACTE 💛</Text> : null}
         <View style={styles.headerActions}>
           {showSearchButton ? (
             <Pressable onPress={onOpenSearch}>
               <Ionicons name="search" size={20} color={colors.primary} />
             </Pressable>
           ) : null}
-          <Pressable
-            onPress={onToggleCaptureMode}
-            style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
-          >
-            <Animated.View
-              style={{
-                transform: [
-                  { scale: modeIconScale },
-                  {
-                    rotate: modeIconRotate.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['-14deg', '0deg'],
-                    }),
-                  },
-                ],
-              }}
+
+          {isIOS26OrNewer ? (
+            <Host
+              matchContents
+              colorScheme={isDark ? 'dark' : 'light'}
+              style={styles.swiftModeToggleHost}
             >
-              <Ionicons
-                name={captureMode === 'text' ? 'camera-outline' : 'document-text-outline'}
-                size={20}
-                color={colors.primary}
-              />
-            </Animated.View>
-          </Pressable>
+              <Button
+                onPress={onToggleCaptureMode}
+                modifiers={[
+                  buttonStyle('glass'),
+                  controlSize('regular'),
+                  tint(colors.primary),
+                ]}
+              >
+                <SwiftUIImage
+                  systemName={captureMode === 'text' ? 'camera' : 'doc.text'}
+                  color={colors.primary}
+                  size={17}
+                />
+              </Button>
+            </Host>
+          ) : (
+            <Pressable
+              onPress={onToggleCaptureMode}
+              style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
+            >
+              <Animated.View
+                style={{
+                  transform: [
+                    { scale: modeIconScale },
+                    {
+                      rotate: modeIconRotate.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['-14deg', '0deg'],
+                      }),
+                    },
+                  ],
+                }}
+              >
+                <Ionicons
+                  name={captureMode === 'text' ? 'camera-outline' : 'document-text-outline'}
+                  size={20}
+                  color={colors.primary}
+                />
+              </Animated.View>
+            </Pressable>
+          )}
         </View>
       </Animated.View>
 
@@ -145,7 +224,8 @@ export default function HomeHeaderSearch({
           </Pressable>
         </View>
       </Animated.View>
-    </GlassHeader>
+      </GlassHeader>
+    </>
   );
 }
 
@@ -155,6 +235,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  defaultHeaderDetached: {
+    justifyContent: 'flex-end',
   },
   logoText: {
     fontSize: 15,
@@ -171,6 +254,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  swiftModeToggleHost: {
+    width: 38,
+    height: 38,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -194,5 +283,38 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     width: '100%',
     fontFamily: 'System',
+  },
+  detachedBrandWrap: {
+    position: 'absolute',
+    left: 20,
+    zIndex: 140,
+  },
+  detachedTopRow: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    zIndex: 140,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  detachedBrandText: {
+    fontSize: 16,
+  },
+  detachedBrandGlass: {
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    height: 42,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  detachedSwiftModeToggleHost: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detachedHeaderOffset: {
+    marginTop: 28,
   },
 });

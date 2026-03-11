@@ -89,7 +89,7 @@ export default function MapCanvas({
         }
 
         const isSelected = node.groupId != null && node.groupId === selectedGroupId;
-        const markerColor = node.primaryType === 'photo' ? '#FF6B6B' : colors.primary;
+        const markerColor = node.primaryType === 'photo' ? '#FF6B6B' : colors.accent;
 
         return (
           <Marker

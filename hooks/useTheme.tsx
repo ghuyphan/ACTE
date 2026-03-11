@@ -31,20 +31,20 @@ interface ThemeContextType {
 
 export const Colors: { light: ThemeColors; dark: ThemeColors } = {
     light: {
-        background: '#FAF9F6',       // Off-white/cream background for better contrast
-        surface: '#FFFFFF',
-        card: '#FFFFFF',
-        text: '#1C1C1E',
-        secondaryText: '#8E8E93',
-        primary: '#FFC107',          // Vibrant gold/amber
-        primarySoft: 'rgba(255, 193, 7, 0.15)',
-        accent: '#FF9F0A',           // Amber accent
-        border: '#E5E5EA',
+        background: '#F7F2EB',       // Subtle stone tint lifted from the widget, but lighter for app-wide use
+        surface: '#FCF9F5',
+        card: '#FFFDFC',
+        text: '#2B2621',
+        secondaryText: '#85786A',
+        primary: '#E0B15B',          // Honey accent keeps the app warm without turning everything brown
+        primarySoft: 'rgba(224, 177, 91, 0.18)',
+        accent: '#B77845',           // Deeper clay reserved for higher-contrast emphasis
+        border: '#EBE1D6',
         danger: '#FF3B30',
         success: '#34C759',
-        gradient: ['#FFC107', '#FF9F0A'],
+        gradient: ['#F2DEC0', '#E0B15B'],
         captureButtonBg: '#1C1C1E',
-        tabBarBg: 'rgba(250,249,246,0.92)',
+        tabBarBg: 'rgba(247,242,235,0.94)',
     },
     dark: {
         background: '#000000',       // Pure OLED black
@@ -52,7 +52,7 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
         card: '#1C1C1E',             // Standard elevated card
         text: '#FFFFFF',
         secondaryText: '#98989E',
-        primary: '#FFC107',          // Vibrant gold/amber
+        primary: '#FFC107',          // Keep the original brighter accent in dark mode
         primarySoft: 'rgba(255, 193, 7, 0.2)',
         accent: '#FF9F0A',
         border: '#2C2C2E',
@@ -64,18 +64,19 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
     },
 };
 
-// Curated gradient palettes for text-note card backgrounds
+// Curated gradient palettes for text-note card backgrounds.
+// Kept moody enough for white text, but aligned to the app's warmer stone palette.
 export const CardGradients: [string, string][] = [
-    ['#667eea', '#764ba2'],  // Purple dream
-    ['#f093fb', '#f5576c'],  // Pink sunset
-    ['#4facfe', '#00f2fe'],  // Ocean blue
-    ['#43e97b', '#38f9d7'],  // Mint green
-    ['#fa709a', '#fee140'],  // Warm peach
-    ['#a18cd1', '#fbc2eb'],  // Lavender
-    ['#fccb90', '#d57eeb'],  // Mango
-    ['#ff9a9e', '#fecfef'],  // Rose
-    ['#ff6e7f', '#bfe9ff'],  // Coral sky
-    ['#6a11cb', '#2575fc'],  // Deep blue
+    ['#5C4638', '#8D6A54'],  // Espresso clay
+    ['#6F5240', '#AE8060'],  // Caramel roast
+    ['#46584E', '#748C7B'],  // Soft sage
+    ['#495D72', '#7C93AF'],  // Slate blue
+    ['#775844', '#B28A68'],  // Warm cedar
+    ['#594B63', '#8A7897'],  // Dusty plum
+    ['#3F5560', '#6F8A94'],  // Blue stone
+    ['#5D5B6A', '#8F8DA1'],  // Misty ink
+    ['#505B42', '#87946E'],  // Olive paper
+    ['#6B4C57', '#A57A84'],  // Muted rosewood
 ];
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);

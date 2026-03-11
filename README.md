@@ -7,6 +7,7 @@ ACTE is a React Native iOS/Android application built with [Expo](https://expo.de
 - **Location-Based Memories:** Capture text notes or photos, automatically tagged with your current location and reverse-geocoded place names.
 - **Interactive Map View:** Browse all your saved memories geographically on an interactive map.
 - **Home Screen Widgets:** Features a custom iOS/Android widget (similar to Locket) that displays your recent memories directly on your device's home screen.
+  - Widget maintainer shortcut: see `docs/widget-maintenance.md`
 - **Background Geofencing:** Keeps track of your locations and can notify you when you are near past memories.
 - **Firebase Authentication:** Secure user authentication with Google Sign-In support.
 - **Offline-First & Fast:** Uses local SQLite database for blazing-fast access to your journal entries.

@@ -403,6 +403,7 @@ export default function HomeScreen() {
         onToggleCaptureMode={handleToggleCaptureMode}
         captureMode={captureMode}
         colors={colors}
+        isDark={isDark}
         t={t}
       />
 

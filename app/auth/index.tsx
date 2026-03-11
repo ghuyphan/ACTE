@@ -41,7 +41,7 @@ export default function LoginScreen() {
 
     const gradientColors: [string, string, string] = isDark
         ? [colors.background, colors.card, '#1A1A1A']
-        : [colors.background, colors.surface, '#F5F0E6'];
+        : [colors.background, colors.surface, '#ECE2D7'];
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>

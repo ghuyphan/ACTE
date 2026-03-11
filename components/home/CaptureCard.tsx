@@ -109,9 +109,9 @@ export default function CaptureCard({
             <View style={styles.cardTextCenter}>
               <TextInput
                 key={`note-text-${isSearching}`}
-                style={[styles.textInput, { color: isDark ? '#000' : '#1C1C1E' }]}
+                style={[styles.textInput, { color: '#1C1C1E' }]}
                 placeholder={t('capture.textPlaceholder', 'Note about this place...')}
-                placeholderTextColor="rgba(0,0,0,0.5)"
+                placeholderTextColor="rgba(28,28,30,0.48)"
                 multiline
                 value={noteText}
                 onChangeText={onChangeNoteText}

@@ -46,7 +46,7 @@ export default function OnboardingScreen() {
                 colors={
                     isDark
                         ? [colors.background, colors.card, '#1A1A1A']
-                        : [colors.background, colors.surface, '#F5F0E6']
+                        : [colors.background, colors.surface, '#ECE2D7']
                 }
                 style={StyleSheet.absoluteFillObject}
                 start={{ x: 0, y: 0 }}
