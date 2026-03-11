@@ -104,6 +104,7 @@
         "clearAllMsg": "All your food notes will be permanently deleted. This action cannot be undone.",
         "account": "ACCOUNT",
         "login": "Sign In",
+        "manageAccount": "Manage account",
         "notSignedIn": "Not signed in",
         "signedIn": "Signed in",
         "localMode": "Local mode",
@@ -116,6 +117,8 @@
         "subtitle": "So you never forget what she likes",
         "signInGoogle": "Sign in with Google",
         "signingIn": "Signing in...",
+        "devModeTitle": "Development sign-in",
+        "devModeMsg": "Google sign-in in this build only stores your account on this device. Cloud sync can be connected later.",
         "localModeTitle": "Local mode is ready",
         "localModeMsg": "This build is using local-first mode. You can keep capturing notes without signing in.",
         "continueLocal": "Continue in local mode",
@@ -145,6 +148,8 @@
     "widget": {
         "idleText": "Note it down before she gets upset 💛",
         "savedCount": "{{count}} notes saved",
+        "countBadgeOne": "{{count}} note",
+        "countBadgeOther": "{{count}} notes",
         "memoryReminder": "A memory reminds you 💛",
         "unknownPlace": "Unknown Place"
     },

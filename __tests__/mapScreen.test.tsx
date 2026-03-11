@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
+import MapScreen from '../app/(tabs)/map';
 
 const mockOpenNoteDetail = jest.fn();
 const mockRouterPush = jest.fn();
@@ -7,6 +8,7 @@ const mockAnimateToRegion = jest.fn();
 const mockFitToCoordinates = jest.fn();
 const mockRequestForegroundLocation = jest.fn();
 const mockOpenAppSettings = jest.fn();
+const mockImpactAsync = jest.fn();
 
 jest.mock('expo-glass-effect', () => {
   const React = require('react');
@@ -25,7 +27,7 @@ jest.mock('expo-image', () => {
 });
 
 jest.mock('expo-haptics', () => ({
-  impactAsync: jest.fn(),
+  impactAsync: (...args: unknown[]) => mockImpactAsync(...args),
   ImpactFeedbackStyle: {
     Light: 'light',
   },
@@ -130,32 +132,40 @@ jest.mock('react-native-maps', () => {
   const React = require('react');
   const { View, Pressable } = require('react-native');
 
-  const MockMapView = React.forwardRef((props: any, ref: any) => {
+  const MockMapView = React.forwardRef(({ children, onMapReady, onPress, onRegionChangeComplete, testID }: any, ref: any) => {
+    const didInitializeRef = React.useRef(false);
+
     React.useImperativeHandle(ref, () => ({
       animateToRegion: (...args: unknown[]) => mockAnimateToRegion(...args),
       fitToCoordinates: (...args: unknown[]) => mockFitToCoordinates(...args),
     }));
 
     React.useEffect(() => {
-      props.onMapReady?.();
-      props.onRegionChangeComplete?.({
+      if (didInitializeRef.current) {
+        return;
+      }
+
+      didInitializeRef.current = true;
+      onMapReady?.();
+      onRegionChangeComplete?.({
         latitude: 10.76,
         longitude: 106.66,
         latitudeDelta: 0.08,
         longitudeDelta: 0.08,
       });
-    }, []);
+    }, [onMapReady, onRegionChangeComplete]);
 
     return (
       <View
-        testID={props.testID ?? 'mock-map-view'}
-        onRegionChangeComplete={props.onRegionChangeComplete}
+        testID={testID ?? 'mock-map-view'}
+        onRegionChangeComplete={onRegionChangeComplete}
       >
-        <Pressable testID="mock-map-press" onPress={() => props.onPress?.({})} />
-        {props.children}
+        <Pressable testID="mock-map-press" onPress={() => onPress?.({})} />
+        {children}
       </View>
     );
   });
+  MockMapView.displayName = 'MockMapView';
 
   const Marker = ({ children, onPress, onSelect, testID }: any) => (
     <Pressable
@@ -175,8 +185,6 @@ jest.mock('react-native-maps', () => {
     Marker,
   };
 });
-
-import MapScreen from '../app/(tabs)/map';
 
 describe('MapScreen', () => {
   beforeEach(() => {
@@ -226,10 +234,10 @@ describe('MapScreen', () => {
     const { getByTestId, queryByTestId } = render(<MapScreen />);
 
     expect(queryByTestId('nearby-rail')).toBeNull();
-    expect(getByTestId('map-preview-nearby-list')).toBeTruthy();
-    expect(String(getByTestId('map-preview-nearby-index').props.children)).toMatch(/^1\/\d+$/);
+    expect(getByTestId('map-preview-list')).toBeTruthy();
+    expect(String(getByTestId('map-preview-index').props.children)).toMatch(/^1\/\d+$/);
 
-    fireEvent.press(getByTestId('map-preview-nearby-text-1'));
+    fireEvent.press(getByTestId('map-preview-item-text-1'));
     expect(mockOpenNoteDetail).not.toHaveBeenCalled();
     expect(mockRouterPush).not.toHaveBeenCalled();
 
@@ -241,7 +249,7 @@ describe('MapScreen', () => {
 
   it('swipes nearby preview and pans map to focused note', async () => {
     const { getByTestId } = render(<MapScreen />);
-    const nearbyList = getByTestId('map-preview-nearby-list');
+    const nearbyList = getByTestId('map-preview-list');
     const snapInterval = nearbyList.props.snapToInterval;
 
     act(() => {
@@ -276,27 +284,30 @@ describe('MapScreen', () => {
     });
   });
 
-  it('switches between marker group mode and nearby mode', async () => {
+  it('keeps the preview rail mounted when switching between marker and nearby modes', async () => {
     const nowSpy = jest.spyOn(Date, 'now');
     let now = 1000;
     nowSpy.mockImplementation(() => now);
 
-    const { getAllByTestId, getByTestId, queryByTestId } = render(<MapScreen />);
+    const { getAllByTestId, getByTestId, getByText, queryByText } = render(<MapScreen />);
 
-    expect(getByTestId('map-preview-nearby-list')).toBeTruthy();
+    expect(getByTestId('map-preview-list')).toBeTruthy();
 
     const leafMarkers = getAllByTestId(/leaf-marker-/);
     fireEvent.press(leafMarkers[0]);
 
     await waitFor(() => {
-      expect(queryByTestId('map-preview-nearby-list')).toBeNull();
+      expect(getByTestId('map-preview-list')).toBeTruthy();
+      expect(getByText('Pinned note')).toBeTruthy();
     });
+    expect(mockImpactAsync).toHaveBeenCalledTimes(1);
 
     now = 1400;
     fireEvent.press(getByTestId('mock-map-press'));
 
     await waitFor(() => {
-      expect(getByTestId('map-preview-nearby-list')).toBeTruthy();
+      expect(getByTestId('map-preview-list')).toBeTruthy();
+      expect(queryByText('Pinned note')).toBeNull();
     });
 
     nowSpy.mockRestore();
@@ -314,7 +325,7 @@ describe('MapScreen', () => {
       });
     });
 
-    fireEvent.press(getByTestId('map-preview-nearby-photo-1'));
+    fireEvent.press(getByTestId('map-preview-item-photo-1'));
 
     fireEvent.press(getByTestId('map-filter-text'));
     fireEvent.press(getByTestId('map-preview-open'));

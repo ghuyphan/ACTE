@@ -8,21 +8,37 @@ const mockDeleteAsync = jest.fn();
 const mockCopyAsync = jest.fn();
 const mockReadAsStringAsync = jest.fn();
 
-jest.mock('../constants/i18n', () => ({
-  __esModule: true,
-  default: {
-    language: 'en',
-    t: (key: string, options?: { count?: number }) => {
-      if (key === 'widget.savedCount') {
-        return `${options?.count ?? 0} saved`;
+jest.mock('../constants/i18n', () => {
+  let currentLanguage = 'en';
+  const translate = jest.fn((key: string, options?: { count?: number }): string => {
+    if (key === 'widget.countBadgeOne' || key === 'widget.countBadgeOther') {
+      const count = options?.count ?? 0;
+      if (currentLanguage === 'vi') {
+        return `${count} ghi chú`;
       }
-      if (key === 'capture.unknownPlace') {
-        return 'Unknown Place';
-      }
-      return key;
+      return key === 'widget.countBadgeOne' ? `${count} note` : `${count} notes`;
+    }
+    if (key === 'capture.unknownPlace') {
+      return currentLanguage === 'vi' ? 'Không rõ địa điểm' : 'Unknown Place';
+    }
+    return key;
+  });
+
+  const mockedI18n = {
+    get language() {
+      return currentLanguage;
     },
-  },
-}));
+    set language(value: string) {
+      currentLanguage = value;
+    },
+    t: translate,
+  };
+
+  return {
+    __esModule: true,
+    default: mockedI18n,
+  };
+});
 
 jest.mock('../widgets/LocketWidget', () => ({
   __esModule: true,
@@ -63,6 +79,7 @@ jest.mock('expo-file-system/legacy', () => ({
 }));
 
 import { selectWidgetNote, updateWidgetData } from '../services/widgetService';
+import i18n from '../constants/i18n';
 
 let warnSpy: jest.SpyInstance;
 
@@ -105,6 +122,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  i18n.language = 'en';
   warnSpy.mockRestore();
 });
 
@@ -257,6 +275,49 @@ describe('widgetService', () => {
         props: expect.objectContaining({
           noteCount: 2,
           savedCountText: '2 notes',
+        }),
+      })
+    );
+  });
+
+  it('formats a singular English count label for the widget badge', async () => {
+    mockGetAllNotes.mockResolvedValue([
+      {
+        id: 'only-note',
+        type: 'text',
+        content: 'Only note',
+        locationName: 'Only place',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-10T10:00:00.000Z',
+        updatedAt: null,
+      },
+    ]);
+
+    await updateWidgetData();
+
+    expect(mockUpdateSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        props: expect.objectContaining({
+          noteCount: 1,
+          savedCountText: '1 note',
+        }),
+      })
+    );
+  });
+
+  it('formats a Vietnamese count label for the widget badge', async () => {
+    i18n.language = 'vi';
+
+    await updateWidgetData();
+
+    expect(mockUpdateSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        props: expect.objectContaining({
+          noteCount: 2,
+          savedCountText: '2 ghi chú',
         }),
       })
     );

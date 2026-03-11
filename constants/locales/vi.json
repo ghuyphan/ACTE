@@ -104,6 +104,7 @@
         "clearAllMsg": "Tất cả ghi chú ăn uống sẽ bị xóa vĩnh viễn. Không thể hoàn tác.",
         "account": "TÀI KHOẢN",
         "login": "Đăng nhập",
+        "manageAccount": "Quản lý tài khoản",
         "notSignedIn": "Chưa đăng nhập",
         "signedIn": "Đã đăng nhập",
         "localMode": "Chế độ cục bộ",
@@ -116,6 +117,8 @@
         "subtitle": "Để anh không bao giờ quên em thích gì",
         "signInGoogle": "Đăng nhập với Google",
         "signingIn": "Đang đăng nhập...",
+        "devModeTitle": "Đăng nhập bản phát triển",
+        "devModeMsg": "Ở bản dựng này, tài khoản Google chỉ được lưu trên thiết bị này. Kết nối đồng bộ đám mây có thể được thêm sau.",
         "localModeTitle": "Chế độ cục bộ đã sẵn sàng",
         "localModeMsg": "Bản dựng này đang chạy theo kiểu local-first. Bạn vẫn có thể ghi chú bình thường mà không cần đăng nhập.",
         "continueLocal": "Tiếp tục ở chế độ cục bộ",
@@ -145,6 +148,8 @@
     "widget": {
         "idleText": "Ghi chú kẻo em dỗi nè 💛",
         "savedCount": "{{count}} ghi chú đã lưu",
+        "countBadgeOne": "{{count}} ghi chú",
+        "countBadgeOther": "{{count}} ghi chú",
         "memoryReminder": "Kỷ niệm nhắc nhở anh 💛",
         "unknownPlace": "Không rõ địa điểm"
     },

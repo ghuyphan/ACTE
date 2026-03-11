@@ -58,11 +58,10 @@ export default function MapScreen() {
     selectedGroup,
     selectedNote,
     selectedNoteIndex,
-    openPrevInGroup,
-    openNextInGroup,
     handleLeafMarkerPress,
     handleClusterMarkerPress,
     handleMapPress,
+    selectNoteById,
     clusterNodes,
     nearbyItems,
     filteredCount,
@@ -355,15 +354,13 @@ export default function MapScreen() {
 
       <MapPreviewCard
         selectedGroup={selectedGroup}
-        selectedNote={selectedNote}
         selectedNoteIndex={selectedNoteIndex}
         nearbyItems={nearbyItems}
         activeNearbyNoteId={activeNearbyNoteId}
         bottomOffset={previewBottomOffset}
-        onPrev={openPrevInGroup}
-        onNext={openNextInGroup}
         onOpen={handleOpenPreview}
         onFocusNearbyNote={handleFocusNearbyNote}
+        onFocusGroupNote={selectNoteById}
         onInteraction={emitLightHaptic}
       />
 

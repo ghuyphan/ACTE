@@ -65,13 +65,16 @@ export default function SettingsScreen() {
     const { t, i18n } = useTranslation();
     const { theme, setTheme, colors, isDark } = useTheme();
     const { notes, deleteAllNotes } = useNotes();
-    const { user, isAvailable, signOut } = useAuth();
+    const { user, isAvailable } = useAuth();
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { alertProps, showAlert } = useAppSheetAlert();
 
     const [showTheme, setShowTheme] = useState(false);
     const [showLanguage, setShowLanguage] = useState(false);
+    const openAuthScreen = () => {
+        router.push('/auth');
+    };
 
     const themeLabel =
         theme === 'system'
@@ -191,22 +194,17 @@ export default function SettingsScreen() {
                                 <AndroidRow
                                     label={user ? t('auth.signedInAs', 'Signed in as') : t('settings.login', 'Sign In')}
                                     value={accountValue}
+                                    onPress={openAuthScreen}
                                 />
-                                {user ? (
-                                    <PrimaryButton
-                                        label={t('auth.signOut', 'Sign out')}
-                                        variant="secondary"
-                                        onPress={() => {
-                                            void signOut();
-                                        }}
-                                    />
-                                ) : (
-                                    <PrimaryButton
-                                        label={t('settings.login', 'Sign In')}
-                                        variant="neutral"
-                                        onPress={() => router.push('/auth')}
-                                    />
-                                )}
+                                <PrimaryButton
+                                    label={
+                                        user
+                                            ? t('settings.manageAccount', 'Manage account')
+                                            : t('settings.login', 'Sign In')
+                                    }
+                                    variant={user ? 'secondary' : 'neutral'}
+                                    onPress={openAuthScreen}
+                                />
                             </>
                         ) : (
                             <View style={styles.localModeCard}>
@@ -293,13 +291,13 @@ export default function SettingsScreen() {
                         }
                     >
                         {isAvailable ? (
-                            <Button onPress={user ? () => { void signOut(); } : () => router.push('/auth')}>
+                            <Button onPress={openAuthScreen}>
                                 <HStack>
                                     <HStack modifiers={[frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }), backgroundOverlay({ color: colors.secondaryText + '18' }), cornerRadius(7), padding({ trailing: 12 })]}>
                                         <SwiftUIImage systemName="person" color={colors.secondaryText} size={18} />
                                     </HStack>
                                     <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                                        {user ? t('auth.signOut', 'Sign out') : t('settings.login', 'Sign In')}
+                                        {user ? t('settings.manageAccount', 'Manage account') : t('settings.login', 'Sign In')}
                                     </SwiftUIText>
                                     <Spacer />
                                     <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{accountValue}</SwiftUIText>

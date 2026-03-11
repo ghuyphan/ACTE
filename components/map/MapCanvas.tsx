@@ -104,11 +104,6 @@ export default function MapCanvas({
                 onLeafPress(node.groupId);
               }
             }}
-            onSelect={() => {
-              if (node.groupId) {
-                onLeafPress(node.groupId);
-              }
-            }}
           >
             {node.pointCount > 1 ? (
               <View

@@ -60,6 +60,19 @@ export default function LoginScreen() {
                 <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
                     {t('auth.subtitle', 'So you never forget what she likes')}
                 </Text>
+                {isAvailable && !user ? (
+                    <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Text style={[styles.infoTitle, { color: colors.text }]}>
+                            {t('auth.devModeTitle', 'Development sign-in')}
+                        </Text>
+                        <Text style={[styles.infoText, { color: colors.secondaryText }]}>
+                            {t(
+                                'auth.devModeMsg',
+                                'Google sign-in in this build only stores your account on this device. Cloud sync can be connected later.'
+                            )}
+                        </Text>
+                    </View>
+                ) : null}
                 {!isAvailable ? (
                     <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                         <Text style={[styles.infoTitle, { color: colors.text }]}>

@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import Reanimated, {
+  LinearTransition,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -30,16 +31,19 @@ const PREVIEW_HORIZONTAL_INSET = 14;
 
 interface MapPreviewCardProps {
   selectedGroup: MapPointGroup | null;
-  selectedNote: Note | null;
   selectedNoteIndex: number;
   nearbyItems: NearbyNoteItem[];
   activeNearbyNoteId: string | null;
   bottomOffset: number;
-  onPrev: () => void;
-  onNext: () => void;
   onOpen: () => void;
   onFocusNearbyNote: (noteId: string) => void;
+  onFocusGroupNote: (noteId: string) => void;
   onInteraction?: () => void;
+}
+
+interface PreviewRailItem {
+  note: Note;
+  distanceMeters: number | null;
 }
 
 function formatDistanceLabel(distanceMeters: number) {
@@ -66,15 +70,13 @@ function getPreviewText(note: Note, photoLabel: string, noContentLabel: string) 
 
 export default function MapPreviewCard({
   selectedGroup,
-  selectedNote,
   selectedNoteIndex,
   nearbyItems,
   activeNearbyNoteId,
   bottomOffset,
-  onPrev,
-  onNext,
   onOpen,
   onFocusNearbyNote,
+  onFocusGroupNote,
   onInteraction,
 }: MapPreviewCardProps) {
   const { t } = useTranslation();
@@ -83,10 +85,12 @@ export default function MapPreviewCard({
   const { width: windowWidth } = useWindowDimensions();
   const railOffsetY = useSharedValue(0);
   const prevBottomOffsetRef = useRef(bottomOffset);
-  const nearbyListRef = useRef<FlatList<NearbyNoteItem>>(null);
-  const nearbyDraggingRef = useRef(false);
+  const previewListRef = useRef<FlatList<PreviewRailItem>>(null);
+  const previewDraggingRef = useRef(false);
 
-  const isGroupMode = Boolean(selectedGroup && selectedNote);
+  const isGroupMode = Boolean(selectedGroup);
+  const previewMode = isGroupMode ? 'group' : 'nearby';
+  const prevPreviewModeRef = useRef(previewMode);
 
   const nearbyPageWidth = useMemo(
     () => Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2 - mapOverlayTokens.overlayPadding * 2),
@@ -98,40 +102,43 @@ export default function MapPreviewCard({
     [activeNearbyNoteId, nearbyItems]
   );
 
-  const activeNearbyItem = useMemo(() => {
-    if (nearbyItems.length === 0) {
+  const previewItems = useMemo<PreviewRailItem[]>(
+    () =>
+      isGroupMode && selectedGroup
+        ? selectedGroup.notes.map((note) => ({
+            note,
+            distanceMeters: null,
+          }))
+        : nearbyItems.map((item) => ({
+            note: item.note,
+            distanceMeters: item.distanceMeters,
+          })),
+    [isGroupMode, nearbyItems, selectedGroup]
+  );
+
+  const activeIndex = useMemo(() => {
+    if (previewItems.length === 0) {
+      return -1;
+    }
+
+    if (isGroupMode) {
+      return Math.max(0, Math.min(selectedNoteIndex, previewItems.length - 1));
+    }
+
+    return activeNearbyIndex >= 0 ? activeNearbyIndex : 0;
+  }, [activeNearbyIndex, isGroupMode, previewItems.length, selectedNoteIndex]);
+
+  const activePreviewItem = useMemo(() => {
+    if (previewItems.length === 0) {
       return null;
     }
 
-    if (activeNearbyIndex >= 0) {
-      return nearbyItems[activeNearbyIndex];
+    if (activeIndex >= 0) {
+      return previewItems[activeIndex] ?? previewItems[0];
     }
 
-    return nearbyItems[0];
-  }, [activeNearbyIndex, nearbyItems]);
-
-  const displayedNote = isGroupMode ? selectedNote : activeNearbyItem?.note ?? null;
-
-  const preview = useMemo(() => {
-    if (!displayedNote) {
-      return '';
-    }
-
-    return getPreviewText(
-      displayedNote,
-      t('map.photoNote', 'Photo Note'),
-      t('map.noContent', 'No note content')
-    );
-  }, [displayedNote, t]);
-
-  const displayedPhotoUri = useMemo(() => {
-    if (!displayedNote || displayedNote.type !== 'photo') {
-      return null;
-    }
-
-    const normalizedUri = displayedNote.content.trim();
-    return normalizedUri.length > 0 ? normalizedUri : null;
-  }, [displayedNote]);
+    return previewItems[0];
+  }, [activeIndex, previewItems]);
 
   useEffect(() => {
     const prevBottom = prevBottomOffsetRef.current;
@@ -151,41 +158,53 @@ export default function MapPreviewCard({
   }, [bottomOffset, railOffsetY, reduceMotionEnabled]);
 
   useEffect(() => {
-    if (isGroupMode || !nearbyListRef.current || activeNearbyIndex < 0) {
+    const modeChanged = prevPreviewModeRef.current !== previewMode;
+    prevPreviewModeRef.current = previewMode;
+
+    if (!previewListRef.current || activeIndex < 0) {
       return;
     }
 
-    nearbyListRef.current.scrollToOffset({
-      offset: activeNearbyIndex * nearbyPageWidth,
-      animated: !reduceMotionEnabled,
+    previewListRef.current.scrollToOffset({
+      offset: activeIndex * nearbyPageWidth,
+      animated: !modeChanged && !reduceMotionEnabled,
     });
-  }, [activeNearbyIndex, isGroupMode, nearbyPageWidth, reduceMotionEnabled]);
+  }, [activeIndex, nearbyPageWidth, previewMode, reduceMotionEnabled]);
 
-  const handleNearbyMomentumEnd = useCallback(
+  const handlePreviewMomentumEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (!nearbyDraggingRef.current) {
+      if (!previewDraggingRef.current) {
         return;
       }
-      nearbyDraggingRef.current = false;
+      previewDraggingRef.current = false;
 
       const xOffset = event.nativeEvent.contentOffset.x;
       const nextIndex = Math.round(xOffset / nearbyPageWidth);
-      const boundedIndex = Math.max(0, Math.min(nextIndex, nearbyItems.length - 1));
-      const item = nearbyItems[boundedIndex];
+      const boundedIndex = Math.max(0, Math.min(nextIndex, previewItems.length - 1));
+      const item = previewItems[boundedIndex];
       if (!item) {
+        return;
+      }
+
+      if (isGroupMode) {
+        onFocusGroupNote(item.note.id);
         return;
       }
 
       onFocusNearbyNote(item.note.id);
     },
-    [nearbyItems, nearbyPageWidth, onFocusNearbyNote]
+    [isGroupMode, nearbyPageWidth, onFocusGroupNote, onFocusNearbyNote, previewItems]
   );
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: railOffsetY.value }],
   }));
 
-  if (!displayedNote) {
+  const layoutTransition = reduceMotionEnabled
+    ? LinearTransition.duration(100)
+    : LinearTransition.springify().damping(20).stiffness(180);
+
+  if (!activePreviewItem) {
     return null;
   }
 
@@ -222,164 +241,126 @@ export default function MapPreviewCard({
           />
         ) : null}
 
-        {isGroupMode ? (
-          <View style={[styles.body, displayedPhotoUri ? styles.bodyWithPhoto : null]}>
-            {displayedPhotoUri ? (
-              <Image
-                testID="map-preview-image"
-                source={{ uri: displayedPhotoUri }}
-                style={[
-                  styles.photoThumb,
-                  {
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-                  },
-                ]}
-                contentFit="cover"
-                transition={150}
-              />
-            ) : null}
-
-            <View style={styles.copyWrap}>
-              <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-                {displayedNote.locationName || t('map.unknownLocation', 'Unknown')}
-              </Text>
-              <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={2}>
-                {preview}
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.nearbyBody}>
-            <FlatList
-              ref={nearbyListRef}
-              testID="map-preview-nearby-list"
-              horizontal
-              data={nearbyItems}
-              keyExtractor={(item) => item.note.id}
-              renderItem={({ item }) => {
-                const nearbyCardPreview = getPreviewText(
-                  item.note,
-                  t('map.photoNote', 'Photo Note'),
-                  t('map.noContent', 'No note content')
-                );
-                const nearbyCardPhotoUri = item.note.type === 'photo' ? item.note.content.trim() : '';
-
-                return (
-                  <Pressable
-                    testID={`map-preview-nearby-${item.note.id}`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: item.note.id === activeNearbyItem?.note.id }}
-                    style={[styles.nearbyPage, { width: nearbyPageWidth }]}
-                    onPress={() => {
-                      nearbyDraggingRef.current = false;
-                      onInteraction?.();
-                      onFocusNearbyNote(item.note.id);
-                      const itemIndex = nearbyItems.findIndex((nearbyItem) => nearbyItem.note.id === item.note.id);
-                      if (itemIndex >= 0) {
-                        nearbyListRef.current?.scrollToOffset({
-                          offset: itemIndex * nearbyPageWidth,
-                          animated: !reduceMotionEnabled,
-                        });
-                      }
-                    }}
-                  >
-                    {nearbyCardPhotoUri ? (
-                      <Image
-                        testID={`map-preview-nearby-image-${item.note.id}`}
-                        source={{ uri: nearbyCardPhotoUri }}
-                        style={styles.photoThumb}
-                        contentFit="cover"
-                        transition={120}
-                      />
-                    ) : null}
-                    <View style={styles.copyWrap}>
-                      <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-                        {item.note.locationName || t('map.unknownLocation', 'Unknown')}
-                      </Text>
-                      <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={2}>
-                        {nearbyCardPreview}
-                      </Text>
-                      <View style={styles.nearbyDistanceRow}>
-                        <Ionicons name="navigate" size={12} color={colors.secondaryText} />
-                        <Text style={[styles.nearbyMetaText, { color: colors.secondaryText }]}>
-                          {formatDistanceLabel(item.distanceMeters)}
-                        </Text>
-                      </View>
-                    </View>
-                  </Pressable>
-                );
-              }}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.nearbyListContent}
-              snapToInterval={nearbyPageWidth}
-              decelerationRate="fast"
-              snapToAlignment="start"
-              disableIntervalMomentum
-              bounces={false}
-              scrollEnabled={nearbyItems.length > 1}
-              onScrollBeginDrag={() => {
-                nearbyDraggingRef.current = true;
-              }}
-              onMomentumScrollEnd={handleNearbyMomentumEnd}
-              onScrollToIndexFailed={() => undefined}
-            />
-          </View>
-        )}
-
-        <View style={styles.footer}>
-          {isGroupMode && selectedGroup && selectedGroup.notes.length > 1 ? (
-            <View style={styles.pager}>
-              <Pressable
-                testID="map-preview-prev"
-                style={styles.pagerButton}
-                onPress={() => {
-                  onInteraction?.();
-                  onPrev();
-                }}
-              >
-                <Ionicons name="chevron-back" size={14} color={colors.text} />
-              </Pressable>
-              <Text style={[styles.pagerText, { color: colors.secondaryText }]}>
-                {selectedNoteIndex + 1}/{selectedGroup.notes.length}
-              </Text>
-              <Pressable
-                testID="map-preview-next"
-                style={styles.pagerButton}
-                onPress={() => {
-                  onInteraction?.();
-                  onNext();
-                }}
-              >
-                <Ionicons name="chevron-forward" size={14} color={colors.text} />
-              </Pressable>
-            </View>
-          ) : (
-            <Text
-              style={[styles.groupText, { color: colors.secondaryText }]}
-              testID={isGroupMode ? 'map-preview-single-note' : 'map-preview-nearby-index'}
-            >
-              {isGroupMode
+        <Reanimated.View layout={layoutTransition}>
+          <FlatList
+            ref={previewListRef}
+            testID="map-preview-list"
+            horizontal
+            data={previewItems}
+            keyExtractor={(item) => item.note.id}
+            renderItem={({ item }) => {
+              const cardPreview = getPreviewText(
+                item.note,
+                t('map.photoNote', 'Photo Note'),
+                t('map.noContent', 'No note content')
+              );
+              const photoUri = item.note.type === 'photo' ? item.note.content.trim() : '';
+              const metaLabel = isGroupMode
                 ? t('map.singleNote', 'Pinned note')
-                : `${Math.max(activeNearbyIndex, 0) + 1}/${nearbyItems.length}`}
-            </Text>
-          )}
+                : formatDistanceLabel(item.distanceMeters ?? 0);
 
-          <Pressable
-            testID="map-preview-open"
-            style={[
-              styles.actionButton,
-              { backgroundColor: `${colors.primary}1F`, borderColor: `${colors.primary}36` },
-            ]}
-            onPress={() => {
-              onInteraction?.();
-              onOpen();
+              return (
+                <Pressable
+                  testID={`map-preview-item-${item.note.id}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: item.note.id === activePreviewItem.note.id }}
+                  style={[styles.previewPage, { width: nearbyPageWidth }]}
+                  onPress={() => {
+                    previewDraggingRef.current = false;
+                    onInteraction?.();
+
+                    if (isGroupMode) {
+                      onFocusGroupNote(item.note.id);
+                      return;
+                    }
+
+                    onFocusNearbyNote(item.note.id);
+
+                    const itemIndex = previewItems.findIndex((previewItem) => previewItem.note.id === item.note.id);
+                    if (itemIndex >= 0) {
+                      previewListRef.current?.scrollToOffset({
+                        offset: itemIndex * nearbyPageWidth,
+                        animated: !reduceMotionEnabled,
+                      });
+                    }
+                  }}
+                >
+                  {photoUri ? (
+                    <Image
+                      testID={`map-preview-image-${item.note.id}`}
+                      source={{ uri: photoUri }}
+                      style={[
+                        styles.photoThumb,
+                        {
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                        },
+                      ]}
+                      contentFit="cover"
+                      transition={120}
+                    />
+                  ) : null}
+                  <View style={styles.copyWrap}>
+                    <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+                      {item.note.locationName || t('map.unknownLocation', 'Unknown')}
+                    </Text>
+                    <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={2}>
+                      {cardPreview}
+                    </Text>
+                    <View style={styles.metaRow}>
+                      <Ionicons
+                        name={isGroupMode ? 'pin' : 'navigate'}
+                        size={12}
+                        color={colors.secondaryText}
+                      />
+                      <Text style={[styles.metaText, { color: colors.secondaryText }]}>
+                        {metaLabel}
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
+              );
             }}
-          >
-            <Text style={[styles.actionText, { color: colors.primary }]}>
-              {t('map.openNote', 'Open note')}
+            style={styles.previewList}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.previewListContent}
+            snapToInterval={nearbyPageWidth > 0 ? nearbyPageWidth : undefined}
+            decelerationRate="fast"
+            snapToAlignment="start"
+            disableIntervalMomentum
+            bounces={false}
+            scrollEnabled={previewItems.length > 1}
+            onScrollBeginDrag={() => {
+              previewDraggingRef.current = true;
+            }}
+            onMomentumScrollEnd={handlePreviewMomentumEnd}
+            onScrollToIndexFailed={() => undefined}
+          />
+
+          <View style={styles.footer}>
+            <Text
+              style={[styles.indexText, { color: colors.secondaryText }]}
+              testID="map-preview-index"
+            >
+              {`${Math.max(activeIndex, 0) + 1}/${previewItems.length}`}
             </Text>
-          </Pressable>
-        </View>
+
+            <Pressable
+              testID="map-preview-open"
+              style={[
+                styles.actionButton,
+                { backgroundColor: `${colors.primary}1F`, borderColor: `${colors.primary}36` },
+              ]}
+              onPress={() => {
+                onInteraction?.();
+                onOpen();
+              }}
+            >
+              <Text style={[styles.actionText, { color: colors.primary }]}>
+                {t('map.openNote', 'Open note')}
+              </Text>
+            </Pressable>
+          </View>
+        </Reanimated.View>
       </GlassView>
     </Reanimated.View>
   );
@@ -401,13 +382,17 @@ const styles = StyleSheet.create({
     ...mapOverlayTokens.overlayShadow,
     overflow: 'hidden',
   },
-  body: {
+  previewList: {
     marginBottom: 8,
   },
-  bodyWithPhoto: {
+  previewListContent: {
+    gap: 0,
+  },
+  previewPage: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: mapOverlayTokens.overlayGap,
+    minHeight: 68,
   },
   copyWrap: {
     flex: 1,
@@ -420,25 +405,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.14)',
   },
-  nearbyBody: {
-    marginBottom: 8,
-  },
-  nearbyListContent: {
-    gap: 0,
-  },
-  nearbyPage: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: mapOverlayTokens.overlayGap,
-    minHeight: 68,
-  },
-  nearbyDistanceRow: {
+  metaRow: {
     marginTop: 6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  nearbyMetaText: {
+  metaText: {
     fontSize: 12,
     fontWeight: '600',
     fontFamily: 'System',
@@ -460,27 +433,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  pager: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  pagerButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
-  },
-  pagerText: {
-    fontSize: 13,
-    fontWeight: '600',
-    minWidth: 38,
-    textAlign: 'center',
-    fontFamily: 'System',
-  },
-  groupText: {
+  indexText: {
     fontSize: 13,
     fontWeight: '500',
     fontFamily: 'System',
