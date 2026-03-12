@@ -119,7 +119,7 @@ export default function CaptureCard({
               />
             </View>
 
-            <GlassView style={styles.cardRestaurantPill} glassEffectStyle="regular" colorScheme="light">
+            <View style={styles.cardRestaurantPill}>
               {isOlderIOS ? (
                 <View
                   style={[
@@ -133,6 +133,13 @@ export default function CaptureCard({
                   ]}
                 />
               ) : null}
+              {/* Keep interactive content outside the native glass host to avoid intermittent child layout misses. */}
+              <GlassView
+                pointerEvents="none"
+                style={StyleSheet.absoluteFillObject}
+                glassEffectStyle="regular"
+                colorScheme="light"
+              />
               <Ionicons
                 name="restaurant-outline"
                 size={14}
@@ -147,7 +154,7 @@ export default function CaptureCard({
                 onChangeText={onChangeRestaurantName}
                 maxLength={100}
               />
-            </GlassView>
+            </View>
           </View>
         ) : capturedPhoto ? (
           <View style={styles.cameraContainer}>
@@ -292,6 +299,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     width: '100%',
     marginTop: 8,
+    overflow: 'hidden',
+    position: 'relative',
   },
   cardRestaurantInput: {
     flex: 1,

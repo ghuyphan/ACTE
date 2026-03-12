@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import i18n from '../constants/i18n';
 import { formatDate } from '../utils/dateUtils';
 import { getAllNotes, Note } from './database';
+import { resolveStoredPhotoUri } from './photoStorage';
 
 // Lazy import to avoid circular dependency issues
 let widgetInstance: any = null;
@@ -190,6 +191,34 @@ async function copyPhotoForWidget(photoUri: string): Promise<string | undefined>
     }
 }
 
+async function getReadablePhotoUri(photoUri: string): Promise<string | undefined> {
+    const normalizedPhotoUri = typeof photoUri === 'string' ? photoUri.trim() : '';
+    if (!normalizedPhotoUri) {
+        return undefined;
+    }
+
+    const candidates = Array.from(
+        new Set([
+            resolveStoredPhotoUri(normalizedPhotoUri),
+            normalizedPhotoUri,
+        ].filter(Boolean))
+    );
+
+    for (const candidate of candidates) {
+        try {
+            const info = await FileSystem.getInfoAsync(candidate);
+            if (info.exists && !info.isDirectory) {
+                return candidate;
+            }
+        } catch {
+            // Try the next candidate.
+        }
+    }
+
+    console.warn('[widgetService] Widget photo is missing or unreadable:', normalizedPhotoUri);
+    return undefined;
+}
+
 async function encodePhotoForWidget(photoUri: string): Promise<string | undefined> {
     const normalizedPhotoUri = typeof photoUri === 'string' ? photoUri.trim() : '';
     if (!normalizedPhotoUri) {
@@ -283,22 +312,34 @@ export async function updateWidgetData(): Promise<void> {
         };
 
         if (selectedNote.type === 'photo' && selectedNote.content) {
-            const copiedPhotoUri = await copyPhotoForWidget(selectedNote.content);
-            if (copiedPhotoUri) {
-                props.backgroundImageUrl = copiedPhotoUri;
-            } else {
-                const photoBase64 = await encodePhotoForWidget(selectedNote.content);
-                if (photoBase64) {
-                    props.backgroundImageBase64 = photoBase64;
+            const readablePhotoUri = await getReadablePhotoUri(selectedNote.content);
+            if (readablePhotoUri) {
+                const copiedPhotoUri = await copyPhotoForWidget(readablePhotoUri);
+                if (copiedPhotoUri) {
+                    props.backgroundImageUrl = copiedPhotoUri;
                 } else {
-                    const fallbackTextNote = getLatestTextNote(notes);
-                    if (fallbackTextNote) {
-                        props.text = fallbackTextNote.content.trim();
-                        props.locationName =
-                            fallbackTextNote.locationName ?? i18n.t('capture.unknownPlace');
-                        props.date = formatDate(fallbackTextNote.createdAt, 'short');
-                        props.isIdleState = false;
+                    const photoBase64 = await encodePhotoForWidget(readablePhotoUri);
+                    if (photoBase64) {
+                        props.backgroundImageBase64 = photoBase64;
+                    } else {
+                        const fallbackTextNote = getLatestTextNote(notes);
+                        if (fallbackTextNote) {
+                            props.text = fallbackTextNote.content.trim();
+                            props.locationName =
+                                fallbackTextNote.locationName ?? i18n.t('capture.unknownPlace');
+                            props.date = formatDate(fallbackTextNote.createdAt, 'short');
+                            props.isIdleState = false;
+                        }
                     }
+                }
+            } else {
+                const fallbackTextNote = getLatestTextNote(notes);
+                if (fallbackTextNote) {
+                    props.text = fallbackTextNote.content.trim();
+                    props.locationName =
+                        fallbackTextNote.locationName ?? i18n.t('capture.unknownPlace');
+                    props.date = formatDate(fallbackTextNote.createdAt, 'short');
+                    props.isIdleState = false;
                 }
             }
         }

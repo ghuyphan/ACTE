@@ -1,7 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { getAllNotes } from './database';
-
-const PHOTO_DIRECTORY = `${FileSystem.documentDirectory}photos/`;
+import { PHOTO_DIRECTORY } from './photoStorage';
 
 export async function cleanupOrphanPhotoFiles(): Promise<number> {
   if (!PHOTO_DIRECTORY) {
@@ -40,4 +39,3 @@ export async function cleanupOrphanPhotoFiles(): Promise<number> {
 
   return deletedCount;
 }
-

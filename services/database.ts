@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
+import { resolveStoredPhotoUri } from './photoStorage';
 
 // ─── Types ──────────────────────────────────────────────────────────
 export type NoteType = 'text' | 'photo';
@@ -85,7 +86,7 @@ function rowToNote(row: any): Note {
     return {
         id: row.id,
         type: row.type as NoteType,
-        content: row.content,
+        content: row.type === 'photo' ? resolveStoredPhotoUri(row.content) : row.content,
         locationName: row.location_name,
         latitude: row.latitude,
         longitude: row.longitude,
@@ -118,7 +119,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
     return {
         id,
         type: input.type,
-        content: input.content,
+        content: input.type === 'photo' ? resolveStoredPhotoUri(input.content) : input.content,
         locationName: input.locationName ?? null,
         latitude: input.latitude,
         longitude: input.longitude,

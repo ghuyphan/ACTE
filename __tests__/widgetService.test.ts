@@ -7,6 +7,7 @@ const mockMakeDirectoryAsync = jest.fn();
 const mockDeleteAsync = jest.fn();
 const mockCopyAsync = jest.fn();
 const mockReadAsStringAsync = jest.fn();
+const mockGetInfoAsync = jest.fn();
 
 jest.mock('../constants/i18n', () => {
   let currentLanguage = 'en';
@@ -69,10 +70,12 @@ jest.mock('expo-file-system', () => ({
 }));
 
 jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///mock-documents/',
   makeDirectoryAsync: (...args: unknown[]) => mockMakeDirectoryAsync(...args),
   deleteAsync: (...args: unknown[]) => mockDeleteAsync(...args),
   copyAsync: (...args: unknown[]) => mockCopyAsync(...args),
   readAsStringAsync: (...args: unknown[]) => mockReadAsStringAsync(...args),
+  getInfoAsync: (...args: unknown[]) => mockGetInfoAsync(...args),
   EncodingType: {
     Base64: 'base64',
   },
@@ -93,6 +96,13 @@ beforeEach(() => {
   mockDeleteAsync.mockResolvedValue(undefined);
   mockCopyAsync.mockResolvedValue(undefined);
   mockReadAsStringAsync.mockResolvedValue('base64-image-data');
+  mockGetInfoAsync.mockResolvedValue({
+    exists: true,
+    isDirectory: false,
+    uri: 'file:///mock-documents/photos/latest.jpg',
+    size: 1024,
+    modificationTime: 0,
+  });
   mockGetAllNotes.mockResolvedValue([
     {
       id: 'newest',
@@ -265,6 +275,37 @@ describe('widgetService', () => {
         }),
       })
     );
+  });
+
+  it('resolves stale app-container photo paths before copying into the widget container', async () => {
+    mockGetAllNotes.mockResolvedValue([
+      {
+        id: 'photo-latest',
+        type: 'photo',
+        content: 'file:///old-container/Documents/photos/latest.jpg',
+        locationName: 'Photo Place',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-10T12:00:00.000Z',
+        updatedAt: null,
+      },
+    ]);
+    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
+      exists: uri === 'file:///mock-documents/photos/latest.jpg',
+      isDirectory: false,
+      uri,
+      size: uri === 'file:///mock-documents/photos/latest.jpg' ? 1024 : 0,
+      modificationTime: 0,
+    }));
+
+    await updateWidgetData();
+
+    expect(mockCopyAsync).toHaveBeenCalledWith({
+      from: 'file:///mock-documents/photos/latest.jpg',
+      to: 'file:///mock-group/widget-images/latest-photo.jpg',
+    });
   });
 
   it('formats a compact count label for the widget badge', async () => {

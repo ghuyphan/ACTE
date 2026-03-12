@@ -88,7 +88,7 @@ function useNotesStoreValue(): NotesStoreValue {
       setNotes((prev) => [note, ...prev]);
 
       void updateWidgetData();
-      void skipImmediateReminderForNewNote(note.id);
+      await skipImmediateReminderForNewNote(note.id);
       void syncGeofenceRegions();
       void syncService.recordChange({
         type: 'create',

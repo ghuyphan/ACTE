@@ -101,6 +101,16 @@ function TestWrapper({ children }: { children: ReactNode }) {
   return <NotesProvider>{children}</NotesProvider>;
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(() => {
   mockIdCounter = 1;
   mockNotesDb = [];
@@ -147,6 +157,36 @@ describe('useNotesStore', () => {
 
     expect(result.current.notes).toHaveLength(2);
     expect(mockRecordChange).toHaveBeenCalledWith(expect.objectContaining({ type: 'create' }));
+  });
+
+  it('sets the skip-enter flag before syncing geofences for a new note', async () => {
+    const deferred = createDeferred<void>();
+    mockSkipImmediateReminderForNewNote.mockImplementation(() => deferred.promise);
+
+    const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let createPromise!: Promise<Note>;
+    await act(async () => {
+      createPromise = result.current.createNote({
+        type: 'text',
+        content: 'Reminder ordering',
+        locationName: 'District 1',
+        latitude: 10.1,
+        longitude: 106.1,
+      });
+      await Promise.resolve();
+    });
+
+    expect(mockSkipImmediateReminderForNewNote).toHaveBeenCalledWith('note-1');
+    expect(mockSyncGeofenceRegions).not.toHaveBeenCalled();
+
+    await act(async () => {
+      deferred.resolve();
+      await createPromise;
+    });
+
+    expect(mockSyncGeofenceRegions).toHaveBeenCalledTimes(1);
   });
 
   it('updates and favorites a note', async () => {

@@ -4,7 +4,7 @@ import * as Notifications from 'expo-notifications';
 import * as SystemUI from 'expo-system-ui';
 import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -27,6 +27,7 @@ function AppContent() {
   const { openNoteDetail } = useNoteDetailSheet();
   const [dbReady, setDbReady] = useState(false);
   const notificationResponseListener = useRef<Notifications.EventSubscription | null>(null);
+  const lastHandledNotificationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     getDB()
@@ -52,20 +53,52 @@ function AppContent() {
     }
   }, [themeReady, dbReady]);
 
+  const handleNotificationResponse = useCallback(
+    async (response: Notifications.NotificationResponse | null) => {
+      if (!response) {
+        return;
+      }
+
+      const notificationId = response.notification.request.identifier;
+      if (lastHandledNotificationIdRef.current === notificationId) {
+        return;
+      }
+      lastHandledNotificationIdRef.current = notificationId;
+
+      const noteId = response.notification.request.content.data?.noteId;
+      if (noteId && typeof noteId === 'string') {
+        openNoteDetail(noteId);
+      }
+
+      try {
+        await Notifications.clearLastNotificationResponseAsync();
+      } catch {
+        return;
+      }
+    },
+    [openNoteDetail]
+  );
+
   // Handle notification tap deep-link
   useEffect(() => {
+    let cancelled = false;
+
+    void Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (!cancelled) {
+        void handleNotificationResponse(response);
+      }
+    });
+
     notificationResponseListener.current =
       Notifications.addNotificationResponseReceivedListener((response) => {
-        const noteId = response.notification.request.content.data?.noteId;
-        if (noteId && typeof noteId === 'string') {
-          openNoteDetail(noteId);
-        }
+        void handleNotificationResponse(response);
       });
 
     return () => {
+      cancelled = true;
       notificationResponseListener.current?.remove();
     };
-  }, [openNoteDetail]);
+  }, [handleNotificationResponse]);
 
   if (!dbReady) {
     return (

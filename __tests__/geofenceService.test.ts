@@ -7,6 +7,7 @@ const mockStartGeofencingAsync = jest.fn();
 const mockStopGeofencingAsync = jest.fn();
 const mockNotificationsGetPermissionsAsync = jest.fn();
 const mockGetAllNotes = jest.fn();
+const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
 jest.mock('../constants/i18n', () => ({
   __esModule: true,
@@ -48,7 +49,11 @@ jest.mock('../services/database', () => ({
   getAllNotes: (...args: unknown[]) => mockGetAllNotes(...args),
 }));
 
-import { clearGeofenceRegions, syncGeofenceRegions } from '../services/geofenceService';
+import {
+  clearGeofenceRegions,
+  getMaxGeofenceRegionCount,
+  syncGeofenceRegions,
+} from '../services/geofenceService';
 
 beforeEach(() => {
   mockStorage.clear();
@@ -74,6 +79,10 @@ beforeEach(() => {
       radius: 150,
     },
   ]);
+});
+
+afterAll(() => {
+  consoleWarnSpy.mockRestore();
 });
 
 describe('geofenceService', () => {
@@ -106,6 +115,31 @@ describe('geofenceService', () => {
     const result = await syncGeofenceRegions();
     expect(result).toBe(true);
     expect(mockStartGeofencingAsync).not.toHaveBeenCalled();
+  });
+
+  it('limits the number of registered regions to the platform maximum', async () => {
+    const maxRegions = getMaxGeofenceRegionCount();
+    mockGetAllNotes.mockResolvedValue(
+      Array.from({ length: maxRegions + 5 }, (_, index) => ({
+        id: `note-${index + 1}`,
+        latitude: 10.7 + index * 0.001,
+        longitude: 106.6 + index * 0.001,
+        radius: 150,
+      }))
+    );
+
+    const result = await syncGeofenceRegions();
+
+    expect(result).toBe(true);
+    expect(mockStartGeofencingAsync).toHaveBeenCalledWith(
+      'BACKGROUND_GEOFENCE_TASK',
+      expect.arrayContaining([
+        expect.objectContaining({ identifier: 'note-1' }),
+        expect.objectContaining({ identifier: `note-${maxRegions}` }),
+      ])
+    );
+    expect(mockStartGeofencingAsync.mock.calls[0]?.[1]).toHaveLength(maxRegions);
+    expect(consoleWarnSpy).toHaveBeenCalled();
   });
 
   it('clears started geofences and signature', async () => {

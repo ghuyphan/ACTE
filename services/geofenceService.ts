@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
 import { getAllNotes } from './database';
 import { GEOFENCE_TASK_NAME } from '../utils/backgroundGeofence';
 import { getSkipNextEnterKey } from '../utils/geofenceKeys';
@@ -11,6 +12,12 @@ export interface ReminderPermissionState {
 }
 
 const GEOFENCE_SIGNATURE_STORAGE_KEY = 'geofence.signature';
+const IOS_GEOFENCE_REGION_LIMIT = 20;
+const ANDROID_GEOFENCE_REGION_LIMIT = 100;
+
+export function getMaxGeofenceRegionCount(platformOS = Platform.OS) {
+  return platformOS === 'android' ? ANDROID_GEOFENCE_REGION_LIMIT : IOS_GEOFENCE_REGION_LIMIT;
+}
 
 function buildGeofenceSignature(
   regions: Array<Pick<Location.LocationRegion, 'identifier' | 'latitude' | 'longitude' | 'radius'>>
@@ -48,7 +55,16 @@ export async function syncGeofenceRegions(): Promise<boolean> {
   }
 
   const notes = await getAllNotes();
-  const regions: Location.LocationRegion[] = notes.map((note) => ({
+  const maxRegions = getMaxGeofenceRegionCount();
+  const notesToMonitor = notes.slice(0, maxRegions);
+
+  if (notes.length > maxRegions) {
+    console.warn(
+      `Geofencing is limited to ${maxRegions} regions on ${Platform.OS}; monitoring the most recent ${maxRegions} notes.`
+    );
+  }
+
+  const regions: Location.LocationRegion[] = notesToMonitor.map((note) => ({
     identifier: note.id,
     latitude: note.latitude,
     longitude: note.longitude,
