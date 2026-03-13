@@ -86,6 +86,8 @@ export default function MapPreviewCard({
   const railOffsetY = useSharedValue(0);
   const prevBottomOffsetRef = useRef(bottomOffset);
   const skippedInitialBottomShiftRef = useRef(false);
+  const hasEnteredScreenRef = useRef(false);
+  const hasAlignedInitialPreviewRef = useRef(false);
   const previewListRef = useRef<FlatList<PreviewRailItem>>(null);
   const previewDraggingRef = useRef(false);
 
@@ -142,6 +144,10 @@ export default function MapPreviewCard({
   }, [activeIndex, previewItems]);
 
   useEffect(() => {
+    hasEnteredScreenRef.current = true;
+  }, []);
+
+  useEffect(() => {
     const prevBottom = prevBottomOffsetRef.current;
     const delta = prevBottom - bottomOffset;
     prevBottomOffsetRef.current = bottomOffset;
@@ -178,8 +184,9 @@ export default function MapPreviewCard({
 
     previewListRef.current.scrollToOffset({
       offset: activeIndex * nearbyPageWidth,
-      animated: !modeChanged && !reduceMotionEnabled,
+      animated: hasAlignedInitialPreviewRef.current && !modeChanged && !reduceMotionEnabled,
     });
+    hasAlignedInitialPreviewRef.current = true;
   }, [activeIndex, nearbyPageWidth, previewMode, reduceMotionEnabled]);
 
   const handlePreviewMomentumEnd = useCallback(
@@ -211,9 +218,11 @@ export default function MapPreviewCard({
     transform: [{ translateY: railOffsetY.value }],
   }));
 
-  const layoutTransition = reduceMotionEnabled
-    ? LinearTransition.duration(100)
-    : LinearTransition.springify().damping(20).stiffness(180);
+  const layoutTransition = hasEnteredScreenRef.current
+    ? reduceMotionEnabled
+      ? LinearTransition.duration(100)
+      : LinearTransition.springify().damping(20).stiffness(180)
+    : undefined;
 
   if (!activePreviewItem) {
     return null;
@@ -307,7 +316,7 @@ export default function MapPreviewCard({
                         },
                       ]}
                       contentFit="cover"
-                      transition={120}
+                      transition={hasEnteredScreenRef.current ? 120 : 0}
                     />
                   ) : null}
                   <View style={styles.copyWrap}>

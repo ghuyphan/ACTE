@@ -21,7 +21,7 @@ import {
   mapOverlayTokens,
 } from '../../components/map/overlayTokens';
 import type { MapClusterNode } from '../../hooks/map/mapDomain';
-import { DEFAULT_REGION, regionToZoom } from '../../hooks/map/mapDomain';
+import { regionToZoom } from '../../hooks/map/mapDomain';
 import { useMapScreenState } from '../../hooks/map/useMapScreenState';
 import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
@@ -68,7 +68,6 @@ export default function MapScreen() {
     hasActiveFilters,
   } = useMapScreenState({ notes, location });
 
-  const mapAnimationDuration = reduceMotionEnabled ? 0 : 900;
   const previewBottomOffset = insets.bottom + 12;
   const [activeNearbyNoteId, setActiveNearbyNoteId] = useState<string | null>(null);
 
@@ -219,14 +218,6 @@ export default function MapScreen() {
     }
 
     if (location) {
-      const target = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      };
-      mapRef.current.animateToRegion(target, mapAnimationDuration);
-      setVisibleRegion(target);
       hasCenteredRef.current = true;
       return;
     }
@@ -239,7 +230,7 @@ export default function MapScreen() {
         })),
         {
           edgePadding: { top: 150, right: 90, bottom: 210, left: 90 },
-          animated: !reduceMotionEnabled,
+          animated: false,
         }
       );
       hasCenteredRef.current = true;
@@ -247,22 +238,12 @@ export default function MapScreen() {
     }
 
     if (notes.length === 1) {
-      const target = {
-        latitude: notes[0].latitude,
-        longitude: notes[0].longitude,
-        latitudeDelta: 0.025,
-        longitudeDelta: 0.025,
-      };
-      mapRef.current.animateToRegion(target, mapAnimationDuration);
-      setVisibleRegion(target);
       hasCenteredRef.current = true;
       return;
     }
 
-    mapRef.current.animateToRegion(DEFAULT_REGION, mapAnimationDuration);
-    setVisibleRegion(DEFAULT_REGION);
     hasCenteredRef.current = true;
-  }, [isMapReady, location, mapAnimationDuration, notes, reduceMotionEnabled, setVisibleRegion]);
+  }, [isMapReady, location, notes]);
 
   const countLabel = useMemo(() => {
     const base = `${filteredCount} ${filteredCount === 1 ? t('map.note', 'note') : t('map.notes', 'notes')}`;

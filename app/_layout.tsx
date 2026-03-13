@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import i18n from '../constants/i18n';
 import { AuthProvider } from '../hooks/useAuth';
 import { NotesProvider } from '../hooks/useNotes';
@@ -164,17 +165,19 @@ function AppContent() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <I18nextProvider i18n={i18n}>
-        <ThemeProvider>
-          <AuthProvider>
-            <NotesProvider>
-              <NoteDetailSheetProvider>
-                <AppContent />
-              </NoteDetailSheetProvider>
-            </NotesProvider>
-          </AuthProvider>
-        </ThemeProvider>
-      </I18nextProvider>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <I18nextProvider i18n={i18n}>
+          <ThemeProvider>
+            <AuthProvider>
+              <NotesProvider>
+                <NoteDetailSheetProvider>
+                  <AppContent />
+                </NoteDetailSheetProvider>
+              </NotesProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </I18nextProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

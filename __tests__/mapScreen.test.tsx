@@ -230,6 +230,12 @@ describe('MapScreen', () => {
     });
   });
 
+  it('keeps the initial map entry static', () => {
+    render(<MapScreen />);
+
+    expect(mockAnimateToRegion).not.toHaveBeenCalled();
+  });
+
   it('renders nearby mode in preview and opens only on explicit open action', async () => {
     const { getByTestId, queryByTestId } = render(<MapScreen />);
 

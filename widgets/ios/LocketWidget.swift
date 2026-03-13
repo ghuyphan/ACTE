@@ -295,17 +295,19 @@ private struct LocketWidgetEntryView: View {
                 .font(.system(size: fontSize, weight: .regular, design: .serif))
                 .foregroundStyle(primaryTextColor)
                 .multilineTextAlignment(.center)
-                .lineLimit(3)
-                .padding(.horizontal, 18)
+                .lineLimit(smallTextLineLimit)
+                .minimumScaleFactor(smallTextMinimumScaleFactor)
+                .allowsTightening(usesCompactSmallTextLayout)
+                .padding(.horizontal, smallTextHorizontalPadding)
 
             Spacer(minLength: 0)
 
             if shouldShowCountBadge {
                 countBadge
-                    .padding(.bottom, 6)
+                    .padding(.bottom, smallBadgeBottomPadding)
             }
         }
-        .padding(14)
+        .padding(smallLayoutPadding)
     }
 
     private var largeLayout: some View {
@@ -342,6 +344,30 @@ private struct LocketWidgetEntryView: View {
         if count <= 28 { return 17 }
         if count <= 64 { return 15.5 }
         return 14.5
+    }
+
+    private var usesCompactSmallTextLayout: Bool {
+        !isLarge && !hasPhotoBackground
+    }
+
+    private var smallTextLineLimit: Int {
+        usesCompactSmallTextLayout ? 4 : 3
+    }
+
+    private var smallTextMinimumScaleFactor: CGFloat {
+        usesCompactSmallTextLayout ? 0.82 : 1
+    }
+
+    private var smallTextHorizontalPadding: CGFloat {
+        usesCompactSmallTextLayout ? 14 : 18
+    }
+
+    private var smallBadgeBottomPadding: CGFloat {
+        usesCompactSmallTextLayout ? 4 : 6
+    }
+
+    private var smallLayoutPadding: CGFloat {
+        usesCompactSmallTextLayout ? 12 : 14
     }
 
     private var shouldShowCountBadge: Bool {

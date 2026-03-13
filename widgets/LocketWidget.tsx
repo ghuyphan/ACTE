@@ -1,5 +1,6 @@
 import { HStack, Image as SwiftUIImage, Rectangle, Spacer, Text, VStack, ZStack } from '@expo/ui/swift-ui';
 import {
+    allowsTightening,
     backgroundOverlay,
     cornerRadius,
     font,
@@ -8,7 +9,8 @@ import {
     lineLimit,
     lineSpacing,
     multilineTextAlignment,
-    padding
+    padding,
+    truncationMode
 } from '@expo/ui/swift-ui/modifiers';
 import { createWidget } from 'expo-widgets';
 
@@ -49,12 +51,12 @@ function getTextLayout(isLarge: boolean, trimmedLength: number): WidgetTextLayou
     }
 
     if (trimmedLength <= 28) {
-        return { fontSize: 17, lineLimit: 2, lineSpacing: 2, horizontalPadding: 20, bottomOffset: 10, topPadding: 0, alignment: 'center' };
+        return { fontSize: 16.5, lineLimit: 4, lineSpacing: 1.8, horizontalPadding: 14, bottomOffset: 8, topPadding: 0, alignment: 'center' };
     }
     if (trimmedLength <= 64) {
-        return { fontSize: 15.5, lineLimit: 3, lineSpacing: 1.5, horizontalPadding: 18, bottomOffset: 10, topPadding: 0, alignment: 'center' };
+        return { fontSize: 15, lineLimit: 4, lineSpacing: 1.3, horizontalPadding: 14, bottomOffset: 8, topPadding: 0, alignment: 'center' };
     }
-    return { fontSize: 14.5, lineLimit: 3, lineSpacing: 1.2, horizontalPadding: 16, bottomOffset: 10, topPadding: 0, alignment: 'center' };
+    return { fontSize: 14, lineLimit: 4, lineSpacing: 1.1, horizontalPadding: 14, bottomOffset: 8, topPadding: 0, alignment: 'center' };
 }
 
 function getFallbackCountLabel(noteCount: number): string {
@@ -90,11 +92,11 @@ const LocketWidget = (props: { props: WidgetProps }) => {
     const isTextNote = !showIdle && !hasImage && safeText.length > 0;
     const isPhoto = !showIdle && hasImage;
     const bodyText = showIdle ? 'Ảnh chả thương em?' : safeText;
-    const compactPad = isLarge ? 18 : 14;
     const backgroundColors = isTextNote || showIdle
         ? ['#F5EFE8', '#ECE5DC']
         : ['#5A4D42', '#2F2926'];
     const usesTextSurface = isTextNote || showIdle || !hasImage;
+    const compactPad = isLarge ? 18 : usesTextSurface ? 12 : 14;
     const showCountBadge = !showIdle && safeNoteCount > 0;
     const textLayout = getTextLayout(isLarge, bodyText.trim().length);
     const footerIconName = usesTextSurface ? 'doc.text' : 'photo';
@@ -203,6 +205,8 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                                         lineLimit(textLayout.lineLimit),
                                         lineSpacing(textLayout.lineSpacing),
                                         multilineTextAlignment('center'),
+                                        allowsTightening(true),
+                                        truncationMode('tail'),
                                         padding({
                                             horizontal: textLayout.horizontalPadding,
                                             bottom: showCountBadge ? textLayout.bottomOffset : 0,
@@ -221,7 +225,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                                     <HStack
                                         modifiers={[
                                             frame({ maxWidth: 9999 }),
-                                            padding({ bottom: 6 }),
+                                            padding({ bottom: 4 }),
                                         ]}
                                     >
                                         <Spacer />
