@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 import i18n from '../constants/i18n';
 import { formatDate } from '../utils/dateUtils';
 import { getAllNotes, Note } from './database';
-import { resolveStoredPhotoUri } from './photoStorage';
+import { getNotePhotoUri, resolveStoredPhotoUri } from './photoStorage';
 
 // Lazy import to avoid circular dependency issues
 let widgetInstance: any = null;
@@ -311,8 +311,9 @@ export async function updateWidgetData(): Promise<void> {
             ...translatedStrings,
         };
 
-        if (selectedNote.type === 'photo' && selectedNote.content) {
-            const readablePhotoUri = await getReadablePhotoUri(selectedNote.content);
+        const selectedPhotoUri = getNotePhotoUri(selectedNote);
+        if (selectedNote.type === 'photo' && selectedPhotoUri) {
+            const readablePhotoUri = await getReadablePhotoUri(selectedPhotoUri);
             if (readablePhotoUri) {
                 const copiedPhotoUri = await copyPhotoForWidget(readablePhotoUri);
                 if (copiedPhotoUri) {

@@ -52,6 +52,7 @@ jest.mock('../services/database', () => ({
 import {
   clearGeofenceRegions,
   getMaxGeofenceRegionCount,
+  prioritizeNotesForGeofencing,
   syncGeofenceRegions,
 } from '../services/geofenceService';
 
@@ -140,6 +141,34 @@ describe('geofenceService', () => {
     );
     expect(mockStartGeofencingAsync.mock.calls[0]?.[1]).toHaveLength(maxRegions);
     expect(consoleWarnSpy).toHaveBeenCalled();
+  });
+
+  it('prioritizes favorite locations before non-favorites when region slots are limited', () => {
+    const prioritized = prioritizeNotesForGeofencing(
+      [
+        {
+          id: 'recent-non-favorite',
+          latitude: 10.7626,
+          longitude: 106.6601,
+          radius: 150,
+          isFavorite: false,
+          createdAt: '2026-03-12T10:00:00.000Z',
+          updatedAt: null,
+        },
+        {
+          id: 'favorite-place',
+          latitude: 10.771,
+          longitude: 106.662,
+          radius: 150,
+          isFavorite: true,
+          createdAt: '2026-03-10T10:00:00.000Z',
+          updatedAt: null,
+        },
+      ] as any,
+      1
+    );
+
+    expect(prioritized.map((note) => note.id)).toEqual(['favorite-place']);
   });
 
   it('clears started geofences and signature', async () => {

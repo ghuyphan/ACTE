@@ -12,7 +12,7 @@ type QueueRow = {
 
 let queueRows: QueueRow[] = [];
 let queueId = 1;
-const mockRemoteNotes = new Map<string, unknown>();
+const mockRemoteNotes = new Map<string, any>();
 
 const mockRemoteSet = jest.fn(async (id: string, data: unknown, _options?: unknown) => {
   mockRemoteNotes.set(id, data);
@@ -21,6 +21,10 @@ const mockRemoteDelete = jest.fn(async (id: string) => {
   mockRemoteNotes.delete(id);
 });
 const mockUserSet = jest.fn(async (_data?: unknown, _options?: unknown) => undefined);
+const mockUpsertNote = jest.fn(async (note: unknown) => note);
+const mockGetNoteById = jest.fn(async (_id: string) => null);
+const mockReadPhotoAsBase64 = jest.fn(async () => 'base64-photo');
+const mockWritePhotoFromBase64 = jest.fn(async (noteId: string) => `file:///synced/${noteId}.jpg`);
 
 const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   if (sql.includes('INSERT INTO sync_queue')) {
@@ -80,23 +84,50 @@ jest.mock('../services/database', () => ({
     runAsync: (...args: any[]) => mockRunAsync(args[0], ...args.slice(1)),
     getAllAsync: (sql: string, limit: number) => mockGetAllAsync(sql, limit),
   }),
+  getNoteById: (...args: unknown[]) => mockGetNoteById(...args),
+  upsertNote: (...args: unknown[]) => mockUpsertNote(...args),
 }));
+
+jest.mock('../services/photoStorage', () => ({
+  readPhotoAsBase64: (...args: unknown[]) => mockReadPhotoAsBase64(...args),
+  writePhotoFromBase64: (...args: unknown[]) => mockWritePhotoFromBase64(...args),
+}));
+
+function mockCreateDocRef(id: string) {
+  return {
+    id,
+    set: (data: unknown, options: unknown) => mockRemoteSet(id, data, options),
+    delete: () => mockRemoteDelete(id),
+  };
+}
 
 jest.mock('../utils/firebase', () => ({
   getFirestore: () => ({
+    batch: () => {
+      const ops: Array<() => Promise<void>> = [];
+      return {
+        set: (ref: { id: string }, data: unknown, options?: unknown) => {
+          ops.push(() => mockRemoteSet(ref.id, data, options));
+        },
+        delete: (ref: { id: string }) => {
+          ops.push(() => mockRemoteDelete(ref.id));
+        },
+        commit: async () => {
+          for (const op of ops) {
+            await op();
+          }
+        },
+      };
+    },
     collection: () => ({
       doc: () => ({
         collection: () => ({
-          doc: (id: string) => ({
-            set: (data: unknown, options: unknown) => mockRemoteSet(id, data, options),
-            delete: () => mockRemoteDelete(id),
-          }),
+          doc: (id: string) => mockCreateDocRef(id),
           get: async () => ({
-            docs: Array.from(mockRemoteNotes.keys()).map((id) => ({
+            docs: Array.from(mockRemoteNotes.entries()).map(([id, data]) => ({
               id,
-              ref: {
-                delete: () => mockRemoteDelete(id),
-              },
+              ref: { id, delete: () => mockRemoteDelete(id) },
+              data: () => data,
             })),
           }),
         }),
@@ -172,8 +203,8 @@ describe('syncService', () => {
     expect(queueRows).toHaveLength(0);
   });
 
-  it('syncs queued deletions and current notes to Firebase', async () => {
-    mockRemoteNotes.set('note-deleted', { id: 'note-deleted' });
+  it('syncs queued deletions and uploads a local backup snapshot to Firebase', async () => {
+    mockRemoteNotes.set('note-deleted', { id: 'note-deleted', type: 'text', content: 'gone' });
 
     const repo = getSyncRepository();
     await repo.enqueue({
@@ -195,6 +226,8 @@ describe('syncService', () => {
           id: 'note-1',
           type: 'text',
           content: 'hello',
+          photoLocalUri: null,
+          photoRemoteBase64: null,
           locationName: 'Saigon',
           latitude: 10.77,
           longitude: 106.69,
@@ -210,6 +243,7 @@ describe('syncService', () => {
       expect.objectContaining({
         status: 'success',
         syncedCount: 1,
+        uploadedCount: 1,
       })
     );
     expect(mockRemoteDelete).toHaveBeenCalledWith('note-deleted');

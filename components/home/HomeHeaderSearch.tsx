@@ -1,10 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Button, Host, Image as SwiftUIImage } from '@expo/ui/swift-ui';
-import { buttonStyle, clipShape, controlSize, frame, tint } from '@expo/ui/swift-ui/modifiers';
+import { Button, HStack, Host, Image as SwiftUIImage, Menu, Text as SwiftUIText } from '@expo/ui/swift-ui';
+import {
+  backgroundOverlay,
+  buttonStyle,
+  cornerRadius,
+  font,
+  foregroundStyle,
+  padding,
+  tint,
+} from '@expo/ui/swift-ui/modifiers';
 import { GlassView } from 'expo-glass-effect';
 import { TFunction } from 'i18next';
 import { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadius';
 import { isIOS26OrNewer } from '../../utils/platform';
 import GlassHeader from '../ui/GlassHeader';
 
@@ -19,6 +28,8 @@ interface HomeHeaderSearchProps {
   showSearchButton?: boolean;
   onToggleCaptureMode: () => void;
   captureMode: 'text' | 'camera';
+  radius: number;
+  onChangeRadius: (nextRadius: number) => void;
   colors: {
     text: string;
     primary: string;
@@ -39,6 +50,8 @@ export default function HomeHeaderSearch({
   showSearchButton = true,
   onToggleCaptureMode,
   captureMode,
+  radius,
+  onChangeRadius,
   colors,
   isDark,
   t,
@@ -48,6 +61,7 @@ export default function HomeHeaderSearch({
   const didMountRef = useRef(false);
   const useDetachedWordmark = isIOS26OrNewer;
   const useDetachedControls = isIOS26OrNewer && !showSearchButton;
+  const showHeaderRadiusMenu = Platform.OS === 'ios';
 
   useEffect(() => {
     if (!didMountRef.current) {
@@ -75,6 +89,128 @@ export default function HomeHeaderSearch({
     });
   }, [captureMode, modeIconRotate, modeIconScale]);
 
+  const getHeaderControlMetrics = (size: 'regular' | 'large' = 'regular') => ({
+    verticalPadding: size === 'large' ? 11 : 9,
+    horizontalPadding: size === 'large' ? 12 : 10,
+    iconSize: size === 'large' ? 13 : 12,
+    textSize: size === 'large' ? 13 : 12,
+  });
+
+  const headerControlBackgroundColor = isDark
+    ? 'rgba(255,255,255,0.94)'
+    : 'rgba(255,255,255,0.88)';
+  const headerControlForegroundColor = '#1C1C1E';
+
+  const renderHeaderControlLabel = (
+    systemName: string,
+    label: string,
+    size: 'regular' | 'large' = 'regular'
+  ) => {
+    const metrics = getHeaderControlMetrics(size);
+
+    return (
+      <HStack
+        modifiers={[
+          padding({
+            top: metrics.verticalPadding,
+            bottom: metrics.verticalPadding,
+            leading: metrics.horizontalPadding,
+            trailing: metrics.horizontalPadding,
+          }),
+          backgroundOverlay({ color: headerControlBackgroundColor }),
+          cornerRadius(999),
+        ]}
+      >
+        <SwiftUIImage systemName={systemName} color={headerControlForegroundColor} size={metrics.iconSize} />
+        <SwiftUIText
+          modifiers={[
+            font({ size: metrics.textSize, weight: 'semibold' }),
+            foregroundStyle(headerControlForegroundColor),
+          ]}
+        >
+          {label}
+        </SwiftUIText>
+      </HStack>
+    );
+  };
+
+  const renderRadiusMenu = (size: 'regular' | 'large' = 'regular') => {
+    if (!showHeaderRadiusMenu) {
+      return null;
+    }
+
+    return (
+      <Host
+        matchContents
+        colorScheme={isDark ? 'dark' : 'light'}
+        style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
+      >
+        <Menu
+          label={renderHeaderControlLabel('scope', formatRadiusLabel(radius), size)}
+          modifiers={[buttonStyle('plain'), tint(colors.primary)]}
+        >
+          {NOTE_RADIUS_OPTIONS.map((option) => (
+            <Button
+              key={option}
+              label={formatRadiusLabel(option)}
+              systemImage={radius === option ? 'checkmark' : undefined}
+              onPress={() => onChangeRadius(option)}
+            />
+          ))}
+        </Menu>
+      </Host>
+    );
+  };
+
+  const renderModeToggle = (size: 'regular' | 'large' = 'regular') => {
+    const modeLabel =
+      captureMode === 'text'
+        ? t('capture.switchCamera', 'Camera')
+        : t('capture.switchText', 'Text');
+    const systemName = captureMode === 'text' ? 'camera' : 'square.and.pencil';
+
+    if (Platform.OS === 'ios') {
+      return (
+        <Host
+          matchContents
+          colorScheme={isDark ? 'dark' : 'light'}
+          style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
+        >
+          <Button onPress={onToggleCaptureMode} modifiers={[buttonStyle('plain'), tint(colors.primary)]}>
+            {renderHeaderControlLabel(systemName, modeLabel, size)}
+          </Button>
+        </Host>
+      );
+    }
+
+    return (
+      <Pressable
+        onPress={onToggleCaptureMode}
+        style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
+      >
+        <Animated.View
+          style={{
+            transform: [
+              { scale: modeIconScale },
+              {
+                rotate: modeIconRotate.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['-14deg', '0deg'],
+                }),
+              },
+            ],
+          }}
+        >
+          <Ionicons
+            name={captureMode === 'text' ? 'camera-outline' : 'create-outline'}
+            size={20}
+            color={colors.primary}
+          />
+        </Animated.View>
+      </Pressable>
+    );
+  };
+
   if (useDetachedControls) {
     return (
       <View pointerEvents="box-none" style={[styles.detachedTopRow, { top: topInset + 6 }]}>
@@ -85,28 +221,10 @@ export default function HomeHeaderSearch({
         >
           <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>Charmly 💛</Text>
         </GlassView>
-        <Host
-          matchContents
-          colorScheme={isDark ? 'dark' : 'light'}
-          style={styles.detachedSwiftModeToggleHost}
-        >
-          <Button
-            onPress={onToggleCaptureMode}
-            modifiers={[
-              buttonStyle('glass'),
-              controlSize('large'),
-              frame({ width: 44, height: 44 }),
-              clipShape('circle'),
-              tint(colors.primary),
-            ]}
-          >
-            <SwiftUIImage
-              systemName={captureMode === 'text' ? 'camera' : 'doc.text'}
-              color={colors.primary}
-              size={18}
-            />
-          </Button>
-        </Host>
+        <View style={styles.detachedControlsGroup}>
+          {renderRadiusMenu('large')}
+          {renderModeToggle('large')}
+        </View>
       </View>
     );
   }
@@ -145,53 +263,9 @@ export default function HomeHeaderSearch({
             </Pressable>
           ) : null}
 
-          {isIOS26OrNewer ? (
-            <Host
-              matchContents
-              colorScheme={isDark ? 'dark' : 'light'}
-              style={styles.swiftModeToggleHost}
-            >
-              <Button
-                onPress={onToggleCaptureMode}
-                modifiers={[
-                  buttonStyle('glass'),
-                  controlSize('regular'),
-                  tint(colors.primary),
-                ]}
-              >
-                <SwiftUIImage
-                  systemName={captureMode === 'text' ? 'camera' : 'doc.text'}
-                  color={colors.primary}
-                  size={17}
-                />
-              </Button>
-            </Host>
-          ) : (
-            <Pressable
-              onPress={onToggleCaptureMode}
-              style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
-            >
-              <Animated.View
-                style={{
-                  transform: [
-                    { scale: modeIconScale },
-                    {
-                      rotate: modeIconRotate.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: ['-14deg', '0deg'],
-                      }),
-                    },
-                  ],
-                }}
-              >
-                <Ionicons
-                  name={captureMode === 'text' ? 'camera-outline' : 'document-text-outline'}
-                  size={20}
-                  color={colors.primary}
-                />
-              </Animated.View>
-            </Pressable>
-          )}
+          {renderRadiusMenu()}
+
+          {renderModeToggle()}
         </View>
       </Animated.View>
 
@@ -257,9 +331,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  swiftModeToggleHost: {
-    width: 38,
-    height: 38,
+  swiftHeaderControlHost: {
+    minHeight: 38,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -298,6 +371,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  detachedControlsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   detachedBrandText: {
     fontSize: 16,
   },
@@ -308,9 +386,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  detachedSwiftModeToggleHost: {
-    width: 44,
-    height: 44,
+  detachedSwiftHeaderControlHost: {
+    minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },

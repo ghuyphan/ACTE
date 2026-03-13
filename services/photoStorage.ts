@@ -1,8 +1,10 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import type { Note } from './database';
 
 export const PHOTO_DIRECTORY = FileSystem.documentDirectory
   ? `${FileSystem.documentDirectory}photos/`
   : null;
+export const MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES = 700 * 1024;
 
 export function extractPhotoFilename(photoUri: string | null | undefined): string | null {
   const normalizedPhotoUri = typeof photoUri === 'string' ? photoUri.trim() : '';
@@ -42,4 +44,56 @@ export function resolveStoredPhotoUri(photoUri: string | null | undefined): stri
   }
 
   return normalizedPhotoUri;
+}
+
+export function getNotePhotoUri(
+  note: Pick<Note, 'type' | 'content' | 'photoLocalUri'> | null | undefined
+) {
+  if (!note || note.type !== 'photo') {
+    return '';
+  }
+
+  return resolveStoredPhotoUri(note.photoLocalUri ?? note.content);
+}
+
+export async function ensurePhotoDirectory() {
+  if (!PHOTO_DIRECTORY) {
+    return null;
+  }
+
+  await FileSystem.makeDirectoryAsync(PHOTO_DIRECTORY, { intermediates: true });
+  return PHOTO_DIRECTORY;
+}
+
+export async function readPhotoAsBase64(photoUri: string) {
+  const normalizedPhotoUri = resolveStoredPhotoUri(photoUri);
+  if (!normalizedPhotoUri) {
+    return null;
+  }
+
+  const info = await FileSystem.getInfoAsync(normalizedPhotoUri);
+  if (!info.exists || info.isDirectory) {
+    return null;
+  }
+
+  if (typeof info.size === 'number' && info.size > MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES) {
+    throw new Error('Photo is too large to sync safely. Please retake it with a lower resolution.');
+  }
+
+  return FileSystem.readAsStringAsync(normalizedPhotoUri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+}
+
+export async function writePhotoFromBase64(noteId: string, base64Data: string) {
+  const directory = await ensurePhotoDirectory();
+  if (!directory || !base64Data.trim()) {
+    return null;
+  }
+
+  const destinationPath = `${directory}${noteId}.jpg`;
+  await FileSystem.writeAsStringAsync(destinationPath, base64Data, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  return destinationPath;
 }

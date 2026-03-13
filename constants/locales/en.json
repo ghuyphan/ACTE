@@ -42,7 +42,8 @@
         "cameraPermission": "Camera access is needed to take photos",
         "grantAccess": "Grant Access",
         "retake": "Retake",
-        "notesHint": "Notes"
+        "notesHint": "Notes",
+        "radiusLabel": "Reminder radius"
     },
     "map": {
         "photoNote": "Photo Note",
@@ -81,6 +82,7 @@
         "editingHint": "Editing mode: update note and place",
         "contentField": "Note",
         "locationField": "Place",
+        "radiusValue": "Reminder radius: {{value}}",
         "editContent": "Edit note content...",
         "editLocation": "Edit location name...",
         "share": "Share",

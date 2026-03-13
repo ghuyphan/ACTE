@@ -180,11 +180,12 @@ export default function SettingsScreen() {
         variant: 'success',
         title: t('settings.syncSuccessTitle', 'Sync complete'),
         message:
-          syncedCount === 1
+          result.message ??
+          (syncedCount === 1
             ? t('settings.syncSuccessMsgOne', 'Synced 1 note to Firebase.')
             : t('settings.syncSuccessMsgOther', 'Synced {{count}} notes to Firebase.', {
                 count: syncedCount,
-              }),
+              })),
         primaryAction: {
           label: t('common.done', 'Done'),
           variant: 'neutral',

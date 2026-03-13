@@ -42,7 +42,8 @@
         "cameraPermission": "Cần quyền truy cập camera để chụp ảnh",
         "grantAccess": "Cấp quyền",
         "retake": "Chụp lại",
-        "notesHint": "Ghi chú"
+        "notesHint": "Ghi chú",
+        "radiusLabel": "Bán kính nhắc nhở"
     },
     "map": {
         "photoNote": "Ghi chú ảnh",
@@ -81,6 +82,7 @@
         "editingHint": "Đang chỉnh sửa: cập nhật ghi chú và địa điểm",
         "contentField": "Nội dung",
         "locationField": "Địa điểm",
+        "radiusValue": "Bán kính nhắc nhở: {{value}}",
         "editContent": "Sửa nội dung ghi chú...",
         "editLocation": "Sửa tên địa điểm...",
         "share": "Chia sẻ",

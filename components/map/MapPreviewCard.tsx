@@ -24,6 +24,7 @@ import type { MapPointGroup, NearbyNoteItem } from '../../hooks/map/mapDomain';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useTheme } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
+import { getNotePhotoUri } from '../../services/photoStorage';
 import { isOlderIOS } from '../../utils/platform';
 import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
 
@@ -274,7 +275,7 @@ export default function MapPreviewCard({
                 t('map.photoNote', 'Photo Note'),
                 t('map.noContent', 'No note content')
               );
-              const photoUri = item.note.type === 'photo' ? item.note.content.trim() : '';
+              const photoUri = item.note.type === 'photo' ? getNotePhotoUri(item.note) : '';
               const metaLabel = isGroupMode
                 ? t('map.singleNote', 'Pinned note')
                 : formatDistanceLabel(item.distanceMeters ?? 0);

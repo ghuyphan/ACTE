@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { getAllNotes } from './database';
-import { PHOTO_DIRECTORY } from './photoStorage';
+import { PHOTO_DIRECTORY, getNotePhotoUri } from './photoStorage';
 
 export async function cleanupOrphanPhotoFiles(): Promise<number> {
   if (!PHOTO_DIRECTORY) {
@@ -16,7 +16,7 @@ export async function cleanupOrphanPhotoFiles(): Promise<number> {
   const referencedPhotoPaths = new Set(
     notes
       .filter((note) => note.type === 'photo')
-      .map((note) => note.content)
+      .map((note) => getNotePhotoUri(note))
       .filter(Boolean)
   );
 

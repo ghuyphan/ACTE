@@ -19,6 +19,8 @@ import { CardGradients, useTheme } from '../../../hooks/useTheme';
 import { useNoteDetailSheet } from '../../../hooks/useNoteDetailSheet';
 import { useNotesStore } from '../../../hooks/useNotes';
 import { Note } from '../../../services/database';
+import { filterNotesByQuery } from '../../../services/noteSearch';
+import { getNotePhotoUri } from '../../../services/photoStorage';
 import { formatDate } from '../../../utils/dateUtils';
 
 function hashToIndex(str: string, max: number): number {
@@ -51,16 +53,7 @@ export default function SearchScreen() {
   const [query, setQuery] = useState('');
 
   const filteredNotes = useMemo(() => {
-    if (!query.trim()) {
-      return notes;
-    }
-
-    const normalizedQuery = query.toLowerCase();
-    return notes.filter(
-      (note) =>
-        note.content.toLowerCase().includes(normalizedQuery) ||
-        note.locationName?.toLowerCase().includes(normalizedQuery)
-    );
+    return filterNotesByQuery(notes, query);
   }, [notes, query]);
 
   const openNote = useCallback(
@@ -104,7 +97,7 @@ export default function SearchScreen() {
               <View style={styles.previewFrame}>
                 {item.type === 'photo' ? (
                   <Image
-                    source={{ uri: item.content }}
+                    source={{ uri: getNotePhotoUri(item) }}
                     style={[
                       styles.previewFrame,
                       {

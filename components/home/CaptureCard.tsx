@@ -7,12 +7,14 @@ import { RefObject } from 'react';
 import {
   Animated,
   Dimensions,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../../constants/noteRadius';
 import { Layout, Typography } from '../../constants/theme';
 import PrimaryButton from '../ui/PrimaryButton';
 import { isOlderIOS } from '../../utils/platform';
@@ -42,6 +44,8 @@ interface CaptureCardProps {
   onChangeNoteText: (nextText: string) => void;
   restaurantName: string;
   onChangeRestaurantName: (nextName: string) => void;
+  radius: number;
+  onChangeRadius: (nextRadius: number) => void;
   capturedPhoto: string | null;
   onRetakePhoto: () => void;
   needsCameraPermission: boolean;
@@ -75,6 +79,8 @@ export default function CaptureCard({
   onChangeNoteText,
   restaurantName,
   onChangeRestaurantName,
+  radius,
+  onChangeRadius,
   capturedPhoto,
   onRetakePhoto,
   needsCameraPermission,
@@ -92,6 +98,8 @@ export default function CaptureCard({
   saving,
   shutterScale,
 }: CaptureCardProps) {
+  const showInlineRadiusOptions = Platform.OS !== 'ios';
+
   return (
     <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
       <Animated.View
@@ -211,6 +219,36 @@ export default function CaptureCard({
           },
         ]}
       >
+        {showInlineRadiusOptions ? (
+          <View style={styles.radiusOptions}>
+            {NOTE_RADIUS_OPTIONS.map((option) => {
+              const isSelected = radius === option;
+              return (
+                <Pressable
+                  key={option}
+                  testID={`capture-radius-${option}`}
+                  style={[
+                    styles.radiusChip,
+                    {
+                      backgroundColor: isSelected ? colors.primary : colors.card,
+                      borderColor: isSelected ? colors.primary : colors.border,
+                    },
+                  ]}
+                  onPress={() => onChangeRadius(option)}
+                >
+                  <Text
+                    style={[
+                      styles.radiusChipText,
+                      { color: isSelected ? '#1C1C1E' : colors.text },
+                    ]}
+                  >
+                    {formatRadiusLabel(option)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
         {captureMode === 'camera' && !capturedPhoto ? (
           <View style={styles.belowCardShutterRow}>
             {permissionGranted ? (
@@ -374,6 +412,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 90,
+    gap: 12,
+  },
+  radiusOptions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  radiusChip: {
+    minWidth: 72,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  radiusChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: 'System',
   },
   belowCardShutterRow: {
     alignItems: 'center',

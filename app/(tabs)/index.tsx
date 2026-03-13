@@ -29,6 +29,7 @@ import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useTheme } from '../../hooks/useTheme';
+import { filterNotesByQuery } from '../../services/noteSearch';
 import { isIOS26OrNewer } from '../../utils/platform';
 
 const { height } = Dimensions.get('window');
@@ -71,6 +72,8 @@ export default function HomeScreen() {
     setNoteText,
     capturedPhoto,
     setCapturedPhoto,
+    radius,
+    setRadius,
     facing,
     setFacing,
     permission,
@@ -92,15 +95,7 @@ export default function HomeScreen() {
   const snapHeight = height - insets.top - 90;
 
   const filteredNotes = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return notes;
-    }
-    const query = searchQuery.toLowerCase();
-    return notes.filter(
-      (note) =>
-        note.content.toLowerCase().includes(query) ||
-        note.locationName?.toLowerCase().includes(query)
-    );
+    return filterNotesByQuery(notes, searchQuery);
   }, [notes, searchQuery]);
 
   const displayedNotes = useInlineHeaderSearch && isSearching ? filteredNotes : notes;
@@ -299,9 +294,11 @@ export default function HomeScreen() {
       await createNote({
         type: captureMode === 'camera' ? 'photo' : 'text',
         content,
+        photoLocalUri: captureMode === 'camera' ? content : null,
         locationName,
         latitude: lat,
         longitude: lon,
+        radius,
       });
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -335,6 +332,7 @@ export default function HomeScreen() {
     reverseGeocode,
     restaurantName,
     createNote,
+    radius,
     resetCapture,
     showSavedSheet,
   ]);
@@ -402,6 +400,8 @@ export default function HomeScreen() {
         showSearchButton={useInlineHeaderSearch}
         onToggleCaptureMode={handleToggleCaptureMode}
         captureMode={captureMode}
+        radius={radius}
+        onChangeRadius={setRadius}
         colors={colors}
         isDark={isDark}
         t={t}
@@ -452,6 +452,8 @@ export default function HomeScreen() {
               onChangeNoteText={setNoteText}
               restaurantName={restaurantName}
               onChangeRestaurantName={setRestaurantName}
+              radius={radius}
+              onChangeRadius={setRadius}
               capturedPhoto={capturedPhoto}
               onRetakePhoto={() => setCapturedPhoto(null)}
               needsCameraPermission={needsCameraPermission}

@@ -21,11 +21,13 @@ import {
     TextInput,
     View,
 } from 'react-native';
+import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../constants/noteRadius';
 import { Layout, Typography } from '../constants/theme';
 import { useNotes } from '../hooks/useNotes';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { CardGradients, useTheme } from '../hooks/useTheme';
 import { Note } from '../services/database';
+import { getNotePhotoUri } from '../services/photoStorage';
 import { formatDate } from '../utils/dateUtils';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
 import { isOlderIOS } from '../utils/platform';
@@ -77,12 +79,14 @@ function AnimatedActionButton({
     onPress,
     children,
     style,
+    testID,
     delay = 0,
     disabled = false,
 }: {
     onPress: () => void;
     children: React.ReactNode;
     style: object;
+    testID?: string;
     delay?: number;
     disabled?: boolean;
 }) {
@@ -102,6 +106,7 @@ function AnimatedActionButton({
 
     return (
         <Pressable
+            testID={testID}
             onPress={onPress}
             disabled={disabled}
             onPressIn={() => {
@@ -179,6 +184,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
     const [isDeleting, setIsDeleting] = useState(false);
     const [editContent, setEditContent] = useState('');
     const [editLocation, setEditLocation] = useState('');
+    const [editRadius, setEditRadius] = useState(150);
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
 
     const cardScale = useRef(new Animated.Value(0.92)).current;
@@ -226,6 +232,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
             if (nextNote) {
                 setEditContent(nextNote.content);
                 setEditLocation(nextNote.locationName || '');
+                setEditRadius(nextNote.radius);
             }
             setLoading(false);
 
@@ -363,13 +370,16 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
 
     const handleSaveEdit = async () => {
         if (!note || isDeleting) return;
-        const updates: Partial<Pick<Note, 'content' | 'locationName'>> = {};
+        const updates: Partial<Pick<Note, 'content' | 'locationName' | 'radius'>> = {};
 
         if (note.type === 'text' && editContent.trim() !== note.content) {
             updates.content = editContent.trim();
         }
         if (editLocation.trim() !== (note.locationName || '')) {
             updates.locationName = editLocation.trim() || null;
+        }
+        if (editRadius !== note.radius) {
+            updates.radius = editRadius;
         }
 
         if (Object.keys(updates).length > 0) {
@@ -387,12 +397,18 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
         const locationStr = note.locationName || t('noteDetail.unknownLocation');
+        const photoUri = getNotePhotoUri(note);
         const message =
             note.type === 'text'
                 ? `📍 ${locationStr}\n\n${note.content}\n\n— Charmly 💛`
                 : `${t('noteDetail.sharePhotoMsg', { location: locationStr })}\n\n— Charmly 💛`;
 
         try {
+            if (note.type === 'photo' && photoUri) {
+                await Share.share({ message, url: photoUri });
+                return;
+            }
+
             await Share.share({ message });
         } catch {
             return;
@@ -458,7 +474,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                     <Animated.View style={{ opacity: cardOpacity, transform: [{ scale: cardScale }] }}>
                         {note.type === 'photo' ? (
                             <View style={styles.photoContainer}>
-                                <Image source={{ uri: note.content }} style={styles.photo} contentFit="cover" transition={300} />
+                                <Image source={{ uri: getNotePhotoUri(note) }} style={styles.photo} contentFit="cover" transition={300} />
                             </View>
                         ) : (
                             <View style={styles.textContainer}>
@@ -475,6 +491,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                     ) : null}
                                     <TextInput
                                         ref={contentInputRef}
+                                        testID="note-detail-content-input"
                                         style={[styles.editTextInput, isEditing ? styles.editTextInputActive : null]}
                                         value={isEditing ? editContent : note.content}
                                         onChangeText={isEditing ? setEditContent : undefined}
@@ -493,6 +510,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                     <Animated.View style={[styles.actionRow, { opacity: actionsOpacity }]}>
                         <AnimatedActionButton
                             onPress={handleToggleFavorite}
+                            testID="note-detail-favorite"
                             style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
                             delay={100}
                             disabled={isDeleting}
@@ -509,6 +527,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                         {note.type === 'text' ? (
                             <AnimatedActionButton
                                 onPress={isEditing ? handleSaveEdit : () => setIsEditing(true)}
+                                testID="note-detail-edit"
                                 style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
                                 delay={150}
                                 disabled={isDeleting}
@@ -534,6 +553,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
 
                         <AnimatedActionButton
                             onPress={handleShare}
+                            testID="note-detail-share"
                             style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
                             delay={200}
                             disabled={isDeleting}
@@ -543,6 +563,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
 
                         <AnimatedActionButton
                             onPress={handleDelete}
+                            testID="note-detail-delete"
                             style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
                             delay={250}
                             disabled={isDeleting}
@@ -594,6 +615,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                 <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
                                 <TextInput
                                     ref={locationInputRef}
+                                    testID="note-detail-location-input"
                                     style={[styles.editLocationInput, { color: colors.text }]}
                                     value={isEditing ? editLocation : (note.locationName || t('noteDetail.unknownLocation', 'Unknown Location'))}
                                     onChangeText={isEditing ? setEditLocation : undefined}
@@ -603,6 +625,44 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                     maxLength={100}
                                 />
                                 {isEditing ? <Ionicons name="create-outline" size={16} color={colors.primary} /> : null}
+                            </View>
+
+                            <View style={styles.infoRowRadius}>
+                                <Ionicons name="radio-outline" size={20} color={colors.secondaryText} />
+                                {isEditing ? (
+                                    <View style={styles.radiusChipsRow}>
+                                        {NOTE_RADIUS_OPTIONS.map((option) => {
+                                            const isSelected = editRadius === option;
+                                            return (
+                                                <Pressable
+                                                    key={option}
+                                                    testID={`note-detail-radius-${option}`}
+                                                    style={[
+                                                        styles.radiusChip,
+                                                        {
+                                                            backgroundColor: isSelected ? `${colors.primary}20` : 'transparent',
+                                                            borderColor: isSelected ? colors.primary : colors.border,
+                                                        },
+                                                    ]}
+                                                    onPress={() => setEditRadius(option)}
+                                                >
+                                                    <Text
+                                                        style={[
+                                                            styles.radiusChipText,
+                                                            { color: isSelected ? colors.primary : colors.secondaryText },
+                                                        ]}
+                                                    >
+                                                        {formatRadiusLabel(option)}
+                                                    </Text>
+                                                </Pressable>
+                                            );
+                                        })}
+                                    </View>
+                                ) : (
+                                    <Text style={[styles.infoText, { color: colors.secondaryText }]}>
+                                        {t('noteDetail.radiusValue', { value: formatRadiusLabel(note.radius) })}
+                                    </Text>
+                                )}
                             </View>
 
                             <View style={styles.infoRow}>
@@ -775,6 +835,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 12,
     },
+    infoRowRadius: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 12,
+    },
     infoRowEditing: {
         borderWidth: 1.5,
         borderRadius: 14,
@@ -789,6 +854,23 @@ const styles = StyleSheet.create({
         ...Typography.body,
         fontWeight: '700',
         flex: 1,
+    },
+    radiusChipsRow: {
+        flex: 1,
+        flexDirection: 'row',
+        gap: 8,
+        flexWrap: 'wrap',
+    },
+    radiusChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 999,
+        borderWidth: 1,
+    },
+    radiusChipText: {
+        fontSize: 13,
+        fontWeight: '700',
+        fontFamily: 'System',
     },
     skeletonCard: {
         width: CARD_SIZE,

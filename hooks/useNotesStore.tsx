@@ -8,7 +8,7 @@ import {
   getAllNotes,
   getNoteById as dbGetById,
   Note,
-  searchNotes as dbSearch,
+  NoteUpdates,
   toggleFavorite as dbToggleFav,
   updateNote as dbUpdate,
 } from '../services/database';
@@ -18,6 +18,8 @@ import {
   syncGeofenceRegions,
 } from '../services/geofenceService';
 import { cleanupOrphanPhotoFiles } from '../services/mediaIntegrity';
+import { filterNotesByQuery } from '../services/noteSearch';
+import { getNotePhotoUri } from '../services/photoStorage';
 import { getSyncService } from '../services/syncService';
 import { updateWidgetData } from '../services/widgetService';
 
@@ -26,7 +28,7 @@ interface NotesStoreValue {
   loading: boolean;
   refreshNotes: (showLoading?: boolean) => Promise<void>;
   createNote: (input: CreateNoteInput) => Promise<Note>;
-  updateNote: (id: string, updates: Partial<Pick<Note, 'content' | 'locationName'>>) => Promise<void>;
+  updateNote: (id: string, updates: NoteUpdates) => Promise<void>;
   toggleFavorite: (id: string) => Promise<boolean>;
   searchNotes: (query: string) => Promise<Note[]>;
   deleteNote: (id: string) => Promise<void>;
@@ -41,10 +43,22 @@ function useNotesStoreValue(): NotesStoreValue {
   const [loading, setLoading] = useState(true);
   const syncService = getSyncService();
   const notesRef = useRef<Note[]>([]);
+  const widgetSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     notesRef.current = notes;
   }, [notes]);
+
+  const scheduleWidgetUpdate = useCallback((delay = 120) => {
+    if (widgetSyncTimeoutRef.current) {
+      clearTimeout(widgetSyncTimeoutRef.current);
+    }
+
+    widgetSyncTimeoutRef.current = setTimeout(() => {
+      widgetSyncTimeoutRef.current = null;
+      void updateWidgetData();
+    }, delay);
+  }, []);
 
   const refreshNotes = useCallback(async (showLoading = true) => {
     try {
@@ -82,12 +96,18 @@ function useNotesStoreValue(): NotesStoreValue {
     };
   }, [refreshNotes]);
 
+  useEffect(() => () => {
+    if (widgetSyncTimeoutRef.current) {
+      clearTimeout(widgetSyncTimeoutRef.current);
+    }
+  }, []);
+
   const createNote = useCallback(
     async (input: CreateNoteInput): Promise<Note> => {
       const note = await dbCreate(input);
       setNotes((prev) => [note, ...prev]);
 
-      void updateWidgetData();
+      scheduleWidgetUpdate();
       await skipImmediateReminderForNewNote(note.id);
       void syncGeofenceRegions();
       void syncService.recordChange({
@@ -100,11 +120,11 @@ function useNotesStoreValue(): NotesStoreValue {
 
       return note;
     },
-    [syncService]
+    [scheduleWidgetUpdate, syncService]
   );
 
   const updateNote = useCallback(
-    async (id: string, updates: Partial<Pick<Note, 'content' | 'locationName'>>) => {
+    async (id: string, updates: NoteUpdates) => {
       await dbUpdate(id, updates);
       setNotes((prev) =>
         prev.map((n) =>
@@ -112,13 +132,32 @@ function useNotesStoreValue(): NotesStoreValue {
             ? {
                 ...n,
                 ...updates,
+                content:
+                  n.type === 'photo'
+                    ? getNotePhotoUri({
+                        ...n,
+                        ...updates,
+                        type: n.type,
+                      })
+                    : updates.content ?? n.content,
+                photoLocalUri:
+                  n.type === 'photo'
+                    ? getNotePhotoUri({
+                        ...n,
+                        ...updates,
+                        type: n.type,
+                      }) || null
+                    : null,
                 updatedAt: new Date().toISOString(),
               }
             : n
         )
       );
 
-      void updateWidgetData();
+      scheduleWidgetUpdate();
+      if (updates.radius !== undefined) {
+        void syncGeofenceRegions();
+      }
       void syncService.recordChange({
         type: 'update',
         entity: 'note',
@@ -127,7 +166,7 @@ function useNotesStoreValue(): NotesStoreValue {
         timestamp: new Date().toISOString(),
       });
     },
-    [syncService]
+    [scheduleWidgetUpdate, syncService]
   );
 
   const toggleFavorite = useCallback(
@@ -150,10 +189,7 @@ function useNotesStoreValue(): NotesStoreValue {
   );
 
   const searchNotes = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      return getAllNotes();
-    }
-    return dbSearch(query);
+    return filterNotesByQuery(notesRef.current, query);
   }, []);
 
   const deleteNote = useCallback(
@@ -163,18 +199,19 @@ function useNotesStoreValue(): NotesStoreValue {
       await dbDelete(id);
       setNotes((prev) => prev.filter((n) => n.id !== id));
 
-      if (note?.type === 'photo' && note.content) {
+      const photoUri = getNotePhotoUri(note);
+      if (note?.type === 'photo' && photoUri) {
         try {
-          const fileInfo = await FileSystem.getInfoAsync(note.content);
+          const fileInfo = await FileSystem.getInfoAsync(photoUri);
           if (fileInfo.exists) {
-            await FileSystem.deleteAsync(note.content, { idempotent: true });
+            await FileSystem.deleteAsync(photoUri, { idempotent: true });
           }
         } catch (error) {
           console.warn('Failed to delete photo file:', error);
         }
       }
 
-      void updateWidgetData();
+      scheduleWidgetUpdate();
       void syncGeofenceRegions();
       void syncService.recordChange({
         type: 'delete',
@@ -183,7 +220,7 @@ function useNotesStoreValue(): NotesStoreValue {
         timestamp: new Date().toISOString(),
       });
     },
-    [syncService]
+    [scheduleWidgetUpdate, syncService]
   );
 
   const deleteAllNotes = useCallback(async () => {
@@ -193,13 +230,14 @@ function useNotesStoreValue(): NotesStoreValue {
     setNotes([]);
 
     for (const note of allNotes) {
-      if (note.type !== 'photo' || !note.content) {
+      const photoUri = getNotePhotoUri(note);
+      if (note.type !== 'photo' || !photoUri) {
         continue;
       }
       try {
-        const fileInfo = await FileSystem.getInfoAsync(note.content);
+        const fileInfo = await FileSystem.getInfoAsync(photoUri);
         if (fileInfo.exists) {
-          await FileSystem.deleteAsync(note.content, { idempotent: true });
+          await FileSystem.deleteAsync(photoUri, { idempotent: true });
         }
       } catch (error) {
         console.warn('Failed to delete photo file:', error);
@@ -207,13 +245,13 @@ function useNotesStoreValue(): NotesStoreValue {
     }
 
     await clearGeofenceRegions();
-    void updateWidgetData();
+    scheduleWidgetUpdate();
     void syncService.recordChange({
       type: 'deleteAll',
       entity: 'note',
       timestamp: new Date().toISOString(),
     });
-  }, [syncService]);
+  }, [scheduleWidgetUpdate, syncService]);
 
   const getNoteById = useCallback(async (id: string) => {
     const inMemory = notesRef.current.find((n) => n.id === id);

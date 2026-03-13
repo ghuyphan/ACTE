@@ -2,6 +2,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useRef, useState } from 'react';
 import { Animated } from 'react-native';
+import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
 
 export type CaptureMode = 'text' | 'camera';
 
@@ -10,6 +11,7 @@ export function useCaptureFlow() {
   const [restaurantName, setRestaurantName] = useState('');
   const [noteText, setNoteText] = useState('');
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [radius, setRadius] = useState(DEFAULT_NOTE_RADIUS);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -74,7 +76,9 @@ export function useCaptureFlow() {
       useNativeDriver: true,
     }).start();
 
-    const photo = await cameraRef.current.takePictureAsync();
+    const photo = await cameraRef.current.takePictureAsync({
+      quality: 0.35,
+    });
     shutterScale.setValue(1);
     if (photo?.uri) {
       setCapturedPhoto(photo.uri);
@@ -85,6 +89,7 @@ export function useCaptureFlow() {
     setNoteText('');
     setRestaurantName('');
     setCapturedPhoto(null);
+    setRadius(DEFAULT_NOTE_RADIUS);
   }, []);
 
   const needsCameraPermission = captureMode === 'camera' && (!permission || !permission.granted);
@@ -98,6 +103,8 @@ export function useCaptureFlow() {
     setNoteText,
     capturedPhoto,
     setCapturedPhoto,
+    radius,
+    setRadius,
     facing,
     setFacing,
     permission,

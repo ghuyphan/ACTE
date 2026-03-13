@@ -14,6 +14,7 @@ import {
 import Reanimated, { LinearTransition } from 'react-native-reanimated';
 import { Layout, Typography } from '../../constants/theme';
 import { Note } from '../../services/database';
+import { getNotePhotoUri } from '../../services/photoStorage';
 import { formatDate } from '../../utils/dateUtils';
 import ImageMemoryCard from '../ImageMemoryCard';
 import TextMemoryCard from '../TextMemoryCard';
@@ -88,7 +89,7 @@ function AnimatedNoteCard({
         style={[styles.noteCardWrapper, { opacity, transform: [{ scale: Animated.multiply(scale, pressScale) }] }]}
       >
         {item.type === 'photo' ? (
-          <ImageMemoryCard imageUrl={item.content} />
+          <ImageMemoryCard imageUrl={getNotePhotoUri(item)} />
         ) : (
           <TextMemoryCard text={item.content} noteId={item.id} />
         )}

@@ -19,22 +19,32 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const isSupportedPlatform = Platform.OS === 'ios';
-const isAuthConfigured = isSupportedPlatform && isGoogleSigninConfigured && hasFirebaseApp();
 
-if (isSupportedPlatform && isGoogleSigninConfigured) {
-  GoogleSignin.configure({
-    webClientId: GOOGLE_WEB_CLIENT_ID,
-  });
+function isSupportedPlatform() {
+  return Platform.OS === 'ios' || Platform.OS === 'android';
+}
+
+function isAuthConfigured() {
+  return isSupportedPlatform() && isGoogleSigninConfigured && hasFirebaseApp();
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
-  const [isReady, setIsReady] = useState(!isSupportedPlatform);
+  const [isReady, setIsReady] = useState(() => !isSupportedPlatform());
+
+  useEffect(() => {
+    if (!isSupportedPlatform() || !isGoogleSigninConfigured) {
+      return;
+    }
+
+    GoogleSignin.configure({
+      webClientId: GOOGLE_WEB_CLIENT_ID,
+    });
+  }, []);
 
   useEffect(() => {
     const firebaseAuth = getFirebaseAuth();
-    if (!isSupportedPlatform || !firebaseAuth) {
+    if (!isSupportedPlatform() || !firebaseAuth) {
       setIsReady(true);
       return;
     }
@@ -51,12 +61,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       isReady,
-      isAvailable: isAuthConfigured,
+      isAvailable: isAuthConfigured(),
       signIn: async () => {
-        if (!isSupportedPlatform) {
+        if (!isSupportedPlatform()) {
           return {
             status: 'unavailable',
-            message: 'Firebase Google sign-in is only enabled on iOS in this build.',
+            message: 'Firebase Google sign-in is unavailable on this platform in the current build.',
           };
         }
 
@@ -83,6 +93,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         try {
+          if (Platform.OS === 'android') {
+            await GoogleSignin.hasPlayServices();
+          }
+
           const response = await GoogleSignin.signIn();
 
           if (response.type === 'cancelled') {
