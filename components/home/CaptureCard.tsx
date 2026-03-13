@@ -53,7 +53,6 @@ interface CaptureCardProps {
     | 'captureCameraOverlayText'
     | 'captureFlashOverlay'
   >;
-  isDark: boolean;
   t: TFunction;
   noteText: string;
   onChangeNoteText: (nextText: string) => void;

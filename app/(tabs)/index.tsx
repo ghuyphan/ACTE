@@ -463,7 +463,6 @@ export default function HomeScreen() {
               captureScale={captureScale}
               captureTranslateY={captureTranslateY}
               colors={colors}
-              isDark={isDark}
               t={t}
               noteText={noteText}
               onChangeNoteText={setNoteText}
