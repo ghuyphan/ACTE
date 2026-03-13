@@ -311,7 +311,7 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
     const nextPhotoRemoteBase64 =
         updates.photoRemoteBase64 !== undefined
             ? updates.photoRemoteBase64
-            : existing.photoRemoteBase64;
+            : existing.photoRemoteBase64 ?? null;
     const now = new Date().toISOString();
     const searchText = buildSearchText({
         type: nextType,

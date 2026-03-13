@@ -3,6 +3,7 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
 import { GOOGLE_WEB_CLIENT_ID, isGoogleSigninConfigured } from '../constants/auth';
+import i18n from '../constants/i18n';
 import { getFirebaseAuth, hasFirebaseApp } from '../utils/firebase';
 
 export interface AuthActionResult {
@@ -10,11 +11,21 @@ export interface AuthActionResult {
   message?: string;
 }
 
+export interface EmailRegistrationInput {
+  email: string;
+  password: string;
+  displayName?: string | null;
+}
+
 interface AuthContextValue {
   user: FirebaseAuthTypes.User | null;
   isReady: boolean;
-  isAvailable: boolean;
-  signIn: () => Promise<AuthActionResult>;
+  isAuthAvailable: boolean;
+  isGoogleAvailable: boolean;
+  signInWithGoogle: () => Promise<AuthActionResult>;
+  signInWithEmail: (email: string, password: string) => Promise<AuthActionResult>;
+  registerWithEmail: (input: EmailRegistrationInput) => Promise<AuthActionResult>;
+  sendPasswordReset: (email: string) => Promise<AuthActionResult>;
   signOut: () => Promise<void>;
 }
 
@@ -24,8 +35,100 @@ function isSupportedPlatform() {
   return Platform.OS === 'ios' || Platform.OS === 'android';
 }
 
-function isAuthConfigured() {
-  return isSupportedPlatform() && isGoogleSigninConfigured && hasFirebaseApp();
+function isFirebaseAuthAvailable() {
+  return isSupportedPlatform() && hasFirebaseApp();
+}
+
+function isGoogleAuthAvailable() {
+  return isFirebaseAuthAvailable() && isGoogleSigninConfigured;
+}
+
+function getUnavailableResult(provider: 'auth' | 'google'): AuthActionResult {
+  if (!isSupportedPlatform()) {
+    return {
+      status: 'unavailable',
+      message: i18n.t(
+        'auth.unavailablePlatform',
+        'Account sign-in is unavailable on this platform in the current build.'
+      ),
+    };
+  }
+
+  if (!hasFirebaseApp()) {
+    return {
+      status: 'unavailable',
+      message: i18n.t('auth.unavailableFirebase', 'Account sign-in is unavailable right now.'),
+    };
+  }
+
+  if (provider === 'google' && !isGoogleSigninConfigured) {
+    return {
+      status: 'unavailable',
+      message: i18n.t('auth.googleUnavailable', 'Google sign-in is unavailable right now.'),
+    };
+  }
+
+  return {
+    status: 'unavailable',
+    message: i18n.t('auth.unavailableGeneric', 'Account sign-in is unavailable right now.'),
+  };
+}
+
+function mapAuthErrorMessage(error: unknown) {
+  if (typeof error === 'object' && error && 'code' in error) {
+    const code = String((error as { code?: string }).code);
+
+    switch (code) {
+      case 'auth/invalid-email':
+        return i18n.t('auth.errorInvalidEmail', 'Enter a valid email address.');
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential':
+        return i18n.t('auth.errorWrongCredentials', 'The email or password is incorrect.');
+      case 'auth/email-already-in-use':
+        return i18n.t('auth.errorEmailInUse', 'That email is already being used by another account.');
+      case 'auth/weak-password':
+        return i18n.t('auth.errorWeakPassword', 'Choose a password with at least 6 characters.');
+      case 'auth/too-many-requests':
+        return i18n.t('auth.errorTooManyRequests', 'Too many attempts right now. Please try again in a bit.');
+      case 'auth/user-disabled':
+        return i18n.t('auth.errorUserDisabled', 'This account has been disabled.');
+      case 'auth/network-request-failed':
+        return i18n.t('auth.errorNetwork', 'Check your connection and try again.');
+      case 'auth/account-exists-with-different-credential':
+      case 'auth/credential-already-in-use':
+        return i18n.t(
+          'auth.errorProviderConflict',
+          'This email is already linked to a different sign-in method.'
+        );
+      default:
+        break;
+    }
+
+    if (code === statusCodes.IN_PROGRESS) {
+      return i18n.t('auth.errorInProgress', 'Sign-in is already in progress.');
+    }
+
+    if (code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      return i18n.t(
+        'auth.errorPlayServices',
+        'Google Play Services are unavailable on this device.'
+      );
+    }
+
+    if (code === 'DEVELOPER_ERROR' || code === '10' || code === '12500') {
+      return i18n.t(
+        'auth.errorGoogleConfig',
+        'Google sign-in is not configured correctly for this build yet.'
+      );
+    }
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return i18n.t('auth.errorGeneric', 'Unable to sign in right now. Please try again later.');
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -61,35 +164,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       isReady,
-      isAvailable: isAuthConfigured(),
-      signIn: async () => {
-        if (!isSupportedPlatform()) {
-          return {
-            status: 'unavailable',
-            message: 'Firebase Google sign-in is unavailable on this platform in the current build.',
-          };
-        }
-
-        if (!isGoogleSigninConfigured) {
-          return {
-            status: 'unavailable',
-            message: 'Google Sign-In is not configured in this build.',
-          };
-        }
-
-        if (!hasFirebaseApp()) {
-          return {
-            status: 'unavailable',
-            message: 'Firebase is not initialized yet. Rebuild the iOS app after updating GoogleService-Info.plist.',
-          };
+      isAuthAvailable: isFirebaseAuthAvailable(),
+      isGoogleAvailable: isGoogleAuthAvailable(),
+      signInWithGoogle: async () => {
+        if (!isGoogleAuthAvailable()) {
+          return getUnavailableResult('google');
         }
 
         const firebaseAuth = getFirebaseAuth();
         if (!firebaseAuth) {
-          return {
-            status: 'unavailable',
-            message: 'Firebase Authentication is unavailable in this build.',
-          };
+          return getUnavailableResult('auth');
         }
 
         try {
@@ -107,7 +191,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!idToken) {
             return {
               status: 'error',
-              message: 'Google Sign-In did not return an ID token. Update constants/auth.ts with your Firebase Web client ID.',
+              message: i18n.t(
+                'auth.errorMissingGoogleToken',
+                'Google sign-in could not be completed. Please try again.'
+              ),
             };
           }
 
@@ -120,29 +207,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (code === statusCodes.SIGN_IN_CANCELLED) {
               return { status: 'cancelled' };
             }
-            if (code === statusCodes.IN_PROGRESS) {
-              return {
-                status: 'error',
-                message: 'Sign-in is already in progress.',
-              };
-            }
-            if (code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-              return {
-                status: 'error',
-                message: 'Google Play Services are unavailable on this device.',
-              };
-            }
-            if (code === 'DEVELOPER_ERROR' || code === '10' || code === '12500') {
-              return {
-                status: 'error',
-                message: 'Google Sign-In is not fully configured yet. Check your iOS bundle ID, reversed client ID, and Web client ID.',
-              };
-            }
           }
 
           return {
             status: 'error',
-            message: 'Unable to sign in right now. Please try again later.',
+            message: mapAuthErrorMessage(error),
+          };
+        }
+      },
+      signInWithEmail: async (email: string, password: string) => {
+        if (!isFirebaseAuthAvailable()) {
+          return getUnavailableResult('auth');
+        }
+
+        const firebaseAuth = getFirebaseAuth();
+        if (!firebaseAuth) {
+          return getUnavailableResult('auth');
+        }
+
+        try {
+          await firebaseAuth.signInWithEmailAndPassword(email.trim(), password);
+          return { status: 'success' };
+        } catch (error) {
+          return {
+            status: 'error',
+            message: mapAuthErrorMessage(error),
+          };
+        }
+      },
+      registerWithEmail: async ({ email, password, displayName }) => {
+        if (!isFirebaseAuthAvailable()) {
+          return getUnavailableResult('auth');
+        }
+
+        const firebaseAuth = getFirebaseAuth();
+        if (!firebaseAuth) {
+          return getUnavailableResult('auth');
+        }
+
+        try {
+          const credential = await firebaseAuth.createUserWithEmailAndPassword(email.trim(), password);
+          const trimmedName = displayName?.trim();
+
+          if (trimmedName) {
+            await credential.user.updateProfile({ displayName: trimmedName });
+            setUser(credential.user);
+          }
+
+          return { status: 'success' };
+        } catch (error) {
+          return {
+            status: 'error',
+            message: mapAuthErrorMessage(error),
+          };
+        }
+      },
+      sendPasswordReset: async (email: string) => {
+        if (!isFirebaseAuthAvailable()) {
+          return getUnavailableResult('auth');
+        }
+
+        const firebaseAuth = getFirebaseAuth();
+        if (!firebaseAuth) {
+          return getUnavailableResult('auth');
+        }
+
+        try {
+          await firebaseAuth.sendPasswordResetEmail(email.trim());
+          return { status: 'success' };
+        } catch (error) {
+          return {
+            status: 'error',
+            message: mapAuthErrorMessage(error),
           };
         }
       },

@@ -381,7 +381,16 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.center,
+          {
+            backgroundColor: colors.background,
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+          },
+        ]}
+      >
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );

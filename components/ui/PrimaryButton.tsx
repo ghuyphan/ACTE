@@ -1,4 +1,5 @@
-import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, TextStyle, ViewStyle } from 'react-native';
+import { ReactNode } from 'react';
+import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { Layout, Shadows, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 
@@ -12,6 +13,8 @@ interface PrimaryButtonProps {
   variant?: ButtonVariant;
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
+  leadingIcon?: ReactNode;
+  testID?: string;
 }
 
 export default function PrimaryButton({
@@ -22,6 +25,8 @@ export default function PrimaryButton({
   variant = 'primary',
   style,
   textStyle,
+  leadingIcon,
+  testID,
 }: PrimaryButtonProps) {
   const { colors } = useTheme();
 
@@ -60,11 +65,15 @@ export default function PrimaryButton({
       ]}
       onPress={onPress}
       disabled={disabled || loading}
+      testID={testID}
     >
       {loading ? (
         <ActivityIndicator color={labelColor} />
       ) : (
-        <Text style={[styles.label, { color: labelColor }, textStyle]}>{label}</Text>
+        <View style={styles.content}>
+          {leadingIcon ? <View style={styles.leadingIcon}>{leadingIcon}</View> : null}
+          <Text style={[styles.label, { color: labelColor }, textStyle]}>{label}</Text>
+        </View>
       )}
     </Pressable>
   );
@@ -85,5 +94,13 @@ const styles = StyleSheet.create({
   },
   label: {
     ...Typography.button,
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leadingIcon: {
+    marginRight: 10,
   },
 });

@@ -13,6 +13,7 @@ import i18n from '../constants/i18n';
 import { AuthProvider } from '../hooks/useAuth';
 import { NotesProvider } from '../hooks/useNotes';
 import { NoteDetailSheetProvider, useNoteDetailSheet } from '../hooks/useNoteDetailSheet';
+import { SyncStatusProvider } from '../hooks/useSyncStatus';
 import { ThemeProvider, useTheme } from '../hooks/useTheme';
 import { getDB } from '../services/database';
 import { syncGeofenceRegions } from '../services/geofenceService';
@@ -170,9 +171,11 @@ export default function RootLayout() {
           <ThemeProvider>
             <AuthProvider>
               <NotesProvider>
-                <NoteDetailSheetProvider>
-                  <AppContent />
-                </NoteDetailSheetProvider>
+                <SyncStatusProvider>
+                  <NoteDetailSheetProvider>
+                    <AppContent />
+                  </NoteDetailSheetProvider>
+                </SyncStatusProvider>
               </NotesProvider>
             </AuthProvider>
           </ThemeProvider>

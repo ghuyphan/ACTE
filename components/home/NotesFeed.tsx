@@ -149,6 +149,7 @@ export default function NotesFeed({
     ...note,
     kind: 'note' as const,
   }))];
+  const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
 
   const captureVisibilityRef = useRef(onCaptureVisibilityChange);
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 30 });
@@ -200,6 +201,7 @@ export default function NotesFeed({
           refreshing={refreshing}
           onRefresh={onRefresh}
           tintColor={colors.primary}
+          progressViewOffset={refreshSpinnerOffset}
         />
       }
     />

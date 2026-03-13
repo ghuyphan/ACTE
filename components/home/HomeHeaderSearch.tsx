@@ -11,7 +11,7 @@ import {
 } from '@expo/ui/swift-ui/modifiers';
 import { GlassView } from 'expo-glass-effect';
 import { TFunction } from 'i18next';
-import { useEffect, useRef } from 'react';
+import { ComponentProps, useEffect, useRef } from 'react';
 import { Animated, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadius';
 import { isIOS26OrNewer } from '../../utils/platform';
@@ -102,7 +102,7 @@ export default function HomeHeaderSearch({
   const headerControlForegroundColor = '#1C1C1E';
 
   const renderHeaderControlLabel = (
-    systemName: string,
+    systemName: ComponentProps<typeof SwiftUIImage>['systemName'],
     label: string,
     size: 'regular' | 'large' = 'regular'
   ) => {

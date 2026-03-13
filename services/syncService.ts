@@ -40,12 +40,14 @@ export interface SyncService {
   recordChange: (change: SyncChange) => Promise<void>;
 }
 
-export interface FirebaseSyncUser {
+export interface SyncUser {
   uid: string;
   displayName: string | null;
   email: string | null;
   photoURL: string | null;
 }
+
+export type FirebaseSyncUser = SyncUser;
 
 export interface FirebaseSyncResult {
   status: 'success' | 'unavailable' | 'error';
@@ -220,7 +222,10 @@ async function deleteAllRemoteNotesInChunks(
 
 async function flushPendingQueueToFirebase(
   notesCollection: {
-    doc: (id: string) => { set: (data: unknown, options?: unknown) => void; delete: () => void };
+    doc: (id: string) => {
+      set: (data: Record<string, unknown>, options?: unknown) => Promise<void> | void;
+      delete: () => Promise<void> | void;
+    };
     get: () => Promise<{ docs: Array<{ ref: unknown }> }>;
   },
   firestore: {
@@ -363,7 +368,7 @@ async function uploadLocalSnapshotToFirebase(
 
 async function mergeRemoteNotesFromFirebase(
   notesCollection: {
-    get: () => Promise<{ docs: Array<{ id: string; data: () => FirebaseNoteRecord }> }>;
+    get: () => Promise<{ docs: Array<{ id: string; data: () => Record<string, unknown> }> }>;
   },
   localNotes: Note[]
 ): Promise<RemoteMergeResult> {
@@ -373,8 +378,8 @@ async function mergeRemoteNotesFromFirebase(
 
   for (const doc of snapshot.docs) {
     const nextRemoteRecord = {
-      id: doc.id,
       ...doc.data(),
+      id: doc.id,
     } as FirebaseNoteRecord;
     const existingLocalNote = localNoteMap.get(nextRemoteRecord.id) ?? (await getNoteById(nextRemoteRecord.id));
     const nextLocalNote = await deserializeRemoteNote(nextRemoteRecord, existingLocalNote);
@@ -466,13 +471,13 @@ const localFirstSyncService: SyncService = {
 };
 
 export async function syncNotesToFirebase(
-  user: FirebaseSyncUser | null,
+  user: SyncUser | null,
   notes: Note[]
 ): Promise<FirebaseSyncResult> {
   if (!user) {
     return {
       status: 'unavailable',
-      message: 'Sign in with Google before syncing your notes.',
+      message: 'Sign in to sync your notes.',
     };
   }
 

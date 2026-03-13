@@ -36,8 +36,8 @@ import { Layout, Typography } from '../../constants/theme';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotes } from '../../hooks/useNotes';
+import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { useTheme } from '../../hooks/useTheme';
-import { syncNotesToFirebase } from '../../services/syncService';
 
 function AndroidSection({ title, children }: { title: string; children: React.ReactNode }) {
   const { colors } = useTheme();
@@ -86,16 +86,20 @@ export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
   const { theme, setTheme, colors, isDark } = useTheme();
   const { notes, deleteAllNotes } = useNotes();
-  const { user, isAvailable } = useAuth();
+  const { user, isAuthAvailable } = useAuth();
+  const { status: syncStatus, lastSyncedAt, lastMessage } = useSyncStatus();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { alertProps, showAlert } = useAppSheetAlert();
 
   const [showTheme, setShowTheme] = useState(false);
   const [showLanguage, setShowLanguage] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
 
   const openAccountScreen = () => {
+    if (!isAuthAvailable) {
+      return;
+    }
+
     router.push((user ? '/auth/profile' : '/auth') as Href);
   };
 
@@ -107,14 +111,63 @@ export default function SettingsScreen() {
         : t('settings.light', 'Light');
 
   const accountValue = useMemo(() => {
-    if (!isAvailable) {
-      return t('settings.localMode', 'Local mode');
-    }
     if (user) {
       return user.displayName || user.email || t('settings.signedIn', 'Signed in');
     }
+    if (!isAuthAvailable) {
+      return t('settings.unavailableShort', 'Unavailable');
+    }
     return t('settings.notSignedIn', 'Not signed in');
-  }, [isAvailable, t, user]);
+  }, [isAuthAvailable, t, user]);
+
+  const syncValue = useMemo(() => {
+    if (!user) {
+      return t('settings.autoSyncOff', 'Off');
+    }
+
+    if (syncStatus === 'syncing') {
+      return t('settings.autoSyncingShort', 'Syncing');
+    }
+
+    return t('settings.autoSyncOnShort', 'On');
+  }, [syncStatus, t, user]);
+
+  const accountHint = useMemo(() => {
+    if (!isAuthAvailable) {
+      return t(
+        'settings.accountUnavailableMsg',
+        'Account sign-in is unavailable right now. Your notes stay safely on this device.'
+      );
+    }
+
+    if (!user) {
+      return null;
+    }
+
+    if (syncStatus === 'syncing') {
+      return t('settings.autoSyncing', 'Syncing your notes now.');
+    }
+
+    if (syncStatus === 'success' && lastSyncedAt) {
+      return t('settings.lastSynced', 'Last synced {{date}}', {
+        date: new Date(lastSyncedAt).toLocaleString(i18n.language, {
+          day: 'numeric',
+          month: 'short',
+          hour: 'numeric',
+          minute: '2-digit',
+        }),
+      });
+    }
+
+    if (syncStatus === 'error') {
+      return (
+        lastMessage ??
+        t('settings.autoSyncRetry', 'We could not sync right now. We will try again when the app is active.')
+      );
+    }
+
+    return t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.');
+  }, [i18n.language, isAuthAvailable, lastMessage, lastSyncedAt, syncStatus, t, user]);
 
   const promptClearAll = () => {
     showAlert({
@@ -137,87 +190,6 @@ export default function SettingsScreen() {
       },
     });
   };
-
-  const promptSignInForSync = () => {
-    showAlert({
-      variant: 'info',
-      title: t('settings.syncSignInTitle', 'Sign in to sync'),
-      message: t(
-        'settings.syncSignInMsg',
-        'Connect your Google account before syncing notes to Firebase.'
-      ),
-      primaryAction: {
-        label: t('settings.login', 'Sign In'),
-        variant: 'neutral',
-        onPress: () => {
-          router.push('/auth');
-        },
-      },
-      secondaryAction: {
-        label: t('common.cancel', 'Cancel'),
-        variant: 'secondary',
-      },
-    });
-  };
-
-  const handleSyncNow = async () => {
-    if (isSyncing) {
-      return;
-    }
-
-    if (!user) {
-      promptSignInForSync();
-      return;
-    }
-
-    setIsSyncing(true);
-    const result = await syncNotesToFirebase(user, notes);
-    setIsSyncing(false);
-
-    if (result.status === 'success') {
-      const syncedCount = result.syncedCount ?? notes.length;
-      showAlert({
-        variant: 'success',
-        title: t('settings.syncSuccessTitle', 'Sync complete'),
-        message:
-          result.message ??
-          (syncedCount === 1
-            ? t('settings.syncSuccessMsgOne', 'Synced 1 note to Firebase.')
-            : t('settings.syncSuccessMsgOther', 'Synced {{count}} notes to Firebase.', {
-                count: syncedCount,
-              })),
-        primaryAction: {
-          label: t('common.done', 'Done'),
-          variant: 'neutral',
-        },
-      });
-      return;
-    }
-
-    showAlert({
-      variant: result.status === 'unavailable' ? 'warning' : 'error',
-      title:
-        result.status === 'unavailable'
-          ? t('settings.syncUnavailableTitle', 'Firebase sync unavailable')
-          : t('settings.syncFailedTitle', 'Sync failed'),
-      message:
-        result.message ??
-        (result.status === 'unavailable'
-          ? t('settings.syncUnavailableMsg', 'Firebase sync is not available in this build.')
-          : t(
-              'settings.syncFailedMsg',
-              'Unable to sync with Firebase right now. Please try again later.'
-            )),
-      primaryAction: {
-        label: t('common.done', 'Done'),
-        variant: result.status === 'unavailable' ? 'secondary' : 'primary',
-      },
-    });
-  };
-
-  const syncButtonLabel = isSyncing
-    ? t('settings.syncing', 'Syncing...')
-    : t('settings.syncNow', 'Sync with Firebase');
 
   if (Platform.OS !== 'ios') {
     return (
@@ -293,52 +265,25 @@ export default function SettingsScreen() {
           </AndroidSection>
 
           <AndroidSection title={t('settings.account', 'ACCOUNT')}>
-            {isAvailable ? (
-              <>
-                <AndroidRow
-                  label={user ? t('settings.profile', 'Profile') : t('settings.login', 'Sign In')}
-                  value={accountValue}
-                  onPress={openAccountScreen}
-                />
-                <PrimaryButton
-                  label={
-                    user ? t('settings.manageAccount', 'Manage account') : t('settings.login', 'Sign In')
-                  }
-                  variant={user ? 'secondary' : 'neutral'}
-                  onPress={openAccountScreen}
-                />
-                {user ? (
-                  <>
-                    <PrimaryButton
-                      label={syncButtonLabel}
-                      onPress={() => {
-                        void handleSyncNow();
-                      }}
-                      loading={isSyncing}
-                      variant="neutral"
-                    />
-                    <Text style={[styles.sectionHint, { color: colors.secondaryText }]}>
-                      {t(
-                        'settings.syncDetail',
-                        'Upload your latest local notes to the signed-in Firebase account.'
-                      )}
-                    </Text>
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <View style={styles.localModeCard}>
-                <Text style={[styles.localModeTitle, { color: colors.text }]}>
-                  {t('settings.localMode', 'Local mode')}
-                </Text>
-                <Text style={[styles.localModeText, { color: colors.secondaryText }]}>
-                  {t(
-                    'settings.localModeDetail',
-                    'This build is ready to use offline. Optional sync can be added later without changing your local notes.'
-                  )}
-                </Text>
-              </View>
-            )}
+            <AndroidRow
+              label={t('settings.accountEntry', 'Account')}
+              value={accountValue}
+              onPress={isAuthAvailable ? openAccountScreen : undefined}
+            />
+            <AndroidRow
+              label={t('settings.autoSync', 'Auto sync')}
+              value={syncValue}
+            />
+            {accountHint ? (
+              <Text style={[styles.sectionHint, { color: colors.secondaryText }]}>{accountHint}</Text>
+            ) : null}
+            {isAuthAvailable ? (
+              <PrimaryButton
+                label={user ? t('settings.manageAccount', 'Manage account') : t('settings.login', 'Sign In')}
+                variant={user ? 'secondary' : 'neutral'}
+                onPress={openAccountScreen}
+              />
+            ) : null}
           </AndroidSection>
         </ScrollView>
         <AppSheetAlert {...alertProps} />
@@ -437,7 +382,7 @@ export default function SettingsScreen() {
               <HStack>
                 <Spacer />
                 <VStack modifiers={[padding({ top: 36, bottom: 40 })]}>
-                  {isAvailable && user ? (
+                  {accountHint ? (
                     <SwiftUIText
                       modifiers={[
                         foregroundStyle(colors.secondaryText),
@@ -446,10 +391,7 @@ export default function SettingsScreen() {
                         padding({ bottom: 8 }),
                       ]}
                     >
-                      {t(
-                        'settings.syncDetail',
-                        'Upload your latest local notes to the signed-in Firebase account.'
-                      )}
+                      {accountHint}
                     </SwiftUIText>
                   ) : null}
                   <SwiftUIText
@@ -472,7 +414,7 @@ export default function SettingsScreen() {
               </HStack>
             }
           >
-            {isAvailable ? (
+            {isAuthAvailable ? (
               <>
                 <Button onPress={openAccountScreen}>
                   <HStack>
@@ -487,37 +429,29 @@ export default function SettingsScreen() {
                       <SwiftUIImage systemName="person" color={colors.secondaryText} size={18} />
                     </HStack>
                     <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                      {user ? t('settings.manageAccount', 'Manage account') : t('settings.login', 'Sign In')}
+                      {t('settings.accountEntry', 'Account')}
                     </SwiftUIText>
                     <Spacer />
                     <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{accountValue}</SwiftUIText>
                   </HStack>
                 </Button>
-                {user ? (
-                  <Button
-                    onPress={() => {
-                      void handleSyncNow();
-                    }}
+                <HStack>
+                  <HStack
+                    modifiers={[
+                      frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                      backgroundOverlay({ color: colors.primary + '18' }),
+                      cornerRadius(7),
+                      padding({ trailing: 12 }),
+                    ]}
                   >
-                    <HStack>
-                      <HStack
-                        modifiers={[
-                          frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                          backgroundOverlay({ color: colors.primary + '18' }),
-                          cornerRadius(7),
-                          padding({ trailing: 12 }),
-                        ]}
-                      >
-                        <SwiftUIImage systemName="icloud.and.arrow.up" color={colors.primary} size={18} />
-                      </HStack>
-                      <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>{syncButtonLabel}</SwiftUIText>
-                      <Spacer />
-                      <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>
-                        {isSyncing ? t('settings.syncing', 'Syncing...') : `${notes.length}`}
-                      </SwiftUIText>
-                    </HStack>
-                  </Button>
-                ) : null}
+                    <SwiftUIImage systemName="arrow.triangle.2.circlepath" color={colors.primary} size={18} />
+                  </HStack>
+                  <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                    {t('settings.autoSync', 'Auto sync')}
+                  </SwiftUIText>
+                  <Spacer />
+                  <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{syncValue}</SwiftUIText>
+                </HStack>
               </>
             ) : (
               <HStack>
@@ -529,14 +463,14 @@ export default function SettingsScreen() {
                     padding({ trailing: 12 }),
                   ]}
                 >
-                  <SwiftUIImage systemName="iphone.gen3" color={colors.primary} size={18} />
+                  <SwiftUIImage systemName="person.crop.circle.badge.exclamationmark" color={colors.primary} size={18} />
                 </HStack>
                 <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                  {t('settings.localMode', 'Local mode')}
+                  {t('settings.accountEntry', 'Account')}
                 </SwiftUIText>
                 <Spacer />
                 <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>
-                  {t('settings.localModeShort', 'Offline ready')}
+                  {accountValue}
                 </SwiftUIText>
               </HStack>
             )}
@@ -607,15 +541,6 @@ const styles = StyleSheet.create({
   optionButton: {
     flex: 1,
     minHeight: 48,
-  },
-  localModeCard: {
-    gap: 8,
-  },
-  localModeTitle: {
-    ...Typography.button,
-  },
-  localModeText: {
-    ...Typography.body,
   },
   sectionHint: {
     ...Typography.body,

@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
+import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { useTheme } from '../../hooks/useTheme';
 
 function ProfileRow({ label, value }: { label: string; value: string }) {
@@ -20,10 +21,22 @@ function ProfileRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function getProviderLabel(providerId: string, fallback: string) {
+  switch (providerId) {
+    case 'google.com':
+      return 'Google';
+    case 'password':
+      return fallback;
+    default:
+      return providerId;
+  }
+}
+
 export default function ProfileScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
-  const { user, isAvailable, signOut } = useAuth();
+  const { user, isAuthAvailable, signOut } = useAuth();
+  const { status: syncStatus, lastSyncedAt, lastMessage } = useSyncStatus();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -35,6 +48,53 @@ export default function ProfileScreen() {
     const base = user?.displayName || user?.email || 'C';
     return base.trim().charAt(0).toUpperCase();
   }, [user?.displayName, user?.email]);
+
+  const providerLabel = useMemo(() => {
+    if (!user) {
+      return t('profile.providerEmail', 'Email');
+    }
+
+    const labels = user.providerData
+      .map((provider) => provider.providerId)
+      .filter(Boolean)
+      .map((providerId) => getProviderLabel(providerId, t('profile.providerEmail', 'Email')));
+
+    if (labels.length === 0) {
+      return t('profile.providerEmail', 'Email');
+    }
+
+    return Array.from(new Set(labels)).join(', ');
+  }, [t, user]);
+
+  const syncSummary = useMemo(() => {
+    if (!user) {
+      return null;
+    }
+
+    if (syncStatus === 'syncing') {
+      return t('profile.syncingNow', 'Syncing your notes now.');
+    }
+
+    if (syncStatus === 'success' && lastSyncedAt) {
+      return t('profile.lastSynced', 'Last synced {{date}}', {
+        date: new Date(lastSyncedAt).toLocaleString(i18n.language, {
+          day: 'numeric',
+          month: 'short',
+          hour: 'numeric',
+          minute: '2-digit',
+        }),
+      });
+    }
+
+    if (syncStatus === 'error') {
+      return (
+        lastMessage ??
+        t('profile.syncRetryHint', 'We could not sync right now. We will try again when the app is active.')
+      );
+    }
+
+    return t('profile.autoSyncOn', 'Your notes sync automatically while you are signed in.');
+  }, [i18n.language, lastMessage, lastSyncedAt, syncStatus, t, user]);
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
@@ -56,7 +116,7 @@ export default function ProfileScreen() {
       >
         <Text style={[styles.title, { color: colors.text }]}>{t('profile.title', 'Profile')}</Text>
         <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-          {t('profile.description', 'Manage the Google account connected to Charmly.')}
+          {t('profile.description', 'Manage the account connected to Charmly.')}
         </Text>
 
         {user ? (
@@ -83,14 +143,16 @@ export default function ProfileScreen() {
               </Text>
               <ProfileRow
                 label={t('profile.name', 'Name')}
-                value={user.displayName || t('profile.noName', 'Google account')}
+                value={user.displayName || t('profile.noName', 'Charmly account')}
               />
               {user.email ? (
                 <ProfileRow label={t('profile.email', 'Email')} value={user.email} />
               ) : null}
-              <Text style={[styles.hint, { color: colors.secondaryText }]}>
-                {t('profile.syncHint', 'Use Settings to sync your local notes with Firebase.')}
-              </Text>
+              <ProfileRow label={t('profile.provider', 'Sign-in method')} value={providerLabel} />
+              <ProfileRow label={t('profile.sync', 'Sync')} value={t('profile.autoSyncShort', 'Auto sync on')} />
+              {syncSummary ? (
+                <Text style={[styles.hint, { color: colors.secondaryText }]}>{syncSummary}</Text>
+              ) : null}
             </View>
 
             <PrimaryButton
@@ -108,20 +170,17 @@ export default function ProfileScreen() {
               <Text style={[styles.cardTitle, { color: colors.text }]}>
                 {t('profile.signedOutTitle', 'No account connected')}
               </Text>
-              <Text style={[styles.hint, { color: colors.secondaryText }]}>
-                {isAvailable
-                  ? t(
-                      'profile.signedOutMsg',
-                      'Sign in with Google to connect Firebase sync for this device.'
-                    )
-                  : t(
-                      'settings.localModeDetail',
-                      'This build is ready to use offline. Optional sync can be added later without changing your local notes.'
-                    )}
-              </Text>
+              {!isAuthAvailable ? (
+                <Text style={[styles.hint, { color: colors.secondaryText }]}>
+                  {t(
+                    'profile.unavailableMsg',
+                    'Account sign-in is unavailable right now, but your notes stay safely on this device.'
+                  )}
+                </Text>
+              ) : null}
             </View>
 
-            {isAvailable ? (
+            {isAuthAvailable ? (
               <PrimaryButton
                 label={t('settings.login', 'Sign In')}
                 onPress={() => router.replace('/auth')}
