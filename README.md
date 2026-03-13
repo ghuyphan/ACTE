@@ -1,6 +1,6 @@
-# Charmly - Location-Based Memory Tracker
+# Noto - Location-Based Memory Tracker
 
-Charmly is a React Native iOS/Android application built with [Expo](https://expo.dev) that allows users to capture, store, and revisit memories (text and photos) linked to specific geographic locations.
+Noto is a React Native iOS/Android application built with [Expo](https://expo.dev) that allows users to capture, store, and revisit memories (text and photos) linked to specific geographic locations.
 
 ## 🌟 Key Features
 

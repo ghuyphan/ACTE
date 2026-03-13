@@ -219,7 +219,10 @@ export default function HomeHeaderSearch({
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
         >
-          <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>Charmly 💛</Text>
+          <View style={styles.brandLockup}>
+            <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>Noto 💛</Text>
+            <Text style={[styles.katakanaText, { color: colors.secondaryText }]}>ノート</Text>
+          </View>
         </GlassView>
         <View style={styles.detachedControlsGroup}>
           {renderRadiusMenu('large')}
@@ -233,7 +236,10 @@ export default function HomeHeaderSearch({
     <>
       {useDetachedWordmark ? (
         <View pointerEvents="none" style={[styles.detachedBrandWrap, { top: topInset + 6 }]}>
-          <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>Charmly 💛</Text>
+          <View style={styles.brandLockup}>
+            <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>Noto 💛</Text>
+            <Text style={[styles.katakanaText, { color: colors.secondaryText }]}>ノート</Text>
+          </View>
         </View>
       ) : null}
 
@@ -255,7 +261,12 @@ export default function HomeHeaderSearch({
           },
         ]}
       >
-        {!useDetachedWordmark ? <Text style={[styles.logoText, { color: colors.text }]}>Charmly 💛</Text> : null}
+        {!useDetachedWordmark ? (
+          <View style={styles.brandLockup}>
+            <Text style={[styles.logoText, { color: colors.text }]}>Noto 💛</Text>
+            <Text style={[styles.katakanaText, { color: colors.secondaryText }]}>ノート</Text>
+          </View>
+        ) : null}
         <View style={styles.headerActions}>
           {showSearchButton ? (
             <Pressable onPress={onOpenSearch}>
@@ -313,11 +324,20 @@ const styles = StyleSheet.create({
   defaultHeaderDetached: {
     justifyContent: 'flex-end',
   },
+  brandLockup: {
+    gap: 2,
+  },
   logoText: {
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 1,
     fontFamily: 'System',
+  },
+  katakanaText: {
+    fontSize: 10,
+    letterSpacing: 2.4,
+    textTransform: 'uppercase',
+    opacity: 0.8,
   },
   headerActions: {
     flexDirection: 'row',

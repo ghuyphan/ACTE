@@ -128,7 +128,7 @@ describe('LoginScreen', () => {
   it('renders the landing design with Google and email actions', () => {
     const { getByText, getByTestId } = render(<LoginScreen />);
 
-    expect(getByText('Charmly')).toBeTruthy();
+    expect(getByText('Noto')).toBeTruthy();
     expect(getByTestId('auth-google-button')).toBeTruthy();
     expect(getByTestId('auth-continue-email')).toBeTruthy();
     expect(getByTestId('auth-continue-local')).toBeTruthy();

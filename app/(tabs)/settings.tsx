@@ -397,7 +397,17 @@ export default function SettingsScreen() {
                   <SwiftUIText
                     modifiers={[foregroundStyle(colors.secondaryText), font({ size: 13 }), multilineTextAlignment('center')]}
                   >
-                    Charmly v1.0.0
+                    Noto v1.0.0
+                  </SwiftUIText>
+                  <SwiftUIText
+                    modifiers={[
+                      foregroundStyle(colors.secondaryText + 'CC'),
+                      font({ size: 11, weight: 'medium' }),
+                      multilineTextAlignment('center'),
+                      padding({ top: 4 }),
+                    ]}
+                  >
+                    ノート
                   </SwiftUIText>
                   <SwiftUIText
                     modifiers={[

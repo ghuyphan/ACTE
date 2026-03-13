@@ -1,4 +1,4 @@
-# Charmly Release Checklist
+# Noto Release Checklist
 
 ## Core Flows
 - [ ] Onboarding appears on first launch and routes to app after completion.

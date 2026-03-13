@@ -400,8 +400,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         const photoUri = getNotePhotoUri(note);
         const message =
             note.type === 'text'
-                ? `📍 ${locationStr}\n\n${note.content}\n\n— Charmly 💛`
-                : `${t('noteDetail.sharePhotoMsg', { location: locationStr })}\n\n— Charmly 💛`;
+                ? `📍 ${locationStr}\n\n${note.content}\n\n— Noto 💛`
+                : `${t('noteDetail.sharePhotoMsg', { location: locationStr })}\n\n— Noto 💛`;
 
         try {
             if (note.type === 'photo' && photoUri) {

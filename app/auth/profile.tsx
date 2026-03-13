@@ -116,7 +116,7 @@ export default function ProfileScreen() {
       >
         <Text style={[styles.title, { color: colors.text }]}>{t('profile.title', 'Profile')}</Text>
         <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-          {t('profile.description', 'Manage the account connected to Charmly.')}
+          {t('profile.description', 'Manage the account connected to Noto.')}
         </Text>
 
         {user ? (
@@ -143,7 +143,7 @@ export default function ProfileScreen() {
               </Text>
               <ProfileRow
                 label={t('profile.name', 'Name')}
-                value={user.displayName || t('profile.noName', 'Charmly account')}
+                value={user.displayName || t('profile.noName', 'Noto account')}
               />
               {user.email ? (
                 <ProfileRow label={t('profile.email', 'Email')} value={user.email} />

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Charmly",
-    "slug": "charmly",
+    "name": "Noto",
+    "slug": "noto",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "charmly",
+    "scheme": "noto",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -35,7 +35,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Charmly to use your location to save and find your nearby memories.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Noto to use your location to save and find your nearby memories.",
           "isAndroidBackgroundLocationEnabled": true,
           "isIosBackgroundLocationEnabled": true
         }

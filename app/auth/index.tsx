@@ -584,7 +584,8 @@ export default function LoginScreen() {
           <View style={[styles.iconContainer, { backgroundColor: colors.primarySoft }]}>
             <Ionicons name="heart" size={64} color={colors.primary} />
           </View>
-          <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Charmly')}</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
+          <Text style={[styles.brandAccent, { color: colors.secondaryText }]}>ノート</Text>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
             {t('auth.subtitle', 'So you never forget what she likes')}
           </Text>
@@ -605,7 +606,7 @@ export default function LoginScreen() {
             variant="neutral"
           />
           <PrimaryButton
-            label={t('auth.continueApp', 'Continue to Charmly')}
+            label={t('auth.continueApp', 'Continue to Noto')}
             onPress={continueToApp}
             variant="secondary"
           />
@@ -635,7 +636,8 @@ export default function LoginScreen() {
         <View style={[styles.iconContainer, { backgroundColor: colors.primarySoft }]}>
           <Ionicons name="heart" size={64} color={colors.primary} />
         </View>
-        <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Charmly')}</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
+        <Text style={[styles.brandAccent, { color: colors.secondaryText }]}>ノート</Text>
         <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
           {t('auth.subtitle', 'So you never forget what she likes')}
         </Text>
@@ -802,7 +804,13 @@ const styles = StyleSheet.create({
   },
   title: {
     ...Typography.heroTitle,
+    marginBottom: 6,
+  },
+  brandAccent: {
+    ...Typography.pill,
+    letterSpacing: 4,
     marginBottom: 12,
+    opacity: 0.78,
   },
   subtitle: {
     ...Typography.heroSubtitle,
