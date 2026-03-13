@@ -19,12 +19,19 @@ export interface ThemeColors {
     gradient: string[];
     captureButtonBg: string;
     tabBarBg: string;
-    primaryContrastText?: string;
-    primaryContrastPlaceholder?: string;
-    primaryGlassOverlay?: string;
-    primaryGlassIcon?: string;
-    primaryGlassPlaceholder?: string;
-    primaryGlassColorScheme?: 'light' | 'dark';
+    captureCardText: string;
+    captureCardPlaceholder: string;
+    captureCardBorder: string;
+    captureGlassFill: string;
+    captureGlassBorder: string;
+    captureGlassText: string;
+    captureGlassIcon: string;
+    captureGlassPlaceholder: string;
+    captureGlassColorScheme: 'light' | 'dark';
+    captureCameraOverlay: string;
+    captureCameraOverlayBorder: string;
+    captureCameraOverlayText: string;
+    captureFlashOverlay: string;
 }
 
 interface ThemeContextType {
@@ -51,12 +58,19 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
         gradient: ['#F2DEC0', '#E0B15B'],
         captureButtonBg: '#1C1C1E',
         tabBarBg: 'rgba(247,242,235,0.94)',
-        primaryContrastText: '#1C1C1E',
-        primaryContrastPlaceholder: 'rgba(28,28,30,0.48)',
-        primaryGlassOverlay: 'rgba(255,255,255,0.72)',
-        primaryGlassIcon: 'rgba(28,28,30,0.45)',
-        primaryGlassPlaceholder: 'rgba(28,28,30,0.32)',
-        primaryGlassColorScheme: 'light',
+        captureCardText: '#1C1C1E',
+        captureCardPlaceholder: 'rgba(28,28,30,0.48)',
+        captureCardBorder: 'rgba(255,255,255,0.22)',
+        captureGlassFill: 'rgba(255,252,246,0.62)',
+        captureGlassBorder: 'rgba(255,255,255,0.3)',
+        captureGlassText: '#2B2621',
+        captureGlassIcon: 'rgba(43,38,33,0.52)',
+        captureGlassPlaceholder: 'rgba(43,38,33,0.34)',
+        captureGlassColorScheme: 'light',
+        captureCameraOverlay: 'rgba(28,28,30,0.48)',
+        captureCameraOverlayBorder: 'rgba(255,255,255,0.16)',
+        captureCameraOverlayText: '#FFFDFC',
+        captureFlashOverlay: 'rgba(255,250,242,0.96)',
     },
     dark: {
         background: '#000000',       // Pure OLED black
@@ -73,12 +87,19 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
         gradient: ['#FFC107', '#FF9F0A'],
         captureButtonBg: '#FFFFFF',
         tabBarBg: 'rgba(0,0,0,0.92)',
-        primaryContrastText: '#1C1C1E',
-        primaryContrastPlaceholder: 'rgba(28,28,30,0.48)',
-        primaryGlassOverlay: 'rgba(255,255,255,0.62)',
-        primaryGlassIcon: 'rgba(28,28,30,0.5)',
-        primaryGlassPlaceholder: 'rgba(28,28,30,0.32)',
-        primaryGlassColorScheme: 'light',
+        captureCardText: '#1C1C1E',
+        captureCardPlaceholder: 'rgba(28,28,30,0.5)',
+        captureCardBorder: 'rgba(255,255,255,0.08)',
+        captureGlassFill: 'rgba(28,28,30,0.28)',
+        captureGlassBorder: 'rgba(255,255,255,0.16)',
+        captureGlassText: '#FFF7E8',
+        captureGlassIcon: 'rgba(255,247,232,0.78)',
+        captureGlassPlaceholder: 'rgba(255,247,232,0.56)',
+        captureGlassColorScheme: 'dark',
+        captureCameraOverlay: 'rgba(18,18,18,0.68)',
+        captureCameraOverlayBorder: 'rgba(255,255,255,0.14)',
+        captureCameraOverlayText: '#FFF7E8',
+        captureFlashOverlay: 'rgba(255,248,232,0.92)',
     },
 };
 

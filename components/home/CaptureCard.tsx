@@ -15,7 +15,8 @@ import {
   View,
 } from 'react-native';
 import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../../constants/noteRadius';
-import { Layout, Typography } from '../../constants/theme';
+import { Layout, Shadows, Typography } from '../../constants/theme';
+import type { ThemeColors } from '../../hooks/useTheme';
 import PrimaryButton from '../ui/PrimaryButton';
 import { isOlderIOS } from '../../utils/platform';
 
@@ -31,19 +32,27 @@ interface CaptureCardProps {
   captureOpacity: Animated.Value;
   captureScale: Animated.Value;
   captureTranslateY: Animated.Value;
-  colors: {
-    primary: string;
-    card: string;
-    border: string;
-    text: string;
-    secondaryText: string;
-    primaryContrastText?: string;
-    primaryContrastPlaceholder?: string;
-    primaryGlassOverlay?: string;
-    primaryGlassIcon?: string;
-    primaryGlassPlaceholder?: string;
-    primaryGlassColorScheme?: 'light' | 'dark';
-  };
+  colors: Pick<
+    ThemeColors,
+    | 'primary'
+    | 'card'
+    | 'border'
+    | 'text'
+    | 'secondaryText'
+    | 'captureCardText'
+    | 'captureCardPlaceholder'
+    | 'captureCardBorder'
+    | 'captureGlassFill'
+    | 'captureGlassBorder'
+    | 'captureGlassText'
+    | 'captureGlassIcon'
+    | 'captureGlassPlaceholder'
+    | 'captureGlassColorScheme'
+    | 'captureCameraOverlay'
+    | 'captureCameraOverlayBorder'
+    | 'captureCameraOverlayText'
+    | 'captureFlashOverlay'
+  >;
   isDark: boolean;
   t: TFunction;
   noteText: string;
@@ -79,7 +88,6 @@ export default function CaptureCard({
   captureScale,
   captureTranslateY,
   colors,
-  isDark,
   t,
   noteText,
   onChangeNoteText,
@@ -105,16 +113,6 @@ export default function CaptureCard({
   shutterScale,
 }: CaptureCardProps) {
   const showInlineRadiusOptions = Platform.OS !== 'ios';
-  const primaryTextColor = colors.primaryContrastText ?? '#1C1C1E';
-  const primaryPlaceholderColor =
-    colors.primaryContrastPlaceholder ?? (isDark ? 'rgba(28,28,30,0.5)' : 'rgba(28,28,30,0.48)');
-  const primaryGlassOverlay =
-    colors.primaryGlassOverlay ?? (isDark ? 'rgba(255,255,255,0.62)' : 'rgba(255,255,255,0.7)');
-  const primaryGlassIcon =
-    colors.primaryGlassIcon ?? (isDark ? 'rgba(28,28,30,0.5)' : 'rgba(28,28,30,0.4)');
-  const primaryGlassPlaceholder =
-    colors.primaryGlassPlaceholder ?? (isDark ? 'rgba(28,28,30,0.35)' : 'rgba(28,28,30,0.3)');
-  const primaryGlassColorScheme = colors.primaryGlassColorScheme ?? 'light';
 
   return (
     <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
@@ -129,13 +127,21 @@ export default function CaptureCard({
         pointerEvents={isSearching ? 'none' : 'auto'}
       >
         {captureMode === 'text' ? (
-          <View style={[styles.textCard, { backgroundColor: colors.primary }]}>
+          <View
+            style={[
+              styles.textCard,
+              {
+                backgroundColor: colors.primary,
+                borderColor: colors.captureCardBorder,
+              },
+            ]}
+          >
             <View style={styles.cardTextCenter}>
               <TextInput
                 key={`note-text-${isSearching}`}
-                style={[styles.textInput, { color: primaryTextColor }]}
+                style={[styles.textInput, { color: colors.captureCardText }]}
                 placeholder={t('capture.textPlaceholder', 'Note about this place...')}
-                placeholderTextColor={primaryPlaceholderColor}
+                placeholderTextColor={colors.captureCardPlaceholder}
                 multiline
                 value={noteText}
                 onChangeText={onChangeNoteText}
@@ -143,13 +149,13 @@ export default function CaptureCard({
               />
             </View>
 
-            <View style={styles.cardRestaurantPill}>
+            <View style={[styles.cardRestaurantPill, { borderColor: colors.captureGlassBorder }]}>
               {isOlderIOS ? (
                 <View
                   style={[
                     StyleSheet.absoluteFillObject,
                     {
-                      backgroundColor: primaryGlassOverlay,
+                      backgroundColor: colors.captureGlassFill,
                       borderRadius: 20,
                     },
                   ]}
@@ -160,18 +166,18 @@ export default function CaptureCard({
                 pointerEvents="none"
                 style={StyleSheet.absoluteFillObject}
                 glassEffectStyle="regular"
-                colorScheme={primaryGlassColorScheme}
+                colorScheme={colors.captureGlassColorScheme}
               />
               <Ionicons
                 name="restaurant-outline"
                 size={14}
-                color={primaryGlassIcon}
+                color={colors.captureGlassIcon}
               />
               <TextInput
                 key={`restaurant-${isSearching}`}
-                style={[styles.cardRestaurantInput, { color: primaryTextColor }]}
+                style={[styles.cardRestaurantInput, { color: colors.captureGlassText }]}
                 placeholder={t('capture.restaurantPlaceholder', 'Restaurant name (e.g. Phở Hòa)')}
-                placeholderTextColor={primaryGlassPlaceholder}
+                placeholderTextColor={colors.captureGlassPlaceholder}
                 value={restaurantName}
                 onChangeText={onChangeRestaurantName}
                 maxLength={100}
@@ -179,17 +185,29 @@ export default function CaptureCard({
             </View>
           </View>
         ) : capturedPhoto ? (
-          <View style={styles.cameraContainer}>
+          <View style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}>
             <Image source={{ uri: capturedPhoto }} style={styles.cameraPreview} contentFit="cover" />
-            <Pressable style={styles.retakeBtn} onPress={onRetakePhoto}>
-              <Ionicons name="refresh" size={18} color="white" />
-              <Text style={styles.retakeBtnText}>{t('capture.retake', 'Retake')}</Text>
+            <Pressable
+              style={[
+                styles.cameraOverlayButton,
+                styles.retakeBtn,
+                {
+                  backgroundColor: colors.captureCameraOverlay,
+                  borderColor: colors.captureCameraOverlayBorder,
+                },
+              ]}
+              onPress={onRetakePhoto}
+            >
+              <Ionicons name="refresh" size={18} color={colors.captureCameraOverlayText} />
+              <Text style={[styles.retakeBtnText, { color: colors.captureCameraOverlayText }]}>
+                {t('capture.retake', 'Retake')}
+              </Text>
             </Pressable>
             <Animated.View
               pointerEvents="none"
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: 'white', opacity: flashAnim, zIndex: 50 },
+                { backgroundColor: colors.captureFlashOverlay, opacity: flashAnim, zIndex: 50 },
               ]}
             />
           </View>
@@ -206,18 +224,28 @@ export default function CaptureCard({
             />
           </View>
         ) : (
-          <View style={styles.cameraContainer}>
+          <View style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}>
             {isFocused && captureMode === 'camera' ? (
               <CameraView style={styles.cameraPreview} facing={facing} ref={cameraRef} />
             ) : null}
-            <Pressable style={styles.flipBtn} onPress={onToggleFacing}>
-              <Ionicons name="camera-reverse" size={20} color="white" />
+            <Pressable
+              style={[
+                styles.cameraOverlayButton,
+                styles.flipBtn,
+                {
+                  backgroundColor: colors.captureCameraOverlay,
+                  borderColor: colors.captureCameraOverlayBorder,
+                },
+              ]}
+              onPress={onToggleFacing}
+            >
+              <Ionicons name="camera-reverse" size={20} color={colors.captureCameraOverlayText} />
             </Pressable>
             <Animated.View
               pointerEvents="none"
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: 'white', opacity: flashAnim, zIndex: 50 },
+                { backgroundColor: colors.captureFlashOverlay, opacity: flashAnim, zIndex: 50 },
               ]}
             />
           </View>
@@ -253,7 +281,7 @@ export default function CaptureCard({
                   <Text
                     style={[
                       styles.radiusChipText,
-                      { color: isSelected ? primaryTextColor : colors.text },
+                      { color: isSelected ? colors.captureCardText : colors.text },
                     ]}
                   >
                     {formatRadiusLabel(option)}
@@ -314,16 +342,13 @@ const styles = StyleSheet.create({
     height: CARD_SIZE,
     borderRadius: 40,
     borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
     padding: 32,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
     position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
+    ...Shadows.card,
   },
   textInput: {
     fontSize: 24,
@@ -349,6 +374,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
     width: '100%',
     marginTop: 8,
     overflow: 'hidden',
@@ -371,12 +397,16 @@ const styles = StyleSheet.create({
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
+    ...Shadows.card,
     backgroundColor: '#000',
+  },
+  cameraOverlayButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
   },
   cameraPreview: {
     flex: 1,
@@ -408,7 +438,6 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   retakeBtnText: {
-    color: 'white',
     fontWeight: '600',
     fontSize: 13,
   },
