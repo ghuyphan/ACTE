@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
-import { ReactElement, RefObject, useEffect, useRef } from 'react';
+import { ReactElement, RefObject, memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Animated,
   Dimensions,
@@ -24,7 +24,7 @@ const { width, height } = Dimensions.get('window');
 const HORIZONTAL_PADDING = Layout.screenPadding - 8;
 const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
 
-function AnimatedNoteCard({
+const AnimatedNoteCard = memo(function AnimatedNoteCard({
   item,
   index,
   onPress,
@@ -37,6 +37,8 @@ function AnimatedNoteCard({
   colors: {
     text: string;
     secondaryText: string;
+    danger: string;
+    card: string;
   };
   t: TFunction;
 }) {
@@ -95,8 +97,8 @@ function AnimatedNoteCard({
         )}
 
         {item.isFavorite ? (
-          <View style={styles.favBadge}>
-            <Ionicons name="heart" size={16} color="#FF3B30" />
+          <View style={[styles.favBadge, { backgroundColor: colors.card }]}>
+            <Ionicons name="heart" size={16} color={colors.danger} />
           </View>
         ) : null}
       </Animated.View>
@@ -112,7 +114,11 @@ function AnimatedNoteCard({
       </Animated.View>
     </Pressable>
   );
-}
+});
+
+type NotesFeedListItem =
+  | { id: '__capture__'; kind: 'capture' }
+  | { id: string; kind: 'note'; note: Note };
 
 interface NotesFeedProps {
   flatListRef: RefObject<FlatList<any> | null>;
@@ -127,6 +133,8 @@ interface NotesFeedProps {
     primary: string;
     text: string;
     secondaryText: string;
+    danger: string;
+    card: string;
   };
   t: TFunction;
   onCaptureVisibilityChange?: (isVisible: boolean) => void;
@@ -145,10 +153,17 @@ export default function NotesFeed({
   t,
   onCaptureVisibilityChange,
 }: NotesFeedProps) {
-  const listData = [{ id: '__capture__', kind: 'capture' as const }, ...notes.map((note) => ({
-    ...note,
-    kind: 'note' as const,
-  }))];
+  const listData = useMemo<NotesFeedListItem[]>(
+    () => [
+      { id: '__capture__', kind: 'capture' },
+      ...notes.map((note) => ({
+        id: note.id,
+        kind: 'note' as const,
+        note,
+      })),
+    ],
+    [notes]
+  );
   const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
 
   const captureVisibilityRef = useRef(onCaptureVisibilityChange);
@@ -165,30 +180,49 @@ export default function NotesFeed({
     }
   ).current;
 
+  const getItemLayout = useCallback(
+    (_data: ArrayLike<NotesFeedListItem> | null | undefined, index: number) => ({
+      length: snapHeight,
+      offset: snapHeight * index,
+      index,
+    }),
+    [snapHeight]
+  );
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: NotesFeedListItem; index: number }) => {
+      if (item.kind === 'capture') {
+        return captureItem;
+      }
+
+      const note = item.note;
+      return (
+        <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
+          <AnimatedNoteCard
+            item={note}
+            index={index}
+            onPress={() => onOpenNote(note.id)}
+            colors={colors}
+            t={t}
+          />
+        </View>
+      );
+    },
+    [captureItem, colors, onOpenNote, snapHeight, t, topInset]
+  );
+
   return (
     <Reanimated.FlatList
       ref={flatListRef}
       data={listData}
       keyExtractor={(item) => item.id}
-      renderItem={({ item, index }) => {
-        if (item.kind === 'capture') {
-          return captureItem;
-        }
-
-        const note = item as Note;
-        return (
-          <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
-            <AnimatedNoteCard
-              item={note}
-              index={index}
-              onPress={() => onOpenNote(note.id)}
-              colors={colors}
-              t={t}
-            />
-          </View>
-        );
-      }}
+      renderItem={renderItem}
       itemLayoutAnimation={LinearTransition.springify().damping(20).stiffness(150)}
+      getItemLayout={getItemLayout}
+      initialNumToRender={3}
+      maxToRenderPerBatch={4}
+      windowSize={5}
+      removeClippedSubviews
       snapToInterval={snapHeight}
       snapToAlignment="start"
       decelerationRate="fast"

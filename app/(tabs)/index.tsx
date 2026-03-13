@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -58,6 +58,8 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
+  const [, startSearchTransition] = useTransition();
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const searchAnim = useRef(new Animated.Value(0)).current;
   const hintAnim = useRef(new Animated.Value(1)).current;
@@ -95,8 +97,8 @@ export default function HomeScreen() {
   const snapHeight = height - insets.top - 90;
 
   const filteredNotes = useMemo(() => {
-    return filterNotesByQuery(notes, searchQuery);
-  }, [notes, searchQuery]);
+    return filterNotesByQuery(notes, deferredSearchQuery);
+  }, [deferredSearchQuery, notes]);
 
   const displayedNotes = useInlineHeaderSearch && isSearching ? filteredNotes : notes;
   const shouldShowNotesHint = displayedNotes.length > 0 && isCaptureVisible;
@@ -379,6 +381,12 @@ export default function HomeScreen() {
     [openNoteDetail, router]
   );
 
+  const handleSearchChange = useCallback((nextQuery: string) => {
+    startSearchTransition(() => {
+      setSearchQuery(nextQuery);
+    });
+  }, [startSearchTransition]);
+
   if (loading) {
     return (
       <View
@@ -403,7 +411,7 @@ export default function HomeScreen() {
         isSearching={isSearching}
         searchAnim={searchAnim}
         searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        onSearchChange={handleSearchChange}
         onOpenSearch={handleOpenSearch}
         onCloseSearch={handleCloseSearch}
         showSearchButton={useInlineHeaderSearch}

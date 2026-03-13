@@ -19,6 +19,12 @@ export interface ThemeColors {
     gradient: string[];
     captureButtonBg: string;
     tabBarBg: string;
+    primaryContrastText?: string;
+    primaryContrastPlaceholder?: string;
+    primaryGlassOverlay?: string;
+    primaryGlassIcon?: string;
+    primaryGlassPlaceholder?: string;
+    primaryGlassColorScheme?: 'light' | 'dark';
 }
 
 interface ThemeContextType {
@@ -45,6 +51,12 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
         gradient: ['#F2DEC0', '#E0B15B'],
         captureButtonBg: '#1C1C1E',
         tabBarBg: 'rgba(247,242,235,0.94)',
+        primaryContrastText: '#1C1C1E',
+        primaryContrastPlaceholder: 'rgba(28,28,30,0.48)',
+        primaryGlassOverlay: 'rgba(255,255,255,0.72)',
+        primaryGlassIcon: 'rgba(28,28,30,0.45)',
+        primaryGlassPlaceholder: 'rgba(28,28,30,0.32)',
+        primaryGlassColorScheme: 'light',
     },
     dark: {
         background: '#000000',       // Pure OLED black
@@ -61,6 +73,12 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
         gradient: ['#FFC107', '#FF9F0A'],
         captureButtonBg: '#FFFFFF',
         tabBarBg: 'rgba(0,0,0,0.92)',
+        primaryContrastText: '#1C1C1E',
+        primaryContrastPlaceholder: 'rgba(28,28,30,0.48)',
+        primaryGlassOverlay: 'rgba(255,255,255,0.62)',
+        primaryGlassIcon: 'rgba(28,28,30,0.5)',
+        primaryGlassPlaceholder: 'rgba(28,28,30,0.32)',
+        primaryGlassColorScheme: 'light',
     },
 };
 

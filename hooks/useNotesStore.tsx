@@ -49,14 +49,17 @@ function useNotesStoreValue(): NotesStoreValue {
     notesRef.current = notes;
   }, [notes]);
 
-  const scheduleWidgetUpdate = useCallback((delay = 120) => {
+  const scheduleWidgetUpdate = useCallback((nextNotes?: Note[], delay = 120) => {
     if (widgetSyncTimeoutRef.current) {
       clearTimeout(widgetSyncTimeoutRef.current);
     }
 
     widgetSyncTimeoutRef.current = setTimeout(() => {
       widgetSyncTimeoutRef.current = null;
-      void updateWidgetData();
+      void updateWidgetData({
+        notes: nextNotes,
+        includeLocationLookup: nextNotes === undefined,
+      });
     }, delay);
   }, []);
 
@@ -66,6 +69,7 @@ function useNotesStoreValue(): NotesStoreValue {
         setLoading(true);
       }
       const allNotes = await getAllNotes();
+      notesRef.current = allNotes;
       setNotes(allNotes);
     } catch (error) {
       console.error('Failed to load notes:', error);
@@ -78,21 +82,25 @@ function useNotesStoreValue(): NotesStoreValue {
 
   useEffect(() => {
     let cancelled = false;
+    let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
     (async () => {
       await refreshNotes(true);
-      try {
-        await cleanupOrphanPhotoFiles();
-      } catch (error) {
-        console.warn('Failed to clean orphan photos:', error);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
+      cleanupTimeout = setTimeout(() => {
+        if (cancelled) {
+          return;
         }
-      }
+
+        void cleanupOrphanPhotoFiles().catch((error) => {
+          console.warn('Failed to clean orphan photos:', error);
+        });
+      }, 300);
     })();
 
     return () => {
       cancelled = true;
+      if (cleanupTimeout) {
+        clearTimeout(cleanupTimeout);
+      }
     };
   }, [refreshNotes]);
 
@@ -105,9 +113,11 @@ function useNotesStoreValue(): NotesStoreValue {
   const createNote = useCallback(
     async (input: CreateNoteInput): Promise<Note> => {
       const note = await dbCreate(input);
-      setNotes((prev) => [note, ...prev]);
+      const nextNotes = [note, ...notesRef.current];
+      notesRef.current = nextNotes;
+      setNotes(nextNotes);
 
-      scheduleWidgetUpdate();
+      scheduleWidgetUpdate(nextNotes);
       await skipImmediateReminderForNewNote(note.id);
       void syncGeofenceRegions();
       void syncService.recordChange({
@@ -126,35 +136,35 @@ function useNotesStoreValue(): NotesStoreValue {
   const updateNote = useCallback(
     async (id: string, updates: NoteUpdates) => {
       await dbUpdate(id, updates);
-      setNotes((prev) =>
-        prev.map((n) =>
-          n.id === id
-            ? {
-                ...n,
-                ...updates,
-                content:
-                  n.type === 'photo'
-                    ? getNotePhotoUri({
-                        ...n,
-                        ...updates,
-                        type: n.type,
-                      })
-                    : updates.content ?? n.content,
-                photoLocalUri:
-                  n.type === 'photo'
-                    ? getNotePhotoUri({
-                        ...n,
-                        ...updates,
-                        type: n.type,
-                      }) || null
-                    : null,
-                updatedAt: new Date().toISOString(),
-              }
-            : n
-        )
+      const nextNotes = notesRef.current.map((n) =>
+        n.id === id
+          ? {
+              ...n,
+              ...updates,
+              content:
+                n.type === 'photo'
+                  ? getNotePhotoUri({
+                      ...n,
+                      ...updates,
+                      type: n.type,
+                    })
+                  : updates.content ?? n.content,
+              photoLocalUri:
+                n.type === 'photo'
+                  ? getNotePhotoUri({
+                      ...n,
+                      ...updates,
+                      type: n.type,
+                    }) || null
+                  : null,
+              updatedAt: new Date().toISOString(),
+            }
+          : n
       );
+      notesRef.current = nextNotes;
+      setNotes(nextNotes);
 
-      scheduleWidgetUpdate();
+      scheduleWidgetUpdate(nextNotes);
       if (updates.radius !== undefined) {
         void syncGeofenceRegions();
       }
@@ -172,10 +182,13 @@ function useNotesStoreValue(): NotesStoreValue {
   const toggleFavorite = useCallback(
     async (id: string) => {
       const newValue = await dbToggleFav(id);
-      setNotes((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, isFavorite: newValue } : n))
+      const nextNotes = notesRef.current.map((n) =>
+        n.id === id ? { ...n, isFavorite: newValue } : n
       );
+      notesRef.current = nextNotes;
+      setNotes(nextNotes);
 
+      void syncGeofenceRegions();
       void syncService.recordChange({
         type: 'update',
         entity: 'note',
@@ -197,7 +210,9 @@ function useNotesStoreValue(): NotesStoreValue {
       const note = await dbGetById(id);
 
       await dbDelete(id);
-      setNotes((prev) => prev.filter((n) => n.id !== id));
+      const nextNotes = notesRef.current.filter((n) => n.id !== id);
+      notesRef.current = nextNotes;
+      setNotes(nextNotes);
 
       const photoUri = getNotePhotoUri(note);
       if (note?.type === 'photo' && photoUri) {
@@ -211,7 +226,7 @@ function useNotesStoreValue(): NotesStoreValue {
         }
       }
 
-      scheduleWidgetUpdate();
+      scheduleWidgetUpdate(nextNotes);
       void syncGeofenceRegions();
       void syncService.recordChange({
         type: 'delete',
@@ -227,6 +242,7 @@ function useNotesStoreValue(): NotesStoreValue {
     const allNotes = await getAllNotes();
 
     await dbDeleteAll();
+    notesRef.current = [];
     setNotes([]);
 
     for (const note of allNotes) {
@@ -245,7 +261,7 @@ function useNotesStoreValue(): NotesStoreValue {
     }
 
     await clearGeofenceRegions();
-    scheduleWidgetUpdate();
+    scheduleWidgetUpdate([]);
     void syncService.recordChange({
       type: 'deleteAll',
       entity: 'note',

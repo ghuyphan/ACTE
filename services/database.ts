@@ -58,6 +58,7 @@ interface NoteRow {
 // ─── Database ───────────────────────────────────────────────────────
 let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+const NOTE_METADATA_SCHEMA_VERSION = 1;
 
 export async function getDB(): Promise<SQLite.SQLiteDatabase> {
     if (db) {
@@ -101,59 +102,73 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
 
             // Migration: add missing columns for existing databases before touching dependent indexes/queries.
             try {
+                const userVersionRow = await database.getFirstAsync<{ user_version: number }>(
+                    'PRAGMA user_version'
+                );
+                const currentUserVersion = userVersionRow?.user_version ?? 0;
                 const tableInfo = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(notes)`);
                 const columns = tableInfo.map((col) => col.name);
+                let shouldBackfillNoteMetadata = currentUserVersion < NOTE_METADATA_SCHEMA_VERSION;
+
                 if (!columns.includes('is_favorite')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0`);
                 }
                 if (!columns.includes('photo_local_uri')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_local_uri TEXT`);
+                    shouldBackfillNoteMetadata = true;
                 }
                 if (!columns.includes('photo_remote_base64')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_remote_base64 TEXT`);
                 }
                 if (!columns.includes('search_text')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN search_text TEXT NOT NULL DEFAULT ''`);
+                    shouldBackfillNoteMetadata = true;
                 }
 
                 await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_search_text ON notes(search_text)`);
 
-                const rows = await database.getAllAsync<{
-                    id: string;
-                    type: NoteType;
-                    content: string;
-                    photo_local_uri: string | null;
-                    location_name: string | null;
-                    search_text: string | null;
-                }>(
-                    `SELECT id, type, content, photo_local_uri, location_name, search_text
-                     FROM notes`
-                );
+                if (shouldBackfillNoteMetadata) {
+                    const rows = await database.getAllAsync<{
+                        id: string;
+                        type: NoteType;
+                        content: string;
+                        photo_local_uri: string | null;
+                        location_name: string | null;
+                        search_text: string | null;
+                    }>(
+                        `SELECT id, type, content, photo_local_uri, location_name, search_text
+                         FROM notes`
+                    );
 
-                for (const row of rows) {
-                    const photoLocalUri =
-                        row.type === 'photo'
-                            ? resolveStoredPhotoUri(row.photo_local_uri ?? row.content)
-                            : null;
-                    const searchText = buildNoteSearchText({
-                        type: row.type,
-                        content: row.type === 'photo' ? '' : row.content,
-                        locationName: row.location_name,
-                    });
+                    for (const row of rows) {
+                        const photoLocalUri =
+                            row.type === 'photo'
+                                ? resolveStoredPhotoUri(row.photo_local_uri ?? row.content)
+                                : null;
+                        const searchText = buildNoteSearchText({
+                            type: row.type,
+                            content: row.type === 'photo' ? '' : row.content,
+                            locationName: row.location_name,
+                        });
 
-                    if (
-                        row.photo_local_uri !== photoLocalUri ||
-                        (row.search_text ?? '') !== searchText
-                    ) {
-                        await database.runAsync(
-                            `UPDATE notes
-                             SET photo_local_uri = ?, search_text = ?
-                             WHERE id = ?`,
-                            photoLocalUri,
-                            searchText,
-                            row.id
-                        );
+                        if (
+                            row.photo_local_uri !== photoLocalUri ||
+                            (row.search_text ?? '') !== searchText
+                        ) {
+                            await database.runAsync(
+                                `UPDATE notes
+                                 SET photo_local_uri = ?, search_text = ?
+                                 WHERE id = ?`,
+                                photoLocalUri,
+                                searchText,
+                                row.id
+                            );
+                        }
                     }
+                }
+
+                if (currentUserVersion < NOTE_METADATA_SCHEMA_VERSION) {
+                    await database.execAsync(`PRAGMA user_version = ${NOTE_METADATA_SCHEMA_VERSION}`);
                 }
             } catch (e) {
                 console.warn('Migration check failed:', e);

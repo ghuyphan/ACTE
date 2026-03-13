@@ -65,6 +65,7 @@ export default function MapCanvas({
               testID={`cluster-marker-${node.id}`}
               coordinate={{ latitude: node.latitude, longitude: node.longitude }}
               anchor={{ x: 0.5, y: 0.5 }}
+              tracksViewChanges={false}
               onPress={(event) => {
                 event.stopPropagation?.();
                 onClusterPress(node);
@@ -89,7 +90,7 @@ export default function MapCanvas({
         }
 
         const isSelected = node.groupId != null && node.groupId === selectedGroupId;
-        const markerColor = node.primaryType === 'photo' ? '#FF6B6B' : colors.accent;
+        const markerColor = node.primaryType === 'photo' ? colors.danger : colors.accent;
 
         return (
           <Marker

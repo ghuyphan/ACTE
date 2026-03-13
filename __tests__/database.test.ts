@@ -1,6 +1,6 @@
-const mockExecAsync = jest.fn(async () => undefined);
-const mockRunAsync = jest.fn(async () => undefined);
-const mockGetAllAsync = jest.fn(async (sql: string) => {
+const mockExecAsync = jest.fn<Promise<void>, [string]>(async () => undefined);
+const mockRunAsync = jest.fn<Promise<void>, [string, ...unknown[]]>(async () => undefined);
+const mockGetAllAsync = jest.fn<Promise<unknown[]>, [string, ...unknown[]]>(async (sql: string) => {
   if (sql.includes('PRAGMA table_info(notes)')) {
     return [
       { name: 'id' },
@@ -34,9 +34,16 @@ const mockGetAllAsync = jest.fn(async (sql: string) => {
 
 jest.mock('expo-sqlite', () => ({
   openDatabaseAsync: async () => ({
-    execAsync: (...args: unknown[]) => mockExecAsync(...args),
-    runAsync: (...args: unknown[]) => mockRunAsync(...args),
-    getAllAsync: (...args: unknown[]) => mockGetAllAsync(...args),
+    execAsync: (sql: string) => mockExecAsync(sql),
+    runAsync: (sql: string, ...args: unknown[]) => mockRunAsync(sql, ...args),
+    getAllAsync: (sql: string, ...args: unknown[]) => mockGetAllAsync(sql, ...args),
+    getFirstAsync: async (sql: string) => {
+      if (sql.includes('PRAGMA user_version')) {
+        return { user_version: 0 };
+      }
+
+      return null;
+    },
   }),
 }));
 

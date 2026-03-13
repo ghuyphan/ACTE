@@ -32,16 +32,26 @@ function AppContent() {
   const lastHandledNotificationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    let startupTimeout: ReturnType<typeof setTimeout> | null = null;
+
     getDB()
       .then(() => {
         setDbReady(true);
-        void updateWidgetData();
-        void syncGeofenceRegions();
+        startupTimeout = setTimeout(() => {
+          void updateWidgetData();
+          void syncGeofenceRegions();
+        }, 250);
       })
       .catch((err) => {
         console.error('Database init failed:', err);
         setDbReady(true); // continue anyway so app isn't stuck
       });
+
+    return () => {
+      if (startupTimeout) {
+        clearTimeout(startupTimeout);
+      }
+    };
   }, []);
 
   // Handle splash screen

@@ -21,10 +21,12 @@ const mockRemoteDelete = jest.fn(async (id: string) => {
   mockRemoteNotes.delete(id);
 });
 const mockUserSet = jest.fn(async (_data?: unknown, _options?: unknown) => undefined);
-const mockUpsertNote = jest.fn(async (note: unknown) => note);
-const mockGetNoteById = jest.fn(async (_id: string) => null);
-const mockReadPhotoAsBase64 = jest.fn(async () => 'base64-photo');
-const mockWritePhotoFromBase64 = jest.fn(async (noteId: string) => `file:///synced/${noteId}.jpg`);
+const mockUpsertNote = jest.fn<Promise<unknown>, [unknown]>(async (note: unknown) => note);
+const mockGetNoteById = jest.fn<Promise<null>, [string]>(async () => null);
+const mockReadPhotoAsBase64 = jest.fn<Promise<string>, [string]>(async () => 'base64-photo');
+const mockWritePhotoFromBase64 = jest.fn<Promise<string>, [string, string]>(
+  async (noteId: string) => `file:///synced/${noteId}.jpg`
+);
 
 const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   if (sql.includes('INSERT INTO sync_queue')) {
@@ -84,13 +86,14 @@ jest.mock('../services/database', () => ({
     runAsync: (...args: any[]) => mockRunAsync(args[0], ...args.slice(1)),
     getAllAsync: (sql: string, limit: number) => mockGetAllAsync(sql, limit),
   }),
-  getNoteById: (...args: unknown[]) => mockGetNoteById(...args),
-  upsertNote: (...args: unknown[]) => mockUpsertNote(...args),
+  getNoteById: (id: string) => mockGetNoteById(id),
+  upsertNote: (note: unknown) => mockUpsertNote(note),
 }));
 
 jest.mock('../services/photoStorage', () => ({
-  readPhotoAsBase64: (...args: unknown[]) => mockReadPhotoAsBase64(...args),
-  writePhotoFromBase64: (...args: unknown[]) => mockWritePhotoFromBase64(...args),
+  readPhotoAsBase64: (photoUri: string) => mockReadPhotoAsBase64(photoUri),
+  writePhotoFromBase64: (noteId: string, base64Data: string) =>
+    mockWritePhotoFromBase64(noteId, base64Data),
 }));
 
 function mockCreateDocRef(id: string) {

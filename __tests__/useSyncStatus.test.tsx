@@ -3,8 +3,8 @@ import { AppState, AppStateStatus } from 'react-native';
 import { ReactNode } from 'react';
 import { SyncStatusProvider, useSyncStatus } from '../hooks/useSyncStatus';
 
-const mockSyncNotesToFirebase = jest.fn();
-const mockRefreshNotes = jest.fn(async () => undefined);
+const mockSyncNotesToFirebase = jest.fn<Promise<unknown>, [unknown, unknown]>();
+const mockRefreshNotes = jest.fn<Promise<void>, [boolean?]>(async () => undefined);
 
 let appStateListener: ((state: AppStateStatus) => void) | null = null;
 
@@ -47,7 +47,7 @@ jest.mock('../hooks/useNotes', () => ({
 }));
 
 jest.mock('../services/syncService', () => ({
-  syncNotesToFirebase: (...args: unknown[]) => mockSyncNotesToFirebase(...args),
+  syncNotesToFirebase: (user: unknown, notes: unknown) => mockSyncNotesToFirebase(user, notes),
 }));
 
 function wrapper({ children }: { children: ReactNode }) {

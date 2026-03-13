@@ -37,6 +37,12 @@ interface CaptureCardProps {
     border: string;
     text: string;
     secondaryText: string;
+    primaryContrastText?: string;
+    primaryContrastPlaceholder?: string;
+    primaryGlassOverlay?: string;
+    primaryGlassIcon?: string;
+    primaryGlassPlaceholder?: string;
+    primaryGlassColorScheme?: 'light' | 'dark';
   };
   isDark: boolean;
   t: TFunction;
@@ -99,6 +105,16 @@ export default function CaptureCard({
   shutterScale,
 }: CaptureCardProps) {
   const showInlineRadiusOptions = Platform.OS !== 'ios';
+  const primaryTextColor = colors.primaryContrastText ?? '#1C1C1E';
+  const primaryPlaceholderColor =
+    colors.primaryContrastPlaceholder ?? (isDark ? 'rgba(28,28,30,0.5)' : 'rgba(28,28,30,0.48)');
+  const primaryGlassOverlay =
+    colors.primaryGlassOverlay ?? (isDark ? 'rgba(255,255,255,0.62)' : 'rgba(255,255,255,0.7)');
+  const primaryGlassIcon =
+    colors.primaryGlassIcon ?? (isDark ? 'rgba(28,28,30,0.5)' : 'rgba(28,28,30,0.4)');
+  const primaryGlassPlaceholder =
+    colors.primaryGlassPlaceholder ?? (isDark ? 'rgba(28,28,30,0.35)' : 'rgba(28,28,30,0.3)');
+  const primaryGlassColorScheme = colors.primaryGlassColorScheme ?? 'light';
 
   return (
     <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
@@ -117,9 +133,9 @@ export default function CaptureCard({
             <View style={styles.cardTextCenter}>
               <TextInput
                 key={`note-text-${isSearching}`}
-                style={[styles.textInput, { color: '#1C1C1E' }]}
+                style={[styles.textInput, { color: primaryTextColor }]}
                 placeholder={t('capture.textPlaceholder', 'Note about this place...')}
-                placeholderTextColor="rgba(28,28,30,0.48)"
+                placeholderTextColor={primaryPlaceholderColor}
                 multiline
                 value={noteText}
                 onChangeText={onChangeNoteText}
@@ -133,9 +149,7 @@ export default function CaptureCard({
                   style={[
                     StyleSheet.absoluteFillObject,
                     {
-                      backgroundColor: isDark
-                        ? 'rgba(0,0,0,0.4)'
-                        : 'rgba(255,255,255,0.7)',
+                      backgroundColor: primaryGlassOverlay,
                       borderRadius: 20,
                     },
                   ]}
@@ -146,18 +160,18 @@ export default function CaptureCard({
                 pointerEvents="none"
                 style={StyleSheet.absoluteFillObject}
                 glassEffectStyle="regular"
-                colorScheme="light"
+                colorScheme={primaryGlassColorScheme}
               />
               <Ionicons
                 name="restaurant-outline"
                 size={14}
-                color={isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.4)'}
+                color={primaryGlassIcon}
               />
               <TextInput
                 key={`restaurant-${isSearching}`}
-                style={[styles.cardRestaurantInput, { color: isDark ? '#000' : '#1C1C1E' }]}
+                style={[styles.cardRestaurantInput, { color: primaryTextColor }]}
                 placeholder={t('capture.restaurantPlaceholder', 'Restaurant name (e.g. Phở Hòa)')}
-                placeholderTextColor={isDark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.3)'}
+                placeholderTextColor={primaryGlassPlaceholder}
                 value={restaurantName}
                 onChangeText={onChangeRestaurantName}
                 maxLength={100}
@@ -239,7 +253,7 @@ export default function CaptureCard({
                   <Text
                     style={[
                       styles.radiusChipText,
-                      { color: isSelected ? '#1C1C1E' : colors.text },
+                      { color: isSelected ? primaryTextColor : colors.text },
                     ]}
                   >
                     {formatRadiusLabel(option)}

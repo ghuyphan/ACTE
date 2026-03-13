@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useMemo, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -51,10 +51,12 @@ export default function SearchScreen() {
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
   const [query, setQuery] = useState('');
+  const [, startSearchTransition] = useTransition();
+  const deferredQuery = useDeferredValue(query);
 
   const filteredNotes = useMemo(() => {
-    return filterNotesByQuery(notes, query);
-  }, [notes, query]);
+    return filterNotesByQuery(notes, deferredQuery);
+  }, [deferredQuery, notes]);
 
   const openNote = useCallback(
     (noteId: string) => {
@@ -68,6 +70,12 @@ export default function SearchScreen() {
   );
 
   const hasQuery = query.trim().length > 0;
+
+  const handleSearchChange = useCallback((nextQuery: string) => {
+    startSearchTransition(() => {
+      setQuery(nextQuery);
+    });
+  }, [startSearchTransition]);
 
   const renderNote = useCallback(
     ({ item }: { item: Note }) => {
@@ -122,7 +130,7 @@ export default function SearchScreen() {
 
                 {item.isFavorite ? (
                   <View style={styles.favoriteBadge}>
-                    <Ionicons name="heart" size={13} color="#FF3B30" />
+                    <Ionicons name="heart" size={13} color={colors.danger} />
                   </View>
                 ) : null}
               </View>
@@ -154,7 +162,7 @@ export default function SearchScreen() {
         </Pressable>
       );
     },
-    [colors.border, colors.secondaryText, colors.surface, colors.text, isDark, openNote, t]
+    [colors.border, colors.danger, colors.secondaryText, colors.surface, colors.text, isDark, openNote, t]
   );
 
   return (
@@ -169,7 +177,7 @@ export default function SearchScreen() {
       <Stack.SearchBar
         hideWhenScrolling={false}
         placeholder={t('home.searchPlaceholder', 'Search notes...')}
-        onChangeText={(event) => setQuery(event.nativeEvent.text)}
+        onChangeText={(event) => handleSearchChange(event.nativeEvent.text)}
       />
 
       {loading ? (

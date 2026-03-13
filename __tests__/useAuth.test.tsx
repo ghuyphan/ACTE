@@ -24,7 +24,7 @@ const mockSignInWithEmailAndPassword = jest.fn(async () => {
     throw mockAuthState.emailSignInError;
   }
 });
-const mockUpdateProfile = jest.fn(async () => undefined);
+const mockUpdateProfile = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockCreateUserWithEmailAndPassword = jest.fn(async () => {
   if (mockAuthState.registerError) {
     throw mockAuthState.registerError;

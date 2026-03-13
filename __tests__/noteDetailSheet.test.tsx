@@ -2,17 +2,17 @@ import React from 'react';
 import { Alert, Share, Text, TextInput, View } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
-const mockGetNoteById = jest.fn();
-const mockDeleteNote = jest.fn(async () => undefined);
-const mockUpdateNote = jest.fn(async () => undefined);
-const mockToggleFavorite = jest.fn(async () => true);
-const mockImpactAsync = jest.fn();
-const mockNotificationAsync = jest.fn();
+const mockGetNoteById = jest.fn<Promise<unknown>, [string]>();
+const mockDeleteNote = jest.fn<Promise<void>, [string]>(async () => undefined);
+const mockUpdateNote = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
+const mockToggleFavorite = jest.fn<Promise<boolean>, [string]>(async () => true);
+const mockImpactAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
+const mockNotificationAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockNotesStore = {
-  getNoteById: (...args: unknown[]) => mockGetNoteById(...args),
-  deleteNote: (...args: unknown[]) => mockDeleteNote(...args),
-  updateNote: (...args: unknown[]) => mockUpdateNote(...args),
-  toggleFavorite: (...args: unknown[]) => mockToggleFavorite(...args),
+  getNoteById: (noteId: string) => mockGetNoteById(noteId),
+  deleteNote: (noteId: string) => mockDeleteNote(noteId),
+  updateNote: (noteId: string, updates: unknown) => mockUpdateNote(noteId, updates),
+  toggleFavorite: (noteId: string) => mockToggleFavorite(noteId),
 };
 
 jest.mock('@expo/ui/swift-ui', () => {
@@ -48,8 +48,8 @@ jest.mock('expo-linear-gradient', () => {
 });
 
 jest.mock('expo-haptics', () => ({
-  impactAsync: (...args: unknown[]) => mockImpactAsync(...args),
-  notificationAsync: (...args: unknown[]) => mockNotificationAsync(...args),
+  impactAsync: (type: unknown) => mockImpactAsync(type),
+  notificationAsync: (type: unknown) => mockNotificationAsync(type),
   ImpactFeedbackStyle: {
     Light: 'light',
     Medium: 'medium',

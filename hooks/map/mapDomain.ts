@@ -234,8 +234,6 @@ export function getMapClusterNodes(
 
     if (isClusterFeature(feature)) {
       const { cluster_id: clusterId, point_count: pointCount, photoCount = 0, textCount = 0 } = feature.properties;
-      const leaves = clusterIndex.getLeaves(clusterId, Infinity);
-      const noteIds = leaves.flatMap((leaf) => leaf.properties.noteIds);
       const expansionZoom = clusterIndex.getClusterExpansionZoom(clusterId);
 
       return {
@@ -244,7 +242,7 @@ export function getMapClusterNodes(
         longitude,
         isCluster: true,
         pointCount,
-        noteIds,
+        noteIds: [],
         primaryType: photoCount >= textCount ? 'photo' : 'text',
         expansionZoom,
       } satisfies MapClusterNode;

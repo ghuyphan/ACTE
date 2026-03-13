@@ -1,4 +1,4 @@
-import firestoreModule from '@react-native-firebase/firestore';
+import firestoreModule, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { Note, getDB, getNoteById, upsertNote } from './database';
 import { readPhotoAsBase64, writePhotoFromBase64 } from './photoStorage';
 import { getFirestore } from '../utils/firebase';
@@ -83,6 +83,10 @@ interface RemoteMergeResult {
 }
 
 const FIRESTORE_BATCH_LIMIT = 400;
+type FirestoreDocument = FirebaseFirestoreTypes.DocumentData;
+type FirestoreCollection = FirebaseFirestoreTypes.CollectionReference<FirestoreDocument>;
+type FirestoreModuleLike = Pick<FirebaseFirestoreTypes.Module, 'batch'>;
+type FirestoreWriteBatch = Pick<FirebaseFirestoreTypes.WriteBatch, 'commit'>;
 
 function rowToQueueItem(row: any): SyncQueueItem {
   return {
@@ -177,7 +181,7 @@ async function commitBatch({
   itemIds,
   syncRepository,
 }: {
-  batch: { commit: () => Promise<void> };
+  batch: FirestoreWriteBatch;
   itemIds: number[];
   syncRepository: SyncRepository;
 }) {
@@ -197,15 +201,8 @@ async function commitBatch({
 }
 
 async function deleteAllRemoteNotesInChunks(
-  notesCollection: {
-    get: () => Promise<{ docs: Array<{ ref: unknown }> }>;
-  },
-  firestore: {
-    batch: () => {
-      delete: (ref: unknown) => void;
-      commit: () => Promise<void>;
-    };
-  }
+  notesCollection: FirestoreCollection,
+  firestore: FirestoreModuleLike
 ) {
   const snapshot = await notesCollection.get();
   const docs = snapshot.docs ?? [];
@@ -221,20 +218,8 @@ async function deleteAllRemoteNotesInChunks(
 }
 
 async function flushPendingQueueToFirebase(
-  notesCollection: {
-    doc: (id: string) => {
-      set: (data: Record<string, unknown>, options?: unknown) => Promise<void> | void;
-      delete: () => Promise<void> | void;
-    };
-    get: () => Promise<{ docs: Array<{ ref: unknown }> }>;
-  },
-  firestore: {
-    batch: () => {
-      set: (ref: unknown, data: unknown, options?: unknown) => void;
-      delete: (ref: unknown) => void;
-      commit: () => Promise<void>;
-    };
-  },
+  notesCollection: FirestoreCollection,
+  firestore: FirestoreModuleLike,
   syncRepository: SyncRepository,
   notes: Note[]
 ): Promise<FlushQueueResult> {
@@ -330,15 +315,8 @@ async function flushPendingQueueToFirebase(
 }
 
 async function uploadLocalSnapshotToFirebase(
-  notesCollection: {
-    doc: (id: string) => unknown;
-  },
-  firestore: {
-    batch: () => {
-      set: (ref: unknown, data: unknown, options?: unknown) => void;
-      commit: () => Promise<void>;
-    };
-  },
+  notesCollection: FirestoreCollection,
+  firestore: FirestoreModuleLike,
   notes: Note[]
 ) {
   let uploadedCount = 0;
@@ -367,9 +345,7 @@ async function uploadLocalSnapshotToFirebase(
 }
 
 async function mergeRemoteNotesFromFirebase(
-  notesCollection: {
-    get: () => Promise<{ docs: Array<{ id: string; data: () => Record<string, unknown> }> }>;
-  },
+  notesCollection: FirestoreCollection,
   localNotes: Note[]
 ): Promise<RemoteMergeResult> {
   const localNoteMap = new Map(localNotes.map((note) => [note.id, note]));
@@ -492,18 +468,7 @@ export async function syncNotesToFirebase(
   try {
     const syncRepository = getSyncRepository();
     const notesCollection = firestore.collection('users').doc(user.uid).collection('notes');
-    const queueResult = await flushPendingQueueToFirebase(
-      notesCollection,
-      firestore as unknown as {
-        batch: () => {
-          set: (ref: unknown, data: unknown, options?: unknown) => void;
-          delete: (ref: unknown) => void;
-          commit: () => Promise<void>;
-        };
-      },
-      syncRepository,
-      notes
-    );
+    const queueResult = await flushPendingQueueToFirebase(notesCollection, firestore, syncRepository, notes);
     if (queueResult.failedCount > 0) {
       return {
         status: 'error',
@@ -517,16 +482,7 @@ export async function syncNotesToFirebase(
       };
     }
 
-    const uploadedSnapshotCount = await uploadLocalSnapshotToFirebase(
-      notesCollection,
-      firestore as unknown as {
-        batch: () => {
-          set: (ref: unknown, data: unknown, options?: unknown) => void;
-          commit: () => Promise<void>;
-        };
-      },
-      notes
-    );
+    const uploadedSnapshotCount = await uploadLocalSnapshotToFirebase(notesCollection, firestore, notes);
     const remoteMergeResult = await mergeRemoteNotesFromFirebase(notesCollection, notes);
 
     await firestore.collection('users').doc(user.uid).set(

@@ -35,6 +35,11 @@ export interface WidgetProps {
     memoryReminderText: string;
 }
 
+export interface UpdateWidgetDataOptions {
+    notes?: Note[];
+    includeLocationLookup?: boolean;
+}
+
 interface LocationCoords {
     latitude: number;
     longitude: number;
@@ -235,12 +240,12 @@ async function encodePhotoForWidget(photoUri: string): Promise<string | undefine
     }
 }
 
-export async function updateWidgetData(): Promise<void> {
+export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): Promise<void> {
     try {
         const widget = getWidget();
         if (!widget) return;
 
-        const notes = await getAllNotes();
+        const notes = options.notes ?? await getAllNotes();
         const translatedStrings = getTranslatedWidgetStrings(notes.length);
 
         if (notes.length === 0) {
@@ -260,16 +265,18 @@ export async function updateWidgetData(): Promise<void> {
 
         // 1. Try to get current location
         let currentLocation: Location.LocationObject | null = null;
-        try {
-            const { status } = await Location.getForegroundPermissionsAsync();
-            if (status === 'granted') {
-                currentLocation = await Location.getLastKnownPositionAsync();
-                if (!currentLocation) {
-                    currentLocation = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (options.includeLocationLookup !== false) {
+            try {
+                const { status } = await Location.getForegroundPermissionsAsync();
+                if (status === 'granted') {
+                    currentLocation = await Location.getLastKnownPositionAsync();
+                    if (!currentLocation) {
+                        currentLocation = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                    }
                 }
+            } catch (e) {
+                console.warn('[widgetService] Location fetch failed:', e);
             }
-        } catch (e) {
-            console.warn('[widgetService] Location fetch failed:', e);
         }
 
         const { selectedNote, nearbyPlacesCount } = selectWidgetNote({

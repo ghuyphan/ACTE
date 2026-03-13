@@ -4,10 +4,16 @@ import LoginScreen from '../app/auth/index';
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
 const mockUsePreventRemove = jest.fn();
-const mockSignInWithGoogle = jest.fn(async () => ({ status: 'success' as const }));
-const mockSignInWithEmail = jest.fn(async () => ({ status: 'success' as const }));
-const mockRegisterWithEmail = jest.fn(async () => ({ status: 'success' as const }));
-const mockSendPasswordReset = jest.fn(async () => ({ status: 'success' as const }));
+const mockSignInWithGoogle = jest.fn<Promise<{ status: 'success' }>, []>(async () => ({ status: 'success' }));
+const mockSignInWithEmail = jest.fn<Promise<{ status: 'success' }>, [string, string]>(
+  async () => ({ status: 'success' })
+);
+const mockRegisterWithEmail = jest.fn<Promise<{ status: 'success' }>, [unknown]>(
+  async () => ({ status: 'success' })
+);
+const mockSendPasswordReset = jest.fn<Promise<{ status: 'success' }>, [string]>(
+  async () => ({ status: 'success' })
+);
 
 const mockAuthState = {
   user: null,
