@@ -1,11 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Button, HStack, Host, Image as SwiftUIImage, Menu, Text as SwiftUIText } from '@expo/ui/swift-ui';
 import {
+  accessibilityLabel,
   backgroundOverlay,
   buttonStyle,
+  controlSize,
   cornerRadius,
   font,
   foregroundStyle,
+  glassEffect,
+  labelStyle,
   padding,
   tint,
 } from '@expo/ui/swift-ui/modifiers';
@@ -57,10 +61,11 @@ export default function HomeHeaderSearch({
   t,
 }: HomeHeaderSearchProps) {
   const modeIconScale = useRef(new Animated.Value(1)).current;
-  const modeIconRotate = useRef(new Animated.Value(0)).current;
   const didMountRef = useRef(false);
   const useDetachedWordmark = isIOS26OrNewer;
   const useDetachedControls = isIOS26OrNewer && !showSearchButton;
+  const useNativeLiquidGlassControls = Platform.OS === 'ios' && isIOS26OrNewer;
+  const useIconOnlyHeaderControls = useNativeLiquidGlassControls;
   const showHeaderRadiusMenu = Platform.OS === 'ios';
 
   useEffect(() => {
@@ -70,29 +75,20 @@ export default function HomeHeaderSearch({
     }
 
     modeIconScale.setValue(0.88);
-    modeIconRotate.setValue(0);
 
-    Animated.parallel([
-      Animated.spring(modeIconScale, {
-        toValue: 1,
-        tension: 260,
-        friction: 18,
-        useNativeDriver: true,
-      }),
-      Animated.timing(modeIconRotate, {
-        toValue: 1,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      modeIconRotate.setValue(0);
-    });
-  }, [captureMode, modeIconRotate, modeIconScale]);
+    Animated.spring(modeIconScale, {
+      toValue: 1,
+      tension: 260,
+      friction: 18,
+      useNativeDriver: true,
+    }).start();
+  }, [captureMode, modeIconScale]);
 
   const getHeaderControlMetrics = (size: 'regular' | 'large' = 'regular') => ({
     verticalPadding: size === 'large' ? 11 : 9,
     horizontalPadding: size === 'large' ? 12 : 10,
-    iconSize: size === 'large' ? 13 : 12,
+    iconOnlyPadding: size === 'large' ? 14 : 11,
+    iconSize: size === 'large' ? 18 : 16,
     textSize: size === 'large' ? 13 : 12,
   });
 
@@ -101,35 +97,63 @@ export default function HomeHeaderSearch({
     : 'rgba(255,255,255,0.88)';
   const headerControlForegroundColor = '#1C1C1E';
 
+  const getHeaderControlModifiers = (label: string) => {
+    const modifiers = [buttonStyle('plain'), accessibilityLabel(label)];
+
+    if (!useNativeLiquidGlassControls) {
+      modifiers.push(tint(colors.primary));
+    }
+
+    return modifiers;
+  };
+
   const renderHeaderControlLabel = (
     systemName: ComponentProps<typeof SwiftUIImage>['systemName'],
     label: string,
     size: 'regular' | 'large' = 'regular'
   ) => {
     const metrics = getHeaderControlMetrics(size);
+    const isIconOnly = useIconOnlyHeaderControls;
 
     return (
       <HStack
         modifiers={[
-          padding({
-            top: metrics.verticalPadding,
-            bottom: metrics.verticalPadding,
-            leading: metrics.horizontalPadding,
-            trailing: metrics.horizontalPadding,
-          }),
-          backgroundOverlay({ color: headerControlBackgroundColor }),
-          cornerRadius(999),
+          isIconOnly
+            ? padding({ all: metrics.iconOnlyPadding })
+            : padding({
+                top: metrics.verticalPadding,
+                bottom: metrics.verticalPadding,
+                leading: metrics.horizontalPadding,
+                trailing: metrics.horizontalPadding,
+              }),
+          ...(useNativeLiquidGlassControls
+            ? [
+                glassEffect({
+                  glass: {
+                    variant: 'regular',
+                    interactive: true,
+                  },
+                  shape: isIconOnly ? 'circle' : 'capsule',
+                }),
+              ]
+            : [backgroundOverlay({ color: headerControlBackgroundColor }), cornerRadius(999)]),
         ]}
       >
-        <SwiftUIImage systemName={systemName} color={headerControlForegroundColor} size={metrics.iconSize} />
-        <SwiftUIText
-          modifiers={[
-            font({ size: metrics.textSize, weight: 'semibold' }),
-            foregroundStyle(headerControlForegroundColor),
-          ]}
-        >
-          {label}
-        </SwiftUIText>
+        <SwiftUIImage
+          systemName={systemName}
+          color={useNativeLiquidGlassControls ? undefined : headerControlForegroundColor}
+          size={metrics.iconSize}
+        />
+        {!isIconOnly ? (
+          <SwiftUIText
+            modifiers={[
+              font({ size: metrics.textSize, weight: 'semibold' }),
+              ...(!useNativeLiquidGlassControls ? [foregroundStyle(headerControlForegroundColor)] : []),
+            ]}
+          >
+            {label}
+          </SwiftUIText>
+        ) : null}
       </HStack>
     );
   };
@@ -139,6 +163,8 @@ export default function HomeHeaderSearch({
       return null;
     }
 
+    const radiusAccessibilityLabel = `${t('capture.radius', 'Radius')}: ${formatRadiusLabel(radius)}`;
+
     return (
       <Host
         matchContents
@@ -147,7 +173,7 @@ export default function HomeHeaderSearch({
       >
         <Menu
           label={renderHeaderControlLabel('scope', formatRadiusLabel(radius), size)}
-          modifiers={[buttonStyle('plain'), tint(colors.primary)]}
+          modifiers={[...getHeaderControlModifiers(radiusAccessibilityLabel)]}
         >
           {NOTE_RADIUS_OPTIONS.map((option) => (
             <Button
@@ -176,7 +202,7 @@ export default function HomeHeaderSearch({
           colorScheme={isDark ? 'dark' : 'light'}
           style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
         >
-          <Button onPress={onToggleCaptureMode} modifiers={[buttonStyle('plain'), tint(colors.primary)]}>
+          <Button onPress={onToggleCaptureMode} modifiers={getHeaderControlModifiers(modeLabel)}>
             {renderHeaderControlLabel(systemName, modeLabel, size)}
           </Button>
         </Host>
@@ -190,15 +216,7 @@ export default function HomeHeaderSearch({
       >
         <Animated.View
           style={{
-            transform: [
-              { scale: modeIconScale },
-              {
-                rotate: modeIconRotate.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['-14deg', '0deg'],
-                }),
-              },
-            ],
+            transform: [{ scale: modeIconScale }],
           }}
         >
           <Ionicons
@@ -211,24 +229,59 @@ export default function HomeHeaderSearch({
     );
   };
 
+  const renderDetachedNativeControls = () => {
+    const modeLabel =
+      captureMode === 'text'
+        ? t('capture.switchCamera', 'Camera')
+        : t('capture.switchText', 'Text');
+    const modeSystemName = captureMode === 'text' ? 'camera' : 'square.and.pencil';
+    const radiusAccessibilityLabel = `${t('capture.radius', 'Radius')}: ${formatRadiusLabel(radius)}`;
+
+    return (
+      <Host matchContents colorScheme={isDark ? 'dark' : 'light'} style={styles.detachedSwiftControlsHost}>
+        <HStack spacing={10} alignment="center">
+          <Menu
+            label={radiusAccessibilityLabel}
+            systemImage="scope"
+            modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
+          >
+            {NOTE_RADIUS_OPTIONS.map((option) => (
+              <Button
+                key={option}
+                label={formatRadiusLabel(option)}
+                systemImage={radius === option ? 'checkmark' : undefined}
+                onPress={() => onChangeRadius(option)}
+              />
+            ))}
+          </Menu>
+          <Button
+            label={modeLabel}
+            systemImage={modeSystemName}
+            onPress={onToggleCaptureMode}
+            modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
+          />
+        </HStack>
+      </Host>
+    );
+  };
+
   if (useDetachedControls) {
     return (
-      <View pointerEvents="box-none" style={[styles.detachedTopRow, { top: topInset + 6 }]}>
-        <GlassView
-          style={styles.detachedBrandGlass}
-          glassEffectStyle="regular"
-          colorScheme={isDark ? 'dark' : 'light'}
-        >
-          <View style={styles.brandLockup}>
-            <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>Noto 💛</Text>
-            <Text style={[styles.katakanaText, { color: colors.secondaryText }]}>ノート</Text>
-          </View>
-        </GlassView>
-        <View style={styles.detachedControlsGroup}>
-          {renderRadiusMenu('large')}
-          {renderModeToggle('large')}
+      <>
+        <View pointerEvents="box-none" style={[styles.detachedTopRow, { top: topInset + 6 }]}>
+          <GlassView
+            style={styles.detachedBrandGlass}
+            glassEffectStyle="regular"
+            colorScheme={isDark ? 'dark' : 'light'}
+          >
+            <View style={styles.brandLockup}>
+              <Text style={[styles.logoText, styles.detachedBrandText, { color: colors.text }]}>Noto 💛</Text>
+              <Text style={[styles.katakanaText, { color: colors.secondaryText }]}>ノート</Text>
+            </View>
+          </GlassView>
+          {renderDetachedNativeControls()}
         </View>
-      </View>
+      </>
     );
   }
 
@@ -391,11 +444,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  detachedControlsGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
   detachedBrandText: {
     fontSize: 16,
   },
@@ -407,6 +455,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   detachedSwiftHeaderControlHost: {
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detachedSwiftControlsHost: {
     minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
