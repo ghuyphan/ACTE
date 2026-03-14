@@ -19,8 +19,18 @@ jest.mock('../constants/i18n', () => {
       }
       return key === 'widget.countBadgeOne' ? `${count} note` : `${count} notes`;
     }
+    if (key === 'widget.idleText') {
+      return currentLanguage === 'vi'
+        ? 'Noto se hien dung ghi chu khi ban o gan.'
+        : "The right note will appear when you're nearby.";
+    }
+    if (key === 'widget.memoryReminder') {
+      return currentLanguage === 'vi'
+        ? 'Mot goi nhac nhe tu noi nay.'
+        : 'A quiet reminder from here.';
+    }
     if (key === 'capture.unknownPlace') {
-      return currentLanguage === 'vi' ? 'Không rõ địa điểm' : 'Unknown Place';
+      return currentLanguage === 'vi' ? 'Khong ro dia diem' : 'Unknown Place';
     }
     return key;
   });
@@ -81,10 +91,27 @@ jest.mock('expo-file-system/legacy', () => ({
   },
 }));
 
+import type { Note } from '../services/database';
 import { selectWidgetNote, updateWidgetData } from '../services/widgetService';
 import i18n from '../constants/i18n';
 
 let warnSpy: jest.SpyInstance;
+
+function buildNote(overrides: Partial<Note> = {}): Note {
+  return {
+    id: 'note-1',
+    type: 'text',
+    content: 'Remember the usual order',
+    locationName: 'District 1',
+    latitude: 10.77,
+    longitude: 106.69,
+    radius: 150,
+    isFavorite: false,
+    createdAt: '2026-03-10T10:00:00.000Z',
+    updatedAt: null,
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -104,30 +131,21 @@ beforeEach(() => {
     modificationTime: 0,
   });
   mockGetAllNotes.mockResolvedValue([
-    {
+    buildNote({
       id: 'newest',
-      type: 'text',
       content: 'Latest note',
       locationName: 'Latest place',
       latitude: 10.8,
       longitude: 106.7,
-      radius: 150,
-      isFavorite: false,
-      createdAt: '2026-03-10T10:00:00.000Z',
-      updatedAt: null,
-    },
-    {
+    }),
+    buildNote({
       id: 'older',
-      type: 'text',
       content: 'Older note',
       locationName: 'Old place',
       latitude: 10.7,
       longitude: 106.6,
-      radius: 150,
-      isFavorite: false,
       createdAt: '2026-03-09T10:00:00.000Z',
-      updatedAt: null,
-    },
+    }),
   ]);
 });
 
@@ -137,128 +155,135 @@ afterEach(() => {
 });
 
 describe('widgetService', () => {
-  it('selects nearest note when current location has nearby notes', () => {
+  it('selects the nearest nearby place and prefers the best text reminder within that place', () => {
     const result = selectWidgetNote({
       notes: [
-        {
-          id: 'near-1',
-          type: 'text',
-          content: 'Nearest',
-          locationName: 'A',
+        buildNote({
+          id: 'near-photo',
+          type: 'photo',
+          content: 'file:///photos/near.jpg',
+          locationName: 'Cafe A',
           latitude: 10.0,
           longitude: 106.0,
-          radius: 150,
-          isFavorite: false,
-          createdAt: '2026-03-10T10:00:00.000Z',
-          updatedAt: null,
-        },
-        {
-          id: 'near-2',
-          type: 'text',
-          content: 'Also nearby',
-          locationName: 'B',
+          createdAt: '2026-03-10T11:00:00.000Z',
+        }),
+        buildNote({
+          id: 'near-preference',
+          content: 'She likes the iced tea here',
+          locationName: 'Cafe A',
+          latitude: 10.0,
+          longitude: 106.0,
+          createdAt: '2026-03-10T09:00:00.000Z',
+        }),
+        buildNote({
+          id: 'other-near',
+          content: 'Another nearby place',
+          locationName: 'Cafe B',
           latitude: 10.001,
           longitude: 106.001,
-          radius: 150,
-          isFavorite: false,
-          createdAt: '2026-03-10T09:00:00.000Z',
-          updatedAt: null,
-        },
-        {
-          id: 'far',
-          type: 'text',
-          content: 'Far away',
-          locationName: 'Far',
-          latitude: 11.0,
-          longitude: 107.0,
-          radius: 150,
-          isFavorite: false,
-          createdAt: '2026-03-10T11:00:00.000Z',
-          updatedAt: null,
-        },
+        }),
       ],
       currentLocation: { latitude: 10.0, longitude: 106.0 },
       nearbyRadiusMeters: 500,
     });
 
-    expect(result.selectedNote?.id).toBe('near-1');
+    expect(result.selectedNote?.id).toBe('near-preference');
     expect(result.nearbyPlacesCount).toBe(1);
+    expect(result.isIdleState).toBe(false);
   });
 
-  it('falls back to latest note when there are no nearby matches', () => {
+  it('prefers keyword-matching reminder text over generic text at the same place', () => {
     const result = selectWidgetNote({
       notes: [
-        {
-          id: 'older',
-          type: 'text',
-          content: 'Older',
-          locationName: 'Old',
+        buildNote({
+          id: 'generic-text',
+          content: 'Nice lighting and calm music',
+          locationName: 'Pho House',
           latitude: 10.0,
           longitude: 106.0,
-          radius: 150,
+          createdAt: '2026-03-10T11:00:00.000Z',
+        }),
+        buildNote({
+          id: 'preference-text',
+          content: 'She prefers no onions here',
+          locationName: 'Pho House',
+          latitude: 10.0,
+          longitude: 106.0,
+          createdAt: '2026-03-10T09:00:00.000Z',
+        }),
+      ],
+      currentLocation: { latitude: 10.0, longitude: 106.0 },
+      nearbyRadiusMeters: 500,
+    });
+
+    expect(result.selectedNote?.id).toBe('preference-text');
+  });
+
+  it('uses favorite only as a tie breaker after recency', () => {
+    const result = selectWidgetNote({
+      notes: [
+        buildNote({
+          id: 'older-favorite',
+          content: 'Quiet corner table',
+          locationName: 'Bistro',
+          latitude: 10.0,
+          longitude: 106.0,
+          isFavorite: true,
+          createdAt: '2026-03-10T09:00:00.000Z',
+        }),
+        buildNote({
+          id: 'newer-non-favorite',
+          content: 'Quiet corner table',
+          locationName: 'Bistro',
+          latitude: 10.0,
+          longitude: 106.0,
           isFavorite: false,
-          createdAt: '2026-03-09T10:00:00.000Z',
-          updatedAt: null,
-        },
-        {
-          id: 'latest',
-          type: 'text',
-          content: 'Latest',
-          locationName: 'New',
-          latitude: 10.2,
-          longitude: 106.2,
-          radius: 150,
-          isFavorite: false,
-          createdAt: '2026-03-10T10:00:00.000Z',
-          updatedAt: null,
-        },
+          createdAt: '2026-03-10T11:00:00.000Z',
+        }),
+      ],
+      currentLocation: { latitude: 10.0, longitude: 106.0 },
+      nearbyRadiusMeters: 500,
+    });
+
+    expect(result.selectedNote?.id).toBe('newer-non-favorite');
+  });
+
+  it('stays idle when there are no nearby matches', () => {
+    const result = selectWidgetNote({
+      notes: [
+        buildNote({
+          id: 'far-note',
+          locationName: 'Far away',
+          latitude: 11.0,
+          longitude: 107.0,
+        }),
       ],
       currentLocation: { latitude: 0.0, longitude: 0.0 },
       nearbyRadiusMeters: 500,
     });
 
-    expect(result.selectedNote?.id).toBe('latest');
+    expect(result.selectedNote).toBeNull();
     expect(result.nearbyPlacesCount).toBe(0);
+    expect(result.isIdleState).toBe(true);
   });
 
-  it('falls back to latest valid text note when photo file cannot be prepared', async () => {
+  it('keeps a nearby photo reminder active when photo file preparation fails', async () => {
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mockGetLastKnownPositionAsync.mockResolvedValue({
+      coords: {
+        latitude: 10.8,
+        longitude: 106.7,
+      },
+    });
     mockGetAllNotes.mockResolvedValue([
-      {
-        id: 'photo-latest',
+      buildNote({
+        id: 'photo-nearby',
         type: 'photo',
         content: 'file:///photos/latest.jpg',
         locationName: 'Photo Place',
         latitude: 10.8,
         longitude: 106.7,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-10T12:00:00.000Z',
-        updatedAt: null,
-      },
-      {
-        id: 'text-older',
-        type: 'text',
-        content: 'Older text',
-        locationName: 'Old Text Place',
-        latitude: 10.7,
-        longitude: 106.6,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-09T12:00:00.000Z',
-        updatedAt: null,
-      },
-      {
-        id: 'text-latest',
-        type: 'text',
-        content: 'Latest text fallback',
-        locationName: 'Latest Text Place',
-        latitude: 10.9,
-        longitude: 106.8,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-10T11:00:00.000Z',
-        updatedAt: null,
-      },
+      }),
     ]);
     mockCopyAsync.mockRejectedValue(new Error('copy failed'));
     mockReadAsStringAsync.mockRejectedValue(new Error('read failed'));
@@ -268,29 +293,33 @@ describe('widgetService', () => {
     expect(mockUpdateSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
         props: expect.objectContaining({
-          text: 'Latest text fallback',
-          locationName: 'Latest Text Place',
+          text: '',
+          locationName: 'Photo Place',
           isIdleState: false,
-          noteCount: 3,
+          noteCount: 1,
+          memoryReminderText: 'A quiet reminder from here.',
         }),
       })
     );
   });
 
   it('resolves stale app-container photo paths before copying into the widget container', async () => {
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mockGetLastKnownPositionAsync.mockResolvedValue({
+      coords: {
+        latitude: 10.8,
+        longitude: 106.7,
+      },
+    });
     mockGetAllNotes.mockResolvedValue([
-      {
-        id: 'photo-latest',
+      buildNote({
+        id: 'photo-nearby',
         type: 'photo',
         content: 'file:///old-container/Documents/photos/latest.jpg',
         locationName: 'Photo Place',
         latitude: 10.8,
         longitude: 106.7,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-10T12:00:00.000Z',
-        updatedAt: null,
-      },
+      }),
     ]);
     mockGetInfoAsync.mockImplementation(async (uri: string) => ({
       exists: uri === 'file:///mock-documents/photos/latest.jpg',
@@ -308,6 +337,21 @@ describe('widgetService', () => {
     });
   });
 
+  it('renders an idle widget when no nearby place is available', async () => {
+    await updateWidgetData();
+
+    expect(mockUpdateSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        props: expect.objectContaining({
+          text: '',
+          locationName: '',
+          isIdleState: true,
+          noteCount: 2,
+        }),
+      })
+    );
+  });
+
   it('formats a compact count label for the widget badge', async () => {
     await updateWidgetData();
 
@@ -323,18 +367,13 @@ describe('widgetService', () => {
 
   it('formats a singular English count label for the widget badge', async () => {
     mockGetAllNotes.mockResolvedValue([
-      {
+      buildNote({
         id: 'only-note',
-        type: 'text',
         content: 'Only note',
         locationName: 'Only place',
         latitude: 10.8,
         longitude: 106.7,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-10T10:00:00.000Z',
-        updatedAt: null,
-      },
+      }),
     ]);
 
     await updateWidgetData();

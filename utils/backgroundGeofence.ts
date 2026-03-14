@@ -3,7 +3,8 @@ import { LocationGeofencingEventType, LocationRegion } from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import i18n from '../constants/i18n';
-import { getNoteById } from '../services/database';
+import { getAllNotes, getNoteById } from '../services/database';
+import { buildReminderTextExcerpt, findReminderPlaceGroupByNoteId } from '../services/reminderSelection';
 import { getGeofenceCooldownKey, getLocationCooldownId, getSkipNextEnterKey } from './geofenceKeys';
 
 export const GEOFENCE_TASK_NAME = 'BACKGROUND_GEOFENCE_TASK';
@@ -54,7 +55,6 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
         if (eventType === LocationGeofencingEventType.Enter) {
             console.log('You entered region:', region.identifier);
 
-            // Look up the actual note content
             let title = i18n.t('notification.title');
             let body = i18n.t('notification.body');
             const regionId = region.identifier ?? '';
@@ -68,19 +68,32 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
                 }
             }
 
-            const isNoteCoolingDown = regionId
-                ? await isOnCooldown('note', regionId, NOTE_NOTIFICATION_COOLDOWN_MS)
-                : false;
-
-            if (isNoteCoolingDown) {
-                return;
-            }
+            let cooldownNoteId = regionId;
 
             try {
-                const note = regionId ? await getNoteById(regionId) : null;
+                const [triggeredNote, allNotes] = await Promise.all([
+                    regionId ? getNoteById(regionId) : Promise.resolve(null),
+                    regionId ? getAllNotes() : Promise.resolve([]),
+                ]);
+                const reminderGroup = regionId
+                    ? findReminderPlaceGroupByNoteId(allNotes, regionId)
+                    : null;
+                const note = reminderGroup?.bestNote ?? triggeredNote;
+
                 if (note) {
+                    cooldownNoteId = note.id;
+                    const isNoteCoolingDown = await isOnCooldown(
+                        'note',
+                        cooldownNoteId,
+                        NOTE_NOTIFICATION_COOLDOWN_MS
+                    );
+                    if (isNoteCoolingDown) {
+                        return;
+                    }
+
+                    const locationName = note.locationName?.trim() || '';
                     const locationCooldownId = getLocationCooldownId(
-                        note.locationName,
+                        locationName || i18n.t('widget.unknownPlace'),
                         note.latitude,
                         note.longitude
                     );
@@ -91,18 +104,19 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
                     );
 
                     if (isLocationCoolingDown) {
-                        await setCooldown('note', regionId);
+                        await setCooldown('note', cooldownNoteId);
                         return;
                     }
 
-                    const location = note.locationName || i18n.t('widget.unknownPlace');
                     if (note.type === 'text') {
-                        title = i18n.t('notification.textTitle', { location });
-                        body = note.content.length > 120
-                            ? note.content.substring(0, 120) + '…'
-                            : note.content;
+                        title = locationName
+                            ? i18n.t('notification.textTitle', { location: locationName })
+                            : i18n.t('notification.title');
+                        body = buildReminderTextExcerpt(note.content) || i18n.t('notification.body');
                     } else {
-                        title = i18n.t('notification.photoTitle', { location });
+                        title = locationName
+                            ? i18n.t('notification.photoTitle', { location: locationName })
+                            : i18n.t('notification.title');
                         body = i18n.t('notification.photoBody');
                     }
 
@@ -110,13 +124,13 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
                         content: {
                             title,
                             body,
-                            data: { noteId: region.identifier },
+                            data: { noteId: cooldownNoteId },
                         },
                         trigger: null,
                     });
 
                     await Promise.all([
-                        setCooldown('note', regionId),
+                        setCooldown('note', cooldownNoteId),
                         setCooldown('location', locationCooldownId),
                     ]);
                     return;
@@ -125,16 +139,23 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
                 console.error('Failed to fetch note for notification:', err);
             }
 
+            const isFallbackCoolingDown = cooldownNoteId
+                ? await isOnCooldown('note', cooldownNoteId, NOTE_NOTIFICATION_COOLDOWN_MS)
+                : false;
+            if (isFallbackCoolingDown) {
+                return;
+            }
+
             await Notifications.scheduleNotificationAsync({
                 content: {
                     title,
                     body,
-                    data: { noteId: region.identifier },
+                    data: { noteId: cooldownNoteId },
                 },
                 trigger: null,
             });
-            if (regionId) {
-                await setCooldown('note', regionId);
+            if (cooldownNoteId) {
+                await setCooldown('note', cooldownNoteId);
             }
         } else if (eventType === LocationGeofencingEventType.Exit) {
             console.log('You left region:', region.identifier);

@@ -1,6 +1,7 @@
 const mockStorage = new Map<string, string>();
 const mockScheduleNotificationAsync = jest.fn();
 const mockGetNoteById = jest.fn();
+const mockGetAllNotes = jest.fn();
 
 (globalThis as any).__mockGeofenceTaskHandler = null;
 
@@ -34,6 +35,7 @@ jest.mock('expo-task-manager', () => ({
 
 jest.mock('../services/database', () => ({
   getNoteById: (...args: unknown[]) => mockGetNoteById(...args),
+  getAllNotes: (...args: unknown[]) => mockGetAllNotes(...args),
 }));
 
 jest.mock('../constants/i18n', () => ({
@@ -41,19 +43,19 @@ jest.mock('../constants/i18n', () => ({
   default: {
     t: (key: string, options?: { location?: string }) => {
       if (key === 'notification.textTitle') {
-        return `Reminder ${options?.location}`;
+        return options?.location ?? 'Nearby reminder';
       }
       if (key === 'notification.photoTitle') {
-        return `Photo ${options?.location}`;
+        return options?.location ?? 'Nearby reminder';
       }
       if (key === 'notification.photoBody') {
-        return 'You took a photo here';
+        return 'A memory from here is waiting.';
       }
       if (key === 'notification.title') {
-        return 'Remember';
+        return 'Nearby reminder';
       }
       if (key === 'notification.body') {
-        return 'Open the note';
+        return 'A note is ready when you open Noto.';
       }
       if (key === 'widget.unknownPlace') {
         return 'Unknown Place';
@@ -66,17 +68,31 @@ jest.mock('../constants/i18n', () => ({
 import { getGeofenceCooldownKey, getLocationCooldownId, getSkipNextEnterKey } from '../utils/geofenceKeys';
 require('../utils/backgroundGeofence');
 
-beforeEach(() => {
-  jest.clearAllMocks();
-  mockStorage.clear();
-  mockGetNoteById.mockResolvedValue({
+function buildNote(overrides: Partial<any> = {}) {
+  return {
     id: 'note-1',
     type: 'text',
     content: 'Order the iced tea',
     locationName: 'District 1',
     latitude: 10.77,
     longitude: 106.69,
-  });
+    radius: 150,
+    isFavorite: false,
+    createdAt: '2026-03-10T10:00:00.000Z',
+    updatedAt: null,
+    ...overrides,
+  };
+}
+
+function setMockNotes(notes: Array<any>) {
+  mockGetAllNotes.mockResolvedValue(notes);
+  mockGetNoteById.mockImplementation(async (id: string) => notes.find((note) => note.id === id) ?? null);
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockStorage.clear();
+  setMockNotes([buildNote()]);
 });
 
 async function runEnterEvent(noteId = 'note-1') {
@@ -107,7 +123,7 @@ describe('backgroundGeofence', () => {
     expect(mockStorage.has(getSkipNextEnterKey('note-1'))).toBe(false);
   });
 
-  it('suppresses notifications while the note is on cooldown', async () => {
+  it('suppresses notifications while the selected reminder note is on cooldown', async () => {
     mockStorage.set(getGeofenceCooldownKey('note', 'note-1'), String(Date.now()));
 
     await runEnterEvent('note-1');
@@ -115,7 +131,7 @@ describe('backgroundGeofence', () => {
     expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
   });
 
-  it('suppresses duplicate location notifications and refreshes the note cooldown', async () => {
+  it('suppresses duplicate location notifications and refreshes the selected note cooldown', async () => {
     mockStorage.set(
       getGeofenceCooldownKey('location', getLocationCooldownId('District 1', 10.77, 106.69)),
       String(Date.now())
@@ -127,22 +143,78 @@ describe('backgroundGeofence', () => {
     expect(mockStorage.has(getGeofenceCooldownKey('note', 'note-1'))).toBe(true);
   });
 
-  it('schedules a reminder and records cooldowns for a valid enter event', async () => {
+  it('selects the best note for the place instead of the raw triggered note', async () => {
+    setMockNotes([
+      buildNote({
+        id: 'photo-note',
+        type: 'photo',
+        content: 'file:///photos/photo.jpg',
+        createdAt: '2026-03-10T11:00:00.000Z',
+      }),
+      buildNote({
+        id: 'preference-note',
+        type: 'text',
+        content: 'She likes the iced tea here',
+        createdAt: '2026-03-10T09:00:00.000Z',
+      }),
+    ]);
+
+    await runEnterEvent('photo-note');
+
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
+      content: {
+        title: 'District 1',
+        body: 'She likes the iced tea here',
+        data: { noteId: 'preference-note' },
+      },
+      trigger: null,
+    });
+    expect(mockStorage.has(getGeofenceCooldownKey('note', 'preference-note'))).toBe(true);
+  });
+
+  it('uses place-led subtle copy for text reminders', async () => {
     await runEnterEvent('note-1');
 
     expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
       content: {
-        title: 'Reminder District 1',
+        title: 'District 1',
         body: 'Order the iced tea',
         data: { noteId: 'note-1' },
       },
       trigger: null,
     });
-    expect(mockStorage.has(getGeofenceCooldownKey('note', 'note-1'))).toBe(true);
     expect(
       mockStorage.has(
         getGeofenceCooldownKey('location', getLocationCooldownId('District 1', 10.77, 106.69))
       )
     ).toBe(true);
+  });
+
+  it('uses photo fallback copy only when there is no usable text reminder', async () => {
+    setMockNotes([
+      buildNote({
+        id: 'blank-text',
+        type: 'text',
+        content: '   ',
+        createdAt: '2026-03-10T12:00:00.000Z',
+      }),
+      buildNote({
+        id: 'photo-note',
+        type: 'photo',
+        content: 'file:///photos/photo.jpg',
+        createdAt: '2026-03-10T09:00:00.000Z',
+      }),
+    ]);
+
+    await runEnterEvent('blank-text');
+
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
+      content: {
+        title: 'District 1',
+        body: 'A memory from here is waiting.',
+        data: { noteId: 'photo-note' },
+      },
+      trigger: null,
+    });
   });
 });

@@ -8,6 +8,7 @@ export type CaptureMode = 'text' | 'camera';
 
 export function useCaptureFlow() {
   const [captureMode, setCaptureMode] = useState<CaptureMode>('text');
+  const [cameraSessionKey, setCameraSessionKey] = useState(0);
   const [restaurantName, setRestaurantName] = useState('');
   const [noteText, setNoteText] = useState('');
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
@@ -24,26 +25,34 @@ export function useCaptureFlow() {
 
   const animateModeSwitch = useCallback((callback: () => void) => {
     Animated.parallel([
-      Animated.timing(captureOpacity, { toValue: 0, duration: 110, useNativeDriver: true }),
       Animated.timing(captureScale, { toValue: 0.97, duration: 110, useNativeDriver: true }),
       Animated.timing(captureTranslateY, { toValue: -10, duration: 110, useNativeDriver: true }),
     ]).start(() => {
       callback();
       Animated.parallel([
-        Animated.spring(captureOpacity, { toValue: 1, tension: 210, friction: 17, useNativeDriver: true }),
         Animated.spring(captureScale, { toValue: 1, tension: 210, friction: 17, useNativeDriver: true }),
         Animated.spring(captureTranslateY, { toValue: 0, tension: 210, friction: 17, useNativeDriver: true }),
       ]).start();
     });
-  }, [captureOpacity, captureScale, captureTranslateY]);
+  }, [captureScale, captureTranslateY]);
 
   const toggleCaptureMode = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     animateModeSwitch(() => {
-      setCaptureMode((mode) => (mode === 'text' ? 'camera' : 'text'));
+      setCaptureMode((mode) => {
+        const nextMode = mode === 'text' ? 'camera' : 'text';
+        if (nextMode === 'camera') {
+          setCameraSessionKey((current) => current + 1);
+        }
+        return nextMode;
+      });
       setCapturedPhoto(null);
     });
   }, [animateModeSwitch]);
+
+  const refreshCameraSession = useCallback(() => {
+    setCameraSessionKey((current) => current + 1);
+  }, []);
 
   const handleShutterPressIn = useCallback(() => {
     Animated.spring(shutterScale, {
@@ -96,6 +105,7 @@ export function useCaptureFlow() {
 
   return {
     captureMode,
+    cameraSessionKey,
     setCaptureMode,
     restaurantName,
     setRestaurantName,
@@ -117,6 +127,7 @@ export function useCaptureFlow() {
     shutterScale,
     animateModeSwitch,
     toggleCaptureMode,
+    refreshCameraSession,
     handleShutterPressIn,
     handleShutterPressOut,
     takePicture,

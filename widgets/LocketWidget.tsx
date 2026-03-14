@@ -75,11 +75,14 @@ const LocketWidget = (props: { props: WidgetProps }) => {
 
     const {
         text,
+        locationName,
         backgroundImageUrl,
         backgroundImageBase64,
         noteCount,
         savedCountText,
         isIdleState,
+        idleText,
+        memoryReminderText,
         family,
     } = props.props ?? {};
 
@@ -91,15 +94,19 @@ const LocketWidget = (props: { props: WidgetProps }) => {
     const showIdle = safeNoteCount <= 0 || (isIdleState && !safeText && !hasImage);
     const isTextNote = !showIdle && !hasImage && safeText.length > 0;
     const isPhoto = !showIdle && hasImage;
-    const bodyText = showIdle ? 'Ảnh chả thương em?' : safeText;
+    const bodyText = showIdle
+        ? asString(idleText) || 'The right note will appear when you are nearby.'
+        : safeText || asString(memoryReminderText) || 'A quiet reminder from here.';
+    const eyebrowText = !showIdle ? asString(locationName) : '';
     const backgroundColors = isTextNote || showIdle
         ? ['#F5EFE8', '#ECE5DC']
         : ['#5A4D42', '#2F2926'];
     const usesTextSurface = isTextNote || showIdle || !hasImage;
     const compactPad = isLarge ? 18 : usesTextSurface ? 12 : 14;
-    const showCountBadge = !showIdle && safeNoteCount > 0;
+    const showCountBadge = showIdle && safeNoteCount > 0;
     const textLayout = getTextLayout(isLarge, bodyText.trim().length);
     const footerIconName = usesTextSurface ? 'doc.text' : 'photo';
+    const eyebrowColor = usesTextSurface ? '#6E5E4F' : '#FFF8F0';
 
     const renderCountBadge = (onDarkSurface: boolean) => (
         <HStack
@@ -176,6 +183,19 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                                     }),
                                 ]}
                             >
+                                {eyebrowText ? (
+                                    <Text
+                                        modifiers={[
+                                            font({ weight: 'medium', size: 11, design: 'default' }),
+                                            foregroundStyle(eyebrowColor),
+                                            frame({ maxWidth: 9999, alignment: 'leading' }),
+                                            lineLimit(1),
+                                            padding({ bottom: 12 }),
+                                        ]}
+                                    >
+                                        {eyebrowText}
+                                    </Text>
+                                ) : null}
                                 <Text
                                     modifiers={[
                                         font({ weight: 'regular', size: textLayout.fontSize, design: 'serif' }),
@@ -195,6 +215,25 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                     ) : (
                         <ZStack modifiers={[frame({ maxWidth: 9999, maxHeight: 9999 })]}>
                             <VStack modifiers={[frame({ maxWidth: 9999, maxHeight: 9999 })]}>
+                                {eyebrowText ? (
+                                    <HStack
+                                        modifiers={[
+                                            frame({ maxWidth: 9999 }),
+                                            padding({ horizontal: 2, top: 2, bottom: 8 }),
+                                        ]}
+                                    >
+                                        <Text
+                                            modifiers={[
+                                                font({ weight: 'medium', size: 10, design: 'default' }),
+                                                foregroundStyle(eyebrowColor),
+                                                lineLimit(1),
+                                            ]}
+                                        >
+                                            {eyebrowText}
+                                        </Text>
+                                        <Spacer />
+                                    </HStack>
+                                ) : null}
                                 <Spacer />
 
                                 <Text

@@ -3,8 +3,9 @@ import { CameraView } from 'expo-camera';
 import { GlassView } from 'expo-glass-effect';
 import { Image } from 'expo-image';
 import { TFunction } from 'i18next';
-import { RefObject } from 'react';
+import { RefObject, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Platform,
@@ -29,12 +30,13 @@ interface CaptureCardProps {
   topInset: number;
   isSearching: boolean;
   captureMode: 'text' | 'camera';
-  captureOpacity: Animated.Value;
+  cameraSessionKey: number;
   captureScale: Animated.Value;
   captureTranslateY: Animated.Value;
   colors: Pick<
     ThemeColors,
     | 'primary'
+    | 'captureButtonBg'
     | 'card'
     | 'border'
     | 'text'
@@ -64,7 +66,6 @@ interface CaptureCardProps {
   onRetakePhoto: () => void;
   needsCameraPermission: boolean;
   onRequestCameraPermission: () => void;
-  isFocused: boolean;
   facing: 'back' | 'front';
   onToggleFacing: () => void;
   cameraRef: RefObject<CameraView | null>;
@@ -83,7 +84,7 @@ export default function CaptureCard({
   topInset,
   isSearching,
   captureMode,
-  captureOpacity,
+  cameraSessionKey,
   captureScale,
   captureTranslateY,
   colors,
@@ -98,7 +99,6 @@ export default function CaptureCard({
   onRetakePhoto,
   needsCameraPermission,
   onRequestCameraPermission,
-  isFocused,
   facing,
   onToggleFacing,
   cameraRef,
@@ -112,6 +112,17 @@ export default function CaptureCard({
   shutterScale,
 }: CaptureCardProps) {
   const showInlineRadiusOptions = Platform.OS !== 'ios';
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const isCameraSaveMode = captureMode === 'camera';
+
+  useEffect(() => {
+    if (captureMode === 'camera' && !capturedPhoto && permissionGranted) {
+      setIsCameraReady(false);
+      return;
+    }
+
+    setIsCameraReady(true);
+  }, [captureMode, capturedPhoto, permissionGranted, cameraSessionKey]);
 
   return (
     <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
@@ -119,7 +130,6 @@ export default function CaptureCard({
         style={[
           styles.captureArea,
           {
-            opacity: captureOpacity,
             transform: [{ translateY: captureTranslateY }, { scale: captureScale }],
           },
         ]}
@@ -224,8 +234,21 @@ export default function CaptureCard({
           </View>
         ) : (
           <View style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}>
-            {isFocused && captureMode === 'camera' ? (
-              <CameraView style={styles.cameraPreview} facing={facing} ref={cameraRef} />
+            {captureMode === 'camera' ? (
+              <CameraView
+                key={`camera-session-${cameraSessionKey}-${facing}`}
+                style={styles.cameraPreview}
+                facing={facing}
+                ref={cameraRef}
+                onCameraReady={() => {
+                  setIsCameraReady(true);
+                }}
+              />
+            ) : null}
+            {!isCameraReady ? (
+              <View pointerEvents="none" style={styles.cameraLoadingOverlay}>
+                <ActivityIndicator size="small" color={colors.captureCameraOverlayText} />
+              </View>
             ) : null}
             <Pressable
               style={[
@@ -255,7 +278,6 @@ export default function CaptureCard({
         style={[
           styles.belowCardSection,
           {
-            opacity: captureOpacity,
             transform: [{ translateY: captureTranslateY }, { scale: captureScale }],
           },
         ]}
@@ -312,13 +334,40 @@ export default function CaptureCard({
             ) : null}
           </View>
         ) : (
-          <PrimaryButton
-            label={t('capture.save', 'Save Note 💛')}
-            variant="neutral"
-            onPress={onSaveNote}
-            loading={saving}
-            style={styles.belowCardSaveButton}
-          />
+          <View style={styles.belowCardShutterRow}>
+            <Pressable
+              testID="capture-save-button"
+              onPress={onSaveNote}
+              disabled={saving}
+              style={[
+                styles.shutterOuter,
+                {
+                  borderColor: colors.border,
+                  opacity: saving ? 0.72 : 1,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.shutterInner,
+                  styles.saveInner,
+                  {
+                    backgroundColor: isCameraSaveMode ? colors.primary : colors.captureButtonBg,
+                  },
+                ]}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'} />
+                ) : (
+                  <Ionicons
+                    name="checkmark"
+                    size={24}
+                    color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'}
+                  />
+                )}
+              </View>
+            </Pressable>
+          </View>
         )}
       </Animated.View>
     </View>
@@ -408,9 +457,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   cameraPreview: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
+  },
+  cameraLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   flipBtn: {
     position: 'absolute',
@@ -493,9 +545,10 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  belowCardSaveButton: {
-    width: '100%',
-    borderRadius: 999,
+  saveInner: {
+    transform: [{ scale: 1 }],
   },
 });

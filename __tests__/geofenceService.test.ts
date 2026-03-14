@@ -49,12 +49,29 @@ jest.mock('../services/database', () => ({
   getAllNotes: (...args: unknown[]) => mockGetAllNotes(...args),
 }));
 
+import type { Note } from '../services/database';
 import {
   clearGeofenceRegions,
   getMaxGeofenceRegionCount,
   prioritizeNotesForGeofencing,
   syncGeofenceRegions,
 } from '../services/geofenceService';
+
+function buildNote(overrides: Partial<Note> = {}): Note {
+  return {
+    id: 'note-1',
+    type: 'text',
+    content: 'Remember the usual order',
+    locationName: 'District 1',
+    latitude: 10.7626,
+    longitude: 106.6601,
+    radius: 150,
+    isFavorite: false,
+    createdAt: '2026-03-10T10:00:00.000Z',
+    updatedAt: null,
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   mockStorage.clear();
@@ -67,18 +84,14 @@ beforeEach(() => {
   mockStartGeofencingAsync.mockResolvedValue(undefined);
   mockStopGeofencingAsync.mockResolvedValue(undefined);
   mockGetAllNotes.mockResolvedValue([
-    {
-      id: 'note-1',
-      latitude: 10.7626,
-      longitude: 106.6601,
-      radius: 150,
-    },
-    {
+    buildNote({ id: 'note-1' }),
+    buildNote({
       id: 'note-2',
+      locationName: 'District 2',
       latitude: 10.765,
       longitude: 106.665,
-      radius: 150,
-    },
+      createdAt: '2026-03-10T09:00:00.000Z',
+    }),
   ]);
 });
 
@@ -121,54 +134,130 @@ describe('geofenceService', () => {
   it('limits the number of registered regions to the platform maximum', async () => {
     const maxRegions = getMaxGeofenceRegionCount();
     mockGetAllNotes.mockResolvedValue(
-      Array.from({ length: maxRegions + 5 }, (_, index) => ({
-        id: `note-${index + 1}`,
-        latitude: 10.7 + index * 0.001,
-        longitude: 106.6 + index * 0.001,
-        radius: 150,
-      }))
+      Array.from({ length: maxRegions + 5 }, (_, index) =>
+        buildNote({
+          id: `note-${index + 1}`,
+          locationName: `Place ${index + 1}`,
+          latitude: 10.7 + index * 0.001,
+          longitude: 106.6 + index * 0.001,
+          createdAt: `2026-03-${String(10 + Math.min(index, 18)).padStart(2, '0')}T10:00:00.000Z`,
+        })
+      )
     );
 
     const result = await syncGeofenceRegions();
 
     expect(result).toBe(true);
-    expect(mockStartGeofencingAsync).toHaveBeenCalledWith(
-      'BACKGROUND_GEOFENCE_TASK',
-      expect.arrayContaining([
-        expect.objectContaining({ identifier: 'note-1' }),
-        expect.objectContaining({ identifier: `note-${maxRegions}` }),
-      ])
-    );
     expect(mockStartGeofencingAsync.mock.calls[0]?.[1]).toHaveLength(maxRegions);
     expect(consoleWarnSpy).toHaveBeenCalled();
   });
 
-  it('prioritizes favorite locations before non-favorites when region slots are limited', () => {
+  it('registers one region per place using the best representative note', async () => {
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'photo-note',
+        type: 'photo',
+        content: 'file:///photo.jpg',
+        locationName: 'District 1',
+        createdAt: '2026-03-10T11:00:00.000Z',
+      }),
+      buildNote({
+        id: 'preference-note',
+        type: 'text',
+        content: 'She likes the iced tea here',
+        locationName: 'District 1',
+        createdAt: '2026-03-10T09:00:00.000Z',
+      }),
+      buildNote({
+        id: 'district-2-note',
+        locationName: 'District 2',
+        latitude: 10.765,
+        longitude: 106.665,
+      }),
+    ]);
+
+    await syncGeofenceRegions();
+
+    expect(mockStartGeofencingAsync).toHaveBeenCalledWith(
+      'BACKGROUND_GEOFENCE_TASK',
+      expect.arrayContaining([
+        expect.objectContaining({ identifier: 'preference-note' }),
+        expect.objectContaining({ identifier: 'district-2-note' }),
+      ])
+    );
+    expect(mockStartGeofencingAsync.mock.calls[0]?.[1]).toHaveLength(2);
+  });
+
+  it('prioritizes a preference reminder over a photo memory for the same place', () => {
     const prioritized = prioritizeNotesForGeofencing(
       [
-        {
-          id: 'recent-non-favorite',
-          latitude: 10.7626,
-          longitude: 106.6601,
-          radius: 150,
-          isFavorite: false,
-          createdAt: '2026-03-12T10:00:00.000Z',
-          updatedAt: null,
-        },
-        {
-          id: 'favorite-place',
-          latitude: 10.771,
-          longitude: 106.662,
-          radius: 150,
-          isFavorite: true,
-          createdAt: '2026-03-10T10:00:00.000Z',
-          updatedAt: null,
-        },
-      ] as any,
+        buildNote({
+          id: 'photo-note',
+          type: 'photo',
+          content: 'file:///photo.jpg',
+          locationName: 'District 1',
+          createdAt: '2026-03-10T11:00:00.000Z',
+        }),
+        buildNote({
+          id: 'preference-note',
+          type: 'text',
+          content: 'She prefers no onions here',
+          locationName: 'District 1',
+          createdAt: '2026-03-10T09:00:00.000Z',
+        }),
+      ],
       1
     );
 
-    expect(prioritized.map((note) => note.id)).toEqual(['favorite-place']);
+    expect(prioritized.map((note) => note.id)).toEqual(['preference-note']);
+  });
+
+  it('does not let blank text outrank a usable reminder for the same place', () => {
+    const prioritized = prioritizeNotesForGeofencing(
+      [
+        buildNote({
+          id: 'blank-text',
+          content: '   ',
+          locationName: 'District 1',
+          createdAt: '2026-03-10T12:00:00.000Z',
+        }),
+        buildNote({
+          id: 'useful-text',
+          content: 'She likes the window seats here',
+          locationName: 'District 1',
+          createdAt: '2026-03-10T09:00:00.000Z',
+        }),
+      ],
+      1
+    );
+
+    expect(prioritized.map((note) => note.id)).toEqual(['useful-text']);
+  });
+
+  it('uses favorite only as a tie breaker after recency', () => {
+    const prioritized = prioritizeNotesForGeofencing(
+      [
+        buildNote({
+          id: 'older-favorite',
+          content: 'Quiet corner table',
+          locationName: 'District 1',
+          isFavorite: true,
+          createdAt: '2026-03-10T09:00:00.000Z',
+        }),
+        buildNote({
+          id: 'newer-non-favorite',
+          content: 'Quiet corner table',
+          locationName: 'District 2',
+          latitude: 10.765,
+          longitude: 106.665,
+          isFavorite: false,
+          createdAt: '2026-03-10T11:00:00.000Z',
+        }),
+      ],
+      1
+    );
+
+    expect(prioritized.map((note) => note.id)).toEqual(['newer-non-favorite']);
   });
 
   it('clears started geofences and signature', async () => {

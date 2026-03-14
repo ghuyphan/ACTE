@@ -3,6 +3,7 @@ import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { Note, getAllNotes } from './database';
+import { getReminderPlaceGroups } from './reminderSelection';
 import { GEOFENCE_TASK_NAME } from '../utils/backgroundGeofence';
 import { getSkipNextEnterKey } from '../utils/geofenceKeys';
 
@@ -34,48 +35,10 @@ function buildGeofenceSignature(
   );
 }
 
-function getLocationPriorityKey(note: Pick<Note, 'locationName' | 'latitude' | 'longitude'>) {
-  const normalizedLocation = note.locationName?.trim().toLowerCase();
-  if (normalizedLocation) {
-    return `${normalizedLocation}:${note.latitude.toFixed(4)}:${note.longitude.toFixed(4)}`;
-  }
-
-  return `${note.latitude.toFixed(4)}:${note.longitude.toFixed(4)}`;
-}
-
-function getPriorityTimestamp(note: Pick<Note, 'createdAt' | 'updatedAt'>) {
-  const timestamp = new Date(note.updatedAt ?? note.createdAt ?? 0).getTime();
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
 export function prioritizeNotesForGeofencing(notes: Note[], maxRegions: number) {
-  const sortedNotes = [...notes].sort((a, b) => {
-    const aIsFavorite = Boolean(a.isFavorite);
-    const bIsFavorite = Boolean(b.isFavorite);
-    if (aIsFavorite !== bIsFavorite) {
-      return aIsFavorite ? -1 : 1;
-    }
-
-    return getPriorityTimestamp(b) - getPriorityTimestamp(a);
-  });
-
-  const selectedNotes: Note[] = [];
-  const seenLocations = new Set<string>();
-
-  for (const note of sortedNotes) {
-    const locationKey = getLocationPriorityKey(note);
-    if (seenLocations.has(locationKey)) {
-      continue;
-    }
-
-    seenLocations.add(locationKey);
-    selectedNotes.push(note);
-    if (selectedNotes.length >= maxRegions) {
-      return selectedNotes;
-    }
-  }
-
-  return selectedNotes;
+  return getReminderPlaceGroups(notes)
+    .slice(0, maxRegions)
+    .map((group) => group.representativeNote);
 }
 
 export async function getReminderPermissionState(): Promise<ReminderPermissionState> {

@@ -1,4 +1,4 @@
-import firestoreModule, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import { FirebaseFirestoreTypes, serverTimestamp } from '@react-native-firebase/firestore';
 import { Note, getDB, getNoteById, upsertNote } from './database';
 import { readPhotoAsBase64, writePhotoFromBase64 } from './photoStorage';
 import { getFirestore } from '../utils/firebase';
@@ -285,7 +285,7 @@ async function flushPendingQueueToFirebase(
             docRef,
             {
               ...serializedNote,
-              syncedAt: firestoreModule.FieldValue.serverTimestamp(),
+              syncedAt: serverTimestamp(),
             },
             { merge: true }
           );
@@ -331,7 +331,7 @@ async function uploadLocalSnapshotToFirebase(
         notesCollection.doc(note.id),
         {
           ...serializedNote,
-          syncedAt: firestoreModule.FieldValue.serverTimestamp(),
+          syncedAt: serverTimestamp(),
         },
         { merge: true }
       );
@@ -491,7 +491,7 @@ export async function syncNotesToFirebase(
         email: user.email ?? null,
         photoURL: user.photoURL ?? null,
         noteCount: notes.length,
-        lastSyncedAt: firestoreModule.FieldValue.serverTimestamp(),
+        lastSyncedAt: serverTimestamp(),
       },
       { merge: true }
     );

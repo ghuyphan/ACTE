@@ -4,7 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, LayoutAnimation, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type MapView from 'react-native-maps';
 import Reanimated, {
   useAnimatedStyle,
@@ -14,6 +14,7 @@ import Reanimated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapCanvas from '../../components/map/MapCanvas';
 import MapFilterBar from '../../components/map/MapFilterBar';
+import { getMapLayoutTransition, mapMotionPressSpring } from '../../components/map/mapMotion';
 import MapPreviewCard from '../../components/map/MapPreviewCard';
 import {
   getOverlayBorderColor,
@@ -32,6 +33,105 @@ import { isOlderIOS } from '../../utils/platform';
 
 const MIN_ZOOM_DELTA = 0.002;
 
+type OverlayState = 'content' | 'no-filter-results' | 'no-notes';
+
+interface MapStatusCardProps {
+  overlayState: Exclude<OverlayState, 'content'>;
+  isDark: boolean;
+  primaryColor: string;
+  textColor: string;
+  secondaryTextColor: string;
+  onClearFilters: () => void;
+  reduceMotionEnabled: boolean;
+  title: string;
+  subtitle: string;
+  clearLabel: string;
+}
+
+function MapStatusCard({
+  overlayState,
+  isDark,
+  primaryColor,
+  textColor,
+  secondaryTextColor,
+  onClearFilters,
+  reduceMotionEnabled,
+  title,
+  subtitle,
+  clearLabel,
+}: MapStatusCardProps) {
+  const isFiltered = overlayState === 'no-filter-results';
+  const statusGlassTintColor = isDark ? 'rgba(18,18,24,0.34)' : 'rgba(255,255,255,0.42)';
+  const statusGlassScrimColor = isDark ? 'rgba(12,12,18,0.18)' : 'rgba(255,255,255,0.20)';
+  return (
+    <Reanimated.View
+      key={overlayState}
+      testID="map-status-card"
+      layout={getMapLayoutTransition(reduceMotionEnabled)}
+      style={styles.emptyCardWrap}
+    >
+      <View
+        style={[
+          styles.emptyCard,
+          { borderColor: getOverlayBorderColor(isDark) },
+        ]}
+      >
+        <GlassView
+          pointerEvents="none"
+          style={StyleSheet.absoluteFillObject}
+          glassEffectStyle="regular"
+          colorScheme={isDark ? 'dark' : 'light'}
+          tintColor={statusGlassTintColor}
+        />
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFillObject,
+            styles.emptyCardScrim,
+            { backgroundColor: statusGlassScrimColor },
+          ]}
+        />
+        {isOlderIOS ? (
+          <View
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                borderRadius: 24,
+                backgroundColor: isDark ? 'rgba(28,28,30,0.92)' : 'rgba(255,255,255,0.92)',
+              },
+            ]}
+          />
+        ) : null}
+        <View style={styles.emptyCardContent}>
+          <Ionicons
+            name={isFiltered ? 'filter-outline' : 'map-outline'}
+            size={isFiltered ? 36 : 40}
+            color={primaryColor}
+            style={styles.emptyIcon}
+          />
+          <Text style={[styles.emptyTitle, { color: textColor }]}>
+            {title}
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: secondaryTextColor }]}>
+            {subtitle}
+          </Text>
+          {isFiltered ? (
+            <Pressable
+              testID="map-clear-filters"
+              style={[styles.clearFiltersBtn, { backgroundColor: `${primaryColor}20` }]}
+              onPress={onClearFilters}
+            >
+              <Text style={[styles.clearFiltersText, { color: primaryColor }]}>
+                {clearLabel}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    </Reanimated.View>
+  );
+}
+
 export default function MapScreen() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -43,7 +143,11 @@ export default function MapScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView>(null);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [activeNearbyNoteId, setActiveNearbyNoteId] = useState<string | null>(null);
+  const [markerPulseId, setMarkerPulseId] = useState<string | null>(null);
+  const [markerPulseKey, setMarkerPulseKey] = useState(0);
   const hasCenteredRef = useRef(false);
+  const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fabScale = useSharedValue(1);
 
   const {
@@ -69,11 +173,40 @@ export default function MapScreen() {
   } = useMapScreenState({ notes, location });
 
   const previewBottomOffset = insets.bottom + 12;
-  const [activeNearbyNoteId, setActiveNearbyNoteId] = useState<string | null>(null);
+  const previewMode = selectedGroup ? 'group' : 'nearby';
+  const overlayState: OverlayState =
+    notes.length === 0 ? 'no-notes' : filteredCount === 0 ? 'no-filter-results' : 'content';
+  const previewVisible = overlayState === 'content' && nearbyItems.length > 0;
+  const noteById = useMemo(() => new Map(notes.map((note) => [note.id, note] as const)), [notes]);
+
+  useEffect(() => {
+    return () => {
+      if (markerPulseTimerRef.current) {
+        clearTimeout(markerPulseTimerRef.current);
+      }
+    };
+  }, []);
 
   const emitLightHaptic = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
+
+  const triggerMarkerPulse = useCallback(
+    (nextMarkerId: string) => {
+      if (markerPulseTimerRef.current) {
+        clearTimeout(markerPulseTimerRef.current);
+      }
+
+      setMarkerPulseId(nextMarkerId);
+      setMarkerPulseKey((current) => current + 1);
+
+      markerPulseTimerRef.current = setTimeout(() => {
+        setMarkerPulseId((current) => (current === nextMarkerId ? null : current));
+        markerPulseTimerRef.current = null;
+      }, reduceMotionEnabled ? 90 : 240);
+    },
+    [reduceMotionEnabled]
+  );
 
   const openNote = useCallback(
     (noteId: string) => {
@@ -153,6 +286,7 @@ export default function MapScreen() {
     (node: MapClusterNode) => {
       handleClusterMarkerPress();
       emitLightHaptic();
+      triggerMarkerPulse(node.id);
 
       if (!mapRef.current) {
         return;
@@ -174,15 +308,16 @@ export default function MapScreen() {
       mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 450);
       setVisibleRegion(nextRegion);
     },
-    [emitLightHaptic, handleClusterMarkerPress, initialRegion, reduceMotionEnabled, setVisibleRegion, visibleRegion]
+    [emitLightHaptic, handleClusterMarkerPress, initialRegion, reduceMotionEnabled, setVisibleRegion, triggerMarkerPulse, visibleRegion]
   );
 
   const handleLeafPress = useCallback(
     (groupId: string) => {
+      triggerMarkerPulse(groupId);
       handleLeafMarkerPress(groupId);
       emitLightHaptic();
     },
-    [emitLightHaptic, handleLeafMarkerPress]
+    [emitLightHaptic, handleLeafMarkerPress, triggerMarkerPulse]
   );
 
   const handleFocusNearbyNote = useCallback(
@@ -237,11 +372,6 @@ export default function MapScreen() {
       return;
     }
 
-    if (notes.length === 1) {
-      hasCenteredRef.current = true;
-      return;
-    }
-
     hasCenteredRef.current = true;
   }, [isMapReady, location, notes]);
 
@@ -272,8 +402,13 @@ export default function MapScreen() {
         mapRef={mapRef}
         initialRegion={initialRegion}
         isDark={isDark}
+        currentZoom={visibleRegion ? regionToZoom(visibleRegion) : regionToZoom(initialRegion)}
         markerNodes={clusterNodes}
+        noteById={noteById}
         selectedGroupId={selectedGroupId}
+        markerPulseId={markerPulseId}
+        markerPulseKey={markerPulseKey}
+        reduceMotionEnabled={reduceMotionEnabled}
         onMapPress={handleMapPress}
         onMapReady={() => {
           setIsMapReady(true);
@@ -285,38 +420,43 @@ export default function MapScreen() {
         colors={colors}
       />
 
-      <View style={[styles.topHeader, { top: insets.top + 8 }]} pointerEvents="box-none">
+      <Reanimated.View
+        style={[styles.topHeader, { top: insets.top + 8 }]}
+        pointerEvents="box-none"
+        layout={getMapLayoutTransition(reduceMotionEnabled)}
+      >
         <MapFilterBar
           filterState={filterState}
           countLabel={countLabel}
           onChangeType={setFilterType}
           onToggleFavorites={toggleFavoritesOnly}
           onInteraction={emitLightHaptic}
+          reduceMotionEnabled={reduceMotionEnabled}
         />
-      </View>
+      </Reanimated.View>
 
-      <Reanimated.View style={[styles.fabContainer, { top: insets.top + 20 }, fabAnimatedStyle]}>
+      <Reanimated.View
+        testID="map-recenter-wrapper"
+        style={[styles.fabContainer, { top: insets.top + 20 }, fabAnimatedStyle]}
+        layout={getMapLayoutTransition(reduceMotionEnabled)}
+      >
         <Pressable
           testID="map-recenter"
           onPress={goToMyLocation}
           onPressIn={() => {
-            fabScale.value = withSpring(0.95, {
-              stiffness: 260,
-              damping: 20,
-            });
+            fabScale.value = withSpring(0.95, mapMotionPressSpring);
           }}
           onPressOut={() => {
-            fabScale.value = withSpring(1, {
-              stiffness: 260,
-              damping: 20,
-            });
+            fabScale.value = withSpring(1, mapMotionPressSpring);
           }}
         >
-          <GlassView
-            style={[styles.fab, { borderColor: getOverlayBorderColor(isDark) }]}
-            glassEffectStyle="regular"
-            colorScheme={isDark ? 'dark' : 'light'}
-          >
+          <View style={[styles.fab, { borderColor: getOverlayBorderColor(isDark) }]}>
+            <GlassView
+              pointerEvents="none"
+              style={StyleSheet.absoluteFillObject}
+              glassEffectStyle="regular"
+              colorScheme={isDark ? 'dark' : 'light'}
+            />
             {isOlderIOS ? (
               <View
                 style={[
@@ -329,70 +469,66 @@ export default function MapScreen() {
               />
             ) : null}
             <Ionicons name="location" size={20} color={colors.primary} />
-          </GlassView>
+          </View>
         </Pressable>
       </Reanimated.View>
 
-      <MapPreviewCard
-        selectedGroup={selectedGroup}
-        selectedNoteIndex={selectedNoteIndex}
-        nearbyItems={nearbyItems}
-        activeNearbyNoteId={activeNearbyNoteId}
-        bottomOffset={previewBottomOffset}
-        onOpen={handleOpenPreview}
-        onFocusNearbyNote={handleFocusNearbyNote}
-        onFocusGroupNote={selectNoteById}
-        onInteraction={emitLightHaptic}
-      />
-
-      {notes.length === 0 ? (
-        <View style={styles.emptyOverlay} pointerEvents="none">
-          <View
-            style={[
-              styles.emptyCard,
-              { backgroundColor: isDark ? 'rgba(28,28,30,0.92)' : 'rgba(255,255,255,0.92)' },
-            ]}
-          >
-            <Ionicons name="map-outline" size={40} color={colors.primary} style={{ marginBottom: 8 }} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              {t('map.emptyTitle', 'No notes on the map yet')}
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-              {t('map.emptySubtitle', 'Your saved notes will appear as pins here')}
-            </Text>
-          </View>
-        </View>
-      ) : filteredCount === 0 ? (
-        <View style={styles.emptyOverlay} pointerEvents="box-none">
-          <View
-            style={[
-              styles.emptyCard,
-              { backgroundColor: isDark ? 'rgba(28,28,30,0.92)' : 'rgba(255,255,255,0.92)' },
-            ]}
-          >
-            <Ionicons name="filter-outline" size={36} color={colors.primary} style={{ marginBottom: 8 }} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              {t('map.filteredEmptyTitle', 'No notes match these filters')}
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-              {t('map.filteredEmptySubtitle', 'Try another filter combination or reset to view all notes')}
-            </Text>
-            <Pressable
-              testID="map-clear-filters"
-              style={[styles.clearFiltersBtn, { backgroundColor: `${colors.primary}20` }]}
-              onPress={() => {
-                emitLightHaptic();
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                clearFilters();
-              }}
-            >
-              <Text style={[styles.clearFiltersText, { color: colors.primary }]}>
-                {t('map.clearFilters', 'Clear filters')}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
+      {notes.length > 0 ? (
+        <MapPreviewCard
+          previewMode={previewMode}
+          visible={previewVisible}
+          selectedGroup={selectedGroup}
+          selectedNoteIndex={selectedNoteIndex}
+          nearbyItems={nearbyItems}
+          activeNearbyNoteId={activeNearbyNoteId}
+          bottomOffset={previewBottomOffset}
+          onOpen={handleOpenPreview}
+          onFocusNearbyNote={handleFocusNearbyNote}
+          onFocusGroupNote={selectNoteById}
+          onInteraction={emitLightHaptic}
+          reduceMotionEnabled={reduceMotionEnabled}
+        />
       ) : null}
+
+      <Reanimated.View
+        testID="map-overlay-host"
+        style={styles.emptyOverlay}
+        pointerEvents={overlayState === 'content' ? 'none' : 'box-none'}
+        layout={getMapLayoutTransition(reduceMotionEnabled)}
+      >
+        {overlayState === 'no-notes' ? (
+          <MapStatusCard
+            overlayState="no-notes"
+            isDark={isDark}
+            primaryColor={colors.primary}
+            textColor={colors.text}
+            secondaryTextColor={colors.secondaryText}
+            onClearFilters={clearFilters}
+            reduceMotionEnabled={reduceMotionEnabled}
+            title={t('map.emptyTitle', 'No notes on the map yet')}
+            subtitle={t('map.emptySubtitle', 'Your saved notes will appear as pins here')}
+            clearLabel={t('map.clearFilters', 'Clear filters')}
+          />
+        ) : null}
+
+        {overlayState === 'no-filter-results' ? (
+          <MapStatusCard
+            overlayState="no-filter-results"
+            isDark={isDark}
+            primaryColor={colors.primary}
+            textColor={colors.text}
+            secondaryTextColor={colors.secondaryText}
+            onClearFilters={() => {
+              emitLightHaptic();
+              clearFilters();
+            }}
+            reduceMotionEnabled={reduceMotionEnabled}
+            title={t('map.filteredEmptyTitle', 'No notes match these filters')}
+            subtitle={t('map.filteredEmptySubtitle', 'Try another filter combination or reset to view all notes')}
+            clearLabel={t('map.clearFilters', 'Clear filters')}
+          />
+        ) : null}
+      </Reanimated.View>
     </View>
   );
 }
@@ -434,17 +570,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     zIndex: 9,
   },
+  emptyCardWrap: {
+    width: '100%',
+    alignItems: 'center',
+  },
   emptyCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 24,
+    borderWidth: 1,
+    overflow: 'hidden',
+    ...mapOverlayTokens.overlayShadow,
+  },
+  emptyCardContent: {
     paddingHorizontal: 32,
     paddingVertical: 28,
-    borderRadius: 24,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 8,
-    maxWidth: 320,
+  },
+  emptyCardScrim: {
+    borderRadius: 24,
+  },
+  emptyIcon: {
+    marginBottom: 8,
   },
   emptyTitle: {
     fontSize: 17,

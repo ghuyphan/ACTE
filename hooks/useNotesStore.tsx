@@ -58,7 +58,7 @@ function useNotesStoreValue(): NotesStoreValue {
       widgetSyncTimeoutRef.current = null;
       void updateWidgetData({
         notes: nextNotes,
-        includeLocationLookup: nextNotes === undefined,
+        includeLocationLookup: true,
       });
     }, delay);
   }, []);
@@ -188,6 +188,7 @@ function useNotesStoreValue(): NotesStoreValue {
       notesRef.current = nextNotes;
       setNotes(nextNotes);
 
+      scheduleWidgetUpdate(nextNotes);
       void syncGeofenceRegions();
       void syncService.recordChange({
         type: 'update',
@@ -198,7 +199,7 @@ function useNotesStoreValue(): NotesStoreValue {
       });
       return newValue;
     },
-    [syncService]
+    [scheduleWidgetUpdate, syncService]
   );
 
   const searchNotes = useCallback(async (query: string) => {

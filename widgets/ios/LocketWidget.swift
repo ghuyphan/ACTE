@@ -24,9 +24,9 @@ private struct LocketWidgetPayload {
         backgroundImageUrl: nil,
         backgroundImageBase64: nil,
         isIdleState: true,
-        idleText: "Note it down before she gets upset",
+        idleText: "The right note will appear when you're nearby.",
         savedCountText: "",
-        memoryReminderText: ""
+        memoryReminderText: "A quiet reminder from here."
     )
 
     init(
@@ -182,7 +182,7 @@ private struct LocketWidgetEntryView: View {
             if !payload.idleText.isEmpty {
                 return payload.idleText
             }
-            return "Note it down before she gets upset"
+            return "The right note will appear when you're nearby."
         }
 
         if !payload.text.isEmpty {
@@ -193,7 +193,11 @@ private struct LocketWidgetEntryView: View {
             return payload.memoryReminderText
         }
 
-        return "A memory reminds you"
+        return "A quiet reminder from here."
+    }
+
+    private var hasLocationEyebrow: Bool {
+        !payload.isIdleState && !payload.locationName.isEmpty
     }
 
     private var countLabel: String {
@@ -289,6 +293,18 @@ private struct LocketWidgetEntryView: View {
 
     private var smallLayout: some View {
         VStack(spacing: 0) {
+            if hasLocationEyebrow {
+                HStack(spacing: 0) {
+                    Text(payload.locationName)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(eyebrowTextColor)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.bottom, 10)
+            }
+
             Spacer(minLength: 0)
 
             Text(displayText)
@@ -312,6 +328,14 @@ private struct LocketWidgetEntryView: View {
 
     private var largeLayout: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if hasLocationEyebrow {
+                Text(payload.locationName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(eyebrowTextColor)
+                    .lineLimit(1)
+                    .padding(.bottom, 12)
+            }
+
             Text(displayText)
                 .font(.system(size: fontSize, weight: .regular, design: .serif))
                 .foregroundStyle(primaryTextColor)
@@ -371,11 +395,17 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var shouldShowCountBadge: Bool {
-        !payload.isIdleState && payload.noteCount > 0
+        payload.isIdleState && payload.noteCount > 0
     }
 
     private var primaryTextColor: Color {
         hasPhotoBackground ? Color.white : Color(red: 0.17, green: 0.10, blue: 0.07)
+    }
+
+    private var eyebrowTextColor: Color {
+        hasPhotoBackground
+            ? Color.white.opacity(0.82)
+            : Color(red: 0.44, green: 0.36, blue: 0.30)
     }
 
     private var badgeBackgroundColor: Color {
@@ -428,8 +458,8 @@ struct LocketWidget: Widget {
         StaticConfiguration(kind: name, provider: LocketWidgetTimelineProvider()) { entry in
             LocketWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Memories")
-        .description("See your latest memory on your Home Screen.")
+        .configurationDisplayName("Nearby reminders")
+        .description("See the right note when you return somewhere familiar.")
         .supportedFamilies([.systemSmall, .systemLarge])
     }
 }

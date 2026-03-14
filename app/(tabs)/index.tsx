@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useIsFocused, useScrollToTop } from '@react-navigation/native';
+import { useScrollToTop } from '@react-navigation/native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
@@ -49,7 +49,6 @@ export default function HomeScreen() {
   const { alertProps, showAlert } = useAppSheetAlert();
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
-  const isFocused = useIsFocused();
   const useNativeTabSearch = isIOS26OrNewer;
   const useInlineHeaderSearch = !useNativeTabSearch;
 
@@ -68,6 +67,7 @@ export default function HomeScreen() {
 
   const {
     captureMode,
+    cameraSessionKey,
     restaurantName,
     setRestaurantName,
     noteText,
@@ -81,7 +81,6 @@ export default function HomeScreen() {
     permission,
     requestPermission,
     cameraRef,
-    captureOpacity,
     captureScale,
     captureTranslateY,
     flashAnim,
@@ -459,7 +458,7 @@ export default function HomeScreen() {
               topInset={insets.top}
               isSearching={isSearching}
               captureMode={captureMode}
-              captureOpacity={captureOpacity}
+              cameraSessionKey={cameraSessionKey}
               captureScale={captureScale}
               captureTranslateY={captureTranslateY}
               colors={colors}
@@ -474,7 +473,6 @@ export default function HomeScreen() {
               onRetakePhoto={() => setCapturedPhoto(null)}
               needsCameraPermission={needsCameraPermission}
               onRequestCameraPermission={requestPermission}
-              isFocused={isFocused}
               facing={facing}
               onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
               cameraRef={cameraRef}

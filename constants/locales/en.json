@@ -236,18 +236,18 @@
         "skip": "Skip"
     },
     "notification": {
-        "title": "💛 Hey, remember!",
-        "body": "You have a note here — open to see!",
-        "textTitle": "💛 {{location}}",
-        "photoTitle": "📷 {{location}}",
-        "photoBody": "You took a photo here — open to see!"
+        "title": "Nearby reminder",
+        "body": "A note is ready when you open Noto.",
+        "textTitle": "{{location}}",
+        "photoTitle": "{{location}}",
+        "photoBody": "A memory from here is waiting."
     },
     "widget": {
-        "idleText": "Note it down before she gets upset 💛",
+        "idleText": "The right note will appear when you're nearby.",
         "savedCount": "{{count}} notes saved",
         "countBadgeOne": "{{count}} note",
         "countBadgeOther": "{{count}} notes",
-        "memoryReminder": "A memory reminds you 💛",
+        "memoryReminder": "A quiet reminder from here.",
         "unknownPlace": "Unknown Place"
     },
     "feedback": {

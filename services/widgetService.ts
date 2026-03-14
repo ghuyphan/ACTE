@@ -6,6 +6,7 @@ import i18n from '../constants/i18n';
 import { formatDate } from '../utils/dateUtils';
 import { getAllNotes, Note } from './database';
 import { getNotePhotoUri, resolveStoredPhotoUri } from './photoStorage';
+import { selectNearbyReminder } from './reminderSelection';
 
 // Lazy import to avoid circular dependency issues
 let widgetInstance: any = null;
@@ -47,28 +48,14 @@ interface LocationCoords {
 
 interface WidgetSelectionResult {
     selectedNote: Note | null;
+    selectedLocationName: string | null;
     nearbyPlacesCount: number;
+    isIdleState: boolean;
 }
 
 const IOS_WIDGET_APP_GROUP_ID = 'group.com.acte.app';
 const WIDGET_IMAGE_DIRECTORY_NAME = 'widget-images';
 const WIDGET_IMAGE_FILENAME = 'latest-photo.jpg';
-
-// Haversine distance in meters
-function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371e3; // metres
-    const φ1 = lat1 * Math.PI / 180; // φ, λ in radians
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-        Math.cos(φ1) * Math.cos(φ2) *
-        Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c; // in metres
-}
 
 function getTranslatedWidgetStrings(noteCount: number) {
     const savedCountText = i18n.t(
@@ -83,67 +70,47 @@ function getTranslatedWidgetStrings(noteCount: number) {
     };
 }
 
-function getLatestNote(notes: Note[]): Note | null {
-    if (notes.length === 0) {
-        return null;
-    }
-
-    return notes.reduce((latest, candidate) =>
-        new Date(candidate.createdAt).getTime() > new Date(latest.createdAt).getTime()
-            ? candidate
-            : latest
-    );
-}
-
-function getLatestTextNote(notes: Note[]): Note | null {
-    const validTextNotes = notes.filter(
-        (note) => note.type === 'text' && note.content.trim().length > 0
-    );
-    return getLatestNote(validTextNotes);
-}
-
 export function selectWidgetNote(options: {
     notes: Note[];
     currentLocation?: LocationCoords | null;
     nearbyRadiusMeters?: number;
 }): WidgetSelectionResult {
-    const { notes, currentLocation = null, nearbyRadiusMeters = 500 } = options;
-
-    if (notes.length === 0) {
-        return { selectedNote: null, nearbyPlacesCount: 0 };
-    }
-
-    if (currentLocation) {
-        const nearbyNotes = notes
-            .map((note) => ({
-                note,
-                distance: getDistance(
-                    currentLocation.latitude,
-                    currentLocation.longitude,
-                    note.latitude,
-                    note.longitude
-                ),
-            }))
-            .filter((entry) => entry.distance <= nearbyRadiusMeters)
-            .sort((a, b) => a.distance - b.distance);
-
-        if (nearbyNotes.length > 0) {
-            const uniquePlaces = new Set(
-                nearbyNotes
-                    .map((entry) => entry.note.locationName)
-                    .filter((value): value is string => Boolean(value && value.trim()))
-            );
-            return {
-                selectedNote: nearbyNotes[0].note,
-                nearbyPlacesCount: Math.max(0, uniquePlaces.size - 1),
-            };
-        }
-    }
+    const selection = selectNearbyReminder(options);
 
     return {
-        selectedNote: getLatestNote(notes),
-        nearbyPlacesCount: 0,
+        selectedNote: selection.selectedNote,
+        selectedLocationName: selection.selectedPlace?.locationName ?? null,
+        nearbyPlacesCount: selection.nearbyPlacesCount,
+        isIdleState: !selection.isNearby,
     };
+}
+
+async function resolveWidgetPhotoProps(note: Note): Promise<Pick<WidgetProps, 'backgroundImageUrl' | 'backgroundImageBase64'>> {
+    const selectedPhotoUri = getNotePhotoUri(note);
+    if (note.type !== 'photo' || !selectedPhotoUri) {
+        return {};
+    }
+
+    const readablePhotoUri = await getReadablePhotoUri(selectedPhotoUri);
+    if (!readablePhotoUri) {
+        return {};
+    }
+
+    const copiedPhotoUri = await copyPhotoForWidget(readablePhotoUri);
+    if (copiedPhotoUri) {
+        return {
+            backgroundImageUrl: copiedPhotoUri,
+        };
+    }
+
+    const photoBase64 = await encodePhotoForWidget(readablePhotoUri);
+    if (photoBase64) {
+        return {
+            backgroundImageBase64: photoBase64,
+        };
+    }
+
+    return {};
 }
 
 function getWidgetSharedContainerUri(): string | null {
@@ -279,7 +246,12 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
             }
         }
 
-        const { selectedNote, nearbyPlacesCount } = selectWidgetNote({
+        const {
+            selectedNote,
+            selectedLocationName,
+            nearbyPlacesCount,
+            isIdleState,
+        } = selectWidgetNote({
             notes,
             currentLocation: currentLocation
                 ? {
@@ -290,8 +262,7 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
             nearbyRadiusMeters: 500,
         });
 
-        if (!selectedNote) {
-            // Guard for corrupted data edge cases; normal flow returns early when notes are empty.
+        if (!selectedNote || isIdleState) {
             widget.updateSnapshot({
                 props: {
                     text: '',
@@ -310,46 +281,16 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
 
         const props: WidgetProps = {
             text: selectedNote.type === 'text' ? selectedNote.content.trim() : '',
-            locationName: selectedNote.locationName ?? i18n.t('capture.unknownPlace'),
+            locationName: selectedLocationName ?? selectedNote.locationName ?? i18n.t('capture.unknownPlace'),
             date: dateStr,
             noteCount: notes.length,
             nearbyPlacesCount,
-            isIdleState: false,
+            isIdleState,
             ...translatedStrings,
         };
 
-        const selectedPhotoUri = getNotePhotoUri(selectedNote);
-        if (selectedNote.type === 'photo' && selectedPhotoUri) {
-            const readablePhotoUri = await getReadablePhotoUri(selectedPhotoUri);
-            if (readablePhotoUri) {
-                const copiedPhotoUri = await copyPhotoForWidget(readablePhotoUri);
-                if (copiedPhotoUri) {
-                    props.backgroundImageUrl = copiedPhotoUri;
-                } else {
-                    const photoBase64 = await encodePhotoForWidget(readablePhotoUri);
-                    if (photoBase64) {
-                        props.backgroundImageBase64 = photoBase64;
-                    } else {
-                        const fallbackTextNote = getLatestTextNote(notes);
-                        if (fallbackTextNote) {
-                            props.text = fallbackTextNote.content.trim();
-                            props.locationName =
-                                fallbackTextNote.locationName ?? i18n.t('capture.unknownPlace');
-                            props.date = formatDate(fallbackTextNote.createdAt, 'short');
-                            props.isIdleState = false;
-                        }
-                    }
-                }
-            } else {
-                const fallbackTextNote = getLatestTextNote(notes);
-                if (fallbackTextNote) {
-                    props.text = fallbackTextNote.content.trim();
-                    props.locationName =
-                        fallbackTextNote.locationName ?? i18n.t('capture.unknownPlace');
-                    props.date = formatDate(fallbackTextNote.createdAt, 'short');
-                    props.isIdleState = false;
-                }
-            }
+        if (selectedNote.type === 'photo') {
+            Object.assign(props, await resolveWidgetPhotoProps(selectedNote));
         }
 
         widget.updateSnapshot({ props });

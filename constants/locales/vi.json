@@ -236,18 +236,18 @@
         "skip": "Bỏ qua"
     },
     "notification": {
-        "title": "💛 Anh ơi, nhớ nha!",
-        "body": "Bạn có ghi chú ở đây — mở ra xem nè!",
-        "textTitle": "💛 {{location}}",
-        "photoTitle": "📷 {{location}}",
-        "photoBody": "Bạn đã chụp ảnh ở đây — mở ra xem!"
+        "title": "Gợi nhắc gần đây",
+        "body": "Có một ghi chú sẵn trong Noto khi bạn cần.",
+        "textTitle": "{{location}}",
+        "photoTitle": "{{location}}",
+        "photoBody": "Có một kỷ niệm từ nơi này đang chờ bạn."
     },
     "widget": {
-        "idleText": "Ghi chú kẻo em dỗi nè 💛",
+        "idleText": "Noto sẽ hiện đúng ghi chú khi bạn ở gần.",
         "savedCount": "{{count}} ghi chú đã lưu",
         "countBadgeOne": "{{count}} ghi chú",
         "countBadgeOther": "{{count}} ghi chú",
-        "memoryReminder": "Kỷ niệm nhắc nhở anh 💛",
+        "memoryReminder": "Một gợi nhắc nhẹ từ nơi này.",
         "unknownPlace": "Không rõ địa điểm"
     },
     "feedback": {

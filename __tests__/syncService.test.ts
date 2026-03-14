@@ -142,11 +142,8 @@ jest.mock('../utils/firebase', () => ({
 
 jest.mock('@react-native-firebase/firestore', () => ({
   __esModule: true,
-  default: {
-    FieldValue: {
-      serverTimestamp: () => 'SERVER_TIMESTAMP',
-    },
-  },
+  default: {},
+  serverTimestamp: () => 'SERVER_TIMESTAMP',
 }));
 
 import { getSyncRepository, getSyncService, syncNotesToFirebase } from '../services/syncService';

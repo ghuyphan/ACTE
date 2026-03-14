@@ -9,6 +9,7 @@ const mockFitToCoordinates = jest.fn();
 const mockRequestForegroundLocation = jest.fn();
 const mockOpenAppSettings = jest.fn();
 const mockImpactAsync = jest.fn();
+let mockReduceMotionEnabled = false;
 
 jest.mock('expo-glass-effect', () => {
   const React = require('react');
@@ -85,7 +86,7 @@ jest.mock('../hooks/useTheme', () => ({
 }));
 
 jest.mock('../hooks/useReducedMotion', () => ({
-  useReducedMotion: () => false,
+  useReducedMotion: () => mockReduceMotionEnabled,
 }));
 
 jest.mock('../hooks/useNoteDetailSheet', () => ({
@@ -94,7 +95,7 @@ jest.mock('../hooks/useNoteDetailSheet', () => ({
   }),
 }));
 
-const mockNotes = [
+const defaultNotes = [
   {
     id: 'text-1',
     type: 'text' as const,
@@ -120,6 +121,16 @@ const mockNotes = [
     updatedAt: null,
   },
 ];
+
+const mockNotes = defaultNotes.map((note) => ({ ...note }));
+
+function resetMockNotes() {
+  mockNotes.splice(0, mockNotes.length, ...defaultNotes.map((note) => ({ ...note })));
+}
+
+function replaceMockNotes(nextNotes: typeof defaultNotes) {
+  mockNotes.splice(0, mockNotes.length, ...nextNotes.map((note) => ({ ...note })));
+}
 
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
@@ -180,9 +191,10 @@ jest.mock('react-native-maps', () => {
   });
   MockMapView.displayName = 'MockMapView';
 
-  const Marker = ({ children, onPress, onSelect, testID }: any) => (
+  const Marker = ({ children, onPress, onSelect, testID, ...props }: any) => (
     <Pressable
       testID={testID}
+      {...props}
       onPress={() => {
         onPress?.({ stopPropagation: () => undefined });
         onSelect?.();
@@ -202,15 +214,19 @@ jest.mock('react-native-maps', () => {
 describe('MapScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockReduceMotionEnabled = false;
+    resetMockNotes();
   });
 
-  it('renders unified map header and supports clearing filters', async () => {
+  it('keeps the top controls mounted while filter empty states appear and clear', async () => {
     const { getByTestId, getByText, queryByTestId } = render(<MapScreen />);
 
     const topHeader = getByTestId('map-top-header');
+    const overlayHost = getByTestId('map-overlay-host');
     expect(within(topHeader).getByTestId('map-inline-count')).toBeTruthy();
     expect(within(topHeader).getByTestId('map-filter-all')).toBeTruthy();
     expect(queryByTestId('map-count-badge')).toBeNull();
+    expect(overlayHost).toBeTruthy();
 
     expect(getByText('2 notes')).toBeTruthy();
 
@@ -223,11 +239,15 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByText('No notes match these filters')).toBeTruthy();
+      expect(getByTestId('map-top-header')).toBeTruthy();
+      expect(getByTestId('map-overlay-host')).toBeTruthy();
     });
 
     fireEvent.press(getByTestId('map-clear-filters'));
     await waitFor(() => {
       expect(getByText('2 notes')).toBeTruthy();
+      expect(getByTestId('map-top-header')).toBeTruthy();
+      expect(getByTestId('map-overlay-host')).toBeTruthy();
     });
   });
 
@@ -310,12 +330,14 @@ describe('MapScreen', () => {
 
     const { getAllByTestId, getByTestId, getByText, queryByText } = render(<MapScreen />);
 
+    expect(getByTestId('map-preview-shell')).toBeTruthy();
     expect(getByTestId('map-preview-list')).toBeTruthy();
 
     const leafMarkers = getAllByTestId(/leaf-marker-/);
     fireEvent.press(leafMarkers[0]);
 
     await waitFor(() => {
+      expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(getByTestId('map-preview-list')).toBeTruthy();
       expect(getByText('Pinned note')).toBeTruthy();
     });
@@ -325,6 +347,7 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('mock-map-press'));
 
     await waitFor(() => {
+      expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(getByTestId('map-preview-list')).toBeTruthy();
       expect(queryByText('Pinned note')).toBeNull();
     });
@@ -351,6 +374,197 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(mockOpenNoteDetail).toHaveBeenCalledWith('text-1');
+    });
+  });
+
+  it('turns on marker feedback tracking when a leaf marker is selected', async () => {
+    const { getAllByTestId } = render(<MapScreen />);
+
+    const [firstLeafMarker] = getAllByTestId(/leaf-marker-/);
+    expect(firstLeafMarker.props.tracksViewChanges).toBe(false);
+
+    fireEvent.press(firstLeafMarker);
+
+    await waitFor(() => {
+      expect(getAllByTestId(/leaf-marker-/)[0].props.tracksViewChanges).toBe(true);
+    });
+  });
+
+  it('shows a thumbnail marker for single photo notes at high zoom and when selected', async () => {
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
+
+    expect(queryByTestId('photo-marker-photo-1')).toBeNull();
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.8,
+        longitude: 106.7,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('photo-marker-photo-1')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.80000:106.70000'));
+
+    await waitFor(() => {
+      expect(getByTestId('photo-marker-photo-1')).toBeTruthy();
+    });
+  });
+
+  it('pulses cluster feedback and zooms the camera when a cluster marker is pressed', async () => {
+    replaceMockNotes([
+      {
+        id: 'cluster-1',
+        type: 'text',
+        content: 'Cluster one',
+        locationName: 'A',
+        latitude: 10.68,
+        longitude: 106.58,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'cluster-2',
+        type: 'photo',
+        content: 'file:///cluster-2.jpg',
+        locationName: 'B',
+        latitude: 10.74,
+        longitude: 106.64,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-10T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'cluster-3',
+        type: 'text',
+        content: 'Cluster three',
+        locationName: 'C',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: true,
+        createdAt: '2026-03-09T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'cluster-4',
+        type: 'photo',
+        content: 'file:///cluster-4.jpg',
+        locationName: 'D',
+        latitude: 10.86,
+        longitude: 106.76,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-08T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ]);
+
+    const { getAllByTestId, getByTestId } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.77,
+        longitude: 106.67,
+        latitudeDelta: 20,
+        longitudeDelta: 20,
+      });
+    });
+
+    const clusterMarker = await waitFor(() => getAllByTestId(/cluster-marker-/)[0]);
+    fireEvent.press(clusterMarker);
+
+    await waitFor(() => {
+      const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
+      expect(lastCall?.[1]).toBe(450);
+      expect(mockImpactAsync).toHaveBeenCalled();
+    });
+  });
+
+  it('uses zero-duration camera animation when reduced motion is enabled', async () => {
+    mockReduceMotionEnabled = true;
+
+    replaceMockNotes([
+      {
+        id: 'cluster-1',
+        type: 'text',
+        content: 'Cluster one',
+        locationName: 'A',
+        latitude: 10.68,
+        longitude: 106.58,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'cluster-2',
+        type: 'photo',
+        content: 'file:///cluster-2.jpg',
+        locationName: 'B',
+        latitude: 10.74,
+        longitude: 106.64,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-10T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'cluster-3',
+        type: 'text',
+        content: 'Cluster three',
+        locationName: 'C',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: true,
+        createdAt: '2026-03-09T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'cluster-4',
+        type: 'photo',
+        content: 'file:///cluster-4.jpg',
+        locationName: 'D',
+        latitude: 10.86,
+        longitude: 106.76,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-08T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ]);
+
+    const { getAllByTestId, getByTestId } = render(<MapScreen />);
+
+    fireEvent.press(getByTestId('map-recenter'));
+
+    await waitFor(() => {
+      const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
+      expect(lastCall?.[1]).toBe(0);
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.77,
+        longitude: 106.67,
+        latitudeDelta: 20,
+        longitudeDelta: 20,
+      });
+    });
+
+    fireEvent.press(await waitFor(() => getAllByTestId(/cluster-marker-/)[0]));
+
+    await waitFor(() => {
+      const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
+      expect(lastCall?.[1]).toBe(0);
     });
   });
 });
