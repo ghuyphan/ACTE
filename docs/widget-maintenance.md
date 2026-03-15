@@ -1,6 +1,6 @@
 # Widget Maintenance Guide
 
-This file is the shortcut for editing the Home Screen widget without rereading the whole app.
+This file is the shortcut for editing the widget without rereading the whole app.
 
 ## Read These Files First
 
@@ -65,7 +65,8 @@ It owns:
 - reading the timeline written by Expo Widgets
 - parsing the nested payload shape
 - loading the shared-container photo file or base64 image
-- the real small/large widget layout
+- the real Home Screen small/large widget layout
+- the privacy-safe Lock Screen accessory layouts
 - iOS-specific background behavior like `containerBackground(for: .widget)`
 
 Important:
@@ -116,6 +117,11 @@ Edit:
 
 - `widgets/ios/LocketWidget.swift`
 - then keep `widgets/LocketWidget.tsx` visually aligned
+
+Lock Screen reminder:
+
+- accessory families should stay glanceable and privacy-safe
+- avoid showing full note text or photos there unless that becomes an explicit product decision
 
 ### Change which note gets shown
 
@@ -232,7 +238,7 @@ As of now:
 - widget selection is `nearby -> latest`
 - text widget style is minimal and centered
 - photo widget uses shared-container image loading on iOS
-- supported families are `systemSmall` and `systemLarge`
+- supported families are `systemSmall`, `systemLarge`, `accessoryInline`, `accessoryCircular`, and `accessoryRectangular`
 
 ## If You Need To Make A Fast Edit
 

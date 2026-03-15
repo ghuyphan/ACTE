@@ -25,7 +25,15 @@ interface WidgetProps {
     isIdleState: boolean;
     idleText: string;
     savedCountText: string;
+    nearbyPlacesLabelText: string;
     memoryReminderText: string;
+    accessorySaveMemoryText: string;
+    accessoryAddFirstPlaceText: string;
+    accessoryMemoryNearbyText: string;
+    accessoryOpenAppText: string;
+    accessoryAddLabelText: string;
+    accessorySavedLabelText: string;
+    accessoryNearLabelText: string;
     family?: string;
 }
 
@@ -76,6 +84,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
     const {
         text,
         locationName,
+        nearbyPlacesCount,
         backgroundImageUrl,
         backgroundImageBase64,
         noteCount,
@@ -83,13 +92,27 @@ const LocketWidget = (props: { props: WidgetProps }) => {
         isIdleState,
         idleText,
         memoryReminderText,
+        nearbyPlacesLabelText,
+        accessorySaveMemoryText,
+        accessoryAddFirstPlaceText,
+        accessoryMemoryNearbyText,
+        accessoryOpenAppText,
+        accessoryAddLabelText,
+        accessorySavedLabelText,
+        accessoryNearLabelText,
         family,
     } = props.props ?? {};
 
-    const isLarge = asString(family) === 'systemLarge';
+    const familyName = asString(family);
+    const isLarge = familyName === 'systemLarge';
+    const isAccessoryInline = familyName === 'accessoryInline';
+    const isAccessoryCircular = familyName === 'accessoryCircular';
+    const isAccessoryRectangular = familyName === 'accessoryRectangular';
     const safeText = truncate(asString(text), isLarge ? 140 : 72);
     const safeNoteCount = typeof noteCount === 'number' ? noteCount : 0;
+    const safeNearbyPlacesCount = typeof nearbyPlacesCount === 'number' ? nearbyPlacesCount : 0;
     const countLabel = asString(savedCountText) || getFallbackCountLabel(safeNoteCount);
+    const compactLocationName = asString(locationName).split(',')[0]?.trim() ?? '';
     const hasImage = Boolean(asString(backgroundImageUrl) || asString(backgroundImageBase64));
     const showIdle = safeNoteCount <= 0 || (isIdleState && !safeText && !hasImage);
     const isTextNote = !showIdle && !hasImage && safeText.length > 0;
@@ -107,6 +130,137 @@ const LocketWidget = (props: { props: WidgetProps }) => {
     const textLayout = getTextLayout(isLarge, bodyText.trim().length);
     const footerIconName = usesTextSurface ? 'doc.text' : 'photo';
     const eyebrowColor = usesTextSurface ? '#6E5E4F' : '#FFF8F0';
+    const nearbyLabelCount = Math.max(safeNearbyPlacesCount, showIdle ? 0 : 1);
+    const nearbyPlacesLabel = asString(nearbyPlacesLabelText) || (nearbyLabelCount === 1 ? '1 place nearby' : `${nearbyLabelCount} places nearby`);
+    const accessorySymbolName = safeNoteCount <= 0 ? 'plus.circle.fill' : showIdle ? 'bookmark.fill' : 'location.fill';
+    const accessoryNoteExcerpt = bodyText.length <= (showIdle ? 26 : 32)
+        ? bodyText
+        : `${bodyText.slice(0, (showIdle ? 26 : 32) - 1)}…`;
+    const accessoryTitle = safeNoteCount <= 0
+        ? asString(accessorySaveMemoryText) || 'Save a memory'
+        : compactLocationName || (showIdle ? countLabel : asString(accessoryMemoryNearbyText) || 'Memory nearby');
+    const accessorySubtitle = safeNoteCount <= 0
+        ? asString(accessoryAddFirstPlaceText) || 'Add your first place'
+        : accessoryNoteExcerpt || (showIdle ? asString(accessoryOpenAppText) || 'Open Noto' : nearbyPlacesLabel);
+    const accessoryInlineText = safeNoteCount <= 0
+        ? asString(accessorySaveMemoryText) || 'Save a memory'
+        : showIdle
+            ? countLabel
+            : compactLocationName
+                ? `${asString(accessoryNearLabelText) || 'Near'} ${compactLocationName}`
+                : asString(accessoryMemoryNearbyText) || 'Memory nearby';
+    const accessoryCircularValue = safeNoteCount <= 0 ? '+' : showIdle ? `${safeNoteCount}` : `${nearbyLabelCount}`;
+    const accessoryCircularCaption = safeNoteCount <= 0
+        ? asString(accessoryAddLabelText) || 'Add'
+        : showIdle
+            ? asString(accessorySavedLabelText) || 'Saved'
+            : asString(accessoryNearLabelText) || 'Near';
+
+    if (isAccessoryInline) {
+        return (
+            <HStack
+                modifiers={[
+                    frame({ maxWidth: 9999, maxHeight: 9999 }),
+                    padding({ horizontal: 8 }),
+                ]}
+            >
+                <SwiftUIImage systemName={accessorySymbolName} color="#2A1A11" size={12} />
+                <Text
+                    modifiers={[
+                        font({ weight: 'semibold', size: 12, design: 'default' }),
+                        foregroundStyle('#2A1A11'),
+                        lineLimit(1),
+                        padding({ leading: 4 }),
+                    ]}
+                >
+                    {accessoryInlineText}
+                </Text>
+                <Spacer />
+            </HStack>
+        );
+    }
+
+    if (isAccessoryCircular) {
+        return (
+            <VStack
+                modifiers={[
+                    frame({ maxWidth: 9999, maxHeight: 9999 }),
+                ]}
+            >
+                <Spacer />
+                <Text
+                    modifiers={[
+                        font({ weight: 'bold', size: 18, design: 'rounded' }),
+                        foregroundStyle('#2A1A11'),
+                        lineLimit(1),
+                    ]}
+                >
+                    {accessoryCircularValue}
+                </Text>
+                <Text
+                    modifiers={[
+                        font({ weight: 'medium', size: 8, design: 'default' }),
+                        foregroundStyle('#6E5E4F'),
+                        lineLimit(1),
+                    ]}
+                >
+                    {accessoryCircularCaption}
+                </Text>
+                <Spacer />
+            </VStack>
+        );
+    }
+
+    if (isAccessoryRectangular) {
+        return (
+            <HStack
+                modifiers={[
+                    frame({ maxWidth: 9999, maxHeight: 9999 }),
+                    padding({ horizontal: 12, vertical: 8 }),
+                ]}
+            >
+                <VStack
+                    modifiers={[
+                        frame({ maxWidth: 9999, alignment: 'leading' }),
+                    ]}
+                >
+                    <Text
+                        modifiers={[
+                            font({ weight: 'semibold', size: 13, design: 'default' }),
+                            foregroundStyle('#2A1A11'),
+                            frame({ maxWidth: 9999, alignment: 'leading' }),
+                            lineLimit(1),
+                        ]}
+                    >
+                        {accessoryTitle}
+                    </Text>
+                    <Text
+                        modifiers={[
+                            font({ weight: 'regular', size: 12, design: 'default' }),
+                            foregroundStyle('#6E5E4F'),
+                            frame({ maxWidth: 9999, alignment: 'leading' }),
+                            lineLimit(2),
+                            padding({ top: 1 }),
+                        ]}
+                    >
+                        {accessorySubtitle}
+                    </Text>
+                </VStack>
+                <Spacer />
+                {showIdle ? (
+                    <Text
+                        modifiers={[
+                            font({ weight: 'bold', size: 18, design: 'rounded' }),
+                            foregroundStyle('#2A1A11'),
+                            lineLimit(1),
+                        ]}
+                    >
+                        {safeNoteCount <= 0 ? '+' : accessoryCircularValue}
+                    </Text>
+                ) : null}
+            </HStack>
+        );
+    }
 
     const renderCountBadge = (onDarkSurface: boolean) => (
         <HStack
@@ -222,6 +376,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                                             padding({ horizontal: 2, top: 2, bottom: 8 }),
                                         ]}
                                     >
+                                        <Spacer />
                                         <Text
                                             modifiers={[
                                                 font({ weight: 'medium', size: 10, design: 'default' }),
@@ -234,7 +389,6 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                                         <Spacer />
                                     </HStack>
                                 ) : null}
-                                <Spacer />
 
                                 <Text
                                     modifiers={[
@@ -247,6 +401,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                                         allowsTightening(true),
                                         truncationMode('tail'),
                                         padding({
+                                            top: eyebrowText ? 2 : 10,
                                             horizontal: textLayout.horizontalPadding,
                                             bottom: showCountBadge ? textLayout.bottomOffset : 0,
                                         }),
@@ -315,6 +470,14 @@ Widget.updateSnapshot({
         isIdleState: true,
         idleText: '',
         savedCountText: '',
+        nearbyPlacesLabelText: '',
         memoryReminderText: '',
+        accessorySaveMemoryText: '',
+        accessoryAddFirstPlaceText: '',
+        accessoryMemoryNearbyText: '',
+        accessoryOpenAppText: '',
+        accessoryAddLabelText: '',
+        accessorySavedLabelText: '',
+        accessoryNearLabelText: '',
     },
 });

@@ -33,7 +33,15 @@ export interface WidgetProps {
     isIdleState: boolean;
     idleText: string;
     savedCountText: string;
+    nearbyPlacesLabelText: string;
     memoryReminderText: string;
+    accessorySaveMemoryText: string;
+    accessoryAddFirstPlaceText: string;
+    accessoryMemoryNearbyText: string;
+    accessoryOpenAppText: string;
+    accessoryAddLabelText: string;
+    accessorySavedLabelText: string;
+    accessoryNearLabelText: string;
 }
 
 export interface UpdateWidgetDataOptions {
@@ -57,16 +65,28 @@ const IOS_WIDGET_APP_GROUP_ID = 'group.com.acte.app';
 const WIDGET_IMAGE_DIRECTORY_NAME = 'widget-images';
 const WIDGET_IMAGE_FILENAME = 'latest-photo.jpg';
 
-function getTranslatedWidgetStrings(noteCount: number) {
+function getTranslatedWidgetStrings(noteCount: number, nearbyPlacesCount = 0) {
     const savedCountText = i18n.t(
         noteCount === 1 ? 'widget.countBadgeOne' : 'widget.countBadgeOther',
         { count: noteCount }
+    );
+    const nearbyPlacesLabelText = i18n.t(
+        nearbyPlacesCount === 1 ? 'widget.nearbyPlaceOne' : 'widget.nearbyPlaceOther',
+        { count: nearbyPlacesCount }
     );
 
     return {
         idleText: i18n.t('widget.idleText'),
         savedCountText,
+        nearbyPlacesLabelText,
         memoryReminderText: i18n.t('widget.memoryReminder'),
+        accessorySaveMemoryText: i18n.t('widget.accessorySaveMemory'),
+        accessoryAddFirstPlaceText: i18n.t('widget.accessoryAddFirstPlace'),
+        accessoryMemoryNearbyText: i18n.t('widget.accessoryMemoryNearby'),
+        accessoryOpenAppText: i18n.t('widget.accessoryOpenApp'),
+        accessoryAddLabelText: i18n.t('widget.accessoryAddLabel'),
+        accessorySavedLabelText: i18n.t('widget.accessorySavedLabel'),
+        accessoryNearLabelText: i18n.t('widget.accessoryNearLabel'),
     };
 }
 
@@ -213,7 +233,7 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
         if (!widget) return;
 
         const notes = options.notes ?? await getAllNotes();
-        const translatedStrings = getTranslatedWidgetStrings(notes.length);
+        const translatedStrings = getTranslatedWidgetStrings(notes.length, 0);
 
         if (notes.length === 0) {
             widget.updateSnapshot({
@@ -261,6 +281,8 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
                 : null,
             nearbyRadiusMeters: 500,
         });
+        const resolvedNearbyPlacesCount = isIdleState ? 0 : Math.max(nearbyPlacesCount, 1);
+        const selectionTranslatedStrings = getTranslatedWidgetStrings(notes.length, resolvedNearbyPlacesCount);
 
         if (!selectedNote || isIdleState) {
             widget.updateSnapshot({
@@ -271,7 +293,7 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
                     noteCount: notes.length,
                     nearbyPlacesCount: 0,
                     isIdleState: true,
-                    ...translatedStrings,
+                    ...selectionTranslatedStrings,
                 },
             });
             return;
@@ -284,9 +306,9 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
             locationName: selectedLocationName ?? selectedNote.locationName ?? i18n.t('capture.unknownPlace'),
             date: dateStr,
             noteCount: notes.length,
-            nearbyPlacesCount,
+            nearbyPlacesCount: resolvedNearbyPlacesCount,
             isIdleState,
-            ...translatedStrings,
+            ...selectionTranslatedStrings,
         };
 
         if (selectedNote.type === 'photo') {

@@ -264,8 +264,17 @@
         "savedCount": "{{count}} ghi chú đã lưu",
         "countBadgeOne": "{{count}} ghi chú",
         "countBadgeOther": "{{count}} ghi chú",
+        "nearbyPlaceOne": "{{count}} địa điểm gần đây",
+        "nearbyPlaceOther": "{{count}} địa điểm gần đây",
         "memoryReminder": "Một gợi nhắc nhẹ từ nơi này.",
-        "unknownPlace": "Không rõ địa điểm"
+        "unknownPlace": "Không rõ địa điểm",
+        "accessorySaveMemory": "Lưu một kỷ niệm",
+        "accessoryAddFirstPlace": "Thêm địa điểm đầu tiên",
+        "accessoryMemoryNearby": "Gợi nhớ gần đây",
+        "accessoryOpenApp": "Mở Noto",
+        "accessoryAddLabel": "Thêm",
+        "accessorySavedLabel": "Đã lưu",
+        "accessoryNearLabel": "Gần"
     },
     "feedback": {
         "favorited": "Đã yêu thích",

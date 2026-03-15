@@ -29,7 +29,29 @@ function enableWidgetEntitlementsModification(project) {
   }
 }
 
-function patchProjectBuildSettings(iosRoot) {
+function setWidgetDisplayName(project, widgetDisplayName) {
+  const configurations = project.pbxXCBuildConfigurationSection();
+
+  for (const [key, configuration] of Object.entries(configurations)) {
+    if (key.endsWith('_comment')) {
+      continue;
+    }
+
+    const buildSettings = configuration.buildSettings;
+    if (!buildSettings) {
+      continue;
+    }
+
+    const entitlementsPath = String(buildSettings.CODE_SIGN_ENTITLEMENTS ?? '').replace(/^"(.*)"$/, '$1');
+    if (entitlementsPath !== WIDGET_ENTITLEMENTS_PATH) {
+      continue;
+    }
+
+    buildSettings.INFOPLIST_KEY_CFBundleDisplayName = widgetDisplayName;
+  }
+}
+
+function patchProjectBuildSettings(iosRoot, widgetDisplayName) {
   const projectDirectoryName = fs.readdirSync(iosRoot).find((entry) => entry.endsWith('.xcodeproj'));
   if (!projectDirectoryName) {
     return;
@@ -43,6 +65,7 @@ function patchProjectBuildSettings(iosRoot) {
   const project = xcode.project(projectFilePath);
   project.parseSync();
   enableWidgetEntitlementsModification(project);
+  setWidgetDisplayName(project, widgetDisplayName);
   fs.writeFileSync(projectFilePath, project.writeSync());
 }
 
@@ -54,6 +77,7 @@ const withCustomWidgetSwift = (config) =>
       const iosRoot = config.modRequest.platformProjectRoot;
       const sourcePath = path.join(projectRoot, 'widgets', 'ios', WIDGET_FILE_NAME);
       const targetPath = path.join(iosRoot, TARGET_NAME, WIDGET_FILE_NAME);
+      const widgetDisplayName = config.name || 'Noto';
 
       if (!fs.existsSync(sourcePath)) {
         console.warn(`[withCustomWidgetSwift] Source file not found: ${sourcePath}`);
@@ -62,7 +86,7 @@ const withCustomWidgetSwift = (config) =>
 
       fs.mkdirSync(path.dirname(targetPath), { recursive: true });
       fs.copyFileSync(sourcePath, targetPath);
-      patchProjectBuildSettings(iosRoot);
+      patchProjectBuildSettings(iosRoot, widgetDisplayName);
 
       return config;
     },

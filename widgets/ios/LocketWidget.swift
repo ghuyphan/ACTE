@@ -13,7 +13,15 @@ private struct LocketWidgetPayload {
     let isIdleState: Bool
     let idleText: String
     let savedCountText: String
+    let nearbyPlacesLabelText: String
     let memoryReminderText: String
+    let accessorySaveMemoryText: String
+    let accessoryAddFirstPlaceText: String
+    let accessoryMemoryNearbyText: String
+    let accessoryOpenAppText: String
+    let accessoryAddLabelText: String
+    let accessorySavedLabelText: String
+    let accessoryNearLabelText: String
 
     static let placeholder = LocketWidgetPayload(
         text: "",
@@ -26,7 +34,15 @@ private struct LocketWidgetPayload {
         isIdleState: true,
         idleText: "The right note will appear when you're nearby.",
         savedCountText: "",
-        memoryReminderText: "A quiet reminder from here."
+        nearbyPlacesLabelText: "",
+        memoryReminderText: "A quiet reminder from here.",
+        accessorySaveMemoryText: "Save a memory",
+        accessoryAddFirstPlaceText: "Add your first place",
+        accessoryMemoryNearbyText: "Memory nearby",
+        accessoryOpenAppText: "Open Noto",
+        accessoryAddLabelText: "Add",
+        accessorySavedLabelText: "Saved",
+        accessoryNearLabelText: "Near"
     )
 
     init(
@@ -40,7 +56,15 @@ private struct LocketWidgetPayload {
         isIdleState: Bool,
         idleText: String,
         savedCountText: String,
-        memoryReminderText: String
+        nearbyPlacesLabelText: String,
+        memoryReminderText: String,
+        accessorySaveMemoryText: String,
+        accessoryAddFirstPlaceText: String,
+        accessoryMemoryNearbyText: String,
+        accessoryOpenAppText: String,
+        accessoryAddLabelText: String,
+        accessorySavedLabelText: String,
+        accessoryNearLabelText: String
     ) {
         self.text = text
         self.locationName = locationName
@@ -52,7 +76,15 @@ private struct LocketWidgetPayload {
         self.isIdleState = isIdleState
         self.idleText = idleText
         self.savedCountText = savedCountText
+        self.nearbyPlacesLabelText = nearbyPlacesLabelText
         self.memoryReminderText = memoryReminderText
+        self.accessorySaveMemoryText = accessorySaveMemoryText
+        self.accessoryAddFirstPlaceText = accessoryAddFirstPlaceText
+        self.accessoryMemoryNearbyText = accessoryMemoryNearbyText
+        self.accessoryOpenAppText = accessoryOpenAppText
+        self.accessoryAddLabelText = accessoryAddLabelText
+        self.accessorySavedLabelText = accessorySavedLabelText
+        self.accessoryNearLabelText = accessoryNearLabelText
     }
 
     init(rawProps: [String: Any]) {
@@ -68,7 +100,15 @@ private struct LocketWidgetPayload {
         isIdleState = LocketWidgetPayload.boolValue(payload["isIdleState"])
         idleText = LocketWidgetPayload.stringValue(payload["idleText"])
         savedCountText = LocketWidgetPayload.stringValue(payload["savedCountText"])
+        nearbyPlacesLabelText = LocketWidgetPayload.stringValue(payload["nearbyPlacesLabelText"])
         memoryReminderText = LocketWidgetPayload.stringValue(payload["memoryReminderText"])
+        accessorySaveMemoryText = LocketWidgetPayload.stringValue(payload["accessorySaveMemoryText"])
+        accessoryAddFirstPlaceText = LocketWidgetPayload.stringValue(payload["accessoryAddFirstPlaceText"])
+        accessoryMemoryNearbyText = LocketWidgetPayload.stringValue(payload["accessoryMemoryNearbyText"])
+        accessoryOpenAppText = LocketWidgetPayload.stringValue(payload["accessoryOpenAppText"])
+        accessoryAddLabelText = LocketWidgetPayload.stringValue(payload["accessoryAddLabelText"])
+        accessorySavedLabelText = LocketWidgetPayload.stringValue(payload["accessorySavedLabelText"])
+        accessoryNearLabelText = LocketWidgetPayload.stringValue(payload["accessoryNearLabelText"])
     }
 
     private static func unwrapPayload(from rawProps: [String: Any]) -> [String: Any] {
@@ -177,6 +217,22 @@ private struct LocketWidgetEntryView: View {
         family == .systemLarge
     }
 
+    private var isAccessoryInline: Bool {
+        family == .accessoryInline
+    }
+
+    private var isAccessoryCircular: Bool {
+        family == .accessoryCircular
+    }
+
+    private var isAccessoryRectangular: Bool {
+        family == .accessoryRectangular
+    }
+
+    private var isAccessoryFamily: Bool {
+        isAccessoryInline || isAccessoryCircular || isAccessoryRectangular
+    }
+
     private var displayText: String {
         if payload.isIdleState {
             if !payload.idleText.isEmpty {
@@ -234,9 +290,148 @@ private struct LocketWidgetEntryView: View {
         [Color.black.opacity(0.14), Color.black.opacity(0.48)]
     }
 
+    private var nearbyPlacesLabel: String {
+        if !payload.nearbyPlacesLabelText.isEmpty {
+            return payload.nearbyPlacesLabelText
+        }
+
+        let count = max(payload.nearbyPlacesCount, payload.isIdleState ? 0 : 1)
+        return count == 1 ? "1 place nearby" : "\(count) places nearby"
+    }
+
+    private var accessorySymbolName: String {
+        if payload.noteCount <= 0 {
+            return "plus.circle.fill"
+        }
+
+        return payload.isIdleState ? "bookmark.fill" : "location.fill"
+    }
+
+    private var accessoryTitle: String {
+        let locationLabel = compactLocationName
+
+        if payload.noteCount <= 0 {
+            return payload.accessorySaveMemoryText.isEmpty ? "Save a memory" : payload.accessorySaveMemoryText
+        }
+
+        if !locationLabel.isEmpty {
+            return locationLabel
+        }
+
+        if payload.isIdleState {
+            return countLabel
+        }
+
+        return payload.accessoryMemoryNearbyText.isEmpty ? "Memory nearby" : payload.accessoryMemoryNearbyText
+    }
+
+    private var accessorySubtitle: String {
+        if payload.noteCount <= 0 {
+            return payload.accessoryAddFirstPlaceText.isEmpty ? "Add your first place" : payload.accessoryAddFirstPlaceText
+        }
+
+        if !accessoryNoteExcerpt.isEmpty {
+            return accessoryNoteExcerpt
+        }
+
+        if payload.isIdleState {
+            return payload.accessoryOpenAppText.isEmpty ? "Open Noto" : payload.accessoryOpenAppText
+        }
+
+        return nearbyPlacesLabel
+    }
+
+    private var accessoryInlineText: String {
+        if payload.noteCount <= 0 {
+            return payload.accessorySaveMemoryText.isEmpty ? "Save a memory" : payload.accessorySaveMemoryText
+        }
+
+        if payload.isIdleState {
+            return countLabel
+        }
+
+        let locationLabel = compactLocationName
+        if !locationLabel.isEmpty {
+            let nearLabel = payload.accessoryNearLabelText.isEmpty ? "Near" : payload.accessoryNearLabelText
+            return "\(nearLabel) \(locationLabel)"
+        }
+
+        return payload.accessoryMemoryNearbyText.isEmpty ? "Memory nearby" : payload.accessoryMemoryNearbyText
+    }
+
+    private var accessoryCircularValue: String {
+        if payload.noteCount <= 0 {
+            return "+"
+        }
+
+        if payload.isIdleState {
+            return "\(payload.noteCount)"
+        }
+
+        return "\(max(payload.nearbyPlacesCount, 1))"
+    }
+
+    private var accessoryCircularCaption: String {
+        if payload.noteCount <= 0 {
+            return payload.accessoryAddLabelText.isEmpty ? "Add" : payload.accessoryAddLabelText
+        }
+
+        if payload.isIdleState {
+            return payload.accessorySavedLabelText.isEmpty ? "Saved" : payload.accessorySavedLabelText
+        }
+
+        return payload.accessoryNearLabelText.isEmpty ? "Near" : payload.accessoryNearLabelText
+    }
+
+    private var accessoryRectangularValue: String? {
+        if payload.noteCount <= 0 {
+            return nil
+        }
+
+        if payload.isIdleState {
+            return "\(payload.noteCount)"
+        }
+
+        return "\(max(payload.nearbyPlacesCount, 1))"
+    }
+
+    private var accessoryNoteExcerpt: String {
+        let rawText = displayText
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !rawText.isEmpty else {
+            return ""
+        }
+
+        let limit = payload.isIdleState ? 26 : 32
+        if rawText.count <= limit {
+            return rawText
+        }
+
+        let endIndex = rawText.index(rawText.startIndex, offsetBy: limit - 1)
+        return "\(rawText[..<endIndex])…"
+    }
+
+    private var compactLocationName: String {
+        let trimmed = payload.locationName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return ""
+        }
+
+        let firstSegment = trimmed
+            .split(separator: ",", maxSplits: 1, omittingEmptySubsequences: true)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? trimmed
+
+        return firstSegment
+    }
+
     var body: some View {
         Group {
-            if #available(iOS 17.0, *) {
+            if isAccessoryFamily {
+                accessoryContentLayer
+            } else if #available(iOS 17.0, *) {
                 contentLayer
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .containerBackground(for: .widget) {
@@ -291,21 +486,73 @@ private struct LocketWidgetEntryView: View {
         }
     }
 
-    private var smallLayout: some View {
-        VStack(spacing: 0) {
-            if hasLocationEyebrow {
-                HStack(spacing: 0) {
-                    Text(payload.locationName)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(eyebrowTextColor)
-                        .lineLimit(1)
+    @ViewBuilder
+    private var accessoryContentLayer: some View {
+        if isAccessoryRectangular {
+            accessoryRectangularLayout
+        } else if isAccessoryCircular {
+            accessoryCircularLayout
+        } else {
+            accessoryInlineLayout
+        }
+    }
 
-                    Spacer(minLength: 0)
-                }
-                .padding(.bottom, 10)
+    private var accessoryInlineLayout: some View {
+        ViewThatFits {
+            Text(accessoryInlineText)
+            Text(payload.isIdleState ? countLabel : "Nearby")
+        }
+        .font(.caption.weight(.semibold))
+        .lineLimit(1)
+    }
+
+    private var accessoryCircularLayout: some View {
+        VStack(spacing: 1) {
+            Text(accessoryCircularValue)
+                .font(.title2.weight(.bold))
+                .lineLimit(1)
+                .widgetAccentable()
+
+            Text(accessoryCircularCaption)
+                .font(.caption2)
+                .lineLimit(1)
+        }
+    }
+
+    private var accessoryRectangularLayout: some View {
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(accessoryTitle)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .widgetAccentable()
+
+                Text(accessorySubtitle)
+                    .font(.caption)
+                    .lineLimit(2)
             }
 
             Spacer(minLength: 0)
+
+            if payload.isIdleState, let value = accessoryRectangularValue {
+                Text(value)
+                    .font(.title2.weight(.bold))
+                    .lineLimit(1)
+                    .widgetAccentable()
+            }
+        }
+    }
+
+    private var smallLayout: some View {
+        VStack(spacing: 0) {
+            if hasLocationEyebrow {
+                Text(payload.locationName)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(eyebrowTextColor)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.bottom, 8)
+            }
 
             Text(displayText)
                 .font(.system(size: fontSize, weight: .regular, design: .serif))
@@ -315,11 +562,13 @@ private struct LocketWidgetEntryView: View {
                 .minimumScaleFactor(smallTextMinimumScaleFactor)
                 .allowsTightening(usesCompactSmallTextLayout)
                 .padding(.horizontal, smallTextHorizontalPadding)
+                .padding(.top, hasLocationEyebrow ? 2 : 10)
 
             Spacer(minLength: 0)
 
             if shouldShowCountBadge {
                 countBadge
+                    .padding(.top, 8)
                     .padding(.bottom, smallBadgeBottomPadding)
             }
         }
@@ -460,6 +709,6 @@ struct LocketWidget: Widget {
         }
         .configurationDisplayName("Nearby reminders")
         .description("See the right note when you return somewhere familiar.")
-        .supportedFamilies([.systemSmall, .systemLarge])
+        .supportedFamilies([.systemSmall, .systemLarge, .accessoryInline, .accessoryCircular, .accessoryRectangular])
     }
 }

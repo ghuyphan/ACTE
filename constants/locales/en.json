@@ -264,8 +264,17 @@
         "savedCount": "{{count}} notes saved",
         "countBadgeOne": "{{count}} note",
         "countBadgeOther": "{{count}} notes",
+        "nearbyPlaceOne": "{{count}} place nearby",
+        "nearbyPlaceOther": "{{count}} places nearby",
         "memoryReminder": "A quiet reminder from here.",
-        "unknownPlace": "Unknown Place"
+        "unknownPlace": "Unknown Place",
+        "accessorySaveMemory": "Save a memory",
+        "accessoryAddFirstPlace": "Add your first place",
+        "accessoryMemoryNearby": "Memory nearby",
+        "accessoryOpenApp": "Open Noto",
+        "accessoryAddLabel": "Add",
+        "accessorySavedLabel": "Saved",
+        "accessoryNearLabel": "Near"
     },
     "feedback": {
         "favorited": "Favorited",

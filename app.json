@@ -64,12 +64,15 @@
             {
               "name": "LocketWidget",
               "module": "./widgets/LocketWidget.tsx",
-              "targetName": "LocketWidgetExtension",
+              "targetName": "ExpoWidgetsTarget",
               "displayName": "Memories",
-              "description": "See your latest memory on your Home Screen.",
+              "description": "See your nearby memory from your Home Screen or Lock Screen.",
               "supportedFamilies": [
                 "systemSmall",
-                "systemLarge"
+                "systemLarge",
+                "accessoryInline",
+                "accessoryCircular",
+                "accessoryRectangular"
               ]
             }
           ]

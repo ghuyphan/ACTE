@@ -29,6 +29,34 @@ jest.mock('../constants/i18n', () => {
         ? 'Mot goi nhac nhe tu noi nay.'
         : 'A quiet reminder from here.';
     }
+    if (key === 'widget.nearbyPlaceOne' || key === 'widget.nearbyPlaceOther') {
+      const count = options?.count ?? 0;
+      if (currentLanguage === 'vi') {
+        return `${count} dia diem gan day`;
+      }
+      return key === 'widget.nearbyPlaceOne' ? `${count} place nearby` : `${count} places nearby`;
+    }
+    if (key === 'widget.accessorySaveMemory') {
+      return currentLanguage === 'vi' ? 'Luu mot ky niem' : 'Save a memory';
+    }
+    if (key === 'widget.accessoryAddFirstPlace') {
+      return currentLanguage === 'vi' ? 'Them dia diem dau tien' : 'Add your first place';
+    }
+    if (key === 'widget.accessoryMemoryNearby') {
+      return currentLanguage === 'vi' ? 'Goi nho gan day' : 'Memory nearby';
+    }
+    if (key === 'widget.accessoryOpenApp') {
+      return currentLanguage === 'vi' ? 'Mo Noto' : 'Open Noto';
+    }
+    if (key === 'widget.accessoryAddLabel') {
+      return currentLanguage === 'vi' ? 'Them' : 'Add';
+    }
+    if (key === 'widget.accessorySavedLabel') {
+      return currentLanguage === 'vi' ? 'Da luu' : 'Saved';
+    }
+    if (key === 'widget.accessoryNearLabel') {
+      return currentLanguage === 'vi' ? 'Gan' : 'Near';
+    }
     if (key === 'capture.unknownPlace') {
       return currentLanguage === 'vi' ? 'Khong ro dia diem' : 'Unknown Place';
     }
@@ -298,6 +326,8 @@ describe('widgetService', () => {
           isIdleState: false,
           noteCount: 1,
           memoryReminderText: 'A quiet reminder from here.',
+          accessoryNearLabelText: 'Near',
+          nearbyPlacesLabelText: '1 place nearby',
         }),
       })
     );
@@ -398,6 +428,9 @@ describe('widgetService', () => {
         props: expect.objectContaining({
           noteCount: 2,
           savedCountText: '2 ghi chú',
+          accessorySaveMemoryText: 'Luu mot ky niem',
+          accessorySavedLabelText: 'Da luu',
+          accessoryOpenAppText: 'Mo Noto',
         }),
       })
     );
