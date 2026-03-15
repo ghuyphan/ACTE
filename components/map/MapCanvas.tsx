@@ -7,14 +7,13 @@ import Reanimated, {
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import type { MapClusterNode } from '../../hooks/map/mapDomain';
 import type { ThemeColors } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
-import { mapMotionDurations, mapMotionSpring } from './mapMotion';
+import { mapMotionDurations, mapMotionEasing } from './mapMotion';
 
 interface MapCanvasProps {
   mapRef: RefObject<MapView | null>;
@@ -90,7 +89,10 @@ function MarkerContent({
   useEffect(() => {
     activeProgress.value = reduceMotionEnabled
       ? withTiming(selected ? 1 : 0, { duration: mapMotionDurations.fast })
-      : withSpring(selected ? 1 : 0, mapMotionSpring);
+      : withTiming(selected ? 1 : 0, {
+          duration: mapMotionDurations.standard,
+          easing: mapMotionEasing.standard,
+        });
   }, [activeProgress, reduceMotionEnabled, selected]);
 
   useEffect(() => {

@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useScrollToTop } from '@react-navigation/native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -28,7 +29,13 @@ import { useCaptureFlow } from '../../hooks/useCaptureFlow';
 import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { useNotesStore } from '../../hooks/useNotes';
+import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
+import {
+  canCreatePhotoNote,
+  countPhotoNotes,
+  getRemainingPhotoSlots,
+} from '../../constants/subscription';
 import { filterNotesByQuery } from '../../services/noteSearch';
 import { isIOS26OrNewer } from '../../utils/platform';
 
@@ -39,6 +46,16 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { notes, loading, refreshNotes, createNote } = useNotesStore();
+  const {
+    tier,
+    isConfigured: isPlusConfigured,
+    isPurchaseAvailable,
+    isPurchaseInFlight,
+    plusPriceLabel,
+    canImportFromLibrary,
+    purchasePlus,
+    restorePurchases,
+  } = useSubscription();
   const {
     location,
     remindersEnabled,
@@ -56,6 +73,7 @@ export default function HomeScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
+  const [importingPhoto, setImportingPhoto] = useState(false);
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -98,6 +116,35 @@ export default function HomeScreen() {
   const filteredNotes = useMemo(() => {
     return filterNotesByQuery(notes, deferredSearchQuery);
   }, [deferredSearchQuery, notes]);
+  const photoNoteCount = useMemo(() => countPhotoNotes(notes), [notes]);
+  const canSaveAnotherPhotoNote = useMemo(
+    () => canCreatePhotoNote(tier, photoNoteCount),
+    [photoNoteCount, tier]
+  );
+  const remainingPhotoSlots = useMemo(
+    () => getRemainingPhotoSlots(tier, photoNoteCount),
+    [photoNoteCount, tier]
+  );
+  const cameraStatusText = useMemo(() => {
+    if (tier === 'plus') {
+      return null;
+    }
+
+    if (remainingPhotoSlots === null) {
+      return null;
+    }
+
+    if (remainingPhotoSlots === 0) {
+      return t(
+        'capture.photoLimitReachedHint',
+        'Free plan photo limit reached. Upgrade to Noto Plus to add more photo notes and import from your library.'
+      );
+    }
+
+    return t('capture.photoSlotsRemaining', '{{count}} free photo notes left', {
+      count: remainingPhotoSlots,
+    });
+  }, [remainingPhotoSlots, t, tier]);
 
   const displayedNotes = useInlineHeaderSearch && isSearching ? filteredNotes : notes;
   const shouldShowNotesHint = displayedNotes.length > 0 && isCaptureVisible;
@@ -217,6 +264,119 @@ export default function HomeScreen() {
     });
   }, [remindersEnabled, requestReminderPermissions, showAlert, showDoneSheet, t]);
 
+  const showPlusSheet = useCallback(
+    (reason: 'limit' | 'library') => {
+      const title =
+        reason === 'library'
+          ? t('plus.libraryTitle', 'Noto Plus unlock')
+          : t('plus.limitTitle', 'Photo limit reached');
+      const message =
+        reason === 'library'
+          ? t(
+              'plus.libraryMessage',
+              'Upgrade to Noto Plus to create notes from photos already in your library.'
+            )
+          : t(
+              'plus.limitMessage',
+              'Free plan includes up to 10 photo notes. Upgrade to Noto Plus to save more image notes and import from your library.'
+            );
+
+      showAlert({
+        variant: 'info',
+        title,
+        message,
+        primaryAction: isPurchaseAvailable
+          ? {
+              label: plusPriceLabel
+                ? t('plus.upgradeCtaWithPrice', 'Upgrade to Plus · {{price}}', {
+                    price: plusPriceLabel,
+                  })
+                : t('plus.upgradeCta', 'Upgrade to Plus'),
+              onPress: async () => {
+                const result = await purchasePlus();
+                if (result.status === 'success') {
+                  showAlert({
+                    variant: 'success',
+                    title: t('plus.upgradeSuccessTitle', 'Noto Plus is ready'),
+                    message: t(
+                      'plus.upgradeSuccessMessage',
+                      'You can now save more photo notes and import images from your library.'
+                    ),
+                    primaryAction: {
+                      label: t('common.done', 'Done'),
+                    },
+                  });
+                  return;
+                }
+
+                if (result.status === 'cancelled') {
+                  return;
+                }
+
+                showAlert({
+                  variant: 'warning',
+                  title: t('plus.upgradeUnavailableTitle', 'Noto Plus unavailable'),
+                  message: t(
+                    'plus.upgradeUnavailableMessage',
+                    'We could not complete the purchase right now. Please try again in a moment.'
+                  ),
+                  primaryAction: {
+                    label: t('common.done', 'Done'),
+                  },
+                });
+              },
+            }
+          : {
+              label: t('common.done', 'Done'),
+            },
+        secondaryAction: isPlusConfigured
+          ? {
+              label: t('plus.restorePurchases', 'Restore purchases'),
+              variant: 'secondary',
+              onPress: async () => {
+                const result = await restorePurchases();
+                if (result.status === 'success') {
+                  showAlert({
+                    variant: 'success',
+                    title: t('plus.restoreSuccessTitle', 'Purchases restored'),
+                    message: t(
+                      'plus.restoreSuccessMessage',
+                      'Your Noto Plus access has been refreshed for this device.'
+                    ),
+                    primaryAction: {
+                      label: t('common.done', 'Done'),
+                    },
+                  });
+                  return;
+                }
+
+                showAlert({
+                  variant: 'warning',
+                  title: t('plus.restoreFailedTitle', 'Could not restore purchases'),
+                  message: t(
+                    'plus.restoreFailedMessage',
+                    'We could not refresh your purchases right now. Please try again later.'
+                  ),
+                  primaryAction: {
+                    label: t('common.done', 'Done'),
+                  },
+                });
+              },
+            }
+          : undefined,
+      });
+    },
+    [
+      isPlusConfigured,
+      isPurchaseAvailable,
+      plusPriceLabel,
+      purchasePlus,
+      restorePurchases,
+      showAlert,
+      t,
+    ]
+  );
+
   const reverseGeocode = useCallback(
     async (lat: number, lon: number): Promise<string> => {
       try {
@@ -269,6 +429,11 @@ export default function HomeScreen() {
         t('capture.error', 'Error'),
         t('capture.noPhoto', 'Please take a photo first')
       );
+      return;
+    }
+
+    if (captureMode === 'camera' && !canSaveAnotherPhotoNote) {
+      showPlusSheet('limit');
       return;
     }
 
@@ -336,7 +501,62 @@ export default function HomeScreen() {
     radius,
     resetCapture,
     showSavedSheet,
+    canSaveAnotherPhotoNote,
+    showPlusSheet,
   ]);
+
+  const handleImportPhoto = useCallback(async () => {
+    if (!canImportFromLibrary) {
+      showPlusSheet('library');
+      return;
+    }
+
+    let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (mediaPermission.status !== 'granted') {
+      mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    }
+
+    if (mediaPermission.status !== 'granted') {
+      showDoneSheet(
+        'warning',
+        t('capture.photoLibraryPermissionTitle', 'Photo access needed'),
+        mediaPermission.canAskAgain === false
+          ? t(
+              'capture.photoLibraryPermissionSettingsMsg',
+              'Photo library access is blocked for Noto. Open Settings to import from your library.'
+            )
+          : t(
+              'capture.photoLibraryPermissionMsg',
+              'Allow photo library access so you can import an image into this note.'
+            ),
+        mediaPermission.canAskAgain === false
+      );
+      return;
+    }
+
+    setImportingPhoto(true);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 0.35,
+        selectionLimit: 1,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setCapturedPhoto(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.warn('Photo import failed:', error);
+      showDoneSheet(
+        'error',
+        t('capture.error', 'Error'),
+        t('capture.photoImportFailed', 'We could not import that photo right now.')
+      );
+    } finally {
+      setImportingPhoto(false);
+    }
+  }, [canImportFromLibrary, setCapturedPhoto, showDoneSheet, showPlusSheet, t]);
 
   const handleOpenSearch = useCallback(() => {
     if (!useInlineHeaderSearch) {
@@ -475,6 +695,9 @@ export default function HomeScreen() {
               onRequestCameraPermission={requestPermission}
               facing={facing}
               onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
+              onOpenPhotoLibrary={() => {
+                void handleImportPhoto();
+              }}
               cameraRef={cameraRef}
               flashAnim={flashAnim}
               permissionGranted={Boolean(permission?.granted)}
@@ -488,6 +711,9 @@ export default function HomeScreen() {
               }}
               saving={saving}
               shutterScale={shutterScale}
+              cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
+              libraryImportLocked={!canImportFromLibrary}
+              importingPhoto={importingPhoto || isPurchaseInFlight}
             />
             {displayedNotes.length > 0 ? (
               <Animated.View

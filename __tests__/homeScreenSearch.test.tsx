@@ -152,6 +152,19 @@ jest.mock('../hooks/useNotes', () => ({
   }),
 }));
 
+jest.mock('../hooks/useSubscription', () => ({
+  useSubscription: () => ({
+    tier: 'free',
+    isConfigured: false,
+    isPurchaseAvailable: false,
+    isPurchaseInFlight: false,
+    plusPriceLabel: null,
+    canImportFromLibrary: false,
+    purchasePlus: jest.fn(async () => ({ status: 'unavailable' })),
+    restorePurchases: jest.fn(async () => ({ status: 'unavailable' })),
+  }),
+}));
+
 jest.mock('../components/AppSheetAlert', () => {
   return function MockAppSheetAlert() {
     return null;

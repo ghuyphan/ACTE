@@ -68,6 +68,7 @@ interface CaptureCardProps {
   onRequestCameraPermission: () => void;
   facing: 'back' | 'front';
   onToggleFacing: () => void;
+  onOpenPhotoLibrary: () => void;
   cameraRef: RefObject<CameraView | null>;
   flashAnim: Animated.Value;
   permissionGranted: boolean;
@@ -77,6 +78,9 @@ interface CaptureCardProps {
   onSaveNote: () => void;
   saving: boolean;
   shutterScale: Animated.Value;
+  cameraStatusText?: string | null;
+  libraryImportLocked?: boolean;
+  importingPhoto?: boolean;
 }
 
 export default function CaptureCard({
@@ -101,6 +105,7 @@ export default function CaptureCard({
   onRequestCameraPermission,
   facing,
   onToggleFacing,
+  onOpenPhotoLibrary,
   cameraRef,
   flashAnim,
   permissionGranted,
@@ -110,6 +115,9 @@ export default function CaptureCard({
   onSaveNote,
   saving,
   shutterScale,
+  cameraStatusText,
+  libraryImportLocked = false,
+  importingPhoto = false,
 }: CaptureCardProps) {
   const showInlineRadiusOptions = Platform.OS !== 'ios';
   const [isCameraReady, setIsCameraReady] = useState(false);
@@ -253,6 +261,28 @@ export default function CaptureCard({
             <Pressable
               style={[
                 styles.cameraOverlayButton,
+                styles.libraryBtn,
+                {
+                  backgroundColor: colors.captureCameraOverlay,
+                  borderColor: colors.captureCameraOverlayBorder,
+                },
+              ]}
+              onPress={onOpenPhotoLibrary}
+            >
+              {importingPhoto ? (
+                <ActivityIndicator size="small" color={colors.captureCameraOverlayText} />
+              ) : (
+                <>
+                  <Ionicons name={libraryImportLocked ? 'sparkles' : 'images'} size={18} color={colors.captureCameraOverlayText} />
+                  <Text style={[styles.libraryBtnText, { color: colors.captureCameraOverlayText }]}>
+                    {libraryImportLocked ? t('capture.plusLibraryLocked', 'Plus') : t('capture.importPhoto', 'Photos')}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+            <Pressable
+              style={[
+                styles.cameraOverlayButton,
                 styles.flipBtn,
                 {
                   backgroundColor: colors.captureCameraOverlay,
@@ -282,6 +312,9 @@ export default function CaptureCard({
           },
         ]}
       >
+        {cameraStatusText ? (
+          <Text style={[styles.cameraStatusText, { color: colors.secondaryText }]}>{cameraStatusText}</Text>
+        ) : null}
         {showInlineRadiusOptions ? (
           <View style={styles.radiusOptions}>
             {NOTE_RADIUS_OPTIONS.map((option) => {
@@ -476,6 +509,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
+  libraryBtn: {
+    position: 'absolute',
+    top: 24,
+    left: 16,
+    minHeight: 38,
+    borderRadius: 19,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    zIndex: 10,
+  },
+  libraryBtnText: {
+    fontWeight: '600',
+    fontSize: 13,
+  },
   retakeBtn: {
     position: 'absolute',
     top: 24,
@@ -507,6 +557,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 90,
     gap: 12,
+  },
+  cameraStatusText: {
+    ...Typography.pill,
+    textAlign: 'center',
   },
   radiusOptions: {
     flexDirection: 'row',

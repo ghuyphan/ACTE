@@ -4,6 +4,7 @@ import { ReactElement, RefObject, memo, useCallback, useEffect, useMemo, useRef 
 import {
   Animated,
   Dimensions,
+  Easing as RNEasing,
   FlatList,
   Pressable,
   RefreshControl,
@@ -11,7 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import Reanimated, { LinearTransition } from 'react-native-reanimated';
+import Reanimated, { Easing, LinearTransition } from 'react-native-reanimated';
 import { Layout, Typography } from '../../constants/theme';
 import { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
@@ -49,10 +50,10 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
 
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(scale, {
+      Animated.timing(scale, {
         toValue: 1,
-        tension: 80,
-        friction: 10,
+        duration: 260,
+        easing: RNEasing.out(RNEasing.cubic),
         delay: mountIndex * 50,
         useNativeDriver: true,
       }),
@@ -66,19 +67,19 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   }, [mountIndex, opacity, scale]);
 
   const handlePressIn = () => {
-    Animated.spring(pressScale, {
+    Animated.timing(pressScale, {
       toValue: 0.98,
-      tension: 300,
-      friction: 15,
+      duration: 120,
+      easing: RNEasing.out(RNEasing.quad),
       useNativeDriver: true,
     }).start();
   };
 
   const handlePressOut = () => {
-    Animated.spring(pressScale, {
+    Animated.timing(pressScale, {
       toValue: 1,
-      tension: 200,
-      friction: 12,
+      duration: 180,
+      easing: RNEasing.out(RNEasing.cubic),
       useNativeDriver: true,
     }).start();
   };
@@ -217,7 +218,7 @@ export default function NotesFeed({
       data={listData}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
-      itemLayoutAnimation={LinearTransition.springify().damping(20).stiffness(150)}
+      itemLayoutAnimation={LinearTransition.duration(180).easing(Easing.out(Easing.cubic))}
       getItemLayout={getItemLayout}
       initialNumToRender={3}
       maxToRenderPerBatch={4}

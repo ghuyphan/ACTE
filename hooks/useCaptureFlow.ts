@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useRef, useState } from 'react';
-import { Animated } from 'react-native';
+import { Animated, Easing } from 'react-native';
 import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
 
 export type CaptureMode = 'text' | 'camera';
@@ -30,8 +30,18 @@ export function useCaptureFlow() {
     ]).start(() => {
       callback();
       Animated.parallel([
-        Animated.spring(captureScale, { toValue: 1, tension: 210, friction: 17, useNativeDriver: true }),
-        Animated.spring(captureTranslateY, { toValue: 0, tension: 210, friction: 17, useNativeDriver: true }),
+        Animated.timing(captureScale, {
+          toValue: 1,
+          duration: 220,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(captureTranslateY, {
+          toValue: 0,
+          duration: 220,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
       ]).start();
     });
   }, [captureScale, captureTranslateY]);
@@ -55,19 +65,19 @@ export function useCaptureFlow() {
   }, []);
 
   const handleShutterPressIn = useCallback(() => {
-    Animated.spring(shutterScale, {
+    Animated.timing(shutterScale, {
       toValue: 0.85,
-      tension: 300,
-      friction: 15,
+      duration: 120,
+      easing: Easing.out(Easing.quad),
       useNativeDriver: true,
     }).start();
   }, [shutterScale]);
 
   const handleShutterPressOut = useCallback(() => {
-    Animated.spring(shutterScale, {
+    Animated.timing(shutterScale, {
       toValue: 1,
-      tension: 200,
-      friction: 12,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
   }, [shutterScale]);

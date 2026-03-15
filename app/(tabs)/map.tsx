@@ -9,12 +9,12 @@ import type MapView from 'react-native-maps';
 import Reanimated, {
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapCanvas from '../../components/map/MapCanvas';
 import MapFilterBar from '../../components/map/MapFilterBar';
-import { getMapLayoutTransition, mapMotionPressSpring } from '../../components/map/mapMotion';
+import { getMapLayoutTransition, mapMotionPressTiming } from '../../components/map/mapMotion';
 import MapPreviewCard from '../../components/map/MapPreviewCard';
 import {
   getOverlayBorderColor,
@@ -444,10 +444,10 @@ export default function MapScreen() {
           testID="map-recenter"
           onPress={goToMyLocation}
           onPressIn={() => {
-            fabScale.value = withSpring(0.95, mapMotionPressSpring);
+            fabScale.value = withTiming(0.95, mapMotionPressTiming);
           }}
           onPressOut={() => {
-            fabScale.value = withSpring(1, mapMotionPressSpring);
+            fabScale.value = withTiming(1, mapMotionPressTiming);
           }}
         >
           <View style={[styles.fab, { borderColor: getOverlayBorderColor(isDark) }]}>

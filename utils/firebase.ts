@@ -1,38 +1,46 @@
-import firebaseApp from '@react-native-firebase/app';
-import authModule from '@react-native-firebase/auth';
-import firestoreModule from '@react-native-firebase/firestore';
+import { getApp, getApps, ReactNativeFirebase } from '@react-native-firebase/app';
+import { getAuth } from '@react-native-firebase/auth';
+import { getFirestore as getModularFirestore } from '@react-native-firebase/firestore';
 
-export function hasFirebaseApp(): boolean {
+function getDefaultFirebaseApp(): ReactNativeFirebase.FirebaseApp | null {
   try {
-    const apps = (firebaseApp as unknown as { apps?: unknown[] }).apps;
-    return Array.isArray(apps) && apps.length > 0;
+    const apps = getApps();
+    if (!apps.length) {
+      return null;
+    }
+
+    return getApp();
   } catch {
-    return false;
+    return null;
   }
 }
 
+export function hasFirebaseApp(): boolean {
+  return getDefaultFirebaseApp() !== null;
+}
+
 export function getFirebaseAuth() {
-  if (!hasFirebaseApp()) {
+  const app = getDefaultFirebaseApp();
+  if (!app) {
     return null;
   }
 
   try {
-    return authModule();
+    return getAuth(app);
   } catch {
     return null;
   }
 }
 
 export function getFirestore() {
-  if (!hasFirebaseApp()) {
+  const app = getDefaultFirebaseApp();
+  if (!app) {
     return null;
   }
 
   try {
-    return firestoreModule();
+    return getModularFirestore(app);
   } catch {
     return null;
   }
 }
-
-export { firebaseApp };

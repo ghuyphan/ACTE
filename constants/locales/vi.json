@@ -42,8 +42,17 @@
         "cameraPermission": "Cần quyền truy cập camera để chụp ảnh",
         "grantAccess": "Cấp quyền",
         "retake": "Chụp lại",
+        "importPhoto": "Thư viện",
+        "plusLibraryLocked": "Plus",
         "notesHint": "Ghi chú",
-        "radiusLabel": "Bán kính nhắc nhở"
+        "radiusLabel": "Bán kính nhắc nhở",
+        "plusEnabledHint": "Đã mở khóa thư viện ảnh",
+        "photoLimitReachedHint": "Đã đạt giới hạn ảnh miễn phí",
+        "photoSlotsRemaining": "Còn {{count}} ghi chú ảnh miễn phí",
+        "photoLibraryPermissionTitle": "Cần quyền truy cập ảnh",
+        "photoLibraryPermissionMsg": "Hãy cho phép truy cập thư viện ảnh để nhập ảnh vào ghi chú này.",
+        "photoLibraryPermissionSettingsMsg": "Quyền truy cập thư viện ảnh của Noto đang bị chặn. Mở Cài đặt để nhập từ thư viện.",
+        "photoImportFailed": "Hiện chưa thể nhập ảnh đó."
     },
     "map": {
         "photoNote": "Ghi chú ảnh",
@@ -137,6 +146,14 @@
         "localMode": "Chế độ cục bộ",
         "localModeShort": "Sẵn sàng ngoại tuyến",
         "localModeDetail": "Bản dựng này đã sẵn sàng dùng ngoại tuyến. Đồng bộ tùy chọn có thể được thêm sau mà không ảnh hưởng tới ghi chú cục bộ của bạn.",
+        "plusTitle": "Plus",
+        "plusPlan": "Gói",
+        "plusActive": "Plus",
+        "plusInactive": "Miễn phí",
+        "plusHint": "Lưu thêm ghi chú ảnh và nhập từ Ảnh.",
+        "plusHintWithLimit": "Gói Miễn phí gồm {{count}} ghi chú ảnh. Plus mở rộng giới hạn và cho phép nhập từ Ảnh.",
+        "plusActiveHint": "Nhập từ Ảnh và lưu thêm ghi chú ảnh.",
+        "plusUnavailable": "Plus chưa hỗ trợ trong bản này",
         "about": "Để anh không bao giờ quên em thích gì 💛"
     },
     "profile": {
@@ -255,10 +272,28 @@
         "unfavorited": "Đã bỏ yêu thích",
         "deleted": "Đã xóa"
     },
+    "plus": {
+        "libraryTitle": "Cần Plus",
+        "libraryMessage": "Nhập từ Ảnh là tính năng của Plus.",
+        "limitTitle": "Đã đạt giới hạn ảnh",
+        "limitMessage": "Gói Miễn phí gồm 10 ghi chú ảnh. Plus mở rộng giới hạn này.",
+        "upgradeCta": "Lấy Plus",
+        "upgradeCtaWithPrice": "Lấy Plus · {{price}}",
+        "upgradeSuccessTitle": "Đã mở khóa Plus",
+        "upgradeSuccessMessage": "Bạn đã có thể nhập từ Ảnh và lưu thêm ghi chú ảnh.",
+        "upgradeUnavailableTitle": "Plus chưa khả dụng",
+        "upgradeUnavailableMessage": "Chưa thể mua lúc này. Vui lòng thử lại sau.",
+        "restorePurchases": "Khôi phục giao dịch",
+        "restoreSuccessTitle": "Đã khôi phục",
+        "restoreSuccessMessage": "Plus đang hoạt động trên thiết bị này.",
+        "restoreFailedTitle": "Khôi phục thất bại",
+        "restoreFailedMessage": "Chưa thể khôi phục giao dịch lúc này."
+    },
     "common": {
         "cancel": "Hủy",
         "delete": "Xóa",
         "goBack": "Quay lại",
-        "done": "Xong"
+        "done": "Xong",
+        "openSettings": "Mở Cài đặt"
     }
 }

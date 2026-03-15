@@ -1,4 +1,5 @@
 import {
+  Easing,
   FadeIn,
   FadeInDown,
   FadeInUp,
@@ -15,37 +16,28 @@ export const mapMotionDurations = {
   slow: 240,
 } as const;
 
-export const mapMotionSpring = {
-  damping: 20,
-  stiffness: 180,
-  mass: 0.82,
+export const mapMotionEasing = {
+  standard: Easing.bezier(0.22, 1, 0.36, 1),
+  emphasis: Easing.bezier(0.2, 0.9, 0.2, 1),
+  press: Easing.out(Easing.quad),
 } as const;
 
-export const mapMotionEmphasisSpring = {
-  damping: 22,
-  stiffness: 240,
-  mass: 0.72,
-} as const;
-
-export const mapMotionPressSpring = {
-  damping: 20,
-  stiffness: 260,
-  mass: 0.7,
+export const mapMotionPressTiming = {
+  duration: mapMotionDurations.fast,
+  easing: mapMotionEasing.press,
 } as const;
 
 export function getMapLayoutTransition(reduceMotionEnabled: boolean) {
   return reduceMotionEnabled
     ? LinearTransition.duration(mapMotionDurations.fast)
-    : LinearTransition.springify().damping(mapMotionSpring.damping).stiffness(mapMotionSpring.stiffness);
+    : LinearTransition.duration(mapMotionDurations.standard).easing(mapMotionEasing.standard);
 }
 
 export function getMapOverlayEnter(reduceMotionEnabled: boolean) {
   return reduceMotionEnabled
     ? FadeIn.duration(mapMotionDurations.fast).reduceMotion(ReduceMotion.Never)
-    : FadeInDown.springify()
-        .damping(mapMotionSpring.damping)
-        .stiffness(mapMotionSpring.stiffness)
-        .mass(mapMotionSpring.mass)
+    : FadeInDown.duration(mapMotionDurations.standard)
+        .easing(mapMotionEasing.standard)
         .reduceMotion(ReduceMotion.Never);
 }
 
@@ -58,10 +50,8 @@ export function getMapOverlayExit(reduceMotionEnabled: boolean) {
 export function getMapCardEnter(reduceMotionEnabled: boolean) {
   return reduceMotionEnabled
     ? FadeInUp.duration(mapMotionDurations.fast).reduceMotion(ReduceMotion.Never)
-    : FadeInUp.springify()
-        .damping(mapMotionSpring.damping)
-        .stiffness(mapMotionSpring.stiffness)
-        .mass(mapMotionSpring.mass)
+    : FadeInUp.duration(mapMotionDurations.standard)
+        .easing(mapMotionEasing.emphasis)
         .reduceMotion(ReduceMotion.Never);
 }
 

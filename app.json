@@ -78,6 +78,12 @@
       "./plugins/withCustomWidgetSwift.js",
       "expo-camera",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Noto to access your photo library so you can save memories from your existing photos."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "ios": {

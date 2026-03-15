@@ -37,6 +37,7 @@ import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotes } from '../../hooks/useNotes';
 import { useSyncStatus } from '../../hooks/useSyncStatus';
+import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
 
 function AndroidSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -88,6 +89,16 @@ export default function SettingsScreen() {
   const { notes, deleteAllNotes } = useNotes();
   const { user, isAuthAvailable } = useAuth();
   const { status: syncStatus, lastSyncedAt, lastMessage } = useSyncStatus();
+  const {
+    tier,
+    isConfigured: isPlusConfigured,
+    isPurchaseAvailable,
+    isPurchaseInFlight,
+    plusPriceLabel,
+    photoNoteLimit,
+    purchasePlus,
+    restorePurchases,
+  } = useSubscription();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { alertProps, showAlert } = useAppSheetAlert();
@@ -131,6 +142,36 @@ export default function SettingsScreen() {
 
     return t('settings.autoSyncOnShort', 'On');
   }, [syncStatus, t, user]);
+
+  const plusValue = useMemo(() => {
+    if (tier === 'plus') {
+      return t('settings.plusActive', 'Active');
+    }
+
+    return plusPriceLabel ?? t('settings.plusInactive', 'Free');
+  }, [plusPriceLabel, t, tier]);
+
+  const plusHint = useMemo(() => {
+    if (tier === 'plus') {
+      return t(
+        'settings.plusActiveHint',
+        'Noto Plus is active. Photo notes are expanded and library import is unlocked.'
+      );
+    }
+
+    if (photoNoteLimit === null) {
+      return t(
+        'settings.plusHint',
+        'Upgrade to Noto Plus to save more photo notes and create notes from your photo library.'
+      );
+    }
+
+    return t(
+      'settings.plusHintWithLimit',
+      'Free plan includes up to {{count}} photo notes. Upgrade to Noto Plus for more image notes and library import.',
+      { count: photoNoteLimit }
+    );
+  }, [photoNoteLimit, t, tier]);
 
   const accountHint = useMemo(() => {
     if (!isAuthAvailable) {
@@ -187,6 +228,72 @@ export default function SettingsScreen() {
       secondaryAction: {
         label: t('common.cancel', 'Cancel'),
         variant: 'secondary',
+      },
+    });
+  };
+
+  const handlePurchasePlus = async () => {
+    const result = await purchasePlus();
+
+    if (result.status === 'success') {
+      showAlert({
+        variant: 'success',
+        title: t('plus.upgradeSuccessTitle', 'Noto Plus is ready'),
+        message: t(
+          'plus.upgradeSuccessMessage',
+          'You can now save more photo notes and import images from your library.'
+        ),
+        primaryAction: {
+          label: t('common.done', 'Done'),
+        },
+      });
+      return;
+    }
+
+    if (result.status === 'cancelled') {
+      return;
+    }
+
+    showAlert({
+      variant: 'warning',
+      title: t('plus.upgradeUnavailableTitle', 'Noto Plus unavailable'),
+      message: t(
+        'plus.upgradeUnavailableMessage',
+        'We could not complete the purchase right now. Please try again in a moment.'
+      ),
+      primaryAction: {
+        label: t('common.done', 'Done'),
+      },
+    });
+  };
+
+  const handleRestorePurchases = async () => {
+    const result = await restorePurchases();
+
+    if (result.status === 'success') {
+      showAlert({
+        variant: 'success',
+        title: t('plus.restoreSuccessTitle', 'Purchases restored'),
+        message: t(
+          'plus.restoreSuccessMessage',
+          'Your Noto Plus access has been refreshed for this device.'
+        ),
+        primaryAction: {
+          label: t('common.done', 'Done'),
+        },
+      });
+      return;
+    }
+
+    showAlert({
+      variant: 'warning',
+      title: t('plus.restoreFailedTitle', 'Could not restore purchases'),
+      message: t(
+        'plus.restoreFailedMessage',
+        'We could not refresh your purchases right now. Please try again later.'
+      ),
+      primaryAction: {
+        label: t('common.done', 'Done'),
       },
     });
   };
@@ -262,6 +369,11 @@ export default function SettingsScreen() {
               onPress={promptClearAll}
               destructive
             />
+          </AndroidSection>
+
+          <AndroidSection title={t('settings.plusTitle', 'NOTO PLUS')}>
+            <AndroidRow label={t('settings.plusPlan', 'Plan')} value={plusValue} />
+            <Text style={[styles.sectionHint, { color: colors.secondaryText }]}>{plusHint}</Text>
           </AndroidSection>
 
           <AndroidSection title={t('settings.account', 'ACCOUNT')}>
@@ -374,6 +486,98 @@ export default function SettingsScreen() {
                 </SwiftUIText>
               </HStack>
             </Button>
+          </Section>
+
+          <Section
+            title={t('settings.plusTitle', 'NOTO PLUS')}
+            footer={
+              <SwiftUIText
+                modifiers={[
+                  foregroundStyle(colors.secondaryText),
+                  font({ size: 13 }),
+                  multilineTextAlignment('leading'),
+                  padding({ top: 8 }),
+                ]}
+              >
+                {plusHint}
+              </SwiftUIText>
+            }
+          >
+            <HStack>
+              <HStack
+                modifiers={[
+                  frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                  backgroundOverlay({ color: colors.primary + '18' }),
+                  cornerRadius(7),
+                  padding({ trailing: 12 }),
+                ]}
+              >
+                <SwiftUIImage systemName="sparkles" color={colors.primary} size={18} />
+              </HStack>
+              <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                {t('settings.plusPlan', 'Plan')}
+              </SwiftUIText>
+              <Spacer />
+              <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{plusValue}</SwiftUIText>
+            </HStack>
+            {tier !== 'plus' ? (
+              <Button
+                onPress={() => {
+                  if (!isPurchaseAvailable || isPurchaseInFlight) {
+                    return;
+                  }
+                  void handlePurchasePlus();
+                }}
+              >
+                <HStack>
+                  <HStack
+                    modifiers={[
+                      frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                      backgroundOverlay({ color: colors.primary + '18' }),
+                      cornerRadius(7),
+                      padding({ trailing: 12 }),
+                    ]}
+                  >
+                    <SwiftUIImage systemName="crown" color={colors.primary} size={18} />
+                  </HStack>
+                  <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                    {isPurchaseAvailable
+                      ? plusPriceLabel
+                        ? t('plus.upgradeCtaWithPrice', 'Upgrade to Plus · {{price}}', {
+                            price: plusPriceLabel,
+                          })
+                        : t('plus.upgradeCta', 'Upgrade to Plus')
+                      : t('settings.plusUnavailable', 'Plus unavailable in this build')}
+                  </SwiftUIText>
+                </HStack>
+              </Button>
+            ) : null}
+            {isPlusConfigured ? (
+              <Button
+                onPress={() => {
+                  if (isPurchaseInFlight) {
+                    return;
+                  }
+                  void handleRestorePurchases();
+                }}
+              >
+                <HStack>
+                  <HStack
+                    modifiers={[
+                      frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                      backgroundOverlay({ color: colors.secondaryText + '18' }),
+                      cornerRadius(7),
+                      padding({ trailing: 12 }),
+                    ]}
+                  >
+                    <SwiftUIImage systemName="arrow.clockwise" color={colors.secondaryText} size={18} />
+                  </HStack>
+                  <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                    {t('plus.restorePurchases', 'Restore purchases')}
+                  </SwiftUIText>
+                </HStack>
+              </Button>
+            ) : null}
           </Section>
 
           <Section

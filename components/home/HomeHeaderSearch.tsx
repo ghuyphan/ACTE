@@ -16,7 +16,7 @@ import {
 import { GlassView } from 'expo-glass-effect';
 import { TFunction } from 'i18next';
 import { ComponentProps, useEffect, useRef } from 'react';
-import { Animated, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadius';
 import { isIOS26OrNewer } from '../../utils/platform';
 import GlassHeader from '../ui/GlassHeader';
@@ -76,10 +76,10 @@ export default function HomeHeaderSearch({
 
     modeIconScale.setValue(0.88);
 
-    Animated.spring(modeIconScale, {
+    Animated.timing(modeIconScale, {
       toValue: 1,
-      tension: 260,
-      friction: 18,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
   }, [captureMode, modeIconScale]);

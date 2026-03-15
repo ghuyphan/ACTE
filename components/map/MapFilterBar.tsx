@@ -7,7 +7,6 @@ import Reanimated, {
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
@@ -17,7 +16,7 @@ import {
   getMapOverlayEnter,
   getMapOverlayExit,
   mapMotionDurations,
-  mapMotionPressSpring,
+  mapMotionPressTiming,
 } from './mapMotion';
 import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
 import type { MapFilterState, MapFilterType } from '../../hooks/map/mapDomain';
@@ -92,10 +91,10 @@ function FilterChip({ label, active, onPress, icon, testID, reduceMotionEnabled 
         accessibilityState={{ selected: active }}
         onPress={onPress}
         onPressIn={() => {
-          pressScale.value = withSpring(0.96, mapMotionPressSpring);
+          pressScale.value = withTiming(0.96, mapMotionPressTiming);
         }}
         onPressOut={() => {
-          pressScale.value = withSpring(1, mapMotionPressSpring);
+          pressScale.value = withTiming(1, mapMotionPressTiming);
         }}
       >
         <Reanimated.View style={[styles.chipOuter, animatedChipStyle]}>

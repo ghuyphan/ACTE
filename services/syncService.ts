@@ -1,4 +1,12 @@
-import { FirebaseFirestoreTypes, serverTimestamp } from '@react-native-firebase/firestore';
+import {
+  collection,
+  doc,
+  FirebaseFirestoreTypes,
+  getDocs,
+  serverTimestamp,
+  setDoc,
+  writeBatch,
+} from '@react-native-firebase/firestore';
 import { Note, getDB, getNoteById, upsertNote } from './database';
 import { readPhotoAsBase64, writePhotoFromBase64 } from './photoStorage';
 import { getFirestore } from '../utils/firebase';
@@ -85,7 +93,6 @@ interface RemoteMergeResult {
 const FIRESTORE_BATCH_LIMIT = 400;
 type FirestoreDocument = FirebaseFirestoreTypes.DocumentData;
 type FirestoreCollection = FirebaseFirestoreTypes.CollectionReference<FirestoreDocument>;
-type FirestoreModuleLike = Pick<FirebaseFirestoreTypes.Module, 'batch'>;
 type FirestoreWriteBatch = Pick<FirebaseFirestoreTypes.WriteBatch, 'commit'>;
 
 function rowToQueueItem(row: any): SyncQueueItem {
@@ -202,16 +209,16 @@ async function commitBatch({
 
 async function deleteAllRemoteNotesInChunks(
   notesCollection: FirestoreCollection,
-  firestore: FirestoreModuleLike
+  firestore: FirebaseFirestoreTypes.Module
 ) {
-  const snapshot = await notesCollection.get();
+  const snapshot = await getDocs(notesCollection);
   const docs = snapshot.docs ?? [];
 
   for (let index = 0; index < docs.length; index += FIRESTORE_BATCH_LIMIT) {
-    const nextBatch = firestore.batch();
+    const nextBatch = writeBatch(firestore);
     const chunk = docs.slice(index, index + FIRESTORE_BATCH_LIMIT);
-    chunk.forEach((doc) => {
-      nextBatch.delete(doc.ref);
+    chunk.forEach((snapshot: FirebaseFirestoreTypes.QueryDocumentSnapshot<FirestoreDocument>) => {
+      nextBatch.delete(snapshot.ref);
     });
     await nextBatch.commit();
   }
@@ -219,14 +226,14 @@ async function deleteAllRemoteNotesInChunks(
 
 async function flushPendingQueueToFirebase(
   notesCollection: FirestoreCollection,
-  firestore: FirestoreModuleLike,
+  firestore: FirebaseFirestoreTypes.Module,
   syncRepository: SyncRepository,
   notes: Note[]
 ): Promise<FlushQueueResult> {
   const pendingChanges = await syncRepository.listPending(5000);
   const noteMap = new Map(notes.map((note) => [note.id, note]));
 
-  let currentBatch = firestore.batch();
+  let currentBatch = writeBatch(firestore);
   let currentBatchItemIds: number[] = [];
   let currentBatchOps = 0;
   let processedCount = 0;
@@ -242,7 +249,7 @@ async function flushPendingQueueToFirebase(
     processedCount += result.processedCount;
     failedCount += result.failedCount;
     lastError = result.error ?? lastError;
-    currentBatch = firestore.batch();
+    currentBatch = writeBatch(firestore);
     currentBatchItemIds = [];
     currentBatchOps = 0;
   };
@@ -272,7 +279,7 @@ async function flushPendingQueueToFirebase(
     }
 
     try {
-      const docRef = notesCollection.doc(change.entityId);
+      const docRef = doc(notesCollection, change.entityId);
       if (change.operation === 'delete') {
         currentBatch.delete(docRef);
       } else {
@@ -316,19 +323,19 @@ async function flushPendingQueueToFirebase(
 
 async function uploadLocalSnapshotToFirebase(
   notesCollection: FirestoreCollection,
-  firestore: FirestoreModuleLike,
+  firestore: FirebaseFirestoreTypes.Module,
   notes: Note[]
 ) {
   let uploadedCount = 0;
 
   for (let index = 0; index < notes.length; index += FIRESTORE_BATCH_LIMIT) {
-    const nextBatch = firestore.batch();
+    const nextBatch = writeBatch(firestore);
     const chunk = notes.slice(index, index + FIRESTORE_BATCH_LIMIT);
 
     for (const note of chunk) {
       const serializedNote = await serializeNoteForFirebase(note);
       nextBatch.set(
-        notesCollection.doc(note.id),
+        doc(notesCollection, note.id),
         {
           ...serializedNote,
           syncedAt: serverTimestamp(),
@@ -349,7 +356,7 @@ async function mergeRemoteNotesFromFirebase(
   localNotes: Note[]
 ): Promise<RemoteMergeResult> {
   const localNoteMap = new Map(localNotes.map((note) => [note.id, note]));
-  const snapshot = await notesCollection.get();
+  const snapshot = await getDocs(notesCollection);
   let importedCount = 0;
 
   for (const doc of snapshot.docs) {
@@ -467,7 +474,7 @@ export async function syncNotesToFirebase(
 
   try {
     const syncRepository = getSyncRepository();
-    const notesCollection = firestore.collection('users').doc(user.uid).collection('notes');
+    const notesCollection = collection(firestore, 'users', user.uid, 'notes');
     const queueResult = await flushPendingQueueToFirebase(notesCollection, firestore, syncRepository, notes);
     if (queueResult.failedCount > 0) {
       return {
@@ -485,7 +492,8 @@ export async function syncNotesToFirebase(
     const uploadedSnapshotCount = await uploadLocalSnapshotToFirebase(notesCollection, firestore, notes);
     const remoteMergeResult = await mergeRemoteNotesFromFirebase(notesCollection, notes);
 
-    await firestore.collection('users').doc(user.uid).set(
+    await setDoc(
+      doc(firestore, 'users', user.uid),
       {
         displayName: user.displayName ?? null,
         email: user.email ?? null,

@@ -42,8 +42,17 @@
         "cameraPermission": "Camera access is needed to take photos",
         "grantAccess": "Grant Access",
         "retake": "Retake",
+        "importPhoto": "Photos",
+        "plusLibraryLocked": "Plus",
         "notesHint": "Notes",
-        "radiusLabel": "Reminder radius"
+        "radiusLabel": "Reminder radius",
+        "plusEnabledHint": "Photos import unlocked",
+        "photoLimitReachedHint": "Free photo limit reached",
+        "photoSlotsRemaining": "{{count}} free photo notes left",
+        "photoLibraryPermissionTitle": "Photo access needed",
+        "photoLibraryPermissionMsg": "Allow photo library access so you can import an image into this note.",
+        "photoLibraryPermissionSettingsMsg": "Photo library access is blocked for Noto. Open Settings to import from your library.",
+        "photoImportFailed": "We could not import that photo right now."
     },
     "map": {
         "photoNote": "Photo Note",
@@ -137,6 +146,14 @@
         "localMode": "Local mode",
         "localModeShort": "Offline ready",
         "localModeDetail": "This build is ready to use offline. Optional sync can be added later without changing your local notes.",
+        "plusTitle": "Plus",
+        "plusPlan": "Plan",
+        "plusActive": "Plus",
+        "plusInactive": "Free",
+        "plusHint": "More photo notes. Import from Photos.",
+        "plusHintWithLimit": "{{count}} photo notes on Free. Plus unlocks more and Photos import.",
+        "plusActiveHint": "More photo notes. Photos import unlocked.",
+        "plusUnavailable": "Plus unavailable in this build",
         "about": "So you never forget what she likes 💛"
     },
     "profile": {
@@ -255,10 +272,28 @@
         "unfavorited": "Unfavorited",
         "deleted": "Deleted"
     },
+    "plus": {
+        "libraryTitle": "Plus required",
+        "libraryMessage": "Import from Photos is part of Plus.",
+        "limitTitle": "Photo limit reached",
+        "limitMessage": "Free includes 10 photo notes. Plus unlocks more.",
+        "upgradeCta": "Get Plus",
+        "upgradeCtaWithPrice": "Get Plus · {{price}}",
+        "upgradeSuccessTitle": "Plus unlocked",
+        "upgradeSuccessMessage": "You can now import from Photos and save more photo notes.",
+        "upgradeUnavailableTitle": "Plus unavailable",
+        "upgradeUnavailableMessage": "Purchase unavailable right now. Try again later.",
+        "restorePurchases": "Restore purchases",
+        "restoreSuccessTitle": "Restored",
+        "restoreSuccessMessage": "Plus is active on this device.",
+        "restoreFailedTitle": "Restore failed",
+        "restoreFailedMessage": "Couldn't restore purchases right now."
+    },
     "common": {
         "cancel": "Cancel",
         "delete": "Delete",
         "goBack": "Go Back",
-        "done": "Done"
+        "done": "Done",
+        "openSettings": "Open Settings"
     }
 }

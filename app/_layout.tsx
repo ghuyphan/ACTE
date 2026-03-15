@@ -14,6 +14,7 @@ import { AuthProvider } from '../hooks/useAuth';
 import { NotesProvider } from '../hooks/useNotes';
 import { NoteDetailSheetProvider, useNoteDetailSheet } from '../hooks/useNoteDetailSheet';
 import { SyncStatusProvider } from '../hooks/useSyncStatus';
+import { SubscriptionProvider } from '../hooks/useSubscription';
 import { ThemeProvider, useTheme } from '../hooks/useTheme';
 import { getDB } from '../services/database';
 import { syncGeofenceRegions } from '../services/geofenceService';
@@ -180,13 +181,15 @@ export default function RootLayout() {
         <I18nextProvider i18n={i18n}>
           <ThemeProvider>
             <AuthProvider>
-              <NotesProvider>
-                <SyncStatusProvider>
-                  <NoteDetailSheetProvider>
-                    <AppContent />
-                  </NoteDetailSheetProvider>
-                </SyncStatusProvider>
-              </NotesProvider>
+              <SubscriptionProvider>
+                <NotesProvider>
+                  <SyncStatusProvider>
+                    <NoteDetailSheetProvider>
+                      <AppContent />
+                    </NoteDetailSheetProvider>
+                  </SyncStatusProvider>
+                </NotesProvider>
+              </SubscriptionProvider>
             </AuthProvider>
           </ThemeProvider>
         </I18nextProvider>

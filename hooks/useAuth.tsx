@@ -1,4 +1,4 @@
-import authModule, { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import authModule, { FirebaseAuthTypes, onAuthStateChanged } from '@react-native-firebase/auth';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
@@ -152,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const unsubscribe = firebaseAuth.onAuthStateChanged((nextUser) => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (nextUser) => {
       setUser(nextUser);
       setIsReady(true);
     });

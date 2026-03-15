@@ -17,7 +17,6 @@ import Reanimated, {
   interpolate,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import type { MapPointGroup, NearbyNoteItem } from '../../hooks/map/mapDomain';
@@ -30,7 +29,7 @@ import {
   getMapCardExit,
   getMapLayoutTransition,
   mapMotionDurations,
-  mapMotionEmphasisSpring,
+  mapMotionEasing,
 } from './mapMotion';
 import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
 
@@ -163,7 +162,10 @@ export default function MapPreviewCard({
   useEffect(() => {
     modeProgress.value = reduceMotionEnabled
       ? withTiming(previewMode === 'group' ? 1 : 0, { duration: mapMotionDurations.fast })
-      : withSpring(previewMode === 'group' ? 1 : 0, mapMotionEmphasisSpring);
+      : withTiming(previewMode === 'group' ? 1 : 0, {
+          duration: mapMotionDurations.standard,
+          easing: mapMotionEasing.emphasis,
+        });
 
     contentOpacity.value = 0.68;
     contentOpacity.value = reduceMotionEnabled
@@ -189,10 +191,9 @@ export default function MapPreviewCard({
     railOffsetY.value = delta;
     railOffsetY.value = reduceMotionEnabled
       ? withTiming(0, { duration: mapMotionDurations.fast })
-      : withSpring(0, {
-          stiffness: 300,
-          damping: 30,
-          mass: 0.8,
+      : withTiming(0, {
+          duration: mapMotionDurations.standard,
+          easing: mapMotionEasing.standard,
         });
   }, [bottomOffset, railOffsetY, reduceMotionEnabled]);
 
