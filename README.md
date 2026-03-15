@@ -1,73 +1,92 @@
-# Noto - Location-Based Memory Tracker
+# Noto
 
-Noto is a React Native iOS/Android application built with [Expo](https://expo.dev) that allows users to capture, store, and revisit memories (text and photos) linked to specific geographic locations.
+Noto is an Expo SDK 55 React Native app for saving text notes and photo memories tied to real places. It is local-first, location-aware, and currently focused on iOS release quality, with Android still present in the repo for later work.
 
-## 🌟 Key Features
+## What The App Does
 
-- **Location-Based Memories:** Capture text notes or photos, automatically tagged with your current location and reverse-geocoded place names.
-- **Interactive Map View:** Browse all your saved memories geographically on an interactive map.
-- **Home Screen Widgets:** Features a custom iOS/Android widget (similar to Locket) that displays your recent memories directly on your device's home screen.
-  - Widget maintainer shortcut: see `docs/widget-maintenance.md`
-- **Background Geofencing:** Keeps track of your locations and can notify you when you are near past memories.
-- **Firebase Authentication:** Secure user authentication with Google Sign-In support.
-- **Offline-First & Fast:** Uses local SQLite database for blazing-fast access to your journal entries.
-- **Sleek UI/UX:** Fully responsive design with Dark/Light mode support, smooth bottom-sheet interactions, and haptic feedback.
-- **Multilingual:** Internationalization (i18n) support out of the box.
+- Save text notes or photo notes with your current location and place name.
+- Revisit notes from the home feed or the map.
+- Get geofence-based reminders when you return to saved places.
+- Sync notes with Firebase when signed in, while still working offline with SQLite.
+- Show recent or nearby notes in the iOS Home Screen widget.
+- Offer an iOS `Noto Plus` plan that unlocks more photo notes and importing from the Photos library.
 
-## 🛠️ Tech Stack
+## Current Product Notes
 
-- **Framework:** [React Native](https://reactnative.dev) + [Expo](https://expo.dev) + [Expo Router](https://docs.expo.dev/router/introduction/)
-- **Navigation:** File-based routing with `@react-navigation`
-- **Authentication:** Firebase Auth (`@react-native-firebase/auth`) + Google Sign-In
-- **Database / Storage:** `expo-sqlite` & `@react-native-async-storage`
-- **Native Device Features:** 
-  - `expo-camera` (Photo capture)
-  - `expo-location` (GPS & Geofencing)
-  - `expo-widgets` (Home screen widgets)
-  - `expo-haptics` (Tactile feedback)
-  - `expo-notifications` (Push notifications & deep linking)
-- **UI & Animations:** `expo-glass-effect`, `react-native-reanimated`, `react-native-gesture-handler`
+- Free plan:
+  - unlimited text notes
+  - up to 10 photo notes
+  - camera capture for photo notes
+- Plus plan on iOS:
+  - more photo-note capacity
+  - import from Photos library
+  - purchase and restore flow via RevenueCat
+- If RevenueCat is not configured, the app safely stays in free mode and shows Plus as unavailable.
 
-## 📂 Project Structure
+## Tech Stack
 
-For developers looking to contribute or understand the codebase quickly, here is the high-level directory structure:
+- Expo + React Native + Expo Router
+- SQLite for local persistence
+- Firebase Auth + Firestore for optional account + sync
+- RevenueCat for iOS subscription/entitlement handling
+- Expo Camera, Image Picker, Location, Notifications, Haptics, and Widgets
+- React Native Reanimated and Expo glass-effect for UI motion and visual treatment
 
-```text
-├── app/                  # Expo Router navigation (Screens)
-│   ├── (tabs)/           # Main tab screens (Home Feed, Map, Settings)
-│   ├── auth/             # Login, Sign-up, Onboarding screens
-│   ├── note/             # Note details modal screen
-│   ├── settings-*.tsx    # Native liquid glass bottom sheet modals
-│   └── _layout.tsx       # Root layout, theme providers, & app init
-├── components/           # Reusable React components
-│   ├── ui/               # Generic UI elements
-│   ├── TextMemoryCard.tsx# UI for text-based memories
-│   └── ImageMemoryCard.tsx # UI for photo-based memories
-├── constants/            # Theming, Colors, Typography, i18n configs
-├── hooks/                # Custom React Hooks (useNotes, useGeofence, useTheme)
-├── services/             # Core business logic
-│   ├── database.ts       # SQLite DB initialization and queries
-│   └── widgetService.ts  # Logic for pushing data to native widgets
-├── utils/                # Helper functions (e.g., backgroundGeofence.ts)
-├── widgets/              # Expo Widgets code (LocketWidget.tsx)
-└── package.json          # Project dependencies & scripts
+## Important Paths
+
+- `app/`: file-based routes and screen entry points
+- `app/(tabs)/`: home, map, settings, and search tabs
+- `app/auth/`: onboarding and auth/account flows
+- `components/home/`: capture, feed, and search UI
+- `components/map/`: map canvas, filters, preview cards, and overlays
+- `hooks/`: app providers and side-effect orchestration
+- `hooks/useSubscription.tsx`: RevenueCat entitlement state
+- `services/database.ts`: SQLite schema and note persistence
+- `services/syncService.ts`: Firestore sync pipeline
+- `services/widgetService.ts`: widget selection and payload generation
+- `widgets/ios/LocketWidget.swift`: source of truth for the iOS widget UI
+- `docs/release-checklist.md`: manual ship checklist
+- `docs/widget-maintenance.md`: widget maintenance shortcut
+
+See [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) for a fuller repo map.
+
+## Getting Started
+
+1. Install dependencies
+
+```bash
+npm install
 ```
 
-## 🚀 Getting Started
+2. Start Expo
 
-1. **Install dependencies**
-   ```bash
-   npm install
-   ```
+```bash
+npx expo start
+```
 
-2. **Start the development server**
-   ```bash
-   npx expo start
-   ```
+3. Run iOS locally
 
-3. **Run on a device or emulator:**
-   - In the terminal output, you can press `i` to open iOS simulator or `a` to open Android emulator.
-   - Alternatively, scan the QR code using the Expo Go app.
+```bash
+npx expo run:ios
+```
 
----
-*Built with ❤️ using Expo.*
+## Optional Configuration
+
+Firebase:
+
+- `GoogleService-Info.plist`
+- `google-services.json`
+
+RevenueCat for Plus:
+
+- `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`
+- `EXPO_PUBLIC_REVENUECAT_PLUS_ENTITLEMENT_ID` optional, defaults to `plus`
+- `EXPO_PUBLIC_REVENUECAT_PLUS_OFFERING_ID` optional
+
+## Quality Checks
+
+```bash
+npm run lint
+npx tsc --noEmit
+npm test -- --runInBand
+```

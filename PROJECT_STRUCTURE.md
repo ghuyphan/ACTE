@@ -51,13 +51,17 @@
 - `components/map/`: Map canvas, filters, preview cards, and overlay tokens.
 - `components/ui/`: Generic shared building blocks such as buttons and headers.
 - `constants/`: Theme tokens, auth constants, note defaults, and i18n setup.
+- `constants/subscription.ts`: Plus/free plan rules, RevenueCat env config, and photo-note limits.
 - `constants/locales/`: Translation JSON files for English and Vietnamese.
 - `docs/`: Short maintenance docs for widgets and releases.
 - `hooks/`: App-wide hooks/providers for notes, auth, theme, sync, geofence, and more.
+- `hooks/useSubscription.tsx`: RevenueCat subscription provider and entitlement state.
 - `hooks/map/`: Map domain modeling and map screen state.
 - `plugins/`: Custom Expo config plugins used during native generation/build setup.
 - `services/`: Database, sync, geofence, photo, search, and widget business logic.
+- `services/syncService.ts`: Firebase sync queue flush + snapshot upload/merge.
 - `utils/`: Background task registration and smaller cross-cutting helpers.
+- `utils/firebase.ts`: Safe modular accessors for Firebase app, auth, and Firestore.
 - `widgets/`: Expo widget registration and JS-side widget definition.
 - `widgets/ios/`: Source Swift widget implementation copied into the native target by a plugin.
 - `__tests__/`: Jest tests for screens, hooks, services, map logic, and widgets.
@@ -68,12 +72,13 @@
 
 - `package.json`: Dependencies plus dev/run/lint/test scripts; app entry is `expo-router/entry`.
 - `app.json`: Expo app config, plugins, permissions, widget registration, and native identifiers.
+- `README.md`: Product overview, setup, and current Plus configuration notes.
+- `docs/release-checklist.md`: Current manual release gate, including Plus validation.
 - `tsconfig.json`: Strict TypeScript config with the `@/*` alias.
 - `eslint.config.js`: Flat ESLint config based on `eslint-config-expo`.
 - `jest.config.js`: Jest Expo preset and module mapping.
 - `jest.setup.ts`: Test setup and React Native dependency mocks.
 - `GoogleService-Info.plist`: iOS Firebase config file.
 - `google-services.json`: Android Firebase config file.
-- `README.md`: Human-oriented product and setup overview.
 - `SKILL.md`: Existing repo-specific AI/developer guidance.
 - `expo-env.d.ts`: Expo-generated type declarations used by the project.
