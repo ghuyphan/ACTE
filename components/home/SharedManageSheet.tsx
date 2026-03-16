@@ -50,7 +50,15 @@ function SheetBody({
   doneLabel: string;
 }) {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const softFill = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)';
+  const outlineColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const inviteTitle = activeInvite
+    ? t('shared.inviteReadyTitle', 'Invite link ready')
+    : t('shared.inviteFirstTitle', 'Invite your first friend');
+  const inviteDescription = activeInvite
+    ? t('shared.inviteReadyBody', 'Share this link with a friend to connect.')
+    : t('shared.inviteFirstBody', 'One invite link is all you need to start sharing notes from Home.');
 
   if (!visible) {
     return null;
@@ -68,31 +76,45 @@ function SheetBody({
         </View>
       </View>
 
-      <View style={styles.sectionBlock}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={[styles.sectionLabel, { color: colors.secondaryText }]}>{inviteLabel}</Text>
-          {activeInvite ? (
-            <Pressable
-              onPress={onRevokeInvite}
-              style={({ pressed }) => [
-                styles.inlineAction,
-                {
-                  backgroundColor: isDark ? 'rgba(255,69,58,0.14)' : 'rgba(255,59,48,0.1)',
-                  opacity: pressed ? 0.9 : 1,
-                },
-              ]}
-            >
-              <Ionicons name="close-circle-outline" size={14} color={colors.danger} />
-              <Text style={[styles.inlineActionText, { color: colors.danger }]}>{revokeInviteLabel}</Text>
-            </Pressable>
-          ) : null}
+      <View
+        style={[
+          styles.heroCard,
+          {
+            backgroundColor: softFill,
+            borderColor: outlineColor,
+          },
+        ]}
+      >
+        <View style={styles.heroHeader}>
+          <View style={[styles.heroIcon, { backgroundColor: colors.primarySoft }]}>
+            <Ionicons
+              name={activeInvite ? 'link-outline' : 'person-add-outline'}
+              size={18}
+              color={colors.primary}
+            />
+          </View>
+          <View style={styles.heroCopy}>
+            <Text style={[styles.heroTitle, { color: colors.text }]}>{inviteTitle}</Text>
+            <Text style={[styles.heroBody, { color: colors.secondaryText }]}>{inviteDescription}</Text>
+          </View>
         </View>
-        <Text
-          style={[styles.sectionBody, { color: activeInvite ? colors.text : colors.secondaryText }]}
-          numberOfLines={activeInvite ? 3 : 4}
-        >
-          {activeInvite?.url ?? inviteBody}
-        </Text>
+
+        {activeInvite ? (
+          <View
+            style={[
+              styles.linkCard,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.72)',
+                borderColor: outlineColor,
+              },
+            ]}
+          >
+            <Text style={[styles.linkLabel, { color: colors.secondaryText }]}>{inviteLabel}</Text>
+            <Text style={[styles.linkValue, { color: colors.text }]} numberOfLines={3}>
+              {activeInvite.url}
+            </Text>
+          </View>
+        ) : null}
 
         <PrimaryButton
           label={primaryActionLabel}
@@ -100,16 +122,24 @@ function SheetBody({
           leadingIcon={<Ionicons name="share-outline" size={18} color="#1C1C1E" />}
           style={styles.sectionPrimaryButton}
         />
-      </View>
 
-      <View
-        style={[
-          styles.sectionDivider,
-          {
-            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-          },
-        ]}
-      />
+        {activeInvite ? (
+          <Pressable
+            onPress={onRevokeInvite}
+            style={({ pressed }) => [
+              styles.secondaryAction,
+              {
+                backgroundColor: isDark ? 'rgba(255,69,58,0.12)' : 'rgba(255,59,48,0.08)',
+                borderColor: isDark ? 'rgba(255,69,58,0.18)' : 'rgba(255,59,48,0.14)',
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}
+          >
+            <Ionicons name="close-circle-outline" size={14} color={colors.danger} />
+            <Text style={[styles.secondaryActionText, { color: colors.danger }]}>{revokeInviteLabel}</Text>
+          </Pressable>
+        ) : null}
+      </View>
 
       <View style={styles.sectionHeaderRow}>
         <Text style={[styles.sectionLabel, { color: colors.secondaryText }]}>{friendsTitle}</Text>
@@ -126,9 +156,14 @@ function SheetBody({
       </View>
       <ScrollView style={styles.friendList} contentContainerStyle={styles.friendListContent}>
         {friends.length === 0 ? (
-          <Text style={[styles.emptyText, styles.emptyStateText, { color: colors.secondaryText }]}>
-            {loading ? emptyLoadingBody : emptyBody}
-          </Text>
+          <View style={[styles.emptyStateCard, { backgroundColor: softFill, borderColor: outlineColor }]}>
+            <View style={[styles.emptyStateIcon, { backgroundColor: colors.primarySoft }]}>
+              <Ionicons name="people-outline" size={18} color={colors.primary} />
+            </View>
+            <Text style={[styles.emptyText, styles.emptyStateText, { color: colors.secondaryText }]}>
+              {loading ? emptyLoadingBody : emptyBody}
+            </Text>
+          </View>
         ) : (
           friends.map((friend) => (
             <View
@@ -196,8 +231,8 @@ export default function SharedManageSheet(props: {
   const { isDark, colors } = useTheme();
   const { t } = useTranslation();
   const primaryActionLabel = props.activeInvite
-    ? t('shared.shareInviteButton', 'Share invite')
-    : t('shared.createInviteButton', 'Create invite');
+    ? t('shared.shareInviteButton', 'Share invite link')
+    : t('shared.inviteFriendButton', 'Invite friend');
 
   if (Platform.OS === 'ios') {
     return (
@@ -223,9 +258,9 @@ export default function SharedManageSheet(props: {
                     inviteLabel={t('shared.inviteSectionTitle', 'Invite link')}
                     inviteBody={t(
                       'shared.manageBody',
-                      'Create one link, keep your circle small, and manage it here.'
+                      'Invite someone once, then keep your circle tidy here.'
                     )}
-                    friendsTitle={t('shared.manageTitle', 'Friends')}
+                    friendsTitle={t('shared.friendsListTitle', 'Connected friends')}
                     primaryActionLabel={primaryActionLabel}
                     revokeInviteLabel={t('shared.revokeInviteButton', 'Revoke invite')}
                     emptyLoadingBody={t('shared.refreshingFriends', 'Refreshing your shared circle...')}
@@ -256,9 +291,9 @@ export default function SharedManageSheet(props: {
             inviteLabel={t('shared.inviteSectionTitle', 'Invite link')}
             inviteBody={t(
               'shared.manageBody',
-              'Create one link, keep your circle small, and manage it here.'
+              'Invite someone once, then keep your circle tidy here.'
             )}
-            friendsTitle={t('shared.manageTitle', 'Friends')}
+            friendsTitle={t('shared.friendsListTitle', 'Connected friends')}
             primaryActionLabel={primaryActionLabel}
             revokeInviteLabel={t('shared.revokeInviteButton', 'Revoke invite')}
             emptyLoadingBody={t('shared.refreshingFriends', 'Refreshing your shared circle...')}
@@ -295,7 +330,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 18,
     paddingBottom: 20,
-    maxHeight: 540,
+    maxHeight: 560,
   },
   header: {
     marginBottom: 18,
@@ -325,8 +360,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  sectionBlock: {
+  heroCard: {
     marginBottom: 18,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 16,
+    gap: 14,
+  },
+  heroHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  heroIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroCopy: {
+    flex: 1,
+  },
+  heroTitle: {
+    fontSize: 17,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  heroBody: {
+    ...Typography.body,
+    marginTop: 4,
+    fontSize: 14,
+    lineHeight: 20,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -342,33 +407,42 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
-  sectionBody: {
+  linkCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
+  },
+  linkLabel: {
+    fontSize: 11,
+    lineHeight: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  linkValue: {
     ...Typography.body,
+    marginTop: 8,
     fontSize: 14,
     lineHeight: 20,
   },
-  sectionDivider: {
-    height: StyleSheet.hairlineWidth,
-    width: '100%',
-    marginBottom: 18,
-  },
-  inlineAction: {
-    minHeight: 30,
+  secondaryAction: {
+    minHeight: 40,
+    alignSelf: 'flex-start',
     borderRadius: 999,
-    paddingHorizontal: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
-  inlineActionText: {
-    fontSize: 12,
-    lineHeight: 14,
+  secondaryActionText: {
+    fontSize: 13,
+    lineHeight: 16,
     fontWeight: '700',
   },
   sectionPrimaryButton: {
     width: '100%',
-    marginTop: 2,
   },
   countPill: {
     minWidth: 28,
@@ -395,8 +469,22 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   emptyStateText: {
-    paddingTop: 2,
-    paddingBottom: 6,
+    textAlign: 'center',
+  },
+  emptyStateCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  emptyStateIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   friendRow: {
     borderRadius: 18,

@@ -184,6 +184,12 @@ export default function HomeScreen() {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (!sharedEnabled || friends.length === 0) {
+      setCaptureTarget('private');
+    }
+  }, [friends.length, sharedEnabled]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -342,7 +348,7 @@ export default function HomeScreen() {
             'Your note is saved locally. Invite a friend to start sharing moments from Home.'
           ),
           primaryAction: {
-            label: t('shared.manageButton', 'Manage'),
+            label: t('shared.inviteFriendButton', 'Invite friend'),
             onPress: () => {
               setShowSharedManageSheet(true);
             },
@@ -748,11 +754,16 @@ export default function HomeScreen() {
           router.push('/auth');
           return;
         }
+
+        if (friends.length === 0) {
+          setShowSharedManageSheet(true);
+          return;
+        }
       }
 
       setCaptureTarget(nextTarget);
     },
-    [isAuthAvailable, router, sharedEnabled, showSharedUnavailableSheet, user]
+    [friends.length, isAuthAvailable, router, sharedEnabled, showSharedUnavailableSheet, user]
   );
 
   const handleOpenSharedManage = useCallback(() => {
