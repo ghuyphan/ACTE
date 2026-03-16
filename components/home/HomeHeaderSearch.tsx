@@ -30,6 +30,8 @@ interface HomeHeaderSearchProps {
   onOpenSearch: () => void;
   onCloseSearch: () => void;
   showSearchButton?: boolean;
+  showSharedButton?: boolean;
+  onOpenShared?: () => void;
   onToggleCaptureMode: () => void;
   captureMode: 'text' | 'camera';
   radius: number;
@@ -52,6 +54,8 @@ export default function HomeHeaderSearch({
   onOpenSearch,
   onCloseSearch,
   showSearchButton = true,
+  showSharedButton = false,
+  onOpenShared,
   onToggleCaptureMode,
   captureMode,
   radius,
@@ -229,6 +233,37 @@ export default function HomeHeaderSearch({
     );
   };
 
+  const renderSharedButton = (size: 'regular' | 'large' = 'regular') => {
+    if (!showSharedButton || !onOpenShared) {
+      return null;
+    }
+
+    const sharedLabel = t('shared.manageTitle', 'Friends');
+
+    if (Platform.OS === 'ios') {
+      return (
+        <Host
+          matchContents
+          colorScheme={isDark ? 'dark' : 'light'}
+          style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
+        >
+          <Button onPress={onOpenShared} modifiers={getHeaderControlModifiers(sharedLabel)}>
+            {renderHeaderControlLabel('person.2', sharedLabel, size)}
+          </Button>
+        </Host>
+      );
+    }
+
+    return (
+      <Pressable
+        onPress={onOpenShared}
+        style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
+      >
+        <Ionicons name="people-outline" size={20} color={colors.primary} />
+      </Pressable>
+    );
+  };
+
   const renderDetachedNativeControls = () => {
     const modeLabel =
       captureMode === 'text'
@@ -240,6 +275,14 @@ export default function HomeHeaderSearch({
     return (
       <Host matchContents colorScheme={isDark ? 'dark' : 'light'} style={styles.detachedSwiftControlsHost}>
         <HStack spacing={10} alignment="center">
+          {showSharedButton && onOpenShared ? (
+            <Button
+              label={t('shared.manageTitle', 'Friends')}
+              systemImage="person.2"
+              onPress={onOpenShared}
+              modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
+            />
+          ) : null}
           <Menu
             label={radiusAccessibilityLabel}
             systemImage="scope"
@@ -326,6 +369,8 @@ export default function HomeHeaderSearch({
               <Ionicons name="search" size={20} color={colors.primary} />
             </Pressable>
           ) : null}
+
+          {renderSharedButton()}
 
           {renderRadiusMenu()}
 

@@ -29,14 +29,12 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   item,
   index,
   onPress,
-  onShare,
   colors,
   t,
 }: {
   item: Note;
   index: number;
   onPress: () => void;
-  onShare?: (() => void) | null;
   colors: {
     primary: string;
     text: string;
@@ -115,17 +113,6 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
           <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
           <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
         </InfoPill>
-        {onShare ? (
-          <Pressable
-            testID={`note-share-room-${item.id}`}
-            onPress={onShare}
-            style={styles.shareButtonPressable}
-          >
-            <InfoPill style={styles.shareButton}>
-              <Ionicons name="paper-plane-outline" size={17} color={colors.primary} />
-            </InfoPill>
-          </Pressable>
-        ) : null}
       </Animated.View>
     </Pressable>
   );
@@ -144,7 +131,6 @@ interface NotesFeedProps {
   topInset: number;
   snapHeight: number;
   onOpenNote: (noteId: string) => void;
-  onShareNote?: (noteId: string) => void;
   colors: {
     primary: string;
     text: string;
@@ -165,7 +151,6 @@ export default function NotesFeed({
   topInset,
   snapHeight,
   onOpenNote,
-  onShareNote,
   colors,
   t,
   onCaptureVisibilityChange,
@@ -219,14 +204,13 @@ export default function NotesFeed({
             item={note}
             index={index}
             onPress={() => onOpenNote(note.id)}
-            onShare={onShareNote ? () => onShareNote(note.id) : null}
             colors={colors}
             t={t}
           />
         </View>
       );
     },
-    [captureItem, colors, onOpenNote, onShareNote, snapHeight, t, topInset]
+    [captureItem, colors, onOpenNote, snapHeight, t, topInset]
   );
 
   return (

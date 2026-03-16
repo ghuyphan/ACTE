@@ -15,6 +15,7 @@ import { AuthProvider } from '../hooks/useAuth';
 import { NotesProvider } from '../hooks/useNotes';
 import { NoteDetailSheetProvider, useNoteDetailSheet } from '../hooks/useNoteDetailSheet';
 import { RoomsProvider } from '../hooks/useRooms';
+import { SharedFeedProvider } from '../hooks/useSharedFeed';
 import { SyncStatusProvider } from '../hooks/useSyncStatus';
 import { SubscriptionProvider } from '../hooks/useSubscription';
 import { ThemeProvider, useTheme } from '../hooks/useTheme';
@@ -218,6 +219,15 @@ function AppContent() {
             />
           ) : null}
           <Stack.Screen
+            name="friends/join"
+            options={{
+              headerShown: true,
+              title: i18n.t('shared.joinTitle', 'Join Friends'),
+              headerBackButtonDisplayMode: 'minimal',
+              headerBackButtonMenuEnabled: false,
+            }}
+          />
+          <Stack.Screen
             name="note/[id]"
             options={{
               presentation: 'transparentModal',
@@ -242,9 +252,11 @@ export default function RootLayout() {
                 <NotesProvider>
                   <SyncStatusProvider>
                     <RoomsProvider>
-                      <NoteDetailSheetProvider>
-                        <AppContent />
-                      </NoteDetailSheetProvider>
+                      <SharedFeedProvider>
+                        <NoteDetailSheetProvider>
+                          <AppContent />
+                        </NoteDetailSheetProvider>
+                      </SharedFeedProvider>
                     </RoomsProvider>
                   </SyncStatusProvider>
                 </NotesProvider>

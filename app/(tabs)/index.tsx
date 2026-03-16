@@ -9,12 +9,14 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, us
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   FlatList,
   Keyboard,
   Platform,
   Pressable,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -24,12 +26,14 @@ import AppSheetAlert from '../../components/AppSheetAlert';
 import CaptureCard from '../../components/home/CaptureCard';
 import HomeHeaderSearch from '../../components/home/HomeHeaderSearch';
 import NotesFeed from '../../components/home/NotesFeed';
+import SharedManageSheet from '../../components/home/SharedManageSheet';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useAuth } from '../../hooks/useAuth';
 import { useCaptureFlow } from '../../hooks/useCaptureFlow';
 import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { useNotesStore } from '../../hooks/useNotes';
+import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
 import {
@@ -38,6 +42,7 @@ import {
   getRemainingPhotoSlots,
 } from '../../constants/subscription';
 import { filterNotesByQuery } from '../../services/noteSearch';
+import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
 import { isIOS26OrNewer } from '../../utils/platform';
 
 const { height } = Dimensions.get('window');
@@ -47,7 +52,18 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { notes, loading, refreshNotes, createNote } = useNotesStore();
-  const { user } = useAuth();
+  const { user, isAuthAvailable } = useAuth();
+  const {
+    enabled: sharedEnabled,
+    loading: sharedLoading,
+    friends,
+    activeInvite,
+    refreshSharedFeed,
+    createFriendInvite,
+    revokeFriendInvite,
+    removeFriend,
+    createSharedPost,
+  } = useSharedFeedStore();
   const {
     tier,
     isConfigured: isPlusConfigured,
@@ -77,6 +93,8 @@ export default function HomeScreen() {
   const [saving, setSaving] = useState(false);
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
+  const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
+  const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -159,11 +177,29 @@ export default function HomeScreen() {
     }).start();
   }, [hintAnim, shouldShowNotesHint]);
 
+  useEffect(() => {
+    if (!user) {
+      setCaptureTarget('private');
+      setShowSharedManageSheet(false);
+    }
+  }, [user]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refreshNotes(false);
-    setRefreshing(false);
-  }, [refreshNotes]);
+    try {
+      await refreshNotes(false);
+
+      if (user && sharedEnabled) {
+        try {
+          await refreshSharedFeed();
+        } catch (error) {
+          console.warn('Shared feed refresh failed:', error);
+        }
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshNotes, refreshSharedFeed, sharedEnabled, user]);
 
   const showDoneSheet = useCallback(
     (
@@ -265,6 +301,74 @@ export default function HomeScreen() {
       },
     });
   }, [remindersEnabled, requestReminderPermissions, showAlert, showDoneSheet, t]);
+
+  const showSharedUnavailableSheet = useCallback(() => {
+    showAlert({
+      variant: 'info',
+      title: t('shared.unavailableTitle', 'Shared moments unavailable'),
+      message: t(
+        'shared.unavailableBody',
+        'This build does not have shared social enabled right now.'
+      ),
+      primaryAction: {
+        label: t('common.done', 'Done'),
+      },
+    });
+  }, [showAlert, t]);
+
+  const showSharedSaveSheet = useCallback(
+    (status: 'shared' | 'no-friends' | 'share-failed') => {
+      if (status === 'shared') {
+        showAlert({
+          variant: 'success',
+          title: t('shared.savedSharedTitle', 'Saved and shared'),
+          message: t(
+            'shared.savedSharedBody',
+            'This note is in your journal and has been published to your shared Home feed.'
+          ),
+          primaryAction: {
+            label: t('common.done', 'Done'),
+          },
+        });
+        return;
+      }
+
+      if (status === 'no-friends') {
+        showAlert({
+          variant: 'warning',
+          title: t('shared.savedLocalOnlyTitle', 'Saved for now'),
+          message: t(
+            'shared.savedLocalOnlyBody',
+            'Your note is saved locally. Invite a friend to start sharing moments from Home.'
+          ),
+          primaryAction: {
+            label: t('shared.manageButton', 'Manage'),
+            onPress: () => {
+              setShowSharedManageSheet(true);
+            },
+          },
+          secondaryAction: {
+            label: t('common.done', 'Done'),
+            variant: 'secondary',
+          },
+        });
+        return;
+      }
+
+      showAlert({
+        variant: 'warning',
+        title: t('shared.sharePublishFailedTitle', 'Saved, but not shared'),
+        message: t(
+          'shared.sharePublishFailedBody',
+          'Your note is safe in your journal, but we could not publish it to the shared feed right now.'
+        ),
+        primaryAction: {
+          label: t('common.done', 'Done'),
+        },
+      });
+    },
+    [showAlert, t]
+  );
 
   const showPlusSheet = useCallback(
     (reason: 'limit' | 'library') => {
@@ -459,7 +563,7 @@ export default function HomeScreen() {
         content = destinationPath;
       }
 
-      await createNote({
+      const createdNote = await createNote({
         type: captureMode === 'camera' ? 'photo' : 'text',
         content,
         photoLocalUri: captureMode === 'camera' ? content : null,
@@ -469,9 +573,31 @@ export default function HomeScreen() {
         radius,
       });
 
+      let shareOutcome: 'default' | 'shared' | 'no-friends' | 'share-failed' = 'default';
+
+      if (captureTarget === 'shared' && sharedEnabled && user) {
+        if (friends.length === 0) {
+          shareOutcome = 'no-friends';
+        } else {
+          try {
+            await createSharedPost(createdNote);
+            shareOutcome = 'shared';
+          } catch (shareError) {
+            console.warn('Shared publish failed:', shareError);
+            shareOutcome = 'share-failed';
+          }
+        }
+      }
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       resetCapture();
-      showSavedSheet();
+      setCaptureTarget('private');
+
+      if (shareOutcome === 'default') {
+        showSavedSheet();
+      } else {
+        showSharedSaveSheet(shareOutcome);
+      }
     } catch (error) {
       console.error('Save failed:', error);
       if (destinationPath) {
@@ -504,7 +630,13 @@ export default function HomeScreen() {
     resetCapture,
     showSavedSheet,
     canSaveAnotherPhotoNote,
+    captureTarget,
+    createSharedPost,
+    friends.length,
+    sharedEnabled,
     showPlusSheet,
+    showSharedSaveSheet,
+    user,
   ]);
 
   const handleImportPhoto = useCallback(async () => {
@@ -602,16 +734,130 @@ export default function HomeScreen() {
     [openNoteDetail, router]
   );
 
-  const handleShareNoteToRoom = useCallback(
-    (noteId: string) => {
-      if (!user) {
-        router.push('/auth');
-        return;
+  const handleCaptureTargetChange = useCallback(
+    (nextTarget: 'private' | 'shared') => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      if (nextTarget === 'shared') {
+        if (!sharedEnabled || !isAuthAvailable) {
+          showSharedUnavailableSheet();
+          return;
+        }
+
+        if (!user) {
+          router.push('/auth');
+          return;
+        }
       }
 
-      router.push(`/rooms/share?noteId=${encodeURIComponent(noteId)}` as any);
+      setCaptureTarget(nextTarget);
     },
-    [router, user]
+    [isAuthAvailable, router, sharedEnabled, showSharedUnavailableSheet, user]
+  );
+
+  const handleOpenSharedManage = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    if (!sharedEnabled || !isAuthAvailable) {
+      showSharedUnavailableSheet();
+      return;
+    }
+
+    if (!user) {
+      router.push('/auth');
+      return;
+    }
+
+    setShowSharedManageSheet(true);
+  }, [isAuthAvailable, router, sharedEnabled, showSharedUnavailableSheet, user]);
+
+  const handleOpenSharedAuth = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    if (!isAuthAvailable) {
+      showSharedUnavailableSheet();
+      return;
+    }
+
+    router.push('/auth');
+  }, [isAuthAvailable, router, showSharedUnavailableSheet]);
+
+  const handleShareInvite = useCallback(async () => {
+    if (!user) {
+      handleOpenSharedAuth();
+      return;
+    }
+
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    try {
+      const invite = activeInvite ?? (await createFriendInvite());
+      await Share.share({
+        message: t('shared.inviteShareMessage', 'Join my Noto shared feed: {{url}}', {
+          url: invite.url,
+        }),
+        url: invite.url,
+      });
+    } catch (error) {
+      Alert.alert(
+        t('shared.inviteFailedTitle', 'Could not prepare invite'),
+        getSharedFeedErrorMessage(error)
+      );
+    }
+  }, [activeInvite, createFriendInvite, handleOpenSharedAuth, t, user]);
+
+  const handleRevokeInvite = useCallback(async () => {
+    if (!activeInvite) {
+      return;
+    }
+
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      await revokeFriendInvite(activeInvite.id);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      Alert.alert(
+        t('shared.inviteFailedTitle', 'Could not prepare invite'),
+        getSharedFeedErrorMessage(error)
+      );
+    }
+  }, [activeInvite, revokeFriendInvite, t]);
+
+  const handleRemoveFriend = useCallback(
+    (friendUid: string) => {
+      Alert.alert(
+        t('shared.removeFriendTitle', 'Remove friend'),
+        t(
+          'shared.removeFriendBody',
+          'This friend will stop seeing the moments you share from Home.'
+        ),
+        [
+          {
+            text: t('common.cancel', 'Cancel'),
+            style: 'cancel',
+          },
+          {
+            text: t('shared.removeFriendConfirm', 'Remove'),
+            style: 'destructive',
+            onPress: () => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              void removeFriend(friendUid)
+                .then(() => {
+                  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                })
+                .catch((error) => {
+                  Alert.alert(
+                    t('shared.removeFriendTitle', 'Remove friend'),
+                    getSharedFeedErrorMessage(error)
+                  );
+                });
+            },
+          },
+        ]
+      );
+    },
+    [removeFriend, t]
   );
 
   const handleSearchChange = useCallback((nextQuery: string) => {
@@ -648,6 +894,8 @@ export default function HomeScreen() {
         onOpenSearch={handleOpenSearch}
         onCloseSearch={handleCloseSearch}
         showSearchButton={useInlineHeaderSearch}
+        showSharedButton
+        onOpenShared={handleOpenSharedManage}
         onToggleCaptureMode={handleToggleCaptureMode}
         captureMode={captureMode}
         radius={radius}
@@ -728,6 +976,8 @@ export default function HomeScreen() {
               cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
               libraryImportLocked={!canImportFromLibrary}
               importingPhoto={importingPhoto || isPurchaseInFlight}
+              shareTarget={captureTarget}
+              onChangeShareTarget={handleCaptureTargetChange}
             />
             {displayedNotes.length > 0 ? (
               <Animated.View
@@ -766,10 +1016,24 @@ export default function HomeScreen() {
         topInset={insets.top}
         snapHeight={snapHeight}
         onOpenNote={openNote}
-        onShareNote={handleShareNoteToRoom}
         colors={colors}
         t={t}
         onCaptureVisibilityChange={setIsCaptureVisible}
+      />
+
+      <SharedManageSheet
+        visible={showSharedManageSheet}
+        friends={friends}
+        activeInvite={activeInvite}
+        loading={sharedLoading}
+        onClose={() => setShowSharedManageSheet(false)}
+        onShareInvite={() => {
+          void handleShareInvite();
+        }}
+        onRevokeInvite={() => {
+          void handleRevokeInvite();
+        }}
+        onRemoveFriend={handleRemoveFriend}
       />
 
       <AppSheetAlert {...alertProps} />

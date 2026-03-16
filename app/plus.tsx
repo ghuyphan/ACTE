@@ -90,12 +90,16 @@ export default function PlusScreen() {
 
       <View style={[styles.content, { paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.heroSection}>
-          <View style={[styles.iconContainer, { backgroundColor: colors.primary + '18' }]}>
-            <Ionicons name="sparkles" size={60} color={colors.primary} />
+          <View style={[styles.iconContainer, { backgroundColor: colors.primarySoft }]}>
+            <Ionicons name="heart" size={64} color={colors.primary} />
           </View>
-          <Text style={[styles.title, { color: colors.text }]}>
-            {t('plus.title', 'Noto Plus')}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { color: colors.text }]}>
+              {t('auth.title', 'Noto')}
+            </Text>
+            <Text style={[styles.plusBadge, { color: colors.primary }]}>Plus</Text>
+          </View>
+          <Text style={[styles.brandAccent, { color: colors.secondaryText }]}>ノート</Text>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
             {t('plus.subtitle', 'Elevate your memory journal')}
           </Text>
@@ -187,32 +191,49 @@ const styles = StyleSheet.create({
   },
   heroSection: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 24,
   },
   iconContainer: {
-    width: 110,
-    height: 110,
+    width: 120,
+    height: 120,
     borderRadius: Layout.cardRadius,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 32,
     ...Shadows.card,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    marginBottom: 4,
+  },
   title: {
-    fontSize: 34,
-    fontWeight: '700',
+    ...Typography.heroTitle,
+    fontSize: 42,
+    letterSpacing: -1,
+  },
+  plusBadge: {
+    fontSize: 24,
+    fontWeight: '900',
     fontFamily: Typography.screenTitle.fontFamily,
-    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: -1,
+  },
+  brandAccent: {
+    ...Typography.pill,
+    letterSpacing: 4,
+    marginBottom: 12,
+    opacity: 0.78,
   },
   subtitle: {
-    fontSize: 18,
-    fontFamily: Typography.screenTitle.fontFamily,
+    ...Typography.heroSubtitle,
     textAlign: 'center',
     opacity: 0.8,
   },
   featuresList: {
-    gap: 22,
-    marginBottom: 32,
+    gap: 16,
+    marginBottom: 20,
   },
   featureRow: {
     flexDirection: 'row',

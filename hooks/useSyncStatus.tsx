@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import i18n from '../constants/i18n';
@@ -12,10 +13,12 @@ interface SyncStatusContextValue {
   lastSyncedAt: string | null;
   lastMessage: string | null;
   isEnabled: boolean;
+  setSyncEnabled: (enabled: boolean) => void;
   requestSync: () => void;
 }
 
 const AUTO_SYNC_DEBOUNCE_MS = 1200;
+const SYNC_ENABLED_KEY = 'settings.syncEnabled';
 
 const SyncStatusContext = createContext<SyncStatusContextValue | undefined>(undefined);
 
@@ -25,6 +28,8 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SyncState>('idle');
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [lastMessage, setLastMessage] = useState<string | null>(null);
+  const [syncEnabledState, setSyncEnabledState] = useState<boolean>(true);
+  const [isSyncPrefReady, setIsSyncPrefReady] = useState(false);
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncInFlightRef = useRef<Promise<void> | null>(null);
@@ -41,8 +46,23 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Load persistence
+  useEffect(() => {
+    AsyncStorage.getItem(SYNC_ENABLED_KEY).then((value) => {
+      if (value !== null) {
+        setSyncEnabledState(value === 'true');
+      }
+      setIsSyncPrefReady(true);
+    });
+  }, []);
+
+  const setSyncEnabled = useCallback(async (enabled: boolean) => {
+    setSyncEnabledState(enabled);
+    await AsyncStorage.setItem(SYNC_ENABLED_KEY, enabled.toString());
+  }, []);
+
   runSyncNowRef.current = async () => {
-    if (!isReady || !isAuthAvailable || !user || loading) {
+    if (!isReady || !isAuthAvailable || !user || loading || !syncEnabledState || !isSyncPrefReady) {
       return;
     }
 
@@ -99,7 +119,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
   const queueSync = useCallback(
     (immediate = false) => {
-      if (!isReady || !isAuthAvailable || !user || loading) {
+      if (!isReady || !isAuthAvailable || !user || loading || !syncEnabledState || !isSyncPrefReady) {
         return;
       }
 
@@ -185,12 +205,13 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       status,
       lastSyncedAt,
       lastMessage,
-      isEnabled: Boolean(user) && isAuthAvailable,
+      isEnabled: syncEnabledState,
+      setSyncEnabled,
       requestSync: () => {
         queueSync(true);
       },
     }),
-    [isAuthAvailable, lastMessage, lastSyncedAt, queueSync, status, user]
+    [lastMessage, lastSyncedAt, queueSync, setSyncEnabled, status, syncEnabledState]
   );
 
   return <SyncStatusContext.Provider value={value}>{children}</SyncStatusContext.Provider>;

@@ -21,6 +21,13 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
+jest.mock('../hooks/useAuth', () => ({
+  useAuth: () => ({
+    user: null,
+    isAuthAvailable: true,
+  }),
+}));
+
 jest.mock('../hooks/useTheme', () => ({
   useTheme: () => ({
     isDark: false,
@@ -165,6 +172,27 @@ jest.mock('../hooks/useSubscription', () => ({
   }),
 }));
 
+jest.mock('../hooks/useSharedFeed', () => ({
+  useSharedFeedStore: () => ({
+    enabled: true,
+    loading: false,
+    ready: true,
+    friends: [],
+    sharedPosts: [],
+    activeInvite: null,
+    refreshSharedFeed: jest.fn(async () => undefined),
+    createFriendInvite: jest.fn(async () => undefined),
+    revokeFriendInvite: jest.fn(async () => undefined),
+    acceptFriendInvite: jest.fn(async () => undefined),
+    removeFriend: jest.fn(async () => undefined),
+    createSharedPost: jest.fn(async () => undefined),
+  }),
+}));
+
+jest.mock('../services/sharedFeedService', () => ({
+  getSharedFeedErrorMessage: jest.fn(() => 'Shared moments are unavailable right now.'),
+}));
+
 jest.mock('../components/AppSheetAlert', () => {
   return function MockAppSheetAlert() {
     return null;
@@ -210,6 +238,22 @@ jest.mock('../components/home/NotesFeed', () => {
         ))}
       </View>
     );
+  };
+});
+
+jest.mock('../components/home/SharedMomentsStrip', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return function MockSharedMomentsStrip() {
+    return <View testID="shared-moments-strip" />;
+  };
+});
+
+jest.mock('../components/home/SharedManageSheet', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return function MockSharedManageSheet() {
+    return <View testID="shared-manage-sheet" />;
   };
 });
 

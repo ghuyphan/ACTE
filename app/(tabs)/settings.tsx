@@ -30,6 +30,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../../components/AppSheetAlert';
 import SettingsLanguageSheet from '../../components/SettingsLanguageSheet';
+import SettingsSyncSheet from '../../components/SettingsSyncSheet';
 import SettingsThemeSheet from '../../components/SettingsThemeSheet';
 import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
@@ -88,7 +89,7 @@ export default function SettingsScreen() {
   const { theme, setTheme, colors, isDark } = useTheme();
   const { notes, deleteAllNotes } = useNotes();
   const { user, isAuthAvailable } = useAuth();
-  const { status: syncStatus, lastSyncedAt, lastMessage } = useSyncStatus();
+  const { status: syncStatus, lastSyncedAt, lastMessage, isEnabled: syncEnabled, setSyncEnabled } = useSyncStatus();
   const {
     tier,
     isConfigured: isPlusConfigured,
@@ -105,6 +106,7 @@ export default function SettingsScreen() {
 
   const [showTheme, setShowTheme] = useState(false);
   const [showLanguage, setShowLanguage] = useState(false);
+  const [showSync, setShowSync] = useState(false);
 
   const openAccountScreen = () => {
     if (!isAuthAvailable) {
@@ -136,12 +138,16 @@ export default function SettingsScreen() {
       return t('settings.autoSyncOff', 'Off');
     }
 
+    if (!syncEnabled) {
+      return t('settings.autoSyncOff', 'Off');
+    }
+
     if (syncStatus === 'syncing') {
       return t('settings.autoSyncingShort', 'Syncing');
     }
 
     return t('settings.autoSyncOnShort', 'On');
-  }, [syncStatus, t, user]);
+  }, [syncEnabled, syncStatus, t, user]);
 
   const plusValue = useMemo(() => {
     if (tier === 'plus') {
@@ -181,7 +187,7 @@ export default function SettingsScreen() {
       );
     }
 
-    if (!user) {
+    if (!user || !syncEnabled) {
       return null;
     }
 
@@ -385,6 +391,7 @@ export default function SettingsScreen() {
             <AndroidRow
               label={t('settings.autoSync', 'Auto sync')}
               value={syncValue}
+              onPress={user ? () => setShowSync(true) : undefined}
             />
             {accountHint ? (
               <Text style={[styles.sectionHint, { color: colors.secondaryText }]}>{accountHint}</Text>
@@ -590,23 +597,25 @@ export default function SettingsScreen() {
                     <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{accountValue}</SwiftUIText>
                   </HStack>
                 </Button>
-                <HStack>
-                  <HStack
-                    modifiers={[
-                      frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                      backgroundOverlay({ color: colors.primary + '18' }),
-                      cornerRadius(7),
-                      padding({ trailing: 12 }),
-                    ]}
-                  >
-                    <SwiftUIImage systemName="arrow.triangle.2.circlepath" color={colors.primary} size={18} />
+                <Button onPress={() => setShowSync(true)}>
+                  <HStack>
+                    <HStack
+                      modifiers={[
+                        frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                        backgroundOverlay({ color: colors.primary + '18' }),
+                        cornerRadius(7),
+                        padding({ trailing: 12 }),
+                      ]}
+                    >
+                      <SwiftUIImage systemName="arrow.triangle.2.circlepath" color={colors.primary} size={18} />
+                    </HStack>
+                    <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                      {t('settings.autoSync', 'Auto sync')}
+                    </SwiftUIText>
+                    <Spacer />
+                    <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{syncValue}</SwiftUIText>
                   </HStack>
-                  <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                    {t('settings.autoSync', 'Auto sync')}
-                  </SwiftUIText>
-                  <Spacer />
-                  <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{syncValue}</SwiftUIText>
-                </HStack>
+                </Button>
               </>
             ) : (
               <HStack>
@@ -641,6 +650,12 @@ export default function SettingsScreen() {
         <BottomSheet isPresented={showLanguage} onIsPresentedChange={setShowLanguage} fitToContents>
           <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
             <SettingsLanguageSheet onClose={() => setShowLanguage(false)} />
+          </Group>
+        </BottomSheet>
+
+        <BottomSheet isPresented={showSync} onIsPresentedChange={setShowSync} fitToContents>
+          <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
+            <SettingsSyncSheet accountHint={accountHint} onClose={() => setShowSync(false)} />
           </Group>
         </BottomSheet>
       </Host>

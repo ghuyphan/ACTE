@@ -3,7 +3,7 @@ import { CameraView } from 'expo-camera';
 import { GlassView } from 'expo-glass-effect';
 import { Image } from 'expo-image';
 import { TFunction } from 'i18next';
-import { RefObject, useEffect, useState } from 'react';
+import { ReactNode, RefObject, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -81,6 +81,9 @@ interface CaptureCardProps {
   cameraStatusText?: string | null;
   libraryImportLocked?: boolean;
   importingPhoto?: boolean;
+  shareTarget: 'private' | 'shared';
+  onChangeShareTarget: (nextTarget: 'private' | 'shared') => void;
+  footerContent?: ReactNode;
 }
 
 export default function CaptureCard({
@@ -118,10 +121,23 @@ export default function CaptureCard({
   cameraStatusText,
   libraryImportLocked = false,
   importingPhoto = false,
+  shareTarget,
+  onChangeShareTarget,
+  footerContent,
 }: CaptureCardProps) {
   const showInlineRadiusOptions = Platform.OS !== 'ios';
   const [isCameraReady, setIsCameraReady] = useState(false);
   const isCameraSaveMode = captureMode === 'camera';
+  const audienceLabel =
+    shareTarget === 'shared'
+      ? t('shared.manageTitle', 'Friends')
+      : t('shared.capturePrivate', 'Just me');
+  const audienceSurfaceBackground =
+    captureMode === 'text' ? colors.captureGlassFill : colors.captureCameraOverlay;
+  const audienceSurfaceBorder =
+    captureMode === 'text' ? colors.captureGlassBorder : colors.captureCameraOverlayBorder;
+  const audienceTextColor =
+    captureMode === 'text' ? colors.captureGlassText : colors.captureCameraOverlayText;
 
   useEffect(() => {
     if (captureMode === 'camera' && !capturedPhoto && permissionGranted) {
@@ -304,6 +320,36 @@ export default function CaptureCard({
             />
           </View>
         )}
+
+        <View pointerEvents="box-none" style={styles.cardAudienceBadgeHost}>
+          <Pressable
+            testID="capture-share-target-toggle"
+            style={[
+              styles.cardAudienceBadge,
+              {
+                backgroundColor: audienceSurfaceBackground,
+                borderColor: audienceSurfaceBorder,
+              },
+            ]}
+            onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
+          >
+            <Ionicons
+              name={shareTarget === 'shared' ? 'people-outline' : 'lock-closed-outline'}
+              size={14}
+              color={shareTarget === 'shared' ? colors.primary : audienceTextColor}
+            />
+            <Text
+              style={[
+                styles.cardAudienceBadgeText,
+                {
+                  color: shareTarget === 'shared' ? colors.primary : audienceTextColor,
+                },
+              ]}
+            >
+              {audienceLabel}
+            </Text>
+          </Pressable>
+        </View>
       </Animated.View>
 
       <Animated.View
@@ -404,6 +450,7 @@ export default function CaptureCard({
             </Pressable>
           </View>
         )}
+        {footerContent ? <View style={styles.footerSlot}>{footerContent}</View> : null}
       </Animated.View>
     </View>
   );
@@ -564,6 +611,28 @@ const styles = StyleSheet.create({
     ...Typography.pill,
     textAlign: 'center',
   },
+  cardAudienceBadgeHost: {
+    position: 'absolute',
+    top: 16,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  cardAudienceBadge: {
+    minHeight: 34,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  cardAudienceBadgeText: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
   radiusOptions: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -606,5 +675,9 @@ const styles = StyleSheet.create({
   },
   saveInner: {
     transform: [{ scale: 1 }],
+  },
+  footerSlot: {
+    width: '100%',
+    paddingTop: 2,
   },
 });

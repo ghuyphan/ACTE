@@ -244,21 +244,15 @@ describe('NoteDetailSheet', () => {
     );
   });
 
-  it('toggles favorite state and confirms deletes before removing a note', async () => {
+  it('confirms deletes before removing a note', async () => {
     const onClose = jest.fn();
     const { getByTestId } = render(
       <NoteDetailSheet noteId="note-1" visible onClose={onClose} />
     );
 
     await waitFor(() => {
-      expect(getByTestId('note-detail-favorite')).toBeTruthy();
+      expect(getByTestId('note-detail-delete')).toBeTruthy();
     });
-
-    await act(async () => {
-      fireEvent.press(getByTestId('note-detail-favorite'));
-    });
-
-    expect(mockToggleFavorite).toHaveBeenCalledWith('note-1');
 
     fireEvent.press(getByTestId('note-detail-delete'));
     expect(Alert.alert).toHaveBeenCalled();
@@ -276,19 +270,15 @@ describe('NoteDetailSheet', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('opens the share-to-room flow for the current note', async () => {
-    const { getByTestId } = render(
+  it('does not render the legacy share-to-room action', async () => {
+    const { queryByTestId } = render(
       <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
     );
 
     await waitFor(() => {
-      expect(getByTestId('note-detail-share-room')).toBeTruthy();
+      expect(mockGetNoteById).toHaveBeenCalledWith('note-1');
     });
 
-    await act(async () => {
-      fireEvent.press(getByTestId('note-detail-share-room'));
-    });
-
-    expect(mockRouterPush).toHaveBeenCalledWith('/rooms/share?noteId=note-1');
+    expect(queryByTestId('note-detail-share-room')).toBeNull();
   });
 });
