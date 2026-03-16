@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useScrollToTop } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
@@ -96,6 +96,7 @@ export default function HomeScreen() {
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
+  const [sharedManageSheetVersion, setSharedManageSheetVersion] = useState(0);
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -103,6 +104,15 @@ export default function HomeScreen() {
   const hintAnim = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<FlatList>(null);
   useScrollToTop(flatListRef);
+
+  const dismissSharedManageSheet = useCallback(() => {
+    setShowSharedManageSheet(false);
+  }, []);
+
+  const presentSharedManageSheet = useCallback(() => {
+    setSharedManageSheetVersion((current) => current + 1);
+    setShowSharedManageSheet(true);
+  }, []);
 
   const {
     captureMode,
@@ -186,15 +196,23 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!user) {
       setCaptureTarget('private');
-      setShowSharedManageSheet(false);
+      dismissSharedManageSheet();
     }
-  }, [user]);
+  }, [dismissSharedManageSheet, user]);
 
   useEffect(() => {
     if (!sharedEnabled || friends.length === 0) {
       setCaptureTarget('private');
     }
   }, [friends.length, sharedEnabled]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        dismissSharedManageSheet();
+      };
+    }, [dismissSharedManageSheet])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -356,7 +374,7 @@ export default function HomeScreen() {
           primaryAction: {
             label: t('shared.inviteFriendButton', 'Invite friend'),
             onPress: () => {
-              setShowSharedManageSheet(true);
+              presentSharedManageSheet();
             },
           },
           secondaryAction: {
@@ -379,7 +397,7 @@ export default function HomeScreen() {
         },
       });
     },
-    [showAlert, t]
+    [presentSharedManageSheet, showAlert, t]
   );
 
   const showPlusSheet = useCallback(
@@ -762,14 +780,22 @@ export default function HomeScreen() {
         }
 
         if (friends.length === 0) {
-          setShowSharedManageSheet(true);
+          presentSharedManageSheet();
           return;
         }
       }
 
       setCaptureTarget(nextTarget);
     },
-    [friends.length, isAuthAvailable, router, sharedEnabled, showSharedUnavailableSheet, user]
+    [
+      friends.length,
+      isAuthAvailable,
+      presentSharedManageSheet,
+      router,
+      sharedEnabled,
+      showSharedUnavailableSheet,
+      user,
+    ]
   );
 
   const handleOpenSharedManage = useCallback(() => {
@@ -785,8 +811,8 @@ export default function HomeScreen() {
       return;
     }
 
-    setShowSharedManageSheet(true);
-  }, [isAuthAvailable, router, sharedEnabled, showSharedUnavailableSheet, user]);
+    presentSharedManageSheet();
+  }, [isAuthAvailable, presentSharedManageSheet, router, sharedEnabled, showSharedUnavailableSheet, user]);
 
   const handleOpenSharedAuth = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -808,6 +834,7 @@ export default function HomeScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
+      dismissSharedManageSheet();
       const invite = activeInvite ?? (await createFriendInvite());
       await Share.share({
         message: t('shared.inviteShareMessage', 'Join my Noto shared feed: {{url}}', {
@@ -821,7 +848,7 @@ export default function HomeScreen() {
         getSharedFeedErrorMessage(error)
       );
     }
-  }, [activeInvite, createFriendInvite, handleOpenSharedAuth, t, user]);
+  }, [activeInvite, createFriendInvite, dismissSharedManageSheet, handleOpenSharedAuth, t, user]);
 
   const handleRevokeInvite = useCallback(async () => {
     if (!activeInvite) {
@@ -1040,11 +1067,12 @@ export default function HomeScreen() {
       />
 
       <SharedManageSheet
+        key={`shared-manage-${sharedManageSheetVersion}`}
         visible={showSharedManageSheet}
         friends={friends}
         activeInvite={activeInvite}
         loading={sharedLoading}
-        onClose={() => setShowSharedManageSheet(false)}
+        onClose={dismissSharedManageSheet}
         onShareInvite={() => {
           void handleShareInvite();
         }}

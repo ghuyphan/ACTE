@@ -221,10 +221,9 @@ function AppContent() {
           <Stack.Screen
             name="friends/join"
             options={{
-              headerShown: true,
-              title: i18n.t('shared.joinTitle', 'Join Friends'),
-              headerBackButtonDisplayMode: 'minimal',
-              headerBackButtonMenuEnabled: false,
+              headerShown: false,
+              presentation: 'transparentModal',
+              animation: 'fade',
             }}
           />
           <Stack.Screen
