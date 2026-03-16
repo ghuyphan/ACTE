@@ -163,6 +163,7 @@ export default function CaptureCard({
                 value={noteText}
                 onChangeText={onChangeNoteText}
                 maxLength={300}
+                selectionColor={colors.captureCardText}
               />
             </View>
 
@@ -198,6 +199,7 @@ export default function CaptureCard({
                 value={restaurantName}
                 onChangeText={onChangeRestaurantName}
                 maxLength={100}
+                selectionColor={colors.captureGlassText}
               />
             </View>
           </View>

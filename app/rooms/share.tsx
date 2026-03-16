@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -9,8 +10,14 @@ import {
   Text,
   View,
 } from 'react-native';
+import {
+  RoomCard,
+  RoomHeader,
+  RoomScreen,
+  RoomSection,
+} from '../../components/rooms/RoomScaffold';
 import PrimaryButton from '../../components/ui/PrimaryButton';
-import { Layout, Typography } from '../../constants/theme';
+import { Typography } from '../../constants/theme';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useRoomsStore } from '../../hooks/useRooms';
 import { useTheme } from '../../hooks/useTheme';
@@ -32,7 +39,6 @@ export default function ShareToRoomScreen() {
     if (typeof noteId !== 'string') {
       return;
     }
-
     void getNoteById(noteId).then((nextNote) => {
       setNote(nextNote);
     });
@@ -48,8 +54,7 @@ export default function ShareToRoomScreen() {
       await shareNoteToRoom(selectedRoomId, note);
       router.replace(`/rooms/${selectedRoomId}` as any);
     } catch (error) {
-      const message = getRoomErrorMessage(error);
-      Alert.alert(t('rooms.shareFailedTitle', 'Could not share note'), message);
+      Alert.alert(t('rooms.shareFailedTitle', 'Could not share note'), getRoomErrorMessage(error));
     } finally {
       setSharing(false);
     }
@@ -57,54 +62,68 @@ export default function ShareToRoomScreen() {
 
   if (!roomsReady || !note) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
+      <RoomScreen contentContainerStyle={styles.center}>
         <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      </RoomScreen>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.text }]}>
-        {t('rooms.sharePrompt', 'Choose a room for this memory')}
-      </Text>
-      <Text style={[styles.body, { color: colors.secondaryText }]}>
-        {note.type === 'text'
-          ? note.content
-          : t('rooms.sharePhotoLabel', 'Photo memory')}
-      </Text>
+    <RoomScreen scroll contentContainerStyle={styles.content}>
+      <RoomHeader
+        title={t('rooms.shareTitle', 'Share to Room')}
+        subtitle={t('rooms.sharePrompt', 'Choose a room for this memory')}
+      />
+
+      <RoomSection title={t('rooms.shareTitle', 'Share to Room')}>
+        <RoomCard>
+          <Text style={[styles.notePreview, { color: colors.text }]}>
+            {note.type === 'text' ? note.content : t('rooms.sharePhotoLabel', 'Photo memory')}
+          </Text>
+        </RoomCard>
+      </RoomSection>
 
       {rooms.length === 0 ? (
-        <View style={styles.emptyWrap}>
-          <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-            {t('rooms.shareEmptyRooms', 'Create a room first, then come back to share this note.')}
-          </Text>
-          <PrimaryButton
-            label={t('rooms.createButton', 'Create room')}
-            onPress={() => router.push('/rooms/create')}
-          />
-        </View>
+        <RoomSection title={t('rooms.emptyTitle', 'No rooms yet')}>
+          <RoomCard>
+            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+              {t('rooms.shareEmptyRooms', 'Create a room first, then come back to share this note.')}
+            </Text>
+            <PrimaryButton
+              label={t('rooms.createButton', 'Create room')}
+              onPress={() => router.push('/rooms/create')}
+              style={styles.topButton}
+            />
+          </RoomCard>
+        </RoomSection>
       ) : (
-        <>
+        <RoomSection title={t('rooms.shareSelectionTitle', 'Choose a room')}>
           <View style={styles.roomList}>
             {rooms.map((room) => {
               const isSelected = selectedRoomId === room.id;
               return (
-                <Pressable
-                  key={room.id}
-                  onPress={() => setSelectedRoomId(room.id)}
-                  style={[
-                    styles.roomOption,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: isSelected ? colors.primary : colors.border,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.roomOptionTitle, { color: colors.text }]}>{room.name}</Text>
-                  <Text style={[styles.roomOptionMeta, { color: colors.secondaryText }]}>
-                    {t('rooms.memberCount', '{{count}} members', { count: room.memberCount })}
-                  </Text>
+                <Pressable key={room.id} onPress={() => setSelectedRoomId(room.id)}>
+                  <RoomCard>
+                    <View style={styles.optionRow}>
+                      <View
+                        style={[
+                          styles.selectionDot,
+                          { borderColor: isSelected ? colors.primary : colors.border },
+                        ]}
+                      >
+                        {isSelected ? (
+                          <View style={[styles.selectionDotInner, { backgroundColor: colors.primary }]} />
+                        ) : null}
+                      </View>
+                      <View style={styles.optionCopy}>
+                        <Text style={[styles.optionTitle, { color: colors.text }]}>{room.name}</Text>
+                        <Text style={[styles.optionMeta, { color: colors.secondaryText }]}>
+                          {t('rooms.memberCount', '{{count}} members', { count: room.memberCount })}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
+                    </View>
+                  </RoomCard>
                 </Pressable>
               );
             })}
@@ -117,52 +136,62 @@ export default function ShareToRoomScreen() {
             disabled={!selectedRoomId}
             loading={sharing}
           />
-        </>
+        </RoomSection>
       )}
-    </View>
+    </RoomScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: Layout.screenPadding,
+  content: {
+    gap: 18,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  title: {
-    ...Typography.screenTitle,
-    marginTop: 12,
-  },
-  body: {
+  notePreview: {
     ...Typography.body,
-    marginTop: 8,
-    marginBottom: 20,
+  },
+  emptyText: {
+    ...Typography.body,
+  },
+  topButton: {
+    marginTop: 14,
   },
   roomList: {
     gap: 12,
     marginBottom: 16,
   },
-  roomOption: {
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 16,
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  roomOptionTitle: {
+  selectionDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  selectionDotInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  optionCopy: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  optionTitle: {
     fontSize: 16,
     fontWeight: '700',
   },
-  roomOptionMeta: {
-    marginTop: 6,
-    fontSize: 13,
-  },
-  emptyWrap: {
-    gap: 16,
-  },
-  emptyBody: {
-    ...Typography.body,
+  optionMeta: {
+    ...Typography.pill,
+    marginTop: 4,
   },
 });

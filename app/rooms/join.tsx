@@ -1,9 +1,15 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, StyleSheet, TextInput } from 'react-native';
+import {
+  RoomCard,
+  RoomHeader,
+  RoomScreen,
+  RoomSection,
+} from '../../components/rooms/RoomScaffold';
 import PrimaryButton from '../../components/ui/PrimaryButton';
-import { Layout, Typography } from '../../constants/theme';
 import { useRoomsStore } from '../../hooks/useRooms';
 import { useTheme } from '../../hooks/useTheme';
 import { getRoomErrorMessage } from '../../services/roomService';
@@ -34,71 +40,59 @@ export default function JoinRoomScreen() {
       const room = await joinRoomByInvite(inviteValue);
       router.replace(`/rooms/${room.id}` as any);
     } catch (error) {
-      const message = getRoomErrorMessage(error);
-      Alert.alert(t('rooms.joinFailedTitle', 'Could not join room'), message);
+      Alert.alert(t('rooms.joinFailedTitle', 'Could not join room'), getRoomErrorMessage(error));
     } finally {
       setJoining(false);
     }
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.text }]}>
-        {t('rooms.joinPrompt', 'Join an invite-only room')}
-      </Text>
-      <Text style={[styles.body, { color: colors.secondaryText }]}>
-        {t('rooms.joinBody', 'Paste the invite link someone shared with you.')}
-      </Text>
-      <TextInput
-        value={inviteValue}
-        onChangeText={setInviteValue}
-        placeholder={t('rooms.joinPlaceholder', 'https://... or invite token')}
-        placeholderTextColor={colors.secondaryText}
-        style={[
-          styles.input,
-          styles.multilineInput,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-            color: colors.text,
-          },
-        ]}
-        multiline
-        autoCapitalize="none"
-        autoCorrect={false}
+    <RoomScreen scroll contentContainerStyle={styles.content}>
+      <RoomHeader
+        title={t('rooms.joinTitle', 'Join Room')}
+        subtitle={t('rooms.joinBody', 'Paste the invite link someone shared with you.')}
       />
-      <PrimaryButton
-        label={t('rooms.joinButton', 'Join invite')}
-        onPress={() => {
-          void handleJoin();
-        }}
-        loading={joining}
-      />
-    </View>
+      <RoomSection title={t('rooms.joinButton', 'Join invite')}>
+        <RoomCard>
+          <TextInput
+            value={inviteValue}
+            onChangeText={setInviteValue}
+            placeholder={t('rooms.joinPlaceholder', 'Paste the full invite link')}
+            placeholderTextColor={colors.secondaryText}
+            style={[
+              styles.input,
+              styles.multilineInput,
+              { backgroundColor: colors.background, borderColor: colors.border, color: colors.text },
+            ]}
+            multiline
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <PrimaryButton
+            label={t('rooms.joinButton', 'Join invite')}
+            onPress={() => {
+              void handleJoin();
+            }}
+            loading={joining}
+            leadingIcon={<Ionicons name="enter-outline" size={18} color="#1C1C1E" />}
+          />
+        </RoomCard>
+      </RoomSection>
+    </RoomScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: Layout.screenPadding,
-  },
-  title: {
-    ...Typography.screenTitle,
-    marginTop: 12,
-  },
-  body: {
-    ...Typography.body,
-    marginTop: 8,
-    marginBottom: 20,
+  content: {
+    gap: 18,
   },
   input: {
     borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 16,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   multilineInput: {
     minHeight: 132,

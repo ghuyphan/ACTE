@@ -1,9 +1,15 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, StyleSheet, TextInput } from 'react-native';
+import {
+  RoomCard,
+  RoomHeader,
+  RoomScreen,
+  RoomSection,
+} from '../../components/rooms/RoomScaffold';
 import PrimaryButton from '../../components/ui/PrimaryButton';
-import { Layout, Typography } from '../../constants/theme';
 import { useRoomsStore } from '../../hooks/useRooms';
 import { useTheme } from '../../hooks/useTheme';
 import { getRoomErrorMessage } from '../../services/roomService';
@@ -27,68 +33,53 @@ export default function CreateRoomScreen() {
       const room = await createRoom(name);
       router.replace(`/rooms/${room.id}` as any);
     } catch (error) {
-      const message = getRoomErrorMessage(error);
-      Alert.alert(t('rooms.createFailedTitle', 'Could not create room'), message);
+      Alert.alert(t('rooms.createFailedTitle', 'Could not create room'), getRoomErrorMessage(error));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.text }]}>
-        {t('rooms.createPrompt', 'Start a private room for your people.')}
-      </Text>
-      <Text style={[styles.body, { color: colors.secondaryText }]}>
-        {t('rooms.createBody', 'Rooms are invite-only and keep your shared memories separate from your personal notes.')}
-      </Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        placeholder={t('rooms.roomNamePlaceholder', 'Weekend getaway')}
-        placeholderTextColor={colors.secondaryText}
-        style={[
-          styles.input,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-            color: colors.text,
-          },
-        ]}
-        autoFocus
-        maxLength={60}
+    <RoomScreen scroll contentContainerStyle={styles.content}>
+      <RoomHeader
+        title={t('rooms.createTitle', 'Create Room')}
+        subtitle={t('rooms.createBody', 'Rooms are invite-only and keep your shared memories separate from your personal notes.')}
       />
-      <PrimaryButton
-        label={t('rooms.createButton', 'Create room')}
-        onPress={() => {
-          void handleCreate();
-        }}
-        loading={saving}
-      />
-    </View>
+      <RoomSection title={t('rooms.roomNameLabel', 'Room name')}>
+        <RoomCard>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder={t('rooms.roomNamePlaceholder', 'Weekend getaway')}
+            placeholderTextColor={colors.secondaryText}
+            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+            autoFocus
+            maxLength={60}
+          />
+          <PrimaryButton
+            label={t('rooms.createButton', 'Create room')}
+            onPress={() => {
+              void handleCreate();
+            }}
+            loading={saving}
+            leadingIcon={<Ionicons name="add-circle-outline" size={18} color="#1C1C1E" />}
+          />
+        </RoomCard>
+      </RoomSection>
+    </RoomScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: Layout.screenPadding,
-  },
-  title: {
-    ...Typography.screenTitle,
-    marginTop: 12,
-  },
-  body: {
-    ...Typography.body,
-    marginTop: 8,
-    marginBottom: 20,
+  content: {
+    gap: 18,
   },
   input: {
-    minHeight: 56,
+    minHeight: 54,
     borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 16,
+    borderRadius: 18,
+    paddingHorizontal: 14,
     fontSize: 16,
-    marginBottom: 16,
+    marginBottom: 14,
   },
 });

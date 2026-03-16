@@ -11,8 +11,13 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  RoomCard,
+  RoomHeader,
+  RoomScreen,
+} from '../../components/rooms/RoomScaffold';
 import PrimaryButton from '../../components/ui/PrimaryButton';
-import { Layout, Typography } from '../../constants/theme';
+import { Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useRoomsStore } from '../../hooks/useRooms';
 import { useTheme } from '../../hooks/useTheme';
@@ -33,249 +38,205 @@ export default function RoomsTabScreen() {
 
   if (!enabled) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>
-          {t('rooms.unavailableTitle', 'Rooms unavailable')}
-        </Text>
-        <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-          {t('rooms.unavailableBody', 'This build does not have shared rooms enabled yet.')}
-        </Text>
-      </View>
+      <RoomScreen contentContainerStyle={[styles.content, styles.center]}>
+        <RoomHeader
+          title={t('rooms.unavailableTitle', 'Rooms unavailable')}
+          subtitle={t('rooms.unavailableBody', 'This build does not have shared rooms enabled yet.')}
+        />
+      </RoomScreen>
     );
   }
 
   if (!user) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background, paddingHorizontal: Layout.screenPadding }]}>
-        <View style={[styles.heroIcon, { backgroundColor: colors.primarySoft }]}>
-          <Ionicons name="people-outline" size={30} color={colors.primary} />
-        </View>
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>
-          {t('rooms.signInTitle', 'Sign in to use rooms')}
-        </Text>
-        <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-          {t('rooms.signInBody', 'Rooms are private shared spaces for the people closest to you.')}
-        </Text>
-        <PrimaryButton
-          label={t('rooms.signInCta', 'Sign in')}
-          onPress={() => router.push('/auth')}
-          style={styles.primaryButton}
+      <RoomScreen contentContainerStyle={[styles.content, styles.center]}>
+        <RoomHeader
+          title={t('rooms.signInTitle', 'Sign in to use rooms')}
+          subtitle={t('rooms.signInBody', 'Rooms are private shared spaces for the people closest to you.')}
+          footer={
+            <PrimaryButton
+              label={t('rooms.signInCta', 'Sign in')}
+              onPress={() => router.push('/auth')}
+            />
+          }
         />
-      </View>
+      </RoomScreen>
+    );
+  }
+
+  const header = (
+    <View style={[styles.content, { paddingTop: insets.top + 8 }]}>
+      <RoomHeader
+        title={t('rooms.title', 'Rooms')}
+        subtitle={t('rooms.subtitle', 'Private shared spaces for your favorite people.')}
+      />
+      <RoomCard>
+        <View style={styles.actionsRow}>
+          <PrimaryButton
+            label={t('rooms.createButton', 'Create room')}
+            onPress={() => router.push('/rooms/create')}
+            style={styles.actionButton}
+          />
+          <PrimaryButton
+            label={t('rooms.joinButton', 'Join invite')}
+            onPress={() => router.push('/rooms/join')}
+            variant="secondary"
+            style={styles.actionButton}
+          />
+        </View>
+      </RoomCard>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>
+        {t('rooms.title', 'Rooms')}
+      </Text>
+    </View>
+  );
+
+  if (!roomsReady || loading) {
+    return (
+      <RoomScreen contentContainerStyle={[styles.content, { paddingTop: insets.top + 8 }]}>
+        <RoomHeader
+          title={t('rooms.title', 'Rooms')}
+          subtitle={t('rooms.subtitle', 'Private shared spaces for your favorite people.')}
+        />
+        <RoomCard>
+          <View style={styles.actionsRow}>
+            <PrimaryButton
+              label={t('rooms.createButton', 'Create room')}
+              onPress={() => router.push('/rooms/create')}
+              style={styles.actionButton}
+            />
+            <PrimaryButton
+              label={t('rooms.joinButton', 'Join invite')}
+              onPress={() => router.push('/rooms/join')}
+              variant="secondary"
+              style={styles.actionButton}
+            />
+          </View>
+        </RoomCard>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </RoomScreen>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 8 }]}>
-      <View style={styles.header}>
-        <View style={styles.headerCopy}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            {t('rooms.title', 'Rooms')}
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-            {t('rooms.subtitle', 'Private shared spaces for your favorite people.')}
-          </Text>
-        </View>
-        <Pressable
-          onPress={() => router.push('/rooms/join')}
-          style={[styles.headerIconButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-        >
-          <Ionicons name="person-add-outline" size={20} color={colors.primary} />
-        </Pressable>
-      </View>
-
-      <View style={styles.actionsRow}>
-        <PrimaryButton
-          label={t('rooms.createButton', 'Create room')}
-          onPress={() => router.push('/rooms/create')}
-          style={styles.actionButton}
-        />
-        <PrimaryButton
-          label={t('rooms.joinButton', 'Join invite')}
-          onPress={() => router.push('/rooms/join')}
-          variant="secondary"
-          style={styles.actionButton}
-        />
-      </View>
-
-      {!roomsReady || loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : (
-        <FlatList
-          data={rooms}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={[
-            styles.listContent,
-            rooms.length === 0 ? styles.listContentEmpty : null,
-            { paddingBottom: insets.bottom + 30 },
-          ]}
-          refreshing={loading}
-          onRefresh={() => {
-            void refreshRooms();
-          }}
-          ListEmptyComponent={
-            <View style={styles.emptyWrap}>
-              <View style={[styles.heroIcon, { backgroundColor: colors.primarySoft }]}>
-                <Ionicons name="paper-plane-outline" size={26} color={colors.primary} />
-              </View>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <FlatList
+        data={rooms}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        refreshing={loading}
+        onRefresh={() => {
+          void refreshRooms();
+        }}
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          <View style={styles.content}>
+            <RoomCard>
               <Text style={[styles.emptyTitle, { color: colors.text }]}>
                 {t('rooms.emptyTitle', 'No rooms yet')}
               </Text>
               <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
                 {t('rooms.emptyBody', 'Create your first private room or join one from an invite link.')}
               </Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => router.push(`/rooms/${item.id}` as any)}
-              style={[
-                styles.roomCard,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <View style={[styles.roomBadge, { backgroundColor: colors.primarySoft }]}>
-                <Ionicons
-                  name={item.currentUserRole === 'owner' ? 'home-outline' : 'people-outline'}
-                  size={18}
-                  color={colors.primary}
-                />
-              </View>
-              <View style={styles.roomCardCopy}>
-                <Text style={[styles.roomName, { color: colors.text }]} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <Text style={[styles.roomMeta, { color: colors.secondaryText }]} numberOfLines={2}>
-                  {item.lastPostPreview ??
-                    t('rooms.noPostsYet', 'No shared memories yet. Start the room with your first post.')}
-                </Text>
-                <Text style={[styles.roomMetaSmall, { color: colors.secondaryText }]}>
-                  {t('rooms.memberCount', '{{count}} members', { count: item.memberCount })}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
+            </RoomCard>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <View style={styles.content}>
+            <Pressable onPress={() => router.push(`/rooms/${item.id}` as any)}>
+              <RoomCard>
+                <View style={styles.roomRow}>
+                  <View style={[styles.roomBadge, { backgroundColor: colors.primarySoft }]}>
+                    <Ionicons
+                      name={item.currentUserRole === 'owner' ? 'home-outline' : 'people-outline'}
+                      size={18}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <View style={styles.roomCopy}>
+                    <Text style={[styles.roomName, { color: colors.text }]} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={[styles.roomPreview, { color: colors.secondaryText }]} numberOfLines={2}>
+                      {item.lastPostPreview ??
+                        t('rooms.noPostsYet', 'No shared memories yet. Start the room with your first post.')}
+                    </Text>
+                    <Text style={[styles.roomMeta, { color: colors.secondaryText }]}>
+                      {t('rooms.memberCount', '{{count}} members', { count: item.memberCount })}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
+                </View>
+              </RoomCard>
             </Pressable>
-          )}
-        />
-      )}
+          </View>
+        )}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    paddingHorizontal: Layout.screenPadding,
+  },
+  content: {
+    gap: 14,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-  },
-  headerCopy: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  title: {
-    ...Typography.screenTitle,
-    fontSize: 28,
-  },
-  subtitle: {
-    ...Typography.body,
-    marginTop: 6,
-  },
-  headerIconButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
   },
   actionsRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
   },
   actionButton: {
     flex: 1,
   },
-  listContent: {
-    gap: 12,
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
   },
-  listContentEmpty: {
-    flexGrow: 1,
-    justifyContent: 'center',
+  emptyBody: {
+    ...Typography.body,
+    marginTop: 6,
   },
-  roomCard: {
-    borderWidth: 1,
-    borderRadius: 24,
-    padding: 16,
+  roomRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   roomBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
   },
-  roomCardCopy: {
+  roomCopy: {
     flex: 1,
-    paddingRight: 10,
+    paddingRight: 12,
   },
   roomName: {
     fontSize: 17,
+    lineHeight: 21,
     fontWeight: '700',
+  },
+  roomPreview: {
+    ...Typography.body,
+    marginTop: 4,
   },
   roomMeta: {
-    marginTop: 4,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  roomMetaSmall: {
+    ...Typography.pill,
     marginTop: 8,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  emptyWrap: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  heroIcon: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 18,
-  },
-  emptyTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  emptyBody: {
-    ...Typography.body,
-    textAlign: 'center',
-    marginTop: 8,
-    maxWidth: 320,
-  },
-  primaryButton: {
-    marginTop: 20,
-    minWidth: 180,
   },
 });

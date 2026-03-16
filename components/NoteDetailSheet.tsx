@@ -489,10 +489,22 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                     </View>
                 ) : null}
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    <Animated.View style={{ opacity: cardOpacity, transform: [{ scale: cardScale }] }}>
+                    <Animated.View style={{ transform: [{ scale: cardScale }] }}>
                         {note.type === 'photo' ? (
                             <View style={styles.photoContainer}>
                                 <Image source={{ uri: getNotePhotoUri(note) }} style={styles.photo} contentFit="cover" transition={300} />
+                                <Pressable
+                                    onPress={handleToggleFavorite}
+                                    style={[styles.cardFavBadge, { backgroundColor: colors.card }]}
+                                >
+                                    <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+                                        <Ionicons
+                                            name={note.isFavorite ? 'heart' : 'heart-outline'}
+                                            size={20}
+                                            color={note.isFavorite ? '#FF3B30' : colors.secondaryText}
+                                        />
+                                    </Animated.View>
+                                </Pressable>
                             </View>
                         ) : (
                             <View style={styles.textContainer}>
@@ -506,7 +518,20 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                         <Text style={styles.editFieldBadge}>
                                             {t('noteDetail.contentField', 'Note')}
                                         </Text>
-                                    ) : null}
+                                    ) : (
+                                        <Pressable
+                                            onPress={handleToggleFavorite}
+                                            style={[styles.cardFavBadge, { backgroundColor: '#FFFFFF33' }]}
+                                        >
+                                            <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+                                                <Ionicons
+                                                    name={note.isFavorite ? 'heart' : 'heart-outline'}
+                                                    size={20}
+                                                    color={note.isFavorite ? '#FF3B30' : '#FFFFFFDD'}
+                                                />
+                                            </Animated.View>
+                                        </Pressable>
+                                    )}
                                     <TextInput
                                         ref={contentInputRef}
                                         testID="note-detail-content-input"
@@ -519,35 +544,20 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                         placeholder={isEditing ? t('noteDetail.editContent', 'Edit note content...') : undefined}
                                         placeholderTextColor="rgba(255,255,255,0.5)"
                                         maxLength={300}
+                                        selectionColor="#FFFFFF"
                                     />
                                 </LinearGradient>
                             </View>
                         )}
                     </Animated.View>
 
-                    <Animated.View style={[styles.actionRow, { opacity: actionsOpacity }]}>
-                        <AnimatedActionButton
-                            onPress={handleToggleFavorite}
-                            testID="note-detail-favorite"
-                            style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
-                            delay={100}
-                            disabled={isDeleting}
-                        >
-                            <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-                                <Ionicons
-                                    name={note.isFavorite ? 'heart' : 'heart-outline'}
-                                    size={20}
-                                    color={note.isFavorite ? '#FF3B30' : colors.secondaryText}
-                                />
-                            </Animated.View>
-                        </AnimatedActionButton>
-
+                    <Animated.View style={styles.actionRow}>
                         {note.type === 'text' ? (
                             <AnimatedActionButton
                                 onPress={isEditing ? handleSaveEdit : () => setIsEditing(true)}
                                 testID="note-detail-edit"
                                 style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
-                                delay={150}
+                                delay={100}
                                 disabled={isDeleting}
                             >
                                 <View style={styles.editIconStack}>
@@ -573,7 +583,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                             onPress={handleShare}
                             testID="note-detail-share"
                             style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
-                            delay={200}
+                            delay={140}
                             disabled={isDeleting}
                         >
                             <Ionicons name="share-outline" size={20} color={colors.secondaryText} />
@@ -583,7 +593,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                             onPress={handleShareToRoom}
                             testID="note-detail-share-room"
                             style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
-                            delay={175}
+                            delay={180}
                             disabled={isDeleting}
                         >
                             <Ionicons name="paper-plane-outline" size={20} color={colors.primary} />
@@ -593,7 +603,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                             onPress={handleDelete}
                             testID="note-detail-delete"
                             style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
-                            delay={250}
+                            delay={220}
                             disabled={isDeleting}
                         >
                             <Ionicons name="trash-outline" size={20} color={colors.danger} />
@@ -619,7 +629,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                         </Animated.View>
                     ) : null}
 
-                    <Animated.View style={{ opacity: infoOpacity, transform: [{ translateY: infoTranslateY }] }}>
+                    <Animated.View style={{ transform: [{ translateY: infoTranslateY }] }}>
                         <View style={styles.infoSection}>
                             {isEditing ? (
                                 <Text style={[styles.editFieldLabel, { color: colors.secondaryText }]}>
@@ -651,6 +661,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                     placeholder={isEditing ? t('noteDetail.editLocation', 'Edit location name...') : undefined}
                                     placeholderTextColor={colors.secondaryText}
                                     maxLength={100}
+                                    selectionColor={colors.primary}
                                 />
                                 {isEditing ? <Ionicons name="create-outline" size={16} color={colors.primary} /> : null}
                             </View>
@@ -823,6 +834,22 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    cardFavBadge: {
+        position: 'absolute',
+        top: 18,
+        right: 24,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 4,
+        zIndex: 10,
     },
     editIconStack: {
         width: 20,

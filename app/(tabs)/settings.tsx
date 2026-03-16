@@ -585,44 +585,40 @@ export default function SettingsScreen() {
             footer={
               <HStack>
                 <Spacer />
-                <VStack modifiers={[padding({ top: 36, bottom: 40 })]}>
+                <VStack alignment="center" modifiers={[padding({ top: 44, bottom: 44 })]}>
+                  <SwiftUIText
+                    modifiers={[
+                      foregroundStyle(colors.text),
+                      font({ size: 14, weight: 'medium' }),
+                      multilineTextAlignment('center'),
+                      padding({ bottom: 10 }),
+                    ]}
+                  >
+                    {t('settings.about', 'So you never forget what she likes 💛')}
+                  </SwiftUIText>
+                  <HStack modifiers={[padding({ top: 4 })]}>
+                    <SwiftUIText
+                      modifiers={[
+                        foregroundStyle(colors.secondaryText + '99'),
+                        font({ size: 11, weight: 'semibold' }),
+                        multilineTextAlignment('center'),
+                      ]}
+                    >
+                      Noto v1.0.0 · ノート
+                    </SwiftUIText>
+                  </HStack>
                   {accountHint ? (
                     <SwiftUIText
                       modifiers={[
-                        foregroundStyle(colors.secondaryText),
-                        font({ size: 13 }),
+                        foregroundStyle(colors.secondaryText + '88'),
+                        font({ size: 11 }),
                         multilineTextAlignment('center'),
-                        padding({ bottom: 8 }),
+                        padding({ top: 12 }),
                       ]}
                     >
                       {accountHint}
                     </SwiftUIText>
                   ) : null}
-                  <SwiftUIText
-                    modifiers={[foregroundStyle(colors.secondaryText), font({ size: 13 }), multilineTextAlignment('center')]}
-                  >
-                    Noto v1.0.0
-                  </SwiftUIText>
-                  <SwiftUIText
-                    modifiers={[
-                      foregroundStyle(colors.secondaryText + 'CC'),
-                      font({ size: 11, weight: 'medium' }),
-                      multilineTextAlignment('center'),
-                      padding({ top: 4 }),
-                    ]}
-                  >
-                    ノート
-                  </SwiftUIText>
-                  <SwiftUIText
-                    modifiers={[
-                      foregroundStyle(colors.secondaryText),
-                      font({ size: 13 }),
-                      multilineTextAlignment('center'),
-                      padding({ top: 4 }),
-                    ]}
-                  >
-                    {t('settings.about', 'So you never forget what she likes 💛')}
-                  </SwiftUIText>
                 </VStack>
                 <Spacer />
               </HStack>
