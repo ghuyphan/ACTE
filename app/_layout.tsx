@@ -10,9 +10,11 @@ import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import i18n from '../constants/i18n';
+import { ENABLE_SHARED_ROOMS } from '../constants/features';
 import { AuthProvider } from '../hooks/useAuth';
 import { NotesProvider } from '../hooks/useNotes';
 import { NoteDetailSheetProvider, useNoteDetailSheet } from '../hooks/useNoteDetailSheet';
+import { RoomsProvider } from '../hooks/useRooms';
 import { SyncStatusProvider } from '../hooks/useSyncStatus';
 import { SubscriptionProvider } from '../hooks/useSubscription';
 import { ThemeProvider, useTheme } from '../hooks/useTheme';
@@ -160,6 +162,61 @@ function AppContent() {
           />
           <Stack.Screen name="auth/onboarding" />
           <Stack.Screen name="(tabs)" />
+          {ENABLE_SHARED_ROOMS ? (
+            <Stack.Screen
+              name="rooms/create"
+              options={{
+                headerShown: true,
+                title: i18n.t('rooms.createTitle', 'Create Room'),
+                headerBackButtonDisplayMode: 'minimal',
+                headerBackButtonMenuEnabled: false,
+              }}
+            />
+          ) : null}
+          {ENABLE_SHARED_ROOMS ? (
+            <Stack.Screen
+              name="rooms/join"
+              options={{
+                headerShown: true,
+                title: i18n.t('rooms.joinTitle', 'Join Room'),
+                headerBackButtonDisplayMode: 'minimal',
+                headerBackButtonMenuEnabled: false,
+              }}
+            />
+          ) : null}
+          {ENABLE_SHARED_ROOMS ? (
+            <Stack.Screen
+              name="rooms/share"
+              options={{
+                headerShown: true,
+                title: i18n.t('rooms.shareTitle', 'Share to Room'),
+                headerBackButtonDisplayMode: 'minimal',
+                headerBackButtonMenuEnabled: false,
+              }}
+            />
+          ) : null}
+          {ENABLE_SHARED_ROOMS ? (
+            <Stack.Screen
+              name="rooms/[id]"
+              options={{
+                headerShown: true,
+                title: i18n.t('rooms.roomTitle', 'Room'),
+                headerBackButtonDisplayMode: 'minimal',
+                headerBackButtonMenuEnabled: false,
+              }}
+            />
+          ) : null}
+          {ENABLE_SHARED_ROOMS ? (
+            <Stack.Screen
+              name="rooms/[id]/settings"
+              options={{
+                headerShown: true,
+                title: i18n.t('rooms.settingsTitle', 'Room Settings'),
+                headerBackButtonDisplayMode: 'minimal',
+                headerBackButtonMenuEnabled: false,
+              }}
+            />
+          ) : null}
           <Stack.Screen
             name="note/[id]"
             options={{
@@ -184,9 +241,11 @@ export default function RootLayout() {
               <SubscriptionProvider>
                 <NotesProvider>
                   <SyncStatusProvider>
-                    <NoteDetailSheetProvider>
-                      <AppContent />
-                    </NoteDetailSheetProvider>
+                    <RoomsProvider>
+                      <NoteDetailSheetProvider>
+                        <AppContent />
+                      </NoteDetailSheetProvider>
+                    </RoomsProvider>
                   </SyncStatusProvider>
                 </NotesProvider>
               </SubscriptionProvider>

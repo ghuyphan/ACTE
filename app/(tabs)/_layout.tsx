@@ -1,6 +1,7 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useTranslation } from 'react-i18next';
 import { DynamicColorIOS, Platform } from 'react-native';
+import { ENABLE_SHARED_ROOMS } from '../../constants/features';
 import { Colors, useTheme } from '../../hooks/useTheme';
 import { isIOS26OrNewer, isOlderIOS } from '../../utils/platform';
 
@@ -37,6 +38,13 @@ export default function TabLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} />
         <NativeTabs.Trigger.Label>{t('tabs.home', 'Home')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+
+      {ENABLE_SHARED_ROOMS ? (
+        <NativeTabs.Trigger name="rooms">
+          <NativeTabs.Trigger.Icon sf={{ default: 'person.3', selected: 'person.3.fill' }} />
+          <NativeTabs.Trigger.Label>{t('tabs.rooms', 'Rooms')}</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+      ) : null}
 
       <NativeTabs.Trigger name="map">
         <NativeTabs.Trigger.Icon sf={{ default: 'map', selected: 'map.fill' }} />

@@ -15,6 +15,7 @@ export const mapOverlayTokens = {
     shadowOpacity: 0.12,
     shadowRadius: 18,
     elevation: 5,
+    borderCurve: 'continuous',
   } satisfies ViewStyle,
 } as const;
 

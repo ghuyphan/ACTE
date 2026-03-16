@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
   textCard: {
     width: CARD_SIZE,
     height: CARD_SIZE,
-    borderRadius: 40,
+    borderRadius: Layout.cardRadius,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
     padding: 32,
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
   cameraContainer: {
     width: CARD_SIZE,
     height: CARD_SIZE,
-    borderRadius: 40,
+    borderRadius: Layout.cardRadius,
     borderCurve: 'continuous',
     overflow: 'hidden',
     position: 'relative',

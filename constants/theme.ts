@@ -30,7 +30,7 @@ export const Layout = {
   headerHeight: 60,
   buttonHeight: 56,
   iconBadge: 30,
-  cardRadius: 40,
+  cardRadius: 60,
   pillRadius: 20,
 } as const;
 

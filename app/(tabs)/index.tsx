@@ -25,6 +25,7 @@ import CaptureCard from '../../components/home/CaptureCard';
 import HomeHeaderSearch from '../../components/home/HomeHeaderSearch';
 import NotesFeed from '../../components/home/NotesFeed';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
+import { useAuth } from '../../hooks/useAuth';
 import { useCaptureFlow } from '../../hooks/useCaptureFlow';
 import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
@@ -46,6 +47,7 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { notes, loading, refreshNotes, createNote } = useNotesStore();
+  const { user } = useAuth();
   const {
     tier,
     isConfigured: isPlusConfigured,
@@ -600,6 +602,18 @@ export default function HomeScreen() {
     [openNoteDetail, router]
   );
 
+  const handleShareNoteToRoom = useCallback(
+    (noteId: string) => {
+      if (!user) {
+        router.push('/auth');
+        return;
+      }
+
+      router.push(`/rooms/share?noteId=${encodeURIComponent(noteId)}` as any);
+    },
+    [router, user]
+  );
+
   const handleSearchChange = useCallback((nextQuery: string) => {
     startSearchTransition(() => {
       setSearchQuery(nextQuery);
@@ -752,6 +766,7 @@ export default function HomeScreen() {
         topInset={insets.top}
         snapHeight={snapHeight}
         onOpenNote={openNote}
+        onShareNote={handleShareNoteToRoom}
         colors={colors}
         t={t}
         onCaptureVisibilityChange={setIsCaptureVisible}

@@ -29,13 +29,16 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   item,
   index,
   onPress,
+  onShare,
   colors,
   t,
 }: {
   item: Note;
   index: number;
   onPress: () => void;
+  onShare?: (() => void) | null;
   colors: {
+    primary: string;
     text: string;
     secondaryText: string;
     danger: string;
@@ -112,6 +115,17 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
           <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
           <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
         </InfoPill>
+        {onShare ? (
+          <Pressable
+            testID={`note-share-room-${item.id}`}
+            onPress={onShare}
+            style={styles.shareButtonPressable}
+          >
+            <InfoPill style={styles.shareButton}>
+              <Ionicons name="paper-plane-outline" size={17} color={colors.primary} />
+            </InfoPill>
+          </Pressable>
+        ) : null}
       </Animated.View>
     </Pressable>
   );
@@ -130,6 +144,7 @@ interface NotesFeedProps {
   topInset: number;
   snapHeight: number;
   onOpenNote: (noteId: string) => void;
+  onShareNote?: (noteId: string) => void;
   colors: {
     primary: string;
     text: string;
@@ -150,6 +165,7 @@ export default function NotesFeed({
   topInset,
   snapHeight,
   onOpenNote,
+  onShareNote,
   colors,
   t,
   onCaptureVisibilityChange,
@@ -203,13 +219,14 @@ export default function NotesFeed({
             item={note}
             index={index}
             onPress={() => onOpenNote(note.id)}
+            onShare={onShareNote ? () => onShareNote(note.id) : null}
             colors={colors}
             t={t}
           />
         </View>
       );
     },
-    [captureItem, colors, onOpenNote, snapHeight, t, topInset]
+    [captureItem, colors, onOpenNote, onShareNote, snapHeight, t, topInset]
   );
 
   return (
@@ -257,7 +274,7 @@ const styles = StyleSheet.create({
   favBadge: {
     position: 'absolute',
     top: 16,
-    right: 16,
+    right: 32,
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -271,7 +288,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   belowCardMetaContainer: {
+    width: CARD_SIZE,
+    alignSelf: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    minHeight: 56,
     paddingTop: 16,
   },
   metadataPill: {
@@ -281,7 +303,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 20,
     gap: 6,
-    maxWidth: '90%',
+    maxWidth: CARD_SIZE - 64,
   },
   metadataPillText: {
     fontSize: 14,
@@ -300,5 +322,17 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 13,
     fontWeight: '500',
+  },
+  shareButtonPressable: {
+    position: 'absolute',
+    right: 0,
+    top: 16,
+  },
+  shareButton: {
+    minHeight: 40,
+    paddingHorizontal: 13,
+    paddingVertical: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

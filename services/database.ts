@@ -98,6 +98,58 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_sync_queue_status_created ON sync_queue(status, created_at ASC);
+      CREATE TABLE IF NOT EXISTS rooms_cache (
+        user_uid TEXT NOT NULL,
+        id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_post_at TEXT,
+        cover_photo_url TEXT,
+        current_user_role TEXT NOT NULL CHECK(current_user_role IN ('owner', 'member')),
+        member_count INTEGER NOT NULL DEFAULT 0,
+        last_post_preview TEXT,
+        PRIMARY KEY (user_uid, id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_rooms_cache_user_updated ON rooms_cache(user_uid, updated_at DESC);
+      CREATE TABLE IF NOT EXISTS room_memberships_cache (
+        user_uid TEXT NOT NULL,
+        room_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('owner', 'member')),
+        display_name_snapshot TEXT,
+        photo_url_snapshot TEXT,
+        joined_at TEXT NOT NULL,
+        last_read_at TEXT,
+        PRIMARY KEY (user_uid, room_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_room_memberships_cache_room ON room_memberships_cache(user_uid, room_id);
+      CREATE TABLE IF NOT EXISTS room_posts_cache (
+        user_uid TEXT NOT NULL,
+        room_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        author_id TEXT NOT NULL,
+        author_display_name TEXT,
+        origin TEXT NOT NULL CHECK(origin IN ('shared_note', 'room_native')),
+        type TEXT NOT NULL CHECK(type IN ('text', 'photo')),
+        text TEXT NOT NULL DEFAULT '',
+        photo_local_uri TEXT,
+        photo_remote_base64 TEXT,
+        place_name TEXT,
+        source_note_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        PRIMARY KEY (user_uid, room_id, id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_room_posts_cache_room_created ON room_posts_cache(user_uid, room_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS room_read_state (
+        user_uid TEXT NOT NULL,
+        room_id TEXT NOT NULL,
+        last_read_at TEXT,
+        PRIMARY KEY (user_uid, room_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_room_read_state_user ON room_read_state(user_uid, room_id);
     `);
 
             // Migration: add missing columns for existing databases before touching dependent indexes/queries.

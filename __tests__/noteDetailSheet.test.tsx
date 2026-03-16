@@ -6,6 +6,7 @@ const mockGetNoteById = jest.fn<Promise<unknown>, [string]>();
 const mockDeleteNote = jest.fn<Promise<void>, [string]>(async () => undefined);
 const mockUpdateNote = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
 const mockToggleFavorite = jest.fn<Promise<boolean>, [string]>(async () => true);
+const mockRouterPush = jest.fn();
 const mockImpactAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockNotificationAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockNotesStore = {
@@ -114,6 +115,18 @@ jest.mock('../hooks/useTheme', () => ({
 
 jest.mock('../hooks/useReducedMotion', () => ({
   useReducedMotion: () => false,
+}));
+
+jest.mock('expo-router', () => ({
+  useRouter: () => ({
+    push: (...args: unknown[]) => mockRouterPush(...args),
+  }),
+}));
+
+jest.mock('../hooks/useAuth', () => ({
+  useAuth: () => ({
+    user: { uid: 'user-1' },
+  }),
 }));
 
 jest.mock('../hooks/useNotes', () => ({
@@ -261,5 +274,21 @@ describe('NoteDetailSheet', () => {
 
     expect(mockDeleteNote).toHaveBeenCalledWith('note-1');
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('opens the share-to-room flow for the current note', async () => {
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-share-room')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-share-room'));
+    });
+
+    expect(mockRouterPush).toHaveBeenCalledWith('/rooms/share?noteId=note-1');
   });
 });

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -23,6 +24,7 @@ import {
 } from 'react-native';
 import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../constants/noteRadius';
 import { Layout, Typography } from '../constants/theme';
+import { useAuth } from '../hooks/useAuth';
 import { useNotes } from '../hooks/useNotes';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { CardGradients, useTheme } from '../hooks/useTheme';
@@ -175,8 +177,10 @@ interface NoteDetailSheetProps {
 
 export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetailSheetProps) {
     const { getNoteById, deleteNote, updateNote, toggleFavorite } = useNotes();
+    const { user } = useAuth();
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
+    const router = useRouter();
     const reduceMotionEnabled = useReducedMotion();
     const [note, setNote] = useState<Note | null>(null);
     const [loading, setLoading] = useState(true);
@@ -415,6 +419,20 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         }
     };
 
+    const handleShareToRoom = useCallback(() => {
+        if (!note || isDeleting) {
+            return;
+        }
+
+        if (!user) {
+            router.push('/auth');
+            return;
+        }
+
+        onClose();
+        router.push(`/rooms/share?noteId=${encodeURIComponent(note.id)}` as any);
+    }, [isDeleting, note, onClose, router, user]);
+
     const handleSheetVisibility = (nextVisible: boolean) => {
         if (!nextVisible) {
             onClose();
@@ -559,6 +577,16 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                             disabled={isDeleting}
                         >
                             <Ionicons name="share-outline" size={20} color={colors.secondaryText} />
+                        </AnimatedActionButton>
+
+                        <AnimatedActionButton
+                            onPress={handleShareToRoom}
+                            testID="note-detail-share-room"
+                            style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
+                            delay={175}
+                            disabled={isDeleting}
+                        >
+                            <Ionicons name="paper-plane-outline" size={20} color={colors.primary} />
                         </AnimatedActionButton>
 
                         <AnimatedActionButton
@@ -727,7 +755,8 @@ const styles = StyleSheet.create({
     photoContainer: {
         width: CARD_SIZE,
         height: CARD_SIZE,
-        borderRadius: 28,
+        borderRadius: Layout.cardRadius,
+        borderCurve: 'continuous',
         overflow: 'hidden',
         marginBottom: 16,
     },
@@ -738,7 +767,8 @@ const styles = StyleSheet.create({
     textContainer: {
         width: CARD_SIZE,
         height: CARD_SIZE,
-        borderRadius: 28,
+        borderRadius: Layout.cardRadius,
+        borderCurve: 'continuous',
         overflow: 'hidden',
         marginBottom: 16,
     },
@@ -875,7 +905,7 @@ const styles = StyleSheet.create({
     skeletonCard: {
         width: CARD_SIZE,
         height: CARD_SIZE,
-        borderRadius: 28,
+        borderRadius: Layout.cardRadius,
         marginBottom: 24,
     },
     skeletonLine: {
