@@ -410,19 +410,19 @@ export default function SettingsScreen() {
       </View>
       <Host style={styles.container} colorScheme={isDark ? 'dark' : 'light'}>
         <List modifiers={[scrollContentBackground('hidden')]}>
-          <Section title={t('settings.preferences', 'PREFERENCES')}>
+          <Section title={t('settings.preferences', 'Style & Language')}>
             <Button onPress={() => setShowLanguage(true)}>
               <HStack>
-                <HStack
-                  modifiers={[
-                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                    backgroundOverlay({ color: colors.primary + '18' }),
-                    cornerRadius(7),
-                    padding({ trailing: 12 }),
-                  ]}
-                >
-                  <SwiftUIImage systemName="globe" color={colors.primary} size={18} />
-                </HStack>
+                  <HStack
+                    modifiers={[
+                      frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                      backgroundOverlay({ color: colors.primary + '18' }),
+                      cornerRadius(7),
+                      padding({ trailing: 12 }),
+                    ]}
+                  >
+                    <SwiftUIImage systemName="globe" color={colors.primary} size={18} />
+                  </HStack>
                 <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
                   {t('settings.language', 'Language')}
                 </SwiftUIText>
@@ -434,16 +434,16 @@ export default function SettingsScreen() {
             </Button>
             <Button onPress={() => setShowTheme(true)}>
               <HStack>
-                <HStack
-                  modifiers={[
-                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                    backgroundOverlay({ color: colors.primary + '18' }),
-                    cornerRadius(7),
-                    padding({ trailing: 12 }),
-                  ]}
-                >
-                  <SwiftUIImage systemName={isDark ? 'moon' : 'sun.max'} color={colors.primary} size={18} />
-                </HStack>
+                  <HStack
+                    modifiers={[
+                      frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                      backgroundOverlay({ color: colors.primary + '18' }),
+                      cornerRadius(7),
+                      padding({ trailing: 12 }),
+                    ]}
+                  >
+                    <SwiftUIImage systemName={isDark ? 'moon' : 'sun.max'} color={colors.primary} size={18} />
+                  </HStack>
                 <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>{t('settings.theme', 'Theme')}</SwiftUIText>
                 <Spacer />
                 <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{themeLabel}</SwiftUIText>
@@ -451,7 +451,7 @@ export default function SettingsScreen() {
             </Button>
           </Section>
 
-          <Section title={t('settings.data', 'DATA')}>
+          <Section title={t('settings.data', 'Memory Data')}>
             <HStack>
               <HStack
                 modifiers={[
@@ -489,7 +489,7 @@ export default function SettingsScreen() {
           </Section>
 
           <Section
-            title={t('settings.plusTitle', 'NOTO PLUS')}
+            title={t('settings.plusTitle', 'Noto Plus')}
             footer={
               <SwiftUIText
                 modifiers={[
@@ -499,89 +499,34 @@ export default function SettingsScreen() {
                   padding({ top: 8 }),
                 ]}
               >
-                {plusHint}
+                {plusHint} {!isPurchaseAvailable && `\n${t('settings.plusUnavailable', 'Plus is coming soon.')}`}
               </SwiftUIText>
             }
           >
-            <HStack>
-              <HStack
-                modifiers={[
-                  frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                  backgroundOverlay({ color: colors.primary + '18' }),
-                  cornerRadius(7),
-                  padding({ trailing: 12 }),
-                ]}
-              >
-                <SwiftUIImage systemName="sparkles" color={colors.primary} size={18} />
+            <Button onPress={() => router.push('/plus')}>
+              <HStack>
+                <HStack
+                  modifiers={[
+                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                    backgroundOverlay({ color: colors.primary + '18' }),
+                    cornerRadius(7),
+                    padding({ trailing: 12 }),
+                  ]}
+                >
+                  <SwiftUIImage systemName="sparkles" color={colors.primary} size={18} />
+                </HStack>
+                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                  {t('settings.plusPlan', 'Edition')}
+                </SwiftUIText>
+                <Spacer />
+                <SwiftUIText modifiers={[foregroundStyle(colors.primary), padding({ trailing: 4 })]}>{plusValue}</SwiftUIText>
+                <SwiftUIImage systemName="chevron.right" color={colors.secondaryText} size={14} />
               </HStack>
-              <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                {t('settings.plusPlan', 'Plan')}
-              </SwiftUIText>
-              <Spacer />
-              <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{plusValue}</SwiftUIText>
-            </HStack>
-            {tier !== 'plus' ? (
-              <Button
-                onPress={() => {
-                  if (!isPurchaseAvailable || isPurchaseInFlight) {
-                    return;
-                  }
-                  void handlePurchasePlus();
-                }}
-              >
-                <HStack>
-                  <HStack
-                    modifiers={[
-                      frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                      backgroundOverlay({ color: colors.primary + '18' }),
-                      cornerRadius(7),
-                      padding({ trailing: 12 }),
-                    ]}
-                  >
-                    <SwiftUIImage systemName="crown" color={colors.primary} size={18} />
-                  </HStack>
-                  <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                    {isPurchaseAvailable
-                      ? plusPriceLabel
-                        ? t('plus.upgradeCtaWithPrice', 'Upgrade to Plus · {{price}}', {
-                            price: plusPriceLabel,
-                          })
-                        : t('plus.upgradeCta', 'Upgrade to Plus')
-                      : t('settings.plusUnavailable', 'Plus unavailable in this build')}
-                  </SwiftUIText>
-                </HStack>
-              </Button>
-            ) : null}
-            {isPlusConfigured ? (
-              <Button
-                onPress={() => {
-                  if (isPurchaseInFlight) {
-                    return;
-                  }
-                  void handleRestorePurchases();
-                }}
-              >
-                <HStack>
-                  <HStack
-                    modifiers={[
-                      frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                      backgroundOverlay({ color: colors.secondaryText + '18' }),
-                      cornerRadius(7),
-                      padding({ trailing: 12 }),
-                    ]}
-                  >
-                    <SwiftUIImage systemName="arrow.clockwise" color={colors.secondaryText} size={18} />
-                  </HStack>
-                  <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                    {t('plus.restorePurchases', 'Restore purchases')}
-                  </SwiftUIText>
-                </HStack>
-              </Button>
-            ) : null}
+            </Button>
           </Section>
 
           <Section
-            title={t('settings.account', 'ACCOUNT')}
+            title={t('settings.account', 'Backup & Sync')}
             footer={
               <HStack>
                 <Spacer />
@@ -631,12 +576,12 @@ export default function SettingsScreen() {
                     <HStack
                       modifiers={[
                         frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                        backgroundOverlay({ color: colors.secondaryText + '18' }),
+                        backgroundOverlay({ color: colors.primary + '18' }),
                         cornerRadius(7),
                         padding({ trailing: 12 }),
                       ]}
                     >
-                      <SwiftUIImage systemName="person" color={colors.secondaryText} size={18} />
+                      <SwiftUIImage systemName="person" color={colors.primary} size={18} />
                     </HStack>
                     <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
                       {t('settings.accountEntry', 'Account')}
