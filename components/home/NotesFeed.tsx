@@ -12,10 +12,12 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import Reanimated, { Easing, LinearTransition } from 'react-native-reanimated';
 import { Layout, Typography } from '../../constants/theme';
 import { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
+import { SharedPost } from '../../services/sharedFeedService';
 import { formatDate } from '../../utils/dateUtils';
 import ImageMemoryCard from '../ImageMemoryCard';
 import TextMemoryCard from '../TextMemoryCard';
@@ -118,14 +120,95 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   );
 });
 
+const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
+  item,
+  index,
+  colors,
+  t,
+}: {
+  item: SharedPost;
+  index: number;
+  colors: {
+    primary: string;
+    text: string;
+    secondaryText: string;
+    danger: string;
+    card: string;
+  };
+  t: TFunction;
+}) {
+  const scale = useRef(new Animated.Value(0.9)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  const mountIndex = useRef(index).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: 260,
+        easing: RNEasing.out(RNEasing.cubic),
+        delay: mountIndex * 50,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 300,
+        delay: mountIndex * 50,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [mountIndex, opacity, scale]);
+
+  const authorLabel = item.authorDisplayName ?? t('shared.someone', 'Someone');
+  const dateStr = formatDate(item.createdAt, 'short');
+
+  return (
+    <Animated.View style={[styles.sharedCardWrap, { opacity, transform: [{ scale }] }]}>
+      <View style={styles.noteCardWrapper}>
+        {item.type === 'photo' && item.photoLocalUri ? (
+          <ImageMemoryCard imageUrl={item.photoLocalUri} />
+        ) : (
+          <TextMemoryCard text={item.text || t('shared.photoMemory', 'Photo memory')} noteId={item.id} />
+        )}
+      </View>
+
+      <View style={styles.sharedMetaContainer}>
+        <View style={styles.sharedMetaRow}>
+          <InfoPill style={styles.sharedAuthorPill}>
+            {item.authorPhotoURLSnapshot ? (
+              <Image source={{ uri: item.authorPhotoURLSnapshot }} style={styles.sharedAvatarImage} contentFit="cover" />
+            ) : (
+              <View style={[styles.sharedAvatarFallback, { backgroundColor: colors.card }]}>
+                <Text style={[styles.sharedAvatarLabel, { color: colors.primary }]}>
+                  {authorLabel.trim().charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </InfoPill>
+
+          <InfoPill icon="location" iconColor={colors.secondaryText} style={[styles.metadataPill, styles.sharedMetadataPill]}>
+            <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
+              {item.placeName ?? t('shared.sharedNow', 'Shared now')}
+            </Text>
+            <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
+            <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
+          </InfoPill>
+        </View>
+      </View>
+    </Animated.View>
+  );
+});
+
 type NotesFeedListItem =
   | { id: '__capture__'; kind: 'capture' }
-  | { id: string; kind: 'note'; note: Note };
+  | { id: string; kind: 'note'; note: Note; createdAt: string }
+  | { id: string; kind: 'shared-post'; post: SharedPost; createdAt: string };
 
 interface NotesFeedProps {
   flatListRef: RefObject<FlatList<any> | null>;
   captureItem: ReactElement;
   notes: Note[];
+  sharedPosts?: SharedPost[];
   refreshing: boolean;
   onRefresh: () => void;
   topInset: number;
@@ -146,6 +229,7 @@ export default function NotesFeed({
   flatListRef,
   captureItem,
   notes,
+  sharedPosts = [],
   refreshing,
   onRefresh,
   topInset,
@@ -156,15 +240,25 @@ export default function NotesFeed({
   onCaptureVisibilityChange,
 }: NotesFeedProps) {
   const listData = useMemo<NotesFeedListItem[]>(
-    () => [
-      { id: '__capture__', kind: 'capture' },
-      ...notes.map((note) => ({
-        id: note.id,
-        kind: 'note' as const,
-        note,
-      })),
-    ],
-    [notes]
+    () => {
+      const feedItems = [
+        ...notes.map((note) => ({
+          id: note.id,
+          kind: 'note' as const,
+          note,
+          createdAt: note.createdAt,
+        })),
+        ...sharedPosts.map((post) => ({
+          id: post.id,
+          kind: 'shared-post' as const,
+          post,
+          createdAt: post.createdAt,
+        })),
+      ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+
+      return [{ id: '__capture__', kind: 'capture' }, ...feedItems];
+    },
+    [notes, sharedPosts]
   );
   const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
 
@@ -195,6 +289,14 @@ export default function NotesFeed({
     ({ item, index }: { item: NotesFeedListItem; index: number }) => {
       if (item.kind === 'capture') {
         return captureItem;
+      }
+
+      if (item.kind === 'shared-post') {
+        return (
+          <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
+            <AnimatedSharedPostCard item={item.post} index={index} colors={colors} t={t} />
+          </View>
+        );
       }
 
       const note = item.note;
@@ -280,6 +382,45 @@ const styles = StyleSheet.create({
     minHeight: 56,
     paddingTop: 16,
   },
+  sharedCardWrap: {
+    width: CARD_SIZE,
+    alignSelf: 'center',
+  },
+  sharedMetaContainer: {
+    width: CARD_SIZE,
+    alignSelf: 'center',
+    minHeight: 56,
+    paddingTop: 16,
+  },
+  sharedMetaRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sharedAuthorPill: {
+    width: 44,
+    minWidth: 44,
+    paddingHorizontal: 0,
+    justifyContent: 'center',
+  },
+  sharedAvatarImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  sharedAvatarFallback: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sharedAvatarLabel: {
+    fontSize: 11,
+    lineHeight: 13,
+    fontWeight: '800',
+  },
   metadataPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -288,6 +429,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 6,
     maxWidth: CARD_SIZE - 64,
+  },
+  sharedMetadataPill: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: CARD_SIZE - 52,
   },
   metadataPillText: {
     fontSize: 14,

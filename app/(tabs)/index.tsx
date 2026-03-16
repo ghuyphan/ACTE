@@ -57,6 +57,7 @@ export default function HomeScreen() {
     enabled: sharedEnabled,
     loading: sharedLoading,
     friends,
+    sharedPosts,
     activeInvite,
     refreshSharedFeed,
     createFriendInvite,
@@ -167,7 +168,12 @@ export default function HomeScreen() {
   }, [remainingPhotoSlots, t, tier]);
 
   const displayedNotes = useInlineHeaderSearch && isSearching ? filteredNotes : notes;
-  const shouldShowNotesHint = displayedNotes.length > 0 && isCaptureVisible;
+  const visibleSharedPosts = useMemo(
+    () =>
+      (useInlineHeaderSearch && isSearching ? [] : sharedPosts).filter((post) => post.authorUid !== user?.uid),
+    [isSearching, sharedPosts, useInlineHeaderSearch, user?.uid]
+  );
+  const shouldShowNotesHint = displayedNotes.length + visibleSharedPosts.length > 0 && isCaptureVisible;
 
   useEffect(() => {
     Animated.timing(hintAnim, {
@@ -990,7 +996,7 @@ export default function HomeScreen() {
               shareTarget={captureTarget}
               onChangeShareTarget={handleCaptureTargetChange}
             />
-            {displayedNotes.length > 0 ? (
+            {displayedNotes.length + visibleSharedPosts.length > 0 ? (
               <Animated.View
                 pointerEvents={shouldShowNotesHint ? 'auto' : 'none'}
                 style={[
@@ -1020,6 +1026,7 @@ export default function HomeScreen() {
           </View>
         }
         notes={displayedNotes}
+        sharedPosts={visibleSharedPosts}
         refreshing={refreshing}
         onRefresh={() => {
           void onRefresh();

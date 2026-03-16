@@ -544,6 +544,24 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var smallLayout: some View {
+        ZStack(alignment: .bottom) {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                smallTextContent
+                Spacer(minLength: 0)
+            }
+            .padding(.bottom, shouldShowCountBadge ? smallBadgeReservedSpace : 0)
+
+            if shouldShowCountBadge {
+                countBadge
+                    .padding(.bottom, smallBadgeBottomPadding)
+            }
+        }
+        .padding(smallLayoutPadding)
+    }
+
+    @ViewBuilder
+    private var smallTextContent: some View {
         VStack(spacing: 0) {
             if hasLocationEyebrow {
                 Text(payload.locationName)
@@ -563,16 +581,7 @@ private struct LocketWidgetEntryView: View {
                 .allowsTightening(usesCompactSmallTextLayout)
                 .padding(.horizontal, smallTextHorizontalPadding)
                 .padding(.top, hasLocationEyebrow ? 2 : 10)
-
-            Spacer(minLength: 0)
-
-            if shouldShowCountBadge {
-                countBadge
-                    .padding(.top, 8)
-                    .padding(.bottom, smallBadgeBottomPadding)
-            }
         }
-        .padding(smallLayoutPadding)
     }
 
     private var largeLayout: some View {
@@ -637,6 +646,10 @@ private struct LocketWidgetEntryView: View {
 
     private var smallBadgeBottomPadding: CGFloat {
         usesCompactSmallTextLayout ? 4 : 6
+    }
+
+    private var smallBadgeReservedSpace: CGFloat {
+        28
     }
 
     private var smallLayoutPadding: CGFloat {

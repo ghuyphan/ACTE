@@ -10,6 +10,7 @@ import {
   removeFriend as deleteFriend,
   revokeFriendInvite as revokeInvite,
   SharedPost,
+  subscribeToSharedFeed,
 } from '../services/sharedFeedService';
 import { useAuth } from './useAuth';
 
@@ -50,6 +51,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       setFriends([]);
       setSharedPosts([]);
       setActiveInvite(null);
+      setLoading(false);
       setReady(true);
       return;
     }
@@ -71,10 +73,35 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       return;
     }
 
-    void refreshAll().catch(() => {
+    if (!enabled || !user) {
+      setFriends([]);
+      setSharedPosts([]);
+      setActiveInvite(null);
+      setLoading(false);
       setReady(true);
+      return;
+    }
+
+    setLoading(true);
+    setReady(false);
+
+    const unsubscribe = subscribeToSharedFeed(user, {
+      onSnapshot: (snapshot) => {
+        setFriends(snapshot.friends);
+        setSharedPosts(snapshot.sharedPosts);
+        setActiveInvite(snapshot.activeInvite);
+        setLoading(false);
+        setReady(true);
+      },
+      onError: (error) => {
+        console.warn('Shared feed subscription failed:', error);
+        setLoading(false);
+        setReady(true);
+      },
     });
-  }, [isReady, refreshAll]);
+
+    return unsubscribe;
+  }, [enabled, isReady, user]);
 
   const requireUser = useCallback(() => {
     if (!enabled || !user) {
@@ -107,12 +134,10 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       acceptFriendInvite: async (inviteValue: string) => {
         const activeUser = requireUser();
         await acceptInvite(activeUser, inviteValue);
-        await refreshAll();
       },
       removeFriend: async (friendUid: string) => {
         const activeUser = requireUser();
         await deleteFriend(activeUser, friendUid);
-        await refreshAll();
       },
       createSharedPost: async (note: Note, audienceUserIds?: string[]) => {
         const activeUser = requireUser();

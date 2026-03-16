@@ -7,6 +7,7 @@ import {
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   setDoc,
@@ -61,6 +62,11 @@ export interface SharedFeedSnapshot {
   friends: FriendConnection[];
   sharedPosts: SharedPost[];
   activeInvite: FriendInvite | null;
+}
+
+interface SubscribeToSharedFeedOptions {
+  onSnapshot: (snapshot: SharedFeedSnapshot) => void;
+  onError?: (error: unknown) => void;
 }
 
 interface FriendConnectionRecord {
@@ -318,6 +324,136 @@ export async function refreshSharedFeed(user: FirebaseAuthTypes.User): Promise<S
     friends,
     sharedPosts,
     activeInvite,
+  };
+}
+
+export function subscribeToSharedFeed(
+  user: FirebaseAuthTypes.User,
+  { onSnapshot: handleSnapshot, onError }: SubscribeToSharedFeedOptions
+) {
+  const firestore = requireFirestore();
+  let disposed = false;
+  let latestPostsVersion = 0;
+  let initialFriendsLoaded = false;
+  let initialInviteLoaded = false;
+  let initialPostsLoaded = false;
+  let currentSnapshot: SharedFeedSnapshot = {
+    friends: [],
+    sharedPosts: [],
+    activeInvite: null,
+  };
+
+  const emitIfReady = () => {
+    if (disposed || !initialFriendsLoaded || !initialInviteLoaded || !initialPostsLoaded) {
+      return;
+    }
+
+    handleSnapshot({
+      friends: currentSnapshot.friends,
+      sharedPosts: currentSnapshot.sharedPosts,
+      activeInvite: currentSnapshot.activeInvite,
+    });
+  };
+
+  const handleFailure = (error: unknown) => {
+    if (!disposed) {
+      onError?.(error);
+    }
+  };
+
+  const unsubscribeFriends = onSnapshot(
+    query(collection(firestore, 'users', user.uid, 'friends'), orderBy('friendedAt', 'asc')),
+    (friendsSnapshot) => {
+      currentSnapshot = {
+        ...currentSnapshot,
+        friends: friendsSnapshot.docs.map((item: { id: string; data: () => unknown }) => {
+          const data = item.data() as FriendConnectionRecord;
+          return {
+            userId: data.userId ?? item.id,
+            displayNameSnapshot: data.displayNameSnapshot ?? null,
+            photoURLSnapshot: data.photoURLSnapshot ?? null,
+            friendedAt: data.friendedAt,
+            lastSharedAt: data.lastSharedAt ?? null,
+            createdByInviteId: data.createdByInviteId ?? null,
+          } satisfies FriendConnection;
+        }),
+      };
+      initialFriendsLoaded = true;
+      emitIfReady();
+    },
+    handleFailure
+  );
+
+  const unsubscribeActiveInvite = onSnapshot(
+    query(
+      collection(firestore, 'friendInvites'),
+      where('inviterUid', '==', user.uid),
+      orderBy('createdAt', 'desc'),
+      limit(10)
+    ),
+    (inviteSnapshot) => {
+      const inviteDoc = inviteSnapshot.docs
+        .map((item: { id: string; data: () => unknown }) => ({
+          id: item.id,
+          ...(item.data() as FriendInviteRecord),
+        }))
+        .find(
+          (item: { revokedAt: string | null; acceptedByUid: string | null; expiresAt: string | null }) =>
+            !item.revokedAt &&
+            !item.acceptedByUid &&
+            (!item.expiresAt || new Date(item.expiresAt).getTime() > Date.now())
+        );
+
+      currentSnapshot = {
+        ...currentSnapshot,
+        activeInvite: inviteDoc ? mapInvite(inviteDoc.id, inviteDoc) : null,
+      };
+      initialInviteLoaded = true;
+      emitIfReady();
+    },
+    handleFailure
+  );
+
+  const unsubscribeSharedPosts = onSnapshot(
+    query(
+      collection(firestore, 'sharedPosts'),
+      where('audienceUserIds', 'array-contains', user.uid),
+      orderBy('createdAt', 'desc'),
+      limit(20)
+    ),
+    async (postsSnapshot) => {
+      const version = latestPostsVersion + 1;
+      latestPostsVersion = version;
+
+      try {
+        const sharedPosts = await Promise.all(
+          postsSnapshot.docs.map((item: { id: string; data: () => unknown }) =>
+            mapSharedPost(item.id, item.data() as SharedPostRecord)
+          )
+        );
+
+        if (disposed || version !== latestPostsVersion) {
+          return;
+        }
+
+        currentSnapshot = {
+          ...currentSnapshot,
+          sharedPosts,
+        };
+        initialPostsLoaded = true;
+        emitIfReady();
+      } catch (error) {
+        handleFailure(error);
+      }
+    },
+    handleFailure
+  );
+
+  return () => {
+    disposed = true;
+    unsubscribeFriends();
+    unsubscribeActiveInvite();
+    unsubscribeSharedPosts();
   };
 }
 

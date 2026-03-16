@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from 'expo-glass-effect';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -14,64 +13,52 @@ import {
 } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { Radii, Shadows, Typography } from '../../constants/theme';
-import { CardGradients, useTheme } from '../../hooks/useTheme';
+import { useTheme } from '../../hooks/useTheme';
 import { FriendConnection, SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
-
-function hashToIndex(str: string, max: number): number {
-  let hash = 0;
-  for (let index = 0; index < str.length; index += 1) {
-    hash = (hash * 31 + str.charCodeAt(index)) % max;
-  }
-  return Math.abs(hash) % max;
-}
+import ImageMemoryCard from '../ImageMemoryCard';
+import TextMemoryCard from '../TextMemoryCard';
+import InfoPill from '../ui/InfoPill';
 
 function PostCard({ post, index }: { post: SharedPost; index: number }) {
   const { t } = useTranslation();
-  const gradient = CardGradients[hashToIndex(post.id, CardGradients.length)];
+  const { colors } = useTheme();
   const authorLabel = post.authorDisplayName ?? t('shared.someone', 'Someone');
+  const locationLabel = post.placeName ?? t('shared.sharedNow', 'Shared now');
 
   return (
     <Animated.View entering={FadeInUp.delay(index * 70).springify().damping(18).mass(0.8)}>
       <View style={styles.postCard}>
-        {post.type === 'photo' && post.photoLocalUri ? (
-          <View style={styles.photoCard}>
-            <Image source={{ uri: post.photoLocalUri }} style={styles.postImage} contentFit="cover" />
-            <LinearGradient
-              colors={['rgba(0,0,0,0.02)', 'rgba(0,0,0,0.48)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={StyleSheet.absoluteFillObject}
-            />
-            <View style={styles.postOverlayFooter}>
-              <Text style={styles.postOverlayAuthor} numberOfLines={1}>
-                {authorLabel}
-              </Text>
-              <Text style={styles.postOverlayCaption} numberOfLines={1}>
-                {post.placeName ?? t('shared.sharedNow', 'Shared now')}
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <LinearGradient
-            colors={gradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.textPostCard}
-          >
-            <Text style={styles.textPostAuthor} numberOfLines={1}>
+        <View style={styles.postVisual}>
+          {post.type === 'photo' && post.photoLocalUri ? (
+            <ImageMemoryCard imageUrl={post.photoLocalUri} />
+          ) : (
+            <TextMemoryCard text={post.text || t('shared.photoMemory', 'Photo memory')} noteId={post.id} />
+          )}
+        </View>
+
+        <View style={styles.metaRow}>
+          <InfoPill style={styles.authorPill}>
+            {post.authorPhotoURLSnapshot ? (
+              <Image source={{ uri: post.authorPhotoURLSnapshot }} style={styles.avatarImage} contentFit="cover" />
+            ) : (
+              <View style={[styles.avatarFallback, { backgroundColor: colors.primarySoft }]}>
+                <Text style={[styles.avatarFallbackLabel, { color: colors.primary }]}>
+                  {authorLabel.trim().charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <Text style={[styles.authorText, { color: colors.text }]} numberOfLines={1}>
               {authorLabel}
             </Text>
-            <Text style={styles.textPostBody} numberOfLines={4}>
-              {post.text || t('shared.photoMemory', 'Photo memory')}
+          </InfoPill>
+
+          <InfoPill icon="location" iconColor={colors.secondaryText} style={styles.locationPill}>
+            <Text style={[styles.locationText, { color: colors.text }]} numberOfLines={1}>
+              {locationLabel}
             </Text>
-            {post.placeName ? (
-              <Text style={styles.textPostPlace} numberOfLines={1}>
-                {post.placeName}
-              </Text>
-            ) : null}
-          </LinearGradient>
-        )}
+          </InfoPill>
+        </View>
       </View>
     </Animated.View>
   );
@@ -349,59 +336,50 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   postCard: {
-    width: 170,
+    width: 188,
   },
-  photoCard: {
-    height: 176,
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: '#1C1C1E',
+  postVisual: {
+    width: '100%',
+    height: 188,
   },
-  postImage: {
-    ...StyleSheet.absoluteFillObject,
+  metaRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  postOverlayFooter: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
-    bottom: 14,
+  authorPill: {
+    maxWidth: 118,
+    paddingLeft: 8,
+    paddingRight: 12,
   },
-  postOverlayAuthor: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    lineHeight: 20,
+  authorText: {
+    ...Typography.pill,
+    flexShrink: 1,
+  },
+  locationPill: {
+    flex: 1,
+  },
+  locationText: {
+    ...Typography.pill,
+    flexShrink: 1,
+  },
+  avatarImage: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+  },
+  avatarFallback: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarFallbackLabel: {
+    fontSize: 11,
+    lineHeight: 13,
     fontWeight: '800',
-  },
-  postOverlayCaption: {
-    marginTop: 4,
-    color: 'rgba(255,255,255,0.78)',
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '500',
-  },
-  textPostCard: {
-    height: 176,
-    borderRadius: 24,
-    padding: 16,
-    justifyContent: 'space-between',
-  },
-  textPostAuthor: {
-    color: '#FFF8F0',
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '700',
-  },
-  textPostBody: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '500',
-  },
-  textPostPlace: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '500',
   },
   emptyState: {
     minHeight: 182,
