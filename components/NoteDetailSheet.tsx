@@ -30,7 +30,6 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 import { CardGradients, useTheme } from '../hooks/useTheme';
 import { Note } from '../services/database';
 import { getNotePhotoUri } from '../services/photoStorage';
-import { getSharedFeedErrorMessage } from '../services/sharedFeedService';
 import { formatDate } from '../utils/dateUtils';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
 import { isOlderIOS } from '../utils/platform';
@@ -177,7 +176,7 @@ interface NoteDetailSheetProps {
 }
 
 export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetailSheetProps) {
-    const { getNoteById, deleteNote, updateNote, toggleFavorite } = useNotes();
+    const { getNoteById, deleteNote, refreshNotes, updateNote, toggleFavorite } = useNotes();
     const { user } = useAuth();
     const { deleteSharedNote, updateSharedNote } = useSharedFeedStore();
     const { colors, isDark } = useTheme();
@@ -316,22 +315,26 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
 
         setIsDeleting(true);
         try {
+            await deleteNote(targetNoteId);
+            await refreshNotes(false);
+            showInteractionFeedback('deleted');
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            onClose();
+
             if (user) {
                 try {
                     await deleteSharedNote(targetNoteId);
                 } catch (error) {
                     console.error('Shared delete failed:', error);
                     Alert.alert(
-                        t('noteDetail.deleteErrorTitle', 'Delete failed'),
-                        getSharedFeedErrorMessage(error)
+                        t('noteDetail.deleteWarningTitle', 'Deleted locally'),
+                        t(
+                            'noteDetail.deleteWarningMsg',
+                            'This note was removed from your device, but the shared copy could not be removed yet.'
+                        )
                     );
-                    return;
                 }
             }
-            await deleteNote(targetNoteId);
-            showInteractionFeedback('deleted');
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            onClose();
         } catch (error) {
             console.error('Delete failed:', error);
             Alert.alert(
@@ -341,7 +344,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         } finally {
             setIsDeleting(false);
         }
-    }, [deleteNote, deleteSharedNote, isDeleting, onClose, showInteractionFeedback, t, user]);
+    }, [deleteNote, deleteSharedNote, isDeleting, onClose, refreshNotes, showInteractionFeedback, t, user]);
 
     const handleDelete = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -403,11 +406,13 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
             const nextUpdatedAt = new Date().toISOString();
             const nextNote = { ...note, ...updates, updatedAt: nextUpdatedAt };
             await updateNote(note.id, updates);
+            await refreshNotes(false);
             setNote(nextNote);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setIsEditing(false);
+
             if (user) {
-                try {
-                    await updateSharedNote(nextNote);
-                } catch (error) {
+                void updateSharedNote(nextNote).catch((error) => {
                     console.warn('Shared note update failed:', error);
                     Alert.alert(
                         t('noteDetail.updateWarningTitle', 'Saved locally'),
@@ -416,9 +421,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                             'This note was updated on your device, but the shared copy could not be refreshed yet.'
                         )
                     );
-                }
+                });
             }
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            return;
         }
         setIsEditing(false);
     };

@@ -85,6 +85,8 @@
         "deleteMsg": "This note and its reminder will be permanently removed.",
         "deleteErrorTitle": "Delete failed",
         "deleteErrorMsg": "Unable to delete this note right now. Please try again.",
+        "deleteWarningTitle": "Deleted locally",
+        "deleteWarningMsg": "This note was removed from your device, but the shared copy could not be removed yet.",
         "notFound": "Note not found",
         "unknownLocation": "Unknown Location",
         "delete": "Delete Note",

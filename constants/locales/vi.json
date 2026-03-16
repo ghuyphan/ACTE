@@ -85,6 +85,8 @@
         "deleteMsg": "Ghi chú này và nhắc nhở sẽ bị xóa vĩnh viễn.",
         "deleteErrorTitle": "Xóa thất bại",
         "deleteErrorMsg": "Chưa thể xóa ghi chú này lúc này. Vui lòng thử lại.",
+        "deleteWarningTitle": "Đã xóa trên máy",
+        "deleteWarningMsg": "Ghi chú đã được xóa khỏi thiết bị của bạn, nhưng bản chia sẻ chưa thể bị xóa ngay lúc này.",
         "notFound": "Không tìm thấy ghi chú",
         "unknownLocation": "Địa điểm không xác định",
         "delete": "Xóa ghi chú",
