@@ -76,6 +76,13 @@ service cloud.firestore {
         friendInviteAllowsLink(request.resource.data.createdByInviteId, userId, friendUid);
     }
 
+    function friendDocInviteUpdateIsValid(userId, friendUid) {
+      return friendDocShapeIsValid(friendUid) &&
+        request.resource.data.lastSharedAt == null &&
+        resource.data.userId == friendUid &&
+        friendInviteAllowsLink(request.resource.data.createdByInviteId, userId, friendUid);
+    }
+
     function friendDocUpdateIsValid(userId) {
       return isSelf(userId) &&
         request.resource.data.userId == resource.data.userId &&
@@ -125,7 +132,8 @@ service cloud.firestore {
       return signedIn() &&
         resource.data.inviterUid != request.auth.uid &&
         resource.data.revokedAt == null &&
-        resource.data.acceptedByUid == null &&
+        (resource.data.acceptedByUid == null ||
+          resource.data.acceptedByUid == request.auth.uid) &&
         friendInviteImmutableFieldsUnchanged() &&
         request.resource.data.revokedAt == resource.data.revokedAt &&
         request.resource.data.acceptedByUid == request.auth.uid &&
@@ -168,7 +176,8 @@ service cloud.firestore {
       match /friends/{friendUid} {
         allow read: if isSelf(userId);
         allow create: if friendDocCreateIsValid(userId, friendUid);
-        allow update: if friendDocUpdateIsValid(userId);
+        allow update: if friendDocUpdateIsValid(userId) ||
+          friendDocInviteUpdateIsValid(userId, friendUid);
         allow delete: if signedIn() &&
           (request.auth.uid == userId || request.auth.uid == friendUid);
       }

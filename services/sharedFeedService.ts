@@ -260,6 +260,10 @@ export function getSharedFeedErrorMessage(error: unknown) {
     return 'Firestore is unavailable right now. Check your connection and try again.';
   }
 
+  if (code === 'firestore/failed-precondition' || message.includes('requires an index')) {
+    return 'Shared moments need Firestore indexes before this screen can finish loading. Deploy the shared feed indexes and try again in a minute.';
+  }
+
   return message;
 }
 

@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -14,7 +15,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
 
 export default function FriendJoinScreen() {
-  const { invite } = useLocalSearchParams<{ invite?: string }>();
+  const { inviteId, invite } = useLocalSearchParams<{ inviteId?: string; invite?: string }>();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const { user, isAuthAvailable } = useAuth();
@@ -26,10 +27,22 @@ export default function FriendJoinScreen() {
   const autoAttemptedRef = useRef(false);
 
   useEffect(() => {
-    if (typeof invite === 'string' && invite.trim()) {
-      setInviteValue(invite);
+    if (typeof inviteId === 'string' && inviteId.trim() && typeof invite === 'string' && invite.trim()) {
+      setInviteValue(
+        Linking.createURL('/friends/join', {
+          queryParams: {
+            inviteId: inviteId.trim(),
+            invite: invite.trim(),
+          },
+        })
+      );
+      return;
     }
-  }, [invite]);
+
+    if (typeof invite === 'string' && invite.trim()) {
+      setInviteValue(invite.trim());
+    }
+  }, [invite, inviteId]);
 
   const handleJoin = useCallback(
     async (value = inviteValue) => {
