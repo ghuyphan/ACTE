@@ -1,21 +1,26 @@
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
 import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import PrimaryButton from '../ui/PrimaryButton';
 import { Layout, Shadows, Typography } from '../../constants/theme';
+import { useAuth } from '../../hooks/useAuth';
+import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
-import { FriendConnection, FriendInvite } from '../../services/sharedFeedService';
+import { FriendConnection, FriendInvite, getSharedFeedErrorMessage } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
 
-function SheetBody({
-  visible,
+function ManageBody({
   friends,
   activeInvite,
   loading,
   onClose,
+  onOpenJoin,
   onShareInvite,
   onRevokeInvite,
   onRemoveFriend,
@@ -26,11 +31,11 @@ function SheetBody({
   connectedOnLabel,
   doneLabel,
 }: {
-  visible: boolean;
   friends: FriendConnection[];
   activeInvite: FriendInvite | null;
   loading: boolean;
   onClose: () => void;
+  onOpenJoin: () => void;
   onShareInvite: () => void;
   onRevokeInvite: () => void;
   onRemoveFriend: (friendUid: string) => void;
@@ -43,15 +48,8 @@ function SheetBody({
 }) {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
-  const router = useRouter();
   const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
   const outlineColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-  const navigateToJoin = () => {
-    onClose();
-    setTimeout(() => {
-      router.push('/friends/join');
-    }, 180);
-  };
   const quickActions = [
     {
       key: 'share',
@@ -64,7 +62,7 @@ function SheetBody({
       key: 'join',
       icon: 'enter-outline' as const,
       label: t('shared.quickJoinLabel', 'Join'),
-      onPress: navigateToJoin,
+      onPress: onOpenJoin,
       accent: false,
     },
     {
@@ -77,10 +75,6 @@ function SheetBody({
       accent: false,
     },
   ];
-
-  if (!visible) {
-    return null;
-  }
 
   return (
     <View style={styles.sheetContent}>
@@ -99,7 +93,7 @@ function SheetBody({
         </View>
 
         <Pressable
-          onPress={navigateToJoin}
+          onPress={onOpenJoin}
           style={({ pressed }) => [
             styles.addFriendRow,
             {
@@ -278,6 +272,154 @@ function SheetBody({
   );
 }
 
+function JoinBody({
+  user,
+  isAuthAvailable,
+  inviteValue,
+  joining,
+  onChangeInvite,
+  onBack,
+  onClose,
+  onSubmit,
+  onGoToAuth,
+}: {
+  user: ReturnType<typeof useAuth>['user'];
+  isAuthAvailable: boolean;
+  inviteValue: string;
+  joining: boolean;
+  onChangeInvite: (value: string) => void;
+  onBack: () => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  onGoToAuth: () => void;
+}) {
+  const { t } = useTranslation();
+  const { colors, isDark } = useTheme();
+
+  return (
+    <View style={styles.sheetContent}>
+      {Platform.OS !== 'ios' ? (
+        <View style={styles.grabberWrap}>
+          <View style={[styles.grabber, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.16)' }]} />
+        </View>
+      ) : null}
+
+      <View style={styles.joinTopRow}>
+        <Pressable
+          onPress={onBack}
+          style={({ pressed }) => [
+            styles.joinIconButton,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              opacity: pressed ? 0.85 : 1,
+            },
+          ]}
+        >
+          <Ionicons name="chevron-back" size={20} color={colors.text} />
+        </Pressable>
+        <Pressable
+          onPress={onClose}
+          style={({ pressed }) => [
+            styles.joinIconButton,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              opacity: pressed ? 0.85 : 1,
+            },
+          ]}
+        >
+          <Ionicons name="close" size={18} color={colors.text} />
+        </Pressable>
+      </View>
+
+      <View style={[styles.joinBadge, { backgroundColor: colors.primarySoft }]}>
+        <Ionicons
+          name={user ? 'link-outline' : 'person-circle-outline'}
+          size={20}
+          color={colors.primary}
+        />
+      </View>
+
+      <Text style={[styles.joinTitle, { color: colors.text }]}>
+        {t('shared.joinTitle', 'Join a friend')}
+      </Text>
+      <Text style={[styles.joinSubtitle, { color: colors.secondaryText }]}>
+        {user
+          ? t('shared.joinBody', 'Paste the invite link to connect and start sharing on Home.')
+          : isAuthAvailable
+            ? t('shared.joinSignInBody', 'Sign in first so we can connect you to this friend.')
+            : t('shared.unavailableBody', 'This build does not have shared social enabled right now.')}
+      </Text>
+
+      {user ? (
+        <View style={styles.joinFormBlock}>
+          <Text style={[styles.joinFieldLabel, { color: colors.secondaryText }]}>
+            {t('shared.joinCardTitle', 'Invite link')}
+          </Text>
+          <TextInput
+            value={inviteValue}
+            onChangeText={onChangeInvite}
+            placeholder={t('shared.joinPlaceholder', 'Paste the full invite link')}
+            placeholderTextColor={colors.secondaryText}
+            style={[
+              styles.joinInput,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                color: colors.text,
+              },
+            ]}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+          />
+        </View>
+      ) : null}
+
+      <PrimaryButton
+        label={user ? t('shared.joinButton', 'Continue') : t('shared.signInButton', 'Sign in')}
+        onPress={() => {
+          if (user) {
+            onSubmit();
+            return;
+          }
+
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onGoToAuth();
+        }}
+        loading={user ? joining : false}
+        disabled={user ? !inviteValue.trim() : !isAuthAvailable}
+        leadingIcon={
+          <Ionicons
+            name={user ? 'enter-outline' : 'person-circle-outline'}
+            size={18}
+            color="#1C1C1E"
+          />
+        }
+        style={styles.joinPrimaryAction}
+      />
+
+      {user && inviteValue.trim() ? (
+        <View
+          style={[
+            styles.joinHelperCard,
+            {
+              backgroundColor: colors.primarySoft,
+              borderColor: colors.primary + '22',
+            },
+          ]}
+        >
+          <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+          <Text style={[styles.joinHelperText, { color: colors.text }]}>
+            {t('shared.joinFooterBody', 'We’ll connect you as soon as this invite checks out.')}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export default function SharedManageSheet(props: {
   visible: boolean;
   friends: FriendConnection[];
@@ -290,14 +432,130 @@ export default function SharedManageSheet(props: {
 }) {
   const { isDark, colors } = useTheme();
   const { t } = useTranslation();
+  const router = useRouter();
+  const { user, isAuthAvailable } = useAuth();
+  const { acceptFriendInvite } = useSharedFeedStore();
+  const { visible, friends, activeInvite, loading, onClose, onShareInvite, onRevokeInvite, onRemoveFriend } = props;
+  const [mode, setMode] = useState<'manage' | 'join'>('manage');
+  const [inviteValue, setInviteValue] = useState('');
+  const [joining, setJoining] = useState(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setMode('manage');
+      setInviteValue('');
+      setJoining(false);
+    }
+  }, [visible]);
+
+  const handleOpenJoin = useCallback(() => {
+    setMode('join');
+  }, []);
+
+  const handleBackToManage = useCallback(() => {
+    if (joining) {
+      return;
+    }
+
+    setInviteValue('');
+    setMode('manage');
+  }, [joining]);
+
+  const handleGoToAuth = useCallback(() => {
+    if (joining) {
+      return;
+    }
+
+    onClose();
+    setMode('manage');
+    setInviteValue('');
+    setTimeout(() => {
+      router.push('/auth');
+    }, 180);
+  }, [joining, onClose, router]);
+
+  const handleJoinInvite = useCallback(async () => {
+    if (!inviteValue.trim()) {
+      Alert.alert(
+        t('shared.joinErrorTitle', 'Invite needed'),
+        t('shared.joinErrorBody', 'Paste a valid invite link to connect.')
+      );
+      return;
+    }
+
+    if (!user) {
+      handleGoToAuth();
+      return;
+    }
+
+    setJoining(true);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      await acceptFriendInvite(inviteValue.trim());
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setInviteValue('');
+      setMode('manage');
+      Alert.alert(
+        t('shared.joinSuccessTitle', "You're connected"),
+        t('shared.joinSuccessBody', 'You can now share notes with this friend from Home.')
+      );
+    } catch (error) {
+      Alert.alert(t('shared.joinFailedTitle', 'Could not join'), getSharedFeedErrorMessage(error));
+    } finally {
+      setJoining(false);
+    }
+  }, [acceptFriendInvite, handleGoToAuth, inviteValue, t, user]);
+
+  const content = mode === 'join' ? (
+    <JoinBody
+      user={user}
+      isAuthAvailable={isAuthAvailable}
+      inviteValue={inviteValue}
+      joining={joining}
+      onChangeInvite={setInviteValue}
+      onBack={handleBackToManage}
+      onClose={onClose}
+      onSubmit={() => {
+        void handleJoinInvite();
+      }}
+      onGoToAuth={handleGoToAuth}
+    />
+  ) : (
+    <ManageBody
+      friends={friends}
+      activeInvite={activeInvite}
+      loading={loading}
+      onClose={onClose}
+      onOpenJoin={handleOpenJoin}
+      onShareInvite={onShareInvite}
+      onRevokeInvite={onRevokeInvite}
+      onRemoveFriend={onRemoveFriend}
+      friendsTitle={t('shared.manageTitle', 'Friends')}
+      emptyLoadingBody={t('shared.refreshingFriends', 'Refreshing your shared circle...')}
+      emptyBody={t(
+        'shared.emptyManageBody',
+        'Invite someone to start a simple shared feed on Home.'
+      )}
+      friendFallback={t('shared.friendFallback', 'Friend')}
+      connectedOnLabel={t('shared.connectedOn', 'Connected')}
+      doneLabel={t('common.done', 'Done')}
+    />
+  );
+  const iosSheetKey = `shared-manage-${mode}`;
 
   if (Platform.OS === 'ios') {
     return (
-      <View pointerEvents={props.visible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
+      <View pointerEvents={visible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
         <Host style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'}>
-          <BottomSheet isPresented={props.visible} onIsPresentedChange={(next) => (!next ? props.onClose() : null)} fitToContents>
+          <BottomSheet
+            key={iosSheetKey}
+            isPresented={visible}
+            onIsPresentedChange={(next) => (!next ? onClose() : null)}
+            fitToContents
+          >
             <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
-              <RNHostView matchContents>
+              <RNHostView key={iosSheetKey} matchContents>
                 <View
                   style={[
                     styles.iosContainer,
@@ -307,18 +565,7 @@ export default function SharedManageSheet(props: {
                     },
                   ]}
                 >
-                  <SheetBody
-                    {...props}
-                    friendsTitle={t('shared.manageTitle', 'Friends')}
-                    emptyLoadingBody={t('shared.refreshingFriends', 'Refreshing your shared circle...')}
-                    emptyBody={t(
-                      'shared.emptyManageBody',
-                      'Invite someone to start a simple shared feed on Home.'
-                    )}
-                    friendFallback={t('shared.friendFallback', 'Friend')}
-                    connectedOnLabel={t('shared.connectedOn', 'Connected')}
-                    doneLabel={t('common.done', 'Done')}
-                  />
+                  {content}
                 </View>
               </RNHostView>
             </Group>
@@ -329,22 +576,11 @@ export default function SharedManageSheet(props: {
   }
 
   return (
-    <Modal visible={props.visible} transparent animationType="fade" onRequestClose={props.onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={props.onClose} />
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
         <View style={[styles.androidSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <SheetBody
-            {...props}
-            friendsTitle={t('shared.manageTitle', 'Friends')}
-            emptyLoadingBody={t('shared.refreshingFriends', 'Refreshing your shared circle...')}
-            emptyBody={t(
-              'shared.emptyManageBody',
-              'Invite someone to start a simple shared feed on Home.'
-            )}
-            friendFallback={t('shared.friendFallback', 'Friend')}
-            connectedOnLabel={t('shared.connectedOn', 'Connected')}
-            doneLabel={t('common.done', 'Done')}
-          />
+          {content}
         </View>
       </View>
     </Modal>
@@ -369,11 +605,11 @@ const styles = StyleSheet.create({
   sheetContent: {
     paddingHorizontal: 24,
     paddingTop: 12,
-    // paddingBottom: Platform.OS === 'ios' ? 28 : 20,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
     maxHeight: 680,
   },
   scrollContent: {
-    // paddingBottom: Platform.OS === 'ios' ? 28 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 8,
   },
   grabberWrap: {
     alignItems: 'center',
@@ -605,5 +841,74 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 18,
     fontWeight: '700',
+  },
+  joinTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Platform.OS === 'ios' ? 6 : 0,
+  },
+  joinIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  joinBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 18,
+  },
+  joinTitle: {
+    marginTop: 18,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  joinSubtitle: {
+    ...Typography.body,
+    marginTop: 10,
+  },
+  joinFormBlock: {
+    marginTop: 22,
+    gap: 8,
+  },
+  joinFieldLabel: {
+    ...Typography.pill,
+    fontSize: 13,
+  },
+  joinInput: {
+    minHeight: 56,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    ...Typography.body,
+  },
+  joinPrimaryAction: {
+    width: '100%',
+    marginTop: 22,
+  },
+  joinHelperCard: {
+    marginTop: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  joinHelperText: {
+    ...Typography.body,
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

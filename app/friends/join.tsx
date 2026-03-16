@@ -165,6 +165,8 @@ export default function FriendJoinScreen() {
   const [isPresented, setIsPresented] = useState(true);
   const dismissTargetRef = useRef<'tabs' | 'auth'>('tabs');
   const autoAttemptedRef = useRef(false);
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didFinishDismissRef = useRef(false);
 
   useEffect(() => {
     if (typeof inviteId === 'string' && inviteId.trim() && typeof invite === 'string' && invite.trim()) {
@@ -184,21 +186,70 @@ export default function FriendJoinScreen() {
     }
   }, [invite, inviteId]);
 
+  useEffect(() => {
+    return () => {
+      if (dismissTimerRef.current) {
+        clearTimeout(dismissTimerRef.current);
+      }
+    };
+  }, []);
+
   const finishDismiss = useCallback(() => {
+    if (didFinishDismissRef.current) {
+      return;
+    }
+
+    didFinishDismissRef.current = true;
+    if (dismissTimerRef.current) {
+      clearTimeout(dismissTimerRef.current);
+      dismissTimerRef.current = null;
+    }
+
     const target = dismissTargetRef.current;
-    router.replace((target === 'auth' ? '/auth' : '/(tabs)') as any);
+    if (target === 'auth') {
+      router.replace('/auth' as any);
+      return;
+    }
+
+    if (router.canDismiss()) {
+      router.dismiss();
+      return;
+    }
+
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/(tabs)' as any);
   }, [router]);
 
+  const scheduleDismiss = useCallback((delay: number) => {
+    if (dismissTimerRef.current) {
+      clearTimeout(dismissTimerRef.current);
+    }
+
+    dismissTimerRef.current = setTimeout(() => {
+      dismissTimerRef.current = null;
+      finishDismiss();
+    }, delay);
+  }, [finishDismiss]);
+
   const dismissTo = useCallback((target: 'tabs' | 'auth' = 'tabs') => {
+    if (didFinishDismissRef.current) {
+      return;
+    }
+
     dismissTargetRef.current = target;
 
     if (Platform.OS === 'ios') {
       setIsPresented(false);
+      scheduleDismiss(260);
       return;
     }
 
     finishDismiss();
-  }, [finishDismiss]);
+  }, [finishDismiss, scheduleDismiss]);
 
   const handleJoin = useCallback(
     async (value = inviteValue) => {
@@ -225,7 +276,11 @@ export default function FriendJoinScreen() {
           t('shared.joinSuccessTitle', "You're connected"),
           t('shared.joinSuccessBody', 'You can now share notes with this friend from Home.')
         );
-        router.replace('/(tabs)' as any);
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(tabs)' as any);
+        }
       } catch (error) {
         Alert.alert(t('shared.joinFailedTitle', 'Could not join'), getSharedFeedErrorMessage(error));
       } finally {
@@ -253,7 +308,7 @@ export default function FriendJoinScreen() {
             onIsPresentedChange={(next) => {
               setIsPresented(next);
               if (!next) {
-                finishDismiss();
+                scheduleDismiss(40);
               }
             }}
             fitToContents
