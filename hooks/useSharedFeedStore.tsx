@@ -4,6 +4,8 @@ import {
   acceptFriendInvite as acceptInvite,
   createFriendInvite as createInvite,
   createSharedPost as createPost,
+  deleteSharedPost as deletePost,
+  findOwnedSharedPostIdsForNote,
   FriendConnection,
   FriendInvite,
   refreshSharedFeed as fetchSharedFeed,
@@ -11,6 +13,7 @@ import {
   revokeFriendInvite as revokeInvite,
   SharedPost,
   subscribeToSharedFeed,
+  updateSharedPost as updatePost,
 } from '../services/sharedFeedService';
 import { useAuth } from './useAuth';
 
@@ -27,6 +30,8 @@ interface SharedFeedStoreValue {
   acceptFriendInvite: (inviteValue: string) => Promise<void>;
   removeFriend: (friendUid: string) => Promise<void>;
   createSharedPost: (note: Note, audienceUserIds?: string[]) => Promise<SharedPost>;
+  updateSharedNote: (note: Note) => Promise<void>;
+  deleteSharedNote: (noteId: string) => Promise<void>;
 }
 
 const SharedFeedStoreContext = createContext<SharedFeedStoreValue | undefined>(undefined);
@@ -39,10 +44,15 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const friendsRef = useRef<FriendConnection[]>([]);
+  const sharedPostsRef = useRef<SharedPost[]>([]);
 
   useEffect(() => {
     friendsRef.current = friends;
   }, [friends]);
+
+  useEffect(() => {
+    sharedPostsRef.current = sharedPosts;
+  }, [sharedPosts]);
 
   const enabled = isAuthAvailable;
 
@@ -51,6 +61,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       setFriends([]);
       setSharedPosts([]);
       setActiveInvite(null);
+      friendsRef.current = [];
+      sharedPostsRef.current = [];
       setLoading(false);
       setReady(true);
       return;
@@ -59,6 +71,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     setLoading(true);
     try {
       const snapshot = await fetchSharedFeed(user);
+      friendsRef.current = snapshot.friends;
+      sharedPostsRef.current = snapshot.sharedPosts;
       setFriends(snapshot.friends);
       setSharedPosts(snapshot.sharedPosts);
       setActiveInvite(snapshot.activeInvite);
@@ -87,6 +101,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
     const unsubscribe = subscribeToSharedFeed(user, {
       onSnapshot: (snapshot) => {
+        friendsRef.current = snapshot.friends;
+        sharedPostsRef.current = snapshot.sharedPosts;
         setFriends(snapshot.friends);
         setSharedPosts(snapshot.sharedPosts);
         setActiveInvite(snapshot.activeInvite);
@@ -150,8 +166,55 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           ].filter(Boolean))
         );
         const post = await createPost(activeUser, note, nextAudience);
+        sharedPostsRef.current = [post, ...sharedPostsRef.current.filter((item) => item.id !== post.id)];
         setSharedPosts((current) => [post, ...current.filter((item) => item.id !== post.id)]);
         return post;
+      },
+      updateSharedNote: async (note: Note) => {
+        const activeUser = requireUser();
+        let matchingPostIds = sharedPostsRef.current
+          .filter(
+          (post) => post.authorUid === activeUser.uid && post.sourceNoteId === note.id
+          )
+          .map((post) => post.id);
+
+        if (matchingPostIds.length === 0 && !ready) {
+          await refreshAll();
+          matchingPostIds = sharedPostsRef.current
+            .filter(
+            (post) => post.authorUid === activeUser.uid && post.sourceNoteId === note.id
+            )
+            .map((post) => post.id);
+        }
+
+        if (matchingPostIds.length === 0) {
+          matchingPostIds = await findOwnedSharedPostIdsForNote(activeUser, note.id);
+        }
+
+        await Promise.all(matchingPostIds.map((postId) => updatePost(activeUser, postId, note)));
+      },
+      deleteSharedNote: async (noteId: string) => {
+        const activeUser = requireUser();
+        let matchingPostIds = sharedPostsRef.current
+          .filter(
+          (post) => post.authorUid === activeUser.uid && post.sourceNoteId === noteId
+          )
+          .map((post) => post.id);
+
+        if (matchingPostIds.length === 0 && !ready) {
+          await refreshAll();
+          matchingPostIds = sharedPostsRef.current
+            .filter(
+            (post) => post.authorUid === activeUser.uid && post.sourceNoteId === noteId
+            )
+            .map((post) => post.id);
+        }
+
+        if (matchingPostIds.length === 0) {
+          matchingPostIds = await findOwnedSharedPostIdsForNote(activeUser, noteId);
+        }
+
+        await Promise.all(matchingPostIds.map((postId) => deletePost(activeUser, postId)));
       },
     }),
     [activeInvite, enabled, friends, loading, ready, refreshAll, requireUser, sharedPosts]

@@ -83,6 +83,8 @@
     "noteDetail": {
         "deleteTitle": "Xóa ghi chú",
         "deleteMsg": "Ghi chú này và nhắc nhở sẽ bị xóa vĩnh viễn.",
+        "deleteErrorTitle": "Xóa thất bại",
+        "deleteErrorMsg": "Chưa thể xóa ghi chú này lúc này. Vui lòng thử lại.",
         "notFound": "Không tìm thấy ghi chú",
         "unknownLocation": "Địa điểm không xác định",
         "delete": "Xóa ghi chú",
@@ -99,7 +101,9 @@
         "favorite": "Yêu thích",
         "unfavorite": "Bỏ yêu thích",
         "sharePhotoMsg": "📷 Ảnh kỷ niệm tại {{location}}",
-        "updated": "Đã cập nhật!"
+        "updated": "Đã cập nhật!",
+        "updateWarningTitle": "Đã lưu trên máy",
+        "updateWarningMsg": "Ghi chú đã được cập nhật trên thiết bị của bạn, nhưng bản chia sẻ chưa thể làm mới ngay lúc này."
     },
     "rooms": {
         "title": "Rooms",

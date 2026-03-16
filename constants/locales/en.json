@@ -83,6 +83,8 @@
     "noteDetail": {
         "deleteTitle": "Delete Note",
         "deleteMsg": "This note and its reminder will be permanently removed.",
+        "deleteErrorTitle": "Delete failed",
+        "deleteErrorMsg": "Unable to delete this note right now. Please try again.",
         "notFound": "Note not found",
         "unknownLocation": "Unknown Location",
         "delete": "Delete Note",
@@ -99,7 +101,9 @@
         "favorite": "Favorite",
         "unfavorite": "Unfavorite",
         "sharePhotoMsg": "📷 Photo Memory at {{location}}",
-        "updated": "Note updated!"
+        "updated": "Note updated!",
+        "updateWarningTitle": "Saved locally",
+        "updateWarningMsg": "This note was updated on your device, but the shared copy could not be refreshed yet."
     },
     "rooms": {
         "title": "Rooms",

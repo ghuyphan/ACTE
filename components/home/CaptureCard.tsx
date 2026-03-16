@@ -24,6 +24,9 @@ import { isOlderIOS } from '../../utils/platform';
 const { width } = Dimensions.get('window');
 const HORIZONTAL_PADDING = Layout.screenPadding - 8;
 const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
+const TOP_CONTROL_INSET = 24;
+const TOP_CONTROL_HEIGHT = 38;
+const TOP_CONTROL_RADIUS = 19;
 
 interface CaptureCardProps {
   snapHeight: number;
@@ -128,16 +131,22 @@ export default function CaptureCard({
   const showInlineRadiusOptions = Platform.OS !== 'ios';
   const [isCameraReady, setIsCameraReady] = useState(false);
   const isCameraSaveMode = captureMode === 'camera';
+  const isSharedTarget = shareTarget === 'shared';
   const audienceLabel =
-    shareTarget === 'shared'
+    isSharedTarget
       ? t('shared.manageTitle', 'Friends')
       : t('shared.capturePrivate', 'Just me');
   const audienceSurfaceBackground =
-    captureMode === 'text' ? colors.captureGlassFill : colors.captureCameraOverlay;
+    isSharedTarget ? '#FFF4DE' : captureMode === 'text' ? colors.captureGlassFill : colors.captureCameraOverlay;
   const audienceSurfaceBorder =
-    captureMode === 'text' ? colors.captureGlassBorder : colors.captureCameraOverlayBorder;
+    isSharedTarget
+      ? 'rgba(255,255,255,0.56)'
+      : captureMode === 'text'
+        ? colors.captureGlassBorder
+        : colors.captureCameraOverlayBorder;
   const audienceTextColor =
-    captureMode === 'text' ? colors.captureGlassText : colors.captureCameraOverlayText;
+    isSharedTarget ? colors.captureCardText : captureMode === 'text' ? colors.captureGlassText : colors.captureCameraOverlayText;
+  const audienceIconColor = isSharedTarget ? colors.primary : audienceTextColor;
 
   useEffect(() => {
     if (captureMode === 'camera' && !capturedPhoto && permissionGranted) {
@@ -326,6 +335,7 @@ export default function CaptureCard({
             testID="capture-share-target-toggle"
             style={[
               styles.cardAudienceBadge,
+              isSharedTarget ? styles.cardAudienceBadgeSelected : null,
               {
                 backgroundColor: audienceSurfaceBackground,
                 borderColor: audienceSurfaceBorder,
@@ -335,14 +345,14 @@ export default function CaptureCard({
           >
             <Ionicons
               name={shareTarget === 'shared' ? 'people-outline' : 'lock-closed-outline'}
-              size={14}
-              color={shareTarget === 'shared' ? colors.primary : audienceTextColor}
+              size={16}
+              color={audienceIconColor}
             />
             <Text
               style={[
                 styles.cardAudienceBadgeText,
                 {
-                  color: shareTarget === 'shared' ? colors.primary : audienceTextColor,
+                  color: audienceIconColor,
                 },
               ]}
             >
@@ -548,11 +558,11 @@ const styles = StyleSheet.create({
   },
   flipBtn: {
     position: 'absolute',
-    top: 24,
+    top: TOP_CONTROL_INSET,
     right: 16,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: TOP_CONTROL_HEIGHT,
+    height: TOP_CONTROL_HEIGHT,
+    borderRadius: TOP_CONTROL_RADIUS,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -560,10 +570,10 @@ const styles = StyleSheet.create({
   },
   libraryBtn: {
     position: 'absolute',
-    top: 24,
+    top: TOP_CONTROL_INSET,
     left: 16,
-    minHeight: 38,
-    borderRadius: 19,
+    minHeight: TOP_CONTROL_HEIGHT,
+    borderRadius: TOP_CONTROL_RADIUS,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -577,13 +587,14 @@ const styles = StyleSheet.create({
   },
   retakeBtn: {
     position: 'absolute',
-    top: 24,
+    top: TOP_CONTROL_INSET,
     right: 16,
+    minHeight: TOP_CONTROL_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 18,
+    paddingVertical: 0,
+    borderRadius: TOP_CONTROL_RADIUS,
     backgroundColor: 'rgba(0,0,0,0.5)',
     gap: 5,
   },
@@ -613,25 +624,32 @@ const styles = StyleSheet.create({
   },
   cardAudienceBadgeHost: {
     position: 'absolute',
-    top: 16,
+    top: TOP_CONTROL_INSET,
     left: 0,
     right: 0,
     alignItems: 'center',
   },
   cardAudienceBadge: {
-    minHeight: 34,
-    borderRadius: 999,
+    minHeight: TOP_CONTROL_HEIGHT,
+    borderRadius: TOP_CONTROL_RADIUS,
     borderWidth: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
   cardAudienceBadgeText: {
-    fontSize: 12,
-    lineHeight: 15,
+    fontSize: 13,
+    lineHeight: 16,
     fontWeight: '700',
+  },
+  cardAudienceBadgeSelected: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
   radiusOptions: {
     flexDirection: 'row',

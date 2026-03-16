@@ -23,11 +23,14 @@ import {
 } from 'react-native';
 import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../constants/noteRadius';
 import { Layout, Typography } from '../constants/theme';
+import { useAuth } from '../hooks/useAuth';
 import { useNotes } from '../hooks/useNotes';
+import { useSharedFeedStore } from '../hooks/useSharedFeed';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { CardGradients, useTheme } from '../hooks/useTheme';
 import { Note } from '../services/database';
 import { getNotePhotoUri } from '../services/photoStorage';
+import { getSharedFeedErrorMessage } from '../services/sharedFeedService';
 import { formatDate } from '../utils/dateUtils';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
 import { isOlderIOS } from '../utils/platform';
@@ -175,6 +178,8 @@ interface NoteDetailSheetProps {
 
 export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetailSheetProps) {
     const { getNoteById, deleteNote, updateNote, toggleFavorite } = useNotes();
+    const { user } = useAuth();
+    const { deleteSharedNote, updateSharedNote } = useSharedFeedStore();
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
     const reduceMotionEnabled = useReducedMotion();
@@ -311,6 +316,18 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
 
         setIsDeleting(true);
         try {
+            if (user) {
+                try {
+                    await deleteSharedNote(targetNoteId);
+                } catch (error) {
+                    console.error('Shared delete failed:', error);
+                    Alert.alert(
+                        t('noteDetail.deleteErrorTitle', 'Delete failed'),
+                        getSharedFeedErrorMessage(error)
+                    );
+                    return;
+                }
+            }
             await deleteNote(targetNoteId);
             showInteractionFeedback('deleted');
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -324,7 +341,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         } finally {
             setIsDeleting(false);
         }
-    }, [deleteNote, isDeleting, onClose, showInteractionFeedback, t]);
+    }, [deleteNote, deleteSharedNote, isDeleting, onClose, showInteractionFeedback, t, user]);
 
     const handleDelete = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -383,10 +400,24 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         }
 
         if (Object.keys(updates).length > 0) {
+            const nextUpdatedAt = new Date().toISOString();
+            const nextNote = { ...note, ...updates, updatedAt: nextUpdatedAt };
             await updateNote(note.id, updates);
-            setNote((prev) =>
-                prev ? { ...prev, ...updates, updatedAt: new Date().toISOString() } : prev
-            );
+            setNote(nextNote);
+            if (user) {
+                try {
+                    await updateSharedNote(nextNote);
+                } catch (error) {
+                    console.warn('Shared note update failed:', error);
+                    Alert.alert(
+                        t('noteDetail.updateWarningTitle', 'Saved locally'),
+                        t(
+                            'noteDetail.updateWarningMsg',
+                            'This note was updated on your device, but the shared copy could not be refreshed yet.'
+                        )
+                    );
+                }
+            }
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
         setIsEditing(false);

@@ -647,3 +647,46 @@ export async function createSharedPost(
 
   return mapSharedPost(postId, record);
 }
+
+export async function updateSharedPost(
+  user: FirebaseAuthTypes.User,
+  postId: string,
+  note: Note
+): Promise<void> {
+  const firestore = requireFirestore();
+  const photoRemoteBase64 =
+    note.type === 'photo' ? await serializeSharedPhoto(note.photoLocalUri ?? note.content) : null;
+
+  await updateDoc(doc(firestore, 'sharedPosts', postId), {
+    text: note.type === 'text' ? note.content.trim() : '',
+    photoRemoteBase64: photoRemoteBase64 ?? null,
+    placeName: note.locationName ?? null,
+    updatedAt: getNowIso(),
+    authorUid: user.uid,
+  });
+}
+
+export async function findOwnedSharedPostIdsForNote(
+  user: FirebaseAuthTypes.User,
+  noteId: string
+): Promise<string[]> {
+  const firestore = requireFirestore();
+  const snapshot = await getDocs(
+    query(collection(firestore, 'sharedPosts'), where('authorUid', '==', user.uid))
+  );
+
+  return snapshot.docs
+    .filter((item: { data: () => unknown }) => {
+      const data = item.data() as SharedPostRecord;
+      return data.sourceNoteId === noteId;
+    })
+    .map((item: { id: string }) => item.id);
+}
+
+export async function deleteSharedPost(
+  _user: FirebaseAuthTypes.User,
+  postId: string
+): Promise<void> {
+  const firestore = requireFirestore();
+  await deleteDoc(doc(firestore, 'sharedPosts', postId));
+}
