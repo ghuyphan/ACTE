@@ -20,13 +20,18 @@ service cloud.firestore {
 
     function isRoomOwner(roomId) {
       return signedIn() &&
-        roomExists(roomId) &&
-        roomDoc(roomId).data.ownerId == request.auth.uid;
+        (
+          (resource != null && 'ownerId' in resource.data && resource.data.ownerId == request.auth.uid) ||
+          (roomExists(roomId) && roomDoc(roomId).data.ownerId == request.auth.uid)
+        );
     }
 
     function isRoomMember(roomId) {
       return signedIn() &&
-        exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
+        (
+          (resource != null && 'userId' in resource.data && resource.data.userId == request.auth.uid) ||
+          exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid))
+        );
     }
 
     function roomInviteExists(roomId, inviteId) {
@@ -195,25 +200,9 @@ service cloud.firestore {
     }
 
     match /friendInvites/{inviteId} {
-      allow get: if signedIn() && (
-        resource.data.inviterUid == request.auth.uid ||
-        (
-          resource.data.revokedAt == null &&
-          (resource.data.acceptedByUid == null ||
-            resource.data.acceptedByUid == request.auth.uid)
-        )
-      );
+      allow get: if signedIn();
 
-      allow list: if signedIn() && (
-        resource.data.inviterUid == request.auth.uid ||
-        (
-          request.query.limit != null &&
-          request.query.limit <= 1 &&
-          resource.data.revokedAt == null &&
-          (resource.data.acceptedByUid == null ||
-            resource.data.acceptedByUid == request.auth.uid)
-        )
-      );
+      allow list: if signedIn() && resource.data.inviterUid == request.auth.uid;
 
       allow create: if friendInviteCreateIsValid();
       allow update: if friendInviteRevokeIsValid() || friendInviteAcceptIsValid();
@@ -225,7 +214,9 @@ service cloud.firestore {
         (resource.data.authorUid == request.auth.uid ||
           request.auth.uid in resource.data.audienceUserIds);
 
-      allow create: if sharedPostBaseIsValid();
+      allow create: if sharedPostBaseIsValid() &&
+        // Smoke test: if they are sharing with friends, at least the first friend should be in their friends list.
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(request.resource.data.audienceUserIds[1]));
 
       allow update: if signedIn() &&
         resource.data.authorUid == request.auth.uid &&

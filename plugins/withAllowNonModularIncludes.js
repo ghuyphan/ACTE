@@ -15,11 +15,14 @@ function withAllowNonModularIncludes(config) {
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
         config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+        if target.name.start_with?('RNFB')
+          config.build_settings['DEFINES_MODULE'] = 'NO'
+        end
       end
     end
 `;
 
-            if (contents.includes(hookEnd) && !contents.includes('CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES')) {
+            if (contents.includes(hookEnd) && !contents.includes('DEFINES_MODULE')) {
                 contents = contents.replace(hookEnd, `${hookEnd}\n${snippet}`);
                 fs.writeFileSync(file, contents);
             }
@@ -29,3 +32,4 @@ function withAllowNonModularIncludes(config) {
 }
 
 module.exports = withAllowNonModularIncludes;
+
