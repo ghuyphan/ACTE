@@ -77,6 +77,8 @@
         "noContent": "No note content",
         "note": "note",
         "notes": "notes",
+        "androidUnavailableTitle": "Map is temporarily unavailable on Android",
+        "androidUnavailableSubtitle": "This build skips Google Maps on Android until the API key is configured.",
         "emptyTitle": "No notes on the map yet",
         "emptySubtitle": "Your saved notes will appear as pins here"
     },
@@ -414,6 +416,8 @@
     "notification": {
         "title": "Nearby reminder",
         "body": "A note is ready when you open Noto.",
+        "channelName": "Nearby reminders",
+        "channelDescription": "Location-based reminders for notes you saved in Noto.",
         "textTitle": "{{location}}",
         "photoTitle": "{{location}}",
         "photoBody": "A memory from here is waiting."

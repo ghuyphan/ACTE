@@ -12,7 +12,7 @@ import {
     padding,
     truncationMode
 } from '@expo/ui/swift-ui/modifiers';
-import { createWidget } from 'expo-widgets';
+import { Platform } from 'react-native';
 
 interface WidgetProps {
     text: string;
@@ -456,7 +456,33 @@ const LocketWidget = (props: { props: WidgetProps }) => {
     );
 };
 
-const Widget = createWidget('LocketWidget', LocketWidget);
+type WidgetModule = {
+    updateSnapshot: (snapshot: { props: WidgetProps }) => void;
+};
+
+function createFallbackWidget(): WidgetModule {
+    return {
+        updateSnapshot: () => undefined,
+    };
+}
+
+function createPlatformWidget(): WidgetModule {
+    if (Platform.OS !== 'ios') {
+        return createFallbackWidget();
+    }
+
+    try {
+        const { createWidget } = require('expo-widgets') as {
+            createWidget: (name: string, component: typeof LocketWidget) => WidgetModule;
+        };
+        return createWidget('LocketWidget', LocketWidget);
+    } catch (error) {
+        console.warn('[LocketWidget] Falling back to no-op widget module:', error);
+        return createFallbackWidget();
+    }
+}
+
+const Widget = createPlatformWidget();
 
 export default Widget;
 

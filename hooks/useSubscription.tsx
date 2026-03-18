@@ -9,9 +9,9 @@ import Purchases, {
 } from 'react-native-purchases';
 import {
   PlanTier,
-  REVENUECAT_IOS_API_KEY,
   REVENUECAT_PLUS_ENTITLEMENT_ID,
   REVENUECAT_PLUS_OFFERING_ID,
+  getRevenueCatApiKey,
   getPhotoNoteLimitForTier,
   isRevenueCatConfigured,
 } from '../constants/subscription';
@@ -97,6 +97,7 @@ function isPurchaseCancelled(error: unknown) {
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const { isReady: authReady, user } = useAuth();
   const isConfigured = isRevenueCatConfigured();
+  const revenueCatApiKey = getRevenueCatApiKey();
   const [isReady, setIsReady] = useState(() => !isConfigured);
   const [tier, setTier] = useState<PlanTier>('free');
   const [selectedPackage, setSelectedPackage] = useState<PurchasesPackage | null>(null);
@@ -137,7 +138,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     isInitializedRef.current = true;
     isConfiguredRef.current = true;
     Purchases.configure({
-      apiKey: REVENUECAT_IOS_API_KEY,
+      apiKey: revenueCatApiKey,
     });
 
     void Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.ERROR);
@@ -159,7 +160,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     return () => {
       Purchases.removeCustomerInfoUpdateListener(listener);
     };
-  }, [isConfigured, loadRevenueCatState]);
+  }, [isConfigured, loadRevenueCatState, revenueCatApiKey]);
 
   useEffect(() => {
     if (!isConfigured || !authReady) {
@@ -195,14 +196,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       tier,
       isReady,
       isConfigured,
-      isPurchaseAvailable: Platform.OS === 'ios' && isConfigured && Boolean(selectedPackage),
+      isPurchaseAvailable: (Platform.OS === 'ios' || Platform.OS === 'android') && isConfigured && Boolean(selectedPackage),
       isPurchaseInFlight,
       canImportFromLibrary: tier === 'plus',
       photoNoteLimit: getPhotoNoteLimitForTier(tier),
       plusPriceLabel: selectedPackage?.product.priceString ?? null,
       plusPackageTitle: getPlusOfferingLabel(selectedPackage),
       purchasePlus: async () => {
-        if (Platform.OS !== 'ios' || !isConfigured || !selectedPackage) {
+        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured || !selectedPackage) {
           return { status: 'unavailable' };
         }
 
@@ -223,7 +224,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         }
       },
       restorePurchases: async () => {
-        if (Platform.OS !== 'ios' || !isConfigured) {
+        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured) {
           return { status: 'unavailable' };
         }
 

@@ -396,6 +396,30 @@ export default function MapScreen() {
     );
   }
 
+  if (Platform.OS === 'android') {
+    return (
+      <View style={[styles.center, styles.androidFallbackScreen, { backgroundColor: colors.background }]}>
+        <View testID="map-android-fallback" style={styles.androidFallbackCardWrap}>
+          <MapStatusCard
+            overlayState="no-notes"
+            isDark={isDark}
+            primaryColor={colors.primary}
+            textColor={colors.text}
+            secondaryTextColor={colors.secondaryText}
+            onClearFilters={clearFilters}
+            reduceMotionEnabled={reduceMotionEnabled}
+            title={t('map.androidUnavailableTitle', 'Map is temporarily unavailable on Android')}
+            subtitle={t(
+              'map.androidUnavailableSubtitle',
+              'This build skips Google Maps on Android until the API key is configured.'
+            )}
+            clearLabel={t('map.clearFilters', 'Clear filters')}
+          />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <MapCanvas
@@ -541,6 +565,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  androidFallbackScreen: {
+    paddingHorizontal: 24,
+  },
+  androidFallbackCardWrap: {
+    width: '100%',
+    maxWidth: 320,
   },
   fabContainer: {
     position: 'absolute',

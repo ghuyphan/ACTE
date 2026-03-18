@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import i18n from '../constants/i18n';
 import { getAllNotes, getNoteById } from '../services/database';
+import { buildReminderNotificationContent } from '../services/notificationService';
 import { buildReminderTextExcerpt, findReminderPlaceGroupByNoteId } from '../services/reminderSelection';
 import { getGeofenceCooldownKey, getLocationCooldownId, getSkipNextEnterKey } from './geofenceKeys';
 
@@ -121,11 +122,11 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
                     }
 
                     await Notifications.scheduleNotificationAsync({
-                        content: {
+                        content: buildReminderNotificationContent({
                             title,
                             body,
-                            data: { noteId: cooldownNoteId },
-                        },
+                            noteId: cooldownNoteId,
+                        }),
                         trigger: null,
                     });
 
@@ -147,11 +148,11 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
             }
 
             await Notifications.scheduleNotificationAsync({
-                content: {
+                content: buildReminderNotificationContent({
                     title,
                     body,
-                    data: { noteId: cooldownNoteId },
-                },
+                    noteId: cooldownNoteId,
+                }),
                 trigger: null,
             });
             if (cooldownNoteId) {

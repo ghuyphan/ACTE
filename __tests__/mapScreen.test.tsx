@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 import MapScreen from '../app/(tabs)/map';
 
 const mockOpenNoteDetail = jest.fn();
@@ -132,6 +133,13 @@ function replaceMockNotes(nextNotes: typeof defaultNotes) {
   mockNotes.splice(0, mockNotes.length, ...nextNotes.map((note) => ({ ...note })));
 }
 
+function setPlatformOS(nextOS: 'ios' | 'android' | 'web') {
+  Object.defineProperty(Platform, 'OS', {
+    configurable: true,
+    get: () => nextOS,
+  });
+}
+
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
@@ -215,7 +223,12 @@ describe('MapScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockReduceMotionEnabled = false;
+    setPlatformOS('ios');
     resetMockNotes();
+  });
+
+  afterAll(() => {
+    setPlatformOS('ios');
   });
 
   it('keeps the top controls mounted while filter empty states appear and clear', async () => {
@@ -267,6 +280,16 @@ describe('MapScreen', () => {
     render(<MapScreen />);
 
     expect(mockAnimateToRegion).not.toHaveBeenCalled();
+  });
+
+  it('skips mounting the native map on Android and shows a fallback card', () => {
+    setPlatformOS('android');
+
+    const { getByTestId, getByText, queryByTestId } = render(<MapScreen />);
+
+    expect(getByTestId('map-android-fallback')).toBeTruthy();
+    expect(getByText('Map is temporarily unavailable on Android')).toBeTruthy();
+    expect(queryByTestId('map-canvas')).toBeNull();
   });
 
   it('renders nearby mode in preview and opens only on explicit open action', async () => {

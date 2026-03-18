@@ -12,6 +12,10 @@ import { selectNearbyReminder } from './reminderSelection';
 let widgetInstance: any = null;
 
 function getWidget() {
+    if (Platform.OS !== 'ios') {
+        return null;
+    }
+
     if (!widgetInstance) {
         try {
             widgetInstance = require('../widgets/LocketWidget').default;
@@ -228,6 +232,10 @@ async function encodePhotoForWidget(photoUri: string): Promise<string | undefine
 }
 
 export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): Promise<void> {
+    if (Platform.OS !== 'ios') {
+        return;
+    }
+
     try {
         const widget = getWidget();
         if (!widget) return;

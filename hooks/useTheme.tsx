@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Appearance, useColorScheme } from 'react-native';
+import { useColorScheme } from 'react-native';
 
 type ThemeType = 'light' | 'dark' | 'system';
 
@@ -121,6 +121,22 @@ export const CardGradients: [string, string][] = [
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = 'settings.theme';
+const VALID_THEMES: ThemeType[] = ['light', 'dark', 'system'];
+
+function normalizeTheme(value: string | null): ThemeType {
+    if (value && VALID_THEMES.includes(value as ThemeType)) {
+        return value as ThemeType;
+    }
+    return 'system';
+}
+
+function syncNativeColorScheme(theme: ThemeType) {
+    // React Native's Android appearance bridge in this stack crashes when
+    // setColorScheme receives a nullish value, and forcing explicit light/dark
+    // also breaks returning cleanly to true system-following mode. The app
+    // already drives its own theme state, so avoid overriding native appearance.
+    void theme;
+}
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const systemColorScheme = useColorScheme();
@@ -129,14 +145,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         AsyncStorage.getItem(THEME_STORAGE_KEY).then((savedTheme) => {
-            if (savedTheme) {
-                setThemeState(savedTheme as ThemeType);
-                // @ts-ignore - React Native 0.83+ allows undefined/null to reset to system default but types may be sticter
-                Appearance.setColorScheme(savedTheme === 'system' ? undefined : savedTheme as 'light' | 'dark');
-            } else {
-                // @ts-ignore
-                Appearance.setColorScheme(undefined);
-            }
+            const nextTheme = normalizeTheme(savedTheme);
+            setThemeState(nextTheme);
+            syncNativeColorScheme(nextTheme);
             setThemeReady(true);
         }).catch(() => {
             setThemeReady(true);
@@ -145,8 +156,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     const setTheme = async (newTheme: ThemeType) => {
         setThemeState(newTheme);
-        // @ts-ignore
-        Appearance.setColorScheme(newTheme === 'system' ? undefined : newTheme);
+        syncNativeColorScheme(newTheme);
         await AsyncStorage.setItem(THEME_STORAGE_KEY, newTheme);
     };
 

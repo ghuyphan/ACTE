@@ -77,6 +77,8 @@
         "noContent": "Không có nội dung ghi chú",
         "note": "ghi chú",
         "notes": "ghi chú",
+        "androidUnavailableTitle": "Bản đồ tạm thời chưa khả dụng trên Android",
+        "androidUnavailableSubtitle": "Bản dựng này sẽ bỏ qua Google Maps trên Android cho tới khi cấu hình xong API key.",
         "emptyTitle": "Chưa có ghi chú nào trên bản đồ",
         "emptySubtitle": "Các ghi chú đã lưu sẽ hiện dưới dạng ghim ở đây"
     },
@@ -414,6 +416,8 @@
     "notification": {
         "title": "Gợi nhắc gần đây",
         "body": "Có một ghi chú sẵn trong Noto khi bạn cần.",
+        "channelName": "Gợi nhắc gần đây",
+        "channelDescription": "Thông báo nhắc theo vị trí cho các ghi chú bạn đã lưu trong Noto.",
         "textTitle": "{{location}}",
         "photoTitle": "{{location}}",
         "photoBody": "Có một kỷ niệm từ nơi này đang chờ bạn."

@@ -6,13 +6,26 @@ export const FREE_PHOTO_NOTE_LIMIT = 10;
 export const PLUS_PHOTO_NOTE_LIMIT = null;
 
 export const REVENUECAT_IOS_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ?? '';
+export const REVENUECAT_ANDROID_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ?? '';
 export const REVENUECAT_PLUS_ENTITLEMENT_ID =
   process.env.EXPO_PUBLIC_REVENUECAT_PLUS_ENTITLEMENT_ID ?? 'plus';
 export const REVENUECAT_PLUS_OFFERING_ID =
   process.env.EXPO_PUBLIC_REVENUECAT_PLUS_OFFERING_ID ?? '';
 
+export function getRevenueCatApiKey(platformOS = Platform.OS) {
+  if (platformOS === 'ios') {
+    return REVENUECAT_IOS_API_KEY;
+  }
+
+  if (platformOS === 'android') {
+    return REVENUECAT_ANDROID_API_KEY;
+  }
+
+  return '';
+}
+
 export function isRevenueCatConfigured(platformOS = Platform.OS) {
-  return platformOS === 'ios' && REVENUECAT_IOS_API_KEY.trim().length > 0;
+  return getRevenueCatApiKey(platformOS).trim().length > 0;
 }
 
 export function getPhotoNoteLimitForTier(tier: PlanTier) {
@@ -36,4 +49,3 @@ export function getRemainingPhotoSlots(tier: PlanTier, photoNoteCount: number) {
 
   return Math.max(limit - photoNoteCount, 0);
 }
-

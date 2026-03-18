@@ -21,9 +21,9 @@ import { SubscriptionProvider } from '../hooks/useSubscription';
 import { ThemeProvider, useTheme } from '../hooks/useTheme';
 import { getDB } from '../services/database';
 import { syncGeofenceRegions } from '../services/geofenceService';
+import { configureNotificationChannels } from '../services/notificationService';
 import { updateWidgetData } from '../services/widgetService';
 import '../utils/backgroundGeofence';
-import '../widgets/LocketWidget';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -37,6 +37,8 @@ function AppContent() {
 
   useEffect(() => {
     let startupTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    void configureNotificationChannels();
 
     getDB()
       .then(() => {
