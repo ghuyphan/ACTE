@@ -33,10 +33,15 @@ import { getNotePhotoUri } from '../services/photoStorage';
 import { formatDate } from '../utils/dateUtils';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
 import { isOlderIOS } from '../utils/platform';
+import AppBottomSheet from './AppBottomSheet';
 import TransientStatusChip from './ui/TransientStatusChip';
 
 const { width } = Dimensions.get('window');
 const CARD_SIZE = width - Layout.screenPadding * 2;
+const CARD_FEEDBACK_TOP_OFFSET = 34;
+const CARD_FEEDBACK_SIDE_PADDING = 34;
+const CARD_OVERLAY_TOP_INSET = 28;
+const CARD_OVERLAY_SIDE_INSET = 28;
 
 function hashToIndex(str: string, max: number): number {
     let hash = 0;
@@ -196,7 +201,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
     const infoTranslateY = useRef(new Animated.Value(20)).current;
     const infoOpacity = useRef(new Animated.Value(0)).current;
     const actionsOpacity = useRef(new Animated.Value(0)).current;
-    const heartScale = useRef(new Animated.Value(1)).current;
+    const favoriteFillProgress = useRef(new Animated.Value(0)).current;
     const editModeAnim = useRef(new Animated.Value(0)).current;
     const contentInputRef = useRef<TextInput>(null);
     const locationInputRef = useRef<TextInput>(null);
@@ -233,6 +238,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
 
         getNoteById(noteId).then((nextNote) => {
             setNote(nextNote);
+            favoriteFillProgress.setValue(nextNote?.isFavorite ? 1 : 0);
             if (nextNote) {
                 setEditContent(nextNote.content);
                 setEditLocation(nextNote.locationName || '');
@@ -276,7 +282,17 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                 }),
             ]).start();
         });
-    }, [actionsOpacity, cardOpacity, cardScale, editModeAnim, getNoteById, infoOpacity, infoTranslateY, noteId, reduceMotionEnabled, visible]);
+    }, [actionsOpacity, cardOpacity, cardScale, editModeAnim, favoriteFillProgress, getNoteById, infoOpacity, infoTranslateY, noteId, reduceMotionEnabled, visible]);
+
+    useEffect(() => {
+        favoriteFillProgress.stopAnimation();
+        Animated.timing(favoriteFillProgress, {
+            toValue: note?.isFavorite ? 1 : 0,
+            duration: reduceMotionEnabled ? 120 : 180,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: false,
+        }).start();
+    }, [favoriteFillProgress, note?.isFavorite, reduceMotionEnabled]);
 
     useEffect(() => {
         Animated.timing(editModeAnim, {
@@ -367,26 +383,87 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
 
     const handleToggleFavorite = async () => {
         if (!note || isDeleting) return;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        Animated.sequence([
-            Animated.timing(heartScale, {
-                toValue: reduceMotionEnabled ? 1.1 : 1.14,
-                duration: 90,
-                easing: Easing.out(Easing.quad),
-                useNativeDriver: true
-            }),
-            Animated.timing(heartScale, {
-                toValue: 1,
-                duration: 120,
-                easing: Easing.out(Easing.quad),
-                useNativeDriver: true
-            }),
-        ]).start();
+        const previousValue = note.isFavorite;
+        const nextValue = !previousValue;
 
-        const newValue = await toggleFavorite(note.id);
-        setNote((prev) => (prev ? { ...prev, isFavorite: newValue } : prev));
-        showInteractionFeedback(newValue ? 'favorited' : 'unfavorited');
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+        setNote((prev) => (prev ? { ...prev, isFavorite: nextValue } : prev));
+
+        try {
+            const newValue = await toggleFavorite(note.id);
+            setNote((prev) => (prev ? { ...prev, isFavorite: newValue } : prev));
+            showInteractionFeedback(newValue ? 'favorited' : 'unfavorited');
+        } catch (error) {
+            console.error('Favorite toggle failed:', error);
+            setNote((prev) => (prev ? { ...prev, isFavorite: previousValue } : prev));
+            Alert.alert(
+                t('noteDetail.favoriteErrorTitle', 'Could not update favorite'),
+                t('noteDetail.favoriteErrorMsg', 'Please try again in a moment.')
+            );
+        }
     };
+
+    const favoriteFilledOpacity = favoriteFillProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, 1],
+    });
+    const favoriteOutlineOpacity = favoriteFillProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0],
+    });
+    const favoriteFilledScale = favoriteFillProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.72, 1],
+    });
+    const favoriteOutlineScale = favoriteFillProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0.82],
+    });
+
+    const renderFavoriteBadge = (backgroundColor: string, inactiveColor: string) => (
+        <Pressable
+            testID="note-detail-favorite"
+            onPress={handleToggleFavorite}
+            style={[styles.cardFavBadge, { backgroundColor }]}
+        >
+            <Animated.View
+                pointerEvents="none"
+                style={[
+                    styles.favoriteBadgeTint,
+                    {
+                        opacity: favoriteFilledOpacity,
+                    },
+                ]}
+            />
+            <View style={styles.favoriteIconStack}>
+                <Animated.View
+                    pointerEvents="none"
+                    style={[
+                        styles.favoriteIconLayer,
+                        {
+                            opacity: favoriteOutlineOpacity,
+                            transform: [{ scale: favoriteOutlineScale }],
+                        },
+                    ]}
+                >
+                    <Ionicons name="heart-outline" size={20} color={inactiveColor} />
+                </Animated.View>
+                <Animated.View
+                    pointerEvents="none"
+                    style={[
+                        styles.favoriteIconLayer,
+                        {
+                            opacity: favoriteFilledOpacity,
+                            transform: [{ scale: favoriteFilledScale }],
+                        },
+                    ]}
+                >
+                    <Ionicons name="heart" size={20} color="#FF3B30" />
+                </Animated.View>
+            </View>
+        </Pressable>
+    );
 
     const handleSaveEdit = async () => {
         if (!note || isDeleting) return;
@@ -502,6 +579,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                     <View pointerEvents="none" style={styles.feedbackOverlay}>
                         <TransientStatusChip
                             key={interactionFeedback.token}
+                            style={styles.feedbackChip}
                             {...getFeedbackPresentation(t, interactionFeedback.type)}
                         />
                     </View>
@@ -511,18 +589,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                         {note.type === 'photo' ? (
                             <View style={styles.photoContainer}>
                                 <Image source={{ uri: getNotePhotoUri(note) }} style={styles.photo} contentFit="cover" transition={300} />
-                                <Pressable
-                                    onPress={handleToggleFavorite}
-                                    style={[styles.cardFavBadge, { backgroundColor: colors.card }]}
-                                >
-                                    <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-                                        <Ionicons
-                                            name={note.isFavorite ? 'heart' : 'heart-outline'}
-                                            size={20}
-                                            color={note.isFavorite ? '#FF3B30' : colors.secondaryText}
-                                        />
-                                    </Animated.View>
-                                </Pressable>
+                                {renderFavoriteBadge(colors.card, colors.secondaryText)}
                             </View>
                         ) : (
                             <View style={styles.textContainer}>
@@ -537,18 +604,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                             {t('noteDetail.contentField', 'Note')}
                                         </Text>
                                     ) : (
-                                        <Pressable
-                                            onPress={handleToggleFavorite}
-                                            style={[styles.cardFavBadge, { backgroundColor: '#FFFFFF33' }]}
-                                        >
-                                            <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-                                                <Ionicons
-                                                    name={note.isFavorite ? 'heart' : 'heart-outline'}
-                                                    size={20}
-                                                    color={note.isFavorite ? '#FF3B30' : '#FFFFFFDD'}
-                                                />
-                                            </Animated.View>
-                                        </Pressable>
+                                        renderFavoriteBadge('#FFFFFF33', '#FFFFFFDD')
                                     )}
                                     <TextInput
                                         ref={contentInputRef}
@@ -731,6 +787,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         );
     };
 
+    if (Platform.OS === 'android') {
+        return (
+            <AppBottomSheet visible={visible} onClose={onClose} detached={false}>
+                {renderBody()}
+            </AppBottomSheet>
+        );
+    }
+
     return (
         <View pointerEvents={visible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
             <Host style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'}>
@@ -765,11 +829,16 @@ const styles = StyleSheet.create({
     },
     feedbackOverlay: {
         position: 'absolute',
-        top: 14,
-        left: 0,
-        right: 0,
+        top: CARD_FEEDBACK_TOP_OFFSET,
+        left: CARD_FEEDBACK_SIDE_PADDING,
+        right: CARD_FEEDBACK_SIDE_PADDING,
         alignItems: 'center',
         zIndex: 10,
+    },
+    feedbackChip: {
+        width: '100%',
+        maxWidth: CARD_SIZE,
+        alignSelf: 'center',
     },
     photoContainer: {
         width: CARD_SIZE,
@@ -799,8 +868,8 @@ const styles = StyleSheet.create({
     },
     editFieldBadge: {
         position: 'absolute',
-        top: 12,
-        left: 14,
+        top: CARD_OVERLAY_TOP_INSET,
+        left: CARD_OVERLAY_SIDE_INSET,
         backgroundColor: 'rgba(0,0,0,0.25)',
         color: 'rgba(255,255,255,0.9)',
         paddingHorizontal: 10,
@@ -845,8 +914,8 @@ const styles = StyleSheet.create({
     },
     cardFavBadge: {
         position: 'absolute',
-        top: 18,
-        right: 24,
+        top: CARD_OVERLAY_TOP_INSET,
+        right: CARD_OVERLAY_SIDE_INSET,
         width: 36,
         height: 36,
         borderRadius: 18,
@@ -858,6 +927,20 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 4,
         zIndex: 10,
+    },
+    favoriteBadgeTint: {
+        ...StyleSheet.absoluteFillObject,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,59,48,0.16)',
+    },
+    favoriteIconStack: {
+        width: 20,
+        height: 20,
+    },
+    favoriteIconLayer: {
+        ...StyleSheet.absoluteFillObject,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     editIconStack: {
         width: 20,

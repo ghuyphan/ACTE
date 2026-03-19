@@ -13,9 +13,10 @@ import {
   padding,
   tint,
 } from '@expo/ui/swift-ui/modifiers';
+import AppBottomSheet from '../AppBottomSheet';
 import { GlassView } from '../ui/GlassView';
 import { TFunction } from 'i18next';
-import { ComponentProps, useEffect, useRef } from 'react';
+import { ComponentProps, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadius';
 import { isIOS26OrNewer } from '../../utils/platform';
@@ -40,6 +41,8 @@ interface HomeHeaderSearchProps {
     text: string;
     primary: string;
     secondaryText: string;
+    card: string;
+    border: string;
   };
   isDark: boolean;
   t: TFunction;
@@ -66,11 +69,11 @@ export default function HomeHeaderSearch({
 }: HomeHeaderSearchProps) {
   const modeIconScale = useRef(new Animated.Value(1)).current;
   const didMountRef = useRef(false);
+  const [showAndroidRadiusSheet, setShowAndroidRadiusSheet] = useState(false);
   const useDetachedWordmark = isIOS26OrNewer;
   const useDetachedControls = isIOS26OrNewer && !showSearchButton;
   const useNativeLiquidGlassControls = Platform.OS === 'ios' && isIOS26OrNewer;
   const useIconOnlyHeaderControls = useNativeLiquidGlassControls;
-  const showHeaderRadiusMenu = Platform.OS === 'ios';
 
   useEffect(() => {
     if (!didMountRef.current) {
@@ -163,7 +166,7 @@ export default function HomeHeaderSearch({
   };
 
   const renderRadiusMenu = (size: 'regular' | 'large' = 'regular') => {
-    if (!showHeaderRadiusMenu) {
+    if (Platform.OS !== 'ios') {
       return null;
     }
 
@@ -189,6 +192,49 @@ export default function HomeHeaderSearch({
           ))}
         </Menu>
       </Host>
+    );
+  };
+
+  const renderAndroidRadiusButton = () => {
+    if (Platform.OS !== 'android') {
+      return null;
+    }
+
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${t('capture.radius', 'Radius')}: ${formatRadiusLabel(radius)}`}
+        onPress={() => setShowAndroidRadiusSheet(true)}
+        style={[styles.radiusToggleBtn, { backgroundColor: `${colors.primary}18` }]}
+      >
+        <Ionicons name="locate-outline" size={16} color={colors.primary} />
+        <Text style={[styles.radiusToggleText, { color: colors.primary }]}>{formatRadiusLabel(radius)}</Text>
+      </Pressable>
+    );
+  };
+
+  const renderSearchButton = () => {
+    if (!showSearchButton) {
+      return null;
+    }
+
+    if (Platform.OS === 'android') {
+      return (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('home.searchPlaceholder', 'Search notes...')}
+          onPress={onOpenSearch}
+          style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
+        >
+          <Ionicons name="search" size={20} color={colors.primary} />
+        </Pressable>
+      );
+    }
+
+    return (
+      <Pressable onPress={onOpenSearch}>
+        <Ionicons name="search" size={20} color={colors.primary} />
+      </Pressable>
     );
   };
 
@@ -364,17 +410,14 @@ export default function HomeHeaderSearch({
           </View>
         ) : null}
         <View style={styles.headerActions}>
-          {showSearchButton ? (
-            <Pressable onPress={onOpenSearch}>
-              <Ionicons name="search" size={20} color={colors.primary} />
-            </Pressable>
-          ) : null}
-
+          {Platform.OS === 'ios' ? renderSearchButton() : null}
           {renderSharedButton()}
 
           {renderRadiusMenu()}
+          {renderAndroidRadiusButton()}
 
           {renderModeToggle()}
+          {Platform.OS === 'android' ? renderSearchButton() : null}
         </View>
       </Animated.View>
 
@@ -408,6 +451,53 @@ export default function HomeHeaderSearch({
         </View>
       </Animated.View>
       </GlassHeader>
+
+      {Platform.OS === 'android' ? (
+        <AppBottomSheet visible={showAndroidRadiusSheet} onClose={() => setShowAndroidRadiusSheet(false)}>
+          <View style={styles.radiusSheet}>
+            <Text style={[styles.radiusSheetTitle, { color: colors.text }]}>
+              {t('capture.radius', 'Radius')}
+            </Text>
+            <View style={[styles.radiusSheetCard, { backgroundColor: colors.card }]}>
+              {NOTE_RADIUS_OPTIONS.map((option, index) => {
+                const isSelected = radius === option;
+
+                return (
+                  <View key={option}>
+                    <Pressable
+                      testID={`header-radius-${option}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                      onPress={() => {
+                        onChangeRadius(option);
+                        setShowAndroidRadiusSheet(false);
+                      }}
+                      style={({ pressed }) => [
+                        styles.radiusSheetRow,
+                        isSelected ? { backgroundColor: `${colors.primary}12` } : null,
+                        pressed ? styles.radiusSheetRowPressed : null,
+                      ]}
+                    >
+                      <View>
+                        <Text style={[styles.radiusSheetLabel, { color: colors.text }]}>
+                          {formatRadiusLabel(option)}
+                        </Text>
+                        <Text style={[styles.radiusSheetHint, { color: colors.secondaryText }]}>
+                          {t('capture.reminderRadiusLabel', 'Reminder trigger distance')}
+                        </Text>
+                      </View>
+                      {isSelected ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
+                    </Pressable>
+                    {index < NOTE_RADIUS_OPTIONS.length - 1 ? (
+                      <View style={[styles.radiusSheetDivider, { backgroundColor: colors.border }]} />
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </AppBottomSheet>
+      ) : null}
     </>
   );
 }
@@ -448,6 +538,19 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  radiusToggleBtn: {
+    minHeight: 36,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  radiusToggleText: {
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: 'System',
   },
   swiftHeaderControlHost: {
     minHeight: 38,
@@ -511,5 +614,45 @@ const styles = StyleSheet.create({
   },
   detachedHeaderOffset: {
     marginTop: 28,
+  },
+  radiusSheet: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  radiusSheetTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'System',
+    marginBottom: 16,
+  },
+  radiusSheetCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  radiusSheetRow: {
+    minHeight: 68,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  radiusSheetRowPressed: {
+    opacity: 0.84,
+  },
+  radiusSheetLabel: {
+    fontSize: 17,
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
+  radiusSheetHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'System',
+    marginTop: 4,
+  },
+  radiusSheetDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 20,
   },
 });

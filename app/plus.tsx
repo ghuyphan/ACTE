@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AppBackButton from '../components/ui/AppBackButton';
 import PrimaryButton from '../components/ui/PrimaryButton';
 import { Layout, Shadows, Typography } from '../constants/theme';
 import { useSubscription } from '../hooks/useSubscription';
@@ -68,19 +69,7 @@ export default function PlusScreen() {
       />
 
       <View style={[styles.header, { paddingTop: insets.top }]}>
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [
-            styles.backButton,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              opacity: pressed ? 0.78 : 1,
-            },
-          ]}
-        >
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-        </Pressable>
+        <AppBackButton onPress={() => router.back()} size={24} style={styles.backButton} />
       </View>
 
       <View style={[styles.content, { paddingBottom: insets.bottom + 20 }]}>
@@ -171,12 +160,6 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginTop: 12,
   },
   content: {

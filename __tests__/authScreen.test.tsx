@@ -3,6 +3,7 @@ import LoginScreen from '../app/auth/index';
 
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
+const mockUseLocalSearchParams = jest.fn(() => ({}));
 const mockUsePreventRemove = jest.fn();
 const mockSignInWithGoogle = jest.fn<Promise<{ status: 'success' }>, []>(async () => ({ status: 'success' }));
 const mockSignInWithEmail = jest.fn<Promise<{ status: 'success' }>, [string, string]>(
@@ -27,6 +28,7 @@ jest.mock('expo-router', () => ({
     replace: (...args: unknown[]) => mockReplace(...args),
     push: (...args: unknown[]) => mockPush(...args),
   }),
+  useLocalSearchParams: () => mockUseLocalSearchParams(),
 }));
 
 jest.mock('@react-navigation/native', () => ({
@@ -138,6 +140,7 @@ jest.mock('../hooks/useAuth', () => ({
 describe('LoginScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseLocalSearchParams.mockReturnValue({});
     mockAuthState.user = null;
     mockAuthState.isReady = true;
     mockAuthState.isAuthAvailable = true;
@@ -154,13 +157,14 @@ describe('LoginScreen', () => {
   });
 
   it('opens the slide-up email form from the landing screen', () => {
-    const { getByTestId } = render(<LoginScreen />);
+    const { getByTestId, getByText } = render(<LoginScreen />);
 
     fireEvent.press(getByTestId('auth-continue-email'));
 
     expect(getByTestId('auth-form-panel')).toBeTruthy();
     expect(getByTestId('auth-email-input')).toBeTruthy();
     expect(getByTestId('auth-password-input')).toBeTruthy();
+    expect(getByText('Sign in to keep your notes backed up and synced automatically.')).toBeTruthy();
   });
 
   it('switches between sign-in, register, and reset-password modes', () => {
@@ -205,5 +209,18 @@ describe('LoginScreen', () => {
 
     const finalCall = mockUsePreventRemove.mock.calls[mockUsePreventRemove.mock.calls.length - 1];
     expect(finalCall[0]).toBe(false);
+  });
+
+  it('shows share-specific copy when opened from a Home share action', () => {
+    mockUseLocalSearchParams.mockReturnValue({ intent: 'share-note' });
+
+    const { getByText, getByTestId, queryByText } = render(<LoginScreen />);
+
+    expect(getByText('Sign in to share this note')).toBeTruthy();
+    expect(queryByText('Choose the easiest way to keep your notes backed up and ready everywhere.')).toBeNull();
+
+    fireEvent.press(getByTestId('auth-continue-email'));
+
+    expect(getByText('Sign in to share this note.')).toBeTruthy();
   });
 });

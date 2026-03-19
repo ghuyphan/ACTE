@@ -5,17 +5,23 @@ import { useTheme } from '../../hooks/useTheme';
 
 export default function TabLayoutAndroid() {
   const { t } = useTranslation();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const barBackground = isDark ? '#19130E' : '#EDE3D6';
+  const indicatorColor = isDark ? 'rgba(255, 193, 7, 0.26)' : '#F4DEAE';
+  const activeColor = isDark ? '#FFF7E8' : '#5F4300';
+  const inactiveColor = isDark ? 'rgba(255, 247, 232, 0.68)' : '#817466';
 
   return (
     <NativeTabs
-      backgroundColor={colors.tabBarBg}
-      tintColor={colors.primary}
-      iconColor={{ default: colors.secondaryText, selected: colors.primary }}
+      backgroundColor={barBackground}
+      indicatorColor={indicatorColor}
+      iconColor={{ default: inactiveColor, selected: activeColor }}
       labelStyle={{
-        default: { color: colors.secondaryText },
-        selected: { color: colors.primary },
+        default: { color: inactiveColor },
+        selected: { color: activeColor },
       }}
+      rippleColor={colors.primarySoft}
+      labelVisibilityMode="labeled"
       backBehavior="history"
     >
       <NativeTabs.Trigger name="index" disableTransparentOnScrollEdge>

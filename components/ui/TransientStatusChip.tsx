@@ -1,7 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from './GlassView';
+import { useEffect } from 'react';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import Animated, { LinearTransition, SlideInDown, SlideInUp, SlideOutUp } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { Layout, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
@@ -16,13 +22,26 @@ interface TransientStatusChipProps {
 export default function TransientStatusChip({ icon, label, style }: TransientStatusChipProps) {
   const { colors, isDark } = useTheme();
   const reduceMotionEnabled = useReducedMotion();
+  const entryProgress = useSharedValue(0);
+
+  useEffect(() => {
+    entryProgress.value = 0;
+    entryProgress.value = withTiming(1, {
+      duration: reduceMotionEnabled ? 90 : 150,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [entryProgress, reduceMotionEnabled, icon, label]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: (1 - entryProgress.value) * 10 },
+      { scale: 0.98 + entryProgress.value * 0.02 },
+    ],
+  }));
 
   return (
     <Animated.View
-      entering={reduceMotionEnabled ? SlideInUp.duration(120) : SlideInDown.springify().damping(18).mass(0.7)}
-      exiting={SlideOutUp.duration(reduceMotionEnabled ? 100 : 160)}
-      layout={reduceMotionEnabled ? LinearTransition.duration(100) : LinearTransition.springify().damping(18)}
-      style={style}
+      style={[style, animatedStyle]}
       pointerEvents="none"
     >
       <GlassView
@@ -52,6 +71,7 @@ export default function TransientStatusChip({ icon, label, style }: TransientSta
 const styles = StyleSheet.create({
   chip: {
     minHeight: 40,
+    maxWidth: '100%',
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',

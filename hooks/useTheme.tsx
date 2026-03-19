@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useColorScheme } from 'react-native';
+import { Appearance, Platform, useColorScheme } from 'react-native';
 
 type ThemeType = 'light' | 'dark' | 'system';
 
@@ -131,11 +131,15 @@ function normalizeTheme(value: string | null): ThemeType {
 }
 
 function syncNativeColorScheme(theme: ThemeType) {
-    // React Native's Android appearance bridge in this stack crashes when
-    // setColorScheme receives a nullish value, and forcing explicit light/dark
-    // also breaks returning cleanly to true system-following mode. The app
-    // already drives its own theme state, so avoid overriding native appearance.
-    void theme;
+    if (Platform.OS !== 'ios') {
+        return;
+    }
+
+    try {
+        Appearance.setColorScheme(theme === 'system' ? 'unspecified' : theme);
+    } catch (error) {
+        console.warn('Failed to sync native color scheme:', error);
+    }
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

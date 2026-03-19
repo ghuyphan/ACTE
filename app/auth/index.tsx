@@ -3,7 +3,7 @@ import { environment, presentationDetents, presentationDragIndicator } from '@ex
 import { Ionicons } from '@expo/vector-icons';
 import { usePreventRemove } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Href, useRouter } from 'expo-router';
+import { Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -24,6 +24,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AppBackButton from '../../components/ui/AppBackButton';
 import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Shadows, Typography } from '../../constants/theme';
 import { EmailRegistrationInput, useAuth } from '../../hooks/useAuth';
@@ -31,6 +32,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
 
 type AuthScreenMode = 'landing' | 'signIn' | 'register' | 'resetPassword';
+type AuthIntent = 'share-note';
 const FORM_LAYOUT_TRANSITION = CurvedTransition.duration(220)
   .easingX(Easing.out(Easing.cubic))
   .easingY(Easing.out(Easing.cubic))
@@ -97,6 +99,7 @@ function AuthField({
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { intent } = useLocalSearchParams<{ intent?: AuthIntent }>();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const {
@@ -121,6 +124,7 @@ export default function LoginScreen() {
   const [formContentHeight, setFormContentHeight] = useState(0);
   const [previousFormContentHeight, setPreviousFormContentHeight] = useState(0);
   const formProgress = useSharedValue(0);
+  const isShareIntent = intent === 'share-note';
 
   const isFormVisible = screenMode !== 'landing';
 
@@ -368,25 +372,29 @@ export default function LoginScreen() {
         ? t('auth.resetTitle', 'Reset your password')
         : t('auth.emailTitle', 'Continue with email');
 
+  const formDescription =
+    screenMode === 'register'
+      ? t('auth.registerDescription', 'Save your notes, keep them backed up, and sync everywhere.')
+      : screenMode === 'resetPassword'
+        ? t('auth.resetDescription', 'Enter your email and we will send you a password reset link.')
+        : isShareIntent
+          ? t('auth.emailShareDescription', 'Sign in to share this note.')
+          : t('auth.emailDescription', 'Sign in to keep your notes backed up and synced automatically.');
+
+  const landingSubtitle = isShareIntent
+    ? t('auth.shareSubtitle', 'Sign in to share this note')
+    : t('auth.subtitle', 'So you never forget what she likes');
+  const landingHint = isShareIntent
+    ? null
+    : t('auth.landingHint', 'Choose the easiest way to keep your notes backed up and ready everywhere.');
+
   const renderFormFields = () => (
     <>
       <Animated.View layout={FORM_LAYOUT_TRANSITION} style={styles.formHeaderRow}>
-        <Pressable
-          onPress={goBackInFlow}
-          style={({ pressed }) => [
-            styles.formBackButton,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              opacity: pressed ? 0.78 : 1,
-            },
-          ]}
-          testID="auth-form-close"
-        >
-          <Ionicons name="chevron-back" size={20} color={colors.text} />
-        </Pressable>
+        <AppBackButton onPress={goBackInFlow} style={styles.formBackButton} testID="auth-form-close" />
         <View style={styles.formHeaderCopy}>
           <Text style={[styles.formTitle, { color: colors.text }]}>{formTitle}</Text>
+          <Text style={[styles.formDescription, { color: colors.secondaryText }]}>{formDescription}</Text>
         </View>
       </Animated.View>
 
@@ -587,8 +595,11 @@ export default function LoginScreen() {
           <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
           <Text style={[styles.brandAccent, { color: colors.secondaryText }]}>ノート</Text>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-            {t('auth.subtitle', 'So you never forget what she likes')}
+            {landingSubtitle}
           </Text>
+          {landingHint ? (
+            <Text style={[styles.landingHint, { color: colors.secondaryText }]}>{landingHint}</Text>
+          ) : null}
           <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.infoTitle, { color: colors.text }]}>
               {t('auth.signedInAs', 'Signed in as')}
@@ -639,8 +650,11 @@ export default function LoginScreen() {
         <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
         <Text style={[styles.brandAccent, { color: colors.secondaryText }]}>ノート</Text>
         <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-          {t('auth.subtitle', 'So you never forget what she likes')}
+          {landingSubtitle}
         </Text>
+        {landingHint ? (
+          <Text style={[styles.landingHint, { color: colors.secondaryText }]}>{landingHint}</Text>
+        ) : null}
 
         {!isAuthAvailable ? (
           <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -816,6 +830,12 @@ const styles = StyleSheet.create({
     ...Typography.heroSubtitle,
     textAlign: 'center',
   },
+  landingHint: {
+    ...Typography.body,
+    marginTop: 14,
+    textAlign: 'center',
+    maxWidth: 320,
+  },
   infoCard: {
     width: '100%',
     marginTop: 28,
@@ -885,12 +905,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   formBackButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
   },
   formHeaderCopy: {
     flex: 1,
@@ -899,6 +915,12 @@ const styles = StyleSheet.create({
   formTitle: {
     ...Typography.screenTitle,
     fontSize: 24,
+  },
+  formDescription: {
+    ...Typography.body,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 4,
   },
   messageCard: {
     borderRadius: 18,

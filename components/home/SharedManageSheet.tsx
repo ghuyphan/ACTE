@@ -6,9 +6,11 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import AppBottomSheet from '../AppBottomSheet';
+import AppBackButton from '../ui/AppBackButton';
 import PrimaryButton from '../ui/PrimaryButton';
-import { Layout, Shadows, Typography } from '../../constants/theme';
+import { Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
@@ -305,19 +307,7 @@ function JoinBody({
       ) : null}
 
       <View style={styles.joinTopRow}>
-        <Pressable
-          onPress={onBack}
-          style={({ pressed }) => [
-            styles.joinIconButton,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-        >
-          <Ionicons name="chevron-back" size={20} color={colors.text} />
-        </Pressable>
+        <AppBackButton onPress={onBack} style={styles.joinIconButton} />
         <Pressable
           onPress={onClose}
           style={({ pressed }) => [
@@ -430,7 +420,7 @@ export default function SharedManageSheet(props: {
   onRevokeInvite: () => void;
   onRemoveFriend: (friendUid: string) => void;
 }) {
-  const { isDark, colors } = useTheme();
+  const { isDark } = useTheme();
   const { t } = useTranslation();
   const router = useRouter();
   const { user, isAuthAvailable } = useAuth();
@@ -576,31 +566,15 @@ export default function SharedManageSheet(props: {
   }
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
-        <View style={[styles.androidSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {content}
-        </View>
-      </View>
-    </Modal>
+    <AppBottomSheet visible={visible} onClose={onClose}>
+      {content}
+    </AppBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
   iosContainer: {
     overflow: 'hidden',
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'flex-end',
-    padding: Layout.screenPadding,
-  },
-  androidSheet: {
-    borderRadius: 24,
-    borderWidth: 1,
-    ...Shadows.floating,
   },
   sheetContent: {
     paddingHorizontal: 24,
@@ -849,12 +823,8 @@ const styles = StyleSheet.create({
     marginTop: Platform.OS === 'ios' ? 6 : 0,
   },
   joinIconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
   },
   joinBadge: {
     width: 46,

@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
+import { Href, useRouter } from 'expo-router';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -113,6 +113,13 @@ export default function HomeScreen() {
     setSharedManageSheetVersion((current) => current + 1);
     setShowSharedManageSheet(true);
   }, []);
+
+  const openAuthForShare = useCallback(() => {
+    router.push({
+      pathname: '/auth',
+      params: { intent: 'share-note' },
+    } as Href);
+  }, [router]);
 
   const {
     captureMode,
@@ -775,7 +782,7 @@ export default function HomeScreen() {
         }
 
         if (!user) {
-          router.push('/auth');
+          openAuthForShare();
           return;
         }
 
@@ -790,8 +797,8 @@ export default function HomeScreen() {
     [
       friends.length,
       isAuthAvailable,
+      openAuthForShare,
       presentSharedManageSheet,
-      router,
       sharedEnabled,
       showSharedUnavailableSheet,
       user,
@@ -807,12 +814,12 @@ export default function HomeScreen() {
     }
 
     if (!user) {
-      router.push('/auth');
+      openAuthForShare();
       return;
     }
 
     presentSharedManageSheet();
-  }, [isAuthAvailable, presentSharedManageSheet, router, sharedEnabled, showSharedUnavailableSheet, user]);
+  }, [isAuthAvailable, openAuthForShare, presentSharedManageSheet, sharedEnabled, showSharedUnavailableSheet, user]);
 
   const handleOpenSharedAuth = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -822,8 +829,8 @@ export default function HomeScreen() {
       return;
     }
 
-    router.push('/auth');
-  }, [isAuthAvailable, router, showSharedUnavailableSheet]);
+    openAuthForShare();
+  }, [isAuthAvailable, openAuthForShare, showSharedUnavailableSheet]);
 
   const handleShareInvite = useCallback(async () => {
     if (!user) {
@@ -993,8 +1000,6 @@ export default function HomeScreen() {
               onChangeNoteText={setNoteText}
               restaurantName={restaurantName}
               onChangeRestaurantName={setRestaurantName}
-              radius={radius}
-              onChangeRadius={setRadius}
               capturedPhoto={capturedPhoto}
               onRetakePhoto={() => setCapturedPhoto(null)}
               needsCameraPermission={needsCameraPermission}

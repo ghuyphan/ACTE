@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
+import { Platform } from 'react-native';
 import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
 import { buildNoteSearchText } from './noteSearch';
 import { resolveStoredPhotoUri } from './photoStorage';
@@ -60,14 +61,41 @@ let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 const APP_SCHEMA_VERSION = 2;
 
+async function safelyCloseDatabase(database: SQLite.SQLiteDatabase | null) {
+    if (!database) {
+        return;
+    }
+
+    try {
+        await database.closeAsync();
+    } catch {
+        // Ignore close failures while recovering from a broken native handle.
+    }
+}
+
 export async function getDB(): Promise<SQLite.SQLiteDatabase> {
+    if (db) {
+        if (Platform.OS === 'android') {
+            try {
+                await db.isInTransactionAsync();
+            } catch {
+                await safelyCloseDatabase(db);
+                db = null;
+                dbInitPromise = null;
+            }
+        }
+    }
+
     if (db) {
         return db;
     }
 
     if (!dbInitPromise) {
         dbInitPromise = (async () => {
-            const database = await SQLite.openDatabaseAsync('acte_notes.db');
+            const database = await SQLite.openDatabaseAsync(
+                'acte_notes.db',
+                Platform.OS === 'android' ? { useNewConnection: true } : undefined
+            );
             await database.execAsync(`
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS notes (

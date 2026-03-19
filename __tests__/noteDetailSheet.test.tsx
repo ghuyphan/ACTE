@@ -188,6 +188,23 @@ afterEach(() => {
 });
 
 describe('NoteDetailSheet', () => {
+  it('toggles favorite from the detail card', async () => {
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-favorite')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-favorite'));
+    });
+
+    expect(mockToggleFavorite).toHaveBeenCalledWith('note-1');
+    expect(mockImpactAsync).toHaveBeenCalledWith('light');
+  });
+
   it('saves edited content, location, and radius', async () => {
     const { getByTestId } = render(
       <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />

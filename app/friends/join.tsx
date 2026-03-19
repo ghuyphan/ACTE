@@ -9,7 +9,6 @@ import { useTranslation } from 'react-i18next';
 import {
   Alert,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -17,8 +16,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import AppBottomSheet from '../../components/AppBottomSheet';
 import PrimaryButton from '../../components/ui/PrimaryButton';
-import { Layout, Shadows, Typography } from '../../constants/theme';
+import { Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
@@ -241,15 +241,9 @@ export default function FriendJoinScreen() {
     }
 
     dismissTargetRef.current = target;
-
-    if (Platform.OS === 'ios') {
-      setIsPresented(false);
-      scheduleDismiss(260);
-      return;
-    }
-
-    finishDismiss();
-  }, [finishDismiss, scheduleDismiss]);
+    setIsPresented(false);
+    scheduleDismiss(260);
+  }, [scheduleDismiss]);
 
   const handleJoin = useCallback(
     async (value = inviteValue) => {
@@ -352,43 +346,27 @@ export default function FriendJoinScreen() {
   }
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={() => dismissTo('tabs')}>
-      <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={() => dismissTo('tabs')} />
-        <View style={[styles.androidSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <JoinSheetBody
-            user={user}
-            isAuthAvailable={isAuthAvailable}
-            inviteValue={inviteValue}
-            joining={joining}
-            bottomPadding={20}
-            onChangeInvite={setInviteValue}
-            onSubmit={() => {
-              void handleJoin();
-            }}
-            onClose={() => dismissTo('tabs')}
-            onGoToAuth={() => dismissTo('auth')}
-          />
-        </View>
-      </View>
-    </Modal>
+    <AppBottomSheet visible={isPresented} onClose={() => dismissTo('tabs')}>
+      <JoinSheetBody
+        user={user}
+        isAuthAvailable={isAuthAvailable}
+        inviteValue={inviteValue}
+        joining={joining}
+        bottomPadding={20}
+        onChangeInvite={setInviteValue}
+        onSubmit={() => {
+          void handleJoin();
+        }}
+        onClose={() => dismissTo('tabs')}
+        onGoToAuth={() => dismissTo('auth')}
+      />
+    </AppBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
   iosContainer: {
     backgroundColor: 'transparent',
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'flex-end',
-    padding: Layout.screenPadding,
-  },
-  androidSheet: {
-    borderRadius: 28,
-    borderWidth: 1,
-    ...Shadows.floating,
   },
   content: {
     paddingHorizontal: 24,

@@ -1,4 +1,5 @@
 
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
 import * as SystemUI from 'expo-system-ui';
@@ -255,7 +256,9 @@ export default function RootLayout() {
                     <RoomsProvider>
                       <SharedFeedProvider>
                         <NoteDetailSheetProvider>
-                          <AppContent />
+                          <BottomSheetModalProvider>
+                            <AppContent />
+                          </BottomSheetModalProvider>
                         </NoteDetailSheetProvider>
                       </SharedFeedProvider>
                     </RoomsProvider>

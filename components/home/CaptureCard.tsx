@@ -8,14 +8,22 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../../constants/noteRadius';
+import Reanimated, {
+  Easing,
+  FadeInDown,
+  FadeOutUp,
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { Layout, Shadows, Typography } from '../../constants/theme';
 import type { ThemeColors } from '../../hooks/useTheme';
 import PrimaryButton from '../ui/PrimaryButton';
@@ -27,6 +35,7 @@ const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
 const TOP_CONTROL_INSET = 24;
 const TOP_CONTROL_HEIGHT = 38;
 const TOP_CONTROL_RADIUS = 19;
+const AnimatedIonicons = Reanimated.createAnimatedComponent(Ionicons);
 
 interface CaptureCardProps {
   snapHeight: number;
@@ -63,8 +72,6 @@ interface CaptureCardProps {
   onChangeNoteText: (nextText: string) => void;
   restaurantName: string;
   onChangeRestaurantName: (nextName: string) => void;
-  radius: number;
-  onChangeRadius: (nextRadius: number) => void;
   capturedPhoto: string | null;
   onRetakePhoto: () => void;
   needsCameraPermission: boolean;
@@ -103,8 +110,6 @@ export default function CaptureCard({
   onChangeNoteText,
   restaurantName,
   onChangeRestaurantName,
-  radius,
-  onChangeRadius,
   capturedPhoto,
   onRetakePhoto,
   needsCameraPermission,
@@ -128,25 +133,24 @@ export default function CaptureCard({
   onChangeShareTarget,
   footerContent,
 }: CaptureCardProps) {
-  const showInlineRadiusOptions = Platform.OS !== 'ios';
   const [isCameraReady, setIsCameraReady] = useState(false);
   const isCameraSaveMode = captureMode === 'camera';
   const isSharedTarget = shareTarget === 'shared';
-  const audienceLabel =
-    isSharedTarget
-      ? t('shared.manageTitle', 'Friends')
-      : t('shared.capturePrivate', 'Just me');
-  const audienceSurfaceBackground =
-    isSharedTarget ? '#FFF4DE' : captureMode === 'text' ? colors.captureGlassFill : colors.captureCameraOverlay;
-  const audienceSurfaceBorder =
-    isSharedTarget
-      ? 'rgba(255,255,255,0.56)'
-      : captureMode === 'text'
-        ? colors.captureGlassBorder
-        : colors.captureCameraOverlayBorder;
-  const audienceTextColor =
-    isSharedTarget ? colors.captureCardText : captureMode === 'text' ? colors.captureGlassText : colors.captureCameraOverlayText;
-  const audienceIconColor = isSharedTarget ? colors.primary : audienceTextColor;
+  const privateAudienceLabel = t('shared.capturePrivate', 'Just me');
+  const sharedAudienceLabel = t('shared.manageTitle', 'Friends');
+  const audienceLabel = isSharedTarget ? sharedAudienceLabel : privateAudienceLabel;
+  const audienceSizerLabel =
+    privateAudienceLabel.length >= sharedAudienceLabel.length ? privateAudienceLabel : sharedAudienceLabel;
+  const privateAudienceSurfaceBackground = captureMode === 'text' ? colors.captureGlassFill : colors.captureCameraOverlay;
+  const sharedAudienceSurfaceBackground = '#FFF4DE';
+  const privateAudienceSurfaceBorder = captureMode === 'text' ? colors.captureGlassBorder : colors.captureCameraOverlayBorder;
+  const sharedAudienceSurfaceBorder = 'rgba(255,255,255,0.56)';
+  const privateAudienceColor = captureMode === 'text' ? colors.captureGlassText : colors.captureCameraOverlayText;
+  const sharedAudienceColor = colors.primary;
+  const audienceIconColor = isSharedTarget ? sharedAudienceColor : privateAudienceColor;
+  const audienceProgress = useSharedValue(isSharedTarget ? 1 : 0);
+  const audiencePressScale = useSharedValue(1);
+  const audienceStateScale = useSharedValue(1);
 
   useEffect(() => {
     if (captureMode === 'camera' && !capturedPhoto && permissionGranted) {
@@ -156,6 +160,39 @@ export default function CaptureCard({
 
     setIsCameraReady(true);
   }, [captureMode, capturedPhoto, permissionGranted, cameraSessionKey]);
+
+  useEffect(() => {
+    audienceProgress.value = withTiming(isSharedTarget ? 1 : 0, {
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+    });
+    audienceStateScale.value = withSequence(
+      withTiming(0.94, { duration: 110, easing: Easing.out(Easing.quad) }),
+      withTiming(1, { duration: 220, easing: Easing.out(Easing.back(1.1)) })
+    );
+  }, [audienceProgress, audienceStateScale, isSharedTarget]);
+
+  const animatedAudienceBadgeStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      audienceProgress.value,
+      [0, 1],
+      [privateAudienceSurfaceBackground, sharedAudienceSurfaceBackground]
+    ),
+    borderColor: interpolateColor(
+      audienceProgress.value,
+      [0, 1],
+      [privateAudienceSurfaceBorder, sharedAudienceSurfaceBorder]
+    ),
+    transform: [{ scale: audiencePressScale.value * audienceStateScale.value }],
+  }));
+
+  const animatedAudienceIconStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(audienceProgress.value, [0, 1], [privateAudienceColor, sharedAudienceColor]),
+  }));
+
+  const animatedAudienceTextStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(audienceProgress.value, [0, 1], [privateAudienceColor, sharedAudienceColor]),
+  }));
 
   return (
     <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
@@ -333,31 +370,51 @@ export default function CaptureCard({
         <View pointerEvents="box-none" style={styles.cardAudienceBadgeHost}>
           <Pressable
             testID="capture-share-target-toggle"
-            style={[
-              styles.cardAudienceBadge,
-              isSharedTarget ? styles.cardAudienceBadgeSelected : null,
-              {
-                backgroundColor: audienceSurfaceBackground,
-                borderColor: audienceSurfaceBorder,
-              },
-            ]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isSharedTarget }}
             onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
+            onPressIn={() => {
+              audiencePressScale.value = withTiming(0.97, { duration: 120, easing: Easing.out(Easing.quad) });
+            }}
+            onPressOut={() => {
+              audiencePressScale.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.cubic) });
+            }}
           >
-            <Ionicons
-              name={shareTarget === 'shared' ? 'people-outline' : 'lock-closed-outline'}
-              size={16}
-              color={audienceIconColor}
-            />
-            <Text
+            <Reanimated.View
               style={[
-                styles.cardAudienceBadgeText,
-                {
-                  color: audienceIconColor,
-                },
+                styles.cardAudienceBadge,
+                isSharedTarget ? styles.cardAudienceBadgeSelected : null,
+                animatedAudienceBadgeStyle,
               ]}
             >
-              {audienceLabel}
-            </Text>
+              <View pointerEvents="none" style={styles.cardAudienceBadgeSizer}>
+                <Ionicons name="lock-closed-outline" size={16} color="transparent" />
+                <Text style={[styles.cardAudienceBadgeText, styles.cardAudienceBadgeSizerText]}>
+                  {audienceSizerLabel}
+                </Text>
+              </View>
+              <Reanimated.View
+                key={shareTarget}
+                entering={FadeInDown.duration(180)}
+                exiting={FadeOutUp.duration(140)}
+                style={styles.cardAudienceBadgeVisibleContent}
+              >
+                <AnimatedIonicons
+                  name={shareTarget === 'shared' ? 'people-outline' : 'lock-closed-outline'}
+                  size={16}
+                  color={audienceIconColor}
+                  style={animatedAudienceIconStyle}
+                />
+                <Reanimated.Text
+                  style={[
+                    styles.cardAudienceBadgeText,
+                    animatedAudienceTextStyle,
+                  ]}
+                >
+                  {audienceLabel}
+                </Reanimated.Text>
+              </Reanimated.View>
+            </Reanimated.View>
           </Pressable>
         </View>
       </Animated.View>
@@ -372,36 +429,6 @@ export default function CaptureCard({
       >
         {cameraStatusText ? (
           <Text style={[styles.cameraStatusText, { color: colors.secondaryText }]}>{cameraStatusText}</Text>
-        ) : null}
-        {showInlineRadiusOptions ? (
-          <View style={styles.radiusOptions}>
-            {NOTE_RADIUS_OPTIONS.map((option) => {
-              const isSelected = radius === option;
-              return (
-                <Pressable
-                  key={option}
-                  testID={`capture-radius-${option}`}
-                  style={[
-                    styles.radiusChip,
-                    {
-                      backgroundColor: isSelected ? colors.primary : colors.card,
-                      borderColor: isSelected ? colors.primary : colors.border,
-                    },
-                  ]}
-                  onPress={() => onChangeRadius(option)}
-                >
-                  <Text
-                    style={[
-                      styles.radiusChipText,
-                      { color: isSelected ? colors.captureCardText : colors.text },
-                    ]}
-                  >
-                    {formatRadiusLabel(option)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
         ) : null}
         {captureMode === 'camera' && !capturedPhoto ? (
           <View style={styles.belowCardShutterRow}>
@@ -634,6 +661,19 @@ const styles = StyleSheet.create({
     borderRadius: TOP_CONTROL_RADIUS,
     borderWidth: 1,
     paddingHorizontal: 14,
+    paddingVertical: 9,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardAudienceBadgeSizer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  cardAudienceBadgeVisibleContent: {
+    ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -644,31 +684,15 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: '700',
   },
+  cardAudienceBadgeSizerText: {
+    color: 'transparent',
+  },
   cardAudienceBadgeSelected: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 3,
-  },
-  radiusOptions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-  radiusChip: {
-    minWidth: 72,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  radiusChipText: {
-    fontSize: 13,
-    fontWeight: '700',
-    fontFamily: 'System',
   },
   belowCardShutterRow: {
     alignItems: 'center',

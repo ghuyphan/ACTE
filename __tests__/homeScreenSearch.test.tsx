@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
   useFocusEffect: (callback: () => void | (() => void)) => {

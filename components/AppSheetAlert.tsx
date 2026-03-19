@@ -1,10 +1,11 @@
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
 import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Layout, Shadows, Typography } from '../constants/theme';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Typography } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { isOlderIOS } from '../utils/platform';
+import AppBottomSheet from './AppBottomSheet';
 import PrimaryButton from './ui/PrimaryButton';
 
 export type AppSheetAlertVariant = 'info' | 'success' | 'warning' | 'error';
@@ -147,39 +148,22 @@ export default function AppSheetAlert({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={dismissible ? onClose : undefined} />
-        <View style={[styles.androidSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <AlertSheetBody
-            variant={variant}
-            title={title}
-            message={message}
-            primaryAction={primaryAction}
-            secondaryAction={secondaryAction}
-            onClose={onClose}
-          />
-        </View>
-      </View>
-    </Modal>
+    <AppBottomSheet visible={visible} onClose={onClose} detached={false} dismissible={dismissible}>
+      <AlertSheetBody
+        variant={variant}
+        title={title}
+        message={message}
+        primaryAction={primaryAction}
+        secondaryAction={secondaryAction}
+        onClose={onClose}
+      />
+    </AppBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
   iosContainer: {
     backgroundColor: 'transparent',
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'flex-end',
-    padding: Layout.screenPadding,
-  },
-  androidSheet: {
-    borderRadius: 24,
-    borderWidth: 1,
-    paddingBottom: 8,
-    ...Shadows.floating,
   },
   sheetCard: {
     paddingHorizontal: 24,

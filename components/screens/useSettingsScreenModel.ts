@@ -19,6 +19,7 @@ export function useSettingsScreenModel() {
     lastSyncedAt,
     lastMessage,
     isEnabled: syncEnabled,
+    setSyncEnabled,
   } = useSyncStatus();
   const { tier, isPurchaseAvailable, plusPriceLabel, photoNoteLimit } = useSubscription();
   const router = useRouter();
@@ -184,6 +185,8 @@ export function useSettingsScreenModel() {
     showLanguage,
     showSync,
     showTheme,
+    syncEnabled,
+    setSyncEnabled,
     syncValue,
     t,
     theme,
