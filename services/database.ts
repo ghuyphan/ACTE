@@ -24,6 +24,7 @@ export interface Note {
     radius: number;           // geofence radius in meters
     isFavorite: boolean;
     hasDoodle?: boolean;
+    doodleStrokesJson?: string | null;
     createdAt: string;        // ISO timestamp
     updatedAt: string | null;
 }
@@ -79,6 +80,7 @@ interface NoteRow {
     updated_at: string | null;
     search_text: string | null;
     has_doodle?: number;
+    doodle_strokes_json?: string | null;
 }
 
 // ─── Database ───────────────────────────────────────────────────────
@@ -86,7 +88,8 @@ let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 const APP_SCHEMA_VERSION = 4;
 const NOTES_SELECT_FIELDS = `notes.*,
-      EXISTS(SELECT 1 FROM note_doodles doodles WHERE doodles.note_id = notes.id) AS has_doodle`;
+      EXISTS(SELECT 1 FROM note_doodles doodles WHERE doodles.note_id = notes.id) AS has_doodle,
+      (SELECT doodles.strokes_json FROM note_doodles doodles WHERE doodles.note_id = notes.id LIMIT 1) AS doodle_strokes_json`;
 
 async function safelyCloseDatabase(database: SQLite.SQLiteDatabase | null) {
     if (!database) {
@@ -397,6 +400,7 @@ function rowToNote(row: NoteRow): Note {
         radius: row.radius,
         isFavorite: row.is_favorite === 1,
         hasDoodle: row.has_doodle === 1,
+        doodleStrokesJson: row.doodle_strokes_json ?? null,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     };
@@ -471,6 +475,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         radius: input.radius ?? DEFAULT_NOTE_RADIUS,
         isFavorite: false,
         hasDoodle: false,
+        doodleStrokesJson: null,
         createdAt: now,
         updatedAt: null,
     };
@@ -724,6 +729,7 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         radius: input.radius ?? DEFAULT_NOTE_RADIUS,
         isFavorite: Boolean(input.isFavorite),
         hasDoodle: input.hasDoodle ?? false,
+        doodleStrokesJson: input.doodleStrokesJson ?? null,
         createdAt: input.createdAt,
         updatedAt: input.updatedAt ?? null,
     };

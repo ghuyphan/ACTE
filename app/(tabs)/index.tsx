@@ -43,8 +43,10 @@ import {
   getRemainingPhotoSlots,
 } from '../../constants/subscription';
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
+import { saveNoteDoodle } from '../../services/noteDoodles';
 import { filterNotesByQuery } from '../../services/noteSearch';
 import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
+import { DoodleStroke } from '../../components/NoteDoodleCanvas';
 import { isIOS26OrNewer } from '../../utils/platform';
 
 const { height } = Dimensions.get('window');
@@ -101,6 +103,8 @@ export default function HomeScreen() {
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [sharedManageSheetVersion, setSharedManageSheetVersion] = useState(0);
+  const [captureDoodleStrokes, setCaptureDoodleStrokes] = useState<DoodleStroke[]>([]);
+  const [captureDoodleMode, setCaptureDoodleMode] = useState(false);
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -216,6 +220,12 @@ export default function HomeScreen() {
   );
   const hasNotesHintTarget = displayedNotes.length + visibleSharedPosts.length > 0;
   const shouldShowNotesHint = hasNotesHintTarget;
+
+  const resetCaptureDraft = useCallback(() => {
+    resetCapture();
+    setCaptureDoodleStrokes([]);
+    setCaptureDoodleMode(false);
+  }, [resetCapture]);
 
   useEffect(() => {
     Animated.timing(hintAnim, {
@@ -655,6 +665,20 @@ export default function HomeScreen() {
         radius,
       });
 
+      const sharedNote =
+        captureMode === 'text' && captureDoodleStrokes.length > 0
+          ? {
+              ...createdNote,
+              hasDoodle: true,
+              doodleStrokesJson: JSON.stringify(captureDoodleStrokes),
+            }
+          : createdNote;
+
+      if (captureMode === 'text' && captureDoodleStrokes.length > 0) {
+        await saveNoteDoodle(createdNote.id, JSON.stringify(captureDoodleStrokes));
+        await refreshNotes(false);
+      }
+
       let shareOutcome: 'default' | 'shared' | 'no-friends' | 'share-failed' = 'default';
 
       if (captureTarget === 'shared' && sharedEnabled && user) {
@@ -662,7 +686,7 @@ export default function HomeScreen() {
           shareOutcome = 'no-friends';
         } else {
           try {
-            await createSharedPost(createdNote);
+            await createSharedPost(sharedNote);
             shareOutcome = 'shared';
           } catch (shareError) {
             console.warn('Shared publish failed:', shareError);
@@ -672,7 +696,7 @@ export default function HomeScreen() {
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      resetCapture();
+      resetCaptureDraft();
       setCaptureTarget('private');
 
       if (shareOutcome === 'default') {
@@ -709,10 +733,12 @@ export default function HomeScreen() {
     restaurantName,
     createNote,
     radius,
-    resetCapture,
+    resetCaptureDraft,
+    captureDoodleStrokes,
     showSavedSheet,
     canSaveAnotherPhotoNote,
     captureTarget,
+    refreshNotes,
     createSharedPost,
     friends.length,
     sharedEnabled,
@@ -798,6 +824,7 @@ export default function HomeScreen() {
   const handleToggleCaptureMode = useCallback(() => {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     toggleCaptureMode();
+    setCaptureDoodleMode(false);
   }, [toggleCaptureMode]);
 
   const handleOpenNotes = useCallback(() => {
@@ -996,6 +1023,12 @@ export default function HomeScreen() {
         restaurantName={restaurantName}
         onChangeRestaurantName={setRestaurantName}
         previewEmoji={livePreviewEmoji}
+        doodleModeEnabled={captureDoodleMode}
+        onToggleDoodleMode={() => setCaptureDoodleMode((current) => !current)}
+        doodleStrokes={captureDoodleStrokes}
+        onChangeDoodleStrokes={setCaptureDoodleStrokes}
+        onUndoDoodle={() => setCaptureDoodleStrokes((current) => current.slice(0, -1))}
+        onClearDoodle={() => setCaptureDoodleStrokes([])}
         capturedPhoto={capturedPhoto}
         onRetakePhoto={() => setCapturedPhoto(null)}
         needsCameraPermission={needsCameraPermission}
@@ -1117,6 +1150,7 @@ export default function HomeScreen() {
         onOpenNote={openNote}
         colors={colors}
         t={t}
+        scrollEnabled={!captureDoodleMode}
       />
 
       <SharedManageSheet

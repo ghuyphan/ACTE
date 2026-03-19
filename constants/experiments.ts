@@ -1,1 +1,1 @@
-export const ENABLE_NOTE_DOODLES = false;
+export const ENABLE_NOTE_DOODLES = true;

@@ -100,7 +100,12 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
         {item.type === 'photo' ? (
           <ImageMemoryCard imageUrl={getNotePhotoUri(item)} />
         ) : (
-          <TextMemoryCard text={item.content} noteId={item.id} emoji={item.moodEmoji} />
+          <TextMemoryCard
+            text={item.content}
+            noteId={item.id}
+            emoji={item.moodEmoji}
+            doodleStrokesJson={item.doodleStrokesJson}
+          />
         )}
 
         {item.isFavorite ? (
@@ -192,7 +197,11 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
         {item.type === 'photo' && item.photoLocalUri ? (
           <ImageMemoryCard imageUrl={item.photoLocalUri} />
         ) : (
-          <TextMemoryCard text={item.text || t('shared.photoMemory', 'Photo memory')} noteId={item.id} />
+          <TextMemoryCard
+            text={item.text || t('shared.photoMemory', 'Photo memory')}
+            noteId={item.id}
+            doodleStrokesJson={item.doodleStrokesJson}
+          />
         )}
       </View>
 
@@ -229,6 +238,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   prevProps.item.type === nextProps.item.type &&
   prevProps.item.text === nextProps.item.text &&
   prevProps.item.photoLocalUri === nextProps.item.photoLocalUri &&
+  prevProps.item.doodleStrokesJson === nextProps.item.doodleStrokesJson &&
   prevProps.item.placeName === nextProps.item.placeName &&
   prevProps.item.createdAt === nextProps.item.createdAt &&
   prevProps.item.authorDisplayName === nextProps.item.authorDisplayName &&
@@ -259,6 +269,7 @@ interface NotesFeedProps {
   };
   t: TFunction;
   onCaptureVisibilityChange?: (isVisible: boolean) => void;
+  scrollEnabled?: boolean;
 }
 
 export default function NotesFeed({
@@ -275,6 +286,7 @@ export default function NotesFeed({
   colors,
   t,
   onCaptureVisibilityChange,
+  scrollEnabled = true,
 }: NotesFeedProps) {
   const captureVisibilityRef = useRef(true);
   const isAdjustingSnapRef = useRef(false);
@@ -428,6 +440,7 @@ export default function NotesFeed({
           progressViewOffset={refreshSpinnerOffset}
         />
       }
+      scrollEnabled={scrollEnabled}
     />
   );
 }

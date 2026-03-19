@@ -56,6 +56,7 @@ export interface SharedPost {
   text: string;
   photoLocalUri: string | null;
   photoRemoteBase64: string | null;
+  doodleStrokesJson?: string | null;
   placeName: string | null;
   sourceNoteId: string | null;
   createdAt: string;
@@ -103,6 +104,7 @@ interface SharedPostRecord {
   type: NoteType;
   text: string;
   photoRemoteBase64: string | null;
+  doodleStrokesJson?: string | null;
   placeName: string | null;
   sourceNoteId: string | null;
   createdAt: string;
@@ -225,6 +227,7 @@ async function mapSharedPost(id: string, record: SharedPostRecord): Promise<Shar
     text: record.text ?? '',
     photoLocalUri,
     photoRemoteBase64: record.photoRemoteBase64 ?? null,
+    doodleStrokesJson: record.doodleStrokesJson ?? null,
     placeName: record.placeName ?? null,
     sourceNoteId: record.sourceNoteId ?? null,
     createdAt: record.createdAt,
@@ -680,6 +683,7 @@ export async function createSharedPost(
     type: note.type,
     text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
     photoRemoteBase64: photoRemoteBase64 ?? null,
+    doodleStrokesJson: note.type === 'text' ? note.doodleStrokesJson ?? null : null,
     placeName: note.locationName ?? null,
     sourceNoteId: note.id,
     createdAt: now,
@@ -714,6 +718,7 @@ export async function updateSharedPost(
   await updateDoc(doc(firestore, 'sharedPosts', postId), {
     text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
     photoRemoteBase64: photoRemoteBase64 ?? null,
+    doodleStrokesJson: note.type === 'text' ? note.doodleStrokesJson ?? null : null,
     placeName: note.locationName ?? null,
     updatedAt: getNowIso(),
     authorUid: user.uid,

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 
-const OPTIONS: Array<{ key: 'system' | 'light' | 'dark'; labelKey: string; fallback: string }> = [
+const OPTIONS: { key: 'system' | 'light' | 'dark'; labelKey: string; fallback: string }[] = [
   { key: 'system', labelKey: 'settings.system', fallback: 'System' },
   { key: 'light', labelKey: 'settings.light', fallback: 'Light' },
   { key: 'dark', labelKey: 'settings.dark', fallback: 'Dark' },

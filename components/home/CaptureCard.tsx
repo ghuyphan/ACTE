@@ -26,6 +26,7 @@ import Reanimated, {
 import { Layout, Shadows, Typography } from '../../constants/theme';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { formatNoteTextWithEmoji, stripAutoEmojiPrefix } from '../../services/noteTextPresentation';
+import NoteDoodleCanvas, { DoodleStroke } from '../NoteDoodleCanvas';
 import PrimaryButton from '../ui/PrimaryButton';
 import { isOlderIOS } from '../../utils/platform';
 
@@ -73,6 +74,12 @@ interface CaptureCardProps {
   restaurantName: string;
   onChangeRestaurantName: (nextName: string) => void;
   previewEmoji?: string | null;
+  doodleModeEnabled?: boolean;
+  onToggleDoodleMode?: () => void;
+  doodleStrokes?: DoodleStroke[];
+  onChangeDoodleStrokes?: (nextStrokes: DoodleStroke[]) => void;
+  onUndoDoodle?: () => void;
+  onClearDoodle?: () => void;
   capturedPhoto: string | null;
   onRetakePhoto: () => void;
   needsCameraPermission: boolean;
@@ -113,6 +120,12 @@ export default function CaptureCard({
   restaurantName,
   onChangeRestaurantName,
   previewEmoji,
+  doodleModeEnabled = false,
+  onToggleDoodleMode,
+  doodleStrokes = [],
+  onChangeDoodleStrokes,
+  onUndoDoodle,
+  onClearDoodle,
   capturedPhoto,
   onRetakePhoto,
   needsCameraPermission,
@@ -261,6 +274,67 @@ export default function CaptureCard({
               },
             ]}
           >
+            <View pointerEvents="box-none" style={styles.textCardTopRow}>
+              <Pressable
+                onPress={onToggleDoodleMode}
+                style={[
+                  styles.textCardActionButton,
+                  {
+                    backgroundColor: doodleModeEnabled ? colors.captureButtonBg : colors.captureGlassFill,
+                    borderColor: doodleModeEnabled ? 'rgba(255,255,255,0.18)' : colors.captureGlassBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={doodleModeEnabled ? 'create' : 'create-outline'}
+                  size={16}
+                  color={doodleModeEnabled ? '#FFFFFF' : colors.captureGlassText}
+                />
+              </Pressable>
+
+              {doodleModeEnabled ? (
+                <View style={styles.textCardActionCluster}>
+                  <Pressable
+                    onPress={onUndoDoodle}
+                    disabled={doodleStrokes.length === 0}
+                    style={[
+                      styles.textCardActionPill,
+                      {
+                        backgroundColor: colors.captureGlassFill,
+                        borderColor: colors.captureGlassBorder,
+                        opacity: doodleStrokes.length === 0 ? 0.45 : 1,
+                      },
+                    ]}
+                  >
+                    <Ionicons name="arrow-undo-outline" size={14} color={colors.captureGlassText} />
+                  </Pressable>
+                  <Pressable
+                    onPress={onClearDoodle}
+                    disabled={doodleStrokes.length === 0}
+                    style={[
+                      styles.textCardActionPill,
+                      {
+                        backgroundColor: colors.captureGlassFill,
+                        borderColor: colors.captureGlassBorder,
+                        opacity: doodleStrokes.length === 0 ? 0.45 : 1,
+                      },
+                    ]}
+                  >
+                    <Ionicons name="close-outline" size={14} color={colors.captureGlassText} />
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
+
+            <View pointerEvents={doodleModeEnabled ? 'auto' : 'none'} style={styles.doodleCanvasLayer}>
+              <NoteDoodleCanvas
+                strokes={doodleStrokes}
+                editable={doodleModeEnabled}
+                activeColor={colors.captureCardText}
+                onChangeStrokes={onChangeDoodleStrokes}
+              />
+            </View>
+
             <View style={styles.cardTextCenter}>
               <TextInput
                 key={`note-text-${isSearching}`}
@@ -269,6 +343,7 @@ export default function CaptureCard({
                 placeholderTextColor={colors.captureCardPlaceholder}
                 multiline
                 value={displayNoteText}
+                editable={!doodleModeEnabled}
                 onChangeText={(nextText) => {
                   onChangeNoteText(stripAutoEmojiPrefix(nextText));
                 }}
@@ -614,6 +689,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
   },
+  textCardTopRow: {
+    position: 'absolute',
+    top: TOP_CONTROL_INSET,
+    left: 18,
+    right: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 3,
+  },
+  textCardActionCluster: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  textCardActionButton: {
+    width: TOP_CONTROL_HEIGHT,
+    height: TOP_CONTROL_HEIGHT,
+    borderRadius: TOP_CONTROL_RADIUS,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textCardActionPill: {
+    width: TOP_CONTROL_HEIGHT,
+    height: TOP_CONTROL_HEIGHT,
+    borderRadius: TOP_CONTROL_RADIUS,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  doodleCanvasLayer: {
+    ...StyleSheet.absoluteFillObject,
+    top: 74,
+    left: 20,
+    right: 20,
+    bottom: 86,
+    zIndex: 2,
+  },
   cardRestaurantPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -626,6 +739,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     overflow: 'hidden',
     position: 'relative',
+    zIndex: 3,
   },
   cardRestaurantInput: {
     flex: 1,

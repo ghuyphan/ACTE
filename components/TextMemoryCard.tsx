@@ -3,12 +3,15 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Layout, Shadows } from '../constants/theme';
 import { CardGradients } from '../hooks/useTheme';
+import NoteDoodleCanvas from './NoteDoodleCanvas';
+import { parseNoteDoodleStrokes } from '../services/noteDoodles';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 
 interface TextMemoryCardProps {
     text: string;
     noteId?: string;
     emoji?: string | null;
+    doodleStrokesJson?: string | null;
 }
 
 function hashToIndex(str: string, max: number): number {
@@ -19,11 +22,12 @@ function hashToIndex(str: string, max: number): number {
     return Math.abs(hash) % max;
 }
 
-export default function TextMemoryCard({ text, noteId, emoji = null }: TextMemoryCardProps) {
+export default function TextMemoryCard({ text, noteId, emoji = null, doodleStrokesJson = null }: TextMemoryCardProps) {
     // Pick a unique gradient based on the note content or id
     const gradientIndex = hashToIndex(noteId || text, CardGradients.length);
     const gradient = CardGradients[gradientIndex];
     const displayText = formatNoteTextWithEmoji(text, emoji);
+    const doodleStrokes = parseNoteDoodleStrokes(doodleStrokesJson);
 
     return (
         <View style={styles.card}>
@@ -33,6 +37,11 @@ export default function TextMemoryCard({ text, noteId, emoji = null }: TextMemor
                 end={{ x: 1, y: 1 }}
                 style={styles.gradient}
             >
+                {doodleStrokes.length > 0 ? (
+                    <View pointerEvents="none" style={styles.doodleOverlay}>
+                        <NoteDoodleCanvas strokes={doodleStrokes} />
+                    </View>
+                ) : null}
                 <Text style={styles.memoryText} numberOfLines={5}>
                     {displayText}
                 </Text>
@@ -56,6 +65,14 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    doodleOverlay: {
+        position: 'absolute',
+        top: 18,
+        right: 18,
+        bottom: 18,
+        left: 18,
+        opacity: 0.5,
+    },
     memoryText: {
         color: '#FFFFFF',
         fontSize: 24,
@@ -67,5 +84,6 @@ const styles = StyleSheet.create({
         textShadowColor: 'rgba(0,0,0,0.2)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 4,
+        zIndex: 1,
     },
 });

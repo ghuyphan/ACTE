@@ -13,6 +13,8 @@ interface NoteDoodleCanvasProps {
   onChangeStrokes?: (nextStrokes: DoodleStroke[]) => void;
 }
 
+const STROKE_WIDTH = 6;
+
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
 }
@@ -36,6 +38,9 @@ export default function NoteDoodleCanvas({
       PanResponder.create({
         onStartShouldSetPanResponder: () => editable,
         onMoveShouldSetPanResponder: () => editable,
+        onStartShouldSetPanResponderCapture: () => editable,
+        onMoveShouldSetPanResponderCapture: () => editable,
+        onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (event) => {
           if (!editable || !onChangeStrokes) {
             return;
@@ -117,6 +122,47 @@ export default function NoteDoodleCanvas({
           );
         })
       )}
+      {strokes.map((stroke, strokeIndex) =>
+        stroke.points.map((value, pointIndex) => {
+          if (pointIndex % 2 !== 0 || pointIndex >= stroke.points.length - 2) {
+            return null;
+          }
+
+          const startX = clamp01(value) * layout.width;
+          const startY = clamp01(stroke.points[pointIndex + 1] ?? 0) * layout.height;
+          const endX = clamp01(stroke.points[pointIndex + 2] ?? 0) * layout.width;
+          const endY = clamp01(stroke.points[pointIndex + 3] ?? 0) * layout.height;
+          const deltaX = endX - startX;
+          const deltaY = endY - startY;
+          const length = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+          if (length <= 0) {
+            return null;
+          }
+
+          const angle = Math.atan2(deltaY, deltaX);
+
+          return (
+            <View
+              key={`segment-${strokeIndex}:${pointIndex}`}
+              style={[
+                styles.segment,
+                {
+                  backgroundColor: stroke.color,
+                  width: length,
+                  left: (startX + endX) / 2,
+                  top: (startY + endY) / 2,
+                  transform: [
+                    { translateX: -length / 2 },
+                    { translateY: -STROKE_WIDTH / 2 },
+                    { rotate: `${angle}rad` },
+                  ],
+                },
+              ]}
+            />
+          );
+        })
+      )}
     </View>
   );
 }
@@ -131,10 +177,15 @@ const styles = StyleSheet.create({
   },
   dot: {
     position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginLeft: -4,
-    marginTop: -4,
+    width: STROKE_WIDTH,
+    height: STROKE_WIDTH,
+    borderRadius: STROKE_WIDTH / 2,
+    marginLeft: -(STROKE_WIDTH / 2),
+    marginTop: -(STROKE_WIDTH / 2),
+  },
+  segment: {
+    position: 'absolute',
+    height: STROKE_WIDTH,
+    borderRadius: STROKE_WIDTH / 2,
   },
 });

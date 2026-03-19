@@ -6,6 +6,33 @@ export interface NoteDoodle {
   updatedAt: string;
 }
 
+export interface NoteDoodleStroke {
+  color: string;
+  points: number[];
+}
+
+export function parseNoteDoodleStrokes(strokesJson: string | null | undefined): NoteDoodleStroke[] {
+  if (!strokesJson) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(strokesJson);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter((stroke): stroke is NoteDoodleStroke => (
+      stroke &&
+      typeof stroke === 'object' &&
+      typeof stroke.color === 'string' &&
+      Array.isArray(stroke.points)
+    ));
+  } catch {
+    return [];
+  }
+}
+
 export async function getNoteDoodle(noteId: string): Promise<NoteDoodle | null> {
   const database = await getDB();
   const row = await database.getFirstAsync<{
