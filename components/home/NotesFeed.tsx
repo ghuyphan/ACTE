@@ -241,6 +241,7 @@ export default function NotesFeed({
   onCaptureVisibilityChange,
 }: NotesFeedProps) {
   const captureVisibilityRef = useRef(true);
+  const isAdjustingSnapRef = useRef(false);
   const listData = useMemo<NotesFeedListItem[]>(
     () =>
       [
@@ -286,6 +287,33 @@ export default function NotesFeed({
       reportCaptureVisibility(offsetY);
     },
     [reportCaptureVisibility]
+  );
+
+  const settleAndroidSnap = useCallback(
+    (offsetY: number) => {
+      if (Platform.OS !== 'android') {
+        return;
+      }
+
+      if (isAdjustingSnapRef.current) {
+        isAdjustingSnapRef.current = false;
+        return;
+      }
+
+      const maxSnapOffset = listData.length * snapHeight;
+      const nearestSnapOffset = Math.min(
+        maxSnapOffset,
+        Math.max(0, Math.round(offsetY / snapHeight) * snapHeight)
+      );
+
+      if (Math.abs(nearestSnapOffset - offsetY) < 2) {
+        return;
+      }
+
+      isAdjustingSnapRef.current = true;
+      flatListRef.current?.scrollToOffset({ offset: nearestSnapOffset, animated: true });
+    },
+    [flatListRef, listData.length, snapHeight]
   );
 
   const getItemLayout = useCallback(
@@ -335,6 +363,7 @@ export default function NotesFeed({
       windowSize={5}
       removeClippedSubviews={Platform.OS === 'android' && captureMode !== 'camera'}
       snapToInterval={snapHeight}
+      disableIntervalMomentum={Platform.OS === 'android'}
       snapToAlignment="start"
       decelerationRate="fast"
       showsVerticalScrollIndicator={false}
@@ -350,7 +379,9 @@ export default function NotesFeed({
         }
       }}
       onMomentumScrollEnd={(event) => {
-        settleCaptureVisibility(event.nativeEvent.contentOffset.y);
+        const offsetY = event.nativeEvent.contentOffset.y;
+        settleCaptureVisibility(offsetY);
+        settleAndroidSnap(offsetY);
       }}
       contentContainerStyle={{ paddingBottom: height - snapHeight }}
       refreshControl={
