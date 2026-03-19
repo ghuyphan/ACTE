@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused, useScrollToTop } from '@react-navigation/native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  AppState,
   Dimensions,
   FlatList,
   Keyboard,
@@ -85,6 +86,7 @@ export default function HomeScreen() {
   const { alertProps, showAlert } = useAppSheetAlert();
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
+  const isScreenFocused = useIsFocused();
   const useNativeTabSearch = isIOS26OrNewer;
   const useInlineHeaderSearch = !useNativeTabSearch;
 
@@ -94,6 +96,7 @@ export default function HomeScreen() {
   const [saving, setSaving] = useState(false);
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
+  const [appState, setAppState] = useState(AppState.currentState);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [sharedManageSheetVersion, setSharedManageSheetVersion] = useState(0);
@@ -185,12 +188,17 @@ export default function HomeScreen() {
   }, [remainingPhotoSlots, t, tier]);
 
   const displayedNotes = useInlineHeaderSearch && isSearching ? filteredNotes : notes;
+  const shouldRenderCameraPreview =
+    captureMode === 'camera' &&
+    isScreenFocused &&
+    appState === 'active';
   const visibleSharedPosts = useMemo(
     () =>
       (useInlineHeaderSearch && isSearching ? [] : sharedPosts).filter((post) => post.authorUid !== user?.uid),
     [isSearching, sharedPosts, useInlineHeaderSearch, user?.uid]
   );
-  const shouldShowNotesHint = displayedNotes.length + visibleSharedPosts.length > 0 && isCaptureVisible;
+  const hasNotesHintTarget = displayedNotes.length + visibleSharedPosts.length > 0;
+  const shouldShowNotesHint = hasNotesHintTarget && isCaptureVisible;
 
   useEffect(() => {
     Animated.timing(hintAnim, {
@@ -199,6 +207,16 @@ export default function HomeScreen() {
       useNativeDriver: true,
     }).start();
   }, [hintAnim, shouldShowNotesHint]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      setAppState(nextState);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -934,6 +952,81 @@ export default function HomeScreen() {
     );
   }
 
+  const captureHeader = (
+    <View style={styles.captureItemWrapper}>
+        <CaptureCard
+          snapHeight={snapHeight}
+          topInset={insets.top}
+          isSearching={isSearching}
+          captureMode={captureMode}
+          cameraSessionKey={cameraSessionKey}
+          captureScale={captureScale}
+          captureTranslateY={captureTranslateY}
+          colors={colors}
+          t={t}
+          noteText={noteText}
+          onChangeNoteText={setNoteText}
+          restaurantName={restaurantName}
+          onChangeRestaurantName={setRestaurantName}
+          capturedPhoto={capturedPhoto}
+          onRetakePhoto={() => setCapturedPhoto(null)}
+          needsCameraPermission={needsCameraPermission}
+          onRequestCameraPermission={requestPermission}
+          facing={facing}
+          onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
+          onOpenPhotoLibrary={() => {
+            void handleImportPhoto();
+          }}
+          cameraRef={cameraRef}
+          shouldRenderCameraPreview={shouldRenderCameraPreview}
+          flashAnim={flashAnim}
+          permissionGranted={Boolean(permission?.granted)}
+          onShutterPressIn={handleShutterPressIn}
+          onShutterPressOut={handleShutterPressOut}
+          onTakePicture={() => {
+            void takePicture();
+          }}
+          onSaveNote={() => {
+            void saveNote();
+          }}
+          saving={saving}
+          shutterScale={shutterScale}
+          cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
+          libraryImportLocked={!canImportFromLibrary}
+          importingPhoto={importingPhoto || isPurchaseInFlight}
+          shareTarget={captureTarget}
+          onChangeShareTarget={handleCaptureTargetChange}
+        />
+        {hasNotesHintTarget ? (
+          <Animated.View
+            pointerEvents={shouldShowNotesHint ? 'auto' : 'none'}
+            style={[
+              styles.homeNotesHintWrap,
+              {
+                opacity: hintAnim,
+                transform: [
+                  {
+                    translateY: hintAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-8, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Pressable
+              style={styles.homeNotesHintButton}
+              onPress={handleOpenNotes}
+              hitSlop={20}
+            >
+              <Ionicons name="chevron-down" size={22} color={colors.text} />
+            </Pressable>
+          </Animated.View>
+        ) : null}
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <HomeHeaderSearch
@@ -981,82 +1074,10 @@ export default function HomeScreen() {
           </Text>
         </View>
       ) : null}
-
       <NotesFeed
         flatListRef={flatListRef}
-        captureItem={
-          <View style={styles.captureItemWrapper}>
-            <CaptureCard
-              snapHeight={snapHeight}
-              topInset={insets.top}
-              isSearching={isSearching}
-              captureMode={captureMode}
-              cameraSessionKey={cameraSessionKey}
-              captureScale={captureScale}
-              captureTranslateY={captureTranslateY}
-              colors={colors}
-              t={t}
-              noteText={noteText}
-              onChangeNoteText={setNoteText}
-              restaurantName={restaurantName}
-              onChangeRestaurantName={setRestaurantName}
-              capturedPhoto={capturedPhoto}
-              onRetakePhoto={() => setCapturedPhoto(null)}
-              needsCameraPermission={needsCameraPermission}
-              onRequestCameraPermission={requestPermission}
-              facing={facing}
-              onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
-              onOpenPhotoLibrary={() => {
-                void handleImportPhoto();
-              }}
-              cameraRef={cameraRef}
-              flashAnim={flashAnim}
-              permissionGranted={Boolean(permission?.granted)}
-              onShutterPressIn={handleShutterPressIn}
-              onShutterPressOut={handleShutterPressOut}
-              onTakePicture={() => {
-                void takePicture();
-              }}
-              onSaveNote={() => {
-                void saveNote();
-              }}
-              saving={saving}
-              shutterScale={shutterScale}
-              cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
-              libraryImportLocked={!canImportFromLibrary}
-              importingPhoto={importingPhoto || isPurchaseInFlight}
-              shareTarget={captureTarget}
-              onChangeShareTarget={handleCaptureTargetChange}
-            />
-            {displayedNotes.length + visibleSharedPosts.length > 0 ? (
-              <Animated.View
-                pointerEvents={shouldShowNotesHint ? 'auto' : 'none'}
-                style={[
-                  styles.homeNotesHintWrap,
-                  {
-                    opacity: hintAnim,
-                    transform: [
-                      {
-                        translateY: hintAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [-8, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                <Pressable
-                  style={styles.homeNotesHintButton}
-                  onPress={handleOpenNotes}
-                  hitSlop={20}
-                >
-                  <Ionicons name="chevron-down" size={22} color={colors.text} />
-                </Pressable>
-              </Animated.View>
-            ) : null}
-          </View>
-        }
+        captureHeader={captureHeader}
+        captureMode={captureMode}
         notes={displayedNotes}
         sharedPosts={visibleSharedPosts}
         refreshing={refreshing}

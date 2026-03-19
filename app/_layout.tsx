@@ -164,6 +164,17 @@ function AppContent() {
               headerBackButtonMenuEnabled: false,
             }}
           />
+          <Stack.Screen
+            name="plus"
+            options={{
+              headerShown: true,
+              headerTransparent: true,
+              headerTitle: '',
+              headerTintColor: colors.text,
+              headerBackButtonDisplayMode: 'minimal',
+              headerBackButtonMenuEnabled: false,
+            }}
+          />
           <Stack.Screen name="auth/onboarding" />
           <Stack.Screen name="(tabs)" />
           {ENABLE_SHARED_ROOMS ? (

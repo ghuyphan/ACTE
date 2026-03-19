@@ -200,13 +200,13 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
 });
 
 type NotesFeedListItem =
-  | { id: '__capture__'; kind: 'capture' }
   | { id: string; kind: 'note'; note: Note; createdAt: string }
   | { id: string; kind: 'shared-post'; post: SharedPost; createdAt: string };
 
 interface NotesFeedProps {
   flatListRef: RefObject<FlatList<any> | null>;
-  captureItem: ReactElement;
+  captureHeader: ReactElement;
+  captureMode: 'text' | 'camera';
   notes: Note[];
   sharedPosts?: SharedPost[];
   refreshing: boolean;
@@ -227,7 +227,8 @@ interface NotesFeedProps {
 
 export default function NotesFeed({
   flatListRef,
-  captureItem,
+  captureHeader,
+  captureMode,
   notes,
   sharedPosts = [],
   refreshing,
@@ -240,8 +241,8 @@ export default function NotesFeed({
   onCaptureVisibilityChange,
 }: NotesFeedProps) {
   const listData = useMemo<NotesFeedListItem[]>(
-    () => {
-      const feedItems = [
+    () =>
+      [
         ...notes.map((note) => ({
           id: note.id,
           kind: 'note' as const,
@@ -254,32 +255,25 @@ export default function NotesFeed({
           post,
           createdAt: post.createdAt,
         })),
-      ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
-
-      return [{ id: '__capture__', kind: 'capture' }, ...feedItems];
-    },
+      ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
     [notes, sharedPosts]
   );
   const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
-
-  const captureVisibilityRef = useRef(onCaptureVisibilityChange);
-  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 30 });
-
   useEffect(() => {
-    captureVisibilityRef.current = onCaptureVisibilityChange;
+    onCaptureVisibilityChange?.(true);
   }, [onCaptureVisibilityChange]);
 
-  const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: { item?: { id?: string } }[] }) => {
-      const isCaptureVisible = viewableItems.some((entry) => entry.item?.id === '__capture__');
-      captureVisibilityRef.current?.(isCaptureVisible);
-    }
-  ).current;
+  const settleCaptureVisibility = useCallback(
+    (offsetY: number) => {
+      onCaptureVisibilityChange?.(offsetY < snapHeight * 0.5);
+    },
+    [onCaptureVisibilityChange, snapHeight]
+  );
 
   const getItemLayout = useCallback(
     (_data: ArrayLike<NotesFeedListItem> | null | undefined, index: number) => ({
       length: snapHeight,
-      offset: snapHeight * index,
+      offset: snapHeight * (index + 1),
       index,
     }),
     [snapHeight]
@@ -287,10 +281,6 @@ export default function NotesFeed({
 
   const renderItem = useCallback(
     ({ item, index }: { item: NotesFeedListItem; index: number }) => {
-      if (item.kind === 'capture') {
-        return captureItem;
-      }
-
       if (item.kind === 'shared-post') {
         return (
           <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
@@ -312,7 +302,7 @@ export default function NotesFeed({
         </View>
       );
     },
-    [captureItem, colors, onOpenNote, snapHeight, t, topInset]
+    [colors, onOpenNote, snapHeight, t, topInset]
   );
 
   return (
@@ -326,13 +316,21 @@ export default function NotesFeed({
       initialNumToRender={3}
       maxToRenderPerBatch={4}
       windowSize={5}
-      removeClippedSubviews
+      removeClippedSubviews={captureMode !== 'camera'}
       snapToInterval={snapHeight}
       snapToAlignment="start"
       decelerationRate="fast"
       showsVerticalScrollIndicator={false}
-      onViewableItemsChanged={onViewableItemsChanged}
-      viewabilityConfig={viewabilityConfig.current}
+      ListHeaderComponent={captureHeader}
+      onScrollEndDrag={(event) => {
+        const velocityY = event.nativeEvent.velocity?.y ?? 0;
+        if (Math.abs(velocityY) < 0.05) {
+          settleCaptureVisibility(event.nativeEvent.contentOffset.y);
+        }
+      }}
+      onMomentumScrollEnd={(event) => {
+        settleCaptureVisibility(event.nativeEvent.contentOffset.y);
+      }}
       contentContainerStyle={{ paddingBottom: height - snapHeight }}
       refreshControl={
         <RefreshControl

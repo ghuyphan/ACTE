@@ -1,15 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AppBackButton from '../components/ui/AppBackButton';
 import PrimaryButton from '../components/ui/PrimaryButton';
 import { Layout, Shadows, Typography } from '../constants/theme';
 import { useSubscription } from '../hooks/useSubscription';
@@ -42,7 +39,6 @@ function FeatureRow({
 }
 
 export default function PlusScreen() {
-  const router = useRouter();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -68,11 +64,7 @@ export default function PlusScreen() {
         end={{ x: 1, y: 1 }}
       />
 
-      <View style={[styles.header, { paddingTop: insets.top }]}>
-        <AppBackButton onPress={() => router.back()} size={24} style={styles.backButton} />
-      </View>
-
-      <View style={[styles.content, { paddingBottom: insets.bottom + 20 }]}>
+      <View style={[styles.content, { paddingTop: insets.top, paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.heroSection}>
           <View style={[styles.iconContainer, { backgroundColor: colors.primarySoft }]}>
             <Ionicons name="heart" size={64} color={colors.primary} />
@@ -134,17 +126,15 @@ export default function PlusScreen() {
             disabled={tier === 'plus' || !isPurchaseAvailable}
           />
 
-          <Pressable
+          <PrimaryButton
+            label={t('plus.restore', 'Restore purchases')}
             onPress={() => {
-                if (isPurchaseInFlight) return;
-                void restorePurchases();
+              if (isPurchaseInFlight) return;
+              void restorePurchases();
             }}
-            style={({ pressed }) => [styles.linkButton, pressed ? styles.linkButtonPressed : null]}
-          >
-            <Text style={[styles.linkButtonLabel, { color: colors.secondaryText }]}>
-              {t('plus.restore', 'Restore purchases')}
-            </Text>
-          </Pressable>
+            variant="secondary"
+            disabled={isPurchaseInFlight}
+          />
         </View>
       </View>
     </View>
@@ -155,17 +145,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 20,
-    zIndex: 10,
-  },
-  backButton: {
-    marginTop: 12,
-  },
   content: {
     flex: 1,
     paddingHorizontal: Layout.screenPadding + 12,
-    paddingTop: 10,
   },
   heroSection: {
     alignItems: 'center',
@@ -241,17 +223,5 @@ const styles = StyleSheet.create({
   },
   footerActions: {
     gap: 12,
-  },
-  linkButton: {
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  linkButtonLabel: {
-    fontSize: 15,
-    fontWeight: '500',
-    fontFamily: Typography.screenTitle.fontFamily,
-  },
-  linkButtonPressed: {
-    opacity: 0.7,
   },
 });

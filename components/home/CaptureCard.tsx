@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -80,6 +81,7 @@ interface CaptureCardProps {
   onToggleFacing: () => void;
   onOpenPhotoLibrary: () => void;
   cameraRef: RefObject<CameraView | null>;
+  shouldRenderCameraPreview: boolean;
   flashAnim: Animated.Value;
   permissionGranted: boolean;
   onShutterPressIn: () => void;
@@ -118,6 +120,7 @@ export default function CaptureCard({
   onToggleFacing,
   onOpenPhotoLibrary,
   cameraRef,
+  shouldRenderCameraPreview,
   flashAnim,
   permissionGranted,
   onShutterPressIn,
@@ -134,6 +137,9 @@ export default function CaptureCard({
   footerContent,
 }: CaptureCardProps) {
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [cameraUnavailable, setCameraUnavailable] = useState(false);
+  const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
+  const [cameraRetryNonce, setCameraRetryNonce] = useState(0);
   const isCameraSaveMode = captureMode === 'camera';
   const isSharedTarget = shareTarget === 'shared';
   const privateAudienceLabel = t('shared.capturePrivate', 'Just me');
@@ -153,13 +159,44 @@ export default function CaptureCard({
   const audienceStateScale = useSharedValue(1);
 
   useEffect(() => {
-    if (captureMode === 'camera' && !capturedPhoto && permissionGranted) {
+    if (captureMode === 'camera' && !capturedPhoto && permissionGranted && shouldRenderCameraPreview) {
       setIsCameraReady(false);
+      setCameraUnavailable(false);
+      setCameraIssueDetail(null);
       return;
     }
 
     setIsCameraReady(true);
-  }, [captureMode, capturedPhoto, permissionGranted, cameraSessionKey]);
+    setCameraUnavailable(false);
+    setCameraIssueDetail(null);
+  }, [captureMode, capturedPhoto, permissionGranted, cameraSessionKey, cameraRetryNonce, shouldRenderCameraPreview]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (captureMode !== 'camera' || capturedPhoto || !permissionGranted || !shouldRenderCameraPreview) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void CameraView.isAvailableAsync()
+      .then((available) => {
+        if (cancelled || available) {
+          return;
+        }
+
+        setCameraUnavailable(true);
+        setIsCameraReady(false);
+      })
+      .catch(() => {
+        // Ignore availability probe failures and rely on onMountError when available.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [captureMode, capturedPhoto, permissionGranted, cameraSessionKey, cameraRetryNonce, shouldRenderCameraPreview]);
 
   useEffect(() => {
     audienceProgress.value = withTiming(isSharedTarget ? 1 : 0, {
@@ -193,6 +230,13 @@ export default function CaptureCard({
   const animatedAudienceTextStyle = useAnimatedStyle(() => ({
     color: interpolateColor(audienceProgress.value, [0, 1], [privateAudienceColor, sharedAudienceColor]),
   }));
+  const showCameraUnavailableState =
+    captureMode === 'camera' && !capturedPhoto && permissionGranted && cameraUnavailable;
+  const cameraUnavailableDetail =
+    cameraIssueDetail?.trim() || t(
+      'capture.cameraUnavailableHint',
+      'This can happen on a simulator or when the camera session gets stuck. Try again or use a physical device.'
+    );
 
   return (
     <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
@@ -305,23 +349,65 @@ export default function CaptureCard({
             />
           </View>
         ) : (
-          <View style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}>
-            {captureMode === 'camera' ? (
-              <CameraView
-                key={`camera-session-${cameraSessionKey}-${facing}`}
-                style={styles.cameraPreview}
-                facing={facing}
-                ref={cameraRef}
-                onCameraReady={() => {
-                  setIsCameraReady(true);
-                }}
-              />
-            ) : null}
-            {!isCameraReady ? (
-              <View pointerEvents="none" style={styles.cameraLoadingOverlay}>
-                <ActivityIndicator size="small" color={colors.captureCameraOverlayText} />
+          <View
+            style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}
+            collapsable={false}
+          >
+            {showCameraUnavailableState ? (
+              <View style={styles.cameraUnavailableState}>
+                <Ionicons name="camera-outline" size={42} color={colors.captureCameraOverlayText} />
+                <Text style={[styles.cameraUnavailableTitle, { color: colors.captureCameraOverlayText }]}>
+                  {t('capture.cameraUnavailable', "Camera preview couldn't start")}
+                </Text>
+                <Text style={[styles.cameraUnavailableHint, { color: colors.captureCameraOverlayText }]}>
+                  {cameraUnavailableDetail}
+                </Text>
+                <PrimaryButton
+                  label={t('capture.cameraTryAgain', 'Try Again')}
+                  variant="secondary"
+                  onPress={() => {
+                    setCameraUnavailable(false);
+                    setCameraIssueDetail(null);
+                    setIsCameraReady(false);
+                    setCameraRetryNonce((current) => current + 1);
+                  }}
+                  style={styles.cameraRetryButton}
+                />
               </View>
-            ) : null}
+            ) : (
+              <>
+                {captureMode === 'camera' && shouldRenderCameraPreview ? (
+                  <CameraView
+                    key={`camera-session-${cameraSessionKey}-${cameraRetryNonce}-${facing}`}
+                    style={styles.cameraPreview}
+                    facing={facing}
+                    ref={cameraRef}
+                    onCameraReady={() => {
+                      setCameraUnavailable(false);
+                      setCameraIssueDetail(null);
+                      setIsCameraReady(true);
+                    }}
+                    onMountError={(error) => {
+                      setCameraUnavailable(true);
+                      setCameraIssueDetail(error.message);
+                      setIsCameraReady(false);
+                    }}
+                  />
+                ) : null}
+                {shouldRenderCameraPreview && !isCameraReady ? (
+                  <View pointerEvents="none" style={styles.cameraLoadingOverlay}>
+                    <ActivityIndicator size="small" color={colors.captureCameraOverlayText} />
+                  </View>
+                ) : null}
+              </>
+            )}
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: colors.captureFlashOverlay, opacity: flashAnim, zIndex: 50 },
+              ]}
+            />
             <Pressable
               style={[
                 styles.cameraOverlayButton,
@@ -344,26 +430,21 @@ export default function CaptureCard({
                 </>
               )}
             </Pressable>
-            <Pressable
-              style={[
-                styles.cameraOverlayButton,
-                styles.flipBtn,
-                {
-                  backgroundColor: colors.captureCameraOverlay,
-                  borderColor: colors.captureCameraOverlayBorder,
-                },
-              ]}
-              onPress={onToggleFacing}
-            >
-              <Ionicons name="camera-reverse" size={20} color={colors.captureCameraOverlayText} />
-            </Pressable>
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: colors.captureFlashOverlay, opacity: flashAnim, zIndex: 50 },
-              ]}
-            />
+            {!showCameraUnavailableState ? (
+              <Pressable
+                style={[
+                  styles.cameraOverlayButton,
+                  styles.flipBtn,
+                  {
+                    backgroundColor: colors.captureCameraOverlay,
+                    borderColor: colors.captureCameraOverlayBorder,
+                  },
+                ]}
+                onPress={onToggleFacing}
+              >
+                <Ionicons name="camera-reverse" size={20} color={colors.captureCameraOverlayText} />
+              </Pressable>
+            ) : null}
           </View>
         )}
 
@@ -564,7 +645,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    ...Shadows.card,
+    ...(Platform.OS === 'android' ? {} : Shadows.card),
     backgroundColor: '#000',
   },
   cameraOverlayButton: {
@@ -574,6 +655,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 4,
+    zIndex: 10,
   },
   cameraPreview: {
     ...StyleSheet.absoluteFillObject,
@@ -582,6 +664,30 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 1,
+  },
+  cameraUnavailableState: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  cameraUnavailableTitle: {
+    ...Typography.body,
+    textAlign: 'center',
+    fontWeight: '700',
+  },
+  cameraUnavailableHint: {
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '500',
+    fontFamily: 'System',
+    lineHeight: 18,
+  },
+  cameraRetryButton: {
+    minWidth: 150,
+    marginTop: 4,
   },
   flipBtn: {
     position: 'absolute',
@@ -624,6 +730,7 @@ const styles = StyleSheet.create({
     borderRadius: TOP_CONTROL_RADIUS,
     backgroundColor: 'rgba(0,0,0,0.5)',
     gap: 5,
+    zIndex: 10,
   },
   retakeBtnText: {
     fontWeight: '600',
