@@ -2,6 +2,10 @@ import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const cleanup = callback();
+    return cleanup ?? undefined;
+  },
   useScrollToTop: jest.fn(),
 }));
 

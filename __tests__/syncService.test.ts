@@ -1,3 +1,5 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 type QueueRow = {
   id: number;
   entity: 'note';
@@ -7,26 +9,59 @@ type QueueRow = {
   status: 'pending' | 'processing' | 'failed';
   attempts: number;
   last_error: string | null;
+  next_retry_at: string | null;
+  terminal: number;
+  blocked_reason: string | null;
   created_at: string;
+};
+
+type NoteRecord = {
+  id: string;
+  type: 'text' | 'photo';
+  content: string;
+  photoLocalUri: string | null;
+  photoRemoteBase64: string | null;
+  locationName: string | null;
+  latitude: number;
+  longitude: number;
+  radius: number;
+  isFavorite: boolean;
+  createdAt: string;
+  updatedAt: string | null;
 };
 
 let queueRows: QueueRow[] = [];
 let queueId = 1;
+let localNotesStore: NoteRecord[] = [];
 const mockRemoteNotes = new Map<string, any>();
+const mockUserDocs = new Map<string, any>();
+const mockPublicProfiles = new Map<string, any>();
 
-const mockRemoteSet = jest.fn(async (id: string, data: unknown, _options?: unknown) => {
+const mockNoteRemoteSet = jest.fn(async (id: string, data: unknown, _options?: unknown) => {
   mockRemoteNotes.set(id, data);
 });
 const mockRemoteDelete = jest.fn(async (id: string) => {
   mockRemoteNotes.delete(id);
 });
-const mockUserSet = jest.fn(async (_data?: unknown, _options?: unknown) => undefined);
-const mockUpsertNote = jest.fn<Promise<unknown>, [unknown]>(async (note: unknown) => note);
-const mockGetNoteById = jest.fn<Promise<null>, [string]>(async () => null);
+const mockUserSet = jest.fn(async (userUid: string, data: unknown, _options?: unknown) => {
+  mockUserDocs.set(userUid, data);
+});
+const mockPublicProfileSet = jest.fn(async (userUid: string, data: unknown, _options?: unknown) => {
+  mockPublicProfiles.set(userUid, data);
+});
+const mockUpsertNote = jest.fn<Promise<unknown>, [NoteRecord]>(async (note: NoteRecord) => {
+  localNotesStore = [note, ...localNotesStore.filter((item) => item.id !== note.id)];
+  return note;
+});
+const mockGetNoteById = jest.fn<Promise<NoteRecord | null>, [string]>(async (id: string) => {
+  return localNotesStore.find((note) => note.id === id) ?? null;
+});
+const mockGetAllNotes = jest.fn<Promise<NoteRecord[]>, []>(async () => localNotesStore);
 const mockReadPhotoAsBase64 = jest.fn<Promise<string>, [string]>(async () => 'base64-photo');
 const mockWritePhotoFromBase64 = jest.fn<Promise<string>, [string, string]>(
   async (noteId: string) => `file:///synced/${noteId}.jpg`
 );
+const mockBatchCommit = jest.fn(async () => undefined);
 
 const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   if (sql.includes('INSERT INTO sync_queue')) {
@@ -40,6 +75,9 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
       status: 'pending',
       attempts: 0,
       last_error: null,
+      next_retry_at: null,
+      terminal: 0,
+      blocked_reason: null,
       created_at: createdAt,
     });
     return;
@@ -49,16 +87,31 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
     const [id] = args;
     queueRows = queueRows.map((row) =>
       row.id === id
-        ? { ...row, status: 'processing', attempts: row.attempts + 1, last_error: null }
+        ? {
+            ...row,
+            status: 'processing',
+            attempts: row.attempts + 1,
+            last_error: null,
+            blocked_reason: null,
+          }
         : row
     );
     return;
   }
 
   if (sql.includes("SET status = 'failed'")) {
-    const [lastError, id] = args;
+    const [lastError, nextRetryAt, terminal, blockedReason, id] = args;
     queueRows = queueRows.map((row) =>
-      row.id === id ? { ...row, status: 'failed', last_error: lastError } : row
+      row.id === id
+        ? {
+            ...row,
+            status: 'failed',
+            last_error: lastError,
+            next_retry_at: nextRetryAt,
+            terminal,
+            blocked_reason: blockedReason,
+          }
+        : row
     );
     return;
   }
@@ -74,20 +127,22 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   }
 });
 
-const mockGetAllAsync = jest.fn(async (_sql: string, limit: number) =>
+const mockGetAllAsync = jest.fn(async (_sql: string, now: string, limit: number) =>
   queueRows
-    .filter((row) => row.status === 'pending' || row.status === 'failed')
+    .filter((row) => (row.status === 'pending' || row.status === 'failed') && row.terminal === 0)
+    .filter((row) => !row.next_retry_at || row.next_retry_at <= now)
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
     .slice(0, limit)
 );
 
 jest.mock('../services/database', () => ({
   getDB: async () => ({
-    runAsync: (...args: any[]) => mockRunAsync(args[0], ...args.slice(1)),
-    getAllAsync: (sql: string, limit: number) => mockGetAllAsync(sql, limit),
+    runAsync: (sql: string, ...args: any[]) => mockRunAsync(sql, ...args),
+    getAllAsync: (sql: string, now: string, limit: number) => mockGetAllAsync(sql, now, limit),
   }),
+  getAllNotes: () => mockGetAllNotes(),
   getNoteById: (id: string) => mockGetNoteById(id),
-  upsertNote: (note: unknown) => mockUpsertNote(note),
+  upsertNote: (note: NoteRecord) => mockUpsertNote(note),
 }));
 
 jest.mock('../services/photoStorage', () => ({
@@ -96,63 +151,135 @@ jest.mock('../services/photoStorage', () => ({
     mockWritePhotoFromBase64(noteId, base64Data),
 }));
 
-function mockCreateDocRef(id: string) {
-  return {
-    id,
-    set: (data: unknown, options: unknown) => mockRemoteSet(id, data, options),
-    delete: () => mockRemoteDelete(id),
-  };
-}
+jest.mock('../services/publicProfileService', () => ({
+  upsertPublicUserProfile: (input: { userUid: string; displayName: string | null; photoURL: string | null }) =>
+    mockPublicProfileSet(input.userUid, input),
+}));
 
 jest.mock('../utils/firebase', () => ({
-  getFirestore: () => ({
-    batch: () => {
-      const ops: Array<() => Promise<void>> = [];
-      return {
-        set: (ref: { id: string }, data: unknown, options?: unknown) => {
-          ops.push(() => mockRemoteSet(ref.id, data, options));
-        },
-        delete: (ref: { id: string }) => {
-          ops.push(() => mockRemoteDelete(ref.id));
-        },
-        commit: async () => {
-          for (const op of ops) {
-            await op();
-          }
-        },
-      };
-    },
-    collection: () => ({
-      doc: () => ({
-        collection: () => ({
-          doc: (id: string) => mockCreateDocRef(id),
-          get: async () => ({
-            docs: Array.from(mockRemoteNotes.entries()).map(([id, data]) => ({
-              id,
-              ref: { id, delete: () => mockRemoteDelete(id) },
-              data: () => data,
-            })),
-          }),
-        }),
-        set: (data: unknown, options: unknown) => mockUserSet(data, options),
-      }),
-    }),
-  }),
+  getFirestore: () => ({}),
 }));
+
+function mockResolvePath(refOrCollection: any, pathSegments: string[]) {
+  if (refOrCollection?.kind === 'collection' || refOrCollection?.kind === 'doc') {
+    return [...refOrCollection.path, ...pathSegments];
+  }
+
+  return pathSegments;
+}
 
 jest.mock('@react-native-firebase/firestore', () => ({
   __esModule: true,
-  default: {},
-  serverTimestamp: () => 'SERVER_TIMESTAMP',
+  collection: (_firestore: unknown, ...path: string[]) => ({ kind: 'collection', path }),
+  doc: (refOrFirestore: unknown, ...path: string[]) => ({
+    kind: 'doc',
+    path: mockResolvePath(refOrFirestore, path),
+    id: mockResolvePath(refOrFirestore, path).slice(-1)[0],
+  }),
+  query: (ref: any, ...constraints: any[]) => ({ kind: 'query', ref, constraints }),
+  where: (field: string, op: string, value: unknown) => ({ type: 'where', field, op, value }),
+  orderBy: (field: string, direction: 'asc' | 'desc' = 'asc') => ({ type: 'orderBy', field, direction }),
+  setDoc: async (ref: any, data: any, options?: unknown) => {
+    const path = ref.path as string[];
+    if (path.length === 2 && path[0] === 'users') {
+      await mockUserSet(path[1]!, data, options);
+      return;
+    }
+    if (path.length === 2 && path[0] === 'publicUserProfiles') {
+      await mockPublicProfileSet(path[1]!, data, options);
+      return;
+    }
+    if (path.length === 4 && path[0] === 'users' && path[2] === 'notes') {
+      await mockNoteRemoteSet(path[3]!, data, options);
+    }
+  },
+  writeBatch: () => {
+    const ops: Array<() => Promise<void>> = [];
+    return {
+      set: (ref: any, data: unknown, options?: unknown) => {
+        ops.push(() => mockNoteRemoteSet(ref.id, data, options));
+      },
+      delete: (ref: any) => {
+        ops.push(() => mockRemoteDelete(ref.id));
+      },
+      commit: async () => {
+        await mockBatchCommit();
+        for (const op of ops) {
+          await op();
+        }
+      },
+    };
+  },
+  getDocs: async (refOrQuery: any) => {
+    const target = refOrQuery.kind === 'query' ? refOrQuery.ref : refOrQuery;
+    const constraints = refOrQuery.kind === 'query' ? refOrQuery.constraints : [];
+    const whereConstraint = constraints.find((item: any) => item.type === 'where');
+    const orderConstraint = constraints.find((item: any) => item.type === 'orderBy');
+    const path = target.path as string[];
+
+    if (path.length === 3 && path[0] === 'users' && path[2] === 'notes') {
+      let docs = Array.from(mockRemoteNotes.entries()).map(([id, data]) => ({
+        id,
+        data,
+      }));
+
+      if (whereConstraint?.field === 'syncedAt' && whereConstraint.op === '>') {
+        docs = docs.filter(({ data }) => String(data?.syncedAt ?? '') > String(whereConstraint.value ?? ''));
+      }
+
+      if (orderConstraint?.field === 'syncedAt') {
+        docs = [...docs].sort((left, right) => {
+          const leftValue = String(left.data?.syncedAt ?? '');
+          const rightValue = String(right.data?.syncedAt ?? '');
+          return orderConstraint.direction === 'desc'
+            ? rightValue.localeCompare(leftValue)
+            : leftValue.localeCompare(rightValue);
+        });
+      }
+
+      return {
+        docs: docs.map(({ id, data }) => ({
+          id,
+          ref: { id },
+          data: () => data,
+        })),
+      };
+    }
+
+    return { docs: [] };
+  },
 }));
 
 import { getSyncRepository, getSyncService, syncNotesToFirebase } from '../services/syncService';
 
-beforeEach(() => {
+function createTextNote(id: string, content = `note ${id}`): NoteRecord {
+  return {
+    id,
+    type: 'text',
+    content,
+    photoLocalUri: null,
+    photoRemoteBase64: null,
+    locationName: 'Saigon',
+    latitude: 10.77,
+    longitude: 106.69,
+    radius: 150,
+    isFavorite: false,
+    createdAt: '2026-03-10T00:00:00.000Z',
+    updatedAt: null,
+  };
+}
+
+beforeEach(async () => {
   jest.clearAllMocks();
+  await AsyncStorage.clear();
   queueRows = [];
   queueId = 1;
+  localNotesStore = [];
   mockRemoteNotes.clear();
+  mockUserDocs.clear();
+  mockPublicProfiles.clear();
+  mockBatchCommit.mockResolvedValue(undefined);
+  mockReadPhotoAsBase64.mockResolvedValue('base64-photo');
 });
 
 describe('syncService', () => {
@@ -172,6 +299,7 @@ describe('syncService', () => {
         operation: 'create',
         entity_id: 'note-1',
         status: 'pending',
+        terminal: 0,
       })
     );
   });
@@ -195,15 +323,21 @@ describe('syncService', () => {
     expect(queueRows[0].status).toBe('processing');
     expect(queueRows[0].attempts).toBe(1);
 
-    await repo.markFailed(pending[0].id, 'network failed');
+    await repo.markFailed(pending[0].id, {
+      error: 'network failed',
+      nextRetryAt: '2026-03-10T01:05:00.000Z',
+    });
     expect(queueRows[0].status).toBe('failed');
     expect(queueRows[0].last_error).toBe('network failed');
+    expect(queueRows[0].next_retry_at).toBe('2026-03-10T01:05:00.000Z');
 
     await repo.markDone(pending[0].id);
     expect(queueRows).toHaveLength(0);
   });
 
-  it('syncs queued deletions and uploads a local backup snapshot to Firebase', async () => {
+  it('syncs queued deletions and performs a full snapshot upload on initial sync', async () => {
+    const note = createTextNote('note-1', 'hello');
+    localNotesStore = [note];
     mockRemoteNotes.set('note-deleted', { id: 'note-deleted', type: 'text', content: 'gone' });
 
     const repo = getSyncRepository();
@@ -221,50 +355,228 @@ describe('syncService', () => {
         email: 'test@example.com',
         photoURL: null,
       },
-      [
-        {
-          id: 'note-1',
-          type: 'text',
-          content: 'hello',
-          photoLocalUri: null,
-          photoRemoteBase64: null,
-          locationName: 'Saigon',
-          latitude: 10.77,
-          longitude: 106.69,
-          radius: 150,
-          isFavorite: false,
-          createdAt: '2026-03-10T00:00:00.000Z',
-          updatedAt: null,
-        },
-      ]
+      localNotesStore
     );
 
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
-        syncedCount: 1,
+        syncedCount: 2,
         uploadedCount: 1,
       })
     );
     expect(mockRemoteDelete).toHaveBeenCalledWith('note-deleted');
-    expect(mockRemoteSet).toHaveBeenCalledWith(
+    expect(mockNoteRemoteSet).toHaveBeenCalledWith(
       'note-1',
       expect.objectContaining({
         id: 'note-1',
         content: 'hello',
-        syncedAt: 'SERVER_TIMESTAMP',
+        syncedAt: expect.any(String),
       }),
       { merge: true }
     );
     expect(mockUserSet).toHaveBeenCalledWith(
+      'user-1',
       expect.objectContaining({
         displayName: 'Test User',
-        email: 'test@example.com',
         noteCount: 1,
-        lastSyncedAt: 'SERVER_TIMESTAMP',
+        lastSyncedAt: expect.any(String),
       }),
       { merge: true }
     );
+    expect(mockPublicProfileSet).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        userUid: 'user-1',
+        displayName: 'Test User',
+      })
+    );
     expect(queueRows).toHaveLength(0);
+  });
+
+  it('backs off transient failures and skips retrying until the item is due again', async () => {
+    const note = createTextNote('note-1', 'retry me');
+    localNotesStore = [note];
+    mockBatchCommit.mockRejectedValueOnce(new Error('temporary outage'));
+
+    const repo = getSyncRepository();
+    await repo.enqueue({
+      type: 'update',
+      entity: 'note',
+      entityId: note.id,
+      timestamp: '2026-03-10T03:00:00.000Z',
+    });
+
+    const result = await syncNotesToFirebase(
+      {
+        uid: 'user-1',
+        displayName: 'Test User',
+        email: 'test@example.com',
+        photoURL: null,
+      },
+      localNotesStore,
+      { mode: 'incremental' }
+    );
+
+    expect(result.status).toBe('error');
+    expect(queueRows[0]).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        terminal: 0,
+        blocked_reason: null,
+        next_retry_at: expect.any(String),
+      })
+    );
+
+    const pendingImmediately = await repo.listPending(20);
+    expect(pendingImmediately).toHaveLength(0);
+
+    queueRows[0] = {
+      ...queueRows[0]!,
+      next_retry_at: '2026-03-10T02:59:00.000Z',
+    };
+
+    const pendingAfterWindow = await repo.listPending(20);
+    expect(pendingAfterWindow).toHaveLength(1);
+  });
+
+  it('marks oversize photo failures as terminal and stops retrying them', async () => {
+    const oversizedPhotoNote: NoteRecord = {
+      ...createTextNote('photo-1'),
+      type: 'photo',
+      content: 'file:///photos/photo-1.jpg',
+      photoLocalUri: 'file:///photos/photo-1.jpg',
+    };
+    localNotesStore = [oversizedPhotoNote];
+    mockReadPhotoAsBase64.mockRejectedValueOnce(
+      new Error('Photo is too large to sync safely. Please retake it with a lower resolution.')
+    );
+
+    const repo = getSyncRepository();
+    await repo.enqueue({
+      type: 'create',
+      entity: 'note',
+      entityId: oversizedPhotoNote.id,
+      timestamp: '2026-03-10T04:00:00.000Z',
+    });
+
+    const result = await syncNotesToFirebase(
+      {
+        uid: 'user-1',
+        displayName: 'Test User',
+        email: 'test@example.com',
+        photoURL: null,
+      },
+      localNotesStore,
+      { mode: 'incremental' }
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'error',
+        message: expect.stringContaining('too large'),
+      })
+    );
+    expect(queueRows[0]).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        terminal: 1,
+        blocked_reason: expect.stringContaining('lower resolution'),
+      })
+    );
+    expect(await repo.listPending(20)).toHaveLength(0);
+  });
+
+  it('syncs only queued changes during incremental sync instead of uploading the whole library', async () => {
+    const firstNote = createTextNote('note-1', 'first');
+    const secondNote = createTextNote('note-2', 'second');
+    localNotesStore = [firstNote, secondNote];
+    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-10T00:00:00.000Z');
+
+    const repo = getSyncRepository();
+    await repo.enqueue({
+      type: 'update',
+      entity: 'note',
+      entityId: secondNote.id,
+      timestamp: '2026-03-10T05:00:00.000Z',
+    });
+
+    const result = await syncNotesToFirebase(
+      {
+        uid: 'user-1',
+        displayName: 'Test User',
+        email: 'test@example.com',
+        photoURL: null,
+      },
+      localNotesStore,
+      { mode: 'incremental' }
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        uploadedCount: 0,
+        importedCount: 0,
+      })
+    );
+    expect(mockNoteRemoteSet).toHaveBeenCalledTimes(1);
+    expect(mockNoteRemoteSet).toHaveBeenCalledWith(
+      'note-2',
+      expect.objectContaining({
+        id: 'note-2',
+        content: 'second',
+      }),
+      { merge: true }
+    );
+  });
+
+  it('imports newer remote changes during a full resync and re-uploads the merged snapshot', async () => {
+    mockRemoteNotes.set('remote-1', {
+      id: 'remote-1',
+      type: 'text',
+      content: 'remote note',
+      photoRemoteBase64: null,
+      locationName: 'District 1',
+      latitude: 10.78,
+      longitude: 106.68,
+      radius: 150,
+      isFavorite: false,
+      createdAt: '2026-03-10T00:00:00.000Z',
+      updatedAt: '2026-03-10T01:00:00.000Z',
+      syncedAt: '2026-03-10T01:00:00.000Z',
+    });
+
+    const result = await syncNotesToFirebase(
+      {
+        uid: 'user-1',
+        displayName: 'Test User',
+        email: 'test@example.com',
+        photoURL: null,
+      },
+      [],
+      { mode: 'full' }
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        importedCount: 1,
+        uploadedCount: 1,
+      })
+    );
+    expect(mockUpsertNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'remote-1',
+        content: 'remote note',
+      })
+    );
+    expect(mockNoteRemoteSet).toHaveBeenCalledWith(
+      'remote-1',
+      expect.objectContaining({
+        id: 'remote-1',
+        content: 'remote note',
+      }),
+      { merge: true }
+    );
   });
 });

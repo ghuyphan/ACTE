@@ -1,18 +1,23 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   collection,
   doc,
   FirebaseFirestoreTypes,
   getDocs,
-  serverTimestamp,
+  orderBy,
+  query,
   setDoc,
+  where,
   writeBatch,
 } from '@react-native-firebase/firestore';
-import { Note, getDB, getNoteById, upsertNote } from './database';
+import { Note, getAllNotes, getDB, getNoteById, upsertNote } from './database';
 import { readPhotoAsBase64, writePhotoFromBase64 } from './photoStorage';
+import { upsertPublicUserProfile } from './publicProfileService';
 import { getFirestore } from '../utils/firebase';
 
 export type SyncChangeType = 'create' | 'update' | 'delete' | 'deleteAll';
 export type SyncQueueStatus = 'pending' | 'processing' | 'failed';
+export type SyncMode = 'incremental' | 'full';
 
 export interface SyncChange {
   type: SyncChangeType;
@@ -31,6 +36,9 @@ export interface SyncQueueItem {
   status: SyncQueueStatus;
   attempts: number;
   lastError: string | null;
+  nextRetryAt: string | null;
+  terminal: boolean;
+  blockedReason: string | null;
   createdAt: string;
 }
 
@@ -38,7 +46,17 @@ export interface SyncRepository {
   enqueue: (change: SyncChange) => Promise<void>;
   listPending: (limit?: number) => Promise<SyncQueueItem[]>;
   markProcessing: (id: number) => Promise<void>;
-  markFailed: (id: number, error?: string) => Promise<void>;
+  markFailed: (
+    id: number,
+    details?:
+      | string
+      | {
+          error?: string;
+          nextRetryAt?: string | null;
+          terminal?: boolean;
+          blockedReason?: string | null;
+        }
+  ) => Promise<void>;
   markDone: (id: number) => Promise<void>;
   clearAll: () => Promise<void>;
 }
@@ -66,6 +84,10 @@ export interface FirebaseSyncResult {
   failedCount?: number;
 }
 
+export interface SyncOptions {
+  mode?: SyncMode;
+}
+
 interface FirebaseNoteRecord {
   id: string;
   type: Note['type'];
@@ -78,24 +100,60 @@ interface FirebaseNoteRecord {
   isFavorite: boolean;
   createdAt: string;
   updatedAt: string | null;
+  syncedAt: string;
+}
+
+interface QueueFlushFailure {
+  itemId: number;
+  error: string;
+  blockedReason: string | null;
+  terminal: boolean;
 }
 
 interface FlushQueueResult {
   processedCount: number;
   failedCount: number;
   lastError: string | null;
+  lastBlockedReason: string | null;
+  hadLocalWrites: boolean;
 }
 
 interface RemoteMergeResult {
   importedCount: number;
+  latestSyncedAt: string | null;
+}
+
+interface QueueRow {
+  id: number;
+  entity: 'note';
+  entity_id: string | null;
+  operation: SyncChangeType;
+  payload: string | null;
+  status: SyncQueueStatus;
+  attempts: number;
+  last_error: string | null;
+  next_retry_at: string | null;
+  terminal: number;
+  blocked_reason: string | null;
+  created_at: string;
 }
 
 const FIRESTORE_BATCH_LIMIT = 400;
+const MAX_SYNC_ATTEMPTS = 5;
+const RETRY_DELAYS_MS = [
+  5 * 60 * 1000,
+  15 * 60 * 1000,
+  60 * 60 * 1000,
+  6 * 60 * 60 * 1000,
+  24 * 60 * 60 * 1000,
+];
+const REMOTE_SYNC_CURSOR_KEY_PREFIX = 'sync.lastRemoteCursor.';
+
 type FirestoreDocument = FirebaseFirestoreTypes.DocumentData;
 type FirestoreCollection = FirebaseFirestoreTypes.CollectionReference<FirestoreDocument>;
-type FirestoreWriteBatch = Pick<FirebaseFirestoreTypes.WriteBatch, 'commit'>;
+type FirestoreWriteBatch = Pick<FirebaseFirestoreTypes.WriteBatch, 'commit' | 'delete' | 'set'>;
 
-function rowToQueueItem(row: any): SyncQueueItem {
+function rowToQueueItem(row: QueueRow): SyncQueueItem {
   return {
     id: row.id,
     entity: row.entity,
@@ -105,6 +163,9 @@ function rowToQueueItem(row: any): SyncQueueItem {
     status: row.status,
     attempts: row.attempts,
     lastError: row.last_error,
+    nextRetryAt: row.next_retry_at,
+    terminal: row.terminal === 1,
+    blockedReason: row.blocked_reason,
     createdAt: row.created_at,
   };
 }
@@ -121,7 +182,54 @@ function getErrorMessage(error: unknown) {
   return 'Unknown sync error';
 }
 
-async function serializeNoteForFirebase(note: Note): Promise<FirebaseNoteRecord> {
+function isTerminalSyncError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+  return message.includes('too large to sync safely');
+}
+
+function getRetryDelayMs(attemptCount: number) {
+  const index = Math.max(0, Math.min(RETRY_DELAYS_MS.length - 1, attemptCount - 1));
+  return RETRY_DELAYS_MS[index] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
+}
+
+function getRetryMetadata(item: SyncQueueItem, error: unknown) {
+  const nextAttemptCount = item.attempts + 1;
+  const terminal = isTerminalSyncError(error) || nextAttemptCount >= MAX_SYNC_ATTEMPTS;
+  const message = getErrorMessage(error);
+
+  if (terminal) {
+    return {
+      error: message,
+      nextRetryAt: null,
+      terminal: true,
+      blockedReason:
+        isTerminalSyncError(error)
+          ? 'A photo is too large to sync safely. Retake it with a lower resolution, then try again.'
+          : 'This note could not be synced after multiple attempts. Edit it and try again.',
+    };
+  }
+
+  return {
+    error: message,
+    nextRetryAt: new Date(Date.now() + getRetryDelayMs(nextAttemptCount)).toISOString(),
+    terminal: false,
+    blockedReason: null,
+  };
+}
+
+function getRemoteSyncCursorKey(userUid: string) {
+  return `${REMOTE_SYNC_CURSOR_KEY_PREFIX}${userUid}`;
+}
+
+async function getLastRemoteSyncCursor(userUid: string) {
+  return AsyncStorage.getItem(getRemoteSyncCursorKey(userUid));
+}
+
+async function setLastRemoteSyncCursor(userUid: string, cursor: string) {
+  await AsyncStorage.setItem(getRemoteSyncCursorKey(userUid), cursor);
+}
+
+async function serializeNoteForFirebase(note: Note, syncedAt: string): Promise<FirebaseNoteRecord> {
   let photoRemoteBase64 = note.photoRemoteBase64 ?? null;
 
   if (note.type === 'photo' && !photoRemoteBase64) {
@@ -140,6 +248,7 @@ async function serializeNoteForFirebase(note: Note): Promise<FirebaseNoteRecord>
     isFavorite: note.isFavorite,
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
+    syncedAt,
   };
 }
 
@@ -183,27 +292,56 @@ async function deserializeRemoteNote(
   };
 }
 
+async function markItemFailed(
+  syncRepository: SyncRepository,
+  item: SyncQueueItem,
+  error: unknown
+): Promise<QueueFlushFailure> {
+  const retryMetadata = getRetryMetadata(item, error);
+  await syncRepository.markFailed(item.id, retryMetadata);
+  return {
+    itemId: item.id,
+    error: retryMetadata.error,
+    blockedReason: retryMetadata.blockedReason,
+    terminal: retryMetadata.terminal,
+  };
+}
+
 async function commitBatch({
   batch,
-  itemIds,
+  items,
   syncRepository,
 }: {
   batch: FirestoreWriteBatch;
-  itemIds: number[];
+  items: SyncQueueItem[];
   syncRepository: SyncRepository;
 }) {
-  if (itemIds.length === 0) {
-    return { processedCount: 0, failedCount: 0, error: null as string | null };
+  if (items.length === 0) {
+    return {
+      processedCount: 0,
+      failedCount: 0,
+      error: null as string | null,
+      blockedReason: null as string | null,
+    };
   }
 
   try {
     await batch.commit();
-    await Promise.all(itemIds.map((id) => syncRepository.markDone(id)));
-    return { processedCount: itemIds.length, failedCount: 0, error: null as string | null };
+    await Promise.all(items.map((item) => syncRepository.markDone(item.id)));
+    return {
+      processedCount: items.length,
+      failedCount: 0,
+      error: null as string | null,
+      blockedReason: null as string | null,
+    };
   } catch (error) {
-    const message = getErrorMessage(error);
-    await Promise.all(itemIds.map((id) => syncRepository.markFailed(id, message)));
-    return { processedCount: 0, failedCount: itemIds.length, error: message };
+    const failures = await Promise.all(items.map((item) => markItemFailed(syncRepository, item, error)));
+    return {
+      processedCount: 0,
+      failedCount: failures.length,
+      error: failures[failures.length - 1]?.error ?? getErrorMessage(error),
+      blockedReason: failures.find((failure) => failure.blockedReason)?.blockedReason ?? null,
+    };
   }
 }
 
@@ -217,8 +355,8 @@ async function deleteAllRemoteNotesInChunks(
   for (let index = 0; index < docs.length; index += FIRESTORE_BATCH_LIMIT) {
     const nextBatch = writeBatch(firestore);
     const chunk = docs.slice(index, index + FIRESTORE_BATCH_LIMIT);
-    chunk.forEach((snapshot: FirebaseFirestoreTypes.QueryDocumentSnapshot<FirestoreDocument>) => {
-      nextBatch.delete(snapshot.ref);
+    chunk.forEach((snapshotItem: FirebaseFirestoreTypes.QueryDocumentSnapshot<FirestoreDocument>) => {
+      nextBatch.delete(snapshotItem.ref);
     });
     await nextBatch.commit();
   }
@@ -228,29 +366,33 @@ async function flushPendingQueueToFirebase(
   notesCollection: FirestoreCollection,
   firestore: FirebaseFirestoreTypes.Module,
   syncRepository: SyncRepository,
-  notes: Note[]
+  notes: Note[],
+  syncMarker: string
 ): Promise<FlushQueueResult> {
   const pendingChanges = await syncRepository.listPending(5000);
   const noteMap = new Map(notes.map((note) => [note.id, note]));
 
   let currentBatch = writeBatch(firestore);
-  let currentBatchItemIds: number[] = [];
+  let currentBatchItems: SyncQueueItem[] = [];
   let currentBatchOps = 0;
   let processedCount = 0;
   let failedCount = 0;
   let lastError: string | null = null;
+  let lastBlockedReason: string | null = null;
+  let hadLocalWrites = false;
 
   const commitCurrentBatch = async () => {
     const result = await commitBatch({
       batch: currentBatch,
-      itemIds: currentBatchItemIds,
+      items: currentBatchItems,
       syncRepository,
     });
     processedCount += result.processedCount;
     failedCount += result.failedCount;
     lastError = result.error ?? lastError;
+    lastBlockedReason = result.blockedReason ?? lastBlockedReason;
     currentBatch = writeBatch(firestore);
-    currentBatchItemIds = [];
+    currentBatchItems = [];
     currentBatchOps = 0;
   };
 
@@ -264,10 +406,12 @@ async function flushPendingQueueToFirebase(
         await deleteAllRemoteNotesInChunks(notesCollection, firestore);
         await syncRepository.markDone(change.id);
         processedCount += 1;
+        hadLocalWrites = true;
       } catch (error) {
-        lastError = getErrorMessage(error);
+        const failure = await markItemFailed(syncRepository, change, error);
         failedCount += 1;
-        await syncRepository.markFailed(change.id, lastError);
+        lastError = failure.error;
+        lastBlockedReason = failure.blockedReason ?? lastBlockedReason;
       }
       continue;
     }
@@ -287,28 +431,23 @@ async function flushPendingQueueToFirebase(
         if (!note) {
           currentBatch.delete(docRef);
         } else {
-          const serializedNote = await serializeNoteForFirebase(note);
-          currentBatch.set(
-            docRef,
-            {
-              ...serializedNote,
-              syncedAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
+          const serializedNote = await serializeNoteForFirebase(note, syncMarker);
+          currentBatch.set(docRef, serializedNote, { merge: true });
         }
       }
 
-      currentBatchItemIds.push(change.id);
+      currentBatchItems.push(change);
       currentBatchOps += 1;
+      hadLocalWrites = true;
 
       if (currentBatchOps >= FIRESTORE_BATCH_LIMIT) {
         await commitCurrentBatch();
       }
     } catch (error) {
-      lastError = getErrorMessage(error);
+      const failure = await markItemFailed(syncRepository, change, error);
       failedCount += 1;
-      await syncRepository.markFailed(change.id, lastError);
+      lastError = failure.error;
+      lastBlockedReason = failure.blockedReason ?? lastBlockedReason;
     }
   }
 
@@ -318,13 +457,16 @@ async function flushPendingQueueToFirebase(
     processedCount,
     failedCount,
     lastError,
+    lastBlockedReason,
+    hadLocalWrites,
   };
 }
 
 async function uploadLocalSnapshotToFirebase(
   notesCollection: FirestoreCollection,
   firestore: FirebaseFirestoreTypes.Module,
-  notes: Note[]
+  notes: Note[],
+  syncMarker: string
 ) {
   let uploadedCount = 0;
 
@@ -333,15 +475,8 @@ async function uploadLocalSnapshotToFirebase(
     const chunk = notes.slice(index, index + FIRESTORE_BATCH_LIMIT);
 
     for (const note of chunk) {
-      const serializedNote = await serializeNoteForFirebase(note);
-      nextBatch.set(
-        doc(notesCollection, note.id),
-        {
-          ...serializedNote,
-          syncedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      const serializedNote = await serializeNoteForFirebase(note, syncMarker);
+      nextBatch.set(doc(notesCollection, note.id), serializedNote, { merge: true });
     }
 
     await nextBatch.commit();
@@ -353,32 +488,42 @@ async function uploadLocalSnapshotToFirebase(
 
 async function mergeRemoteNotesFromFirebase(
   notesCollection: FirestoreCollection,
-  localNotes: Note[]
+  localNotes: Note[],
+  options: { since: string | null }
 ): Promise<RemoteMergeResult> {
   const localNoteMap = new Map(localNotes.map((note) => [note.id, note]));
-  const snapshot = await getDocs(notesCollection);
+  const remoteRef = options.since
+    ? query(notesCollection, where('syncedAt', '>', options.since), orderBy('syncedAt', 'asc'))
+    : notesCollection;
+  const snapshot = await getDocs(remoteRef);
   let importedCount = 0;
+  let latestSyncedAt: string | null = options.since;
 
-  for (const doc of snapshot.docs) {
+  for (const snapshotDoc of snapshot.docs) {
     const nextRemoteRecord = {
-      ...doc.data(),
-      id: doc.id,
+      ...snapshotDoc.data(),
+      id: snapshotDoc.id,
     } as FirebaseNoteRecord;
-    const existingLocalNote = localNoteMap.get(nextRemoteRecord.id) ?? (await getNoteById(nextRemoteRecord.id));
+    const existingLocalNote =
+      localNoteMap.get(nextRemoteRecord.id) ?? (await getNoteById(nextRemoteRecord.id));
     const nextLocalNote = await deserializeRemoteNote(nextRemoteRecord, existingLocalNote);
     if (!nextLocalNote) {
+      latestSyncedAt = nextRemoteRecord.syncedAt ?? latestSyncedAt;
       continue;
     }
 
     if (existingLocalNote && getSyncTimestamp(existingLocalNote) >= getSyncTimestamp(nextLocalNote)) {
+      latestSyncedAt = nextRemoteRecord.syncedAt ?? latestSyncedAt;
       continue;
     }
 
     await upsertNote(nextLocalNote);
+    localNoteMap.set(nextLocalNote.id, nextLocalNote);
     importedCount += 1;
+    latestSyncedAt = nextRemoteRecord.syncedAt ?? latestSyncedAt;
   }
 
-  return { importedCount };
+  return { importedCount, latestSyncedAt };
 }
 
 const sqliteSyncRepository: SyncRepository = {
@@ -387,8 +532,20 @@ const sqliteSyncRepository: SyncRepository = {
     const serializedPayload =
       change.payload === undefined ? null : JSON.stringify(change.payload);
     await db.runAsync(
-      `INSERT INTO sync_queue (entity, entity_id, operation, payload, status, attempts, created_at)
-       VALUES (?, ?, ?, ?, 'pending', 0, ?)`,
+      `INSERT INTO sync_queue (
+        entity,
+        entity_id,
+        operation,
+        payload,
+        status,
+        attempts,
+        last_error,
+        next_retry_at,
+        terminal,
+        blocked_reason,
+        created_at
+      )
+       VALUES (?, ?, ?, ?, 'pending', 0, NULL, NULL, 0, NULL, ?)`,
       change.entity,
       change.entityId ?? null,
       change.type,
@@ -399,12 +556,16 @@ const sqliteSyncRepository: SyncRepository = {
 
   async listPending(limit = 100) {
     const db = await getDB();
-    const rows = await db.getAllAsync(
+    const now = new Date().toISOString();
+    const rows = await db.getAllAsync<QueueRow>(
       `SELECT *
        FROM sync_queue
        WHERE status IN ('pending', 'failed')
+         AND terminal = 0
+         AND (next_retry_at IS NULL OR next_retry_at <= ?)
        ORDER BY created_at ASC
        LIMIT ?`,
+      now,
       limit
     );
     return rows.map(rowToQueueItem);
@@ -414,19 +575,33 @@ const sqliteSyncRepository: SyncRepository = {
     const db = await getDB();
     await db.runAsync(
       `UPDATE sync_queue
-       SET status = 'processing', attempts = attempts + 1, last_error = NULL
+       SET status = 'processing',
+           attempts = attempts + 1,
+           last_error = NULL,
+           blocked_reason = NULL
        WHERE id = ?`,
       id
     );
   },
 
-  async markFailed(id, error) {
+  async markFailed(id, details) {
     const db = await getDB();
+    const normalizedDetails =
+      typeof details === 'string'
+        ? { error: details, nextRetryAt: null, terminal: false, blockedReason: null }
+        : details;
     await db.runAsync(
       `UPDATE sync_queue
-       SET status = 'failed', last_error = ?
+       SET status = 'failed',
+           last_error = ?,
+           next_retry_at = ?,
+           terminal = ?,
+           blocked_reason = ?
        WHERE id = ?`,
-      error ?? null,
+      normalizedDetails?.error ?? null,
+      normalizedDetails?.nextRetryAt ?? null,
+      normalizedDetails?.terminal ? 1 : 0,
+      normalizedDetails?.blockedReason ?? null,
       id
     );
   },
@@ -455,7 +630,8 @@ const localFirstSyncService: SyncService = {
 
 export async function syncNotesToFirebase(
   user: SyncUser | null,
-  notes: Note[]
+  notes: Note[],
+  options: SyncOptions = {}
 ): Promise<FirebaseSyncResult> {
   if (!user) {
     return {
@@ -472,10 +648,23 @@ export async function syncNotesToFirebase(
     };
   }
 
+  const requestedMode = options.mode ?? 'incremental';
+
   try {
     const syncRepository = getSyncRepository();
     const notesCollection = collection(firestore, 'users', user.uid, 'notes');
-    const queueResult = await flushPendingQueueToFirebase(notesCollection, firestore, syncRepository, notes);
+    const syncMarker = new Date().toISOString();
+    const lastRemoteCursor = await getLastRemoteSyncCursor(user.uid);
+    const mode: SyncMode =
+      requestedMode === 'full' || !lastRemoteCursor ? 'full' : 'incremental';
+
+    const queueResult = await flushPendingQueueToFirebase(
+      notesCollection,
+      firestore,
+      syncRepository,
+      notes,
+      syncMarker
+    );
     if (queueResult.failedCount > 0) {
       return {
         status: 'error',
@@ -484,32 +673,70 @@ export async function syncNotesToFirebase(
         importedCount: 0,
         failedCount: queueResult.failedCount,
         message:
+          queueResult.lastBlockedReason ??
           queueResult.lastError ??
           'Some notes could not be synced. Please try again after checking your photo sizes and connection.',
       };
     }
 
-    const uploadedSnapshotCount = await uploadLocalSnapshotToFirebase(notesCollection, firestore, notes);
-    const remoteMergeResult = await mergeRemoteNotesFromFirebase(notesCollection, notes);
+    let uploadedSnapshotCount = 0;
+    let importedCount = 0;
+    let nextCursor = lastRemoteCursor ?? syncMarker;
+    let finalNoteCount = notes.length;
 
-    await setDoc(
-      doc(firestore, 'users', user.uid),
-      {
-        displayName: user.displayName ?? null,
-        email: user.email ?? null,
-        photoURL: user.photoURL ?? null,
-        noteCount: notes.length,
-        lastSyncedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    if (mode === 'full') {
+      const remoteMergeResult = await mergeRemoteNotesFromFirebase(notesCollection, notes, { since: null });
+      importedCount = remoteMergeResult.importedCount;
+      const latestLocalNotes = remoteMergeResult.importedCount > 0 ? await getAllNotes() : notes;
+      finalNoteCount = latestLocalNotes.length;
+      uploadedSnapshotCount = await uploadLocalSnapshotToFirebase(
+        notesCollection,
+        firestore,
+        latestLocalNotes,
+        syncMarker
+      );
+      nextCursor = syncMarker;
+    } else {
+      const remoteMergeResult = await mergeRemoteNotesFromFirebase(notesCollection, notes, {
+        since: lastRemoteCursor,
+      });
+      importedCount = remoteMergeResult.importedCount;
+      if (remoteMergeResult.latestSyncedAt && remoteMergeResult.latestSyncedAt > nextCursor) {
+        nextCursor = remoteMergeResult.latestSyncedAt;
+      }
+      if (queueResult.hadLocalWrites && syncMarker > nextCursor) {
+        nextCursor = syncMarker;
+      }
+      if (importedCount > 0) {
+        finalNoteCount = (await getAllNotes()).length;
+      }
+    }
 
-    const syncedCount = uploadedSnapshotCount + remoteMergeResult.importedCount;
+    await Promise.all([
+      setDoc(
+        doc(firestore, 'users', user.uid),
+        {
+          displayName: user.displayName ?? null,
+          photoURL: user.photoURL ?? null,
+          noteCount: finalNoteCount,
+          lastSyncedAt: syncMarker,
+        },
+        { merge: true }
+      ),
+      upsertPublicUserProfile({
+        userUid: user.uid,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+      }),
+      setLastRemoteSyncCursor(user.uid, nextCursor),
+    ]);
+
+    const syncedCount = queueResult.processedCount + uploadedSnapshotCount + importedCount;
     return {
       status: 'success',
       syncedCount,
       uploadedCount: uploadedSnapshotCount,
-      importedCount: remoteMergeResult.importedCount,
+      importedCount,
       failedCount: 0,
       message:
         syncedCount === 1

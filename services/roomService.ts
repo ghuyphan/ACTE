@@ -63,6 +63,7 @@ interface RoomMembershipRecord {
   joinedAt: string;
   lastReadAt: string | null;
   joinedViaInviteId?: string | null;
+  joinedViaInviteToken?: string | null;
 }
 
 interface RoomMembershipIndexRecord {
@@ -482,6 +483,7 @@ export async function createRoom(user: FirebaseAuthTypes.User, name: string) {
     joinedAt: now,
     lastReadAt: now,
     joinedViaInviteId: null,
+    joinedViaInviteToken: null,
   };
 
   await setDoc(doc(firestore, 'rooms', roomId), {
@@ -587,12 +589,28 @@ export async function revokeRoomInvite(
 }
 
 export async function joinRoomByInvite(user: FirebaseAuthTypes.User, inviteValue: string) {
-  const { roomId, inviteId } = parseInvitePayload(inviteValue);
-  if (!roomId || !inviteId) {
+  const { roomId, inviteId, token } = parseInvitePayload(inviteValue);
+  if (!roomId || !inviteId || !token) {
     throw new Error('Paste a valid invite link.');
   }
 
   const firestore = requireFirestore();
+  const inviteSnapshot = await getDoc(doc(firestore, 'rooms', roomId, 'invites', inviteId));
+  if (!inviteSnapshot.exists()) {
+    throw new Error('Invite not found.');
+  }
+
+  const invite = inviteSnapshot.data() as RoomInviteRecord;
+  if (invite.revokedAt) {
+    throw new Error('This invite link is no longer active.');
+  }
+  if (invite.expiresAt && new Date(invite.expiresAt).getTime() <= Date.now()) {
+    throw new Error('This invite link has expired.');
+  }
+  if (invite.token !== token) {
+    throw new Error('This invite link is invalid.');
+  }
+
   const now = getNowIso();
   const memberRecord: RoomMembershipRecord = {
     roomId,
@@ -603,6 +621,7 @@ export async function joinRoomByInvite(user: FirebaseAuthTypes.User, inviteValue
     joinedAt: now,
     lastReadAt: now,
     joinedViaInviteId: inviteId,
+    joinedViaInviteToken: token,
   };
 
   await setDoc(doc(firestore, 'rooms', roomId, 'members', user.uid), memberRecord, { merge: true });

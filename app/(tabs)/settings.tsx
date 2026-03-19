@@ -89,16 +89,12 @@ export default function SettingsScreen() {
   const { theme, setTheme, colors, isDark } = useTheme();
   const { notes, deleteAllNotes } = useNotes();
   const { user, isAuthAvailable } = useAuth();
-  const { status: syncStatus, lastSyncedAt, lastMessage, isEnabled: syncEnabled, setSyncEnabled } = useSyncStatus();
+  const { status: syncStatus, lastSyncedAt, lastMessage, isEnabled: syncEnabled } = useSyncStatus();
   const {
     tier,
-    isConfigured: isPlusConfigured,
     isPurchaseAvailable,
-    isPurchaseInFlight,
     plusPriceLabel,
     photoNoteLimit,
-    purchasePlus,
-    restorePurchases,
   } = useSubscription();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -214,7 +210,7 @@ export default function SettingsScreen() {
     }
 
     return t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.');
-  }, [i18n.language, isAuthAvailable, lastMessage, lastSyncedAt, syncStatus, t, user]);
+  }, [i18n.language, isAuthAvailable, lastMessage, lastSyncedAt, syncEnabled, syncStatus, t, user]);
 
   const promptClearAll = () => {
     showAlert({
@@ -234,72 +230,6 @@ export default function SettingsScreen() {
       secondaryAction: {
         label: t('common.cancel', 'Cancel'),
         variant: 'secondary',
-      },
-    });
-  };
-
-  const handlePurchasePlus = async () => {
-    const result = await purchasePlus();
-
-    if (result.status === 'success') {
-      showAlert({
-        variant: 'success',
-        title: t('plus.upgradeSuccessTitle', 'Noto Plus is ready'),
-        message: t(
-          'plus.upgradeSuccessMessage',
-          'You can now save more photo notes and import images from your library.'
-        ),
-        primaryAction: {
-          label: t('common.done', 'Done'),
-        },
-      });
-      return;
-    }
-
-    if (result.status === 'cancelled') {
-      return;
-    }
-
-    showAlert({
-      variant: 'warning',
-      title: t('plus.upgradeUnavailableTitle', 'Noto Plus unavailable'),
-      message: t(
-        'plus.upgradeUnavailableMessage',
-        'We could not complete the purchase right now. Please try again in a moment.'
-      ),
-      primaryAction: {
-        label: t('common.done', 'Done'),
-      },
-    });
-  };
-
-  const handleRestorePurchases = async () => {
-    const result = await restorePurchases();
-
-    if (result.status === 'success') {
-      showAlert({
-        variant: 'success',
-        title: t('plus.restoreSuccessTitle', 'Purchases restored'),
-        message: t(
-          'plus.restoreSuccessMessage',
-          'Your Noto Plus access has been refreshed for this device.'
-        ),
-        primaryAction: {
-          label: t('common.done', 'Done'),
-        },
-      });
-      return;
-    }
-
-    showAlert({
-      variant: 'warning',
-      title: t('plus.restoreFailedTitle', 'Could not restore purchases'),
-      message: t(
-        'plus.restoreFailedMessage',
-        'We could not refresh your purchases right now. Please try again later.'
-      ),
-      primaryAction: {
-        label: t('common.done', 'Done'),
       },
     });
   };
@@ -655,7 +585,7 @@ export default function SettingsScreen() {
 
         <BottomSheet isPresented={showSync} onIsPresentedChange={setShowSync} fitToContents>
           <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
-            <SettingsSyncSheet accountHint={accountHint} onClose={() => setShowSync(false)} />
+            <SettingsSyncSheet accountHint={accountHint} />
           </Group>
         </BottomSheet>
       </Host>

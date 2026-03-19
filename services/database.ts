@@ -58,7 +58,7 @@ interface NoteRow {
 // ─── Database ───────────────────────────────────────────────────────
 let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-const NOTE_METADATA_SCHEMA_VERSION = 1;
+const APP_SCHEMA_VERSION = 2;
 
 export async function getDB(): Promise<SQLite.SQLiteDatabase> {
     if (db) {
@@ -95,9 +95,13 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'failed')),
         attempts INTEGER NOT NULL DEFAULT 0,
         last_error TEXT,
+        next_retry_at TEXT,
+        terminal INTEGER NOT NULL DEFAULT 0,
+        blocked_reason TEXT,
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_sync_queue_status_created ON sync_queue(status, created_at ASC);
+      CREATE INDEX IF NOT EXISTS idx_sync_queue_retry_window ON sync_queue(status, terminal, next_retry_at, created_at ASC);
       CREATE TABLE IF NOT EXISTS rooms_cache (
         user_uid TEXT NOT NULL,
         id TEXT NOT NULL,
@@ -160,7 +164,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 const currentUserVersion = userVersionRow?.user_version ?? 0;
                 const tableInfo = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(notes)`);
                 const columns = tableInfo.map((col) => col.name);
-                let shouldBackfillNoteMetadata = currentUserVersion < NOTE_METADATA_SCHEMA_VERSION;
+                let shouldBackfillNoteMetadata = currentUserVersion < APP_SCHEMA_VERSION;
 
                 if (!columns.includes('is_favorite')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0`);
@@ -219,8 +223,25 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     }
                 }
 
-                if (currentUserVersion < NOTE_METADATA_SCHEMA_VERSION) {
-                    await database.execAsync(`PRAGMA user_version = ${NOTE_METADATA_SCHEMA_VERSION}`);
+                const syncQueueInfo = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(sync_queue)`);
+                const syncQueueColumns = syncQueueInfo.map((col) => col.name);
+
+                if (!syncQueueColumns.includes('next_retry_at')) {
+                    await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN next_retry_at TEXT`);
+                }
+                if (!syncQueueColumns.includes('terminal')) {
+                    await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN terminal INTEGER NOT NULL DEFAULT 0`);
+                }
+                if (!syncQueueColumns.includes('blocked_reason')) {
+                    await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN blocked_reason TEXT`);
+                }
+
+                await database.execAsync(
+                    `CREATE INDEX IF NOT EXISTS idx_sync_queue_retry_window ON sync_queue(status, terminal, next_retry_at, created_at ASC)`
+                );
+
+                if (currentUserVersion < APP_SCHEMA_VERSION) {
+                    await database.execAsync(`PRAGMA user_version = ${APP_SCHEMA_VERSION}`);
                 }
             } catch (e) {
                 console.warn('Migration check failed:', e);

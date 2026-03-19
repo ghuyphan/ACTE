@@ -17,6 +17,7 @@ import {
 import { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { Note, NoteType } from './database';
 import { readPhotoAsBase64, writePhotoFromBase64 } from './photoStorage';
+import { getPublicUserProfile, upsertPublicUserProfile } from './publicProfileService';
 import { getFirestore } from '../utils/firebase';
 
 export interface FriendConnection {
@@ -26,6 +27,7 @@ export interface FriendConnection {
   friendedAt: string;
   lastSharedAt: string | null;
   createdByInviteId: string | null;
+  createdByInviteToken: string | null;
 }
 
 export interface FriendInvite {
@@ -76,6 +78,7 @@ interface FriendConnectionRecord {
   friendedAt: string;
   lastSharedAt: string | null;
   createdByInviteId: string | null;
+  createdByInviteToken: string | null;
 }
 
 interface FriendInviteRecord {
@@ -209,24 +212,7 @@ async function mapSharedPost(id: string, record: SharedPostRecord): Promise<Shar
 }
 
 async function getUserProfileSnapshot(userUid: string) {
-  const firestore = requireFirestore();
-  const snapshot = await getDoc(doc(firestore, 'users', userUid));
-  if (!snapshot.exists()) {
-    return {
-      displayNameSnapshot: null,
-      photoURLSnapshot: null,
-    };
-  }
-
-  const data = snapshot.data() as {
-    displayName?: string | null;
-    photoURL?: string | null;
-  };
-
-  return {
-    displayNameSnapshot: data.displayName ?? null,
-    photoURLSnapshot: data.photoURL ?? null,
-  };
+  return getPublicUserProfile(userUid);
 }
 
 async function getFriendsForUser(userUid: string) {
@@ -244,6 +230,7 @@ async function getFriendsForUser(userUid: string) {
       friendedAt: data.friendedAt,
       lastSharedAt: data.lastSharedAt ?? null,
       createdByInviteId: data.createdByInviteId ?? null,
+      createdByInviteToken: data.createdByInviteToken ?? null,
     } satisfies FriendConnection;
   });
 }
@@ -302,7 +289,7 @@ export async function getActiveFriendInvite(user: FirebaseAuthTypes.User): Promi
 export async function refreshSharedFeed(user: FirebaseAuthTypes.User): Promise<SharedFeedSnapshot> {
   const firestore = requireFirestore();
   const friends = await getFriendsForUser(user.uid);
-  const friendUids = friends.map((f) => f.userId);
+  const friendUids = friends.map((friend: FriendConnection) => friend.userId);
   const authorWhitelist = [user.uid, ...friendUids].slice(0, 30);
 
   const [activeInvite, postsSnapshot] = await Promise.all([
@@ -371,7 +358,7 @@ export function subscribeToSharedFeed(
       unsubscribeSharedPosts();
     }
 
-    const friendUids = friends.map((f) => f.userId);
+    const friendUids = friends.map((friend: FriendConnection) => friend.userId);
     const authorWhitelist = [user.uid, ...friendUids].slice(0, 30);
 
     unsubscribeSharedPosts = onSnapshot(
@@ -423,6 +410,7 @@ export function subscribeToSharedFeed(
           friendedAt: data.friendedAt,
           lastSharedAt: data.lastSharedAt ?? null,
           createdByInviteId: data.createdByInviteId ?? null,
+          createdByInviteToken: data.createdByInviteToken ?? null,
         } satisfies FriendConnection;
       });
 
@@ -484,6 +472,12 @@ export async function createFriendInvite(user: FirebaseAuthTypes.User): Promise<
   const token = Crypto.randomUUID();
   const now = getNowIso();
 
+  await upsertPublicUserProfile({
+    userUid: user.uid,
+    displayName: getDisplayName(user),
+    photoURL: user.photoURL ?? null,
+  });
+
   const record: FriendInviteRecord = {
     inviterUid: user.uid,
     inviterDisplayNameSnapshot: getDisplayName(user),
@@ -530,6 +524,10 @@ export async function acceptFriendInvite(
     throw new Error('Paste a valid invite link.');
   }
 
+  if (!token) {
+    throw new Error('This invite link is invalid.');
+  }
+
   let resolvedInviteId = inviteId;
   let inviteSnapshot;
 
@@ -568,6 +566,11 @@ export async function acceptFriendInvite(
   }
 
   const now = getNowIso();
+  await upsertPublicUserProfile({
+    userUid: user.uid,
+    displayName: getDisplayName(user),
+    photoURL: user.photoURL ?? null,
+  });
   const inviterProfile = await getUserProfileSnapshot(invite.inviterUid);
 
   const currentUserConnection: FriendConnectionRecord = {
@@ -579,6 +582,7 @@ export async function acceptFriendInvite(
     friendedAt: now,
     lastSharedAt: null,
     createdByInviteId: resolvedInviteId,
+    createdByInviteToken: token,
   };
 
   const inviterConnection: FriendConnectionRecord = {
@@ -588,6 +592,7 @@ export async function acceptFriendInvite(
     friendedAt: now,
     lastSharedAt: null,
     createdByInviteId: resolvedInviteId,
+    createdByInviteToken: token,
   };
 
   await Promise.all([
@@ -610,6 +615,7 @@ export async function acceptFriendInvite(
     friendedAt: currentUserConnection.friendedAt,
     lastSharedAt: currentUserConnection.lastSharedAt,
     createdByInviteId: currentUserConnection.createdByInviteId,
+    createdByInviteToken: currentUserConnection.createdByInviteToken,
   };
 }
 

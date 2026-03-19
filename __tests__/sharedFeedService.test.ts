@@ -1,7 +1,7 @@
-const mockUsers = new Map<string, any>();
 const mockFriendInvites = new Map<string, any>();
 const mockSharedPosts = new Map<string, any>();
 const mockFriends = new Map<string, Map<string, any>>();
+const mockPublicProfiles = new Map<string, { displayNameSnapshot: string | null; photoURLSnapshot: string | null }>();
 
 function mockEnsureFriendMap(userUid: string) {
   if (!mockFriends.has(userUid)) {
@@ -37,6 +37,20 @@ jest.mock('../services/photoStorage', () => ({
   writePhotoFromBase64: jest.fn(async (id: string) => `file:///shared/${id}.jpg`),
 }));
 
+jest.mock('../services/publicProfileService', () => ({
+  getPublicUserProfile: async (userUid: string) =>
+    mockPublicProfiles.get(userUid) ?? {
+      displayNameSnapshot: null,
+      photoURLSnapshot: null,
+    },
+  upsertPublicUserProfile: jest.fn(async (input: { userUid: string; displayName: string | null; photoURL: string | null }) => {
+    mockPublicProfiles.set(input.userUid, {
+      displayNameSnapshot: input.displayName,
+      photoURLSnapshot: input.photoURL,
+    });
+  }),
+}));
+
 jest.mock('../utils/firebase', () => ({
   getFirestore: () => ({}),
 }));
@@ -70,12 +84,6 @@ jest.mock('@react-native-firebase/firestore', () => ({
   limit: (value: number) => ({ type: 'limit', value }),
   setDoc: async (ref: any, data: any, options?: { merge?: boolean }) => {
     const path = ref.path as string[];
-
-    if (path.length === 2 && path[0] === 'users') {
-      const current = mockUsers.get(path[1]!);
-      mockUsers.set(path[1]!, options?.merge ? { ...(current ?? {}), ...data } : data);
-      return;
-    }
 
     if (path.length === 2 && path[0] === 'friendInvites') {
       mockFriendInvites.set(path[1]!, data);
@@ -123,9 +131,7 @@ jest.mock('@react-native-firebase/firestore', () => ({
     const path = ref.path as string[];
     let value: unknown;
 
-    if (path.length === 2 && path[0] === 'users') {
-      value = mockUsers.get(path[1]!);
-    } else if (path.length === 2 && path[0] === 'friendInvites') {
+    if (path.length === 2 && path[0] === 'friendInvites') {
       value = mockFriendInvites.get(path[1]!);
     } else if (path.length === 4 && path[0] === 'users' && path[2] === 'friends') {
       value = mockEnsureFriendMap(path[1]!).get(path[3]!);
@@ -207,18 +213,17 @@ const friendUser = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockUsers.clear();
   mockFriendInvites.clear();
   mockSharedPosts.clear();
   mockFriends.clear();
-
-  mockUsers.set(ownerUser.uid, {
-    displayName: ownerUser.displayName,
-    photoURL: ownerUser.photoURL,
+  mockPublicProfiles.clear();
+  mockPublicProfiles.set(ownerUser.uid, {
+    displayNameSnapshot: ownerUser.displayName,
+    photoURLSnapshot: ownerUser.photoURL,
   });
-  mockUsers.set(friendUser.uid, {
-    displayName: friendUser.displayName,
-    photoURL: friendUser.photoURL,
+  mockPublicProfiles.set(friendUser.uid, {
+    displayNameSnapshot: friendUser.displayName,
+    photoURLSnapshot: friendUser.photoURL,
   });
 });
 
@@ -233,12 +238,14 @@ describe('sharedFeedService', () => {
       expect.objectContaining({
         userId: ownerUser.uid,
         createdByInviteId: invite.id,
+        createdByInviteToken: invite.token,
       })
     );
     expect(mockEnsureFriendMap(ownerUser.uid).get(friendUser.uid)).toEqual(
       expect.objectContaining({
         userId: friendUser.uid,
         createdByInviteId: invite.id,
+        createdByInviteToken: invite.token,
       })
     );
     expect(mockFriendInvites.get(invite.id)).toEqual(
@@ -256,6 +263,7 @@ describe('sharedFeedService', () => {
       friendedAt: '2026-03-16T00:00:00.000Z',
       lastSharedAt: null,
       createdByInviteId: 'invite-1',
+      createdByInviteToken: 'token-1',
     });
     mockEnsureFriendMap(friendUser.uid).set(ownerUser.uid, {
       userId: ownerUser.uid,
@@ -264,6 +272,7 @@ describe('sharedFeedService', () => {
       friendedAt: '2026-03-16T00:00:00.000Z',
       lastSharedAt: null,
       createdByInviteId: 'invite-1',
+      createdByInviteToken: 'token-1',
     });
 
     const dateNowSpy = jest.spyOn(Date, 'now');

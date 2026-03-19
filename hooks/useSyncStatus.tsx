@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import i18n from '../constants/i18n';
-import { syncNotesToFirebase } from '../services/syncService';
+import { SyncMode, syncNotesToFirebase } from '../services/syncService';
 import { useAuth } from './useAuth';
 import { useNotes } from './useNotes';
 
@@ -37,7 +37,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const previousUserUidRef = useRef<string | null>(null);
   const skipNextNotesEffectRef = useRef(false);
   const suppressNextNotesEffectRef = useRef(false);
-  const runSyncNowRef = useRef<() => Promise<void>>(async () => undefined);
+  const runSyncNowRef = useRef<(mode?: SyncMode) => Promise<void>>(async () => undefined);
 
   const clearDebounceTimer = useCallback(() => {
     if (debounceTimerRef.current) {
@@ -61,7 +61,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(SYNC_ENABLED_KEY, enabled.toString());
   }, []);
 
-  runSyncNowRef.current = async () => {
+  runSyncNowRef.current = async (mode: SyncMode = 'incremental') => {
     if (!isReady || !isAuthAvailable || !user || loading || !syncEnabledState || !isSyncPrefReady) {
       return;
     }
@@ -84,7 +84,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       setStatus('syncing');
       setLastMessage(null);
 
-      const result = await syncNotesToFirebase(currentUser, notes);
+      const result = await syncNotesToFirebase(currentUser, notes, { mode });
 
       if (result.status === 'success') {
         setStatus('success');
@@ -109,7 +109,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
       if (pendingRunRef.current) {
         pendingRunRef.current = false;
-        void runSyncNowRef.current();
+        void runSyncNowRef.current(mode);
       }
     });
 
@@ -118,7 +118,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   };
 
   const queueSync = useCallback(
-    (immediate = false) => {
+    (immediate = false, mode: SyncMode = 'incremental') => {
       if (!isReady || !isAuthAvailable || !user || loading || !syncEnabledState || !isSyncPrefReady) {
         return;
       }
@@ -126,16 +126,16 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       clearDebounceTimer();
 
       if (immediate) {
-        void runSyncNowRef.current();
+        void runSyncNowRef.current(mode);
         return;
       }
 
       debounceTimerRef.current = setTimeout(() => {
         debounceTimerRef.current = null;
-        void runSyncNowRef.current();
+        void runSyncNowRef.current(mode);
       }, AUTO_SYNC_DEBOUNCE_MS);
     },
-    [clearDebounceTimer, isAuthAvailable, isReady, loading, user]
+    [clearDebounceTimer, isAuthAvailable, isReady, isSyncPrefReady, loading, syncEnabledState, user]
   );
 
   useEffect(() => {
@@ -156,13 +156,17 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     }
 
     if (previousUserUidRef.current !== user.uid) {
+      if (!isSyncPrefReady || !syncEnabledState) {
+        return;
+      }
+
       previousUserUidRef.current = user.uid;
       skipNextNotesEffectRef.current = true;
       setLastMessage(null);
       setLastSyncedAt(null);
-      queueSync(true);
+      queueSync(true, 'full');
     }
-  }, [clearDebounceTimer, isAuthAvailable, isReady, loading, queueSync, user]);
+  }, [clearDebounceTimer, isAuthAvailable, isReady, isSyncPrefReady, loading, queueSync, syncEnabledState, user]);
 
   useEffect(() => {
     if (!isReady || loading || !user || !isAuthAvailable) {
@@ -179,13 +183,13 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    queueSync(false);
+    queueSync(false, 'incremental');
   }, [isAuthAvailable, isReady, loading, notes, queueSync, user]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        queueSync(true);
+        queueSync(true, 'incremental');
       }
     });
 
@@ -208,7 +212,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       isEnabled: syncEnabledState,
       setSyncEnabled,
       requestSync: () => {
-        queueSync(true);
+        queueSync(true, 'full');
       },
     }),
     [lastMessage, lastSyncedAt, queueSync, setSyncEnabled, status, syncEnabledState]

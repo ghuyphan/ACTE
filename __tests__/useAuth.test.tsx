@@ -98,6 +98,8 @@ jest.mock('@react-native-firebase/auth', () => ({
       credential: (idToken: string) => `credential:${idToken}`,
     },
   },
+  onAuthStateChanged: (_firebaseAuth: unknown, callback: (user: unknown) => void) =>
+    mockOnAuthStateChanged(callback),
 }));
 
 import { AuthProvider, useAuth } from '../hooks/useAuth';

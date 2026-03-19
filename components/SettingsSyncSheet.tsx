@@ -1,22 +1,18 @@
-import { Group, HStack, Spacer, Text as SwiftUIText, Toggle, VStack } from '@expo/ui/swift-ui';
+import { Group, HStack, Text as SwiftUIText, Toggle, VStack } from '@expo/ui/swift-ui';
 import { backgroundOverlay, cornerRadius, font, foregroundStyle, padding } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../hooks/useAuth';
 import { useSyncStatus } from '../hooks/useSyncStatus';
 import { useTheme } from '../hooks/useTheme';
 import { isOlderIOS } from '../utils/platform';
 
 export default function SettingsSyncSheet({
   accountHint,
-  onClose,
 }: {
   accountHint: string | null;
-  onClose: () => void;
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { user } = useAuth();
   const { isEnabled, setSyncEnabled } = useSyncStatus();
 
   const containerModifiers = [

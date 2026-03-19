@@ -150,6 +150,8 @@ jest.mock('@react-native-firebase/firestore', () => ({
       value = mockRemoteRooms.get(path[1]!);
     } else if (path.length === 4 && path[0] === 'rooms' && path[2] === 'members') {
       value = mockEnsureMapEntry(mockRemoteMembers, path[1]!).get(path[3]!);
+    } else if (path.length === 4 && path[0] === 'rooms' && path[2] === 'invites') {
+      value = mockEnsureMapEntry(mockRemoteInvites, path[1]!).get(path[3]!);
     }
 
     return {
@@ -273,6 +275,12 @@ describe('roomService', () => {
     expect(joinedRoom.id).toBe(room.id);
     expect(details.members.map((member) => member.userId)).toEqual(
       expect.arrayContaining(['owner-1', 'member-1'])
+    );
+    expect(mockEnsureMapEntry(mockRemoteMembers, room.id).get(memberUser.uid)).toEqual(
+      expect.objectContaining({
+        joinedViaInviteId: invite.id,
+        joinedViaInviteToken: invite.token,
+      })
     );
   });
 

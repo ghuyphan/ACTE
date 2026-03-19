@@ -1,9 +1,10 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { AppState, AppStateStatus } from 'react-native';
 import { ReactNode } from 'react';
 import { SyncStatusProvider, useSyncStatus } from '../hooks/useSyncStatus';
 
-const mockSyncNotesToFirebase = jest.fn<Promise<unknown>, [unknown, unknown]>();
+const mockSyncNotesToFirebase = jest.fn<Promise<unknown>, [unknown, unknown, unknown?]>();
 const mockRefreshNotes = jest.fn<Promise<void>, [boolean?]>(async () => undefined);
 
 let appStateListener: ((state: AppStateStatus) => void) | null = null;
@@ -74,6 +75,8 @@ function createNote(id: string) {
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
+  (AsyncStorage.getItem as jest.Mock).mockResolvedValue('true');
+  (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
   mockAuthState.user = null;
   mockAuthState.isReady = true;
   mockAuthState.isAuthAvailable = true;
@@ -101,9 +104,19 @@ afterEach(() => {
   appStateListener = null;
 });
 
+async function flushSyncPref() {
+  await act(async () => {
+    jest.runOnlyPendingTimers();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 describe('useSyncStatus', () => {
-  it('does not sync while signed out', () => {
+  it('does not sync while signed out', async () => {
     renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
 
     act(() => {
       jest.advanceTimersByTime(5000);
@@ -121,6 +134,7 @@ describe('useSyncStatus', () => {
     };
 
     const { result } = renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
 
     await waitFor(() => {
       expect(mockSyncNotesToFirebase).toHaveBeenCalledTimes(1);
@@ -140,6 +154,7 @@ describe('useSyncStatus', () => {
       void marker;
       return useSyncStatus();
     }, { wrapper, initialProps: { marker: 0 } });
+    await flushSyncPref();
 
     await waitFor(() => {
       expect(mockSyncNotesToFirebase).toHaveBeenCalledTimes(1);
@@ -173,6 +188,7 @@ describe('useSyncStatus', () => {
     };
 
     renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
 
     await waitFor(() => {
       expect(mockSyncNotesToFirebase).toHaveBeenCalledTimes(1);
@@ -209,6 +225,7 @@ describe('useSyncStatus', () => {
       void marker;
       return useSyncStatus();
     }, { wrapper, initialProps: { marker: 0 } });
+    await flushSyncPref();
 
     await waitFor(() => {
       expect(mockSyncNotesToFirebase).toHaveBeenCalledTimes(1);

@@ -51,10 +51,11 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/friendInvites/$(inviteId));
     }
 
-    function friendInviteAllowsLink(inviteId, userId, friendUid) {
+    function friendInviteAllowsLink(inviteId, inviteToken, userId, friendUid) {
       return signedIn() &&
         friendInviteExists(inviteId) &&
         friendInviteDoc(inviteId).data.revokedAt == null &&
+        friendInviteDoc(inviteId).data.token == inviteToken &&
         (friendInviteDoc(inviteId).data.acceptedByUid == null ||
           friendInviteDoc(inviteId).data.acceptedByUid == request.auth.uid) &&
         friendInviteDoc(inviteId).data.inviterUid != request.auth.uid &&
@@ -72,20 +73,33 @@ service cloud.firestore {
         request.resource.data.friendedAt is string &&
         (request.resource.data.lastSharedAt is string ||
           request.resource.data.lastSharedAt == null) &&
-        request.resource.data.createdByInviteId is string;
+        request.resource.data.createdByInviteId is string &&
+        request.resource.data.createdByInviteToken is string;
     }
 
     function friendDocCreateIsValid(userId, friendUid) {
       return friendDocShapeIsValid(friendUid) &&
         request.resource.data.lastSharedAt == null &&
-        friendInviteAllowsLink(request.resource.data.createdByInviteId, userId, friendUid);
+        friendInviteAllowsLink(
+          request.resource.data.createdByInviteId,
+          request.resource.data.createdByInviteToken,
+          userId,
+          friendUid
+        );
     }
 
     function friendDocInviteUpdateIsValid(userId, friendUid) {
       return friendDocShapeIsValid(friendUid) &&
         request.resource.data.lastSharedAt == null &&
         resource.data.userId == friendUid &&
-        friendInviteAllowsLink(request.resource.data.createdByInviteId, userId, friendUid);
+        request.resource.data.createdByInviteId == resource.data.createdByInviteId &&
+        request.resource.data.createdByInviteToken == resource.data.createdByInviteToken &&
+        friendInviteAllowsLink(
+          request.resource.data.createdByInviteId,
+          request.resource.data.createdByInviteToken,
+          userId,
+          friendUid
+        );
     }
 
     function friendDocUpdateIsValid(userId) {
@@ -169,8 +183,53 @@ service cloud.firestore {
           request.resource.data.updatedAt == null);
     }
 
-    match /users/{userId} {
+    function audienceEntryIsAllowed(audience, index) {
+      return audience.size() <= index ||
+        audience[index] == request.auth.uid ||
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(audience[index]));
+    }
+
+    function sharedPostAudienceIsValid(audience) {
+      return audienceEntryIsAllowed(audience, 0) &&
+        audienceEntryIsAllowed(audience, 1) &&
+        audienceEntryIsAllowed(audience, 2) &&
+        audienceEntryIsAllowed(audience, 3) &&
+        audienceEntryIsAllowed(audience, 4) &&
+        audienceEntryIsAllowed(audience, 5) &&
+        audienceEntryIsAllowed(audience, 6) &&
+        audienceEntryIsAllowed(audience, 7) &&
+        audienceEntryIsAllowed(audience, 8) &&
+        audienceEntryIsAllowed(audience, 9) &&
+        audienceEntryIsAllowed(audience, 10) &&
+        audienceEntryIsAllowed(audience, 11) &&
+        audienceEntryIsAllowed(audience, 12) &&
+        audienceEntryIsAllowed(audience, 13) &&
+        audienceEntryIsAllowed(audience, 14) &&
+        audienceEntryIsAllowed(audience, 15) &&
+        audienceEntryIsAllowed(audience, 16) &&
+        audienceEntryIsAllowed(audience, 17) &&
+        audienceEntryIsAllowed(audience, 18) &&
+        audienceEntryIsAllowed(audience, 19) &&
+        audienceEntryIsAllowed(audience, 20) &&
+        audienceEntryIsAllowed(audience, 21) &&
+        audienceEntryIsAllowed(audience, 22) &&
+        audienceEntryIsAllowed(audience, 23) &&
+        audienceEntryIsAllowed(audience, 24);
+    }
+
+    function roomInviteTokenMatches(roomId, inviteId, inviteToken) {
+      return roomInviteExists(roomId, inviteId) &&
+        get(/databases/$(database)/documents/rooms/$(roomId)/invites/$(inviteId)).data.token == inviteToken;
+    }
+
+    match /publicUserProfiles/{userId} {
       allow get: if signedIn();
+      allow list: if false;
+      allow create, update, delete: if isSelf(userId);
+    }
+
+    match /users/{userId} {
+      allow get: if isSelf(userId);
       allow list: if false;
       allow create, update, delete: if isSelf(userId);
 
@@ -215,8 +274,7 @@ service cloud.firestore {
           request.auth.uid in resource.data.audienceUserIds);
 
       allow create: if sharedPostBaseIsValid() &&
-        // Smoke test: if they are sharing with friends, at least the first friend should be in their friends list.
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(request.resource.data.audienceUserIds[1]));
+        sharedPostAudienceIsValid(request.resource.data.audienceUserIds);
 
       allow update: if signedIn() &&
         resource.data.authorUid == request.auth.uid &&
@@ -252,7 +310,13 @@ service cloud.firestore {
             (
               request.resource.data.role == 'member' &&
               request.resource.data.joinedViaInviteId is string &&
-              roomInviteIsActive(roomId, request.resource.data.joinedViaInviteId)
+              request.resource.data.joinedViaInviteToken is string &&
+              roomInviteIsActive(roomId, request.resource.data.joinedViaInviteId) &&
+              roomInviteTokenMatches(
+                roomId,
+                request.resource.data.joinedViaInviteId,
+                request.resource.data.joinedViaInviteToken
+              )
             )
           );
 

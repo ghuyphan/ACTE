@@ -14,6 +14,7 @@ const mockNotesStore = {
   deleteNote: (noteId: string) => mockDeleteNote(noteId),
   updateNote: (noteId: string, updates: unknown) => mockUpdateNote(noteId, updates),
   toggleFavorite: (noteId: string) => mockToggleFavorite(noteId),
+  refreshNotes: jest.fn(async () => undefined),
 };
 
 jest.mock('@expo/ui/swift-ui', () => {
@@ -126,6 +127,13 @@ jest.mock('expo-router', () => ({
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
     user: { uid: 'user-1' },
+  }),
+}));
+
+jest.mock('../hooks/useSharedFeed', () => ({
+  useSharedFeedStore: () => ({
+    deleteSharedNote: jest.fn(async () => undefined),
+    updateSharedNote: jest.fn(async () => undefined),
   }),
 }));
 
