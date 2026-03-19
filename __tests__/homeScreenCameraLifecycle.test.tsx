@@ -1,5 +1,7 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { AppState } from 'react-native';
+let mockCaptureCardProps: any = null;
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -24,6 +26,18 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: jest.fn(),
   }),
+}));
+
+jest.mock('expo-haptics', () => ({
+  impactAsync: jest.fn(),
+  notificationAsync: jest.fn(),
+  ImpactFeedbackStyle: {
+    Light: 'light',
+    Medium: 'medium',
+  },
+  NotificationFeedbackType: {
+    Success: 'success',
+  },
 }));
 
 jest.mock('../hooks/useAuth', () => ({
@@ -93,19 +107,17 @@ jest.mock('../hooks/useNoteDetailSheet', () => ({
 
 jest.mock('../hooks/useCaptureFlow', () => ({
   useCaptureFlow: () => ({
-    // Build Animated values inside the factory to satisfy Jest's hoisting rules.
     ...(() => {
       const { Animated } = require('react-native');
       return {
-        captureOpacity: new Animated.Value(1),
         captureScale: new Animated.Value(1),
         captureTranslateY: new Animated.Value(0),
         flashAnim: new Animated.Value(0),
         shutterScale: new Animated.Value(1),
       };
     })(),
-    captureMode: 'text',
-    cameraSessionKey: 0,
+    captureMode: 'camera',
+    cameraSessionKey: 1,
     setCaptureMode: jest.fn(),
     restaurantName: '',
     setRestaurantName: jest.fn(),
@@ -133,33 +145,7 @@ jest.mock('../hooks/useCaptureFlow', () => ({
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
-    notes: [
-      {
-        id: 'photo-1',
-        type: 'photo',
-        content: 'file:///private/photo-1.jpg',
-        photoLocalUri: 'file:///private/photo-1.jpg',
-        locationName: 'District 3',
-        latitude: 10.8,
-        longitude: 106.7,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-11T00:00:00.000Z',
-        updatedAt: null,
-      },
-      {
-        id: 'text-1',
-        type: 'text',
-        content: 'Best iced coffee',
-        locationName: 'District 1',
-        latitude: 10.7,
-        longitude: 106.6,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-10T00:00:00.000Z',
-        updatedAt: null,
-      },
-    ],
+    notes: [],
     refreshNotes: jest.fn(async () => undefined),
     createNote: jest.fn(async () => undefined),
   }),
@@ -207,51 +193,32 @@ jest.mock('../components/AppSheetAlert', () => {
 
 jest.mock('../components/home/CaptureCard', () => {
   const React = require('react');
-  const { View } = require('react-native');
-  return function MockCaptureCard() {
-    return <View testID="capture-card" />;
+  const { Text } = require('react-native');
+  return function MockCaptureCard(props: any) {
+    mockCaptureCardProps = props;
+    return <Text testID="camera-preview-state">{String(props.shouldRenderCameraPreview)}</Text>;
   };
 });
 
 jest.mock('../components/home/HomeHeaderSearch', () => {
   const React = require('react');
-  const { Pressable, Text, TextInput, View } = require('react-native');
-  return function MockHomeHeaderSearch(props: any) {
-    return (
-      <View>
-        <Pressable testID="home-open-search" onPress={props.onOpenSearch}>
-          <Text>Open search</Text>
-        </Pressable>
-        <TextInput
-          testID="home-search-input"
-          value={props.searchQuery}
-          onChangeText={props.onSearchChange}
-        />
-      </View>
-    );
+  const { View } = require('react-native');
+  return function MockHomeHeaderSearch() {
+    return <View testID="home-header-search" />;
   };
 });
 
 jest.mock('../components/home/NotesFeed', () => {
   const React = require('react');
-  const { Text, View } = require('react-native');
-  return function MockNotesFeed({ notes }: { notes: Array<{ id: string }> }) {
+  const { Pressable, View } = require('react-native');
+  return function MockNotesFeed(props: any) {
     return (
       <View>
-        <Text testID="home-notes-count">{String(notes.length)}</Text>
-        {notes.map((note) => (
-          <Text key={note.id}>{note.id}</Text>
-        ))}
+        {props.captureHeader}
+        <Pressable testID="hide-capture" onPress={() => props.onCaptureVisibilityChange?.(false)} />
+        <Pressable testID="show-capture" onPress={() => props.onCaptureVisibilityChange?.(true)} />
       </View>
     );
-  };
-});
-
-jest.mock('../components/home/SharedMomentsStrip', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  return function MockSharedMomentsStrip() {
-    return <View testID="shared-moments-strip" />;
   };
 });
 
@@ -269,23 +236,30 @@ jest.mock('../utils/platform', () => ({
 
 import HomeScreen from '../app/(tabs)/index';
 
-describe('HomeScreen search', () => {
-  it('filters with shared search logic and ignores photo file uris', async () => {
-    const { getByTestId, queryByText } = render(<HomeScreen />);
+describe('HomeScreen camera lifecycle', () => {
+  beforeEach(() => {
+    AppState.currentState = 'active';
+    mockCaptureCardProps = null;
+  });
 
-    fireEvent.press(getByTestId('home-open-search'));
-    fireEvent.changeText(getByTestId('home-search-input'), 'photo-1.jpg');
+  it('keeps the camera preview mounted while capture visibility changes', async () => {
+    const { getByTestId } = render(<HomeScreen />);
+
+    expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
+    expect(mockCaptureCardProps?.shouldRenderCameraPreview).toBe(true);
+
+    fireEvent.press(getByTestId('hide-capture'));
 
     await waitFor(() => {
-      expect(getByTestId('home-notes-count').props.children).toBe('0');
-      expect(queryByText('photo-1')).toBeNull();
+      expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
+      expect(mockCaptureCardProps?.shouldRenderCameraPreview).toBe(true);
     });
 
-    fireEvent.changeText(getByTestId('home-search-input'), 'District 3');
+    fireEvent.press(getByTestId('show-capture'));
 
     await waitFor(() => {
-      expect(getByTestId('home-notes-count').props.children).toBe('1');
-      expect(queryByText('photo-1')).toBeTruthy();
+      expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
+      expect(mockCaptureCardProps?.shouldRenderCameraPreview).toBe(true);
     });
   });
 });

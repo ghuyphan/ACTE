@@ -95,7 +95,6 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [importingPhoto, setImportingPhoto] = useState(false);
-  const [isCaptureVisible, setIsCaptureVisible] = useState(true);
   const [appState, setAppState] = useState(AppState.currentState);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
@@ -198,7 +197,7 @@ export default function HomeScreen() {
     [isSearching, sharedPosts, useInlineHeaderSearch, user?.uid]
   );
   const hasNotesHintTarget = displayedNotes.length + visibleSharedPosts.length > 0;
-  const shouldShowNotesHint = hasNotesHintTarget && isCaptureVisible;
+  const shouldShowNotesHint = hasNotesHintTarget;
 
   useEffect(() => {
     Animated.timing(hintAnim, {
@@ -954,76 +953,76 @@ export default function HomeScreen() {
 
   const captureHeader = (
     <View style={styles.captureItemWrapper}>
-        <CaptureCard
-          snapHeight={snapHeight}
-          topInset={insets.top}
-          isSearching={isSearching}
-          captureMode={captureMode}
-          cameraSessionKey={cameraSessionKey}
-          captureScale={captureScale}
-          captureTranslateY={captureTranslateY}
-          colors={colors}
-          t={t}
-          noteText={noteText}
-          onChangeNoteText={setNoteText}
-          restaurantName={restaurantName}
-          onChangeRestaurantName={setRestaurantName}
-          capturedPhoto={capturedPhoto}
-          onRetakePhoto={() => setCapturedPhoto(null)}
-          needsCameraPermission={needsCameraPermission}
-          onRequestCameraPermission={requestPermission}
-          facing={facing}
-          onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
-          onOpenPhotoLibrary={() => {
-            void handleImportPhoto();
-          }}
-          cameraRef={cameraRef}
-          shouldRenderCameraPreview={shouldRenderCameraPreview}
-          flashAnim={flashAnim}
-          permissionGranted={Boolean(permission?.granted)}
-          onShutterPressIn={handleShutterPressIn}
-          onShutterPressOut={handleShutterPressOut}
-          onTakePicture={() => {
-            void takePicture();
-          }}
-          onSaveNote={() => {
-            void saveNote();
-          }}
-          saving={saving}
-          shutterScale={shutterScale}
-          cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
-          libraryImportLocked={!canImportFromLibrary}
-          importingPhoto={importingPhoto || isPurchaseInFlight}
-          shareTarget={captureTarget}
-          onChangeShareTarget={handleCaptureTargetChange}
-        />
-        {hasNotesHintTarget ? (
-          <Animated.View
-            pointerEvents={shouldShowNotesHint ? 'auto' : 'none'}
-            style={[
-              styles.homeNotesHintWrap,
-              {
-                opacity: hintAnim,
-                transform: [
-                  {
-                    translateY: hintAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-8, 0],
-                    }),
-                  },
-                ],
-              },
-            ]}
+      <CaptureCard
+        snapHeight={snapHeight}
+        topInset={insets.top}
+        isSearching={isSearching}
+        captureMode={captureMode}
+        cameraSessionKey={cameraSessionKey}
+        captureScale={captureScale}
+        captureTranslateY={captureTranslateY}
+        colors={colors}
+        t={t}
+        noteText={noteText}
+        onChangeNoteText={setNoteText}
+        restaurantName={restaurantName}
+        onChangeRestaurantName={setRestaurantName}
+        capturedPhoto={capturedPhoto}
+        onRetakePhoto={() => setCapturedPhoto(null)}
+        needsCameraPermission={needsCameraPermission}
+        onRequestCameraPermission={requestPermission}
+        facing={facing}
+        onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
+        onOpenPhotoLibrary={() => {
+          void handleImportPhoto();
+        }}
+        cameraRef={cameraRef}
+        shouldRenderCameraPreview={shouldRenderCameraPreview}
+        flashAnim={flashAnim}
+        permissionGranted={Boolean(permission?.granted)}
+        onShutterPressIn={handleShutterPressIn}
+        onShutterPressOut={handleShutterPressOut}
+        onTakePicture={() => {
+          void takePicture();
+        }}
+        onSaveNote={() => {
+          void saveNote();
+        }}
+        saving={saving}
+        shutterScale={shutterScale}
+        cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
+        libraryImportLocked={!canImportFromLibrary}
+        importingPhoto={importingPhoto || isPurchaseInFlight}
+        shareTarget={captureTarget}
+        onChangeShareTarget={handleCaptureTargetChange}
+      />
+      {hasNotesHintTarget ? (
+        <Animated.View
+          pointerEvents={shouldShowNotesHint ? 'auto' : 'none'}
+          style={[
+            styles.homeNotesHintWrap,
+            {
+              opacity: hintAnim,
+              transform: [
+                {
+                  translateY: hintAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-8, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Pressable
+            style={styles.homeNotesHintButton}
+            onPress={handleOpenNotes}
+            hitSlop={20}
           >
-            <Pressable
-              style={styles.homeNotesHintButton}
-              onPress={handleOpenNotes}
-              hitSlop={20}
-            >
-              <Ionicons name="chevron-down" size={22} color={colors.text} />
-            </Pressable>
-          </Animated.View>
-        ) : null}
+            <Ionicons name="chevron-down" size={22} color={colors.text} />
+          </Pressable>
+        </Animated.View>
+      ) : null}
     </View>
   );
 
@@ -1089,7 +1088,6 @@ export default function HomeScreen() {
         onOpenNote={openNote}
         colors={colors}
         t={t}
-        onCaptureVisibilityChange={setIsCaptureVisible}
       />
 
       <SharedManageSheet

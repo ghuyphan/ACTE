@@ -6,6 +6,7 @@ import {
   Dimensions,
   Easing as RNEasing,
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -13,7 +14,6 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import Reanimated, { Easing, LinearTransition } from 'react-native-reanimated';
 import { Layout, Typography } from '../../constants/theme';
 import { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
@@ -240,6 +240,7 @@ export default function NotesFeed({
   t,
   onCaptureVisibilityChange,
 }: NotesFeedProps) {
+  const captureVisibilityRef = useRef(true);
   const listData = useMemo<NotesFeedListItem[]>(
     () =>
       [
@@ -259,15 +260,32 @@ export default function NotesFeed({
     [notes, sharedPosts]
   );
   const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
+
+  const reportCaptureVisibility = useCallback(
+    (offsetY: number) => {
+      const visibilityThreshold = Math.min(Math.max(snapHeight * 0.1, 48), 72);
+      const nextIsVisible = offsetY <= visibilityThreshold;
+
+      if (captureVisibilityRef.current === nextIsVisible) {
+        return;
+      }
+
+      captureVisibilityRef.current = nextIsVisible;
+      onCaptureVisibilityChange?.(nextIsVisible);
+    },
+    [onCaptureVisibilityChange, snapHeight]
+  );
+
   useEffect(() => {
+    captureVisibilityRef.current = true;
     onCaptureVisibilityChange?.(true);
   }, [onCaptureVisibilityChange]);
 
   const settleCaptureVisibility = useCallback(
     (offsetY: number) => {
-      onCaptureVisibilityChange?.(offsetY < snapHeight * 0.5);
+      reportCaptureVisibility(offsetY);
     },
-    [onCaptureVisibilityChange, snapHeight]
+    [reportCaptureVisibility]
   );
 
   const getItemLayout = useCallback(
@@ -306,22 +324,25 @@ export default function NotesFeed({
   );
 
   return (
-    <Reanimated.FlatList
+    <FlatList
       ref={flatListRef}
       data={listData}
-      keyExtractor={(item) => item.id}
+      keyExtractor={(item) => `${item.kind}:${item.id}`}
       renderItem={renderItem}
-      itemLayoutAnimation={LinearTransition.duration(180).easing(Easing.out(Easing.cubic))}
       getItemLayout={getItemLayout}
       initialNumToRender={3}
       maxToRenderPerBatch={4}
       windowSize={5}
-      removeClippedSubviews={captureMode !== 'camera'}
+      removeClippedSubviews={Platform.OS === 'android' && captureMode !== 'camera'}
       snapToInterval={snapHeight}
       snapToAlignment="start"
       decelerationRate="fast"
       showsVerticalScrollIndicator={false}
       ListHeaderComponent={captureHeader}
+      onScroll={(event) => {
+        reportCaptureVisibility(event.nativeEvent.contentOffset.y);
+      }}
+      scrollEventThrottle={16}
       onScrollEndDrag={(event) => {
         const velocityY = event.nativeEvent.velocity?.y ?? 0;
         if (Math.abs(velocityY) < 0.05) {

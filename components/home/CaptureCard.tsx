@@ -17,8 +17,6 @@ import {
 } from 'react-native';
 import Reanimated, {
   Easing,
-  FadeInDown,
-  FadeOutUp,
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
@@ -474,12 +472,7 @@ export default function CaptureCard({
                   {audienceSizerLabel}
                 </Text>
               </View>
-              <Reanimated.View
-                key={shareTarget}
-                entering={FadeInDown.duration(180)}
-                exiting={FadeOutUp.duration(140)}
-                style={styles.cardAudienceBadgeVisibleContent}
-              >
+              <Reanimated.View style={styles.cardAudienceBadgeVisibleContent}>
                 <AnimatedIonicons
                   name={shareTarget === 'shared' ? 'people-outline' : 'lock-closed-outline'}
                   size={16}
