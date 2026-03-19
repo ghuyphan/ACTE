@@ -1,5 +1,6 @@
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
+import { doc, onSnapshot } from '@react-native-firebase/firestore';
 import Purchases, {
   CustomerInfo,
   LOG_LEVEL,
@@ -15,6 +16,7 @@ import {
   getPhotoNoteLimitForTier,
   isRevenueCatConfigured,
 } from '../constants/subscription';
+import { getFirestore } from '../utils/firebase';
 import { useAuth } from './useAuth';
 
 export interface SubscriptionActionResult {
@@ -30,6 +32,7 @@ interface SubscriptionContextValue {
   isPurchaseInFlight: boolean;
   canImportFromLibrary: boolean;
   photoNoteLimit: number | null;
+  remotePhotoNoteCount: number | null;
   plusPriceLabel: string | null;
   plusPackageTitle: string | null;
   purchasePlus: () => Promise<SubscriptionActionResult>;
@@ -102,6 +105,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [tier, setTier] = useState<PlanTier>('free');
   const [selectedPackage, setSelectedPackage] = useState<PurchasesPackage | null>(null);
   const [isPurchaseInFlight, setIsPurchaseInFlight] = useState(false);
+  const [remotePhotoNoteCount, setRemotePhotoNoteCount] = useState<number | null>(null);
   const isConfiguredRef = useRef(false);
   const isInitializedRef = useRef(false);
   const currentRevenueCatUserIdRef = useRef<string | null>(null);
@@ -163,6 +167,34 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   }, [isConfigured, loadRevenueCatState, revenueCatApiKey]);
 
   useEffect(() => {
+    const firestore = getFirestore();
+    if (!authReady) {
+      return;
+    }
+
+    if (!user || !firestore) {
+      setRemotePhotoNoteCount(null);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      doc(firestore, 'users', user.uid),
+      (snapshot) => {
+        const data = snapshot.data() as { photoNoteCount?: unknown } | undefined;
+        const nextCount = data?.photoNoteCount;
+        setRemotePhotoNoteCount(
+          typeof nextCount === 'number' && Number.isFinite(nextCount) ? nextCount : null
+        );
+      },
+      (error) => {
+        console.warn('[subscription] Failed to observe remote usage:', error);
+      }
+    );
+
+    return unsubscribe;
+  }, [authReady, user]);
+
+  useEffect(() => {
     if (!isConfigured || !authReady) {
       return;
     }
@@ -200,6 +232,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       isPurchaseInFlight,
       canImportFromLibrary: tier === 'plus',
       photoNoteLimit: getPhotoNoteLimitForTier(tier),
+      remotePhotoNoteCount,
       plusPriceLabel: selectedPackage?.product.priceString ?? null,
       plusPackageTitle: getPlusOfferingLabel(selectedPackage),
       purchasePlus: async () => {
@@ -248,7 +281,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         await loadRevenueCatState();
       },
     }),
-    [isConfigured, isPurchaseInFlight, isReady, loadRevenueCatState, selectedPackage, tier]
+    [isConfigured, isPurchaseInFlight, isReady, loadRevenueCatState, remotePhotoNoteCount, selectedPackage, tier]
   );
 
   return <SubscriptionContext.Provider value={value}>{children}</SubscriptionContext.Provider>;

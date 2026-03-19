@@ -129,6 +129,24 @@ service cloud.firestore {
           request.resource.data.expiresAt == null);
     }
 
+    function friendInviteResetIsValid() {
+      return signedIn() &&
+        resource.data.inviterUid == request.auth.uid &&
+        request.resource.data.inviterUid == resource.data.inviterUid &&
+        (resource.data.revokedAt != null || resource.data.acceptedByUid != null) &&
+        (request.resource.data.inviterDisplayNameSnapshot is string ||
+          request.resource.data.inviterDisplayNameSnapshot == null) &&
+        (request.resource.data.inviterPhotoURLSnapshot is string ||
+          request.resource.data.inviterPhotoURLSnapshot == null) &&
+        request.resource.data.token is string &&
+        request.resource.data.createdAt is string &&
+        request.resource.data.revokedAt == null &&
+        request.resource.data.acceptedByUid == null &&
+        request.resource.data.acceptedAt == null &&
+        (request.resource.data.expiresAt is string ||
+          request.resource.data.expiresAt == null);
+    }
+
     function friendInviteImmutableFieldsUnchanged() {
       return request.resource.data.inviterUid == resource.data.inviterUid &&
         request.resource.data.inviterDisplayNameSnapshot == resource.data.inviterDisplayNameSnapshot &&
@@ -264,7 +282,9 @@ service cloud.firestore {
       allow list: if signedIn() && resource.data.inviterUid == request.auth.uid;
 
       allow create: if friendInviteCreateIsValid();
-      allow update: if friendInviteRevokeIsValid() || friendInviteAcceptIsValid();
+      allow update: if friendInviteRevokeIsValid() ||
+        friendInviteAcceptIsValid() ||
+        friendInviteResetIsValid();
       allow delete: if false;
     }
 

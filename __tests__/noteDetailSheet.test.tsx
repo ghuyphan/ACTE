@@ -141,6 +141,12 @@ jest.mock('../hooks/useNotes', () => ({
   useNotes: () => mockNotesStore,
 }));
 
+jest.mock('../services/noteDoodles', () => ({
+  getNoteDoodle: jest.fn(async () => null),
+  saveNoteDoodle: jest.fn(async () => undefined),
+  clearNoteDoodle: jest.fn(async () => undefined),
+}));
+
 jest.mock('../utils/interactionFeedback', () => ({
   emitInteractionFeedback: jest.fn(),
 }));
@@ -161,6 +167,14 @@ jest.mock('../components/ui/TransientStatusChip', () => {
   };
 });
 
+jest.mock('../components/AppBottomSheet', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return function MockAppBottomSheet({ children }: any) {
+    return <View>{children}</View>;
+  };
+});
+
 import NoteDetailSheet from '../components/NoteDetailSheet';
 
 beforeEach(() => {
@@ -176,6 +190,7 @@ beforeEach(() => {
     longitude: 106.69,
     radius: 150,
     isFavorite: false,
+    hasDoodle: false,
     createdAt: '2026-03-10T00:00:00.000Z',
     updatedAt: null,
   });
@@ -230,6 +245,7 @@ describe('NoteDetailSheet', () => {
     expect(mockUpdateNote).toHaveBeenCalledWith('note-1', {
       content: 'Updated note',
       locationName: 'New place',
+      moodEmoji: '🌙',
       radius: 250,
     });
   });
@@ -246,6 +262,7 @@ describe('NoteDetailSheet', () => {
       longitude: 106.69,
       radius: 150,
       isFavorite: false,
+      hasDoodle: false,
       createdAt: '2026-03-10T00:00:00.000Z',
       updatedAt: null,
     });

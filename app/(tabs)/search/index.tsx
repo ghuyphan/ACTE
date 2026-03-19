@@ -21,6 +21,7 @@ import { useNotesStore } from '../../../hooks/useNotes';
 import { Note } from '../../../services/database';
 import { filterNotesByQuery } from '../../../services/noteSearch';
 import { getNotePhotoUri } from '../../../services/photoStorage';
+import { formatNoteTextWithEmoji } from '../../../services/noteTextPresentation';
 import { formatDate } from '../../../utils/dateUtils';
 
 function hashToIndex(str: string, max: number): number {
@@ -40,7 +41,7 @@ function getPreviewText(note: Note, photoLabel: string, emptyLabel: string) {
   if (!normalized) {
     return emptyLabel;
   }
-  return normalized;
+  return formatNoteTextWithEmoji(normalized, note.moodEmoji);
 }
 
 export default function SearchScreen() {

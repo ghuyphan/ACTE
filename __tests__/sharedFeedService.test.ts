@@ -2,6 +2,7 @@ const mockFriendInvites = new Map<string, any>();
 const mockSharedPosts = new Map<string, any>();
 const mockFriends = new Map<string, Map<string, any>>();
 const mockPublicProfiles = new Map<string, { displayNameSnapshot: string | null; photoURLSnapshot: string | null }>();
+let mockUuidCounter = 0;
 
 function mockEnsureFriendMap(userUid: string) {
   if (!mockFriends.has(userUid)) {
@@ -56,7 +57,12 @@ jest.mock('../utils/firebase', () => ({
 }));
 
 jest.mock('expo-crypto', () => ({
-  randomUUID: () => 'uuid-12345678',
+  randomUUID: () => `uuid-${++mockUuidCounter}`,
+  digestStringAsync: async (_algorithm: string, value: string) =>
+    `digest-${value.replace(/[^a-z0-9]/gi, '').toLowerCase()}`,
+  CryptoDigestAlgorithm: {
+    SHA256: 'SHA-256',
+  },
 }));
 
 jest.mock('expo-linking', () => ({
@@ -82,6 +88,28 @@ jest.mock('@react-native-firebase/firestore', () => ({
   where: (field: string, op: string, value: unknown) => ({ type: 'where', field, op, value }),
   orderBy: (field: string, direction: 'asc' | 'desc' = 'asc') => ({ type: 'orderBy', field, direction }),
   limit: (value: number) => ({ type: 'limit', value }),
+  runTransaction: async (_firestore: unknown, updateFunction: (transaction: any) => Promise<unknown>) =>
+    updateFunction({
+      get: async (ref: any) => {
+        const path = ref.path as string[];
+        let value: unknown;
+
+        if (path.length === 2 && path[0] === 'friendInvites') {
+          value = mockFriendInvites.get(path[1]!);
+        } else if (path.length === 4 && path[0] === 'users' && path[2] === 'friends') {
+          value = mockEnsureFriendMap(path[1]!).get(path[3]!);
+        }
+
+        return mockCreateSnapshot(path, value);
+      },
+      set: (ref: any, data: any) => {
+        const path = ref.path as string[];
+
+        if (path.length === 2 && path[0] === 'friendInvites') {
+          mockFriendInvites.set(path[1]!, data);
+        }
+      },
+    }),
   setDoc: async (ref: any, data: any, options?: { merge?: boolean }) => {
     const path = ref.path as string[];
 
@@ -195,6 +223,7 @@ import {
   createSharedPost,
   refreshSharedFeed,
   removeFriend,
+  revokeFriendInvite,
 } from '../services/sharedFeedService';
 
 const ownerUser = {
@@ -213,6 +242,7 @@ const friendUser = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockUuidCounter = 0;
   mockFriendInvites.clear();
   mockSharedPosts.clear();
   mockFriends.clear();
@@ -251,6 +281,34 @@ describe('sharedFeedService', () => {
     expect(mockFriendInvites.get(invite.id)).toEqual(
       expect.objectContaining({
         acceptedByUid: friendUser.uid,
+      })
+    );
+  });
+
+  it('reuses the current active invite instead of creating another document', async () => {
+    const firstInvite = await createFriendInvite(ownerUser);
+    const secondInvite = await createFriendInvite(ownerUser);
+
+    expect(secondInvite).toEqual(firstInvite);
+    expect(Array.from(mockFriendInvites.keys())).toEqual([firstInvite.id]);
+  });
+
+  it('recreates a revoked invite in place with a fresh token', async () => {
+    const initialInvite = await createFriendInvite(ownerUser);
+
+    await revokeFriendInvite(ownerUser, initialInvite.id);
+
+    const regeneratedInvite = await createFriendInvite(ownerUser);
+
+    expect(regeneratedInvite.id).toBe(initialInvite.id);
+    expect(regeneratedInvite.token).not.toBe(initialInvite.token);
+    expect(mockFriendInvites.size).toBe(1);
+    expect(mockFriendInvites.get(initialInvite.id)).toEqual(
+      expect.objectContaining({
+        revokedAt: null,
+        acceptedByUid: null,
+        acceptedAt: null,
+        token: regeneratedInvite.token,
       })
     );
   });

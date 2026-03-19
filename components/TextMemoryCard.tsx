@@ -3,10 +3,12 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Layout, Shadows } from '../constants/theme';
 import { CardGradients } from '../hooks/useTheme';
+import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 
 interface TextMemoryCardProps {
     text: string;
     noteId?: string;
+    emoji?: string | null;
 }
 
 function hashToIndex(str: string, max: number): number {
@@ -17,10 +19,11 @@ function hashToIndex(str: string, max: number): number {
     return Math.abs(hash) % max;
 }
 
-export default function TextMemoryCard({ text, noteId }: TextMemoryCardProps) {
+export default function TextMemoryCard({ text, noteId, emoji = null }: TextMemoryCardProps) {
     // Pick a unique gradient based on the note content or id
     const gradientIndex = hashToIndex(noteId || text, CardGradients.length);
     const gradient = CardGradients[gradientIndex];
+    const displayText = formatNoteTextWithEmoji(text, emoji);
 
     return (
         <View style={styles.card}>
@@ -31,7 +34,7 @@ export default function TextMemoryCard({ text, noteId }: TextMemoryCardProps) {
                 style={styles.gradient}
             >
                 <Text style={styles.memoryText} numberOfLines={5}>
-                    {text}
+                    {displayText}
                 </Text>
             </LinearGradient>
         </View>

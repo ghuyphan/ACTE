@@ -2,6 +2,8 @@ interface SearchableNote {
   type: 'text' | 'photo';
   content: string;
   locationName: string | null;
+  promptTextSnapshot?: string | null;
+  promptAnswer?: string | null;
 }
 
 function normalizeSegment(value: string | null | undefined) {
@@ -16,8 +18,8 @@ function normalizeSegment(value: string | null | undefined) {
 export function buildNoteSearchText(note: SearchableNote) {
   const segments =
     note.type === 'photo'
-      ? [note.locationName]
-      : [note.content, note.locationName];
+      ? [note.locationName, note.promptTextSnapshot, note.promptAnswer]
+      : [note.content, note.locationName, note.promptTextSnapshot, note.promptAnswer];
 
   return segments
     .map(normalizeSegment)

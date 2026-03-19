@@ -16,7 +16,7 @@ const mockGetAllAsync = jest.fn<Promise<unknown[]>, [string, ...unknown[]]>(asyn
     ];
   }
 
-  if (sql.includes('SELECT id, type, content, photo_local_uri, location_name, search_text')) {
+  if (sql.includes('SELECT id, type, content, photo_local_uri, location_name, prompt_text_snapshot, prompt_answer, search_text')) {
     return [
       {
         id: 'photo-1',

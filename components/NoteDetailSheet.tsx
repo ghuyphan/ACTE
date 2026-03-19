@@ -29,7 +29,9 @@ import { useSharedFeedStore } from '../hooks/useSharedFeed';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { CardGradients, useTheme } from '../hooks/useTheme';
 import { Note } from '../services/database';
+import { resolveAutoNoteEmoji } from '../services/noteDecorations';
 import { getNotePhotoUri } from '../services/photoStorage';
+import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import { formatDate } from '../utils/dateUtils';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
 import { isOlderIOS } from '../utils/platform';
@@ -467,7 +469,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
 
     const handleSaveEdit = async () => {
         if (!note || isDeleting) return;
-        const updates: Partial<Pick<Note, 'content' | 'locationName' | 'radius'>> = {};
+        const updates: Partial<Pick<Note, 'content' | 'locationName' | 'moodEmoji' | 'radius'>> = {};
 
         if (note.type === 'text' && editContent.trim() !== note.content) {
             updates.content = editContent.trim();
@@ -477,6 +479,17 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         }
         if (editRadius !== note.radius) {
             updates.radius = editRadius;
+        }
+
+        const nextContent = note.type === 'text' ? (updates.content ?? note.content) : note.content;
+        const nextLocation = updates.locationName !== undefined ? updates.locationName : note.locationName;
+        const autoEmoji = resolveAutoNoteEmoji({
+            type: note.type,
+            content: note.type === 'text' ? nextContent : nextLocation ?? '',
+            locationName: nextLocation,
+        });
+        if (autoEmoji !== note.moodEmoji) {
+            updates.moodEmoji = autoEmoji;
         }
 
         if (Object.keys(updates).length > 0) {
@@ -513,7 +526,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         const photoUri = getNotePhotoUri(note);
         const message =
             note.type === 'text'
-                ? `📍 ${locationStr}\n\n${note.content}\n\n— Noto 💛`
+                ? `📍 ${locationStr}\n\n${formatNoteTextWithEmoji(note.content, note.moodEmoji)}\n\n— Noto 💛`
                 : `${t('noteDetail.sharePhotoMsg', { location: locationStr })}\n\n— Noto 💛`;
 
         try {
@@ -610,7 +623,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                         ref={contentInputRef}
                                         testID="note-detail-content-input"
                                         style={[styles.editTextInput, isEditing ? styles.editTextInputActive : null]}
-                                        value={isEditing ? editContent : note.content}
+                                        value={isEditing ? editContent : formatNoteTextWithEmoji(note.content, note.moodEmoji)}
                                         onChangeText={isEditing ? setEditContent : undefined}
                                         editable={isEditing}
                                         multiline
@@ -626,32 +639,30 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                     </Animated.View>
 
                     <Animated.View style={styles.actionRow}>
-                        {note.type === 'text' ? (
-                            <AnimatedActionButton
-                                onPress={isEditing ? handleSaveEdit : () => setIsEditing(true)}
-                                testID="note-detail-edit"
-                                style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
-                                delay={100}
-                                disabled={isDeleting}
-                            >
-                                <View style={styles.editIconStack}>
-                                    <Animated.View style={[styles.editIconLayer, editIconStyle]}>
-                                        <Ionicons
-                                            name="create-outline"
-                                            size={20}
-                                            color={colors.secondaryText}
-                                        />
-                                    </Animated.View>
-                                    <Animated.View style={[styles.editIconLayer, saveIconStyle]}>
-                                        <Ionicons
-                                            name="checkmark"
-                                            size={20}
-                                            color={colors.success}
-                                        />
-                                    </Animated.View>
-                                </View>
-                            </AnimatedActionButton>
-                        ) : null}
+                        <AnimatedActionButton
+                            onPress={isEditing ? handleSaveEdit : () => setIsEditing(true)}
+                            testID="note-detail-edit"
+                            style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}
+                            delay={100}
+                            disabled={isDeleting}
+                        >
+                            <View style={styles.editIconStack}>
+                                <Animated.View style={[styles.editIconLayer, editIconStyle]}>
+                                    <Ionicons
+                                        name="create-outline"
+                                        size={20}
+                                        color={colors.secondaryText}
+                                    />
+                                </Animated.View>
+                                <Animated.View style={[styles.editIconLayer, saveIconStyle]}>
+                                    <Ionicons
+                                        name="checkmark"
+                                        size={20}
+                                        color={colors.success}
+                                    />
+                                </Animated.View>
+                            </View>
+                        </AnimatedActionButton>
 
                         <AnimatedActionButton
                             onPress={handleShare}

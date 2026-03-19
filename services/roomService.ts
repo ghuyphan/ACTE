@@ -16,6 +16,7 @@ import {
 } from '@react-native-firebase/firestore';
 import { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { Note } from './database';
+import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import {
   clearCachedRoom,
   getCachedRoomMembers,
@@ -700,7 +701,7 @@ export async function shareNoteToRoom(
     authorDisplayName: getDisplayName(user),
     origin: 'shared_note',
     type: note.type,
-    text: note.type === 'text' ? note.content.trim() : '',
+    text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
     photoRemoteBase64: photoRemoteBase64 ?? null,
     placeName: note.locationName ?? null,
     sourceNoteId: note.id,

@@ -15,10 +15,15 @@ export interface Note {
     photoLocalUri?: string | null;
     photoRemoteBase64?: string | null;
     locationName: string | null;
+    promptId?: string | null;
+    promptTextSnapshot?: string | null;
+    promptAnswer?: string | null;
+    moodEmoji?: string | null;
     latitude: number;
     longitude: number;
     radius: number;           // geofence radius in meters
     isFavorite: boolean;
+    hasDoodle?: boolean;
     createdAt: string;        // ISO timestamp
     updatedAt: string | null;
 }
@@ -29,13 +34,28 @@ export interface CreateNoteInput {
     photoLocalUri?: string | null;
     photoRemoteBase64?: string | null;
     locationName?: string;
+    promptId?: string | null;
+    promptTextSnapshot?: string | null;
+    promptAnswer?: string | null;
+    moodEmoji?: string | null;
     latitude: number;
     longitude: number;
     radius?: number;
 }
 
 export type NoteUpdates = Partial<
-    Pick<Note, 'content' | 'photoLocalUri' | 'photoRemoteBase64' | 'locationName' | 'radius'>
+    Pick<
+        Note,
+        | 'content'
+        | 'photoLocalUri'
+        | 'photoRemoteBase64'
+        | 'locationName'
+        | 'promptId'
+        | 'promptTextSnapshot'
+        | 'promptAnswer'
+        | 'moodEmoji'
+        | 'radius'
+    >
 >;
 
 export type UpsertNoteInput = Omit<Note, 'isFavorite'> & { isFavorite?: boolean };
@@ -47,6 +67,10 @@ interface NoteRow {
     photo_local_uri: string | null;
     photo_remote_base64: string | null;
     location_name: string | null;
+    prompt_id: string | null;
+    prompt_text_snapshot: string | null;
+    prompt_answer: string | null;
+    mood_emoji: string | null;
     latitude: number;
     longitude: number;
     radius: number;
@@ -54,12 +78,15 @@ interface NoteRow {
     created_at: string;
     updated_at: string | null;
     search_text: string | null;
+    has_doodle?: number;
 }
 
 // ─── Database ───────────────────────────────────────────────────────
 let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-const APP_SCHEMA_VERSION = 2;
+const APP_SCHEMA_VERSION = 4;
+const NOTES_SELECT_FIELDS = `notes.*,
+      EXISTS(SELECT 1 FROM note_doodles doodles WHERE doodles.note_id = notes.id) AS has_doodle`;
 
 async function safelyCloseDatabase(database: SQLite.SQLiteDatabase | null) {
     if (!database) {
@@ -105,6 +132,10 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         photo_local_uri TEXT,
         photo_remote_base64 TEXT,
         location_name TEXT,
+        prompt_id TEXT,
+        prompt_text_snapshot TEXT,
+        prompt_answer TEXT,
+        mood_emoji TEXT,
         search_text TEXT NOT NULL DEFAULT '',
         latitude REAL NOT NULL,
         longitude REAL NOT NULL,
@@ -114,6 +145,12 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         updated_at TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_notes_created ON notes(created_at DESC);
+      CREATE TABLE IF NOT EXISTS note_doodles (
+        note_id TEXT PRIMARY KEY NOT NULL,
+        strokes_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
+      );
       CREATE TABLE IF NOT EXISTS sync_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         entity TEXT NOT NULL CHECK(entity IN ('note')),
@@ -207,8 +244,30 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN search_text TEXT NOT NULL DEFAULT ''`);
                     shouldBackfillNoteMetadata = true;
                 }
+                if (!columns.includes('prompt_id')) {
+                    await database.execAsync(`ALTER TABLE notes ADD COLUMN prompt_id TEXT`);
+                }
+                if (!columns.includes('prompt_text_snapshot')) {
+                    await database.execAsync(`ALTER TABLE notes ADD COLUMN prompt_text_snapshot TEXT`);
+                    shouldBackfillNoteMetadata = true;
+                }
+                if (!columns.includes('prompt_answer')) {
+                    await database.execAsync(`ALTER TABLE notes ADD COLUMN prompt_answer TEXT`);
+                    shouldBackfillNoteMetadata = true;
+                }
+                if (!columns.includes('mood_emoji')) {
+                    await database.execAsync(`ALTER TABLE notes ADD COLUMN mood_emoji TEXT`);
+                }
 
                 await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_search_text ON notes(search_text)`);
+                await database.execAsync(
+                    `CREATE TABLE IF NOT EXISTS note_doodles (
+                        note_id TEXT PRIMARY KEY NOT NULL,
+                        strokes_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
+                    )`
+                );
 
                 if (shouldBackfillNoteMetadata) {
                     const rows = await database.getAllAsync<{
@@ -217,9 +276,11 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                         content: string;
                         photo_local_uri: string | null;
                         location_name: string | null;
+                        prompt_text_snapshot: string | null;
+                        prompt_answer: string | null;
                         search_text: string | null;
                     }>(
-                        `SELECT id, type, content, photo_local_uri, location_name, search_text
+                        `SELECT id, type, content, photo_local_uri, location_name, prompt_text_snapshot, prompt_answer, search_text
                          FROM notes`
                     );
 
@@ -232,6 +293,8 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                             type: row.type,
                             content: row.type === 'photo' ? '' : row.content,
                             locationName: row.location_name,
+                            promptTextSnapshot: row.prompt_text_snapshot,
+                            promptAnswer: row.prompt_answer,
                         });
 
                         if (
@@ -304,11 +367,15 @@ function buildSearchText(input: {
     type: NoteType;
     content: string;
     locationName: string | null;
+    promptTextSnapshot?: string | null;
+    promptAnswer?: string | null;
 }) {
     return buildNoteSearchText({
         type: input.type,
         content: input.type === 'text' ? input.content : '',
         locationName: input.locationName,
+        promptTextSnapshot: input.promptTextSnapshot,
+        promptAnswer: input.promptAnswer,
     });
 }
 
@@ -321,10 +388,15 @@ function rowToNote(row: NoteRow): Note {
         photoLocalUri,
         photoRemoteBase64: row.photo_remote_base64,
         locationName: row.location_name,
+        promptId: row.prompt_id,
+        promptTextSnapshot: row.prompt_text_snapshot,
+        promptAnswer: row.prompt_answer,
+        moodEmoji: row.mood_emoji,
         latitude: row.latitude,
         longitude: row.longitude,
         radius: row.radius,
         isFavorite: row.is_favorite === 1,
+        hasDoodle: row.has_doodle === 1,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     };
@@ -342,6 +414,8 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         type: input.type,
         content: normalizedContent,
         locationName: input.locationName ?? null,
+        promptTextSnapshot: input.promptTextSnapshot ?? null,
+        promptAnswer: input.promptAnswer ?? null,
     });
 
     await database.runAsync(
@@ -352,6 +426,10 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
             photo_local_uri,
             photo_remote_base64,
             location_name,
+            prompt_id,
+            prompt_text_snapshot,
+            prompt_answer,
+            mood_emoji,
             search_text,
             latitude,
             longitude,
@@ -359,13 +437,17 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
             is_favorite,
             created_at
         )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
         id,
         input.type,
         normalizedContent,
         photoLocalUri,
         input.photoRemoteBase64 ?? null,
         input.locationName ?? null,
+        input.promptId ?? null,
+        input.promptTextSnapshot ?? null,
+        input.promptAnswer ?? null,
+        input.moodEmoji ?? null,
         searchText,
         input.latitude,
         input.longitude,
@@ -380,10 +462,15 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         photoLocalUri,
         photoRemoteBase64: input.photoRemoteBase64 ?? null,
         locationName: input.locationName ?? null,
+        promptId: input.promptId ?? null,
+        promptTextSnapshot: input.promptTextSnapshot ?? null,
+        promptAnswer: input.promptAnswer ?? null,
+        moodEmoji: input.moodEmoji ?? null,
         latitude: input.latitude,
         longitude: input.longitude,
         radius: input.radius ?? DEFAULT_NOTE_RADIUS,
         isFavorite: false,
+        hasDoodle: false,
         createdAt: now,
         updatedAt: null,
     };
@@ -391,13 +478,22 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
 
 export async function getAllNotes(): Promise<Note[]> {
     const database = await getDB();
-    const rows = await database.getAllAsync<NoteRow>('SELECT * FROM notes ORDER BY created_at DESC');
+    const rows = await database.getAllAsync<NoteRow>(
+        `SELECT ${NOTES_SELECT_FIELDS}
+         FROM notes
+         ORDER BY created_at DESC`
+    );
     return rows.map(rowToNote);
 }
 
 export async function getNoteById(id: string): Promise<Note | null> {
     const database = await getDB();
-    const row = await database.getFirstAsync<NoteRow>('SELECT * FROM notes WHERE id = ?', id);
+    const row = await database.getFirstAsync<NoteRow>(
+        `SELECT ${NOTES_SELECT_FIELDS}
+         FROM notes
+         WHERE id = ?`,
+        id
+    );
     return row ? rowToNote(row) : null;
 }
 
@@ -422,6 +518,16 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
             : updates.content ?? existing.content;
     const nextLocationName =
         updates.locationName !== undefined ? updates.locationName : existing.locationName;
+    const nextPromptId =
+        updates.promptId !== undefined ? updates.promptId : existing.promptId ?? null;
+    const nextPromptTextSnapshot =
+        updates.promptTextSnapshot !== undefined
+            ? updates.promptTextSnapshot
+            : existing.promptTextSnapshot ?? null;
+    const nextPromptAnswer =
+        updates.promptAnswer !== undefined ? updates.promptAnswer : existing.promptAnswer ?? null;
+    const nextMoodEmoji =
+        updates.moodEmoji !== undefined ? updates.moodEmoji : existing.moodEmoji ?? null;
     const nextRadius = updates.radius ?? existing.radius;
     const nextPhotoRemoteBase64 =
         updates.photoRemoteBase64 !== undefined
@@ -432,6 +538,8 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         type: nextType,
         content: nextContent,
         locationName: nextLocationName,
+        promptTextSnapshot: nextPromptTextSnapshot,
+        promptAnswer: nextPromptAnswer,
     });
 
     await database.runAsync(
@@ -440,6 +548,10 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
              photo_local_uri = ?,
              photo_remote_base64 = ?,
              location_name = ?,
+             prompt_id = ?,
+             prompt_text_snapshot = ?,
+             prompt_answer = ?,
+             mood_emoji = ?,
              search_text = ?,
              radius = ?,
              updated_at = ?
@@ -448,6 +560,10 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         nextPhotoLocalUri,
         nextPhotoRemoteBase64,
         nextLocationName,
+        nextPromptId,
+        nextPromptTextSnapshot,
+        nextPromptAnswer,
+        nextMoodEmoji,
         searchText,
         nextRadius,
         now,
@@ -478,6 +594,8 @@ export async function searchNotes(query: string): Promise<Note[]> {
         type: 'text',
         content: query,
         locationName: null,
+        promptTextSnapshot: null,
+        promptAnswer: null,
     })
         .split(' ')
         .filter(Boolean);
@@ -489,7 +607,10 @@ export async function searchNotes(query: string): Promise<Note[]> {
     const whereClause = normalizedTokens.map(() => `search_text LIKE ?`).join(' AND ');
     const params = normalizedTokens.map((token) => `%${token}%`);
     const rows = await database.getAllAsync<NoteRow>(
-        `SELECT * FROM notes WHERE ${whereClause} ORDER BY created_at DESC`,
+        `SELECT ${NOTES_SELECT_FIELDS}
+         FROM notes
+         WHERE ${whereClause}
+         ORDER BY created_at DESC`,
         ...params
     );
     return rows.map(rowToNote);
@@ -497,11 +618,13 @@ export async function searchNotes(query: string): Promise<Note[]> {
 
 export async function deleteNote(id: string): Promise<void> {
     const database = await getDB();
+    await database.runAsync('DELETE FROM note_doodles WHERE note_id = ?', id);
     await database.runAsync('DELETE FROM notes WHERE id = ?', id);
 }
 
 export async function deleteAllNotes(): Promise<void> {
     const database = await getDB();
+    await database.runAsync('DELETE FROM note_doodles');
     await database.runAsync('DELETE FROM notes');
 }
 
@@ -524,6 +647,8 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         type: input.type,
         content: normalizedContent,
         locationName: input.locationName,
+        promptTextSnapshot: input.promptTextSnapshot ?? null,
+        promptAnswer: input.promptAnswer ?? null,
     });
 
     await database.runAsync(
@@ -534,6 +659,10 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
             photo_local_uri,
             photo_remote_base64,
             location_name,
+            prompt_id,
+            prompt_text_snapshot,
+            prompt_answer,
+            mood_emoji,
             search_text,
             latitude,
             longitude,
@@ -542,13 +671,17 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
             created_at,
             updated_at
         )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
             type = excluded.type,
             content = excluded.content,
             photo_local_uri = excluded.photo_local_uri,
             photo_remote_base64 = excluded.photo_remote_base64,
             location_name = excluded.location_name,
+            prompt_id = excluded.prompt_id,
+            prompt_text_snapshot = excluded.prompt_text_snapshot,
+            prompt_answer = excluded.prompt_answer,
+            mood_emoji = excluded.mood_emoji,
             search_text = excluded.search_text,
             latitude = excluded.latitude,
             longitude = excluded.longitude,
@@ -562,6 +695,10 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         photoLocalUri,
         input.photoRemoteBase64 ?? null,
         input.locationName ?? null,
+        input.promptId ?? null,
+        input.promptTextSnapshot ?? null,
+        input.promptAnswer ?? null,
+        input.moodEmoji ?? null,
         searchText,
         input.latitude,
         input.longitude,
@@ -578,10 +715,15 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         photoLocalUri,
         photoRemoteBase64: input.photoRemoteBase64 ?? null,
         locationName: input.locationName ?? null,
+        promptId: input.promptId ?? null,
+        promptTextSnapshot: input.promptTextSnapshot ?? null,
+        promptAnswer: input.promptAnswer ?? null,
+        moodEmoji: input.moodEmoji ?? null,
         latitude: input.latitude,
         longitude: input.longitude,
         radius: input.radius ?? DEFAULT_NOTE_RADIUS,
         isFavorite: Boolean(input.isFavorite),
+        hasDoodle: input.hasDoodle ?? false,
         createdAt: input.createdAt,
         updatedAt: input.updatedAt ?? null,
     };

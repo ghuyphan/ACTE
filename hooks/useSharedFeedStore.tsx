@@ -45,6 +45,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const [ready, setReady] = useState(false);
   const friendsRef = useRef<FriendConnection[]>([]);
   const sharedPostsRef = useRef<SharedPost[]>([]);
+  const activeInviteRef = useRef<FriendInvite | null>(null);
+  const createInvitePromiseRef = useRef<Promise<FriendInvite> | null>(null);
 
   useEffect(() => {
     friendsRef.current = friends;
@@ -53,6 +55,10 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   useEffect(() => {
     sharedPostsRef.current = sharedPosts;
   }, [sharedPosts]);
+
+  useEffect(() => {
+    activeInviteRef.current = activeInvite;
+  }, [activeInvite]);
 
   const enabled = isAuthAvailable;
 
@@ -63,6 +69,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       setActiveInvite(null);
       friendsRef.current = [];
       sharedPostsRef.current = [];
+      activeInviteRef.current = null;
+      createInvitePromiseRef.current = null;
       setLoading(false);
       setReady(true);
       return;
@@ -73,6 +81,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       const snapshot = await fetchSharedFeed(user);
       friendsRef.current = snapshot.friends;
       sharedPostsRef.current = snapshot.sharedPosts;
+      activeInviteRef.current = snapshot.activeInvite;
       setFriends(snapshot.friends);
       setSharedPosts(snapshot.sharedPosts);
       setActiveInvite(snapshot.activeInvite);
@@ -91,6 +100,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       setFriends([]);
       setSharedPosts([]);
       setActiveInvite(null);
+      activeInviteRef.current = null;
+      createInvitePromiseRef.current = null;
       setLoading(false);
       setReady(true);
       return;
@@ -103,6 +114,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       onSnapshot: (snapshot) => {
         friendsRef.current = snapshot.friends;
         sharedPostsRef.current = snapshot.sharedPosts;
+        activeInviteRef.current = snapshot.activeInvite;
         setFriends(snapshot.friends);
         setSharedPosts(snapshot.sharedPosts);
         setActiveInvite(snapshot.activeInvite);
@@ -137,15 +149,36 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       activeInvite,
       refreshSharedFeed: refreshAll,
       createFriendInvite: async () => {
+        if (activeInviteRef.current) {
+          return activeInviteRef.current;
+        }
+
+        if (createInvitePromiseRef.current) {
+          return createInvitePromiseRef.current;
+        }
+
         const activeUser = requireUser();
-        const invite = await createInvite(activeUser);
-        setActiveInvite(invite);
-        return invite;
+        const invitePromise = createInvite(activeUser)
+          .then((invite) => {
+            activeInviteRef.current = invite;
+            setActiveInvite(invite);
+            return invite;
+          })
+          .finally(() => {
+            createInvitePromiseRef.current = null;
+          });
+
+        createInvitePromiseRef.current = invitePromise;
+        return invitePromise;
       },
       revokeFriendInvite: async (inviteId: string) => {
         const activeUser = requireUser();
         await revokeInvite(activeUser, inviteId);
-        setActiveInvite((current) => (current?.id === inviteId ? null : current));
+        setActiveInvite((current) => {
+          const nextInvite = current?.id === inviteId ? null : current;
+          activeInviteRef.current = nextInvite;
+          return nextInvite;
+        });
       },
       acceptFriendInvite: async (inviteValue: string) => {
         const activeUser = requireUser();

@@ -5,8 +5,9 @@ import { Platform } from 'react-native';
 import i18n from '../constants/i18n';
 import { formatDate } from '../utils/dateUtils';
 import { getAllNotes, Note } from './database';
+import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getNotePhotoUri, resolveStoredPhotoUri } from './photoStorage';
-import { selectNearbyReminder } from './reminderSelection';
+import { compareReminderNotes, getDistanceMeters } from './reminderSelection';
 
 // Lazy import to avoid circular dependency issues
 let widgetInstance: any = null;
@@ -51,6 +52,7 @@ export interface WidgetProps {
 export interface UpdateWidgetDataOptions {
     notes?: Note[];
     includeLocationLookup?: boolean;
+    referenceDate?: Date;
 }
 
 interface LocationCoords {
@@ -63,13 +65,60 @@ interface WidgetSelectionResult {
     selectedLocationName: string | null;
     nearbyPlacesCount: number;
     isIdleState: boolean;
+    selectionMode: WidgetSelectionMode;
 }
+
+export type WidgetSelectionMode =
+    | 'nearest_memory'
+    | 'random_favorite'
+    | 'around_this_area'
+    | 'latest_memory';
 
 const IOS_WIDGET_APP_GROUP_ID = 'group.com.acte.app';
 const WIDGET_IMAGE_DIRECTORY_NAME = 'widget-images';
 const WIDGET_IMAGE_FILENAME = 'latest-photo.jpg';
 
-function getTranslatedWidgetStrings(noteCount: number, nearbyPlacesCount = 0) {
+function hashString(value: string) {
+    let hash = 0;
+    for (let index = 0; index < value.length; index += 1) {
+        hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+    }
+
+    return hash;
+}
+
+function getModeLabelKey(selectionMode: WidgetSelectionMode) {
+    if (selectionMode === 'nearest_memory') {
+        return 'widget.modeNearest';
+    }
+
+    if (selectionMode === 'random_favorite') {
+        return 'widget.modeFavorite';
+    }
+
+    if (selectionMode === 'around_this_area') {
+        return 'widget.modeArea';
+    }
+
+    return 'widget.memoryReminder';
+}
+
+function getSlotKey(referenceDate: Date) {
+    const slot = Math.floor(referenceDate.getHours() / 6);
+    return `${referenceDate.getFullYear()}-${referenceDate.getMonth() + 1}-${referenceDate.getDate()}-${slot}`;
+}
+
+function getOrderedSelectionModes(referenceDate: Date): WidgetSelectionMode[] {
+    const modes: WidgetSelectionMode[] = ['nearest_memory', 'random_favorite', 'around_this_area'];
+    const startIndex = hashString(getSlotKey(referenceDate)) % modes.length;
+    return modes.map((_, offset) => modes[(startIndex + offset) % modes.length]!);
+}
+
+function getTranslatedWidgetStrings(
+    noteCount: number,
+    nearbyPlacesCount = 0,
+    selectionMode: WidgetSelectionMode = 'latest_memory'
+) {
     const savedCountText = i18n.t(
         noteCount === 1 ? 'widget.countBadgeOne' : 'widget.countBadgeOther',
         { count: noteCount }
@@ -83,7 +132,7 @@ function getTranslatedWidgetStrings(noteCount: number, nearbyPlacesCount = 0) {
         idleText: i18n.t('widget.idleText'),
         savedCountText,
         nearbyPlacesLabelText,
-        memoryReminderText: i18n.t('widget.memoryReminder'),
+        memoryReminderText: i18n.t(getModeLabelKey(selectionMode)),
         accessorySaveMemoryText: i18n.t('widget.accessorySaveMemory'),
         accessoryAddFirstPlaceText: i18n.t('widget.accessoryAddFirstPlace'),
         accessoryMemoryNearbyText: i18n.t('widget.accessoryMemoryNearby'),
@@ -98,14 +147,115 @@ export function selectWidgetNote(options: {
     notes: Note[];
     currentLocation?: LocationCoords | null;
     nearbyRadiusMeters?: number;
+    referenceDate?: Date;
 }): WidgetSelectionResult {
-    const selection = selectNearbyReminder(options);
+    const {
+        notes,
+        currentLocation = null,
+        nearbyRadiusMeters = 5000,
+        referenceDate = new Date(),
+    } = options;
+
+    if (notes.length === 0) {
+        return {
+            selectedNote: null,
+            selectedLocationName: null,
+            nearbyPlacesCount: 0,
+            isIdleState: true,
+            selectionMode: 'latest_memory',
+        };
+    }
+
+    const orderedModes = getOrderedSelectionModes(referenceDate);
+
+    const nearestCandidates = currentLocation
+        ? notes
+            .map((note) => ({
+                note,
+                distanceMeters: getDistanceMeters(currentLocation, {
+                    latitude: note.latitude,
+                    longitude: note.longitude,
+                }),
+            }))
+            .filter((entry) => entry.distanceMeters <= Math.max(1, entry.note.radius))
+            .sort((left, right) => {
+                const distanceDelta = left.distanceMeters - right.distanceMeters;
+                if (distanceDelta !== 0) {
+                    return distanceDelta;
+                }
+
+                return compareReminderNotes(left.note, right.note);
+            })
+        : [];
+
+    const nearbyAreaCandidates = currentLocation
+        ? notes
+            .map((note) => ({
+                note,
+                distanceMeters: getDistanceMeters(currentLocation, {
+                    latitude: note.latitude,
+                    longitude: note.longitude,
+                }),
+            }))
+            .filter((entry) => entry.distanceMeters <= nearbyRadiusMeters)
+            .sort((left, right) => {
+                const distanceDelta = left.distanceMeters - right.distanceMeters;
+                if (distanceDelta !== 0) {
+                    return distanceDelta;
+                }
+
+                return compareReminderNotes(left.note, right.note);
+            })
+        : [];
+
+    const favoriteCandidates = notes.filter((note) => note.isFavorite);
+    const favoriteSelection =
+        favoriteCandidates.length > 0
+            ? [...favoriteCandidates].sort(compareReminderNotes)[hashString(getSlotKey(referenceDate)) % favoriteCandidates.length] ?? null
+            : null;
+
+    for (const mode of orderedModes) {
+        if (mode === 'nearest_memory' && nearestCandidates.length > 0) {
+            return {
+                selectedNote: nearestCandidates[0]?.note ?? null,
+                selectedLocationName: nearestCandidates[0]?.note.locationName ?? null,
+                nearbyPlacesCount: Math.max(0, nearestCandidates.length - 1),
+                isIdleState: false,
+                selectionMode: mode,
+            };
+        }
+
+        if (mode === 'random_favorite' && favoriteSelection) {
+            return {
+                selectedNote: favoriteSelection,
+                selectedLocationName: favoriteSelection.locationName ?? null,
+                nearbyPlacesCount: 0,
+                isIdleState: false,
+                selectionMode: mode,
+            };
+        }
+
+        if (mode === 'around_this_area' && nearbyAreaCandidates.length > 0) {
+            return {
+                selectedNote: nearbyAreaCandidates[0]?.note ?? null,
+                selectedLocationName: nearbyAreaCandidates[0]?.note.locationName ?? null,
+                nearbyPlacesCount: Math.max(0, nearbyAreaCandidates.length - 1),
+                isIdleState: false,
+                selectionMode: mode,
+            };
+        }
+    }
+
+    const latestNote = [...notes].sort((left, right) =>
+        new Date(right.updatedAt ?? right.createdAt).getTime() - new Date(left.updatedAt ?? left.createdAt).getTime()
+    )[0] ?? null;
 
     return {
-        selectedNote: selection.selectedNote,
-        selectedLocationName: selection.selectedPlace?.locationName ?? null,
-        nearbyPlacesCount: selection.nearbyPlacesCount,
-        isIdleState: !selection.isNearby,
+        selectedNote: latestNote,
+        selectedLocationName: latestNote?.locationName ?? null,
+        nearbyPlacesCount: 0,
+        isIdleState: false,
+        selectionMode: 'latest_memory',
     };
 }
 
@@ -241,7 +391,7 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
         if (!widget) return;
 
         const notes = options.notes ?? await getAllNotes();
-        const translatedStrings = getTranslatedWidgetStrings(notes.length, 0);
+        const translatedStrings = getTranslatedWidgetStrings(notes.length, 0, 'latest_memory');
 
         if (notes.length === 0) {
             widget.updateSnapshot({
@@ -279,6 +429,7 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
             selectedLocationName,
             nearbyPlacesCount,
             isIdleState,
+            selectionMode,
         } = selectWidgetNote({
             notes,
             currentLocation: currentLocation
@@ -287,10 +438,16 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
                     longitude: currentLocation.coords.longitude,
                 }
                 : null,
-            nearbyRadiusMeters: 500,
+            nearbyRadiusMeters: 5000,
+            referenceDate: options.referenceDate ?? new Date(),
         });
-        const resolvedNearbyPlacesCount = isIdleState ? 0 : Math.max(nearbyPlacesCount, 1);
-        const selectionTranslatedStrings = getTranslatedWidgetStrings(notes.length, resolvedNearbyPlacesCount);
+        const resolvedNearbyPlacesCount =
+            isIdleState
+                ? 0
+                : selectionMode === 'nearest_memory' || selectionMode === 'around_this_area'
+                    ? Math.max(nearbyPlacesCount, 1)
+                    : 0;
+        const selectionTranslatedStrings = getTranslatedWidgetStrings(notes.length, resolvedNearbyPlacesCount, selectionMode);
 
         if (!selectedNote || isIdleState) {
             widget.updateSnapshot({
@@ -310,7 +467,10 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
         const dateStr = formatDate(selectedNote.createdAt, 'short');
 
         const props: WidgetProps = {
-            text: selectedNote.type === 'text' ? selectedNote.content.trim() : '',
+            text:
+                selectedNote.type === 'text'
+                    ? formatNoteTextWithEmoji(selectedNote.content.trim(), selectedNote.moodEmoji)
+                    : '',
             locationName: selectedLocationName ?? selectedNote.locationName ?? i18n.t('capture.unknownPlace'),
             date: dateStr,
             noteCount: notes.length,

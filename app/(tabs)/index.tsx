@@ -42,6 +42,7 @@ import {
   countPhotoNotes,
   getRemainingPhotoSlots,
 } from '../../constants/subscription';
+import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { filterNotesByQuery } from '../../services/noteSearch';
 import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
 import { isIOS26OrNewer } from '../../utils/platform';
@@ -73,6 +74,7 @@ export default function HomeScreen() {
     isPurchaseInFlight,
     plusPriceLabel,
     canImportFromLibrary,
+    remotePhotoNoteCount,
     purchasePlus,
     restorePurchases,
   } = useSubscription();
@@ -156,7 +158,11 @@ export default function HomeScreen() {
   const filteredNotes = useMemo(() => {
     return filterNotesByQuery(notes, deferredSearchQuery);
   }, [deferredSearchQuery, notes]);
-  const photoNoteCount = useMemo(() => countPhotoNotes(notes), [notes]);
+  const localPhotoNoteCount = useMemo(() => countPhotoNotes(notes), [notes]);
+  const photoNoteCount = useMemo(
+    () => Math.max(localPhotoNoteCount, remotePhotoNoteCount ?? 0),
+    [localPhotoNoteCount, remotePhotoNoteCount]
+  );
   const canSaveAnotherPhotoNote = useMemo(
     () => canCreatePhotoNote(tier, photoNoteCount),
     [photoNoteCount, tier]
@@ -187,6 +193,18 @@ export default function HomeScreen() {
   }, [remainingPhotoSlots, t, tier]);
 
   const displayedNotes = useInlineHeaderSearch && isSearching ? filteredNotes : notes;
+  const livePreviewEmoji = useMemo(() => {
+    const previewContent = captureMode === 'text' ? noteText.trim() : restaurantName.trim();
+    if (!previewContent && captureMode === 'text') {
+      return null;
+    }
+
+    return resolveAutoNoteEmoji({
+      type: captureMode === 'camera' ? 'photo' : 'text',
+      content: previewContent,
+      locationName: restaurantName.trim() || null,
+    });
+  }, [captureMode, noteText, restaurantName]);
   const shouldRenderCameraPreview =
     captureMode === 'camera' &&
     isScreenFocused &&
@@ -617,11 +635,21 @@ export default function HomeScreen() {
         content = destinationPath;
       }
 
+      const autoEmoji = resolveAutoNoteEmoji({
+        type: captureMode === 'camera' ? 'photo' : 'text',
+        content: captureMode === 'camera' ? locationName : content,
+        locationName,
+      });
+
       const createdNote = await createNote({
         type: captureMode === 'camera' ? 'photo' : 'text',
         content,
         photoLocalUri: captureMode === 'camera' ? content : null,
         locationName,
+        promptId: null,
+        promptTextSnapshot: null,
+        promptAnswer: null,
+        moodEmoji: autoEmoji,
         latitude: lat,
         longitude: lon,
         radius,
@@ -967,6 +995,7 @@ export default function HomeScreen() {
         onChangeNoteText={setNoteText}
         restaurantName={restaurantName}
         onChangeRestaurantName={setRestaurantName}
+        previewEmoji={livePreviewEmoji}
         capturedPhoto={capturedPhoto}
         onRetakePhoto={() => setCapturedPhoto(null)}
         needsCameraPermission={needsCameraPermission}

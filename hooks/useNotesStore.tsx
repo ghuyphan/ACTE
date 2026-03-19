@@ -157,6 +157,14 @@ function useNotesStoreValue(): NotesStoreValue {
                       type: n.type,
                     }) || null
                   : null,
+              promptId: updates.promptId !== undefined ? updates.promptId : n.promptId ?? null,
+              promptTextSnapshot:
+                updates.promptTextSnapshot !== undefined
+                  ? updates.promptTextSnapshot
+                  : n.promptTextSnapshot ?? null,
+              promptAnswer:
+                updates.promptAnswer !== undefined ? updates.promptAnswer : n.promptAnswer ?? null,
+              moodEmoji: updates.moodEmoji !== undefined ? updates.moodEmoji : n.moodEmoji ?? null,
               updatedAt: new Date().toISOString(),
             }
           : n

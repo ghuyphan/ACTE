@@ -30,6 +30,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { Note } from '../../services/database';
 import { RoomSummary } from '../../services/roomCache';
 import { getRoomErrorMessage } from '../../services/roomService';
+import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
 import { isOlderIOS } from '../../utils/platform';
 
 function SelectableRoomCard({
@@ -212,7 +213,7 @@ export default function ShareToRoomScreen() {
               {t('rooms.notePreviewLabel', 'Memory preview')}
             </Text>
             <Text style={[styles.notePreview, { color: colors.text }]}>
-              {note.type === 'text' ? note.content : t('rooms.sharePhotoLabel', 'Photo memory')}
+              {note.type === 'text' ? formatNoteTextWithEmoji(note.content, note.moodEmoji) : t('rooms.sharePhotoLabel', 'Photo memory')}
             </Text>
           </View>
         </Animated.View>

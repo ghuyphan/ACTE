@@ -12,9 +12,31 @@ const mockSubscriptionConfig = {
   iosApiKey: '',
   androidApiKey: 'android-key',
 };
+const mockRemoteUsage = {
+  photoNoteCount: null as number | null,
+};
+const mockUsageUnsubscribe = jest.fn();
 
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => mockAuthState,
+}));
+
+jest.mock('../utils/firebase', () => ({
+  getFirestore: () => ({}),
+}));
+
+jest.mock('@react-native-firebase/firestore', () => ({
+  __esModule: true,
+  doc: (_firestore: unknown, ...path: string[]) => ({ path }),
+  onSnapshot: (_ref: unknown, onNext: (snapshot: { data: () => { photoNoteCount: number | null } }) => void) => {
+    onNext({
+      data: () => ({
+        photoNoteCount: mockRemoteUsage.photoNoteCount,
+      }),
+    });
+
+    return mockUsageUnsubscribe;
+  },
 }));
 
 jest.mock('../constants/subscription', () => {
@@ -81,6 +103,7 @@ describe('useSubscription', () => {
     setPlatformOS('android');
     mockAuthState.isReady = true;
     mockAuthState.user = null;
+    mockRemoteUsage.photoNoteCount = null;
     mockSubscriptionConfig.iosApiKey = '';
     mockSubscriptionConfig.androidApiKey = 'android-key';
 
@@ -160,5 +183,16 @@ describe('useSubscription', () => {
 
     const restoreResult = await hook.result.current.restorePurchases();
     expect(restoreResult).toEqual({ status: 'unavailable' });
+  });
+
+  it('surfaces the remote photo note count from Firestore usage data', async () => {
+    mockAuthState.user = { uid: 'user-1' };
+    mockRemoteUsage.photoNoteCount = 7;
+
+    const hook = renderHook(() => useSubscription(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.remotePhotoNoteCount).toBe(7);
+    });
   });
 });

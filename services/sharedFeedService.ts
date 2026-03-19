@@ -10,12 +10,14 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   setDoc,
   updateDoc,
   where,
 } from '@react-native-firebase/firestore';
 import { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { Note, NoteType } from './database';
+import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { readPhotoAsBase64, writePhotoFromBase64 } from './photoStorage';
 import { getPublicUserProfile, upsertPublicUserProfile } from './publicProfileService';
 import { getFirestore } from '../utils/firebase';
@@ -107,6 +109,8 @@ interface SharedPostRecord {
   updatedAt: string | null;
 }
 
+const ACTIVE_FRIEND_INVITE_QUERY_LIMIT = 50;
+
 function requireFirestore() {
   const firestore = getFirestore();
   if (!firestore) {
@@ -122,6 +126,23 @@ function getNowIso() {
 
 function getDisplayName(user: FirebaseAuthTypes.User) {
   return user.displayName?.trim() || user.email?.trim() || 'Noto user';
+}
+
+function isInviteActive(record: FriendInviteRecord, nowMs = Date.now()) {
+  return (
+    !record.revokedAt &&
+    !record.acceptedByUid &&
+    (!record.expiresAt || new Date(record.expiresAt).getTime() > nowMs)
+  );
+}
+
+async function getFriendInviteDocumentId(userUid: string) {
+  const digest = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    `noto-friend-invite:${userUid}`
+  );
+
+  return `friend-invite-${digest.slice(0, 24)}`;
 }
 
 function buildInviteUrl(inviteId: string, token: string) {
@@ -267,7 +288,7 @@ export async function getActiveFriendInvite(user: FirebaseAuthTypes.User): Promi
       collection(firestore, 'friendInvites'),
       where('inviterUid', '==', user.uid),
       orderBy('createdAt', 'desc'),
-      limit(10)
+      limit(ACTIVE_FRIEND_INVITE_QUERY_LIMIT)
     )
   );
 
@@ -276,12 +297,7 @@ export async function getActiveFriendInvite(user: FirebaseAuthTypes.User): Promi
       id: item.id,
       ...(item.data() as FriendInviteRecord),
     }))
-    .find(
-      (item: { revokedAt: string | null; acceptedByUid: string | null; expiresAt: string | null }) =>
-        !item.revokedAt &&
-        !item.acceptedByUid &&
-        (!item.expiresAt || new Date(item.expiresAt).getTime() > Date.now())
-    );
+    .find((item: FriendInviteRecord) => isInviteActive(item));
 
   return inviteDoc ? mapInvite(inviteDoc.id, inviteDoc) : null;
 }
@@ -431,7 +447,7 @@ export function subscribeToSharedFeed(
       collection(firestore, 'friendInvites'),
       where('inviterUid', '==', user.uid),
       orderBy('createdAt', 'desc'),
-      limit(10)
+      limit(ACTIVE_FRIEND_INVITE_QUERY_LIMIT)
     ),
     (inviteSnapshot) => {
       const inviteDoc = inviteSnapshot.docs
@@ -439,12 +455,7 @@ export function subscribeToSharedFeed(
           id: item.id,
           ...(item.data() as FriendInviteRecord),
         }))
-        .find(
-          (item: { revokedAt: string | null; acceptedByUid: string | null; expiresAt: string | null }) =>
-            !item.revokedAt &&
-            !item.acceptedByUid &&
-            (!item.expiresAt || new Date(item.expiresAt).getTime() > Date.now())
-        );
+        .find((item: FriendInviteRecord) => isInviteActive(item));
 
       currentSnapshot = {
         ...currentSnapshot,
@@ -468,9 +479,6 @@ export function subscribeToSharedFeed(
 
 export async function createFriendInvite(user: FirebaseAuthTypes.User): Promise<FriendInvite> {
   const firestore = requireFirestore();
-  const inviteId = `friend-invite-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}`;
-  const token = Crypto.randomUUID();
-  const now = getNowIso();
 
   await upsertPublicUserProfile({
     userUid: user.uid,
@@ -478,20 +486,39 @@ export async function createFriendInvite(user: FirebaseAuthTypes.User): Promise<
     photoURL: user.photoURL ?? null,
   });
 
-  const record: FriendInviteRecord = {
-    inviterUid: user.uid,
-    inviterDisplayNameSnapshot: getDisplayName(user),
-    inviterPhotoURLSnapshot: user.photoURL ?? null,
-    token,
-    createdAt: now,
-    revokedAt: null,
-    acceptedByUid: null,
-    acceptedAt: null,
-    expiresAt: null,
-  };
+  const existingInvite = await getActiveFriendInvite(user);
+  if (existingInvite) {
+    return existingInvite;
+  }
 
-  await setDoc(doc(firestore, 'friendInvites', inviteId), record);
-  return mapInvite(inviteId, record);
+  const inviteId = await getFriendInviteDocumentId(user.uid);
+  const inviteRef = doc(firestore, 'friendInvites', inviteId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const inviteSnapshot = await transaction.get(inviteRef);
+    const currentInvite = inviteSnapshot.exists()
+      ? (inviteSnapshot.data() as FriendInviteRecord)
+      : null;
+
+    if (currentInvite && isInviteActive(currentInvite)) {
+      return mapInvite(inviteId, currentInvite);
+    }
+
+    const nextInvite: FriendInviteRecord = {
+      inviterUid: user.uid,
+      inviterDisplayNameSnapshot: getDisplayName(user),
+      inviterPhotoURLSnapshot: user.photoURL ?? null,
+      token: Crypto.randomUUID(),
+      createdAt: getNowIso(),
+      revokedAt: null,
+      acceptedByUid: null,
+      acceptedAt: null,
+      expiresAt: null,
+    };
+
+    transaction.set(inviteRef, nextInvite);
+    return mapInvite(inviteId, nextInvite);
+  });
 }
 
 export async function revokeFriendInvite(user: FirebaseAuthTypes.User, inviteId: string): Promise<void> {
@@ -651,7 +678,7 @@ export async function createSharedPost(
     authorPhotoURLSnapshot: user.photoURL ?? null,
     audienceUserIds: dedupedAudience,
     type: note.type,
-    text: note.type === 'text' ? note.content.trim() : '',
+    text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
     photoRemoteBase64: photoRemoteBase64 ?? null,
     placeName: note.locationName ?? null,
     sourceNoteId: note.id,
@@ -685,7 +712,7 @@ export async function updateSharedPost(
     note.type === 'photo' ? await serializeSharedPhoto(note.photoLocalUri ?? note.content) : null;
 
   await updateDoc(doc(firestore, 'sharedPosts', postId), {
-    text: note.type === 'text' ? note.content.trim() : '',
+    text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
     photoRemoteBase64: photoRemoteBase64 ?? null,
     placeName: note.locationName ?? null,
     updatedAt: getNowIso(),

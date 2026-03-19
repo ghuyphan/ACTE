@@ -10,6 +10,7 @@ import {
   where,
   writeBatch,
 } from '@react-native-firebase/firestore';
+import { countPhotoNotes } from '../constants/subscription';
 import { Note, getAllNotes, getDB, getNoteById, upsertNote } from './database';
 import { readPhotoAsBase64, writePhotoFromBase64 } from './photoStorage';
 import { upsertPublicUserProfile } from './publicProfileService';
@@ -94,6 +95,10 @@ interface FirebaseNoteRecord {
   content: string;
   photoRemoteBase64?: string | null;
   locationName: string | null;
+  promptId?: string | null;
+  promptTextSnapshot?: string | null;
+  promptAnswer?: string | null;
+  moodEmoji?: string | null;
   latitude: number;
   longitude: number;
   radius: number;
@@ -242,6 +247,10 @@ async function serializeNoteForFirebase(note: Note, syncedAt: string): Promise<F
     content: note.type === 'text' ? note.content : '',
     photoRemoteBase64,
     locationName: note.locationName,
+    promptId: note.promptId ?? null,
+    promptTextSnapshot: note.promptTextSnapshot ?? null,
+    promptAnswer: note.promptAnswer ?? null,
+    moodEmoji: note.moodEmoji ?? null,
     latitude: note.latitude,
     longitude: note.longitude,
     radius: note.radius,
@@ -283,6 +292,10 @@ async function deserializeRemoteNote(
     photoLocalUri,
     photoRemoteBase64: record.photoRemoteBase64 ?? null,
     locationName: record.locationName ?? null,
+    promptId: record.promptId ?? null,
+    promptTextSnapshot: record.promptTextSnapshot ?? null,
+    promptAnswer: record.promptAnswer ?? null,
+    moodEmoji: record.moodEmoji ?? null,
     latitude: record.latitude,
     longitude: record.longitude,
     radius: typeof record.radius === 'number' ? record.radius : 150,
@@ -683,12 +696,14 @@ export async function syncNotesToFirebase(
     let importedCount = 0;
     let nextCursor = lastRemoteCursor ?? syncMarker;
     let finalNoteCount = notes.length;
+    let finalPhotoNoteCount = countPhotoNotes(notes);
 
     if (mode === 'full') {
       const remoteMergeResult = await mergeRemoteNotesFromFirebase(notesCollection, notes, { since: null });
       importedCount = remoteMergeResult.importedCount;
       const latestLocalNotes = remoteMergeResult.importedCount > 0 ? await getAllNotes() : notes;
       finalNoteCount = latestLocalNotes.length;
+      finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
       uploadedSnapshotCount = await uploadLocalSnapshotToFirebase(
         notesCollection,
         firestore,
@@ -708,7 +723,9 @@ export async function syncNotesToFirebase(
         nextCursor = syncMarker;
       }
       if (importedCount > 0) {
-        finalNoteCount = (await getAllNotes()).length;
+        const latestLocalNotes = await getAllNotes();
+        finalNoteCount = latestLocalNotes.length;
+        finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
       }
     }
 
@@ -719,6 +736,7 @@ export async function syncNotesToFirebase(
           displayName: user.displayName ?? null,
           photoURL: user.photoURL ?? null,
           noteCount: finalNoteCount,
+          photoNoteCount: finalPhotoNoteCount,
           lastSyncedAt: syncMarker,
         },
         { merge: true }

@@ -269,6 +269,15 @@ function createTextNote(id: string, content = `note ${id}`): NoteRecord {
   };
 }
 
+function createPhotoNote(id: string): NoteRecord {
+  return {
+    ...createTextNote(id),
+    type: 'photo',
+    content: `file:///photos/${id}.jpg`,
+    photoLocalUri: `file:///photos/${id}.jpg`,
+  };
+}
+
 beforeEach(async () => {
   jest.clearAllMocks();
   await AsyncStorage.clear();
@@ -380,6 +389,7 @@ describe('syncService', () => {
       expect.objectContaining({
         displayName: 'Test User',
         noteCount: 1,
+        photoNoteCount: 0,
         lastSyncedAt: expect.any(String),
       }),
       { merge: true }
@@ -392,6 +402,30 @@ describe('syncService', () => {
       })
     );
     expect(queueRows).toHaveLength(0);
+  });
+
+  it('stores the synced remote photo note count on the user profile document', async () => {
+    localNotesStore = [createTextNote('note-1'), createPhotoNote('photo-1')];
+
+    const result = await syncNotesToFirebase(
+      {
+        uid: 'user-1',
+        displayName: 'Test User',
+        email: 'test@example.com',
+        photoURL: null,
+      },
+      localNotesStore
+    );
+
+    expect(result.status).toBe('success');
+    expect(mockUserSet).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        noteCount: 2,
+        photoNoteCount: 1,
+      }),
+      { merge: true }
+    );
   });
 
   it('backs off transient failures and skips retrying until the item is due again', async () => {

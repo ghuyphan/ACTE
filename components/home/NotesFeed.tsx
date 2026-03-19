@@ -30,13 +30,13 @@ const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
 const AnimatedNoteCard = memo(function AnimatedNoteCard({
   item,
   index,
-  onPress,
+  onOpenNote,
   colors,
   t,
 }: {
   item: Note;
   index: number;
-  onPress: () => void;
+  onOpenNote: (noteId: string) => void;
   colors: {
     primary: string;
     text: string;
@@ -50,6 +50,9 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   const opacity = useRef(new Animated.Value(0)).current;
   const pressScale = useRef(new Animated.Value(1)).current;
   const mountIndex = useRef(index).current;
+  const handlePress = useCallback(() => {
+    onOpenNote(item.id);
+  }, [item.id, onOpenNote]);
 
   useEffect(() => {
     Animated.parallel([
@@ -90,14 +93,14 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   const dateStr = formatDate(item.createdAt, 'short');
 
   return (
-    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+    <Pressable onPress={handlePress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
       <Animated.View
         style={[styles.noteCardWrapper, { opacity, transform: [{ scale: Animated.multiply(scale, pressScale) }] }]}
       >
         {item.type === 'photo' ? (
           <ImageMemoryCard imageUrl={getNotePhotoUri(item)} />
         ) : (
-          <TextMemoryCard text={item.content} noteId={item.id} />
+          <TextMemoryCard text={item.content} noteId={item.id} emoji={item.moodEmoji} />
         )}
 
         {item.isFavorite ? (
@@ -114,11 +117,32 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
           </Text>
           <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
           <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
+          {item.hasDoodle ? (
+            <>
+              <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
+              <Ionicons name="brush-outline" size={14} color={colors.secondaryText} />
+            </>
+          ) : null}
         </InfoPill>
       </Animated.View>
     </Pressable>
   );
-});
+}, (prevProps, nextProps) => (
+  prevProps.index === nextProps.index &&
+  prevProps.colors === nextProps.colors &&
+  prevProps.t === nextProps.t &&
+  prevProps.onOpenNote === nextProps.onOpenNote &&
+  prevProps.item.id === nextProps.item.id &&
+  prevProps.item.type === nextProps.item.type &&
+  prevProps.item.content === nextProps.item.content &&
+  prevProps.item.photoLocalUri === nextProps.item.photoLocalUri &&
+  prevProps.item.photoRemoteBase64 === nextProps.item.photoRemoteBase64 &&
+  prevProps.item.locationName === nextProps.item.locationName &&
+  prevProps.item.createdAt === nextProps.item.createdAt &&
+  prevProps.item.isFavorite === nextProps.item.isFavorite &&
+  prevProps.item.moodEmoji === nextProps.item.moodEmoji &&
+  prevProps.item.hasDoodle === nextProps.item.hasDoodle
+));
 
 const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   item,
@@ -197,7 +221,19 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
       </View>
     </Animated.View>
   );
-});
+}, (prevProps, nextProps) => (
+  prevProps.index === nextProps.index &&
+  prevProps.colors === nextProps.colors &&
+  prevProps.t === nextProps.t &&
+  prevProps.item.id === nextProps.item.id &&
+  prevProps.item.type === nextProps.item.type &&
+  prevProps.item.text === nextProps.item.text &&
+  prevProps.item.photoLocalUri === nextProps.item.photoLocalUri &&
+  prevProps.item.placeName === nextProps.item.placeName &&
+  prevProps.item.createdAt === nextProps.item.createdAt &&
+  prevProps.item.authorDisplayName === nextProps.item.authorDisplayName &&
+  prevProps.item.authorPhotoURLSnapshot === nextProps.item.authorPhotoURLSnapshot
+));
 
 type NotesFeedListItem =
   | { id: string; kind: 'note'; note: Note; createdAt: string }
@@ -341,7 +377,7 @@ export default function NotesFeed({
           <AnimatedNoteCard
             item={note}
             index={index}
-            onPress={() => onOpenNote(note.id)}
+            onOpenNote={onOpenNote}
             colors={colors}
             t={t}
           />

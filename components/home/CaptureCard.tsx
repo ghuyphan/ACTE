@@ -25,6 +25,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { Layout, Shadows, Typography } from '../../constants/theme';
 import type { ThemeColors } from '../../hooks/useTheme';
+import { formatNoteTextWithEmoji, stripAutoEmojiPrefix } from '../../services/noteTextPresentation';
 import PrimaryButton from '../ui/PrimaryButton';
 import { isOlderIOS } from '../../utils/platform';
 
@@ -71,6 +72,7 @@ interface CaptureCardProps {
   onChangeNoteText: (nextText: string) => void;
   restaurantName: string;
   onChangeRestaurantName: (nextName: string) => void;
+  previewEmoji?: string | null;
   capturedPhoto: string | null;
   onRetakePhoto: () => void;
   needsCameraPermission: boolean;
@@ -110,6 +112,7 @@ export default function CaptureCard({
   onChangeNoteText,
   restaurantName,
   onChangeRestaurantName,
+  previewEmoji,
   capturedPhoto,
   onRetakePhoto,
   needsCameraPermission,
@@ -138,6 +141,7 @@ export default function CaptureCard({
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
   const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
   const [cameraRetryNonce, setCameraRetryNonce] = useState(0);
+  const displayNoteText = formatNoteTextWithEmoji(noteText, previewEmoji);
   const isCameraSaveMode = captureMode === 'camera';
   const isSharedTarget = shareTarget === 'shared';
   const privateAudienceLabel = t('shared.capturePrivate', 'Just me');
@@ -264,8 +268,10 @@ export default function CaptureCard({
                 placeholder={t('capture.textPlaceholder', 'Note about this place...')}
                 placeholderTextColor={colors.captureCardPlaceholder}
                 multiline
-                value={noteText}
-                onChangeText={onChangeNoteText}
+                value={displayNoteText}
+                onChangeText={(nextText) => {
+                  onChangeNoteText(stripAutoEmojiPrefix(nextText));
+                }}
                 maxLength={300}
                 selectionColor={colors.captureCardText}
               />

@@ -23,6 +23,7 @@ import type { MapPointGroup, NearbyNoteItem } from '../../hooks/map/mapDomain';
 import { useTheme } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
+import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
 import { isOlderIOS } from '../../utils/platform';
 import {
   getMapCardEnter,
@@ -76,7 +77,8 @@ function getPreviewText(note: Note, photoLabel: string, noContentLabel: string) 
     return noContentLabel;
   }
 
-  return normalized.substring(0, 120) + (normalized.length > 120 ? '…' : '');
+  const displayText = formatNoteTextWithEmoji(normalized, note.moodEmoji);
+  return displayText.substring(0, 120) + (displayText.length > 120 ? '…' : '');
 }
 
 export default function MapPreviewCard({

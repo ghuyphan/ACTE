@@ -12,6 +12,12 @@ export function useCaptureFlow() {
   const [restaurantName, setRestaurantName] = useState('');
   const [noteText, setNoteText] = useState('');
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
+  const [selectedPromptText, setSelectedPromptText] = useState<string | null>(null);
+  const [promptAnswer, setPromptAnswer] = useState('');
+  const [moodEmoji, setMoodEmoji] = useState<string | null>(null);
+  const [promptExpanded, setPromptExpanded] = useState(false);
+  const [hasShuffledPrompt, setHasShuffledPrompt] = useState(false);
   const [radius, setRadius] = useState(DEFAULT_NOTE_RADIUS);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [permission, requestPermission] = useCameraPermissions();
@@ -57,6 +63,12 @@ export function useCaptureFlow() {
         return nextMode;
       });
       setCapturedPhoto(null);
+      setSelectedPromptId(null);
+      setSelectedPromptText(null);
+      setPromptAnswer('');
+      setMoodEmoji(null);
+      setPromptExpanded(false);
+      setHasShuffledPrompt(false);
     });
   }, [animateModeSwitch]);
 
@@ -108,6 +120,12 @@ export function useCaptureFlow() {
     setNoteText('');
     setRestaurantName('');
     setCapturedPhoto(null);
+    setSelectedPromptId(null);
+    setSelectedPromptText(null);
+    setPromptAnswer('');
+    setMoodEmoji(null);
+    setPromptExpanded(false);
+    setHasShuffledPrompt(false);
     setRadius(DEFAULT_NOTE_RADIUS);
   }, []);
 
@@ -123,6 +141,18 @@ export function useCaptureFlow() {
     setNoteText,
     capturedPhoto,
     setCapturedPhoto,
+    selectedPromptId,
+    setSelectedPromptId,
+    selectedPromptText,
+    setSelectedPromptText,
+    promptAnswer,
+    setPromptAnswer,
+    moodEmoji,
+    setMoodEmoji,
+    promptExpanded,
+    setPromptExpanded,
+    hasShuffledPrompt,
+    setHasShuffledPrompt,
     radius,
     setRadius,
     facing,
