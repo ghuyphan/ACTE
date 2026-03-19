@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { GlassView } from 'expo-glass-effect';
+import { GlassView } from './GlassView';
 import { ReactNode } from 'react';
 import { StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { Layout, Typography } from '../../constants/theme';

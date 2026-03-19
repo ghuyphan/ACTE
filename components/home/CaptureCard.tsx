@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView } from 'expo-camera';
-import { GlassView } from 'expo-glass-effect';
+import { GlassView } from '../ui/GlassView';
 import { Image } from 'expo-image';
 import { TFunction } from 'i18next';
 import { ReactNode, RefObject, useEffect, useState } from 'react';

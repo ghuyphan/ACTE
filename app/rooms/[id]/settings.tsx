@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { GlassView } from 'expo-glass-effect';
+import { GlassView } from '../../../components/ui/GlassView';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';

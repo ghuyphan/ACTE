@@ -13,7 +13,7 @@ import {
   padding,
   tint,
 } from '@expo/ui/swift-ui/modifiers';
-import { GlassView } from 'expo-glass-effect';
+import { GlassView } from '../ui/GlassView';
 import { TFunction } from 'i18next';
 import { ComponentProps, useEffect, useRef } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';

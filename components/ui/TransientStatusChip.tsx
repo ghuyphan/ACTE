@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { GlassView } from 'expo-glass-effect';
+import { GlassView } from './GlassView';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Animated, { LinearTransition, SlideInDown, SlideInUp, SlideOutUp } from 'react-native-reanimated';
 import { Layout, Typography } from '../../constants/theme';

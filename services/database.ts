@@ -101,7 +101,6 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_sync_queue_status_created ON sync_queue(status, created_at ASC);
-      CREATE INDEX IF NOT EXISTS idx_sync_queue_retry_window ON sync_queue(status, terminal, next_retry_at, created_at ASC);
       CREATE TABLE IF NOT EXISTS rooms_cache (
         user_uid TEXT NOT NULL,
         id TEXT NOT NULL,

@@ -1,9 +1,9 @@
-import { GlassView } from 'expo-glass-effect';
 import { ReactNode } from 'react';
-import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { Layout, Shadows } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
+import { GlassView } from './GlassView';
 
 interface GlassHeaderProps {
   topInset: number;
@@ -58,7 +58,15 @@ const styles = StyleSheet.create({
   container: {
     borderRadius: 30,
     overflow: 'hidden',
-    ...Shadows.floating,
+    ...(Platform.OS === 'android'
+      ? {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          elevation: 2,
+        }
+      : Shadows.floating),
   },
   content: {
     flex: 1,
