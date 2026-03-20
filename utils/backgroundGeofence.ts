@@ -4,7 +4,7 @@ import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import i18n from '../constants/i18n';
 import { getAllNotes, getNoteById } from '../services/database';
-import { buildReminderNotificationContent } from '../services/notificationService';
+import { buildNearbyReminderCopy, buildReminderNotificationContent } from '../services/notificationService';
 import { buildReminderTextExcerpt, findReminderPlaceGroupByNoteId } from '../services/reminderSelection';
 import { getGeofenceCooldownKey, getLocationCooldownId, getSkipNextEnterKey } from './geofenceKeys';
 
@@ -110,15 +110,20 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
                     }
 
                     if (note.type === 'text') {
-                        title = locationName
-                            ? i18n.t('notification.textTitle', { location: locationName })
-                            : i18n.t('notification.title');
-                        body = buildReminderTextExcerpt(note.content) || i18n.t('notification.body');
+                        const reminderCopy = await buildNearbyReminderCopy({
+                            noteType: 'text',
+                            locationName,
+                            noteBody: buildReminderTextExcerpt(note.content),
+                        });
+                        title = reminderCopy.title;
+                        body = reminderCopy.body;
                     } else {
-                        title = locationName
-                            ? i18n.t('notification.photoTitle', { location: locationName })
-                            : i18n.t('notification.title');
-                        body = i18n.t('notification.photoBody');
+                        const reminderCopy = await buildNearbyReminderCopy({
+                            noteType: 'photo',
+                            locationName,
+                        });
+                        title = reminderCopy.title;
+                        body = reminderCopy.body;
                     }
 
                     await Notifications.scheduleNotificationAsync({

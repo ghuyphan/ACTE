@@ -23,6 +23,14 @@
         "switchText": "Text",
         "restaurantPlaceholder": "Restaurant name (e.g. Phở Hòa)",
         "textPlaceholder": "Note about this place...",
+        "textPlaceholderVariants": [
+            "Note about this place...",
+            "Leave a tiny clue for future you...",
+            "What should you remember here?",
+            "Write one quick thing before it escapes...",
+            "Anything here worth saving for later?",
+            "Drop a small memory here..."
+        ],
         "currentLocation": "Using current location",
         "unknownPlace": "Unknown Place",
         "save": "Save Note 💛",
@@ -445,7 +453,35 @@
         "channelDescription": "Location-based reminders for notes you saved in Noto.",
         "textTitle": "{{location}}",
         "photoTitle": "{{location}}",
-        "photoBody": "A memory from here is waiting."
+        "photoBody": "A memory from here is waiting.",
+        "titleVariantsWithLocation": [
+            "Back at {{location}}",
+            "{{location}} remembers this one",
+            "A saved note is waiting at {{location}}",
+            "You just passed {{location}} again",
+            "{{location}} has one of your stories"
+        ],
+        "titleVariantsGeneric": [
+            "A saved note is nearby",
+            "Past you left a breadcrumb",
+            "A little memory is nearby",
+            "You just passed an old note",
+            "Something you saved is waiting"
+        ],
+        "textBodyVariants": [
+            "A note from this place is waiting when you open Noto.",
+            "Open Noto to see what you wanted to remember here.",
+            "There is a saved note here if you want a quick reminder.",
+            "A small memory from this place is ready when you are.",
+            "Your past self left a note here for a reason."
+        ],
+        "photoBodyVariants": [
+            "A memory from here is waiting.",
+            "There is a photo memory from this place waiting for you.",
+            "You left a little snapshot here.",
+            "A saved moment from this place is ready to revisit.",
+            "This place is holding on to one of your memories."
+        ]
     },
     "widget": {
         "idleText": "The right note will appear when you're nearby.",

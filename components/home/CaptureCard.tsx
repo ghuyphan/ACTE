@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GlassView } from '../ui/GlassView';
 import { Image } from 'expo-image';
 import { TFunction } from 'i18next';
-import { forwardRef, ReactNode, RefObject, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import { forwardRef, ReactNode, RefObject, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -40,6 +40,25 @@ const TOP_CONTROL_INSET = 24;
 const TOP_CONTROL_HEIGHT = 38;
 const TOP_CONTROL_RADIUS = 19;
 const AnimatedIonicons = Reanimated.createAnimatedComponent(Ionicons);
+const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
+  'Note about this place...',
+  'Leave a tiny clue for future you...',
+  'What should you remember here?',
+  'Write one quick thing before it escapes...',
+  'Anything here worth saving for later?',
+  'Drop a small memory here...',
+];
+
+function getCaptureTextPlaceholderVariants(t: TFunction) {
+  const translated = t('capture.textPlaceholderVariants', {
+    returnObjects: true,
+    defaultValue: DEFAULT_CAPTURE_TEXT_PLACEHOLDERS,
+  } as any);
+
+  return Array.isArray(translated) && translated.every((item) => typeof item === 'string')
+    ? translated
+    : DEFAULT_CAPTURE_TEXT_PLACEHOLDERS;
+}
 
 export interface CaptureCardHandle {
   getDoodleSnapshot: () => { enabled: boolean; strokes: DoodleStroke[] };
@@ -156,6 +175,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [photoDoodleModeEnabled, setPhotoDoodleModeEnabled] = useState(false);
   const [textDoodleStrokes, setTextDoodleStrokes] = useState<DoodleStroke[]>([]);
   const [photoDoodleStrokes, setPhotoDoodleStrokes] = useState<DoodleStroke[]>([]);
+  const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
   const isPhotoDoodleSurface = captureMode === 'camera' && Boolean(capturedPhoto);
   const doodleModeEnabled = isPhotoDoodleSurface ? photoDoodleModeEnabled : textDoodleModeEnabled;
   const doodleStrokes = isPhotoDoodleSurface ? photoDoodleStrokes : textDoodleStrokes;
@@ -189,6 +209,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const audienceProgress = useSharedValue(isSharedTarget ? 1 : 0);
   const audiencePressScale = useSharedValue(1);
   const audienceStateScale = useSharedValue(1);
+  const previousTextDraftEmptyRef = useRef(noteText.length === 0);
+  const previousCaptureModeRef = useRef(captureMode);
+  const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
+  const activeTextPlaceholder =
+    placeholderVariants[textPlaceholderIndex % placeholderVariants.length] ??
+    DEFAULT_CAPTURE_TEXT_PLACEHOLDERS[0];
 
   useEffect(() => {
     if (captureMode === 'camera' && !capturedPhoto && permissionGranted && shouldRenderCameraPreview) {
@@ -250,6 +276,23 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       setPhotoDoodleModeEnabled(false);
     }
   }, [captureMode, capturedPhoto]);
+
+  useEffect(() => {
+    const isTextDraftEmpty = noteText.length === 0;
+    const wasTextDraftEmpty = previousTextDraftEmptyRef.current;
+    const previousCaptureMode = previousCaptureModeRef.current;
+    const enteredFreshEmptyTextDraft =
+      captureMode === 'text' &&
+      isTextDraftEmpty &&
+      (!wasTextDraftEmpty || previousCaptureMode !== 'text');
+
+    if (enteredFreshEmptyTextDraft) {
+      setTextPlaceholderIndex((current) => current + 1);
+    }
+
+    previousTextDraftEmptyRef.current = isTextDraftEmpty;
+    previousCaptureModeRef.current = captureMode;
+  }, [captureMode, noteText.length]);
 
   useEffect(() => {
     onDoodleModeChange?.((captureMode === 'text' || Boolean(capturedPhoto)) && doodleModeEnabled);
@@ -441,7 +484,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 testID="capture-note-input"
                 key={`note-text-${isSearching}`}
                 style={[styles.textInput, { color: colors.captureCardText }]}
-                placeholder={t('capture.textPlaceholder', 'Note about this place...')}
+                placeholder={activeTextPlaceholder}
                 placeholderTextColor={colors.captureCardPlaceholder}
                 multiline
                 value={noteText}

@@ -32,6 +32,11 @@ describe('noteDecorations', () => {
     expect(applyCommittedInlineEmoji('Need ca phe', 'Need ca phe ')).toBe('Need ca phe ☕️ ');
   });
 
+  it('inserts an emoji inline when a recognized word is committed with punctuation', () => {
+    expect(applyCommittedInlineEmoji('Them hanh', 'Them hanh,')).toBe('Them hanh 🧅,');
+    expect(applyCommittedInlineEmoji('Them hành', 'Them hành...')).toBe('Them hành 🧅...');
+  });
+
   it('does not duplicate an emoji when spacing continues after insertion', () => {
     expect(applyCommittedInlineEmoji('Need ca phe ☕️ ', 'Need ca phe ☕️  ')).toBe('Need ca phe ☕️  ');
   });
@@ -56,6 +61,30 @@ describe('noteDecorations', () => {
         type: 'text',
         content: 'Chili oil dip',
         locationName: 'District 1',
+      })
+    ).toBe('🌶️');
+  });
+
+  it('matches accented Vietnamese garnish keywords with the more specific food emoji', () => {
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Phở nhiều hành lá',
+        locationName: 'Quận 1',
+      })
+    ).toBe('🧅');
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Nước chấm thêm tỏi',
+        locationName: 'Quận 1',
+      })
+    ).toBe('🧄');
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Chấm với ớt xanh',
+        locationName: 'Quận 1',
       })
     ).toBe('🌶️');
   });

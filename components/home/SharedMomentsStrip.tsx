@@ -11,7 +11,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import Animated, { FadeInUp } from 'react-native-reanimated';
 import { Radii, Shadows, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { FriendConnection, SharedPost } from '../../services/sharedFeedService';
@@ -20,14 +19,14 @@ import ImageMemoryCard from '../ImageMemoryCard';
 import TextMemoryCard from '../TextMemoryCard';
 import InfoPill from '../ui/InfoPill';
 
-function PostCard({ post, index }: { post: SharedPost; index: number }) {
+function PostCard({ post }: { post: SharedPost }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const authorLabel = post.authorDisplayName ?? t('shared.someone', 'Someone');
   const locationLabel = post.placeName ?? t('shared.sharedNow', 'Shared now');
 
   return (
-    <Animated.View entering={FadeInUp.delay(index * 70).springify().damping(18).mass(0.8)}>
+    <View>
       <View style={styles.postCard}>
         <View style={styles.postVisual}>
           {post.type === 'photo' && post.photoLocalUri ? (
@@ -60,7 +59,7 @@ function PostCard({ post, index }: { post: SharedPost; index: number }) {
           </InfoPill>
         </View>
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -209,7 +208,7 @@ export default function SharedMomentsStrip({
               contentContainerStyle={styles.postsRow}
             >
               {sharedPosts.map((post, index) => (
-                <PostCard key={post.id} post={post} index={index} />
+                <PostCard key={post.id} post={post} />
               ))}
             </ScrollView>
           </View>

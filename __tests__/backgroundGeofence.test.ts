@@ -41,6 +41,7 @@ jest.mock('../services/database', () => ({
 jest.mock('../constants/i18n', () => ({
   __esModule: true,
   default: {
+    language: 'vi',
     t: (key: string, options?: { location?: string }) => {
       if (key === 'notification.textTitle') {
         return options?.location ?? 'Nearby reminder';
@@ -163,7 +164,7 @@ describe('backgroundGeofence', () => {
 
     expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
       content: {
-        title: 'District 1',
+        title: 'Này, District 1 quen không?',
         body: 'She likes the iced tea here',
         data: { noteId: 'preference-note' },
       },
@@ -177,7 +178,7 @@ describe('backgroundGeofence', () => {
 
     expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
       content: {
-        title: 'District 1',
+        title: 'Này, District 1 quen không?',
         body: 'Order the iced tea',
         data: { noteId: 'note-1' },
       },
@@ -210,8 +211,8 @@ describe('backgroundGeofence', () => {
 
     expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
       content: {
-        title: 'District 1',
-        body: 'A memory from here is waiting.',
+        title: 'Này, District 1 quen không?',
+        body: 'Có một kỷ niệm từ nơi này đang chờ bạn.',
         data: { noteId: 'photo-note' },
       },
       trigger: null,

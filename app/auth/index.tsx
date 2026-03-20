@@ -814,7 +814,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    ...Shadows.card,
+    ...(Platform.OS === 'ios' ? Shadows.card : {}),
   },
   title: {
     ...Typography.heroTitle,

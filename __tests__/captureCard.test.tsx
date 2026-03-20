@@ -76,75 +76,80 @@ jest.mock('../components/NoteDoodleCanvas', () => {
   };
 });
 
-function renderCaptureCard(
+function createCaptureCardProps(
   ref: React.RefObject<CaptureCardHandle | null>,
   props: Partial<React.ComponentProps<typeof CaptureCard>> = {}
 ) {
   const animatedValue = new Animated.Value(1);
   const zeroValue = new Animated.Value(0);
 
-  return render(
-    <CaptureCard
-      ref={ref}
-      snapHeight={700}
-      topInset={0}
-      isSearching={false}
-      captureMode="text"
-      cameraSessionKey={1}
-      captureScale={animatedValue}
-      captureTranslateY={zeroValue}
-      colors={{
-        primary: '#FFC107',
-        captureButtonBg: '#1C1C1E',
-        card: '#FFFFFF',
-        border: '#E5E5EA',
-        text: '#1C1C1E',
-        secondaryText: '#8E8E93',
-        captureCardText: '#1C1C1E',
-        captureCardPlaceholder: 'rgba(28,28,30,0.48)',
-        captureCardBorder: 'rgba(255,255,255,0.22)',
-        captureGlassFill: 'rgba(255,252,246,0.62)',
-        captureGlassBorder: 'rgba(255,255,255,0.3)',
-        captureGlassText: '#2B2621',
-        captureGlassIcon: 'rgba(43,38,33,0.52)',
-        captureGlassPlaceholder: 'rgba(43,38,33,0.34)',
-        captureGlassColorScheme: 'light',
-        captureCameraOverlay: 'rgba(28,28,30,0.48)',
-        captureCameraOverlayBorder: 'rgba(255,255,255,0.16)',
-        captureCameraOverlayText: '#FFFDFC',
-        captureFlashOverlay: 'rgba(255,250,242,0.96)',
-      }}
-      t={((_: string, fallback?: string) => fallback ?? '') as any}
-      noteText="Draft memory"
-      onChangeNoteText={() => undefined}
-      restaurantName="Cafe"
-      onChangeRestaurantName={() => undefined}
-      capturedPhoto={null}
-      onRetakePhoto={() => undefined}
-      needsCameraPermission={false}
-      onRequestCameraPermission={() => undefined}
-      facing="back"
-      onToggleFacing={() => undefined}
-      onOpenPhotoLibrary={() => undefined}
-      cameraRef={{ current: null }}
-      shouldRenderCameraPreview={false}
-      flashAnim={zeroValue}
-      permissionGranted
-      onShutterPressIn={() => undefined}
-      onShutterPressOut={() => undefined}
-      onTakePicture={() => undefined}
-      onSaveNote={() => undefined}
-      saving={false}
-      shutterScale={animatedValue}
-      cameraStatusText={null}
-      libraryImportLocked={false}
-      importingPhoto={false}
-      shareTarget="private"
-      onChangeShareTarget={() => undefined}
-      footerContent={<View />}
-      {...props}
-    />
-  );
+  return {
+    ref,
+    snapHeight: 700,
+    topInset: 0,
+    isSearching: false,
+    captureMode: 'text' as const,
+    cameraSessionKey: 1,
+    captureScale: animatedValue,
+    captureTranslateY: zeroValue,
+    colors: {
+      primary: '#FFC107',
+      captureButtonBg: '#1C1C1E',
+      card: '#FFFFFF',
+      border: '#E5E5EA',
+      text: '#1C1C1E',
+      secondaryText: '#8E8E93',
+      captureCardText: '#1C1C1E',
+      captureCardPlaceholder: 'rgba(28,28,30,0.48)',
+      captureCardBorder: 'rgba(255,255,255,0.22)',
+      captureGlassFill: 'rgba(255,252,246,0.62)',
+      captureGlassBorder: 'rgba(255,255,255,0.3)',
+      captureGlassText: '#2B2621',
+      captureGlassIcon: 'rgba(43,38,33,0.52)',
+      captureGlassPlaceholder: 'rgba(43,38,33,0.34)',
+      captureGlassColorScheme: 'light' as const,
+      captureCameraOverlay: 'rgba(28,28,30,0.48)',
+      captureCameraOverlayBorder: 'rgba(255,255,255,0.16)',
+      captureCameraOverlayText: '#FFFDFC',
+      captureFlashOverlay: 'rgba(255,250,242,0.96)',
+    },
+    t: ((_: string, fallback?: string) => fallback ?? '') as any,
+    noteText: 'Draft memory',
+    onChangeNoteText: () => undefined,
+    restaurantName: 'Cafe',
+    onChangeRestaurantName: () => undefined,
+    capturedPhoto: null,
+    onRetakePhoto: () => undefined,
+    needsCameraPermission: false,
+    onRequestCameraPermission: () => undefined,
+    facing: 'back' as const,
+    onToggleFacing: () => undefined,
+    onOpenPhotoLibrary: () => undefined,
+    cameraRef: { current: null },
+    shouldRenderCameraPreview: false,
+    flashAnim: zeroValue,
+    permissionGranted: true,
+    onShutterPressIn: () => undefined,
+    onShutterPressOut: () => undefined,
+    onTakePicture: () => undefined,
+    onSaveNote: () => undefined,
+    saving: false,
+    shutterScale: animatedValue,
+    cameraStatusText: null,
+    libraryImportLocked: false,
+    importingPhoto: false,
+    shareTarget: 'private' as const,
+    onChangeShareTarget: () => undefined,
+    footerContent: <View />,
+    ...props,
+  };
+}
+
+function renderCaptureCard(
+  ref: React.RefObject<CaptureCardHandle | null>,
+  props: Partial<React.ComponentProps<typeof CaptureCard>> = {}
+) {
+  return render(<CaptureCard {...createCaptureCardProps(ref, props)} />);
 }
 
 describe('CaptureCard doodle handle', () => {
@@ -209,6 +214,20 @@ describe('CaptureCard doodle handle', () => {
 
     fireEvent.changeText(getByTestId('capture-note-input'), 'Ca phe ');
     expect(handleChangeNoteText).toHaveBeenCalledWith('Ca phe ☕️ ');
+  });
+
+  it('rotates the text placeholder when the draft becomes empty again', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    const firstPlaceholder = view.getByTestId('capture-note-input').props.placeholder;
+
+    view.rerender(<CaptureCard {...createCaptureCardProps(ref, { noteText: 'Draft memory' })} />);
+    view.rerender(<CaptureCard {...createCaptureCardProps(ref, { noteText: '' })} />);
+
+    expect(view.getByTestId('capture-note-input').props.placeholder).not.toBe(firstPlaceholder);
   });
 
   it('keeps doodle editing available on captured photos', () => {

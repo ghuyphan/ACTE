@@ -23,6 +23,14 @@
         "switchText": "Văn bản",
         "restaurantPlaceholder": "Tên quán (VD: Phở Anh Hai)",
         "textPlaceholder": "Ghi chú về quán này...",
+        "textPlaceholderVariants": [
+            "Ghi chú về quán này...",
+            "Ghi nhanh đi, kẻo lại quên hành phi.",
+            "Chỗ này có gì cần nhớ không?",
+            "Để lại một mẩu nhớ ở đây nhé...",
+            "Quán này có gì đáng note lại?",
+            "Viết gì đó cho lần quay lại sau nha."
+        ],
         "currentLocation": "Đang dùng vị trí hiện tại",
         "unknownPlace": "Không rõ địa điểm",
         "save": "Lưu ghi chú 💛",
@@ -445,7 +453,35 @@
         "channelDescription": "Thông báo nhắc theo vị trí cho các ghi chú bạn đã lưu trong Noto.",
         "textTitle": "{{location}}",
         "photoTitle": "{{location}}",
-        "photoBody": "Có một kỷ niệm từ nơi này đang chờ bạn."
+        "photoBody": "Có một kỷ niệm từ nơi này đang chờ bạn.",
+        "titleVariantsWithLocation": [
+            "Này, {{location}} quen không?",
+            "{{location}} vẫn còn nhớ bạn",
+            "Alo, {{location}} gọi",
+            "Bạn vừa đi ngang {{location}}",
+            "{{location}} có một ghi chú đang đợi bạn"
+        ],
+        "titleVariantsGeneric": [
+            "Alo, quá khứ gọi",
+            "Bạn đang ở gần một ghi chú",
+            "Có một mẩu ký ức ở gần đây",
+            "Này, có gì đó đang đợi bạn",
+            "Ghi chú cũ vừa vẫy tay"
+        ],
+        "textBodyVariants": [
+            "Có một ghi chú nhỏ đang đợi bạn mở lại.",
+            "Một mẩu ký ức ở đây vừa gặp lại bạn.",
+            "Mở Noto xem bạn từng để lại gì ở nơi này nhé.",
+            "Có đôi dòng ngày trước đang chờ bạn.",
+            "Nơi này vẫn giữ một ghi chú của bạn."
+        ],
+        "photoBodyVariants": [
+            "Có một kỷ niệm từ nơi này đang chờ bạn.",
+            "Nơi này còn giữ một khoảnh khắc của bạn.",
+            "Bạn từng để lại một mẩu chuyện ở đây đó.",
+            "Có một tấm ảnh cũ đang chờ được mở lại.",
+            "Chỗ này vẫn còn nhớ một lần bạn đã ghé qua."
+        ]
     },
     "widget": {
         "idleText": "Noto sẽ hiện đúng ghi chú khi bạn ở gần.",

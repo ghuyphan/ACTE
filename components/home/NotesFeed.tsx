@@ -47,7 +47,8 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   t: TFunction;
 }) {
   const scale = useRef(new Animated.Value(0.9)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const cardTranslateY = useRef(new Animated.Value(18)).current;
+  const metaTranslateY = useRef(new Animated.Value(10)).current;
   const pressScale = useRef(new Animated.Value(1)).current;
   const mountIndex = useRef(index).current;
   const handlePress = useCallback(() => {
@@ -55,6 +56,8 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   }, [item.id, onOpenNote]);
 
   useEffect(() => {
+    // Avoid opacity fades here: the metadata pills use GlassView and can stop rendering
+    // correctly when an ancestor animates opacity on iOS.
     Animated.parallel([
       Animated.timing(scale, {
         toValue: 1,
@@ -63,14 +66,22 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
         delay: mountIndex * 50,
         useNativeDriver: true,
       }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 300,
+      Animated.timing(cardTranslateY, {
+        toValue: 0,
+        duration: 280,
         delay: mountIndex * 50,
+        easing: RNEasing.out(RNEasing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(metaTranslateY, {
+        toValue: 0,
+        duration: 240,
+        delay: mountIndex * 50,
+        easing: RNEasing.out(RNEasing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [mountIndex, opacity, scale]);
+  }, [cardTranslateY, metaTranslateY, mountIndex, scale]);
 
   const handlePressIn = () => {
     Animated.timing(pressScale, {
@@ -95,7 +106,15 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   return (
     <Pressable onPress={handlePress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
       <Animated.View
-        style={[styles.noteCardWrapper, { opacity, transform: [{ scale: Animated.multiply(scale, pressScale) }] }]}
+        style={[
+          styles.noteCardWrapper,
+          {
+            transform: [
+              { translateY: cardTranslateY },
+              { scale: Animated.multiply(scale, pressScale) },
+            ],
+          },
+        ]}
       >
         {item.type === 'photo' ? (
           <ImageMemoryCard imageUrl={getNotePhotoUri(item)} doodleStrokesJson={item.doodleStrokesJson} />
@@ -115,7 +134,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
         ) : null}
       </Animated.View>
 
-      <Animated.View style={[styles.belowCardMetaContainer, { opacity }]}>
+      <Animated.View style={[styles.belowCardMetaContainer, { transform: [{ translateY: metaTranslateY }] }]}>
         <InfoPill icon="location" iconColor={colors.secondaryText} style={styles.metadataPill}>
           <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
             {item.locationName ?? t('home.unknownLocation', 'Unknown location')}
@@ -167,7 +186,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   t: TFunction;
 }) {
   const scale = useRef(new Animated.Value(0.9)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(18)).current;
   const mountIndex = useRef(index).current;
 
   useEffect(() => {
@@ -179,20 +198,21 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
         delay: mountIndex * 50,
         useNativeDriver: true,
       }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 300,
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 280,
         delay: mountIndex * 50,
+        easing: RNEasing.out(RNEasing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [mountIndex, opacity, scale]);
+  }, [mountIndex, scale, translateY]);
 
   const authorLabel = item.authorDisplayName ?? t('shared.someone', 'Someone');
   const dateStr = formatDate(item.createdAt, 'short');
 
   return (
-    <Animated.View style={[styles.sharedCardWrap, { opacity, transform: [{ scale }] }]}>
+    <Animated.View style={[styles.sharedCardWrap, { transform: [{ translateY }, { scale }] }]}>
       <View style={styles.noteCardWrapper}>
         {item.type === 'photo' && item.photoLocalUri ? (
           <ImageMemoryCard imageUrl={item.photoLocalUri} doodleStrokesJson={item.doodleStrokesJson} />

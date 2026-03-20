@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import {
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -42,6 +44,7 @@ export default function PlusScreen() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const { 
     tier, 
     isPurchaseAvailable, 
@@ -64,7 +67,15 @@ export default function PlusScreen() {
         end={{ x: 1, y: 1 }}
       />
 
-      <View style={[styles.content, { paddingTop: insets.top, paddingBottom: insets.bottom + 20 }]}>
+      <View
+        style={[
+          styles.content,
+          {
+            paddingTop: headerHeight + 12,
+            paddingBottom: insets.bottom + 20,
+          },
+        ]}
+      >
         <View style={styles.heroSection}>
           <View style={[styles.iconContainer, { backgroundColor: colors.primarySoft }]}>
             <Ionicons name="heart" size={64} color={colors.primary} />
@@ -160,11 +171,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    ...Shadows.card,
+    ...(Platform.OS === 'ios' ? Shadows.card : {}),
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     gap: 8,
     marginBottom: 4,
   },

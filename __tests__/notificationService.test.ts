@@ -1,11 +1,23 @@
 const mockSetNotificationChannelAsync = jest.fn(async () => undefined);
+const mockStorage = new Map<string, string>();
 
 function loadNotificationService() {
   jest.resetModules();
 
+  jest.doMock('@react-native-async-storage/async-storage', () => ({
+    __esModule: true,
+    default: {
+      getItem: async (key: string) => mockStorage.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        mockStorage.set(key, value);
+      },
+    },
+  }));
+
   jest.doMock('../constants/i18n', () => ({
     __esModule: true,
     default: {
+      language: 'vi',
       t: (_key: string, fallback?: string) => fallback ?? _key,
     },
   }));
@@ -27,6 +39,7 @@ function loadNotificationService() {
 describe('notificationService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockStorage.clear();
   });
 
   it('creates the Android reminder channel with the expected configuration', async () => {
@@ -78,5 +91,24 @@ describe('notificationService', () => {
         data: { noteId: 'note-1' },
       })
     );
+  });
+
+  it('rotates nearby reminder titles so the same line does not repeat every time', async () => {
+    const { buildNearbyReminderCopy } = loadNotificationService();
+
+    const first = await buildNearbyReminderCopy({
+      noteType: 'text',
+      locationName: 'District 1',
+      noteBody: 'Them hanh phi',
+    });
+    const second = await buildNearbyReminderCopy({
+      noteType: 'text',
+      locationName: 'District 1',
+      noteBody: 'Them hanh phi',
+    });
+
+    expect(first.body).toBe('Them hanh phi');
+    expect(second.body).toBe('Them hanh phi');
+    expect(first.title).not.toBe(second.title);
   });
 });
