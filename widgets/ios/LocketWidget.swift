@@ -236,6 +236,8 @@ private struct LocketWidgetDoodleOverlay: View {
     }
 }
 
+private let locketWidgetDoodleArtboardInset: CGFloat = 18
+
 private func parseDoodleStrokes(from doodleStrokesJson: String?) -> [LocketWidgetDoodleStroke] {
     guard
         let doodleStrokesJson,
@@ -428,8 +430,8 @@ private struct LocketWidgetEntryView: View {
     private var shouldShowDoodleOverlay: Bool {
         !isAccessoryFamily &&
         !payload.isIdleState &&
-        payload.noteType == "text" &&
         payload.hasDoodle &&
+        (payload.noteType == "photo" || !payload.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) &&
         !doodleStrokes.isEmpty
     }
 
@@ -698,8 +700,7 @@ private struct LocketWidgetEntryView: View {
         ZStack(alignment: .bottom) {
             if shouldShowDoodleOverlay {
                 LocketWidgetDoodleOverlay(strokes: doodleStrokes, isLarge: false)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
+                    .padding(locketWidgetDoodleArtboardInset)
                     .allowsHitTesting(false)
             }
 
@@ -746,8 +747,7 @@ private struct LocketWidgetEntryView: View {
         ZStack {
             if shouldShowDoodleOverlay {
                 LocketWidgetDoodleOverlay(strokes: doodleStrokes, isLarge: true)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 16)
+                    .padding(locketWidgetDoodleArtboardInset)
                     .allowsHitTesting(false)
             }
 

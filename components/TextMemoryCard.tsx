@@ -1,11 +1,12 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { DOODLE_ARTBOARD_FRAME } from '../constants/doodleLayout';
 import { Layout, Shadows } from '../constants/theme';
-import { CardGradients } from '../hooks/useTheme';
-import NoteDoodleCanvas from './NoteDoodleCanvas';
+import { getTextNoteCardGradient } from '../services/noteAppearance';
 import { parseNoteDoodleStrokes } from '../services/noteDoodles';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
+import NoteDoodleCanvas from './NoteDoodleCanvas';
 
 interface TextMemoryCardProps {
     text: string;
@@ -14,18 +15,8 @@ interface TextMemoryCardProps {
     doodleStrokesJson?: string | null;
 }
 
-function hashToIndex(str: string, max: number): number {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = (hash * 31 + str.charCodeAt(i)) % max;
-    }
-    return Math.abs(hash) % max;
-}
-
 export default function TextMemoryCard({ text, noteId, emoji = null, doodleStrokesJson = null }: TextMemoryCardProps) {
-    // Pick a unique gradient based on the note content or id
-    const gradientIndex = hashToIndex(noteId || text, CardGradients.length);
-    const gradient = CardGradients[gradientIndex];
+    const gradient = getTextNoteCardGradient({ text, noteId, emoji });
     const displayText = formatNoteTextWithEmoji(text, emoji);
     const doodleStrokes = parseNoteDoodleStrokes(doodleStrokesJson);
 
@@ -67,10 +58,7 @@ const styles = StyleSheet.create({
     },
     doodleOverlay: {
         position: 'absolute',
-        top: 18,
-        right: 18,
-        bottom: 18,
-        left: 18,
+        ...DOODLE_ARTBOARD_FRAME,
         opacity: 0.5,
     },
     memoryText: {

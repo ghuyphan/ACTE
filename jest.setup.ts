@@ -4,6 +4,70 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
+jest.mock('react-native-gesture-handler', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  const createGestureChain = () => {
+    const chain = {
+      runOnJS: () => chain,
+      enabled: () => chain,
+      maxPointers: () => chain,
+      minDistance: () => chain,
+      shouldCancelWhenOutside: () => chain,
+      onBegin: () => chain,
+      onUpdate: () => chain,
+      onFinalize: () => chain,
+    };
+
+    return chain;
+  };
+
+  return {
+    GestureHandlerRootView: ({ children, ...props }: any) => React.createElement(View, props, children),
+    GestureDetector: ({ children, ...props }: any) => React.createElement(View, props, children),
+    Gesture: {
+      Pan: () => createGestureChain(),
+    },
+  };
+});
+
+jest.mock('@shopify/react-native-skia', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const createPath = () => ({
+    commands: [] as Array<unknown>,
+    moveTo(x: number, y: number) {
+      this.commands.push(['M', x, y]);
+      return this;
+    },
+    lineTo(x: number, y: number) {
+      this.commands.push(['L', x, y]);
+      return this;
+    },
+    quadTo(x1: number, y1: number, x2: number, y2: number) {
+      this.commands.push(['Q', x1, y1, x2, y2]);
+      return this;
+    },
+    addCircle(x: number, y: number, r: number) {
+      this.commands.push(['C', x, y, r]);
+      return this;
+    },
+  });
+
+  return {
+    Canvas: ({ children, ...props }: any) => React.createElement(View, props, children),
+    Path: () => null,
+    Circle: () => null,
+    usePathValue: () => createPath(),
+    Skia: {
+      Path: {
+        Make: () => createPath(),
+      },
+    },
+  };
+});
+
 jest.mock('react-native-worklets', () => require('react-native-worklets/lib/module/mock'));
 
 jest.mock('react-native-reanimated', () => {

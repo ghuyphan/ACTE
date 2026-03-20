@@ -94,6 +94,8 @@ interface FirebaseNoteRecord {
   type: Note['type'];
   content: string;
   photoRemoteBase64?: string | null;
+  hasDoodle?: boolean;
+  doodleStrokesJson?: string | null;
   locationName: string | null;
   promptId?: string | null;
   promptTextSnapshot?: string | null;
@@ -246,6 +248,8 @@ async function serializeNoteForFirebase(note: Note, syncedAt: string): Promise<F
     type: note.type,
     content: note.type === 'text' ? note.content : '',
     photoRemoteBase64,
+    hasDoodle: Boolean(note.hasDoodle && note.doodleStrokesJson),
+    doodleStrokesJson: note.doodleStrokesJson ?? null,
     locationName: note.locationName,
     promptId: note.promptId ?? null,
     promptTextSnapshot: note.promptTextSnapshot ?? null,
@@ -300,6 +304,8 @@ async function deserializeRemoteNote(
     longitude: record.longitude,
     radius: typeof record.radius === 'number' ? record.radius : 150,
     isFavorite: Boolean(record.isFavorite),
+    hasDoodle: Boolean(record.hasDoodle && record.doodleStrokesJson),
+    doodleStrokesJson: record.doodleStrokesJson ?? null,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt ?? null,
   };

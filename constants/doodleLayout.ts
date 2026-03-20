@@ -1,0 +1,8 @@
+export const DOODLE_ARTBOARD_INSET = 18;
+
+export const DOODLE_ARTBOARD_FRAME = {
+  top: DOODLE_ARTBOARD_INSET,
+  right: DOODLE_ARTBOARD_INSET,
+  bottom: DOODLE_ARTBOARD_INSET,
+  left: DOODLE_ARTBOARD_INSET,
+} as const;

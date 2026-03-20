@@ -24,6 +24,21 @@ type EmojiRule = {
   score?: number;
 };
 
+type NormalizedEmojiRule = EmojiRule & {
+  normalizedKeywords: string[];
+};
+
+export type InlineNoteEmojiSuggestion = {
+  emoji: string;
+  matchedText: string;
+  matchedKeyword: string;
+  exact: boolean;
+};
+
+function isTrailingWhitespaceCommit(previousText: string, nextText: string) {
+  return nextText.length > previousText.length && /\s$/.test(nextText);
+}
+
 const EMOJI_RULES: EmojiRule[] = [
   {
     emoji: '☕️',
@@ -89,6 +104,21 @@ const EMOJI_RULES: EmojiRule[] = [
   {
     emoji: '🍰',
     keywords: ['cake', 'bakery', 'dessert', 'sweet', 'croissant', 'pastry', 'cookie', 'ice cream', 'kem', 'tiramisu'],
+    score: 3,
+  },
+  {
+    emoji: '🧄',
+    keywords: ['garlic', 'garlic bread', 'garlic butter', 'toi phi', 'toi nuong', 'roasted garlic'],
+    score: 3,
+  },
+  {
+    emoji: '🧅',
+    keywords: ['shallot', 'shallots', 'scallion', 'spring onion', 'green onion', 'hanh phi', 'hanh la', 'fried shallot'],
+    score: 3,
+  },
+  {
+    emoji: '🌶️',
+    keywords: ['chili', 'chilli', 'chili oil', 'spicy', 'sate', 'sa te', 'ot xanh', 'ot do'],
     score: 3,
   },
   {
@@ -203,6 +233,19 @@ const EMOJI_RULES: EmojiRule[] = [
   },
 ];
 
+const NORMALIZED_EMOJI_RULES: NormalizedEmojiRule[] = EMOJI_RULES.map((rule) => ({
+  ...rule,
+  normalizedKeywords: Array.from(new Set(rule.keywords.map((keyword) => normalize(keyword)).filter(Boolean))),
+}));
+
+const MAX_KEYWORD_TOKENS = NORMALIZED_EMOJI_RULES.reduce((max, rule) => {
+  const ruleMax = rule.normalizedKeywords.reduce((keywordMax, keyword) => {
+    return Math.max(keywordMax, keyword.split(' ').length);
+  }, 1);
+
+  return Math.max(max, ruleMax);
+}, 1);
+
 export const AUTO_NOTE_EMOJIS = Array.from(
   new Set([
     ...EMOJI_RULES.map((rule) => rule.emoji),
@@ -213,9 +256,116 @@ export const AUTO_NOTE_EMOJIS = Array.from(
   ])
 );
 
-function getRuleScore(paddedText: string, rule: EmojiRule) {
-  const matches = rule.keywords.reduce((count, keyword) => count + (containsKeyword(paddedText, keyword) ? 1 : 0), 0);
+function getRuleScore(paddedText: string, rule: NormalizedEmojiRule) {
+  const matches = rule.normalizedKeywords.reduce(
+    (count, keyword) => count + (containsKeyword(paddedText, keyword) ? 1 : 0),
+    0
+  );
   return matches * (rule.score ?? 1);
+}
+
+function extractActiveSegment(text: string, caret: number) {
+  const safeCaret = Math.max(0, Math.min(caret, text.length));
+  const beforeCaret = text.slice(0, safeCaret).replace(/\s+$/, '');
+
+  if (!beforeCaret.trim()) {
+    return '';
+  }
+
+  return beforeCaret
+    .split(/[\n\r\t.,!?;:()[\]{}"'“”‘’`~@#$%^&*_+=/\\|-]+/)
+    .pop()
+    ?.trim() ?? '';
+}
+
+function buildInlineSuggestion(
+  segment: string,
+  candidate: string,
+  matchedKeyword: string,
+  emoji: string,
+  exact: boolean
+): InlineNoteEmojiSuggestion | null {
+  const tokenCount = candidate.split(' ').length;
+  const rawTokens = segment.split(/\s+/).filter(Boolean);
+  const matchedText = rawTokens.slice(-tokenCount).join(' ').trim() || matchedKeyword;
+
+  if (!matchedText) {
+    return null;
+  }
+
+  return {
+    emoji,
+    matchedText,
+    matchedKeyword,
+    exact,
+  };
+}
+
+export function resolveInlineNoteEmojiSuggestion(text: string, caret = text.length): InlineNoteEmojiSuggestion | null {
+  const safeText = typeof text === 'string' ? text : '';
+  const segment = extractActiveSegment(safeText, caret);
+  const normalizedSegment = normalize(segment);
+
+  if (!normalizedSegment || normalizedSegment.length < 2) {
+    return null;
+  }
+
+  const segmentTokens = normalizedSegment.split(' ').filter(Boolean);
+  const maxTokens = Math.min(segmentTokens.length, MAX_KEYWORD_TOKENS);
+
+  for (let tokenCount = maxTokens; tokenCount >= 1; tokenCount -= 1) {
+    const candidate = segmentTokens.slice(-tokenCount).join(' ');
+
+    for (const rule of NORMALIZED_EMOJI_RULES) {
+      const exactKeyword = rule.normalizedKeywords.find((keyword) => keyword === candidate);
+      if (exactKeyword) {
+        return buildInlineSuggestion(segment, candidate, exactKeyword, rule.emoji, true);
+      }
+    }
+  }
+
+  if (segmentTokens[segmentTokens.length - 1]?.length < 2) {
+    return null;
+  }
+
+  for (let tokenCount = maxTokens; tokenCount >= 1; tokenCount -= 1) {
+    const candidate = segmentTokens.slice(-tokenCount).join(' ');
+
+    for (const rule of NORMALIZED_EMOJI_RULES) {
+      const partialKeyword = [...rule.normalizedKeywords]
+        .sort((left, right) => left.length - right.length)
+        .find((keyword) => keyword.startsWith(candidate));
+
+      if (partialKeyword) {
+        return buildInlineSuggestion(segment, candidate, partialKeyword, rule.emoji, false);
+      }
+    }
+  }
+
+  return null;
+}
+
+export function applyCommittedInlineEmoji(previousText: string, nextText: string) {
+  const previousValue = typeof previousText === 'string' ? previousText : '';
+  const nextValue = typeof nextText === 'string' ? nextText : '';
+
+  if (!isTrailingWhitespaceCommit(previousValue, nextValue)) {
+    return nextValue;
+  }
+
+  const trailingWhitespace = nextValue.match(/\s+$/)?.[0] ?? '';
+  const committedText = nextValue.slice(0, nextValue.length - trailingWhitespace.length);
+  const suggestion = resolveInlineNoteEmojiSuggestion(committedText);
+
+  if (!suggestion?.exact) {
+    return nextValue;
+  }
+
+  if (committedText.endsWith(` ${suggestion.emoji}`) || committedText.endsWith(suggestion.emoji)) {
+    return nextValue;
+  }
+
+  return `${committedText} ${suggestion.emoji}${trailingWhitespace}`;
 }
 
 export function resolveAutoNoteEmoji(options: {
@@ -229,7 +379,7 @@ export function resolveAutoNoteEmoji(options: {
   let bestEmoji: string | null = null;
   let bestScore = 0;
 
-  for (const rule of EMOJI_RULES) {
+  for (const rule of NORMALIZED_EMOJI_RULES) {
     const score = getRuleScore(paddedText, rule);
     if (score > bestScore) {
       bestEmoji = rule.emoji;

@@ -8,6 +8,7 @@ export interface ShowSheetAlertInput {
   primaryAction: AppSheetAlertAction;
   secondaryAction?: AppSheetAlertAction;
   dismissible?: boolean;
+  onClose?: () => void;
 }
 
 type AlertState = ShowSheetAlertInput & { visible: boolean };
@@ -19,13 +20,22 @@ const DEFAULT_STATE: AlertState = {
   message: '',
   primaryAction: { label: '' },
   dismissible: true,
+  onClose: undefined,
 };
 
 export function useAppSheetAlert() {
   const [alertState, setAlertState] = useState<AlertState>(DEFAULT_STATE);
 
   const hideAlert = useCallback(() => {
-    setAlertState((current) => ({ ...current, visible: false }));
+    setAlertState((current) => {
+      current.onClose?.();
+
+      return {
+        ...current,
+        visible: false,
+        onClose: undefined,
+      };
+    });
   }, []);
 
   const showAlert = useCallback((nextAlert: ShowSheetAlertInput) => {
@@ -37,8 +47,10 @@ export function useAppSheetAlert() {
     });
   }, []);
 
+  const { onClose: _onClose, ...restAlertState } = alertState;
+
   const alertProps: AppSheetAlertProps = {
-    ...alertState,
+    ...restAlertState,
     onClose: hideAlert,
   };
 

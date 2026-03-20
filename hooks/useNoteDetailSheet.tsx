@@ -10,14 +10,16 @@ const NoteDetailSheetContext = createContext<NoteDetailSheetContextValue | undef
 
 export function NoteDetailSheetProvider({ children }: { children: ReactNode }) {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [visible, setVisible] = useState(false);
 
   const value = useMemo<NoteDetailSheetContextValue>(
     () => ({
       openNoteDetail: (noteId: string) => {
         setSelectedNoteId(noteId);
+        setVisible(true);
       },
       closeNoteDetail: () => {
-        setSelectedNoteId(null);
+        setVisible(false);
       },
     }),
     []
@@ -29,8 +31,12 @@ export function NoteDetailSheetProvider({ children }: { children: ReactNode }) {
       {selectedNoteId ? (
         <NoteDetailSheet
           noteId={selectedNoteId}
-          visible
+          visible={visible}
           onClose={() => {
+            setVisible(false);
+          }}
+          onClosed={() => {
+            setVisible(false);
             setSelectedNoteId(null);
           }}
         />

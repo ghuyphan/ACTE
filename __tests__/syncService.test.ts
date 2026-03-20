@@ -21,6 +21,8 @@ type NoteRecord = {
   content: string;
   photoLocalUri: string | null;
   photoRemoteBase64: string | null;
+  hasDoodle?: boolean;
+  doodleStrokesJson?: string | null;
   locationName: string | null;
   latitude: number;
   longitude: number;
@@ -523,7 +525,11 @@ describe('syncService', () => {
 
   it('syncs only queued changes during incremental sync instead of uploading the whole library', async () => {
     const firstNote = createTextNote('note-1', 'first');
-    const secondNote = createTextNote('note-2', 'second');
+    const secondNote = {
+      ...createTextNote('note-2', 'second'),
+      hasDoodle: true,
+      doodleStrokesJson: JSON.stringify([{ color: '#1C1C1E', points: [0.1, 0.1, 0.3, 0.3] }]),
+    };
     localNotesStore = [firstNote, secondNote];
     await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-10T00:00:00.000Z');
 
@@ -559,6 +565,8 @@ describe('syncService', () => {
       expect.objectContaining({
         id: 'note-2',
         content: 'second',
+        hasDoodle: true,
+        doodleStrokesJson: JSON.stringify([{ color: '#1C1C1E', points: [0.1, 0.1, 0.3, 0.3] }]),
       }),
       { merge: true }
     );
@@ -570,6 +578,8 @@ describe('syncService', () => {
       type: 'text',
       content: 'remote note',
       photoRemoteBase64: null,
+      hasDoodle: true,
+      doodleStrokesJson: JSON.stringify([{ color: '#1C1C1E', points: [0.2, 0.2, 0.6, 0.6] }]),
       locationName: 'District 1',
       latitude: 10.78,
       longitude: 106.68,
@@ -602,6 +612,8 @@ describe('syncService', () => {
       expect.objectContaining({
         id: 'remote-1',
         content: 'remote note',
+        hasDoodle: true,
+        doodleStrokesJson: JSON.stringify([{ color: '#1C1C1E', points: [0.2, 0.2, 0.6, 0.6] }]),
       })
     );
     expect(mockNoteRemoteSet).toHaveBeenCalledWith(
@@ -609,6 +621,8 @@ describe('syncService', () => {
       expect.objectContaining({
         id: 'remote-1',
         content: 'remote note',
+        hasDoodle: true,
+        doodleStrokesJson: JSON.stringify([{ color: '#1C1C1E', points: [0.2, 0.2, 0.6, 0.6] }]),
       }),
       { merge: true }
     );

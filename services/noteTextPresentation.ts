@@ -14,7 +14,11 @@ export function formatNoteTextWithEmoji(text: string, emoji?: string | null) {
     return trimmedText;
   }
 
-  if (trimmedText.startsWith(`${trimmedEmoji} `) || LEADING_EMOJI_PATTERN.test(trimmedText)) {
+  if (
+    trimmedText.startsWith(`${trimmedEmoji} `) ||
+    trimmedText.includes(trimmedEmoji) ||
+    LEADING_EMOJI_PATTERN.test(trimmedText)
+  ) {
     return trimmedText;
   }
 

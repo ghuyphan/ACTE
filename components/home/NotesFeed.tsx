@@ -98,7 +98,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
         style={[styles.noteCardWrapper, { opacity, transform: [{ scale: Animated.multiply(scale, pressScale) }] }]}
       >
         {item.type === 'photo' ? (
-          <ImageMemoryCard imageUrl={getNotePhotoUri(item)} />
+          <ImageMemoryCard imageUrl={getNotePhotoUri(item)} doodleStrokesJson={item.doodleStrokesJson} />
         ) : (
           <TextMemoryCard
             text={item.content}
@@ -195,7 +195,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
     <Animated.View style={[styles.sharedCardWrap, { opacity, transform: [{ scale }] }]}>
       <View style={styles.noteCardWrapper}>
         {item.type === 'photo' && item.photoLocalUri ? (
-          <ImageMemoryCard imageUrl={item.photoLocalUri} />
+          <ImageMemoryCard imageUrl={item.photoLocalUri} doodleStrokesJson={item.doodleStrokesJson} />
         ) : (
           <TextMemoryCard
             text={item.text || t('shared.photoMemory', 'Photo memory')}

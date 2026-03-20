@@ -1,5 +1,7 @@
-import { GestureResponderEvent, PanResponder, LayoutChangeEvent, StyleSheet, View } from 'react-native';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { LayoutChangeEvent, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS, useAnimatedReaction, useSharedValue, type SharedValue } from 'react-native-reanimated';
 
 export interface DoodleStroke {
   color: string;
@@ -11,18 +13,96 @@ interface NoteDoodleCanvasProps {
   editable?: boolean;
   activeColor?: string;
   onChangeStrokes?: (nextStrokes: DoodleStroke[]) => void;
+  style?: StyleProp<ViewStyle>;
 }
-
-const STROKE_WIDTH = 6;
-const MIN_STAMP_SPACING = 0.008;
-const MAX_SEGMENT_SUBDIVISIONS = 12;
 
 interface DoodlePoint {
   x: number;
   y: number;
 }
 
+interface SkiaPathLike {
+  moveTo: (x: number, y: number) => unknown;
+  lineTo: (x: number, y: number) => unknown;
+  quadTo: (x1: number, y1: number, x2: number, y2: number) => unknown;
+  addCircle?: (x: number, y: number, radius: number) => unknown;
+  reset?: () => unknown;
+}
+
+interface RenderedStroke {
+  color: string;
+  path: SkiaPathLike | null;
+  dot: DoodlePoint | null;
+  fallbackPoints: DoodlePoint[] | null;
+}
+
+interface DraftPreview {
+  color: string;
+  path: SkiaPathLike | null;
+  dot: DoodlePoint | null;
+  fallbackPoints: DoodlePoint[] | null;
+}
+
+interface SkiaLayerProps {
+  renderedStrokes: RenderedStroke[];
+  draftPath: SharedValue<SkiaPathLike | null>;
+  draftVisible: SharedValue<number>;
+  draftColor: string;
+  showDraft: boolean;
+}
+
+interface FallbackLayerProps {
+  renderedStrokes: RenderedStroke[];
+  layout: CanvasLayout;
+}
+
+interface DraftFallbackLayerProps {
+  draftFallbackPoints: DoodlePoint[];
+  draftColor: string;
+  layout: CanvasLayout;
+}
+
+function strokesMatch(first: DoodleStroke | null | undefined, second: DoodleStroke | null | undefined) {
+  if (!first || !second) {
+    return false;
+  }
+
+  return (
+    first.color === second.color &&
+    first.points.length === second.points.length &&
+    first.points.every((point, index) => point === second.points[index])
+  );
+}
+
+const STROKE_WIDTH = 6;
+const SINGLE_POINT_RADIUS = STROKE_WIDTH / 2;
+const MIN_POINT_DISTANCE = 0.0035;
+const MIN_STAMP_SPACING = 0.008;
+const MAX_SEGMENT_SUBDIVISIONS = 12;
+
+type SkiaRendererModule = {
+  Canvas: ComponentType<any>;
+  Circle: ComponentType<any>;
+  Path: ComponentType<any>;
+  notifyChange?: <T>(value: SharedValue<T>) => void;
+  Skia?: {
+    Path?: {
+      Make: () => SkiaPathLike;
+    };
+  };
+};
+
+let skiaRendererModule: SkiaRendererModule | null = null;
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  skiaRendererModule = require('@shopify/react-native-skia');
+} catch {
+  skiaRendererModule = null;
+}
+
 function clamp01(value: number) {
+  'worklet';
   return Math.min(1, Math.max(0, value));
 }
 
@@ -40,9 +120,74 @@ function pairStrokePoints(points: number[]): DoodlePoint[] {
 }
 
 function distanceBetweenPoints(start: DoodlePoint, end: DoodlePoint) {
+  'worklet';
   const deltaX = end.x - start.x;
   const deltaY = end.y - start.y;
   return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+}
+
+function scalePoint(point: DoodlePoint, width: number, height: number) {
+  'worklet';
+  return {
+    x: point.x * width,
+    y: point.y * height,
+  };
+}
+
+function appendSmoothSkiaPath(path: SkiaPathLike, points: number[], width: number, height: number) {
+  'worklet';
+
+  if (points.length < 2) {
+    return;
+  }
+
+  if (points.length === 2) {
+    const centerX = points[0] * width;
+    const centerY = points[1] * height;
+
+    if (path.addCircle) {
+      path.addCircle(centerX, centerY, SINGLE_POINT_RADIUS);
+    } else {
+      path.moveTo(centerX, centerY);
+      path.lineTo(centerX, centerY);
+    }
+
+    return;
+  }
+
+  if (points.length === 4) {
+    path.moveTo(points[0] * width, points[1] * height);
+    path.lineTo(points[2] * width, points[3] * height);
+    return;
+  }
+
+  path.moveTo(points[0] * width, points[1] * height);
+
+  for (let index = 2; index < points.length - 2; index += 2) {
+    const currentX = points[index] * width;
+    const currentY = points[index + 1] * height;
+    const nextX = points[index + 2] * width;
+    const nextY = points[index + 3] * height;
+
+    path.quadTo(currentX, currentY, (currentX + nextX) / 2, (currentY + nextY) / 2);
+  }
+
+  const penultimateX = points[points.length - 4] * width;
+  const penultimateY = points[points.length - 3] * height;
+  const lastX = points[points.length - 2] * width;
+  const lastY = points[points.length - 1] * height;
+  path.quadTo(penultimateX, penultimateY, lastX, lastY);
+}
+
+function buildSmoothSkiaPath(points: DoodlePoint[], width: number, height: number) {
+  const nextPath = skiaRendererModule?.Skia?.Path?.Make?.();
+
+  if (!nextPath || points.length < 2) {
+    return null;
+  }
+
+  appendSmoothSkiaPath(nextPath, points.flatMap((point) => [point.x, point.y]), width, height);
+  return nextPath;
 }
 
 function interpolateLine(start: DoodlePoint, end: DoodlePoint) {
@@ -73,21 +218,21 @@ function interpolateCurve(
 
   for (let step = 0; step <= subdivisions; step += 1) {
     const progress = step / subdivisions;
-    const tension2 = progress * progress;
-    const tension3 = tension2 * progress;
+    const progressSquared = progress * progress;
+    const progressCubed = progressSquared * progress;
 
     const x =
       0.5 *
       ((2 * start.x) +
         (-previous.x + end.x) * progress +
-        (2 * previous.x - 5 * start.x + 4 * end.x - next.x) * tension2 +
-        (-previous.x + 3 * start.x - 3 * end.x + next.x) * tension3);
+        (2 * previous.x - 5 * start.x + 4 * end.x - next.x) * progressSquared +
+        (-previous.x + 3 * start.x - 3 * end.x + next.x) * progressCubed);
     const y =
       0.5 *
       ((2 * start.y) +
         (-previous.y + end.y) * progress +
-        (2 * previous.y - 5 * start.y + 4 * end.y - next.y) * tension2 +
-        (-previous.y + 3 * start.y - 3 * end.y + next.y) * tension3);
+        (2 * previous.y - 5 * start.y + 4 * end.y - next.y) * progressSquared +
+        (-previous.y + 3 * start.y - 3 * end.y + next.y) * progressCubed);
 
     points.push({ x: clamp01(x), y: clamp01(y) });
   }
@@ -95,9 +240,7 @@ function interpolateCurve(
   return points;
 }
 
-function smoothStrokePoints(rawPoints: number[]) {
-  const points = pairStrokePoints(rawPoints);
-
+function buildFallbackStrokePoints(points: DoodlePoint[]) {
   if (points.length <= 1) {
     return points;
   }
@@ -125,132 +268,155 @@ function smoothStrokePoints(rawPoints: number[]) {
   return smoothed;
 }
 
-export default function NoteDoodleCanvas({
-  strokes,
-  editable = false,
-  activeColor = '#1C1C1E',
-  onChangeStrokes,
-}: NoteDoodleCanvasProps) {
-  const [layout, setLayout] = useState({ width: 1, height: 1, pageX: 0, pageY: 0 });
-  const canvasRef = useRef<View | null>(null);
-  const draftStrokeIndexRef = useRef<number | null>(null);
-  const strokesRef = useRef(strokes);
+function normalizeTouchPoint(locationX: number, locationY: number, layout: CanvasLayout) {
+  'worklet';
 
-  useEffect(() => {
-    strokesRef.current = strokes;
-  }, [strokes]);
+  return {
+    x: clamp01(locationX / layout.width),
+    y: clamp01(locationY / layout.height),
+  };
+}
 
-  const syncCanvasFrame = useCallback((fallbackWidth?: number, fallbackHeight?: number) => {
-    requestAnimationFrame(() => {
-      canvasRef.current?.measureInWindow((pageX, pageY, measuredWidth, measuredHeight) => {
-        setLayout({
-          width: Math.max(fallbackWidth ?? measuredWidth, 1),
-          height: Math.max(fallbackHeight ?? measuredHeight, 1),
-          pageX,
-          pageY,
-        });
-      });
-    });
-  }, []);
+function appendPointIfNeeded(points: number[], point: DoodlePoint) {
+  'worklet';
 
-  const getNormalizedPoint = useCallback((event: GestureResponderEvent) => {
-    const x = clamp01((event.nativeEvent.pageX - layout.pageX) / layout.width);
-    const y = clamp01((event.nativeEvent.pageY - layout.pageY) / layout.height);
-    return { x, y };
-  }, [layout.height, layout.pageX, layout.pageY, layout.width]);
+  const lastX = points[points.length - 2];
+  const lastY = points[points.length - 1];
 
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => editable,
-        onMoveShouldSetPanResponder: () => editable,
-        onStartShouldSetPanResponderCapture: () => editable,
-        onMoveShouldSetPanResponderCapture: () => editable,
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderGrant: (event) => {
-          if (!editable || !onChangeStrokes) {
-            return;
-          }
+  if (lastX === undefined || lastY === undefined) {
+    points.push(point.x, point.y);
+    return true;
+  }
 
-          syncCanvasFrame();
-          const { x, y } = getNormalizedPoint(event);
-          const nextStrokes = [...strokesRef.current, { color: activeColor, points: [x, y] }];
-          strokesRef.current = nextStrokes;
-          draftStrokeIndexRef.current = nextStrokes.length - 1;
-          onChangeStrokes(nextStrokes);
-        },
-        onPanResponderMove: (event) => {
-          if (!editable || !onChangeStrokes) {
-            return;
-          }
+  if (distanceBetweenPoints({ x: lastX, y: lastY }, point) < MIN_POINT_DISTANCE) {
+    return false;
+  }
 
-          const draftIndex = draftStrokeIndexRef.current;
-          if (draftIndex === null) {
-            return;
-          }
+  points.push(point.x, point.y);
+  return true;
+}
 
-          const { x, y } = getNormalizedPoint(event);
+interface CanvasLayout {
+  width: number;
+  height: number;
+}
 
-          const nextStrokes = strokesRef.current.map((stroke, index) =>
-              index === draftIndex
-                ? { ...stroke, points: [...stroke.points, x, y] }
-                : stroke
-            );
-          strokesRef.current = nextStrokes;
-          onChangeStrokes(nextStrokes);
-        },
-        onPanResponderRelease: () => {
-          draftStrokeIndexRef.current = null;
-        },
-        onPanResponderTerminate: () => {
-          draftStrokeIndexRef.current = null;
-        },
-      }),
-    [activeColor, editable, getNormalizedPoint, onChangeStrokes, syncCanvasFrame]
-  );
+interface CachedRenderedStroke extends RenderedStroke {
+  width: number;
+  height: number;
+  useSkia: boolean;
+}
 
-  const handleLayout = (event: LayoutChangeEvent) => {
-    const { width, height } = event.nativeEvent.layout;
-    syncCanvasFrame(width, height);
+export type RenderedStrokeCache = WeakMap<DoodleStroke, CachedRenderedStroke>;
+
+export function createRenderedStrokeCache(): RenderedStrokeCache {
+  return new WeakMap();
+}
+
+export function getOrCreateRenderedStroke(
+  cache: RenderedStrokeCache,
+  stroke: DoodleStroke,
+  width: number,
+  height: number,
+  useSkia: boolean
+): RenderedStroke {
+  const cached = cache.get(stroke);
+
+  if (cached && cached.width === width && cached.height === height && cached.useSkia === useSkia) {
+    return cached;
+  }
+
+  const points = pairStrokePoints(stroke.points);
+  const nextRenderedStroke: CachedRenderedStroke = {
+    color: stroke.color,
+    path: useSkia ? buildSmoothSkiaPath(points, width, height) : null,
+    dot: points.length === 1 ? scalePoint(points[0], width, height) : null,
+    fallbackPoints: useSkia ? null : buildFallbackStrokePoints(points),
+    width,
+    height,
+    useSkia,
   };
 
-  const renderedStrokes = useMemo(
-    () =>
-      strokes.map((stroke) => ({
-        color: stroke.color,
-        points: smoothStrokePoints(stroke.points),
-      })),
-    [strokes]
-  );
+  cache.set(stroke, nextRenderedStroke);
+  return nextRenderedStroke;
+}
+
+const SkiaLayer = memo(function SkiaLayer({
+  renderedStrokes,
+  draftPath,
+  draftVisible,
+  draftColor,
+  showDraft,
+}: SkiaLayerProps) {
+  const SkiaCanvas = (skiaRendererModule?.Canvas ?? null) as ComponentType<any> | null;
+  const SkiaPath = (skiaRendererModule?.Path ?? null) as ComponentType<any> | null;
+  const SkiaCircle = (skiaRendererModule?.Circle ?? null) as ComponentType<any> | null;
+
+  if (!SkiaCanvas || !SkiaPath || !SkiaCircle) {
+    return null;
+  }
 
   return (
-    <View
-      ref={canvasRef}
-      style={styles.canvas}
-      onLayout={handleLayout}
-      {...(editable ? panResponder.panHandlers : {})}
-    >
+    <SkiaCanvas pointerEvents="none" style={styles.skiaCanvas}>
+      {renderedStrokes.map((stroke, index) =>
+        stroke.path ? (
+          <SkiaPath
+            key={`stroke-${index}`}
+            path={stroke.path}
+            color={stroke.color}
+            style="stroke"
+            strokeWidth={STROKE_WIDTH}
+            strokeCap="round"
+            strokeJoin="round"
+          />
+        ) : null
+      )}
+      {renderedStrokes.map((stroke, index) =>
+        stroke.dot ? (
+          <SkiaCircle
+            key={`dot-${index}`}
+            cx={stroke.dot.x}
+            cy={stroke.dot.y}
+            r={SINGLE_POINT_RADIUS}
+            color={stroke.color}
+          />
+        ) : null
+      )}
+      <SkiaPath
+        key="draft-path"
+        path={draftPath}
+        color={draftColor}
+        opacity={showDraft ? draftVisible : 0}
+        style="stroke"
+        strokeWidth={STROKE_WIDTH}
+        strokeCap="round"
+        strokeJoin="round"
+      />
+    </SkiaCanvas>
+  );
+});
+
+const CommittedFallbackLayer = memo(function CommittedFallbackLayer({ renderedStrokes, layout }: FallbackLayerProps) {
+  return (
+    <View pointerEvents="none" style={styles.fallbackCanvas}>
       {renderedStrokes.map((stroke, strokeIndex) =>
-        stroke.points.map((point, pointIndex) => {
-          return (
-            <View
-              key={`${strokeIndex}:${pointIndex}`}
-              pointerEvents="none"
-              style={[
-                styles.dot,
-                {
-                  backgroundColor: stroke.color,
-                  left: `${point.x * 100}%`,
-                  top: `${point.y * 100}%`,
-                },
-              ]}
-            />
-          );
-        })
+        (stroke.fallbackPoints ?? []).map((point, pointIndex) => (
+          <View
+            key={`${strokeIndex}:dot:${pointIndex}`}
+            style={[
+              styles.dot,
+              {
+                backgroundColor: stroke.color,
+                left: `${point.x * 100}%`,
+                top: `${point.y * 100}%`,
+              },
+            ]}
+          />
+        ))
       )}
       {renderedStrokes.map((stroke, strokeIndex) =>
-        stroke.points.map((point, pointIndex) => {
-          const nextPoint = stroke.points[pointIndex + 1];
+        (stroke.fallbackPoints ?? []).map((point, pointIndex, fallbackPoints) => {
+          const nextPoint = fallbackPoints[pointIndex + 1];
 
           if (!nextPoint) {
             return null;
@@ -272,8 +438,7 @@ export default function NoteDoodleCanvas({
 
           return (
             <View
-              key={`segment-${strokeIndex}:${pointIndex}`}
-              pointerEvents="none"
+              key={`${strokeIndex}:segment:${pointIndex}`}
               style={[
                 styles.segment,
                 {
@@ -294,15 +459,452 @@ export default function NoteDoodleCanvas({
       )}
     </View>
   );
+});
+
+const DraftFallbackLayer = memo(function DraftFallbackLayer({
+  draftFallbackPoints,
+  draftColor,
+  layout,
+}: DraftFallbackLayerProps) {
+  if (draftFallbackPoints.length === 0) {
+    return null;
+  }
+
+  return (
+    <View pointerEvents="none" style={styles.fallbackCanvas}>
+      {draftFallbackPoints.map((point, pointIndex) => (
+        <View
+          key={`draft-dot:${pointIndex}`}
+          style={[
+            styles.dot,
+            {
+              backgroundColor: draftColor,
+              left: `${point.x * 100}%`,
+              top: `${point.y * 100}%`,
+            },
+          ]}
+        />
+      ))}
+      {draftFallbackPoints.map((point, pointIndex, fallbackPoints) => {
+        const nextPoint = fallbackPoints[pointIndex + 1];
+
+        if (!nextPoint) {
+          return null;
+        }
+
+        const startX = point.x * layout.width;
+        const startY = point.y * layout.height;
+        const endX = nextPoint.x * layout.width;
+        const endY = nextPoint.y * layout.height;
+        const deltaX = endX - startX;
+        const deltaY = endY - startY;
+        const length = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+        if (length <= 0) {
+          return null;
+        }
+
+        const angle = Math.atan2(deltaY, deltaX);
+
+        return (
+          <View
+            key={`draft-segment:${pointIndex}`}
+            style={[
+              styles.segment,
+              {
+                backgroundColor: draftColor,
+                width: length,
+                left: (startX + endX) / 2,
+                top: (startY + endY) / 2,
+                transform: [
+                  { translateX: -length / 2 },
+                  { translateY: -STROKE_WIDTH / 2 },
+                  { rotate: `${angle}rad` },
+                ],
+              },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+});
+
+export default function NoteDoodleCanvas({
+  strokes,
+  editable = false,
+  activeColor = '#1C1C1E',
+  onChangeStrokes,
+  style,
+}: NoteDoodleCanvasProps) {
+  const [layout, setLayout] = useState<CanvasLayout>({ width: 1, height: 1 });
+  const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
+  const [optimisticCommittedStroke, setOptimisticCommittedStroke] = useState<DoodleStroke | null>(null);
+  const strokesRef = useRef(strokes);
+  const optimisticCommitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftStrokeRef = useRef<DoodleStroke | null>(null);
+  const draftPreviewRef = useRef<DraftPreview | null>(null);
+  const queuedDraftPreviewRef = useRef<DraftPreview | null>(null);
+  const draftFrameRef = useRef<number | null>(null);
+  const renderCacheRef = useRef<RenderedStrokeCache>(createRenderedStrokeCache());
+  const draftPointsValue = useSharedValue<number[]>([]);
+  const draftPathRevisionValue = useSharedValue(0);
+  const draftVisibleValue = useSharedValue(0);
+  const draftDimensionsValue = useSharedValue({ width: 1, height: 1 });
+  const draftPathValue = useSharedValue<SkiaPathLike | null>(skiaRendererModule?.Skia?.Path?.Make?.() ?? null);
+
+  useEffect(() => {
+    draftDimensionsValue.value = { width: layout.width, height: layout.height };
+  }, [draftDimensionsValue, layout.height, layout.width]);
+
+  useAnimatedReaction(
+    () => ({
+      revision: draftPathRevisionValue.value,
+      width: draftDimensionsValue.value.width,
+      height: draftDimensionsValue.value.height,
+    }),
+    ({ width, height }) => {
+      const path = draftPathValue.value;
+
+      if (!path) {
+        return;
+      }
+
+      path.reset?.();
+      appendSmoothSkiaPath(path, draftPointsValue.value, width, height);
+      skiaRendererModule?.notifyChange?.(draftPathValue as SharedValue<SkiaPathLike | null>);
+    }
+  );
+
+  useEffect(() => {
+    return () => {
+      if (optimisticCommitTimeoutRef.current !== null) {
+        clearTimeout(optimisticCommitTimeoutRef.current);
+      }
+
+      if (draftFrameRef.current !== null) {
+        cancelAnimationFrame(draftFrameRef.current);
+      }
+    };
+  }, []);
+
+  const flushDraftPreview = useCallback((nextPreview: DraftPreview | null) => {
+    queuedDraftPreviewRef.current = nextPreview;
+
+    if (draftFrameRef.current !== null) {
+      return;
+    }
+
+    draftFrameRef.current = requestAnimationFrame(() => {
+      draftFrameRef.current = null;
+      setDraftPreview(queuedDraftPreviewRef.current);
+    });
+  }, []);
+
+  const resetDraftState = useCallback(() => {
+    draftStrokeRef.current = null;
+    draftPreviewRef.current = null;
+    queuedDraftPreviewRef.current = null;
+    draftPointsValue.value = [];
+    draftPathRevisionValue.value += 1;
+    draftVisibleValue.value = 0;
+
+    if (draftFrameRef.current !== null) {
+      cancelAnimationFrame(draftFrameRef.current);
+      draftFrameRef.current = null;
+    }
+
+    setDraftPreview(null);
+  }, [draftPathRevisionValue, draftPointsValue, draftVisibleValue]);
+
+  useEffect(() => {
+    strokesRef.current = strokes;
+    const latestStroke = strokes[strokes.length - 1];
+
+    if (strokesMatch(optimisticCommittedStroke, latestStroke)) {
+      if (optimisticCommitTimeoutRef.current !== null) {
+        clearTimeout(optimisticCommitTimeoutRef.current);
+        optimisticCommitTimeoutRef.current = null;
+      }
+
+      setOptimisticCommittedStroke(null);
+    }
+  }, [optimisticCommittedStroke, strokes]);
+
+  const commitStroke = useCallback(
+    (points: number[], color: string) => {
+      if (!onChangeStrokes || points.length < 2) {
+        return;
+      }
+
+      onChangeStrokes([
+        ...strokesRef.current,
+        {
+          color,
+          points: [...points],
+        },
+      ]);
+    },
+    [onChangeStrokes]
+  );
+
+  const commitFallbackDraftStroke = useCallback(() => {
+    const currentDraft = draftStrokeRef.current;
+
+    if (currentDraft) {
+      commitStroke(currentDraft.points, currentDraft.color);
+    }
+
+    resetDraftState();
+  }, [commitStroke, resetDraftState]);
+
+  const commitSkiaDraftStroke = useCallback(
+    (points: number[], color: string) => {
+      if (!onChangeStrokes || points.length < 2) {
+        resetDraftState();
+        return;
+      }
+
+      const nextStroke = {
+        color,
+        points: [...points],
+      };
+      setOptimisticCommittedStroke(nextStroke);
+
+      if (optimisticCommitTimeoutRef.current !== null) {
+        clearTimeout(optimisticCommitTimeoutRef.current);
+      }
+
+      optimisticCommitTimeoutRef.current = setTimeout(() => {
+        optimisticCommitTimeoutRef.current = null;
+        setOptimisticCommittedStroke(null);
+      }, 250);
+
+      onChangeStrokes([
+        ...strokesRef.current,
+        nextStroke,
+      ]);
+
+      resetDraftState();
+    },
+    [onChangeStrokes, resetDraftState]
+  );
+
+  const SkiaCanvas = (skiaRendererModule?.Canvas ?? null) as ComponentType<any> | null;
+  const SkiaPath = (skiaRendererModule?.Path ?? null) as ComponentType<any> | null;
+  const SkiaCircle = (skiaRendererModule?.Circle ?? null) as ComponentType<any> | null;
+  const canUseSkia = Boolean(SkiaCanvas && SkiaPath && SkiaCircle && skiaRendererModule?.Skia?.Path?.Make);
+
+  const beginFallbackDraftStroke = useCallback(
+    (point: DoodlePoint) => {
+      const nextDraft = { color: activeColor, points: [point.x, point.y] };
+      const nextPreview = {
+        color: activeColor,
+        path: null,
+        dot: scalePoint(point, layout.width, layout.height),
+        fallbackPoints: [point],
+      };
+
+      draftStrokeRef.current = nextDraft;
+      draftPreviewRef.current = nextPreview;
+      flushDraftPreview(nextPreview);
+    },
+    [activeColor, flushDraftPreview, layout.height, layout.width]
+  );
+
+  const moveFallbackDraftStroke = useCallback(
+    (point: DoodlePoint) => {
+      const currentDraft = draftStrokeRef.current;
+
+      if (!currentDraft || !appendPointIfNeeded(currentDraft.points, point)) {
+        return;
+      }
+
+      const currentPreview = draftPreviewRef.current;
+      const draftPoints = pairStrokePoints(currentDraft.points);
+      const nextFallbackPoints = currentPreview?.fallbackPoints
+        ? [...currentPreview.fallbackPoints, point]
+        : [draftPoints[0], point];
+      const nextPreview = {
+        color: activeColor,
+        path: null,
+        dot: null,
+        fallbackPoints: nextFallbackPoints,
+      };
+
+      draftPreviewRef.current = nextPreview;
+      flushDraftPreview(nextPreview);
+    },
+    [activeColor, flushDraftPreview]
+  );
+
+  const finalizeFallbackDraftStroke = useCallback(
+    (success: boolean) => {
+      if (success) {
+        commitFallbackDraftStroke();
+        return;
+      }
+
+      resetDraftState();
+    },
+    [commitFallbackDraftStroke, resetDraftState]
+  );
+
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(false)
+        .enabled(editable && Boolean(onChangeStrokes))
+        .maxPointers(1)
+        .minDistance(0)
+        .shouldCancelWhenOutside(false)
+        .onBegin((event) => {
+          const point = normalizeTouchPoint(event.x, event.y, draftDimensionsValue.value);
+
+          if (canUseSkia) {
+            draftPointsValue.value = [point.x, point.y];
+            draftPathRevisionValue.value += 1;
+            draftVisibleValue.value = 1;
+            return;
+          }
+
+          runOnJS(beginFallbackDraftStroke)(point);
+        })
+        .onUpdate((event) => {
+          const point = normalizeTouchPoint(event.x, event.y, draftDimensionsValue.value);
+
+          if (canUseSkia) {
+            const nextPoints = [...draftPointsValue.value];
+
+            if (!appendPointIfNeeded(nextPoints, point)) {
+              return;
+            }
+
+            draftPointsValue.value = nextPoints;
+            draftPathRevisionValue.value += 1;
+            draftVisibleValue.value = 1;
+            return;
+          }
+
+          runOnJS(moveFallbackDraftStroke)(point);
+        })
+        .onFinalize((_, success) => {
+          if (canUseSkia) {
+            const completedPoints = draftPointsValue.value.slice();
+
+            if (success && completedPoints.length >= 2) {
+              runOnJS(commitSkiaDraftStroke)(completedPoints, activeColor);
+              return;
+            }
+
+            runOnJS(resetDraftState)();
+            return;
+          }
+
+          runOnJS(finalizeFallbackDraftStroke)(success);
+        }),
+    [
+      activeColor,
+      beginFallbackDraftStroke,
+      canUseSkia,
+      commitSkiaDraftStroke,
+      draftDimensionsValue,
+      draftPathRevisionValue,
+      draftPointsValue,
+      draftVisibleValue,
+      editable,
+      finalizeFallbackDraftStroke,
+      moveFallbackDraftStroke,
+      onChangeStrokes,
+      resetDraftState,
+    ]
+  );
+
+  useEffect(() => {
+    if (!editable) {
+      resetDraftState();
+    }
+  }, [editable, resetDraftState]);
+
+  const handleLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const { width, height } = event.nativeEvent.layout;
+      setLayout((currentLayout) => {
+        const nextWidth = Math.max(width, 1);
+        const nextHeight = Math.max(height, 1);
+
+        if (currentLayout.width === nextWidth && currentLayout.height === nextHeight) {
+          return currentLayout;
+        }
+
+        return {
+          width: nextWidth,
+          height: nextHeight,
+        };
+      });
+      draftDimensionsValue.value = {
+        width: Math.max(width, 1),
+        height: Math.max(height, 1),
+      };
+      draftPathRevisionValue.value += 1;
+    },
+    [draftDimensionsValue, draftPathRevisionValue]
+  );
+
+  const visibleStrokes = useMemo<DoodleStroke[]>(
+    () => (strokesMatch(optimisticCommittedStroke, strokes[strokes.length - 1]) ? strokes : optimisticCommittedStroke ? [...strokes, optimisticCommittedStroke] : strokes),
+    [optimisticCommittedStroke, strokes]
+  );
+
+  const renderedStrokes = useMemo<RenderedStroke[]>(
+    () =>
+      visibleStrokes.map((stroke) =>
+        getOrCreateRenderedStroke(renderCacheRef.current, stroke, layout.width, layout.height, canUseSkia)
+      ),
+    [canUseSkia, layout.height, layout.width, visibleStrokes]
+  );
+  const draftFallbackPoints = draftPreview?.fallbackPoints ?? [];
+  const draftColor = draftPreview?.color ?? activeColor;
+
+  const canvasContent = canUseSkia && SkiaCanvas && SkiaPath && SkiaCircle ? (
+    <>
+      <SkiaLayer
+        renderedStrokes={renderedStrokes}
+        draftPath={draftPathValue}
+        draftVisible={draftVisibleValue}
+        draftColor={activeColor}
+        showDraft={editable}
+      />
+    </>
+  ) : (
+    <>
+      <CommittedFallbackLayer renderedStrokes={renderedStrokes} layout={layout} />
+      <DraftFallbackLayer draftFallbackPoints={draftFallbackPoints} draftColor={draftColor} layout={layout} />
+    </>
+  );
+
+  return (
+    <GestureDetector gesture={panGesture}>
+      <View style={[styles.canvas, style]} onLayout={handleLayout}>
+        {canvasContent}
+      </View>
+    </GestureDetector>
+  );
 }
 
 const styles = StyleSheet.create({
   canvas: {
     width: '100%',
-    aspectRatio: 1.25,
+    height: '100%',
     borderRadius: 18,
     overflow: 'hidden',
     position: 'relative',
+  },
+  skiaCanvas: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  fallbackCanvas: {
+    ...StyleSheet.absoluteFillObject,
   },
   dot: {
     position: 'absolute',

@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView } from 'expo-camera';
+import { LinearGradient } from 'expo-linear-gradient';
 import { GlassView } from '../ui/GlassView';
 import { Image } from 'expo-image';
 import { TFunction } from 'i18next';
-import { ReactNode, RefObject, useEffect, useState } from 'react';
+import { forwardRef, ReactNode, RefObject, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -23,9 +24,11 @@ import Reanimated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
+import { DOODLE_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { Layout, Shadows, Typography } from '../../constants/theme';
 import type { ThemeColors } from '../../hooks/useTheme';
-import { formatNoteTextWithEmoji, stripAutoEmojiPrefix } from '../../services/noteTextPresentation';
+import { getCaptureNoteGradient } from '../../services/noteAppearance';
+import { applyCommittedInlineEmoji, resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import NoteDoodleCanvas, { DoodleStroke } from '../NoteDoodleCanvas';
 import PrimaryButton from '../ui/PrimaryButton';
 import { isOlderIOS } from '../../utils/platform';
@@ -37,6 +40,11 @@ const TOP_CONTROL_INSET = 24;
 const TOP_CONTROL_HEIGHT = 38;
 const TOP_CONTROL_RADIUS = 19;
 const AnimatedIonicons = Reanimated.createAnimatedComponent(Ionicons);
+
+export interface CaptureCardHandle {
+  getDoodleSnapshot: () => { enabled: boolean; strokes: DoodleStroke[] };
+  resetDoodle: () => void;
+}
 
 interface CaptureCardProps {
   snapHeight: number;
@@ -73,13 +81,6 @@ interface CaptureCardProps {
   onChangeNoteText: (nextText: string) => void;
   restaurantName: string;
   onChangeRestaurantName: (nextName: string) => void;
-  previewEmoji?: string | null;
-  doodleModeEnabled?: boolean;
-  onToggleDoodleMode?: () => void;
-  doodleStrokes?: DoodleStroke[];
-  onChangeDoodleStrokes?: (nextStrokes: DoodleStroke[]) => void;
-  onUndoDoodle?: () => void;
-  onClearDoodle?: () => void;
   capturedPhoto: string | null;
   onRetakePhoto: () => void;
   needsCameraPermission: boolean;
@@ -98,14 +99,16 @@ interface CaptureCardProps {
   saving: boolean;
   shutterScale: Animated.Value;
   cameraStatusText?: string | null;
+  remainingPhotoSlots?: number | null;
   libraryImportLocked?: boolean;
   importingPhoto?: boolean;
   shareTarget: 'private' | 'shared';
   onChangeShareTarget: (nextTarget: 'private' | 'shared') => void;
+  onDoodleModeChange?: (enabled: boolean) => void;
   footerContent?: ReactNode;
 }
 
-export default function CaptureCard({
+const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function CaptureCard({
   snapHeight,
   topInset,
   isSearching,
@@ -119,13 +122,6 @@ export default function CaptureCard({
   onChangeNoteText,
   restaurantName,
   onChangeRestaurantName,
-  previewEmoji,
-  doodleModeEnabled = false,
-  onToggleDoodleMode,
-  doodleStrokes = [],
-  onChangeDoodleStrokes,
-  onUndoDoodle,
-  onClearDoodle,
   capturedPhoto,
   onRetakePhoto,
   needsCameraPermission,
@@ -144,29 +140,50 @@ export default function CaptureCard({
   saving,
   shutterScale,
   cameraStatusText,
+  remainingPhotoSlots,
   libraryImportLocked = false,
   importingPhoto = false,
   shareTarget,
   onChangeShareTarget,
+  onDoodleModeChange,
   footerContent,
-}: CaptureCardProps) {
+}, ref) {
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
   const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
   const [cameraRetryNonce, setCameraRetryNonce] = useState(0);
-  const displayNoteText = formatNoteTextWithEmoji(noteText, previewEmoji);
+  const [textDoodleModeEnabled, setTextDoodleModeEnabled] = useState(false);
+  const [photoDoodleModeEnabled, setPhotoDoodleModeEnabled] = useState(false);
+  const [textDoodleStrokes, setTextDoodleStrokes] = useState<DoodleStroke[]>([]);
+  const [photoDoodleStrokes, setPhotoDoodleStrokes] = useState<DoodleStroke[]>([]);
+  const isPhotoDoodleSurface = captureMode === 'camera' && Boolean(capturedPhoto);
+  const doodleModeEnabled = isPhotoDoodleSurface ? photoDoodleModeEnabled : textDoodleModeEnabled;
+  const doodleStrokes = isPhotoDoodleSurface ? photoDoodleStrokes : textDoodleStrokes;
   const isCameraSaveMode = captureMode === 'camera';
   const isSharedTarget = shareTarget === 'shared';
+  const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
+  const photoPreviewControlFill = capturedPhoto
+    ? (isDarkCaptureTheme ? 'rgba(22,22,24,0.74)' : 'rgba(255,250,242,0.78)')
+    : colors.captureCameraOverlay;
+  const photoPreviewControlBorder = capturedPhoto
+    ? (isDarkCaptureTheme ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.42)')
+    : colors.captureCameraOverlayBorder;
+  const photoPreviewControlText = capturedPhoto ? colors.captureGlassText : colors.captureCameraOverlayText;
+  const photoPreviewActiveFill = colors.primary;
+  const photoPreviewActiveText = colors.captureCardText;
   const privateAudienceLabel = t('shared.capturePrivate', 'Just me');
   const sharedAudienceLabel = t('shared.manageTitle', 'Friends');
   const audienceLabel = isSharedTarget ? sharedAudienceLabel : privateAudienceLabel;
   const audienceSizerLabel =
     privateAudienceLabel.length >= sharedAudienceLabel.length ? privateAudienceLabel : sharedAudienceLabel;
-  const privateAudienceSurfaceBackground = captureMode === 'text' ? colors.captureGlassFill : colors.captureCameraOverlay;
+  const privateAudienceSurfaceBackground =
+    captureMode === 'text' ? colors.captureGlassFill : photoPreviewControlFill;
   const sharedAudienceSurfaceBackground = '#FFF4DE';
-  const privateAudienceSurfaceBorder = captureMode === 'text' ? colors.captureGlassBorder : colors.captureCameraOverlayBorder;
+  const privateAudienceSurfaceBorder =
+    captureMode === 'text' ? colors.captureGlassBorder : photoPreviewControlBorder;
   const sharedAudienceSurfaceBorder = 'rgba(255,255,255,0.56)';
-  const privateAudienceColor = captureMode === 'text' ? colors.captureGlassText : colors.captureCameraOverlayText;
+  const privateAudienceColor =
+    captureMode === 'text' ? colors.captureGlassText : photoPreviewControlText;
   const sharedAudienceColor = colors.primary;
   const audienceIconColor = isSharedTarget ? sharedAudienceColor : privateAudienceColor;
   const audienceProgress = useSharedValue(isSharedTarget ? 1 : 0);
@@ -224,6 +241,42 @@ export default function CaptureCard({
     );
   }, [audienceProgress, audienceStateScale, isSharedTarget]);
 
+  useEffect(() => {
+    if (captureMode !== 'text') {
+      setTextDoodleModeEnabled(false);
+    }
+
+    if (!capturedPhoto) {
+      setPhotoDoodleModeEnabled(false);
+    }
+  }, [captureMode, capturedPhoto]);
+
+  useEffect(() => {
+    onDoodleModeChange?.((captureMode === 'text' || Boolean(capturedPhoto)) && doodleModeEnabled);
+  }, [captureMode, capturedPhoto, doodleModeEnabled, onDoodleModeChange]);
+
+  const resetDoodle = useCallback(() => {
+    setTextDoodleModeEnabled(false);
+    setPhotoDoodleModeEnabled(false);
+    setTextDoodleStrokes([]);
+    setPhotoDoodleStrokes([]);
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getDoodleSnapshot: () => ({
+        enabled: doodleModeEnabled,
+        strokes: doodleStrokes.map((stroke) => ({
+          color: stroke.color,
+          points: [...stroke.points],
+        })),
+      }),
+      resetDoodle,
+    }),
+    [doodleModeEnabled, doodleStrokes, resetDoodle]
+  );
+
   const animatedAudienceBadgeStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
       audienceProgress.value,
@@ -252,6 +305,49 @@ export default function CaptureCard({
       'capture.cameraUnavailableHint',
       'This can happen on a simulator or when the camera session gets stuck. Try again or use a physical device.'
     );
+  const handleToggleDoodleMode = useCallback(() => {
+    if (isPhotoDoodleSurface) {
+      setPhotoDoodleModeEnabled((current) => !current);
+      return;
+    }
+
+    setTextDoodleModeEnabled((current) => !current);
+  }, [isPhotoDoodleSurface]);
+  const handleUndoDoodle = useCallback(() => {
+    if (isPhotoDoodleSurface) {
+      setPhotoDoodleStrokes((current) => current.slice(0, -1));
+      return;
+    }
+
+    setTextDoodleStrokes((current) => current.slice(0, -1));
+  }, [isPhotoDoodleSurface]);
+  const handleClearDoodle = useCallback(() => {
+    if (isPhotoDoodleSurface) {
+      setPhotoDoodleStrokes([]);
+      return;
+    }
+
+    setTextDoodleStrokes([]);
+  }, [isPhotoDoodleSurface]);
+  const handleChangeNoteText = useCallback(
+    (nextText: string) => {
+      onChangeNoteText(applyCommittedInlineEmoji(noteText, nextText));
+    },
+    [noteText, onChangeNoteText]
+  );
+  const previewEmoji = useMemo(() => {
+    const previewContent = noteText.trim() || restaurantName.trim();
+    if (!previewContent) {
+      return null;
+    }
+
+    return resolveAutoNoteEmoji({
+      type: 'text',
+      content: noteText.trim(),
+      locationName: restaurantName.trim() || null,
+    });
+  }, [noteText, restaurantName]);
+  const captureGradient = getCaptureNoteGradient();
 
   return (
     <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
@@ -265,18 +361,21 @@ export default function CaptureCard({
         pointerEvents={isSearching ? 'none' : 'auto'}
       >
         {captureMode === 'text' ? (
-          <View
+          <LinearGradient
             style={[
               styles.textCard,
               {
-                backgroundColor: colors.primary,
                 borderColor: colors.captureCardBorder,
               },
             ]}
+            colors={captureGradient}
+            start={{ x: 0.08, y: 0.06 }}
+            end={{ x: 0.94, y: 0.94 }}
           >
             <View pointerEvents="box-none" style={styles.textCardTopRow}>
               <Pressable
-                onPress={onToggleDoodleMode}
+                testID="capture-doodle-toggle"
+                onPress={handleToggleDoodleMode}
                 style={[
                   styles.textCardActionButton,
                   {
@@ -295,7 +394,8 @@ export default function CaptureCard({
               {doodleModeEnabled ? (
                 <View style={styles.textCardActionCluster}>
                   <Pressable
-                    onPress={onUndoDoodle}
+                    testID="capture-doodle-undo"
+                    onPress={handleUndoDoodle}
                     disabled={doodleStrokes.length === 0}
                     style={[
                       styles.textCardActionPill,
@@ -309,7 +409,8 @@ export default function CaptureCard({
                     <Ionicons name="arrow-undo-outline" size={14} color={colors.captureGlassText} />
                   </Pressable>
                   <Pressable
-                    onPress={onClearDoodle}
+                    testID="capture-doodle-clear"
+                    onPress={handleClearDoodle}
                     disabled={doodleStrokes.length === 0}
                     style={[
                       styles.textCardActionPill,
@@ -331,22 +432,21 @@ export default function CaptureCard({
                 strokes={doodleStrokes}
                 editable={doodleModeEnabled}
                 activeColor={colors.captureCardText}
-                onChangeStrokes={onChangeDoodleStrokes}
+                onChangeStrokes={setTextDoodleStrokes}
               />
             </View>
 
             <View style={styles.cardTextCenter}>
               <TextInput
+                testID="capture-note-input"
                 key={`note-text-${isSearching}`}
                 style={[styles.textInput, { color: colors.captureCardText }]}
                 placeholder={t('capture.textPlaceholder', 'Note about this place...')}
                 placeholderTextColor={colors.captureCardPlaceholder}
                 multiline
-                value={displayNoteText}
+                value={noteText}
                 editable={!doodleModeEnabled}
-                onChangeText={(nextText) => {
-                  onChangeNoteText(stripAutoEmojiPrefix(nextText));
-                }}
+                onChangeText={handleChangeNoteText}
                 maxLength={300}
                 selectionColor={colors.captureCardText}
               />
@@ -387,26 +487,78 @@ export default function CaptureCard({
                 selectionColor={colors.captureGlassText}
               />
             </View>
-          </View>
+            </LinearGradient>
         ) : capturedPhoto ? (
           <View style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}>
             <Image source={{ uri: capturedPhoto }} style={styles.cameraPreview} contentFit="cover" />
-            <Pressable
-              style={[
-                styles.cameraOverlayButton,
-                styles.retakeBtn,
-                {
-                  backgroundColor: colors.captureCameraOverlay,
-                  borderColor: colors.captureCameraOverlayBorder,
-                },
-              ]}
-              onPress={onRetakePhoto}
-            >
-              <Ionicons name="refresh" size={18} color={colors.captureCameraOverlayText} />
-              <Text style={[styles.retakeBtnText, { color: colors.captureCameraOverlayText }]}>
-                {t('capture.retake', 'Retake')}
-              </Text>
-            </Pressable>
+            <View pointerEvents="box-none" style={styles.photoDoodleToolbar}>
+              <Pressable
+                testID="capture-doodle-toggle"
+                accessibilityLabel={
+                  doodleModeEnabled ? t('capture.doneDrawing', 'Done') : t('capture.draw', 'Draw')
+                }
+                onPress={handleToggleDoodleMode}
+                style={[
+                  styles.cameraOverlayButton,
+                  styles.photoDoodleIconButton,
+                  {
+                    backgroundColor: doodleModeEnabled ? photoPreviewActiveFill : photoPreviewControlFill,
+                    borderColor: doodleModeEnabled ? photoPreviewActiveFill : photoPreviewControlBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={doodleModeEnabled ? 'create' : 'create-outline'}
+                  size={16}
+                  color={doodleModeEnabled ? photoPreviewActiveText : photoPreviewControlText}
+                />
+              </Pressable>
+
+              {doodleModeEnabled ? (
+                <View pointerEvents="box-none" style={styles.photoDoodleActionsCluster}>
+                  <Pressable
+                    testID="capture-doodle-undo"
+                    onPress={handleUndoDoodle}
+                    disabled={doodleStrokes.length === 0}
+                    style={[
+                      styles.cameraOverlayButton,
+                      styles.textCardActionPill,
+                      {
+                        backgroundColor: photoPreviewControlFill,
+                        borderColor: photoPreviewControlBorder,
+                        opacity: doodleStrokes.length === 0 ? 0.45 : 1,
+                      },
+                    ]}
+                  >
+                    <Ionicons name="arrow-undo-outline" size={14} color={photoPreviewControlText} />
+                  </Pressable>
+                  <Pressable
+                    testID="capture-doodle-clear"
+                    onPress={handleClearDoodle}
+                    disabled={doodleStrokes.length === 0}
+                    style={[
+                      styles.cameraOverlayButton,
+                      styles.textCardActionPill,
+                      {
+                        backgroundColor: photoPreviewControlFill,
+                        borderColor: photoPreviewControlBorder,
+                        opacity: doodleStrokes.length === 0 ? 0.45 : 1,
+                      },
+                    ]}
+                  >
+                    <Ionicons name="close-outline" size={14} color={photoPreviewControlText} />
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
+            <View pointerEvents={doodleModeEnabled ? 'auto' : 'none'} style={styles.doodleCanvasLayer}>
+              <NoteDoodleCanvas
+                strokes={doodleStrokes}
+                editable={doodleModeEnabled}
+                activeColor="#FFFFFF"
+                onChangeStrokes={setPhotoDoodleStrokes}
+              />
+            </View>
             <Animated.View
               pointerEvents="none"
               style={[
@@ -526,8 +678,10 @@ export default function CaptureCard({
             ) : null}
           </View>
         )}
-
-        <View pointerEvents="box-none" style={styles.cardAudienceBadgeHost}>
+        <View
+          pointerEvents="box-none"
+          style={styles.cardAudienceBadgeHost}
+        >
           <Pressable
             testID="capture-share-target-toggle"
             accessibilityRole="button"
@@ -602,9 +756,65 @@ export default function CaptureCard({
                       transform: [{ scale: shutterScale }],
                     },
                   ]}
-                />
+                >
+                  {typeof remainingPhotoSlots === 'number' && remainingPhotoSlots > 0 ? (
+                    <Text style={styles.shutterInnerCountText}>{remainingPhotoSlots}</Text>
+                  ) : null}
+                </Animated.View>
               </Pressable>
             ) : null}
+          </View>
+        ) : capturedPhoto ? (
+          <View style={[styles.belowCardShutterRow, styles.belowCardCapturedPhotoActions]}>
+            <View pointerEvents="none" style={styles.capturedPhotoActionSpacer} />
+
+            <Pressable
+              testID="capture-save-button"
+              onPress={onSaveNote}
+              disabled={saving}
+              style={[
+                styles.shutterOuter,
+                {
+                  borderColor: colors.border,
+                  opacity: saving ? 0.72 : 1,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.shutterInner,
+                  styles.saveInner,
+                  {
+                    backgroundColor: isCameraSaveMode ? colors.primary : colors.captureButtonBg,
+                  },
+                ]}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'} />
+                ) : (
+                  <Ionicons
+                    name="checkmark"
+                    size={24}
+                    color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'}
+                  />
+                )}
+              </View>
+            </Pressable>
+
+            <Pressable
+              testID="capture-retake-button"
+              accessibilityLabel={t('capture.retake', 'Retake')}
+              onPress={onRetakePhoto}
+              style={[
+                styles.secondaryActionButton,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                },
+              ]}
+            >
+              <Ionicons name="refresh" size={18} color={colors.text} />
+            </Pressable>
           </View>
         ) : (
           <View style={styles.belowCardShutterRow}>
@@ -646,7 +856,9 @@ export default function CaptureCard({
       </Animated.View>
     </View>
   );
-}
+});
+
+export default CaptureCard;
 
 const styles = StyleSheet.create({
   snapItem: {
@@ -699,6 +911,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     zIndex: 3,
   },
+  photoDoodleToolbar: {
+    position: 'absolute',
+    top: TOP_CONTROL_INSET,
+    left: 18,
+    right: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 11,
+  },
+  photoDoodleActionsCluster: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  photoDoodleIconButton: {
+    width: TOP_CONTROL_HEIGHT,
+    height: TOP_CONTROL_HEIGHT,
+    borderRadius: TOP_CONTROL_RADIUS,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   textCardActionCluster: {
     flexDirection: 'row',
     gap: 8,
@@ -721,10 +954,7 @@ const styles = StyleSheet.create({
   },
   doodleCanvasLayer: {
     ...StyleSheet.absoluteFillObject,
-    top: 74,
-    left: 20,
-    right: 20,
-    bottom: 86,
+    ...DOODLE_ARTBOARD_FRAME,
     zIndex: 2,
   },
   cardRestaurantPill: {
@@ -835,19 +1065,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: TOP_CONTROL_INSET,
     right: 16,
-    minHeight: TOP_CONTROL_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 0,
+    width: TOP_CONTROL_HEIGHT,
+    height: TOP_CONTROL_HEIGHT,
     borderRadius: TOP_CONTROL_RADIUS,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    gap: 5,
+    justifyContent: 'center',
+    alignItems: 'center',
     zIndex: 10,
-  },
-  retakeBtnText: {
-    fontWeight: '600',
-    fontSize: 13,
   },
   permissionText: {
     ...Typography.body,
@@ -915,9 +1139,25 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   belowCardShutterRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 4,
+  },
+  belowCardCapturedPhotoActions: {
+    gap: 14,
+  },
+  capturedPhotoActionSpacer: {
+    width: 46,
+    height: 46,
+  },
+  secondaryActionButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   shutterOuter: {
     width: 68,
@@ -937,6 +1177,12 @@ const styles = StyleSheet.create({
   },
   saveInner: {
     transform: [{ scale: 1 }],
+  },
+  shutterInnerCountText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    lineHeight: 18,
+    fontWeight: '800',
   },
   footerSlot: {
     width: '100%',

@@ -343,6 +343,8 @@ describe('sharedFeedService', () => {
         content: 'file:///photos/one.jpg',
         photoLocalUri: 'file:///photos/one.jpg',
         photoRemoteBase64: null,
+        hasDoodle: true,
+        doodleStrokesJson: JSON.stringify([{ color: '#FFFFFF', points: [0.1, 0.1, 0.8, 0.8] }]),
         locationName: 'Coffee shop',
         latitude: 10.77,
         longitude: 106.69,
@@ -401,6 +403,7 @@ describe('sharedFeedService', () => {
       expect.objectContaining({
         authorUid: ownerUser.uid,
         placeName: 'Coffee shop',
+        doodleStrokesJson: JSON.stringify([{ color: '#FFFFFF', points: [0.1, 0.1, 0.8, 0.8] }]),
       })
     );
   });

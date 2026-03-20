@@ -206,9 +206,12 @@ jest.mock('../components/AppSheetAlert', () => {
 jest.mock('../components/home/CaptureCard', () => {
   const React = require('react');
   const { Text } = require('react-native');
-  return function MockCaptureCard(props: any) {
-    mockCaptureCardProps = props;
-    return <Text testID="camera-preview-state">{String(props.shouldRenderCameraPreview)}</Text>;
+  return {
+    __esModule: true,
+    default: React.forwardRef(function MockCaptureCard(props: any, _ref: any) {
+      mockCaptureCardProps = props;
+      return <Text testID="camera-preview-state">{String(props.shouldRenderCameraPreview)}</Text>;
+    }),
   };
 });
 

@@ -25,7 +25,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../../components/AppSheetAlert';
-import CaptureCard from '../../components/home/CaptureCard';
+import CaptureCard, { type CaptureCardHandle } from '../../components/home/CaptureCard';
 import HomeHeaderSearch from '../../components/home/HomeHeaderSearch';
 import NotesFeed from '../../components/home/NotesFeed';
 import SharedManageSheet from '../../components/home/SharedManageSheet';
@@ -47,7 +47,6 @@ import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { saveNoteDoodle } from '../../services/noteDoodles';
 import { filterNotesByQuery } from '../../services/noteSearch';
 import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
-import { DoodleStroke } from '../../components/NoteDoodleCanvas';
 import { isIOS26OrNewer } from '../../utils/platform';
 
 const { height } = Dimensions.get('window');
@@ -102,17 +101,17 @@ export default function HomeScreen() {
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [appState, setAppState] = useState(AppState.currentState);
   const [cameraPreviewReady, setCameraPreviewReady] = useState(Platform.OS !== 'android');
+  const [captureScrollLocked, setCaptureScrollLocked] = useState(false);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [sharedManageSheetVersion, setSharedManageSheetVersion] = useState(0);
-  const [captureDoodleStrokes, setCaptureDoodleStrokes] = useState<DoodleStroke[]>([]);
-  const [captureDoodleMode, setCaptureDoodleMode] = useState(false);
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const searchAnim = useRef(new Animated.Value(0)).current;
   const hintAnim = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<FlatList>(null);
+  const captureCardRef = useRef<CaptureCardHandle | null>(null);
   useScrollToTop(flatListRef);
 
   const dismissSharedManageSheet = useCallback(() => {
@@ -193,24 +192,10 @@ export default function HomeScreen() {
       );
     }
 
-    return t('capture.photoSlotsRemaining', '{{count}} free photo notes left', {
-      count: remainingPhotoSlots,
-    });
+    return null;
   }, [remainingPhotoSlots, t, tier]);
 
   const displayedNotes = useInlineHeaderSearch && isSearching ? filteredNotes : notes;
-  const livePreviewEmoji = useMemo(() => {
-    const previewContent = captureMode === 'text' ? noteText.trim() : restaurantName.trim();
-    if (!previewContent && captureMode === 'text') {
-      return null;
-    }
-
-    return resolveAutoNoteEmoji({
-      type: captureMode === 'camera' ? 'photo' : 'text',
-      content: previewContent,
-      locationName: restaurantName.trim() || null,
-    });
-  }, [captureMode, noteText, restaurantName]);
   const shouldRenderCameraPreview =
     captureMode === 'camera' &&
     isScreenFocused &&
@@ -226,9 +211,13 @@ export default function HomeScreen() {
 
   const resetCaptureDraft = useCallback(() => {
     resetCapture();
-    setCaptureDoodleStrokes([]);
-    setCaptureDoodleMode(false);
+    captureCardRef.current?.resetDoodle();
   }, [resetCapture]);
+
+  const finalizeSavedCapture = useCallback(() => {
+    resetCaptureDraft();
+    setCaptureTarget('private');
+  }, [resetCaptureDraft]);
 
   useEffect(() => {
     Animated.timing(hintAnim, {
@@ -349,12 +338,13 @@ export default function HomeScreen() {
     [openAppSettings, showAlert, t]
   );
 
-  const showSavedSheet = useCallback(() => {
+  const showSavedSheet = useCallback((onClose?: () => void) => {
     if (remindersEnabled) {
       showAlert({
         variant: 'success',
         title: t('capture.saved', 'Saved!'),
         message: t('capture.savedMsg', "We'll remind you next time you're here!"),
+        onClose,
         primaryAction: {
           label: t('common.done', 'Done'),
         },
@@ -369,6 +359,7 @@ export default function HomeScreen() {
         'capture.savedLocalMsg',
         'Your note is saved on this device. Enable reminders to get notified when you revisit this place.'
       ),
+      onClose,
       primaryAction: {
         label: t('capture.enableReminders', 'Enable reminders'),
         onPress: async () => {
@@ -433,7 +424,7 @@ export default function HomeScreen() {
   }, [showAlert, t]);
 
   const showSharedSaveSheet = useCallback(
-    (status: 'shared' | 'no-friends' | 'share-failed') => {
+    (status: 'shared' | 'no-friends' | 'share-failed', onClose?: () => void) => {
       if (status === 'shared') {
         showAlert({
           variant: 'success',
@@ -442,6 +433,7 @@ export default function HomeScreen() {
             'shared.savedSharedBody',
             'This note is in your journal and has been published to your shared Home feed.'
           ),
+          onClose,
           primaryAction: {
             label: t('common.done', 'Done'),
           },
@@ -457,6 +449,7 @@ export default function HomeScreen() {
             'shared.savedLocalOnlyBody',
             'Your note is saved locally. Invite a friend to start sharing moments from Home.'
           ),
+          onClose,
           primaryAction: {
             label: t('shared.inviteFriendButton', 'Invite friend'),
             onPress: () => {
@@ -478,6 +471,7 @@ export default function HomeScreen() {
           'shared.sharePublishFailedBody',
           'Your note is safe in your journal, but we could not publish it to the shared feed right now.'
         ),
+        onClose,
         primaryAction: {
           label: t('common.done', 'Done'),
         },
@@ -636,11 +630,16 @@ export default function HomeScreen() {
       return;
     }
 
-    if (captureMode === 'text' && !noteText.trim()) {
+    const doodleSnapshot = captureCardRef.current?.getDoodleSnapshot() ?? {
+      enabled: false,
+      strokes: [],
+    };
+
+    if (captureMode === 'text' && !noteText.trim() && doodleSnapshot.strokes.length === 0) {
       showDoneSheet(
         'warning',
         t('capture.error', 'Error'),
-        t('capture.noText', 'Please write a note')
+        t('capture.noText', 'Please write a note or add a doodle')
       );
       return;
     }
@@ -663,6 +662,10 @@ export default function HomeScreen() {
     let destinationPath: string | null = null;
 
     try {
+      const doodleStrokesJson =
+        doodleSnapshot.strokes.length > 0
+          ? JSON.stringify(doodleSnapshot.strokes)
+          : null;
       const lat = currentLocation.coords.latitude;
       const lon = currentLocation.coords.longitude;
       const geocodedName = await reverseGeocode(lat, lon);
@@ -697,20 +700,12 @@ export default function HomeScreen() {
         latitude: lat,
         longitude: lon,
         radius,
+        hasDoodle: Boolean(doodleStrokesJson),
+        doodleStrokesJson,
       });
 
-      const sharedNote =
-        captureMode === 'text' && captureDoodleStrokes.length > 0
-          ? {
-              ...createdNote,
-              hasDoodle: true,
-              doodleStrokesJson: JSON.stringify(captureDoodleStrokes),
-            }
-          : createdNote;
-
-      if (captureMode === 'text' && captureDoodleStrokes.length > 0) {
-        await saveNoteDoodle(createdNote.id, JSON.stringify(captureDoodleStrokes));
-        await refreshNotes(false);
+      if (doodleStrokesJson) {
+        await saveNoteDoodle(createdNote.id, doodleStrokesJson);
       }
 
       let shareOutcome: 'default' | 'shared' | 'no-friends' | 'share-failed' = 'default';
@@ -720,7 +715,7 @@ export default function HomeScreen() {
           shareOutcome = 'no-friends';
         } else {
           try {
-            await createSharedPost(sharedNote);
+            await createSharedPost(createdNote);
             shareOutcome = 'shared';
           } catch (shareError) {
             console.warn('Shared publish failed:', shareError);
@@ -730,13 +725,11 @@ export default function HomeScreen() {
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      resetCaptureDraft();
-      setCaptureTarget('private');
 
       if (shareOutcome === 'default') {
-        showSavedSheet();
+        showSavedSheet(finalizeSavedCapture);
       } else {
-        showSharedSaveSheet(shareOutcome);
+        showSharedSaveSheet(shareOutcome, finalizeSavedCapture);
       }
     } catch (error) {
       console.error('Save failed:', error);
@@ -767,8 +760,7 @@ export default function HomeScreen() {
     restaurantName,
     createNote,
     radius,
-    resetCaptureDraft,
-    captureDoodleStrokes,
+    finalizeSavedCapture,
     showSavedSheet,
     canSaveAnotherPhotoNote,
     captureTarget,
@@ -858,7 +850,6 @@ export default function HomeScreen() {
   const handleToggleCaptureMode = useCallback(() => {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     toggleCaptureMode();
-    setCaptureDoodleMode(false);
   }, [toggleCaptureMode]);
 
   const handleOpenNotes = useCallback(() => {
@@ -1043,6 +1034,7 @@ export default function HomeScreen() {
   const captureHeader = (
     <View style={styles.captureItemWrapper}>
       <CaptureCard
+        ref={captureCardRef}
         snapHeight={snapHeight}
         topInset={insets.top}
         isSearching={isSearching}
@@ -1056,13 +1048,6 @@ export default function HomeScreen() {
         onChangeNoteText={setNoteText}
         restaurantName={restaurantName}
         onChangeRestaurantName={setRestaurantName}
-        previewEmoji={livePreviewEmoji}
-        doodleModeEnabled={captureDoodleMode}
-        onToggleDoodleMode={() => setCaptureDoodleMode((current) => !current)}
-        doodleStrokes={captureDoodleStrokes}
-        onChangeDoodleStrokes={setCaptureDoodleStrokes}
-        onUndoDoodle={() => setCaptureDoodleStrokes((current) => current.slice(0, -1))}
-        onClearDoodle={() => setCaptureDoodleStrokes([])}
         capturedPhoto={capturedPhoto}
         onRetakePhoto={() => setCapturedPhoto(null)}
         needsCameraPermission={needsCameraPermission}
@@ -1087,10 +1072,12 @@ export default function HomeScreen() {
         saving={saving}
         shutterScale={shutterScale}
         cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
+        remainingPhotoSlots={captureMode === 'camera' ? remainingPhotoSlots : null}
         libraryImportLocked={!canImportFromLibrary}
         importingPhoto={importingPhoto || isPurchaseInFlight}
         shareTarget={captureTarget}
         onChangeShareTarget={handleCaptureTargetChange}
+        onDoodleModeChange={setCaptureScrollLocked}
       />
       {hasNotesHintTarget ? (
         <Animated.View
@@ -1184,7 +1171,7 @@ export default function HomeScreen() {
         onOpenNote={openNote}
         colors={colors}
         t={t}
-        scrollEnabled={!captureDoodleMode}
+        scrollEnabled={!captureScrollLocked}
       />
 
       <SharedManageSheet

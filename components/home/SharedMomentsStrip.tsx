@@ -31,7 +31,7 @@ function PostCard({ post, index }: { post: SharedPost; index: number }) {
       <View style={styles.postCard}>
         <View style={styles.postVisual}>
           {post.type === 'photo' && post.photoLocalUri ? (
-            <ImageMemoryCard imageUrl={post.photoLocalUri} />
+            <ImageMemoryCard imageUrl={post.photoLocalUri} doodleStrokesJson={post.doodleStrokesJson} />
           ) : (
             <TextMemoryCard text={post.text || t('shared.photoMemory', 'Photo memory')} noteId={post.id} />
           )}

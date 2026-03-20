@@ -42,6 +42,8 @@ export interface CreateNoteInput {
     latitude: number;
     longitude: number;
     radius?: number;
+    hasDoodle?: boolean;
+    doodleStrokesJson?: string | null;
 }
 
 export type NoteUpdates = Partial<
@@ -474,8 +476,8 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         longitude: input.longitude,
         radius: input.radius ?? DEFAULT_NOTE_RADIUS,
         isFavorite: false,
-        hasDoodle: false,
-        doodleStrokesJson: null,
+        hasDoodle: input.hasDoodle ?? false,
+        doodleStrokesJson: input.doodleStrokesJson ?? null,
         createdAt: now,
         updatedAt: null,
     };
@@ -712,6 +714,21 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         input.createdAt,
         input.updatedAt ?? null
     );
+
+    if (input.hasDoodle && input.doodleStrokesJson) {
+        await database.runAsync(
+            `INSERT INTO note_doodles (note_id, strokes_json, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(note_id) DO UPDATE SET
+                strokes_json = excluded.strokes_json,
+                updated_at = excluded.updated_at`,
+            input.id,
+            input.doodleStrokesJson,
+            input.updatedAt ?? input.createdAt
+        );
+    } else {
+        await database.runAsync('DELETE FROM note_doodles WHERE note_id = ?', input.id);
+    }
 
     return {
         id: input.id,

@@ -6,6 +6,8 @@ const mockGetNoteById = jest.fn<Promise<unknown>, [string]>();
 const mockDeleteNote = jest.fn<Promise<void>, [string]>(async () => undefined);
 const mockUpdateNote = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
 const mockToggleFavorite = jest.fn<Promise<boolean>, [string]>(async () => true);
+const mockSaveNoteDoodle = jest.fn<Promise<void>, [string, string]>(async () => undefined);
+const mockClearNoteDoodle = jest.fn<Promise<void>, [string]>(async () => undefined);
 const mockRouterPush = jest.fn();
 const mockImpactAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockNotificationAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
@@ -21,7 +23,15 @@ jest.mock('@expo/ui/swift-ui', () => {
   const React = require('react');
   const { View } = require('react-native');
   return {
-    BottomSheet: ({ children }: any) => <View>{children}</View>,
+    BottomSheet: ({ children, isPresented, onIsPresentedChange }: any) => {
+      React.useEffect(() => {
+        if (!isPresented) {
+          onIsPresentedChange?.(false);
+        }
+      }, [isPresented, onIsPresentedChange]);
+
+      return <View>{children}</View>;
+    },
     Group: ({ children }: any) => <View>{children}</View>,
     Host: ({ children }: any) => <View>{children}</View>,
     RNHostView: ({ children }: any) => <View>{children}</View>,
@@ -143,8 +153,15 @@ jest.mock('../hooks/useNotes', () => ({
 
 jest.mock('../services/noteDoodles', () => ({
   getNoteDoodle: jest.fn(async () => null),
-  saveNoteDoodle: jest.fn(async () => undefined),
-  clearNoteDoodle: jest.fn(async () => undefined),
+  parseNoteDoodleStrokes: (strokesJson: string | null | undefined) => {
+    if (!strokesJson) {
+      return [];
+    }
+
+    return JSON.parse(strokesJson);
+  },
+  saveNoteDoodle: (noteId: string, strokesJson: string) => mockSaveNoteDoodle(noteId, strokesJson),
+  clearNoteDoodle: (noteId: string) => mockClearNoteDoodle(noteId),
 }));
 
 jest.mock('../utils/interactionFeedback', () => ({
@@ -172,6 +189,32 @@ jest.mock('../components/AppBottomSheet', () => {
   const { View } = require('react-native');
   return function MockAppBottomSheet({ children }: any) {
     return <View>{children}</View>;
+  };
+});
+
+jest.mock('../components/NoteDoodleCanvas', () => {
+  const React = require('react');
+  const { Pressable, Text, View } = require('react-native');
+
+  return {
+    __esModule: true,
+    default: function MockNoteDoodleCanvas(props: any) {
+      return (
+        <View testID="mock-note-doodle-canvas">
+          <Text testID="mock-note-doodle-editable">{String(props.editable)}</Text>
+          <Text testID="mock-note-doodle-count">{String(props.strokes?.length ?? 0)}</Text>
+          <Pressable
+            testID="mock-note-doodle-commit"
+            onPress={() =>
+              props.onChangeStrokes?.([
+                { color: '#FFFFFF', points: [0.1, 0.1, 0.2, 0.2] },
+                { color: '#FFFFFF', points: [0.3, 0.3, 0.4, 0.4] },
+              ])
+            }
+          />
+        </View>
+      );
+    },
   };
 });
 
@@ -245,9 +288,54 @@ describe('NoteDetailSheet', () => {
     expect(mockUpdateNote).toHaveBeenCalledWith('note-1', {
       content: 'Updated note',
       locationName: 'New place',
-      moodEmoji: '🌙',
+      moodEmoji: '✨',
       radius: 250,
     });
+  });
+
+  it('shows saved doodles and lets you edit them', async () => {
+    mockGetNoteById.mockResolvedValue({
+      id: 'note-1',
+      type: 'text',
+      content: 'Original note',
+      photoLocalUri: null,
+      photoRemoteBase64: null,
+      locationName: 'Old place',
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: true,
+      doodleStrokesJson: JSON.stringify([{ color: '#FFFFFF', points: [0.1, 0.1, 0.2, 0.2] }]),
+      createdAt: '2026-03-10T00:00:00.000Z',
+      updatedAt: null,
+    });
+
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('mock-note-doodle-count')).toHaveTextContent('1');
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+    fireEvent.press(getByTestId('note-detail-doodle-toggle'));
+    expect(getByTestId('mock-note-doodle-editable')).toHaveTextContent('true');
+
+    fireEvent.press(getByTestId('mock-note-doodle-commit'));
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-edit'));
+    });
+
+    expect(mockSaveNoteDoodle).toHaveBeenCalledWith(
+      'note-1',
+      JSON.stringify([
+        { color: '#FFFFFF', points: [0.1, 0.1, 0.2, 0.2] },
+        { color: '#FFFFFF', points: [0.3, 0.3, 0.4, 0.4] },
+      ])
+    );
   });
 
   it('shares photo notes with the file url', async () => {
@@ -286,10 +374,56 @@ describe('NoteDetailSheet', () => {
     );
   });
 
+  it('shows and saves doodles on photo notes', async () => {
+    mockGetNoteById.mockResolvedValue({
+      id: 'photo-1',
+      type: 'photo',
+      content: 'file:///photos/photo-1.jpg',
+      photoLocalUri: 'file:///photos/photo-1.jpg',
+      photoRemoteBase64: null,
+      locationName: 'Coffee shop',
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: true,
+      doodleStrokesJson: JSON.stringify([{ color: '#FFFFFF', points: [0.1, 0.1, 0.2, 0.2] }]),
+      createdAt: '2026-03-10T00:00:00.000Z',
+      updatedAt: null,
+    });
+
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="photo-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('mock-note-doodle-count')).toHaveTextContent('1');
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+    fireEvent.press(getByTestId('note-detail-doodle-toggle'));
+    expect(getByTestId('mock-note-doodle-editable')).toHaveTextContent('true');
+
+    fireEvent.press(getByTestId('mock-note-doodle-commit'));
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-edit'));
+    });
+
+    expect(mockSaveNoteDoodle).toHaveBeenCalledWith(
+      'photo-1',
+      JSON.stringify([
+        { color: '#FFFFFF', points: [0.1, 0.1, 0.2, 0.2] },
+        { color: '#FFFFFF', points: [0.3, 0.3, 0.4, 0.4] },
+      ])
+    );
+  });
+
   it('confirms deletes before removing a note', async () => {
     const onClose = jest.fn();
-    const { getByTestId } = render(
-      <NoteDetailSheet noteId="note-1" visible onClose={onClose} />
+    const onClosed = jest.fn();
+    const { getByTestId, rerender } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={onClose} onClosed={onClosed} />
     );
 
     await waitFor(() => {
@@ -308,8 +442,17 @@ describe('NoteDetailSheet', () => {
       destructiveButton?.onPress?.();
     });
 
-    expect(mockDeleteNote).toHaveBeenCalledWith('note-1');
     expect(onClose).toHaveBeenCalled();
+
+    rerender(
+      <NoteDetailSheet noteId="note-1" visible={false} onClose={onClose} onClosed={onClosed} />
+    );
+
+    await waitFor(() => {
+      expect(mockDeleteNote).toHaveBeenCalledWith('note-1');
+    });
+
+    expect(onClosed).toHaveBeenCalled();
   });
 
   it('does not render the legacy share-to-room action', async () => {

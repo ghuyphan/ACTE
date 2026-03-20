@@ -11,7 +11,9 @@ import {
     Animated,
     Dimensions,
     Easing,
+    Keyboard,
     KeyboardAvoidingView,
+    LayoutAnimation,
     Platform,
     Pressable,
     ScrollView,
@@ -19,23 +21,28 @@ import {
     StyleSheet,
     Text,
     TextInput,
+    UIManager,
     View,
 } from 'react-native';
+import { DOODLE_ARTBOARD_FRAME } from '../constants/doodleLayout';
 import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../constants/noteRadius';
 import { Layout, Typography } from '../constants/theme';
 import { useAuth } from '../hooks/useAuth';
 import { useNotes } from '../hooks/useNotes';
 import { useSharedFeedStore } from '../hooks/useSharedFeed';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { CardGradients, useTheme } from '../hooks/useTheme';
+import { useTheme } from '../hooks/useTheme';
 import { Note } from '../services/database';
+import { getTextNoteCardGradient } from '../services/noteAppearance';
 import { resolveAutoNoteEmoji } from '../services/noteDecorations';
+import { clearNoteDoodle, parseNoteDoodleStrokes, saveNoteDoodle } from '../services/noteDoodles';
 import { getNotePhotoUri } from '../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import { formatDate } from '../utils/dateUtils';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
 import { isOlderIOS } from '../utils/platform';
 import AppBottomSheet from './AppBottomSheet';
+import NoteDoodleCanvas, { DoodleStroke } from './NoteDoodleCanvas';
 import TransientStatusChip from './ui/TransientStatusChip';
 
 const { width } = Dimensions.get('window');
@@ -44,14 +51,6 @@ const CARD_FEEDBACK_TOP_OFFSET = 34;
 const CARD_FEEDBACK_SIDE_PADDING = 34;
 const CARD_OVERLAY_TOP_INSET = 28;
 const CARD_OVERLAY_SIDE_INSET = 28;
-
-function hashToIndex(str: string, max: number): number {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = (hash * 31 + str.charCodeAt(i)) % max;
-    }
-    return Math.abs(hash) % max;
-}
 
 function SkeletonCard({ colors }: { colors: { card: string } }) {
     const opacity = useRef(new Animated.Value(0.3)).current;
@@ -180,9 +179,10 @@ interface NoteDetailSheetProps {
     noteId: string;
     visible: boolean;
     onClose: () => void;
+    onClosed?: () => void;
 }
 
-export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetailSheetProps) {
+export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: NoteDetailSheetProps) {
     const { getNoteById, deleteNote, refreshNotes, updateNote, toggleFavorite } = useNotes();
     const { user } = useAuth();
     const { deleteSharedNote, updateSharedNote } = useSharedFeedStore();
@@ -196,6 +196,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
     const [editContent, setEditContent] = useState('');
     const [editLocation, setEditLocation] = useState('');
     const [editRadius, setEditRadius] = useState(150);
+    const [editDoodleStrokes, setEditDoodleStrokes] = useState<DoodleStroke[]>([]);
+    const [doodleModeEnabled, setDoodleModeEnabled] = useState(false);
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
 
     const cardScale = useRef(new Animated.Value(0.92)).current;
@@ -209,6 +211,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
     const locationInputRef = useRef<TextInput>(null);
     const sheetBackgroundStyle = isOlderIOS ? { backgroundColor: colors.card } : null;
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingDeleteNoteIdRef = useRef<string | null>(null);
+    const closeCompletionHandledRef = useRef(false);
 
     const showInteractionFeedback = useCallback((type: InteractionFeedbackType) => {
         if (feedbackTimeoutRef.current) {
@@ -228,9 +232,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
             return;
         }
 
+        closeCompletionHandledRef.current = false;
         setLoading(true);
         setIsEditing(false);
         setIsDeleting(false);
+        pendingDeleteNoteIdRef.current = null;
         cardScale.setValue(0.97);
         cardOpacity.setValue(0);
         infoTranslateY.setValue(12);
@@ -245,6 +251,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                 setEditContent(nextNote.content);
                 setEditLocation(nextNote.locationName || '');
                 setEditRadius(nextNote.radius);
+                setEditDoodleStrokes(parseNoteDoodleStrokes(nextNote.doodleStrokesJson));
+                setDoodleModeEnabled(false);
             }
             setLoading(false);
 
@@ -306,6 +314,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
 
     useEffect(() => {
         if (!isEditing) {
+            setDoodleModeEnabled(false);
             return;
         }
 
@@ -320,6 +329,23 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         return () => clearTimeout(focusTimer);
     }, [isEditing, note?.type]);
 
+    const handleToggleDoodleMode = useCallback(() => {
+        if (!isEditing || !note) {
+            return;
+        }
+
+        Keyboard.dismiss();
+        setDoodleModeEnabled((current) => !current);
+    }, [isEditing, note]);
+
+    const handleUndoDoodle = useCallback(() => {
+        setEditDoodleStrokes((current) => current.slice(0, -1));
+    }, []);
+
+    const handleClearDoodle = useCallback(() => {
+        setEditDoodleStrokes([]);
+    }, []);
+
     useEffect(() => () => {
         if (feedbackTimeoutRef.current) {
             clearTimeout(feedbackTimeoutRef.current);
@@ -327,17 +353,35 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
     }, []);
 
     const performDelete = useCallback(async (targetNoteId: string) => {
-        if (isDeleting) {
-            return;
-        }
-
-        setIsDeleting(true);
         try {
+            if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+                UIManager.setLayoutAnimationEnabledExperimental(true);
+            }
+
+            LayoutAnimation.configureNext(
+                reduceMotionEnabled
+                    ? LayoutAnimation.Presets.easeInEaseOut
+                    : {
+                        duration: 220,
+                        create: {
+                            type: LayoutAnimation.Types.easeInEaseOut,
+                            property: LayoutAnimation.Properties.opacity,
+                            duration: 140,
+                        },
+                        update: {
+                            type: LayoutAnimation.Types.easeInEaseOut,
+                        },
+                        delete: {
+                            type: LayoutAnimation.Types.easeInEaseOut,
+                            property: LayoutAnimation.Properties.opacity,
+                            duration: 180,
+                        },
+                    }
+            );
+
             await deleteNote(targetNoteId);
-            await refreshNotes(false);
-            showInteractionFeedback('deleted');
+            emitInteractionFeedback('deleted');
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            onClose();
 
             if (user) {
                 try {
@@ -362,7 +406,40 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         } finally {
             setIsDeleting(false);
         }
-    }, [deleteNote, deleteSharedNote, isDeleting, onClose, refreshNotes, showInteractionFeedback, t, user]);
+    }, [deleteNote, deleteSharedNote, reduceMotionEnabled, t, user]);
+
+    useEffect(() => {
+        if (visible) {
+            closeCompletionHandledRef.current = false;
+            return;
+        }
+
+        const closeDelay = reduceMotionEnabled ? 40 : 220;
+        const timer = setTimeout(() => {
+            if (closeCompletionHandledRef.current) {
+                return;
+            }
+
+            closeCompletionHandledRef.current = true;
+            const pendingDeleteNoteId = pendingDeleteNoteIdRef.current;
+            pendingDeleteNoteIdRef.current = null;
+
+            if (pendingDeleteNoteId) {
+                void performDelete(pendingDeleteNoteId).finally(() => {
+                    onClosed?.();
+                });
+                return;
+            }
+
+            onClosed?.();
+        }, closeDelay);
+
+        return () => clearTimeout(timer);
+    }, [onClosed, performDelete, reduceMotionEnabled, visible]);
+
+    const handleSheetDismiss = useCallback(() => {
+        onClose();
+    }, [onClose]);
 
     const handleDelete = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -375,8 +452,13 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                     text: t('common.delete', 'Delete'),
                     style: 'destructive',
                     onPress: () => {
-                        if (!note || isDeleting) return;
-                        void performDelete(note.id);
+                        if (!note || isDeleting) {
+                            return;
+                        }
+
+                        pendingDeleteNoteIdRef.current = note.id;
+                        setIsDeleting(true);
+                        onClose();
                     },
                 },
             ]
@@ -470,6 +552,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
     const handleSaveEdit = async () => {
         if (!note || isDeleting) return;
         const updates: Partial<Pick<Note, 'content' | 'locationName' | 'moodEmoji' | 'radius'>> = {};
+        const nextDoodleStrokesJson =
+            editDoodleStrokes.length > 0 ? JSON.stringify(editDoodleStrokes) : null;
+        const doodleChanged = nextDoodleStrokesJson !== (note.doodleStrokesJson ?? null);
 
         if (note.type === 'text' && editContent.trim() !== note.content) {
             updates.content = editContent.trim();
@@ -492,12 +577,32 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
             updates.moodEmoji = autoEmoji;
         }
 
-        if (Object.keys(updates).length > 0) {
+        if (Object.keys(updates).length > 0 || doodleChanged) {
             const nextUpdatedAt = new Date().toISOString();
-            const nextNote = { ...note, ...updates, updatedAt: nextUpdatedAt };
-            await updateNote(note.id, updates);
+            const nextNote = {
+                ...note,
+                ...updates,
+                hasDoodle: Boolean(nextDoodleStrokesJson),
+                doodleStrokesJson: nextDoodleStrokesJson,
+                updatedAt: nextUpdatedAt,
+            };
+
+            if (Object.keys(updates).length > 0) {
+                await updateNote(note.id, updates);
+            }
+
+            if (doodleChanged) {
+                if (nextDoodleStrokesJson) {
+                    await saveNoteDoodle(note.id, nextDoodleStrokesJson);
+                } else {
+                    await clearNoteDoodle(note.id);
+                }
+            }
+
             await refreshNotes(false);
             setNote(nextNote);
+            setEditDoodleStrokes(parseNoteDoodleStrokes(nextDoodleStrokesJson));
+            setDoodleModeEnabled(false);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setIsEditing(false);
 
@@ -515,6 +620,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
             }
             return;
         }
+        setDoodleModeEnabled(false);
         setIsEditing(false);
     };
 
@@ -543,7 +649,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
 
     const handleSheetVisibility = (nextVisible: boolean) => {
         if (!nextVisible) {
-            onClose();
+            handleSheetDismiss();
         }
     };
 
@@ -572,8 +678,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
         }
 
         const dateStr = formatDate(note.createdAt, 'long');
-        const gradientIndex = hashToIndex(note.id, CardGradients.length);
-        const gradient = CardGradients[gradientIndex];
+        const gradient = getTextNoteCardGradient({
+            text: note.content,
+            noteId: note.id,
+            emoji: note.moodEmoji,
+        });
+        const displayedDoodleStrokes = isEditing ? editDoodleStrokes : parseNoteDoodleStrokes(note.doodleStrokesJson);
         const editIconStyle = {
             opacity: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
             transform: [{ scale: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.72] }) }],
@@ -602,6 +712,77 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                         {note.type === 'photo' ? (
                             <View style={styles.photoContainer}>
                                 <Image source={{ uri: getNotePhotoUri(note) }} style={styles.photo} contentFit="cover" transition={300} />
+                                {displayedDoodleStrokes.length > 0 || isEditing ? (
+                                    <View
+                                        pointerEvents={isEditing && doodleModeEnabled ? 'auto' : 'none'}
+                                        style={[
+                                            styles.doodleOverlay,
+                                            styles.photoDoodleOverlay,
+                                            isEditing ? styles.doodleOverlayEditing : null,
+                                            isEditing && doodleModeEnabled ? styles.doodleOverlayActive : null,
+                                        ]}
+                                    >
+                                        <NoteDoodleCanvas
+                                            strokes={displayedDoodleStrokes}
+                                            editable={isEditing && doodleModeEnabled}
+                                            activeColor="#FFFFFF"
+                                            onChangeStrokes={setEditDoodleStrokes}
+                                        />
+                                    </View>
+                                ) : null}
+                                {isEditing ? (
+                                    <View style={styles.textEditHeader}>
+                                        <Text style={styles.editFieldBadge}>
+                                            {t('noteDetail.contentField', 'Note')}
+                                        </Text>
+                                        <View style={styles.textCardActionCluster}>
+                                            <Pressable
+                                                testID="note-detail-doodle-toggle"
+                                                onPress={handleToggleDoodleMode}
+                                                style={[
+                                                    styles.textCardActionButton,
+                                                    doodleModeEnabled ? styles.textCardActionButtonActive : null,
+                                                ]}
+                                            >
+                                                <Ionicons
+                                                    name={doodleModeEnabled ? 'create' : 'create-outline'}
+                                                    size={16}
+                                                    color="#FFFFFF"
+                                                />
+                                            </Pressable>
+                                            {doodleModeEnabled ? (
+                                                <View style={styles.textCardActionCluster}>
+                                                    <Pressable
+                                                        testID="note-detail-doodle-undo"
+                                                        onPress={handleUndoDoodle}
+                                                        disabled={editDoodleStrokes.length === 0}
+                                                        style={[
+                                                            styles.textCardActionPill,
+                                                            editDoodleStrokes.length === 0
+                                                                ? styles.textCardActionDisabled
+                                                                : null,
+                                                        ]}
+                                                    >
+                                                        <Ionicons name="arrow-undo-outline" size={14} color="#FFFFFF" />
+                                                    </Pressable>
+                                                    <Pressable
+                                                        testID="note-detail-doodle-clear"
+                                                        onPress={handleClearDoodle}
+                                                        disabled={editDoodleStrokes.length === 0}
+                                                        style={[
+                                                            styles.textCardActionPill,
+                                                            editDoodleStrokes.length === 0
+                                                                ? styles.textCardActionDisabled
+                                                                : null,
+                                                        ]}
+                                                    >
+                                                        <Ionicons name="close-outline" size={14} color="#FFFFFF" />
+                                                    </Pressable>
+                                                </View>
+                                            ) : null}
+                                        </View>
+                                    </View>
+                                ) : null}
                                 {renderFavoriteBadge(colors.card, colors.secondaryText)}
                             </View>
                         ) : (
@@ -612,10 +793,75 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                     end={{ x: 1, y: 1 }}
                                     style={styles.textGradient}
                                 >
+                                    {displayedDoodleStrokes.length > 0 || isEditing ? (
+                                        <View
+                                            pointerEvents={isEditing && doodleModeEnabled ? 'auto' : 'none'}
+                                            style={[
+                                                styles.doodleOverlay,
+                                                isEditing ? styles.doodleOverlayEditing : null,
+                                                isEditing && doodleModeEnabled ? styles.doodleOverlayActive : null,
+                                            ]}
+                                        >
+                                            <NoteDoodleCanvas
+                                                strokes={displayedDoodleStrokes}
+                                                editable={isEditing && doodleModeEnabled}
+                                                activeColor="#FFFFFF"
+                                                onChangeStrokes={setEditDoodleStrokes}
+                                            />
+                                        </View>
+                                    ) : null}
                                     {isEditing ? (
-                                        <Text style={styles.editFieldBadge}>
-                                            {t('noteDetail.contentField', 'Note')}
-                                        </Text>
+                                        <View style={styles.textEditHeader}>
+                                            <Text style={styles.editFieldBadge}>
+                                                {t('noteDetail.contentField', 'Note')}
+                                            </Text>
+                                            <View style={styles.textCardActionCluster}>
+                                                <Pressable
+                                                    testID="note-detail-doodle-toggle"
+                                                    onPress={handleToggleDoodleMode}
+                                                    style={[
+                                                        styles.textCardActionButton,
+                                                        doodleModeEnabled ? styles.textCardActionButtonActive : null,
+                                                    ]}
+                                                >
+                                                    <Ionicons
+                                                        name={doodleModeEnabled ? 'create' : 'create-outline'}
+                                                        size={16}
+                                                        color="#FFFFFF"
+                                                    />
+                                                </Pressable>
+                                                {doodleModeEnabled ? (
+                                                    <View style={styles.textCardActionCluster}>
+                                                        <Pressable
+                                                            testID="note-detail-doodle-undo"
+                                                            onPress={handleUndoDoodle}
+                                                            disabled={editDoodleStrokes.length === 0}
+                                                            style={[
+                                                                styles.textCardActionPill,
+                                                                editDoodleStrokes.length === 0
+                                                                    ? styles.textCardActionDisabled
+                                                                    : null,
+                                                            ]}
+                                                        >
+                                                            <Ionicons name="arrow-undo-outline" size={14} color="#FFFFFF" />
+                                                        </Pressable>
+                                                        <Pressable
+                                                            testID="note-detail-doodle-clear"
+                                                            onPress={handleClearDoodle}
+                                                            disabled={editDoodleStrokes.length === 0}
+                                                            style={[
+                                                                styles.textCardActionPill,
+                                                                editDoodleStrokes.length === 0
+                                                                    ? styles.textCardActionDisabled
+                                                                    : null,
+                                                            ]}
+                                                        >
+                                                            <Ionicons name="close-outline" size={14} color="#FFFFFF" />
+                                                        </Pressable>
+                                                    </View>
+                                                ) : null}
+                                            </View>
+                                        </View>
                                     ) : (
                                         renderFavoriteBadge('#FFFFFF33', '#FFFFFFDD')
                                     )}
@@ -625,7 +871,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                                         style={[styles.editTextInput, isEditing ? styles.editTextInputActive : null]}
                                         value={isEditing ? editContent : formatNoteTextWithEmoji(note.content, note.moodEmoji)}
                                         onChangeText={isEditing ? setEditContent : undefined}
-                                        editable={isEditing}
+                                        editable={isEditing && !doodleModeEnabled}
                                         multiline
                                         scrollEnabled={false}
                                         placeholder={isEditing ? t('noteDetail.editContent', 'Edit note content...') : undefined}
@@ -698,7 +944,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
                             >
                                 <Ionicons name="create-outline" size={16} color={colors.primary} />
                                 <Text style={[styles.editingHintText, { color: colors.secondaryText }]}>
-                                    {t('noteDetail.editingHint', 'Editing mode: update note and place')}
+                                    {t('noteDetail.editingHint', 'Editing mode: update note, doodle, and place')}
                                 </Text>
                             </View>
                         </Animated.View>
@@ -800,7 +1046,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose }: NoteDetail
 
     if (Platform.OS === 'android') {
         return (
-            <AppBottomSheet visible={visible} onClose={onClose} detached={false}>
+            <AppBottomSheet visible={visible} onClose={handleSheetDismiss} detached={false}>
                 {renderBody()}
             </AppBottomSheet>
         );
@@ -877,10 +1123,31 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    editFieldBadge: {
+    doodleOverlay: {
+        position: 'absolute',
+        ...DOODLE_ARTBOARD_FRAME,
+        opacity: 0.5,
+    },
+    doodleOverlayEditing: {
+        opacity: 0.72,
+    },
+    photoDoodleOverlay: {
+        opacity: 0.92,
+    },
+    doodleOverlayActive: {
+        opacity: 1,
+    },
+    textEditHeader: {
         position: 'absolute',
         top: CARD_OVERLAY_TOP_INSET,
         left: CARD_OVERLAY_SIDE_INSET,
+        right: CARD_OVERLAY_SIDE_INSET,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        zIndex: 2,
+    },
+    editFieldBadge: {
         backgroundColor: 'rgba(0,0,0,0.25)',
         color: 'rgba(255,255,255,0.9)',
         paddingHorizontal: 10,
@@ -891,6 +1158,37 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
         zIndex: 2,
         fontFamily: 'System',
+    },
+    textCardActionCluster: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    textCardActionButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(255,255,255,0.14)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.18)',
+    },
+    textCardActionButtonActive: {
+        backgroundColor: 'rgba(0,0,0,0.34)',
+    },
+    textCardActionPill: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(255,255,255,0.14)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.18)',
+    },
+    textCardActionDisabled: {
+        opacity: 0.45,
     },
     editTextInput: {
         color: '#FFFFFF',

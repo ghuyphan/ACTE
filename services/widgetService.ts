@@ -7,7 +7,7 @@ import { formatDate } from '../utils/dateUtils';
 import { getAllNotes, Note } from './database';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getNotePhotoUri, resolveStoredPhotoUri } from './photoStorage';
-import { compareReminderNotes, getDistanceMeters } from './reminderSelection';
+import { getDistanceMeters } from './reminderSelection';
 
 // Lazy import to avoid circular dependency issues
 let widgetInstance: any = null;
@@ -156,6 +156,46 @@ function getSlotKey(referenceDate: Date) {
     return `${referenceDate.getFullYear()}-${referenceDate.getMonth() + 1}-${referenceDate.getDate()}-${slot}`;
 }
 
+function hasRenderableWidgetText(note: Pick<Note, 'type' | 'content'>) {
+    return note.type === 'text' && typeof note.content === 'string' && note.content.trim().length > 0;
+}
+
+function isWidgetSelectableNote(note: Note) {
+    return note.type === 'photo' || hasRenderableWidgetText(note);
+}
+
+function getWidgetSelectionTier(note: Note) {
+    if (hasRenderableWidgetText(note)) {
+        return 2;
+    }
+
+    return note.type === 'photo' ? 1 : 0;
+}
+
+function getWidgetSelectionTimestamp(note: Pick<Note, 'createdAt' | 'updatedAt'>) {
+    const timestamp = new Date(note.updatedAt ?? note.createdAt ?? 0).getTime();
+    return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function compareWidgetNotes(a: Note, b: Note) {
+    const tierDelta = getWidgetSelectionTier(b) - getWidgetSelectionTier(a);
+    if (tierDelta !== 0) {
+        return tierDelta;
+    }
+
+    const timestampDelta = getWidgetSelectionTimestamp(b) - getWidgetSelectionTimestamp(a);
+    if (timestampDelta !== 0) {
+        return timestampDelta;
+    }
+
+    const favoriteDelta = Number(Boolean(b.isFavorite)) - Number(Boolean(a.isFavorite));
+    if (favoriteDelta !== 0) {
+        return favoriteDelta;
+    }
+
+    return a.id.localeCompare(b.id);
+}
+
 function getOrderedSelectionModes(referenceDate: Date): WidgetSelectionMode[] {
     const modes: WidgetSelectionMode[] = ['nearest_memory', 'random_favorite', 'around_this_area'];
     const startIndex = hashString(getSlotKey(referenceDate)) % modes.length;
@@ -214,10 +254,22 @@ export function selectWidgetNote(options: {
         };
     }
 
+    const selectableNotes = notes.filter(isWidgetSelectableNote);
+
+    if (selectableNotes.length === 0) {
+        return {
+            selectedNote: null,
+            selectedLocationName: null,
+            nearbyPlacesCount: 0,
+            isIdleState: true,
+            selectionMode: 'latest_memory',
+        };
+    }
+
     const orderedModes = getOrderedSelectionModes(referenceDate);
 
     const nearestCandidates = currentLocation
-        ? notes
+        ? selectableNotes
             .map((note) => ({
                 note,
                 distanceMeters: getDistanceMeters(currentLocation, {
@@ -232,12 +284,12 @@ export function selectWidgetNote(options: {
                     return distanceDelta;
                 }
 
-                return compareReminderNotes(left.note, right.note);
+                return compareWidgetNotes(left.note, right.note);
             })
         : [];
 
     const nearbyAreaCandidates = currentLocation
-        ? notes
+        ? selectableNotes
             .map((note) => ({
                 note,
                 distanceMeters: getDistanceMeters(currentLocation, {
@@ -252,14 +304,14 @@ export function selectWidgetNote(options: {
                     return distanceDelta;
                 }
 
-                return compareReminderNotes(left.note, right.note);
+                return compareWidgetNotes(left.note, right.note);
             })
         : [];
 
-    const favoriteCandidates = notes.filter((note) => note.isFavorite);
+    const favoriteCandidates = selectableNotes.filter((note) => note.isFavorite);
     const favoriteSelection =
         favoriteCandidates.length > 0
-            ? [...favoriteCandidates].sort(compareReminderNotes)[hashString(getSlotKey(referenceDate)) % favoriteCandidates.length] ?? null
+            ? [...favoriteCandidates].sort(compareWidgetNotes)[hashString(getSlotKey(referenceDate)) % favoriteCandidates.length] ?? null
             : null;
 
     for (const mode of orderedModes) {
@@ -294,7 +346,7 @@ export function selectWidgetNote(options: {
         }
     }
 
-    const latestNote = [...notes].sort((left, right) =>
+    const latestNote = [...selectableNotes].sort((left, right) =>
         new Date(right.updatedAt ?? right.createdAt).getTime() - new Date(left.updatedAt ?? left.createdAt).getTime()
     )[0] ?? null;
 
@@ -523,8 +575,8 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
             date: dateStr,
             noteCount: notes.length,
             nearbyPlacesCount: resolvedNearbyPlacesCount,
-            hasDoodle: selectedNote.type === 'text' && Boolean(selectedNote.hasDoodle && selectedNote.doodleStrokesJson),
-            doodleStrokesJson: selectedNote.type === 'text' ? selectedNote.doodleStrokesJson ?? null : null,
+            hasDoodle: Boolean(selectedNote.hasDoodle && selectedNote.doodleStrokesJson),
+            doodleStrokesJson: selectedNote.doodleStrokesJson ?? null,
             isIdleState,
             ...selectionTranslatedStrings,
         };

@@ -281,6 +281,70 @@ describe('widgetService', () => {
     expect(result.selectionMode).toBe('around_this_area');
   });
 
+  it('skips doodle-only text notes when choosing a widget memory', () => {
+    const result = selectWidgetNote({
+      notes: [
+        buildNote({
+          id: 'plain-text',
+          content: 'Typed note',
+          locationName: 'Cafe',
+          latitude: 10.001,
+          longitude: 106.001,
+          createdAt: '2026-03-09T10:00:00.000Z',
+        }),
+        buildNote({
+          id: 'doodle-only',
+          content: '',
+          hasDoodle: true,
+          doodleStrokesJson: JSON.stringify([
+            {
+              color: '#1C1C1E',
+              points: [0.1, 0.2, 0.4, 0.6],
+            },
+          ]),
+          locationName: 'Cafe',
+          latitude: 10.001,
+          longitude: 106.001,
+          createdAt: '2026-03-10T10:00:00.000Z',
+        }),
+      ],
+      currentLocation: { latitude: 10.0, longitude: 106.0 },
+      referenceDate: new Date('2026-03-10T12:00:00'),
+    });
+
+    expect(result.selectedNote?.id).toBe('plain-text');
+    expect(result.selectionMode).toBe('around_this_area');
+  });
+
+  it('falls back to idle when only doodle-only text notes exist', async () => {
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'doodle-only',
+        content: '',
+        hasDoodle: true,
+        doodleStrokesJson: JSON.stringify([
+          {
+            color: '#1C1C1E',
+            points: [0.1, 0.2, 0.4, 0.6],
+          },
+        ]),
+      }),
+    ]);
+
+    await updateWidgetData();
+
+    expect(mockUpdateSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        props: expect.objectContaining({
+          isIdleState: true,
+          text: '',
+          hasDoodle: false,
+          doodleStrokesJson: null,
+        }),
+      })
+    );
+  });
+
   it('falls back to the latest note when no rotated mode has a candidate', () => {
     const result = selectWidgetNote({
       notes: [
@@ -463,6 +527,50 @@ describe('widgetService', () => {
           hasDoodle: false,
           doodleStrokesJson: null,
           backgroundImageUrl: 'file:///mock-group/widget-images/latest-photo.jpg',
+        }),
+      })
+    );
+  });
+
+  it('includes doodle metadata for photo notes', async () => {
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mockGetLastKnownPositionAsync.mockResolvedValue({
+      coords: {
+        latitude: 10.8,
+        longitude: 106.7,
+      },
+    });
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'photo-doodle-note',
+        type: 'photo',
+        content: 'file:///mock-documents/photos/latest.jpg',
+        locationName: 'Photo Place',
+        latitude: 10.8,
+        longitude: 106.7,
+        hasDoodle: true,
+        doodleStrokesJson: JSON.stringify([
+          {
+            color: '#FFFFFF',
+            points: [0.1, 0.1, 0.8, 0.8],
+          },
+        ]),
+      }),
+    ]);
+
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00') });
+
+    expect(mockUpdateSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        props: expect.objectContaining({
+          noteType: 'photo',
+          hasDoodle: true,
+          doodleStrokesJson: JSON.stringify([
+            {
+              color: '#FFFFFF',
+              points: [0.1, 0.1, 0.8, 0.8],
+            },
+          ]),
         }),
       })
     );

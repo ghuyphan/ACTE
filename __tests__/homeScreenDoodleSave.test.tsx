@@ -1,5 +1,29 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+
+const mockCreateNote = jest.fn(async () => ({
+  id: 'note-1',
+  type: 'text',
+  content: 'A doodled note',
+  locationName: 'Mock Place',
+  latitude: 10.77,
+  longitude: 106.69,
+  radius: 150,
+  isFavorite: false,
+  hasDoodle: false,
+  createdAt: '2026-03-20T00:00:00.000Z',
+  updatedAt: null,
+}));
+const mockRefreshNotes = jest.fn(async () => undefined);
+const mockResetCapture = jest.fn();
+const mockSaveNoteDoodle = jest.fn<Promise<void>, [string, string]>(async () => undefined);
+const mockResetDoodle = jest.fn();
+const mockShowAlert = jest.fn();
+let mockNoteText = 'A doodled note';
+const mockGetDoodleSnapshot = jest.fn(() => ({
+  enabled: true,
+  strokes: [{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }],
+}));
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -24,6 +48,22 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: jest.fn(),
   }),
+}));
+
+jest.mock('expo-haptics', () => ({
+  impactAsync: jest.fn(),
+  notificationAsync: jest.fn(),
+  ImpactFeedbackStyle: {
+    Light: 'light',
+    Medium: 'medium',
+  },
+  NotificationFeedbackType: {
+    Success: 'success',
+  },
+}));
+
+jest.mock('expo-location', () => ({
+  reverseGeocodeAsync: jest.fn(async () => [{ name: 'Mock Place', street: 'Mock Street', city: 'Ho Chi Minh City' }]),
 }));
 
 jest.mock('../hooks/useAuth', () => ({
@@ -70,7 +110,12 @@ jest.mock('../hooks/useTheme', () => ({
 
 jest.mock('../hooks/useGeofence', () => ({
   useGeofence: () => ({
-    location: null,
+    location: {
+      coords: {
+        latitude: 10.77,
+        longitude: 106.69,
+      },
+    },
     remindersEnabled: false,
     requestForegroundLocation: jest.fn(async () => ({ location: null, requiresSettings: false })),
     requestReminderPermissions: jest.fn(async () => ({ enabled: false, requiresSettings: false })),
@@ -81,7 +126,7 @@ jest.mock('../hooks/useGeofence', () => ({
 jest.mock('../hooks/useAppSheetAlert', () => ({
   useAppSheetAlert: () => ({
     alertProps: {},
-    showAlert: jest.fn(),
+    showAlert: mockShowAlert,
   }),
 }));
 
@@ -93,11 +138,9 @@ jest.mock('../hooks/useNoteDetailSheet', () => ({
 
 jest.mock('../hooks/useCaptureFlow', () => ({
   useCaptureFlow: () => ({
-    // Build Animated values inside the factory to satisfy Jest's hoisting rules.
     ...(() => {
       const { Animated } = require('react-native');
       return {
-        captureOpacity: new Animated.Value(1),
         captureScale: new Animated.Value(1),
         captureTranslateY: new Animated.Value(0),
         flashAnim: new Animated.Value(0),
@@ -105,17 +148,17 @@ jest.mock('../hooks/useCaptureFlow', () => ({
       };
     })(),
     captureMode: 'text',
-    cameraSessionKey: 0,
+    cameraSessionKey: 1,
     setCaptureMode: jest.fn(),
     restaurantName: '',
     setRestaurantName: jest.fn(),
-    noteText: '',
+    noteText: mockNoteText,
     setNoteText: jest.fn(),
     capturedPhoto: null,
     setCapturedPhoto: jest.fn(),
-    selectedPromptId: 'future-notice',
+    selectedPromptId: null,
     setSelectedPromptId: jest.fn(),
-    selectedPromptText: 'What should future-you notice here?',
+    selectedPromptText: null,
     setSelectedPromptText: jest.fn(),
     promptAnswer: '',
     setPromptAnswer: jest.fn(),
@@ -138,42 +181,16 @@ jest.mock('../hooks/useCaptureFlow', () => ({
     handleShutterPressOut: jest.fn(),
     takePicture: jest.fn(),
     needsCameraPermission: false,
-    resetCapture: jest.fn(),
+    resetCapture: mockResetCapture,
   }),
 }));
 
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
-    notes: [
-      {
-        id: 'photo-1',
-        type: 'photo',
-        content: 'file:///private/photo-1.jpg',
-        photoLocalUri: 'file:///private/photo-1.jpg',
-        locationName: 'District 3',
-        latitude: 10.8,
-        longitude: 106.7,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-11T00:00:00.000Z',
-        updatedAt: null,
-      },
-      {
-        id: 'text-1',
-        type: 'text',
-        content: 'Best iced coffee',
-        locationName: 'District 1',
-        latitude: 10.7,
-        longitude: 106.6,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-10T00:00:00.000Z',
-        updatedAt: null,
-      },
-    ],
-    refreshNotes: jest.fn(async () => undefined),
-    createNote: jest.fn(async () => undefined),
+    notes: [],
+    refreshNotes: mockRefreshNotes,
+    createNote: mockCreateNote,
   }),
 }));
 
@@ -185,6 +202,7 @@ jest.mock('../hooks/useSubscription', () => ({
     isPurchaseInFlight: false,
     plusPriceLabel: null,
     canImportFromLibrary: false,
+    remotePhotoNoteCount: 0,
     purchasePlus: jest.fn(async () => ({ status: 'unavailable' })),
     restorePurchases: jest.fn(async () => ({ status: 'unavailable' })),
   }),
@@ -207,6 +225,10 @@ jest.mock('../hooks/useSharedFeed', () => ({
   }),
 }));
 
+jest.mock('../services/noteDoodles', () => ({
+  saveNoteDoodle: (noteId: string, strokesJson: string) => mockSaveNoteDoodle(noteId, strokesJson),
+}));
+
 jest.mock('../services/sharedFeedService', () => ({
   getSharedFeedErrorMessage: jest.fn(() => 'Shared moments are unavailable right now.'),
 }));
@@ -219,54 +241,42 @@ jest.mock('../components/AppSheetAlert', () => {
 
 jest.mock('../components/home/CaptureCard', () => {
   const React = require('react');
-  const { View } = require('react-native');
+  const { Pressable, View } = require('react-native');
+
   return {
     __esModule: true,
-    default: React.forwardRef(function MockCaptureCard(_props: any, _ref: any) {
-      return <View testID="capture-card" />;
+    default: React.forwardRef(function MockCaptureCard(props: any, ref: any) {
+      React.useImperativeHandle(
+        ref,
+        () => ({
+          getDoodleSnapshot: () => mockGetDoodleSnapshot(),
+          resetDoodle: () => mockResetDoodle(),
+        }),
+        []
+      );
+
+      return (
+        <View>
+          <Pressable testID="capture-save-button" onPress={props.onSaveNote} />
+        </View>
+      );
     }),
   };
 });
 
 jest.mock('../components/home/HomeHeaderSearch', () => {
   const React = require('react');
-  const { Pressable, Text, TextInput, View } = require('react-native');
-  return function MockHomeHeaderSearch(props: any) {
-    return (
-      <View>
-        <Pressable testID="home-open-search" onPress={props.onOpenSearch}>
-          <Text>Open search</Text>
-        </Pressable>
-        <TextInput
-          testID="home-search-input"
-          value={props.searchQuery}
-          onChangeText={props.onSearchChange}
-        />
-      </View>
-    );
+  const { View } = require('react-native');
+  return function MockHomeHeaderSearch() {
+    return <View testID="home-header-search" />;
   };
 });
 
 jest.mock('../components/home/NotesFeed', () => {
   const React = require('react');
-  const { Text, View } = require('react-native');
-  return function MockNotesFeed({ notes }: { notes: Array<{ id: string }> }) {
-    return (
-      <View>
-        <Text testID="home-notes-count">{String(notes.length)}</Text>
-        {notes.map((note) => (
-          <Text key={note.id}>{note.id}</Text>
-        ))}
-      </View>
-    );
-  };
-});
-
-jest.mock('../components/home/SharedMomentsStrip', () => {
-  const React = require('react');
   const { View } = require('react-native');
-  return function MockSharedMomentsStrip() {
-    return <View testID="shared-moments-strip" />;
+  return function MockNotesFeed(props: any) {
+    return <View>{props.captureHeader}</View>;
   };
 });
 
@@ -284,23 +294,79 @@ jest.mock('../utils/platform', () => ({
 
 import HomeScreen from '../app/(tabs)/index';
 
-describe('HomeScreen search', () => {
-  it('filters with shared search logic and ignores photo file uris', async () => {
-    const { getByTestId, queryByText } = render(<HomeScreen />);
+describe('HomeScreen doodle save flow', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockNoteText = 'A doodled note';
+    mockGetDoodleSnapshot.mockImplementation(() => ({
+      enabled: true,
+      strokes: [{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }],
+    }));
+  });
 
-    fireEvent.press(getByTestId('home-open-search'));
-    fireEvent.changeText(getByTestId('home-search-input'), 'photo-1.jpg');
+  it('keeps the doodle visible until the save sheet closes', async () => {
+    const { getByTestId } = render(<HomeScreen />);
+
+    fireEvent.press(getByTestId('capture-save-button'));
 
     await waitFor(() => {
-      expect(getByTestId('home-notes-count').props.children).toBe('0');
-      expect(queryByText('photo-1')).toBeNull();
+      expect(mockCreateNote).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'text',
+          content: 'A doodled note',
+          locationName: 'Mock Place, Mock Street, Ho Chi Minh City',
+          hasDoodle: true,
+          doodleStrokesJson: JSON.stringify([{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }]),
+        })
+      );
     });
 
-    fireEvent.changeText(getByTestId('home-search-input'), 'District 3');
+    expect(mockGetDoodleSnapshot).toHaveBeenCalled();
+    expect(mockSaveNoteDoodle).toHaveBeenCalledWith(
+      'note-1',
+      JSON.stringify([{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }])
+    );
+    expect(mockRefreshNotes).not.toHaveBeenCalled();
+    expect(mockShowAlert).toHaveBeenCalledWith(expect.objectContaining({
+      variant: 'success',
+      onClose: expect.any(Function),
+    }));
+    expect(mockResetCapture).not.toHaveBeenCalled();
+    expect(mockResetDoodle).not.toHaveBeenCalled();
+
+    const latestAlertCall = mockShowAlert.mock.calls[mockShowAlert.mock.calls.length - 1];
+    const [{ onClose }] = latestAlertCall ?? [];
+
+    act(() => {
+      onClose?.();
+    });
+
+    expect(mockResetCapture).toHaveBeenCalled();
+    expect(mockResetDoodle).toHaveBeenCalled();
+  });
+
+  it('allows saving a doodle-only text note', async () => {
+    mockNoteText = '';
+
+    const { getByTestId } = render(<HomeScreen />);
+
+    fireEvent.press(getByTestId('capture-save-button'));
 
     await waitFor(() => {
-      expect(getByTestId('home-notes-count').props.children).toBe('1');
-      expect(queryByText('photo-1')).toBeTruthy();
+      expect(mockCreateNote).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'text',
+          content: '',
+          locationName: 'Mock Place, Mock Street, Ho Chi Minh City',
+          hasDoodle: true,
+          doodleStrokesJson: JSON.stringify([{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }]),
+        })
+      );
     });
+
+    expect(mockSaveNoteDoodle).toHaveBeenCalledWith(
+      'note-1',
+      JSON.stringify([{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }])
+    );
   });
 });

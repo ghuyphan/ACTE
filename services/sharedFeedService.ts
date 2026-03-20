@@ -683,7 +683,7 @@ export async function createSharedPost(
     type: note.type,
     text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
     photoRemoteBase64: photoRemoteBase64 ?? null,
-    doodleStrokesJson: note.type === 'text' ? note.doodleStrokesJson ?? null : null,
+    doodleStrokesJson: note.doodleStrokesJson ?? null,
     placeName: note.locationName ?? null,
     sourceNoteId: note.id,
     createdAt: now,
@@ -718,7 +718,7 @@ export async function updateSharedPost(
   await updateDoc(doc(firestore, 'sharedPosts', postId), {
     text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
     photoRemoteBase64: photoRemoteBase64 ?? null,
-    doodleStrokesJson: note.type === 'text' ? note.doodleStrokesJson ?? null : null,
+    doodleStrokesJson: note.doodleStrokesJson ?? null,
     placeName: note.locationName ?? null,
     updatedAt: getNowIso(),
     authorUid: user.uid,
