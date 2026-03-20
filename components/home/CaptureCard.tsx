@@ -182,6 +182,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const isCameraSaveMode = captureMode === 'camera';
   const isSharedTarget = shareTarget === 'shared';
   const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
+  const textCardActiveIconColor = isDarkCaptureTheme ? colors.captureCardText : '#FFFFFF';
   const photoPreviewControlFill = capturedPhoto
     ? (isDarkCaptureTheme ? 'rgba(22,22,24,0.74)' : 'rgba(255,250,242,0.78)')
     : colors.captureCameraOverlay;
@@ -430,7 +431,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 <Ionicons
                   name={doodleModeEnabled ? 'create' : 'create-outline'}
                   size={16}
-                  color={doodleModeEnabled ? '#FFFFFF' : colors.captureGlassText}
+                  color={doodleModeEnabled ? textCardActiveIconColor : colors.captureGlassText}
                 />
               </Pressable>
 
