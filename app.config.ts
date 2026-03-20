@@ -1,0 +1,121 @@
+import type { ExpoConfig } from 'expo/config';
+
+const googleMapsAndroidApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY;
+
+const config = {
+  name: 'Noto',
+  slug: 'noto',
+  version: '1.0.0',
+  orientation: 'portrait',
+  icon: './assets/images/icon.png',
+  scheme: 'noto',
+  userInterfaceStyle: 'automatic',
+  newArchEnabled: true,
+  ios: {
+    supportsTablet: true,
+    bundleIdentifier: 'com.acte.app',
+    googleServicesFile: './GoogleService-Info.plist',
+  },
+  android: {
+    package: 'com.acte.app',
+    adaptiveIcon: {
+      backgroundColor: '#F7F2EB',
+      foregroundImage: './assets/images/android-icon-foreground.png',
+      backgroundImage: './assets/images/android-icon-background.png',
+      monochromeImage: './assets/images/android-icon-monochrome.png',
+    },
+    googleServicesFile: './google-services.json',
+    predictiveBackGestureEnabled: false,
+    config: googleMapsAndroidApiKey
+      ? {
+          googleMaps: {
+            apiKey: googleMapsAndroidApiKey,
+          },
+        }
+      : undefined,
+  },
+  web: {
+    output: 'static',
+    favicon: './assets/images/favicon.ico',
+  },
+  plugins: [
+    'expo-router',
+    'expo-notifications',
+    [
+      'expo-location',
+      {
+        locationAlwaysAndWhenInUsePermission:
+          'Allow Noto to use your location to save and find your nearby memories.',
+        isAndroidBackgroundLocationEnabled: true,
+        isIosBackgroundLocationEnabled: true,
+      },
+    ],
+    [
+      'expo-splash-screen',
+      {
+        image: './assets/images/splash-icon.png',
+        imageWidth: 200,
+        resizeMode: 'contain',
+        backgroundColor: '#F7F2EB',
+        dark: {
+          backgroundColor: '#F7F2EB',
+        },
+      },
+    ],
+    'expo-sqlite',
+    '@react-native-firebase/app',
+    '@react-native-firebase/auth',
+    '@react-native-google-signin/google-signin',
+    './plugins/withExpoWidgetsBundleFix.js',
+    [
+      'expo-widgets',
+      {
+        widgets: [
+          {
+            name: 'LocketWidget',
+            module: './widgets/LocketWidget.tsx',
+            targetName: 'ExpoWidgetsTarget',
+            displayName: 'Memories',
+            description: 'See your nearby memory from your Home Screen or Lock Screen.',
+            supportedFamilies: [
+              'systemSmall',
+              'systemLarge',
+              'accessoryInline',
+              'accessoryCircular',
+              'accessoryRectangular',
+            ],
+          },
+        ],
+      },
+    ],
+    './plugins/withCustomWidgetSwift.js',
+    'expo-camera',
+    [
+      'expo-image-picker',
+      {
+        photosPermission:
+          'Allow Noto to access your photo library so you can save memories from your existing photos.',
+      },
+    ],
+    [
+      'expo-build-properties',
+      {
+        ios: {
+          useFrameworks: 'static',
+        },
+      },
+    ],
+    'expo-font',
+    'expo-image',
+    'expo-web-browser',
+    './plugins/withAllowNonModularIncludes.js',
+    './plugins/withSafeFirebaseInitialization.js',
+    './plugins/withRNFirebaseAsStaticFramework.js',
+  ],
+  experiments: {
+    typedRoutes: true,
+    reactCompiler: true,
+  },
+} as ExpoConfig;
+
+export default config;

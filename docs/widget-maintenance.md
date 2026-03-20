@@ -158,7 +158,7 @@ Check:
 Edit:
 
 - `widgets/LocketWidget.tsx`
-- `app.json`
+- `app.config.ts`
 
 ## Known Gotchas
 

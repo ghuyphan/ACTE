@@ -30,7 +30,7 @@
 ├── android/
 ├── ios/
 ├── package.json
-├── app.json
+├── app.config.ts
 ├── tsconfig.json
 ├── eslint.config.js
 ├── jest.config.js
@@ -79,7 +79,7 @@
 ## Key Top-Level Files
 
 - `package.json`: Dependencies plus dev/run/lint/test scripts; app entry is `expo-router/entry`.
-- `app.json`: Expo app config, plugins, permissions, widget registration, and native identifiers.
+- `app.config.ts`: Expo app config, plugins, permissions, widget registration, native identifiers, and env-backed Android Maps setup.
 - `README.md`: Product overview, setup, and current Plus configuration notes.
 - `docs/release-checklist.md`: Current manual release gate, including Plus validation.
 - `tsconfig.json`: Strict TypeScript config with the `@/*` alias.

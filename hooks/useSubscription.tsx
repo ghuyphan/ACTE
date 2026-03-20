@@ -8,10 +8,11 @@ import Purchases, {
   PurchasesOffering,
   PurchasesPackage,
 } from 'react-native-purchases';
+import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import {
   PlanTier,
-  REVENUECAT_PLUS_ENTITLEMENT_ID,
-  REVENUECAT_PLUS_OFFERING_ID,
+  REVENUECAT_OFFERING_ID,
+  REVENUECAT_PRO_ENTITLEMENT_ID,
   getRevenueCatApiKey,
   getPhotoNoteLimitForTier,
   isRevenueCatConfigured,
@@ -22,6 +23,7 @@ import { useAuth } from './useAuth';
 export interface SubscriptionActionResult {
   status: 'success' | 'cancelled' | 'unavailable' | 'error';
   message?: string;
+  customerInfo?: CustomerInfo;
 }
 
 interface SubscriptionContextValue {
@@ -30,20 +32,31 @@ interface SubscriptionContextValue {
   isConfigured: boolean;
   isPurchaseAvailable: boolean;
   isPurchaseInFlight: boolean;
+  hasProEntitlement: boolean;
   canImportFromLibrary: boolean;
   photoNoteLimit: number | null;
   remotePhotoNoteCount: number | null;
+  customerInfo: CustomerInfo | null;
+  currentOffering: PurchasesOffering | null;
+  availablePackages: PurchasesPackage[];
+  monthlyPackage: PurchasesPackage | null;
+  annualPackage: PurchasesPackage | null;
+  lifetimePackage: PurchasesPackage | null;
   plusPriceLabel: string | null;
   plusPackageTitle: string | null;
+  purchasePackage: (pkg: PurchasesPackage | null) => Promise<SubscriptionActionResult>;
   purchasePlus: () => Promise<SubscriptionActionResult>;
   restorePurchases: () => Promise<SubscriptionActionResult>;
+  presentPaywall: () => Promise<PAYWALL_RESULT | null>;
+  presentPaywallIfNeeded: () => Promise<PAYWALL_RESULT | null>;
+  presentCustomerCenter: () => Promise<void>;
   refreshSubscription: () => Promise<void>;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextValue | undefined>(undefined);
 
 function getTierFromCustomerInfo(customerInfo: CustomerInfo | null): PlanTier {
-  if (customerInfo?.entitlements.active?.[REVENUECAT_PLUS_ENTITLEMENT_ID]) {
+  if (customerInfo?.entitlements.active?.[REVENUECAT_PRO_ENTITLEMENT_ID]) {
     return 'plus';
   }
 
@@ -88,6 +101,18 @@ function getPlusOfferingLabel(aPackage: PurchasesPackage | null) {
   return aPackage.identifier;
 }
 
+function getPurchaseErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message?: unknown }).message ?? 'Purchase failed.');
+  }
+
+  return 'Purchase failed.';
+}
+
 function isPurchaseCancelled(error: unknown) {
   return Boolean(
     typeof error === 'object' &&
@@ -102,8 +127,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const isConfigured = isRevenueCatConfigured();
   const revenueCatApiKey = getRevenueCatApiKey();
   const [isReady, setIsReady] = useState(() => !isConfigured);
-  const [tier, setTier] = useState<PlanTier>('free');
-  const [selectedPackage, setSelectedPackage] = useState<PurchasesPackage | null>(null);
+  const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+  const [currentOffering, setCurrentOffering] = useState<PurchasesOffering | null>(null);
   const [isPurchaseInFlight, setIsPurchaseInFlight] = useState(false);
   const [remotePhotoNoteCount, setRemotePhotoNoteCount] = useState<number | null>(null);
   const isConfiguredRef = useRef(false);
@@ -121,12 +146,12 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     ]);
 
     const offering =
-      (REVENUECAT_PLUS_OFFERING_ID
-        ? offerings.all[REVENUECAT_PLUS_OFFERING_ID]
+      (REVENUECAT_OFFERING_ID
+        ? offerings.all[REVENUECAT_OFFERING_ID]
         : offerings.current) ?? offerings.current ?? null;
 
-    setSelectedPackage(selectPreferredPackage(offering));
-    setTier(getTierFromCustomerInfo(customerInfo));
+    setCurrentOffering(offering);
+    setCustomerInfo(customerInfo);
   }, []);
 
   useEffect(() => {
@@ -148,7 +173,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     void Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.ERROR);
 
     const listener = (customerInfo: CustomerInfo) => {
-      setTier(getTierFromCustomerInfo(customerInfo));
+      setCustomerInfo(customerInfo);
     };
 
     Purchases.addCustomerInfoUpdateListener(listener);
@@ -210,10 +235,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       try {
         if (nextUserId) {
           const result = await Purchases.logIn(nextUserId);
-          setTier(getTierFromCustomerInfo(result.customerInfo));
+          setCustomerInfo(result.customerInfo);
         } else {
           const customerInfo = await Purchases.logOut();
-          setTier(getTierFromCustomerInfo(customerInfo));
+          setCustomerInfo(customerInfo);
         }
 
         await loadRevenueCatState();
@@ -223,38 +248,70 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     })();
   }, [authReady, isConfigured, loadRevenueCatState, user?.uid]);
 
+  const tier = getTierFromCustomerInfo(customerInfo);
+  const selectedPackage = selectPreferredPackage(currentOffering);
+  const availablePackages = currentOffering?.availablePackages ?? [];
+  const monthlyPackage =
+    availablePackages.find((item) => item.packageType === PACKAGE_TYPE.MONTHLY) ?? null;
+  const annualPackage =
+    availablePackages.find((item) => item.packageType === PACKAGE_TYPE.ANNUAL) ?? null;
+  const lifetimePackage =
+    availablePackages.find((item) => item.packageType === PACKAGE_TYPE.LIFETIME) ?? null;
+
+  const purchasePackage = useCallback(
+    async (pkg: PurchasesPackage | null): Promise<SubscriptionActionResult> => {
+      if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured || !pkg) {
+        return { status: 'unavailable' };
+      }
+
+      setIsPurchaseInFlight(true);
+      try {
+        const result = await Purchases.purchasePackage(pkg);
+        setCustomerInfo(result.customerInfo);
+        return { status: 'success', customerInfo: result.customerInfo };
+      } catch (error) {
+        if (isPurchaseCancelled(error)) {
+          return { status: 'cancelled' };
+        }
+
+        console.warn('[subscription] Purchase failed:', error);
+        return { status: 'error', message: getPurchaseErrorMessage(error) };
+      } finally {
+        setIsPurchaseInFlight(false);
+      }
+    },
+    [isConfigured]
+  );
+
   const value = useMemo<SubscriptionContextValue>(
     () => ({
       tier,
       isReady,
       isConfigured,
-      isPurchaseAvailable: (Platform.OS === 'ios' || Platform.OS === 'android') && isConfigured && Boolean(selectedPackage),
+      isPurchaseAvailable:
+        (Platform.OS === 'ios' || Platform.OS === 'android') &&
+        isConfigured &&
+        availablePackages.length > 0,
       isPurchaseInFlight,
+      hasProEntitlement: tier === 'plus',
       canImportFromLibrary: tier === 'plus',
       photoNoteLimit: getPhotoNoteLimitForTier(tier),
       remotePhotoNoteCount,
+      customerInfo,
+      currentOffering,
+      availablePackages,
+      monthlyPackage,
+      annualPackage,
+      lifetimePackage,
       plusPriceLabel: selectedPackage?.product.priceString ?? null,
       plusPackageTitle: getPlusOfferingLabel(selectedPackage),
+      purchasePackage,
       purchasePlus: async () => {
-        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured || !selectedPackage) {
+        if (!selectedPackage) {
           return { status: 'unavailable' };
         }
 
-        setIsPurchaseInFlight(true);
-        try {
-          const result = await Purchases.purchasePackage(selectedPackage);
-          setTier(getTierFromCustomerInfo(result.customerInfo));
-          return { status: 'success' };
-        } catch (error) {
-          if (isPurchaseCancelled(error)) {
-            return { status: 'cancelled' };
-          }
-
-          console.warn('[subscription] Purchase failed:', error);
-          return { status: 'error' };
-        } finally {
-          setIsPurchaseInFlight(false);
-        }
+        return purchasePackage(selectedPackage);
       },
       restorePurchases: async () => {
         if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured) {
@@ -264,13 +321,64 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         setIsPurchaseInFlight(true);
         try {
           const customerInfo = await Purchases.restorePurchases();
-          setTier(getTierFromCustomerInfo(customerInfo));
-          return { status: 'success' };
+          setCustomerInfo(customerInfo);
+          return { status: 'success', customerInfo };
         } catch (error) {
           console.warn('[subscription] Restore failed:', error);
-          return { status: 'error' };
+          return { status: 'error', message: getPurchaseErrorMessage(error) };
         } finally {
           setIsPurchaseInFlight(false);
+        }
+      },
+      presentPaywall: async () => {
+        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured) {
+          return null;
+        }
+
+        try {
+          return await RevenueCatUI.presentPaywall({
+            offering: currentOffering ?? undefined,
+            displayCloseButton: true,
+          });
+        } catch (error) {
+          console.warn('[subscription] Paywall presentation failed:', error);
+          return null;
+        }
+      },
+      presentPaywallIfNeeded: async () => {
+        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured) {
+          return null;
+        }
+
+        try {
+          return await RevenueCatUI.presentPaywallIfNeeded({
+            requiredEntitlementIdentifier: REVENUECAT_PRO_ENTITLEMENT_ID,
+            offering: currentOffering ?? undefined,
+            displayCloseButton: true,
+          });
+        } catch (error) {
+          console.warn('[subscription] Conditional paywall presentation failed:', error);
+          return null;
+        }
+      },
+      presentCustomerCenter: async () => {
+        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured) {
+          return;
+        }
+
+        try {
+          await RevenueCatUI.presentCustomerCenter({
+            callbacks: {
+              onRestoreCompleted: ({ customerInfo }) => {
+                setCustomerInfo(customerInfo);
+              },
+              onRestoreFailed: ({ error }) => {
+                console.warn('[subscription] Customer Center restore failed:', error);
+              },
+            },
+          });
+        } catch (error) {
+          console.warn('[subscription] Customer Center presentation failed:', error);
         }
       },
       refreshSubscription: async () => {
@@ -281,7 +389,22 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         await loadRevenueCatState();
       },
     }),
-    [isConfigured, isPurchaseInFlight, isReady, loadRevenueCatState, remotePhotoNoteCount, selectedPackage, tier]
+    [
+      annualPackage,
+      availablePackages,
+      currentOffering,
+      customerInfo,
+      isConfigured,
+      isPurchaseInFlight,
+      isReady,
+      lifetimePackage,
+      loadRevenueCatState,
+      monthlyPackage,
+      purchasePackage,
+      remotePhotoNoteCount,
+      selectedPackage,
+      tier,
+    ]
   );
 
   return <SubscriptionContext.Provider value={value}>{children}</SubscriptionContext.Provider>;

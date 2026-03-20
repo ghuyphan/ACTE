@@ -3,11 +3,14 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import {
+  Alert,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PrimaryButton from '../components/ui/PrimaryButton';
 import { Layout, Shadows, Typography } from '../constants/theme';
@@ -45,18 +48,85 @@ export default function PlusScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const { 
-    tier, 
-    isPurchaseAvailable, 
-    isPurchaseInFlight, 
-    plusPriceLabel, 
-    purchasePlus, 
-    restorePurchases 
+  const {
+    annualPackage,
+    isPurchaseAvailable,
+    isPurchaseInFlight,
+    lifetimePackage,
+    monthlyPackage,
+    plusPriceLabel,
+    presentCustomerCenter,
+    presentPaywall,
+    purchasePackage,
+    restorePurchases,
+    tier,
   } = useSubscription();
 
   const gradientColors: [string, string, string] = isDark
     ? [colors.background, colors.card, '#1A1A1A']
     : [colors.background, colors.surface, '#ECE2D7'];
+
+  const handlePurchase = async (
+    pkg: typeof monthlyPackage,
+    successMessage: string
+  ) => {
+    if (!pkg || isPurchaseInFlight) {
+      return;
+    }
+
+    const result = await purchasePackage(pkg);
+    if (result.status === 'success') {
+      Alert.alert(t('plus.upgradeSuccessTitle', 'Plus unlocked'), successMessage);
+      return;
+    }
+
+    if (result.status === 'cancelled') {
+      return;
+    }
+
+    Alert.alert(
+      t('plus.upgradeUnavailableTitle', 'Plus unavailable'),
+      result.message ??
+        t(
+          'plus.upgradeUnavailableMessage',
+          'We could not complete the purchase right now. Please try again in a moment.'
+        )
+    );
+  };
+
+  const handlePresentPaywall = async () => {
+    const result = await presentPaywall();
+    if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
+      Alert.alert(
+        t('plus.upgradeSuccessTitle', 'Plus unlocked'),
+        t(
+          'plus.upgradeSuccessMessage',
+          'You can now save more photo notes and import images from your library.'
+        )
+      );
+    }
+  };
+
+  const handleRestorePurchases = async () => {
+    if (isPurchaseInFlight) {
+      return;
+    }
+
+    const result = await restorePurchases();
+    if (result.status === 'success') {
+      Alert.alert(
+        t('plus.restoreSuccessTitle', 'Restored'),
+        t('plus.restoreSuccessMessage', 'Plus is active on this device.')
+      );
+      return;
+    }
+
+    Alert.alert(
+      t('plus.restoreFailedTitle', 'Restore failed'),
+      result.message ??
+        t('plus.restoreFailedMessage', "Couldn't restore purchases right now.")
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -67,14 +137,15 @@ export default function PlusScreen() {
         end={{ x: 1, y: 1 }}
       />
 
-      <View
+      <ScrollView
         style={[
           styles.content,
           {
             paddingTop: headerHeight + 12,
-            paddingBottom: insets.bottom + 20,
+            paddingBottom: insets.bottom + 24,
           },
         ]}
+        contentContainerStyle={styles.contentContainer}
       >
         <View style={styles.heroSection}>
           <View style={[styles.iconContainer, { backgroundColor: colors.primarySoft }]}>
@@ -115,8 +186,6 @@ export default function PlusScreen() {
           />
         </View>
 
-        <View style={{ flex: 1 }} />
-
         <View style={styles.footerActions}>
           <PrimaryButton
             label={
@@ -129,25 +198,86 @@ export default function PlusScreen() {
                 : t('plus.cta', 'Upgrade to Noto Plus')
             }
             onPress={() => {
-                if (tier === 'plus' || !isPurchaseAvailable || isPurchaseInFlight) return;
-                void purchasePlus();
+              if (tier === 'plus' || !isPurchaseAvailable || isPurchaseInFlight) return;
+              void handlePresentPaywall();
             }}
             loading={isPurchaseInFlight}
             variant="neutral"
             disabled={tier === 'plus' || !isPurchaseAvailable}
           />
 
+          {monthlyPackage ? (
+            <PrimaryButton
+              label={`${t('plus.monthly', 'Monthly')} · ${monthlyPackage.product.priceString ?? monthlyPackage.identifier}`}
+              onPress={() =>
+                void handlePurchase(
+                  monthlyPackage,
+                  t(
+                    'plus.upgradeSuccessMessage',
+                    'You can now save more photo notes and import images from your library.'
+                  )
+                )
+              }
+              variant="secondary"
+              disabled={isPurchaseInFlight}
+            />
+          ) : null}
+
+          {annualPackage ? (
+            <PrimaryButton
+              label={`${t('plus.yearly', 'Yearly')} · ${annualPackage.product.priceString ?? annualPackage.identifier}`}
+              onPress={() =>
+                void handlePurchase(
+                  annualPackage,
+                  t(
+                    'plus.upgradeSuccessMessage',
+                    'You can now save more photo notes and import images from your library.'
+                  )
+                )
+              }
+              variant="secondary"
+              disabled={isPurchaseInFlight}
+            />
+          ) : null}
+
+          {lifetimePackage ? (
+            <PrimaryButton
+              label={`${t('plus.lifetime', 'Lifetime')} · ${lifetimePackage.product.priceString ?? lifetimePackage.identifier}`}
+              onPress={() =>
+                void handlePurchase(
+                  lifetimePackage,
+                  t(
+                    'plus.upgradeSuccessMessage',
+                    'You can now save more photo notes and import images from your library.'
+                  )
+                )
+              }
+              variant="secondary"
+              disabled={isPurchaseInFlight}
+            />
+          ) : null}
+
           <PrimaryButton
             label={t('plus.restore', 'Restore purchases')}
             onPress={() => {
-              if (isPurchaseInFlight) return;
-              void restorePurchases();
+              void handleRestorePurchases();
             }}
             variant="secondary"
             disabled={isPurchaseInFlight}
           />
+
+          {tier === 'plus' ? (
+            <PrimaryButton
+              label={t('plus.customerCenter', 'Manage subscription')}
+              onPress={() => {
+                void presentCustomerCenter();
+              }}
+              variant="secondary"
+              disabled={isPurchaseInFlight}
+            />
+          ) : null}
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -160,9 +290,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: Layout.screenPadding + 12,
   },
+  contentContainer: {
+    gap: 24,
+  },
   heroSection: {
     alignItems: 'center',
-    marginBottom: 24,
   },
   iconContainer: {
     width: 120,
@@ -234,5 +366,6 @@ const styles = StyleSheet.create({
   },
   footerActions: {
     gap: 12,
+    paddingBottom: 12,
   },
 });

@@ -52,6 +52,7 @@ Noto is an Expo SDK 55 React Native app for saving text notes and photo memories
 - `services/syncService.ts`: Firestore sync pipeline
 - `services/widgetService.ts`: widget selection and payload generation
 - `widgets/ios/LocketWidget.swift`: source of truth for the iOS widget UI
+- `app.config.ts`: Expo app config and env-backed native settings
 - `docs/release-checklist.md`: manual ship checklist
 - `docs/widget-maintenance.md`: widget maintenance shortcut
 
@@ -86,6 +87,7 @@ Firebase:
 
 RevenueCat for Plus:
 
+- `EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY`
 - `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`
 - `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`
 - `EXPO_PUBLIC_REVENUECAT_PLUS_ENTITLEMENT_ID` optional, defaults to `plus`

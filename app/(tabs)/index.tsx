@@ -23,6 +23,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../../components/AppSheetAlert';
 import CaptureCard, { type CaptureCardHandle } from '../../components/home/CaptureCard';
@@ -77,7 +78,7 @@ export default function HomeScreen() {
     plusPriceLabel,
     canImportFromLibrary,
     remotePhotoNoteCount,
-    purchasePlus,
+    presentPaywallIfNeeded,
     restorePurchases,
   } = useSubscription();
   const {
@@ -509,8 +510,8 @@ export default function HomeScreen() {
                   })
                 : t('plus.upgradeCta', 'Upgrade to Plus'),
               onPress: async () => {
-                const result = await purchasePlus();
-                if (result.status === 'success') {
+                const result = await presentPaywallIfNeeded();
+                if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
                   showAlert({
                     variant: 'success',
                     title: t('plus.upgradeSuccessTitle', 'Noto Plus is ready'),
@@ -525,7 +526,7 @@ export default function HomeScreen() {
                   return;
                 }
 
-                if (result.status === 'cancelled') {
+                if (result === PAYWALL_RESULT.CANCELLED || result === PAYWALL_RESULT.NOT_PRESENTED) {
                   return;
                 }
 
@@ -586,7 +587,7 @@ export default function HomeScreen() {
       isPlusConfigured,
       isPurchaseAvailable,
       plusPriceLabel,
-      purchasePlus,
+      presentPaywallIfNeeded,
       restorePurchases,
       showAlert,
       t,

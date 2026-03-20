@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ReactNode } from 'react';
 import { Platform } from 'react-native';
 import Purchases, { PACKAGE_TYPE } from 'react-native-purchases';
+import RevenueCatUI from 'react-native-purchases-ui';
 
 const mockAuthState = {
   isReady: true,
@@ -9,6 +10,7 @@ const mockAuthState = {
 };
 
 const mockSubscriptionConfig = {
+  testApiKey: '',
   iosApiKey: '',
   androidApiKey: 'android-key',
 };
@@ -45,9 +47,13 @@ jest.mock('../constants/subscription', () => {
   return {
     FREE_PHOTO_NOTE_LIMIT: 10,
     PLUS_PHOTO_NOTE_LIMIT: null,
-    REVENUECAT_PLUS_ENTITLEMENT_ID: 'plus',
-    REVENUECAT_PLUS_OFFERING_ID: '',
+    REVENUECAT_PRO_ENTITLEMENT_ID: 'noto_pro',
+    REVENUECAT_OFFERING_ID: 'default',
     getRevenueCatApiKey: (platformOS = Platform.OS) => {
+      if (mockSubscriptionConfig.testApiKey.trim().length > 0) {
+        return mockSubscriptionConfig.testApiKey;
+      }
+
       if (platformOS === 'ios') {
         return mockSubscriptionConfig.iosApiKey;
       }
@@ -59,6 +65,10 @@ jest.mock('../constants/subscription', () => {
       return '';
     },
     isRevenueCatConfigured: (platformOS = Platform.OS) => {
+      if (mockSubscriptionConfig.testApiKey.trim().length > 0) {
+        return true;
+      }
+
       if (platformOS === 'ios') {
         return mockSubscriptionConfig.iosApiKey.trim().length > 0;
       }
@@ -73,9 +83,26 @@ jest.mock('../constants/subscription', () => {
   };
 });
 
+jest.mock('react-native-purchases-ui', () => ({
+  __esModule: true,
+  PAYWALL_RESULT: {
+    NOT_PRESENTED: 'NOT_PRESENTED',
+    ERROR: 'ERROR',
+    CANCELLED: 'CANCELLED',
+    PURCHASED: 'PURCHASED',
+    RESTORED: 'RESTORED',
+  },
+  default: {
+    presentPaywall: jest.fn(async () => 'PURCHASED'),
+    presentPaywallIfNeeded: jest.fn(async () => 'PURCHASED'),
+    presentCustomerCenter: jest.fn(async () => undefined),
+  },
+}));
+
 import { SubscriptionProvider, useSubscription } from '../hooks/useSubscription';
 
 const mockPurchases = Purchases as jest.Mocked<typeof Purchases>;
+const mockRevenueCatUI = RevenueCatUI as jest.Mocked<typeof RevenueCatUI>;
 
 const monthlyPackage = {
   packageType: PACKAGE_TYPE.MONTHLY,
@@ -104,25 +131,32 @@ describe('useSubscription', () => {
     mockAuthState.isReady = true;
     mockAuthState.user = null;
     mockRemoteUsage.photoNoteCount = null;
+    mockSubscriptionConfig.testApiKey = '';
     mockSubscriptionConfig.iosApiKey = '';
     mockSubscriptionConfig.androidApiKey = 'android-key';
 
     mockPurchases.getOfferings.mockResolvedValue({
       current: {
+        identifier: 'default',
         availablePackages: [monthlyPackage],
       },
-      all: {},
+      all: {
+        default: {
+          identifier: 'default',
+          availablePackages: [monthlyPackage],
+        },
+      },
     } as any);
     mockPurchases.getCustomerInfo.mockResolvedValue({
       entitlements: { active: {} },
     } as any);
     mockPurchases.purchasePackage.mockResolvedValue({
       customerInfo: {
-        entitlements: { active: { plus: {} } },
+        entitlements: { active: { noto_pro: {} } },
       },
     } as any);
     mockPurchases.restorePurchases.mockResolvedValue({
-      entitlements: { active: { plus: {} } },
+      entitlements: { active: { noto_pro: {} } },
     } as any);
     mockPurchases.logIn.mockResolvedValue({
       customerInfo: {
@@ -153,7 +187,7 @@ describe('useSubscription', () => {
       purchaseResult = await hook.result.current.purchasePlus();
     });
 
-    expect(purchaseResult).toEqual({ status: 'success' });
+    expect(purchaseResult.status).toBe('success');
     expect(mockPurchases.purchasePackage).toHaveBeenCalledWith(monthlyPackage);
 
     let restoreResult!: { status: string; message?: string };
@@ -161,7 +195,7 @@ describe('useSubscription', () => {
       restoreResult = await hook.result.current.restorePurchases();
     });
 
-    expect(restoreResult).toEqual({ status: 'success' });
+    expect(restoreResult.status).toBe('success');
     expect(mockPurchases.restorePurchases).toHaveBeenCalled();
   });
 
@@ -194,5 +228,21 @@ describe('useSubscription', () => {
     await waitFor(() => {
       expect(hook.result.current.remotePhotoNoteCount).toBe(7);
     });
+  });
+
+  it('presents RevenueCat paywall and customer center helpers', async () => {
+    const hook = renderHook(() => useSubscription(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+    });
+
+    await act(async () => {
+      expect(await hook.result.current.presentPaywallIfNeeded()).toBe('PURCHASED');
+      await hook.result.current.presentCustomerCenter();
+    });
+
+    expect(mockRevenueCatUI.presentPaywallIfNeeded).toHaveBeenCalled();
+    expect(mockRevenueCatUI.presentCustomerCenter).toHaveBeenCalled();
   });
 });
