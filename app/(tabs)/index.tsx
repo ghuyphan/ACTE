@@ -14,6 +14,7 @@ import {
   AppState,
   Dimensions,
   FlatList,
+  InteractionManager,
   Keyboard,
   Platform,
   Pressable,
@@ -100,6 +101,7 @@ export default function HomeScreen() {
   const [saving, setSaving] = useState(false);
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [appState, setAppState] = useState(AppState.currentState);
+  const [cameraPreviewReady, setCameraPreviewReady] = useState(Platform.OS !== 'android');
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [sharedManageSheetVersion, setSharedManageSheetVersion] = useState(0);
@@ -212,7 +214,8 @@ export default function HomeScreen() {
   const shouldRenderCameraPreview =
     captureMode === 'camera' &&
     isScreenFocused &&
-    appState === 'active';
+    appState === 'active' &&
+    cameraPreviewReady;
   const visibleSharedPosts = useMemo(
     () =>
       (useInlineHeaderSearch && isSearching ? [] : sharedPosts).filter((post) => post.authorUid !== user?.uid),
@@ -244,6 +247,37 @@ export default function HomeScreen() {
       subscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      setCameraPreviewReady(true);
+      return;
+    }
+
+    if (captureMode !== 'camera' || !isScreenFocused || appState !== 'active') {
+      setCameraPreviewReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+      const timeout = setTimeout(() => {
+        if (!cancelled) {
+          setCameraPreviewReady(true);
+        }
+      }, 180);
+
+      return () => {
+        clearTimeout(timeout);
+      };
+    });
+
+    return () => {
+      cancelled = true;
+      setCameraPreviewReady(false);
+      interactionHandle.cancel();
+    };
+  }, [appState, captureMode, isScreenFocused]);
 
   useEffect(() => {
     if (!user) {

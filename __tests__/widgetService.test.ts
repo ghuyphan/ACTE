@@ -387,10 +387,82 @@ describe('widgetService', () => {
     expect(mockUpdateSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
         props: expect.objectContaining({
+          noteType: 'text',
           text: 'Latest note',
           locationName: 'Latest place',
           isIdleState: false,
           noteCount: 2,
+          hasDoodle: false,
+          doodleStrokesJson: null,
+        }),
+      })
+    );
+  });
+
+  it('includes doodle metadata for text notes without changing emoji formatting', async () => {
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'doodle-note',
+        content: 'Morning coffee again',
+        moodEmoji: '☕️',
+        hasDoodle: true,
+        doodleStrokesJson: JSON.stringify([
+          {
+            color: '#1C1C1E',
+            points: [0.1, 0.2, 0.4, 0.6],
+          },
+        ]),
+      }),
+    ]);
+
+    await updateWidgetData();
+
+    expect(mockUpdateSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        props: expect.objectContaining({
+          noteType: 'text',
+          text: '☕️ Morning coffee again',
+          hasDoodle: true,
+          doodleStrokesJson: JSON.stringify([
+            {
+              color: '#1C1C1E',
+              points: [0.1, 0.2, 0.4, 0.6],
+            },
+          ]),
+        }),
+      })
+    );
+  });
+
+  it('includes photo metadata for photo notes', async () => {
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mockGetLastKnownPositionAsync.mockResolvedValue({
+      coords: {
+        latitude: 10.8,
+        longitude: 106.7,
+      },
+    });
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'photo-note',
+        type: 'photo',
+        content: 'file:///mock-documents/photos/latest.jpg',
+        locationName: 'Photo Place',
+        latitude: 10.8,
+        longitude: 106.7,
+      }),
+    ]);
+
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00') });
+
+    expect(mockUpdateSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        props: expect.objectContaining({
+          noteType: 'photo',
+          text: '',
+          hasDoodle: false,
+          doodleStrokesJson: null,
+          backgroundImageUrl: 'file:///mock-group/widget-images/latest-photo.jpg',
         }),
       })
     );

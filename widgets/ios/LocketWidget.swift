@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 
 private struct LocketWidgetPayload {
+    let noteType: String
     let text: String
     let locationName: String
     let date: String
@@ -10,6 +11,8 @@ private struct LocketWidgetPayload {
     let nearbyPlacesCount: Int
     let backgroundImageUrl: String?
     let backgroundImageBase64: String?
+    let hasDoodle: Bool
+    let doodleStrokesJson: String?
     let isIdleState: Bool
     let idleText: String
     let savedCountText: String
@@ -24,6 +27,7 @@ private struct LocketWidgetPayload {
     let accessoryNearLabelText: String
 
     static let placeholder = LocketWidgetPayload(
+        noteType: "text",
         text: "",
         locationName: "",
         date: "",
@@ -31,6 +35,8 @@ private struct LocketWidgetPayload {
         nearbyPlacesCount: 0,
         backgroundImageUrl: nil,
         backgroundImageBase64: nil,
+        hasDoodle: false,
+        doodleStrokesJson: nil,
         isIdleState: true,
         idleText: "The right note will appear when you're nearby.",
         savedCountText: "",
@@ -46,6 +52,7 @@ private struct LocketWidgetPayload {
     )
 
     init(
+        noteType: String,
         text: String,
         locationName: String,
         date: String,
@@ -53,6 +60,8 @@ private struct LocketWidgetPayload {
         nearbyPlacesCount: Int,
         backgroundImageUrl: String?,
         backgroundImageBase64: String?,
+        hasDoodle: Bool,
+        doodleStrokesJson: String?,
         isIdleState: Bool,
         idleText: String,
         savedCountText: String,
@@ -66,6 +75,7 @@ private struct LocketWidgetPayload {
         accessorySavedLabelText: String,
         accessoryNearLabelText: String
     ) {
+        self.noteType = noteType
         self.text = text
         self.locationName = locationName
         self.date = date
@@ -73,6 +83,8 @@ private struct LocketWidgetPayload {
         self.nearbyPlacesCount = nearbyPlacesCount
         self.backgroundImageUrl = backgroundImageUrl
         self.backgroundImageBase64 = backgroundImageBase64
+        self.hasDoodle = hasDoodle
+        self.doodleStrokesJson = doodleStrokesJson
         self.isIdleState = isIdleState
         self.idleText = idleText
         self.savedCountText = savedCountText
@@ -90,6 +102,7 @@ private struct LocketWidgetPayload {
     init(rawProps: [String: Any]) {
         let payload = LocketWidgetPayload.unwrapPayload(from: rawProps)
 
+        noteType = LocketWidgetPayload.stringValue(payload["noteType"])
         text = LocketWidgetPayload.stringValue(payload["text"])
         locationName = LocketWidgetPayload.stringValue(payload["locationName"])
         date = LocketWidgetPayload.stringValue(payload["date"])
@@ -97,6 +110,8 @@ private struct LocketWidgetPayload {
         nearbyPlacesCount = LocketWidgetPayload.intValue(payload["nearbyPlacesCount"])
         backgroundImageUrl = LocketWidgetPayload.optionalStringValue(payload["backgroundImageUrl"])
         backgroundImageBase64 = LocketWidgetPayload.optionalStringValue(payload["backgroundImageBase64"])
+        hasDoodle = LocketWidgetPayload.boolValue(payload["hasDoodle"])
+        doodleStrokesJson = LocketWidgetPayload.optionalStringValue(payload["doodleStrokesJson"])
         isIdleState = LocketWidgetPayload.boolValue(payload["isIdleState"])
         idleText = LocketWidgetPayload.stringValue(payload["idleText"])
         savedCountText = LocketWidgetPayload.stringValue(payload["savedCountText"])
@@ -154,6 +169,130 @@ private struct LocketWidgetPayload {
             return value.boolValue
         }
         return false
+    }
+}
+
+private struct LocketWidgetDoodleStroke {
+    let colorHex: String
+    let points: [CGPoint]
+}
+
+private struct LocketWidgetDoodleOverlay: View {
+    let strokes: [LocketWidgetDoodleStroke]
+    let isLarge: Bool
+
+    private var strokeOpacity: Double {
+        isLarge ? 0.34 : 0.28
+    }
+
+    private var pointOpacity: Double {
+        isLarge ? 0.40 : 0.34
+    }
+
+    var body: some View {
+        Canvas { context, size in
+            let baseLineWidth = max(4, min(size.width, size.height) * (isLarge ? 0.011 : 0.013))
+
+            for stroke in strokes {
+                guard !stroke.points.isEmpty else {
+                    continue
+                }
+
+                let strokeColor = colorFromHex(stroke.colorHex).opacity(strokeOpacity)
+                let dotColor = colorFromHex(stroke.colorHex).opacity(pointOpacity)
+                let resolvedPoints = stroke.points.map { point in
+                    CGPoint(x: point.x * size.width, y: point.y * size.height)
+                }
+
+                if resolvedPoints.count == 1, let point = resolvedPoints.first {
+                    let rect = CGRect(
+                        x: point.x - baseLineWidth / 2,
+                        y: point.y - baseLineWidth / 2,
+                        width: baseLineWidth,
+                        height: baseLineWidth
+                    )
+                    context.fill(Path(ellipseIn: rect), with: .color(dotColor))
+                    continue
+                }
+
+                var path = Path()
+                path.move(to: resolvedPoints[0])
+
+                for point in resolvedPoints.dropFirst() {
+                    path.addLine(to: point)
+                }
+
+                context.stroke(
+                    path,
+                    with: .color(strokeColor),
+                    style: StrokeStyle(
+                        lineWidth: baseLineWidth,
+                        lineCap: .round,
+                        lineJoin: .round
+                    )
+                )
+            }
+        }
+    }
+}
+
+private func parseDoodleStrokes(from doodleStrokesJson: String?) -> [LocketWidgetDoodleStroke] {
+    guard
+        let doodleStrokesJson,
+        let data = doodleStrokesJson.data(using: .utf8),
+        let parsed = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+    else {
+        return []
+    }
+
+    return parsed.compactMap { item in
+        guard
+            let colorHex = item["color"] as? String,
+            let rawPoints = item["points"] as? [NSNumber]
+        else {
+            return nil
+        }
+
+        var points: [CGPoint] = []
+        var index = 0
+        while index + 1 < rawPoints.count {
+            let x = CGFloat(max(0, min(1, rawPoints[index].doubleValue)))
+            let y = CGFloat(max(0, min(1, rawPoints[index + 1].doubleValue)))
+            points.append(CGPoint(x: x, y: y))
+            index += 2
+        }
+
+        guard !points.isEmpty else {
+            return nil
+        }
+
+        return LocketWidgetDoodleStroke(colorHex: colorHex, points: points)
+    }
+}
+
+private func colorFromHex(_ value: String) -> Color {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    let hex = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
+    var number: UInt64 = 0
+
+    guard Scanner(string: hex).scanHexInt64(&number) else {
+        return Color.black
+    }
+
+    switch hex.count {
+    case 6:
+        let red = Double((number & 0xFF0000) >> 16) / 255.0
+        let green = Double((number & 0x00FF00) >> 8) / 255.0
+        let blue = Double(number & 0x0000FF) / 255.0
+        return Color(red: red, green: green, blue: blue)
+    case 8:
+        let alpha = Double((number & 0xFF000000) >> 24) / 255.0
+        let red = Double((number & 0x00FF0000) >> 16) / 255.0
+        let green = Double((number & 0x0000FF00) >> 8) / 255.0
+        let blue = Double(number & 0x000000FF) / 255.0
+        return Color(.sRGB, red: red, green: green, blue: blue, opacity: alpha)
+    default:
+        return Color.black
     }
 }
 
@@ -280,6 +419,18 @@ private struct LocketWidgetEntryView: View {
 
     private var hasPhotoBackground: Bool {
         resolvedImage != nil && !payload.isIdleState
+    }
+
+    private var doodleStrokes: [LocketWidgetDoodleStroke] {
+        parseDoodleStrokes(from: payload.doodleStrokesJson)
+    }
+
+    private var shouldShowDoodleOverlay: Bool {
+        !isAccessoryFamily &&
+        !payload.isIdleState &&
+        payload.noteType == "text" &&
+        payload.hasDoodle &&
+        !doodleStrokes.isEmpty
     }
 
     private var textSurfaceColors: [Color] {
@@ -545,6 +696,13 @@ private struct LocketWidgetEntryView: View {
 
     private var smallLayout: some View {
         ZStack(alignment: .bottom) {
+            if shouldShowDoodleOverlay {
+                LocketWidgetDoodleOverlay(strokes: doodleStrokes, isLarge: false)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .allowsHitTesting(false)
+            }
+
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
                 smallTextContent
@@ -585,28 +743,37 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var largeLayout: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if hasLocationEyebrow {
-                Text(payload.locationName)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(eyebrowTextColor)
-                    .lineLimit(1)
-                    .padding(.bottom, 12)
+        ZStack {
+            if shouldShowDoodleOverlay {
+                LocketWidgetDoodleOverlay(strokes: doodleStrokes, isLarge: true)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                    .allowsHitTesting(false)
             }
 
-            Text(displayText)
-                .font(.system(size: fontSize, weight: .regular, design: .serif))
-                .foregroundStyle(primaryTextColor)
-                .multilineTextAlignment(.leading)
-                .lineLimit(4)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 0) {
+                if hasLocationEyebrow {
+                    Text(payload.locationName)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(eyebrowTextColor)
+                        .lineLimit(1)
+                        .padding(.bottom, 12)
+                }
 
-            Spacer(minLength: 18)
+                Text(displayText)
+                    .font(.system(size: fontSize, weight: .regular, design: .serif))
+                    .foregroundStyle(primaryTextColor)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-            if shouldShowCountBadge {
-                HStack {
-                    countBadge
-                    Spacer(minLength: 0)
+                Spacer(minLength: 18)
+
+                if shouldShowCountBadge {
+                    HStack {
+                        countBadge
+                        Spacer(minLength: 0)
+                    }
                 }
             }
         }

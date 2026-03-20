@@ -1,5 +1,5 @@
-import { PanResponder, LayoutChangeEvent, StyleSheet, View } from 'react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { GestureResponderEvent, PanResponder, LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface DoodleStroke {
   color: string;
@@ -14,9 +14,115 @@ interface NoteDoodleCanvasProps {
 }
 
 const STROKE_WIDTH = 6;
+const MIN_STAMP_SPACING = 0.008;
+const MAX_SEGMENT_SUBDIVISIONS = 12;
+
+interface DoodlePoint {
+  x: number;
+  y: number;
+}
 
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
+}
+
+function pairStrokePoints(points: number[]): DoodlePoint[] {
+  const paired: DoodlePoint[] = [];
+
+  for (let index = 0; index < points.length; index += 2) {
+    paired.push({
+      x: clamp01(points[index] ?? 0),
+      y: clamp01(points[index + 1] ?? 0),
+    });
+  }
+
+  return paired;
+}
+
+function distanceBetweenPoints(start: DoodlePoint, end: DoodlePoint) {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+}
+
+function interpolateLine(start: DoodlePoint, end: DoodlePoint) {
+  const distance = distanceBetweenPoints(start, end);
+  const subdivisions = Math.max(1, Math.min(MAX_SEGMENT_SUBDIVISIONS, Math.ceil(distance / MIN_STAMP_SPACING)));
+  const points: DoodlePoint[] = [];
+
+  for (let step = 0; step <= subdivisions; step += 1) {
+    const progress = step / subdivisions;
+    points.push({
+      x: clamp01(start.x + (end.x - start.x) * progress),
+      y: clamp01(start.y + (end.y - start.y) * progress),
+    });
+  }
+
+  return points;
+}
+
+function interpolateCurve(
+  previous: DoodlePoint,
+  start: DoodlePoint,
+  end: DoodlePoint,
+  next: DoodlePoint
+) {
+  const distance = distanceBetweenPoints(start, end);
+  const subdivisions = Math.max(2, Math.min(MAX_SEGMENT_SUBDIVISIONS, Math.ceil(distance / MIN_STAMP_SPACING)));
+  const points: DoodlePoint[] = [];
+
+  for (let step = 0; step <= subdivisions; step += 1) {
+    const progress = step / subdivisions;
+    const tension2 = progress * progress;
+    const tension3 = tension2 * progress;
+
+    const x =
+      0.5 *
+      ((2 * start.x) +
+        (-previous.x + end.x) * progress +
+        (2 * previous.x - 5 * start.x + 4 * end.x - next.x) * tension2 +
+        (-previous.x + 3 * start.x - 3 * end.x + next.x) * tension3);
+    const y =
+      0.5 *
+      ((2 * start.y) +
+        (-previous.y + end.y) * progress +
+        (2 * previous.y - 5 * start.y + 4 * end.y - next.y) * tension2 +
+        (-previous.y + 3 * start.y - 3 * end.y + next.y) * tension3);
+
+    points.push({ x: clamp01(x), y: clamp01(y) });
+  }
+
+  return points;
+}
+
+function smoothStrokePoints(rawPoints: number[]) {
+  const points = pairStrokePoints(rawPoints);
+
+  if (points.length <= 1) {
+    return points;
+  }
+
+  if (points.length === 2) {
+    return interpolateLine(points[0], points[1]);
+  }
+
+  const smoothed: DoodlePoint[] = [];
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const previous = points[index - 1] ?? points[index];
+    const start = points[index];
+    const end = points[index + 1];
+    const next = points[index + 2] ?? end;
+    const segmentPoints = interpolateCurve(previous, start, end, next);
+
+    if (index > 0) {
+      segmentPoints.shift();
+    }
+
+    smoothed.push(...segmentPoints);
+  }
+
+  return smoothed;
 }
 
 export default function NoteDoodleCanvas({
@@ -25,13 +131,33 @@ export default function NoteDoodleCanvas({
   activeColor = '#1C1C1E',
   onChangeStrokes,
 }: NoteDoodleCanvasProps) {
-  const [layout, setLayout] = useState({ width: 1, height: 1 });
+  const [layout, setLayout] = useState({ width: 1, height: 1, pageX: 0, pageY: 0 });
+  const canvasRef = useRef<View | null>(null);
   const draftStrokeIndexRef = useRef<number | null>(null);
   const strokesRef = useRef(strokes);
 
   useEffect(() => {
     strokesRef.current = strokes;
   }, [strokes]);
+
+  const syncCanvasFrame = useCallback((fallbackWidth?: number, fallbackHeight?: number) => {
+    requestAnimationFrame(() => {
+      canvasRef.current?.measureInWindow((pageX, pageY, measuredWidth, measuredHeight) => {
+        setLayout({
+          width: Math.max(fallbackWidth ?? measuredWidth, 1),
+          height: Math.max(fallbackHeight ?? measuredHeight, 1),
+          pageX,
+          pageY,
+        });
+      });
+    });
+  }, []);
+
+  const getNormalizedPoint = useCallback((event: GestureResponderEvent) => {
+    const x = clamp01((event.nativeEvent.pageX - layout.pageX) / layout.width);
+    const y = clamp01((event.nativeEvent.pageY - layout.pageY) / layout.height);
+    return { x, y };
+  }, [layout.height, layout.pageX, layout.pageY, layout.width]);
 
   const panResponder = useMemo(
     () =>
@@ -46,8 +172,8 @@ export default function NoteDoodleCanvas({
             return;
           }
 
-          const x = clamp01(event.nativeEvent.locationX / layout.width);
-          const y = clamp01(event.nativeEvent.locationY / layout.height);
+          syncCanvasFrame();
+          const { x, y } = getNormalizedPoint(event);
           const nextStrokes = [...strokesRef.current, { color: activeColor, points: [x, y] }];
           strokesRef.current = nextStrokes;
           draftStrokeIndexRef.current = nextStrokes.length - 1;
@@ -63,8 +189,7 @@ export default function NoteDoodleCanvas({
             return;
           }
 
-          const x = clamp01(event.nativeEvent.locationX / layout.width);
-          const y = clamp01(event.nativeEvent.locationY / layout.height);
+          const { x, y } = getNormalizedPoint(event);
 
           const nextStrokes = strokesRef.current.map((stroke, index) =>
               index === draftIndex
@@ -81,57 +206,60 @@ export default function NoteDoodleCanvas({
           draftStrokeIndexRef.current = null;
         },
       }),
-    [activeColor, editable, layout.height, layout.width, onChangeStrokes]
+    [activeColor, editable, getNormalizedPoint, onChangeStrokes, syncCanvasFrame]
   );
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
-    setLayout({
-      width: Math.max(width, 1),
-      height: Math.max(height, 1),
-    });
+    syncCanvasFrame(width, height);
   };
+
+  const renderedStrokes = useMemo(
+    () =>
+      strokes.map((stroke) => ({
+        color: stroke.color,
+        points: smoothStrokePoints(stroke.points),
+      })),
+    [strokes]
+  );
 
   return (
     <View
+      ref={canvasRef}
       style={styles.canvas}
       onLayout={handleLayout}
       {...(editable ? panResponder.panHandlers : {})}
     >
-      {strokes.map((stroke, strokeIndex) =>
-        stroke.points.map((value, pointIndex) => {
-          if (pointIndex % 2 !== 0) {
-            return null;
-          }
-
-          const x = value;
-          const y = stroke.points[pointIndex + 1] ?? 0;
-
+      {renderedStrokes.map((stroke, strokeIndex) =>
+        stroke.points.map((point, pointIndex) => {
           return (
             <View
               key={`${strokeIndex}:${pointIndex}`}
+              pointerEvents="none"
               style={[
                 styles.dot,
                 {
                   backgroundColor: stroke.color,
-                  left: `${clamp01(x) * 100}%`,
-                  top: `${clamp01(y) * 100}%`,
+                  left: `${point.x * 100}%`,
+                  top: `${point.y * 100}%`,
                 },
               ]}
             />
           );
         })
       )}
-      {strokes.map((stroke, strokeIndex) =>
-        stroke.points.map((value, pointIndex) => {
-          if (pointIndex % 2 !== 0 || pointIndex >= stroke.points.length - 2) {
+      {renderedStrokes.map((stroke, strokeIndex) =>
+        stroke.points.map((point, pointIndex) => {
+          const nextPoint = stroke.points[pointIndex + 1];
+
+          if (!nextPoint) {
             return null;
           }
 
-          const startX = clamp01(value) * layout.width;
-          const startY = clamp01(stroke.points[pointIndex + 1] ?? 0) * layout.height;
-          const endX = clamp01(stroke.points[pointIndex + 2] ?? 0) * layout.width;
-          const endY = clamp01(stroke.points[pointIndex + 3] ?? 0) * layout.height;
+          const startX = point.x * layout.width;
+          const startY = point.y * layout.height;
+          const endX = nextPoint.x * layout.width;
+          const endY = nextPoint.y * layout.height;
           const deltaX = endX - startX;
           const deltaY = endY - startY;
           const length = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
@@ -145,6 +273,7 @@ export default function NoteDoodleCanvas({
           return (
             <View
               key={`segment-${strokeIndex}:${pointIndex}`}
+              pointerEvents="none"
               style={[
                 styles.segment,
                 {

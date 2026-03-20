@@ -15,6 +15,7 @@ import {
 import { Platform } from 'react-native';
 
 interface WidgetProps {
+    noteType: 'text' | 'photo';
     text: string;
     locationName: string;
     date: string;
@@ -22,6 +23,8 @@ interface WidgetProps {
     nearbyPlacesCount: number;
     backgroundImageUrl?: string; // Currently not supported natively by expo-widgets JS side
     backgroundImageBase64?: string;
+    hasDoodle: boolean;
+    doodleStrokesJson?: string | null;
     isIdleState: boolean;
     idleText: string;
     savedCountText: string;
@@ -485,25 +488,3 @@ function createPlatformWidget(): WidgetModule {
 const Widget = createPlatformWidget();
 
 export default Widget;
-
-Widget.updateSnapshot({
-    props: {
-        text: '',
-        locationName: '',
-        date: '',
-        noteCount: 0,
-        nearbyPlacesCount: 0,
-        isIdleState: true,
-        idleText: '',
-        savedCountText: '',
-        nearbyPlacesLabelText: '',
-        memoryReminderText: '',
-        accessorySaveMemoryText: '',
-        accessoryAddFirstPlaceText: '',
-        accessoryMemoryNearbyText: '',
-        accessoryOpenAppText: '',
-        accessoryAddLabelText: '',
-        accessorySavedLabelText: '',
-        accessoryNearLabelText: '',
-    },
-});

@@ -1,7 +1,7 @@
 import { Paths } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import i18n from '../constants/i18n';
 import { formatDate } from '../utils/dateUtils';
 import { getAllNotes, Note } from './database';
@@ -19,7 +19,14 @@ function getWidget() {
 
     if (!widgetInstance) {
         try {
-            widgetInstance = require('../widgets/LocketWidget').default;
+            const widgetModule = require('../widgets/LocketWidget') as { default?: unknown };
+            const candidate = widgetModule?.default ?? widgetModule;
+
+            if (candidate && typeof (candidate as { updateSnapshot?: unknown }).updateSnapshot === 'function') {
+                widgetInstance = candidate;
+            } else {
+                console.warn('[widgetService] Widget module loaded without updateSnapshot');
+            }
         } catch (e) {
             console.warn('[widgetService] Could not load widget:', e);
         }
@@ -28,6 +35,7 @@ function getWidget() {
 }
 
 export interface WidgetProps {
+    noteType: 'text' | 'photo';
     text: string;
     locationName: string;
     date: string;
@@ -35,6 +43,8 @@ export interface WidgetProps {
     nearbyPlacesCount: number;
     backgroundImageUrl?: string; // local file uri
     backgroundImageBase64?: string;
+    hasDoodle: boolean;
+    doodleStrokesJson?: string | null;
     isIdleState: boolean;
     idleText: string;
     savedCountText: string;
@@ -77,6 +87,44 @@ export type WidgetSelectionMode =
 const IOS_WIDGET_APP_GROUP_ID = 'group.com.acte.app';
 const WIDGET_IMAGE_DIRECTORY_NAME = 'widget-images';
 const WIDGET_IMAGE_FILENAME = 'latest-photo.jpg';
+
+type AndroidWidgetModule = {
+    updateSnapshot?: (snapshotJson: string) => void;
+};
+
+function getAndroidWidgetModule(): AndroidWidgetModule | null {
+    if (Platform.OS !== 'android') {
+        return null;
+    }
+
+    const androidWidgetModule = (NativeModules as { NotoWidgetModule?: AndroidWidgetModule }).NotoWidgetModule;
+    return androidWidgetModule ?? null;
+}
+
+function updatePlatformWidgetSnapshot(props: WidgetProps) {
+    if (Platform.OS === 'ios') {
+        const widget = getWidget();
+        if (!widget) {
+            return;
+        }
+
+        widget.updateSnapshot({ props });
+        return;
+    }
+
+    if (Platform.OS === 'android') {
+        const androidWidgetModule = getAndroidWidgetModule();
+        if (!androidWidgetModule?.updateSnapshot) {
+            return;
+        }
+
+        try {
+            androidWidgetModule.updateSnapshot(JSON.stringify(props));
+        } catch (error) {
+            console.warn('[widgetService] Failed to push Android widget snapshot:', error);
+        }
+    }
+}
 
 function hashString(value: string) {
     let hash = 0;
@@ -382,28 +430,26 @@ async function encodePhotoForWidget(photoUri: string): Promise<string | undefine
 }
 
 export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): Promise<void> {
-    if (Platform.OS !== 'ios') {
+    if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
         return;
     }
 
     try {
-        const widget = getWidget();
-        if (!widget) return;
-
         const notes = options.notes ?? await getAllNotes();
         const translatedStrings = getTranslatedWidgetStrings(notes.length, 0, 'latest_memory');
 
         if (notes.length === 0) {
-            widget.updateSnapshot({
-                props: {
-                    text: '',
-                    locationName: '',
-                    date: '',
-                    noteCount: 0,
-                    nearbyPlacesCount: 0,
-                    isIdleState: true,
-                    ...translatedStrings,
-                },
+            updatePlatformWidgetSnapshot({
+                noteType: 'text',
+                text: '',
+                locationName: '',
+                date: '',
+                noteCount: 0,
+                nearbyPlacesCount: 0,
+                hasDoodle: false,
+                doodleStrokesJson: null,
+                isIdleState: true,
+                ...translatedStrings,
             });
             return;
         }
@@ -450,16 +496,17 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
         const selectionTranslatedStrings = getTranslatedWidgetStrings(notes.length, resolvedNearbyPlacesCount, selectionMode);
 
         if (!selectedNote || isIdleState) {
-            widget.updateSnapshot({
-                props: {
-                    text: '',
-                    locationName: '',
-                    date: '',
-                    noteCount: notes.length,
-                    nearbyPlacesCount: 0,
-                    isIdleState: true,
-                    ...selectionTranslatedStrings,
-                },
+            updatePlatformWidgetSnapshot({
+                noteType: 'text',
+                text: '',
+                locationName: '',
+                date: '',
+                noteCount: notes.length,
+                nearbyPlacesCount: 0,
+                hasDoodle: false,
+                doodleStrokesJson: null,
+                isIdleState: true,
+                ...selectionTranslatedStrings,
             });
             return;
         }
@@ -467,6 +514,7 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
         const dateStr = formatDate(selectedNote.createdAt, 'short');
 
         const props: WidgetProps = {
+            noteType: selectedNote.type,
             text:
                 selectedNote.type === 'text'
                     ? formatNoteTextWithEmoji(selectedNote.content.trim(), selectedNote.moodEmoji)
@@ -475,6 +523,8 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
             date: dateStr,
             noteCount: notes.length,
             nearbyPlacesCount: resolvedNearbyPlacesCount,
+            hasDoodle: selectedNote.type === 'text' && Boolean(selectedNote.hasDoodle && selectedNote.doodleStrokesJson),
+            doodleStrokesJson: selectedNote.type === 'text' ? selectedNote.doodleStrokesJson ?? null : null,
             isIdleState,
             ...selectionTranslatedStrings,
         };
@@ -483,7 +533,7 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
             Object.assign(props, await resolveWidgetPhotoProps(selectedNote));
         }
 
-        widget.updateSnapshot({ props });
+        updatePlatformWidgetSnapshot(props);
     } catch (error) {
         console.warn('[widgetService] Failed to update widget:', error);
     }
