@@ -7,6 +7,8 @@
 ├── app/
 │   ├── (tabs)/
 │   ├── auth/
+│   ├── friends/
+│   ├── rooms/
 │   └── note/
 ├── assets/
 │   └── images/
@@ -35,30 +37,36 @@
 ├── jest.setup.ts
 ├── GoogleService-Info.plist
 ├── google-services.json
-├── README.md
-└── SKILL.md
+└── README.md
 ```
 
 ## Major Directories
 
 - `app/`: Expo Router route tree and screen entry points.
-- `app/(tabs)/`: Main app tabs for home, map, settings, and search.
+- `app/(tabs)/`: Main app tabs for home, map, rooms, settings, and search.
 - `app/auth/`: Onboarding plus account/auth flows.
+- `app/friends/`: Friend invite acceptance and sharing entry points.
+- `app/rooms/`: Room creation, joining, detail, and room settings routes.
 - `app/note/`: Note detail route wrapper for modal-style navigation.
 - `assets/images/`: Icons, splash assets, and image resources.
 - `components/`: Shared React Native UI components.
 - `components/home/`: Home feed, capture, and search header UI.
 - `components/map/`: Map canvas, filters, preview cards, and overlay tokens.
+- `components/screens/`: Larger screen implementations, including platform-specific screen splits.
 - `components/ui/`: Generic shared building blocks such as buttons and headers.
 - `constants/`: Theme tokens, auth constants, note defaults, and i18n setup.
 - `constants/subscription.ts`: Plus/free plan rules, RevenueCat env config, and photo-note limits.
 - `constants/locales/`: Translation JSON files for English and Vietnamese.
-- `docs/`: Short maintenance docs for widgets and releases.
+- `docs/`: Short maintenance docs for widgets and release flows.
 - `hooks/`: App-wide hooks/providers for notes, auth, theme, sync, geofence, and more.
+- `hooks/useRooms.tsx`: Room list/detail state and Firestore-backed refresh behavior.
+- `hooks/useSharedFeed.tsx`: Friend graph and shared moments state for the home feed.
 - `hooks/useSubscription.tsx`: RevenueCat subscription provider and entitlement state.
 - `hooks/map/`: Map domain modeling and map screen state.
 - `plugins/`: Custom Expo config plugins used during native generation/build setup.
-- `services/`: Database, sync, geofence, photo, search, and widget business logic.
+- `services/`: Database, sync, geofence, photo, search, sharing, and widget business logic.
+- `services/roomService.ts`: Room lifecycle, invites, membership, and room posts.
+- `services/sharedFeedService.ts`: Friends, invites, and private shared-feed operations.
 - `services/syncService.ts`: Firebase sync queue flush + snapshot upload/merge.
 - `utils/`: Background task registration and smaller cross-cutting helpers.
 - `utils/firebase.ts`: Safe modular accessors for Firebase app, auth, and Firestore.
@@ -80,5 +88,4 @@
 - `jest.setup.ts`: Test setup and React Native dependency mocks.
 - `GoogleService-Info.plist`: iOS Firebase config file.
 - `google-services.json`: Android Firebase config file.
-- `SKILL.md`: Existing repo-specific AI/developer guidance.
 - `expo-env.d.ts`: Expo-generated type declarations used by the project.
