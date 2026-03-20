@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Alert,
@@ -328,6 +328,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         return () => clearTimeout(focusTimer);
     }, [isEditing, note?.type]);
+
+    const parsedNoteDoodleStrokes = useMemo(
+        () => parseNoteDoodleStrokes(note?.doodleStrokesJson),
+        [note?.doodleStrokesJson]
+    );
 
     const handleToggleDoodleMode = useCallback(() => {
         if (!isEditing || !note) {
@@ -683,7 +688,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             noteId: note.id,
             emoji: note.moodEmoji,
         });
-        const displayedDoodleStrokes = isEditing ? editDoodleStrokes : parseNoteDoodleStrokes(note.doodleStrokesJson);
+        const displayedDoodleStrokes = isEditing ? editDoodleStrokes : parsedNoteDoodleStrokes;
         const editIconStyle = {
             opacity: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
             transform: [{ scale: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.72] }) }],

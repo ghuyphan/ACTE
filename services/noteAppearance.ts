@@ -11,84 +11,84 @@ const DEFAULT_CAPTURE_GRADIENT: GradientPair = ['#E9C97E', '#D7A24D'];
 
 const EMOJI_NOTE_PALETTES: Record<string, NotePalette> = {
   '☕️': {
-    capture: ['#E8C791', '#C8925B'],
-    card: ['#5C4638', '#8D6A54'],
+    capture: ['#F1CF9A', '#D59659'],
+    card: ['#7A402A', '#CC6E4C'],
   },
   '🧋': {
-    capture: ['#E8D0B1', '#C79B7B'],
-    card: ['#6F5240', '#AE8060'],
+    capture: ['#F0D3B4', '#D49A74'],
+    card: ['#84523A', '#D08A66'],
   },
   '🍜': {
-    capture: ['#F0C6A0', '#DE935C'],
-    card: ['#714637', '#B56742'],
+    capture: ['#F5C89A', '#E9864E'],
+    card: ['#8B3D24', '#E1653B'],
   },
   '🍣': {
-    capture: ['#F0C8CE', '#DE9BA5'],
-    card: ['#69434B', '#A76C76'],
+    capture: ['#F5CCD4', '#E792A5'],
+    card: ['#7A3655', '#D86A93'],
   },
   '🍕': {
-    capture: ['#F1C88A', '#D9854A'],
-    card: ['#6B4736', '#AD6942'],
+    capture: ['#F6CB80', '#E88A46'],
+    card: ['#8A3B22', '#DA6333'],
   },
   '🍔': {
-    capture: ['#EAC690', '#C88A55'],
-    card: ['#674635', '#A76F47'],
+    capture: ['#EFCA8E', '#D58B51'],
+    card: ['#70512D', '#BF7A38'],
   },
   '🍚': {
-    capture: ['#E7D4A7', '#D0AE67'],
-    card: ['#6C573E', '#A98A59'],
+    capture: ['#EFDCAC', '#DDB46A'],
+    card: ['#6E5930', '#C49C45'],
   },
   '🍰': {
-    capture: ['#F1D1D9', '#E2A9B6'],
-    card: ['#6C4D58', '#A87A88'],
+    capture: ['#F7D6DF', '#EB9EB8'],
+    card: ['#854766', '#D87EA9'],
   },
   '🧄': {
-    capture: ['#EFE3BF', '#D7BD7A'],
-    card: ['#66563C', '#A48A57'],
+    capture: ['#F3E7BE', '#E0BF73'],
+    card: ['#72583A', '#BD9348'],
   },
   '🧅': {
-    capture: ['#E8D6DA', '#CAA4AC'],
-    card: ['#5F4951', '#92727B'],
+    capture: ['#EEDBE0', '#D4A0B2'],
+    card: ['#744666', '#B773A0'],
   },
   '🌶️': {
-    capture: ['#F0B4A4', '#DC725C'],
-    card: ['#6C3832', '#B55046'],
+    capture: ['#F7B09E', '#EE6251'],
+    card: ['#84292D', '#E1444D'],
   },
   '🍸': {
-    capture: ['#D7C8D9', '#A98EB0'],
-    card: ['#594B63', '#8A7897'],
+    capture: ['#E1D0E4', '#B693C2'],
+    card: ['#5E477C', '#A273D3'],
   },
   '🌿': {
-    capture: ['#D5E4C8', '#A4BE8D'],
-    card: ['#46584E', '#748C7B'],
+    capture: ['#D9E8C7', '#9CC680'],
+    card: ['#2D6A51', '#5BB586'],
   },
   '🏃': {
-    capture: ['#D7E2C3', '#9CAF74'],
-    card: ['#505B42', '#87946E'],
+    capture: ['#DCE7BF', '#A7C567'],
+    card: ['#556229', '#95B83F'],
   },
   '🏖️': {
-    capture: ['#D8E6E8', '#94C0C7'],
-    card: ['#3F5560', '#6F8A94'],
+    capture: ['#D8EEF2', '#7CC9D4'],
+    card: ['#23687A', '#4DBED0'],
   },
   '🏙️': {
-    capture: ['#D6DCE6', '#A2B1C8'],
-    card: ['#495D72', '#7C93AF'],
+    capture: ['#D7DDF3', '#98AEDB'],
+    card: ['#355C88', '#6694E8'],
   },
   '📚': {
-    capture: ['#DAD3E6', '#AC9FCA'],
-    card: ['#5D5B6A', '#8F8DA1'],
+    capture: ['#E1D8F0', '#B39FD8'],
+    card: ['#514D82', '#887EE0'],
   },
   '🎨': {
-    capture: ['#E4D1C7', '#C99884'],
-    card: ['#775844', '#B28A68'],
+    capture: ['#F0D0C7', '#DE9577'],
+    card: ['#8B4A37', '#DA7B56'],
   },
   '🤍': {
-    capture: ['#F0D8D7', '#DBA7A1'],
-    card: ['#6B4C57', '#A57A84'],
+    capture: ['#F6DCDB', '#E6A2AF'],
+    card: ['#8A4A6A', '#DB86AB'],
   },
   '✨': {
-    capture: ['#E8D8B7', '#D3AE63'],
-    card: ['#775844', '#B28A68'],
+    capture: ['#F2DEB0', '#E1B95E'],
+    card: ['#7A5725', '#D9A63E'],
   },
 };
 
@@ -194,7 +194,7 @@ export function getTextNoteCardGradient(options: {
   const baseGradient = getBaseGradientSeed(options.text, options.noteId);
   const paletteEmoji = resolvePaletteEmoji(options.text, options.emoji);
   if (paletteEmoji) {
-    return blendGradients(baseGradient, EMOJI_NOTE_PALETTES[paletteEmoji].card, 0.36);
+    return blendGradients(baseGradient, EMOJI_NOTE_PALETTES[paletteEmoji].card, 0.42);
   }
 
   return baseGradient;

@@ -190,6 +190,10 @@ function buildSmoothSkiaPath(points: DoodlePoint[], width: number, height: numbe
   return nextPath;
 }
 
+function createEmptySkiaPath() {
+  return skiaRendererModule?.Skia?.Path?.Make?.() ?? null;
+}
+
 function interpolateLine(start: DoodlePoint, end: DoodlePoint) {
   const distance = distanceBetweenPoints(start, end);
   const subdivisions = Math.max(1, Math.min(MAX_SEGMENT_SUBDIVISIONS, Math.ceil(distance / MIN_STAMP_SPACING)));
@@ -539,19 +543,20 @@ export default function NoteDoodleCanvas({
 }: NoteDoodleCanvasProps) {
   const [layout, setLayout] = useState<CanvasLayout>({ width: 1, height: 1 });
   const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
-  const [optimisticCommittedStroke, setOptimisticCommittedStroke] = useState<DoodleStroke | null>(null);
   const strokesRef = useRef(strokes);
-  const optimisticCommitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDraftResetStrokeRef = useRef<DoodleStroke | null>(null);
   const draftStrokeRef = useRef<DoodleStroke | null>(null);
   const draftPreviewRef = useRef<DraftPreview | null>(null);
   const queuedDraftPreviewRef = useRef<DraftPreview | null>(null);
   const draftFrameRef = useRef<number | null>(null);
+  const draftResetFrameRef = useRef<number | null>(null);
   const renderCacheRef = useRef<RenderedStrokeCache>(createRenderedStrokeCache());
   const draftPointsValue = useSharedValue<number[]>([]);
+  const draftCommitQueuedValue = useSharedValue(0);
   const draftPathRevisionValue = useSharedValue(0);
   const draftVisibleValue = useSharedValue(0);
   const draftDimensionsValue = useSharedValue({ width: 1, height: 1 });
-  const draftPathValue = useSharedValue<SkiaPathLike | null>(skiaRendererModule?.Skia?.Path?.Make?.() ?? null);
+  const draftPathValue = useSharedValue<SkiaPathLike | null>(createEmptySkiaPath());
 
   useEffect(() => {
     draftDimensionsValue.value = { width: layout.width, height: layout.height };
@@ -578,12 +583,12 @@ export default function NoteDoodleCanvas({
 
   useEffect(() => {
     return () => {
-      if (optimisticCommitTimeoutRef.current !== null) {
-        clearTimeout(optimisticCommitTimeoutRef.current);
-      }
-
       if (draftFrameRef.current !== null) {
         cancelAnimationFrame(draftFrameRef.current);
+      }
+
+      if (draftResetFrameRef.current !== null) {
+        cancelAnimationFrame(draftResetFrameRef.current);
       }
     };
   }, []);
@@ -601,10 +606,11 @@ export default function NoteDoodleCanvas({
     });
   }, []);
 
-  const resetDraftState = useCallback(() => {
+  const clearLiveDraftState = useCallback(() => {
     draftStrokeRef.current = null;
     draftPreviewRef.current = null;
     queuedDraftPreviewRef.current = null;
+    draftCommitQueuedValue.value = 0;
     draftPointsValue.value = [];
     draftPathRevisionValue.value += 1;
     draftVisibleValue.value = 0;
@@ -615,21 +621,40 @@ export default function NoteDoodleCanvas({
     }
 
     setDraftPreview(null);
-  }, [draftPathRevisionValue, draftPointsValue, draftVisibleValue]);
+  }, [draftCommitQueuedValue, draftPathRevisionValue, draftPointsValue, draftVisibleValue]);
+
+  const resetDraftState = useCallback(() => {
+    pendingDraftResetStrokeRef.current = null;
+
+    if (draftResetFrameRef.current !== null) {
+      cancelAnimationFrame(draftResetFrameRef.current);
+      draftResetFrameRef.current = null;
+    }
+
+    clearLiveDraftState();
+  }, [clearLiveDraftState]);
 
   useEffect(() => {
     strokesRef.current = strokes;
-    const latestStroke = strokes[strokes.length - 1];
+  }, [strokes]);
 
-    if (strokesMatch(optimisticCommittedStroke, latestStroke)) {
-      if (optimisticCommitTimeoutRef.current !== null) {
-        clearTimeout(optimisticCommitTimeoutRef.current);
-        optimisticCommitTimeoutRef.current = null;
-      }
+  useEffect(() => {
+    const pendingDraftResetStroke = pendingDraftResetStrokeRef.current;
+    const latestCommittedStroke = strokes[strokes.length - 1] ?? null;
 
-      setOptimisticCommittedStroke(null);
+    if (!pendingDraftResetStroke || !strokesMatch(pendingDraftResetStroke, latestCommittedStroke)) {
+      return;
     }
-  }, [optimisticCommittedStroke, strokes]);
+
+    if (draftResetFrameRef.current !== null) {
+      return;
+    }
+
+    draftResetFrameRef.current = requestAnimationFrame(() => {
+      draftResetFrameRef.current = null;
+      resetDraftState();
+    });
+  }, [resetDraftState, strokes]);
 
   const commitStroke = useCallback(
     (points: number[], color: string) => {
@@ -669,23 +694,12 @@ export default function NoteDoodleCanvas({
         color,
         points: [...points],
       };
-      setOptimisticCommittedStroke(nextStroke);
-
-      if (optimisticCommitTimeoutRef.current !== null) {
-        clearTimeout(optimisticCommitTimeoutRef.current);
-      }
-
-      optimisticCommitTimeoutRef.current = setTimeout(() => {
-        optimisticCommitTimeoutRef.current = null;
-        setOptimisticCommittedStroke(null);
-      }, 250);
+      pendingDraftResetStrokeRef.current = nextStroke;
 
       onChangeStrokes([
         ...strokesRef.current,
         nextStroke,
       ]);
-
-      resetDraftState();
     },
     [onChangeStrokes, resetDraftState]
   );
@@ -694,6 +708,18 @@ export default function NoteDoodleCanvas({
   const SkiaPath = (skiaRendererModule?.Path ?? null) as ComponentType<any> | null;
   const SkiaCircle = (skiaRendererModule?.Circle ?? null) as ComponentType<any> | null;
   const canUseSkia = Boolean(SkiaCanvas && SkiaPath && SkiaCircle && skiaRendererModule?.Skia?.Path?.Make);
+
+  const commitTapDot = useCallback(
+    (point: DoodlePoint) => {
+      if (canUseSkia) {
+        commitSkiaDraftStroke([point.x, point.y], activeColor);
+        return;
+      }
+
+      commitStroke([point.x, point.y], activeColor);
+    },
+    [activeColor, canUseSkia, commitSkiaDraftStroke, commitStroke]
+  );
 
   const beginFallbackDraftStroke = useCallback(
     (point: DoodlePoint) => {
@@ -756,12 +782,13 @@ export default function NoteDoodleCanvas({
         .runOnJS(false)
         .enabled(editable && Boolean(onChangeStrokes))
         .maxPointers(1)
-        .minDistance(0)
+        .minDistance(1)
         .shouldCancelWhenOutside(false)
         .onBegin((event) => {
           const point = normalizeTouchPoint(event.x, event.y, draftDimensionsValue.value);
 
           if (canUseSkia) {
+            draftCommitQueuedValue.value = 0;
             draftPointsValue.value = [point.x, point.y];
             draftPathRevisionValue.value += 1;
             draftVisibleValue.value = 1;
@@ -788,12 +815,25 @@ export default function NoteDoodleCanvas({
 
           runOnJS(moveFallbackDraftStroke)(point);
         })
-        .onFinalize((_, success) => {
+        .onEnd((event) => {
           if (canUseSkia) {
             const completedPoints = draftPointsValue.value.slice();
 
-            if (success && completedPoints.length >= 2) {
+            if (completedPoints.length < 2) {
+              const point = normalizeTouchPoint(event.x, event.y, draftDimensionsValue.value);
+              completedPoints.push(point.x, point.y);
+            }
+
+            if (completedPoints.length >= 2) {
+              draftCommitQueuedValue.value = 1;
               runOnJS(commitSkiaDraftStroke)(completedPoints, activeColor);
+              return;
+            }
+          }
+        })
+        .onFinalize((_, success) => {
+          if (canUseSkia) {
+            if (draftCommitQueuedValue.value === 1) {
               return;
             }
 
@@ -808,6 +848,7 @@ export default function NoteDoodleCanvas({
       beginFallbackDraftStroke,
       canUseSkia,
       commitSkiaDraftStroke,
+      draftCommitQueuedValue,
       draftDimensionsValue,
       draftPathRevisionValue,
       draftPointsValue,
@@ -818,6 +859,24 @@ export default function NoteDoodleCanvas({
       onChangeStrokes,
       resetDraftState,
     ]
+  );
+
+  const tapGesture = useMemo(
+    () =>
+      Gesture.Tap()
+        .runOnJS(false)
+        .enabled(editable && Boolean(onChangeStrokes))
+        .maxDuration(250)
+        .maxDistance(8)
+        .onEnd((event, success) => {
+          if (!success) {
+            return;
+          }
+
+          const point = normalizeTouchPoint(event.x, event.y, draftDimensionsValue.value);
+          runOnJS(commitTapDot)(point);
+        }),
+    [commitTapDot, draftDimensionsValue, editable, onChangeStrokes]
   );
 
   useEffect(() => {
@@ -851,17 +910,12 @@ export default function NoteDoodleCanvas({
     [draftDimensionsValue, draftPathRevisionValue]
   );
 
-  const visibleStrokes = useMemo<DoodleStroke[]>(
-    () => (strokesMatch(optimisticCommittedStroke, strokes[strokes.length - 1]) ? strokes : optimisticCommittedStroke ? [...strokes, optimisticCommittedStroke] : strokes),
-    [optimisticCommittedStroke, strokes]
-  );
-
   const renderedStrokes = useMemo<RenderedStroke[]>(
     () =>
-      visibleStrokes.map((stroke) =>
+      strokes.map((stroke) =>
         getOrCreateRenderedStroke(renderCacheRef.current, stroke, layout.width, layout.height, canUseSkia)
       ),
-    [canUseSkia, layout.height, layout.width, visibleStrokes]
+    [canUseSkia, layout.height, layout.width, strokes]
   );
   const draftFallbackPoints = draftPreview?.fallbackPoints ?? [];
   const draftColor = draftPreview?.color ?? activeColor;
@@ -884,7 +938,7 @@ export default function NoteDoodleCanvas({
   );
 
   return (
-    <GestureDetector gesture={panGesture}>
+    <GestureDetector gesture={Gesture.Exclusive(tapGesture, panGesture)}>
       <View style={[styles.canvas, style]} onLayout={handleLayout}>
         {canvasContent}
       </View>

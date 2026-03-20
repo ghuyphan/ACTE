@@ -107,16 +107,16 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
 // Curated gradient palettes for text-note card backgrounds.
 // Kept moody enough for white text, but aligned to the app's warmer stone palette.
 export const CardGradients: [string, string][] = [
-    ['#5C4638', '#8D6A54'],  // Espresso clay
-    ['#6F5240', '#AE8060'],  // Caramel roast
-    ['#46584E', '#748C7B'],  // Soft sage
-    ['#495D72', '#7C93AF'],  // Slate blue
-    ['#775844', '#B28A68'],  // Warm cedar
-    ['#594B63', '#8A7897'],  // Dusty plum
-    ['#3F5560', '#6F8A94'],  // Blue stone
-    ['#5D5B6A', '#8F8DA1'],  // Misty ink
-    ['#505B42', '#87946E'],  // Olive paper
-    ['#6B4C57', '#A57A84'],  // Muted rosewood
+    ['#7A3C2F', '#D86B4E'],  // Sunset coral
+    ['#7A4B23', '#D89A3D'],  // Marigold glow
+    ['#245C4B', '#4EAE8C'],  // Jade pop
+    ['#2F5E8B', '#76A8F0'],  // Sky blue
+    ['#8A4A2B', '#E38852'],  // Tangerine clay
+    ['#654A8A', '#A486E6'],  // Violet bloom
+    ['#1F6070', '#56B3C5'],  // Pool teal
+    ['#4A5F91', '#8BA1E8'],  // Periwinkle ink
+    ['#58652D', '#A9C24B'],  // Olive lime
+    ['#7A3E60', '#D07AA3'],  // Raspberry dusk
 ];
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
