@@ -7,6 +7,44 @@ import en from './locales/en.json';
 import vi from './locales/vi.json';
 
 const STORE_LANGUAGE_KEY = 'settings.lang';
+const STORE_LANGUAGE_SOURCE_KEY = 'settings.lang.source';
+const EXPLICIT_LANGUAGE_SOURCE = 'user';
+export const SUPPORTED_LANGUAGE_CODES = ['en', 'vi'] as const;
+export type AppLanguageCode = (typeof SUPPORTED_LANGUAGE_CODES)[number];
+const DEFAULT_LANGUAGE: AppLanguageCode = 'en';
+
+export function normalizeAppLanguage(language: string | null | undefined): AppLanguageCode {
+    if (!language) {
+        return DEFAULT_LANGUAGE;
+    }
+
+    const normalized = language.trim().toLowerCase().replace(/_/g, '-');
+
+    if (normalized.startsWith('vi')) {
+        return 'vi';
+    }
+
+    if (normalized.startsWith('en')) {
+        return 'en';
+    }
+
+    return DEFAULT_LANGUAGE;
+}
+
+export async function detectInitialLanguage(): Promise<AppLanguageCode> {
+    try {
+        const languageSource = await AsyncStorage.getItem(STORE_LANGUAGE_SOURCE_KEY);
+        const storedLanguage = await AsyncStorage.getItem(STORE_LANGUAGE_KEY);
+        if (languageSource === EXPLICIT_LANGUAGE_SOURCE && storedLanguage) {
+            return normalizeAppLanguage(storedLanguage);
+        }
+    } catch (error) {
+        console.log('Error reading language', error);
+    }
+
+    const [deviceLocale] = getLocales();
+    return normalizeAppLanguage(deviceLocale?.languageCode ?? deviceLocale?.languageTag);
+}
 
 // Language detection and caching
 const languageDetectorPlugin = {
@@ -14,32 +52,10 @@ const languageDetectorPlugin = {
     async: true,
     init: () => { },
     detect: async function (callback: (lang: string) => void) {
-        try {
-            // get stored language from Async storage
-            await AsyncStorage.getItem(STORE_LANGUAGE_KEY).then((language) => {
-                if (language) {
-                    // if language was stored before, use this language in the app
-                    return callback(language);
-                } else {
-                    // if language was not stored yet, use device's locale
-                    const deviceLang = getLocales()[0].languageCode;
-                    return callback(deviceLang || 'en');
-                }
-            });
-        } catch (error) {
-            console.log('Error reading language', error);
-            const deviceLang = getLocales()[0].languageCode;
-            callback(deviceLang || 'en');
-        }
+        const language = await detectInitialLanguage();
+        callback(language);
     },
-    cacheUserLanguage: async function (language: string) {
-        try {
-            // save a user's language choice in Async storage
-            await AsyncStorage.setItem(STORE_LANGUAGE_KEY, language);
-        } catch (error) {
-            console.log('Error saving language', error);
-        }
-    },
+    cacheUserLanguage: () => { },
 };
 
 const resources = {
@@ -47,16 +63,37 @@ const resources = {
     vi: { translation: vi },
 };
 
-i18n
+export const i18nReady = i18n
     .use(initReactI18next)
     .use(languageDetectorPlugin)
     .init({
         resources,
         compatibilityJSON: 'v4',
-        fallbackLng: 'en',
+        fallbackLng: DEFAULT_LANGUAGE,
+        supportedLngs: [...SUPPORTED_LANGUAGE_CODES],
+        load: 'languageOnly',
+        nonExplicitSupportedLngs: true,
         interpolation: {
             escapeValue: false,
         },
+        react: {
+            useSuspense: false,
+        },
     });
+
+export async function setAppLanguage(language: string): Promise<void> {
+    const normalizedLanguage = normalizeAppLanguage(language);
+
+    try {
+        await AsyncStorage.multiSet([
+            [STORE_LANGUAGE_KEY, normalizedLanguage],
+            [STORE_LANGUAGE_SOURCE_KEY, EXPLICIT_LANGUAGE_SOURCE],
+        ]);
+    } catch (error) {
+        console.log('Error saving language', error);
+    }
+
+    await i18n.changeLanguage(normalizedLanguage);
+}
 
 export default i18n;

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { setAppLanguage } from '../constants/i18n';
 import { useTheme } from '../hooks/useTheme';
 
 export default function SettingsLanguageSheetAndroid({ onClose }: { onClose: () => void }) {
@@ -24,7 +25,7 @@ export default function SettingsLanguageSheetAndroid({ onClose }: { onClose: () 
                 selected ? { backgroundColor: colors.primarySoft } : null,
               ]}
               onPress={() => {
-                void i18n.changeLanguage(option.code);
+                void setAppLanguage(option.code);
                 onClose();
               }}
             >

@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Appearance, Platform, useColorScheme } from 'react-native';
+import { Appearance, AppState, Platform } from 'react-native';
 
-type ThemeType = 'light' | 'dark' | 'system';
+export type ThemeType = 'light' | 'dark' | 'system';
+type ResolvedColorScheme = 'light' | 'dark';
 
 export interface ThemeColors {
     background: string;
@@ -130,6 +131,19 @@ function normalizeTheme(value: string | null): ThemeType {
     return 'system';
 }
 
+function normalizeSystemColorScheme(
+    colorScheme: ReturnType<typeof Appearance.getColorScheme>
+): ResolvedColorScheme {
+    return colorScheme === 'dark' ? 'dark' : 'light';
+}
+
+export function resolveThemePreference(
+    theme: ThemeType,
+    systemColorScheme: ResolvedColorScheme
+): ResolvedColorScheme {
+    return theme === 'system' ? systemColorScheme : theme;
+}
+
 function syncNativeColorScheme(theme: ThemeType) {
     if (Platform.OS !== 'ios') {
         return;
@@ -143,9 +157,34 @@ function syncNativeColorScheme(theme: ThemeType) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-    const systemColorScheme = useColorScheme();
     const [theme, setThemeState] = useState<ThemeType>('system');
+    const [systemTheme, setSystemTheme] = useState<ResolvedColorScheme>(() =>
+        normalizeSystemColorScheme(Appearance.getColorScheme())
+    );
     const [themeReady, setThemeReady] = useState(false);
+
+    useEffect(() => {
+        const syncSystemTheme = () => {
+            setSystemTheme(normalizeSystemColorScheme(Appearance.getColorScheme()));
+        };
+
+        syncSystemTheme();
+
+        const appearanceSubscription = Appearance.addChangeListener(({ colorScheme }) => {
+            setSystemTheme(normalizeSystemColorScheme(colorScheme));
+        });
+
+        const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
+            if (nextAppState === 'active') {
+                syncSystemTheme();
+            }
+        });
+
+        return () => {
+            appearanceSubscription.remove();
+            appStateSubscription.remove();
+        };
+    }, []);
 
     useEffect(() => {
         AsyncStorage.getItem(THEME_STORAGE_KEY).then((savedTheme) => {
@@ -154,6 +193,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             syncNativeColorScheme(nextTheme);
             setThemeReady(true);
         }).catch(() => {
+            syncNativeColorScheme('system');
             setThemeReady(true);
         });
     }, []);
@@ -164,7 +204,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         await AsyncStorage.setItem(THEME_STORAGE_KEY, newTheme);
     };
 
-    const isDark = theme === 'system' ? systemColorScheme === 'dark' : theme === 'dark';
+    const resolvedTheme = resolveThemePreference(theme, systemTheme);
+    const isDark = resolvedTheme === 'dark';
     const colors = isDark ? Colors.dark : Colors.light;
 
     // Block rendering until the saved theme is loaded to prevent

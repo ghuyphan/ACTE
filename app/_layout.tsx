@@ -10,7 +10,7 @@ import { I18nextProvider } from 'react-i18next';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
-import i18n from '../constants/i18n';
+import i18n, { i18nReady } from '../constants/i18n';
 import { ENABLE_SHARED_ROOMS } from '../constants/features';
 import { AuthProvider } from '../hooks/useAuth';
 import { NotesProvider } from '../hooks/useNotes';
@@ -33,6 +33,7 @@ function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
   const { openNoteDetail } = useNoteDetailSheet();
   const [dbReady, setDbReady] = useState(false);
+  const [localeReady, setLocaleReady] = useState(i18n.isInitialized);
   const notificationResponseListener = useRef<Notifications.EventSubscription | null>(null);
   const lastHandledNotificationIdRef = useRef<string | null>(null);
 
@@ -61,16 +62,34 @@ function AppContent() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void i18nReady
+      .catch((error) => {
+        console.error('i18n init failed:', error);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLocaleReady(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Handle splash screen
   useEffect(() => {
     void SystemUI.setBackgroundColorAsync(colors.background);
   }, [colors.background]);
 
   useEffect(() => {
-    if (themeReady && dbReady) {
+    if (themeReady && dbReady && localeReady) {
       SplashScreen.hideAsync();
     }
-  }, [themeReady, dbReady]);
+  }, [themeReady, dbReady, localeReady]);
 
   const handleNotificationResponse = useCallback(
     async (response: Notifications.NotificationResponse | null) => {
@@ -119,7 +138,7 @@ function AppContent() {
     };
   }, [handleNotificationResponse]);
 
-  if (!dbReady) {
+  if (!dbReady || !localeReady) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
         <StatusBar style={isDark ? 'light' : 'dark'} />

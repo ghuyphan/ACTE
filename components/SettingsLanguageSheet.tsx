@@ -3,6 +3,7 @@ import { backgroundOverlay, cornerRadius, font, foregroundStyle, frame, padding,
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { setAppLanguage } from '../constants/i18n';
 import { useTheme } from '../hooks/useTheme';
 import { isOlderIOS } from '../utils/platform';
 
@@ -25,7 +26,7 @@ export default function SettingsLanguageSheet({ onClose }: { onClose: () => void
 
                 <Picker
                     selection={i18n.language}
-                    onSelectionChange={(selection) => { i18n.changeLanguage(selection as string); }}
+                    onSelectionChange={(selection) => { void setAppLanguage(selection as string); }}
                     modifiers={[pickerStyle('wheel'), frame({ height: 160 })]}
                 >
                     <SwiftUIText modifiers={[tag('en')]}>English</SwiftUIText>

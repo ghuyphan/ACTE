@@ -7,6 +7,7 @@ import PrimaryButton from '../ui/PrimaryButton';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { Layout, Typography } from '../../constants/theme';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
+import { setAppLanguage } from '../../constants/i18n';
 
 type SheetKey = 'language' | 'theme' | 'sync' | null;
 
@@ -190,7 +191,7 @@ export default function SettingsScreenAndroid() {
       <SelectionSheet
         colors={colors}
         onSelect={(value) => {
-          void i18n.changeLanguage(value);
+          void setAppLanguage(value);
           setSheet(null);
         }}
         options={[
