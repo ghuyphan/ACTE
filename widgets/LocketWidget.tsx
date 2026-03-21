@@ -37,6 +37,11 @@ interface WidgetProps {
     accessoryAddLabelText: string;
     accessorySavedLabelText: string;
     accessoryNearLabelText: string;
+    isSharedContent: boolean;
+    authorDisplayName: string;
+    authorInitials: string;
+    authorAvatarImageUrl?: string;
+    authorAvatarImageBase64?: string;
     family?: string;
 }
 
@@ -103,6 +108,9 @@ const LocketWidget = (props: { props: WidgetProps }) => {
         accessoryAddLabelText,
         accessorySavedLabelText,
         accessoryNearLabelText,
+        isSharedContent,
+        authorDisplayName,
+        authorInitials,
         family,
     } = props.props ?? {};
 
@@ -158,6 +166,12 @@ const LocketWidget = (props: { props: WidgetProps }) => {
         : showIdle
             ? asString(accessorySavedLabelText) || 'Saved'
             : asString(accessoryNearLabelText) || 'Near';
+    const safeAuthorName = asString(authorDisplayName);
+    const safeAuthorInitials = asString(authorInitials);
+    const compactAuthorName = safeAuthorName.split(/\s+/)[0]?.trim() ?? safeAuthorName;
+    const showAuthorChip = Boolean(isSharedContent && (safeAuthorInitials || compactAuthorName));
+    const authorChipBackground = hasImage ? 'rgba(16,12,10,0.32)' : 'rgba(255,249,243,0.82)';
+    const authorChipForeground = hasImage ? '#FFF8F0' : '#2A1A11';
 
     if (isAccessoryInline) {
         return (
@@ -327,6 +341,46 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                     frame({ maxWidth: 9999, maxHeight: 9999 }),
                 ]}
             >
+                {showAuthorChip ? (
+                    <HStack
+                        modifiers={[
+                            frame({ maxWidth: 9999 }),
+                            padding({ bottom: isLarge ? 8 : 4 }),
+                        ]}
+                    >
+                        <HStack
+                            modifiers={[
+                                backgroundOverlay({ color: authorChipBackground }),
+                                cornerRadius(999),
+                                padding({ horizontal: 8, vertical: 5 }),
+                            ]}
+                        >
+                            <Text
+                                modifiers={[
+                                    font({ weight: 'bold', size: 10, design: 'rounded' }),
+                                    foregroundStyle(authorChipForeground),
+                                    lineLimit(1),
+                                ]}
+                            >
+                                {safeAuthorInitials}
+                            </Text>
+                            {compactAuthorName ? (
+                                <Text
+                                    modifiers={[
+                                        font({ weight: 'medium', size: 10, design: 'default' }),
+                                        foregroundStyle(authorChipForeground),
+                                        lineLimit(1),
+                                        padding({ leading: 5 }),
+                                    ]}
+                                >
+                                    {compactAuthorName}
+                                </Text>
+                            ) : null}
+                        </HStack>
+                        <Spacer />
+                    </HStack>
+                ) : null}
+
                 {usesTextSurface ? (
                     isLarge ? (
                         <VStack modifiers={[frame({ maxWidth: 9999, maxHeight: 9999 })]}>

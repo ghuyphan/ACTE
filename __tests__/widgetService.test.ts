@@ -8,8 +8,12 @@ const mockGetCurrentPositionAsync = jest.fn();
 const mockMakeDirectoryAsync = jest.fn();
 const mockDeleteAsync = jest.fn();
 const mockCopyAsync = jest.fn();
+const mockDownloadAsync = jest.fn();
 const mockReadAsStringAsync = jest.fn();
 const mockGetInfoAsync = jest.fn();
+const mockGetCachedSharedFeedSnapshot = jest.fn();
+const mockRefreshSharedFeed = jest.fn();
+let mockCurrentUser: { uid: string } | null = null;
 
 jest.mock('../constants/i18n', () => {
   let currentLanguage = 'en';
@@ -50,6 +54,11 @@ jest.mock('../constants/i18n', () => {
       return currentLanguage === 'vi'
         ? 'Mot dieu dang de nho lai lan nua.'
         : 'Something worth remembering again.';
+    }
+    if (key === 'widget.modeShared') {
+      return currentLanguage === 'vi'
+        ? 'Mot ky uc duoc chia se.'
+        : 'A shared memory from someone close.';
     }
     if (key === 'widget.nearbyPlaceOne' || key === 'widget.nearbyPlaceOther') {
       const count = options?.count ?? 0;
@@ -112,6 +121,18 @@ jest.mock('../services/database', () => ({
   getAllNotes: (...args: unknown[]) => mockGetAllNotes(...args),
 }));
 
+jest.mock('../services/sharedFeedCache', () => ({
+  getCachedSharedFeedSnapshot: (...args: unknown[]) => mockGetCachedSharedFeedSnapshot(...args),
+}));
+
+jest.mock('../services/sharedFeedService', () => ({
+  refreshSharedFeed: (...args: unknown[]) => mockRefreshSharedFeed(...args),
+}));
+
+jest.mock('../utils/firebase', () => ({
+  getFirebaseAuth: () => (mockCurrentUser ? { currentUser: mockCurrentUser } : null),
+}));
+
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: (...args: unknown[]) => mockGetForegroundPermissionsAsync(...args),
   getLastKnownPositionAsync: (...args: unknown[]) => mockGetLastKnownPositionAsync(...args),
@@ -134,6 +155,7 @@ jest.mock('expo-file-system/legacy', () => ({
   makeDirectoryAsync: (...args: unknown[]) => mockMakeDirectoryAsync(...args),
   deleteAsync: (...args: unknown[]) => mockDeleteAsync(...args),
   copyAsync: (...args: unknown[]) => mockCopyAsync(...args),
+  downloadAsync: (...args: unknown[]) => mockDownloadAsync(...args),
   readAsStringAsync: (...args: unknown[]) => mockReadAsStringAsync(...args),
   getInfoAsync: (...args: unknown[]) => mockGetInfoAsync(...args),
   EncodingType: {
@@ -178,7 +200,20 @@ beforeEach(async () => {
   mockMakeDirectoryAsync.mockResolvedValue(undefined);
   mockDeleteAsync.mockResolvedValue(undefined);
   mockCopyAsync.mockResolvedValue(undefined);
+  mockDownloadAsync.mockResolvedValue(undefined);
   mockReadAsStringAsync.mockResolvedValue('base64-image-data');
+  mockCurrentUser = null;
+  mockGetCachedSharedFeedSnapshot.mockResolvedValue({
+    friends: [],
+    sharedPosts: [],
+    activeInvite: null,
+    lastUpdatedAt: null,
+  });
+  mockRefreshSharedFeed.mockResolvedValue({
+    friends: [],
+    sharedPosts: [],
+    activeInvite: null,
+  });
   mockGetInfoAsync.mockResolvedValue({
     exists: true,
     isDirectory: false,
@@ -338,6 +373,94 @@ describe('widgetService', () => {
     expect(result.selectionMode).toBe('latest_memory');
   });
 
+  it('can use shared friend content as a fallback with author attribution', async () => {
+    mockCurrentUser = { uid: 'me' };
+    mockGetCachedSharedFeedSnapshot.mockResolvedValue({
+      friends: [],
+      sharedPosts: [
+        {
+          id: 'shared-photo-1',
+          authorUid: 'friend-1',
+          authorDisplayName: 'Annie Case',
+          authorPhotoURLSnapshot: 'https://example.com/annie.jpg',
+          audienceUserIds: ['me'],
+          type: 'photo',
+          text: '',
+          photoLocalUri: 'file:///mock-documents/photos/shared.jpg',
+          photoRemoteBase64: null,
+          doodleStrokesJson: null,
+          placeName: 'Shared Place',
+          sourceNoteId: null,
+          createdAt: '2026-03-10T11:00:00.000Z',
+          updatedAt: null,
+        },
+      ],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-10T11:05:00.000Z',
+    });
+    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
+      exists: uri !== 'https://example.com/annie.jpg',
+      isDirectory: false,
+      uri,
+      size: 1024,
+      modificationTime: 0,
+    }));
+
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T12:00:00.000Z') });
+
+    const entries = getLastTimelineEntries();
+
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        isSharedContent: true,
+        authorDisplayName: 'Annie Case',
+        authorInitials: 'AC',
+        locationName: 'Shared Place',
+      })
+    );
+  });
+
+  it('refreshes shared widget content from the network when asked', async () => {
+    mockCurrentUser = { uid: 'me' };
+    mockRefreshSharedFeed.mockResolvedValue({
+      friends: [],
+      sharedPosts: [
+        {
+          id: 'shared-text-1',
+          authorUid: 'friend-2',
+          authorDisplayName: 'Bao',
+          authorPhotoURLSnapshot: null,
+          audienceUserIds: ['me'],
+          type: 'text',
+          text: 'Shared hello',
+          photoLocalUri: null,
+          photoRemoteBase64: null,
+          doodleStrokesJson: null,
+          placeName: 'Friend Cafe',
+          sourceNoteId: null,
+          createdAt: '2026-03-10T12:00:00.000Z',
+          updatedAt: null,
+        },
+      ],
+      activeInvite: null,
+    });
+
+    await updateWidgetData({
+      referenceDate: new Date('2026-03-10T12:00:00.000Z'),
+      includeSharedRefresh: true,
+    });
+
+    expect(mockRefreshSharedFeed).toHaveBeenCalled();
+    const entries = getLastTimelineEntries();
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        isSharedContent: true,
+        authorDisplayName: 'Bao',
+        text: 'Shared hello',
+      })
+    );
+  });
+
   it('creates four six-hour timeline entries aligned to slot boundaries', async () => {
     const referenceDate = new Date('2026-03-10T07:30:00.000Z');
     await updateWidgetData({ referenceDate });
@@ -476,8 +599,8 @@ describe('widgetService', () => {
     const secondImageUrl = String(entries[1]?.props.props.backgroundImageUrl ?? '');
 
     expect(mockCopyAsync).toHaveBeenCalled();
-    expect(firstImageUrl).toContain('note-favorite-photo');
-    expect(secondImageUrl).toContain('note-favorite-photo');
+    expect(firstImageUrl).toContain('favorite-photo');
+    expect(secondImageUrl).toContain('favorite-photo');
     expect(firstImageUrl).not.toBe(secondImageUrl);
   });
 

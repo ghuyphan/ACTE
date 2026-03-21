@@ -4,11 +4,14 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
 import { NativeModules, Platform } from 'react-native';
 import i18n from '../constants/i18n';
+import { getFirebaseAuth } from '../utils/firebase';
 import { formatDate } from '../utils/dateUtils';
 import { getAllNotes, Note } from './database';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getNotePhotoUri, resolveStoredPhotoUri } from './photoStorage';
 import { getDistanceMeters } from './reminderSelection';
+import { getCachedSharedFeedSnapshot } from './sharedFeedCache';
+import { refreshSharedFeed, SharedPost } from './sharedFeedService';
 
 // Lazy import to avoid circular dependency issues
 let widgetInstance: any = null;
@@ -36,12 +39,18 @@ export interface WidgetProps {
     accessoryAddLabelText: string;
     accessorySavedLabelText: string;
     accessoryNearLabelText: string;
+    isSharedContent: boolean;
+    authorDisplayName: string;
+    authorInitials: string;
+    authorAvatarImageUrl?: string;
+    authorAvatarImageBase64?: string;
 }
 
 export interface UpdateWidgetDataOptions {
     notes?: Note[];
     includeLocationLookup?: boolean;
     referenceDate?: Date;
+    includeSharedRefresh?: boolean;
 }
 
 interface LocationCoords {
@@ -50,7 +59,8 @@ interface LocationCoords {
 }
 
 interface WidgetSelectionResult {
-    selectedNote: Note | null;
+    selectedNote: WidgetCandidate | null;
+    selectedCandidate: WidgetCandidate | null;
     selectedLocationName: string | null;
     nearbyPlacesCount: number;
     isIdleState: boolean;
@@ -63,15 +73,41 @@ interface WidgetTimelineEntry {
 }
 
 interface WidgetHistoryEntry {
-    noteId: string;
+    candidateKey: string;
     slotKey: string;
     slotStartedAt: string;
     selectionMode: WidgetSelectionMode;
 }
 
-interface EligibleWidgetNotes {
-    notes: Note[];
-    readablePhotoUrisByNoteId: Map<string, string>;
+interface EligibleWidgetCandidates {
+    candidates: WidgetCandidate[];
+    readablePhotoUrisByCandidateKey: Map<string, string>;
+}
+
+interface WidgetSharedFeedSnapshot {
+    currentUserUid: string | null;
+    sharedPosts: SharedPost[];
+}
+
+interface WidgetCandidate {
+    id: string;
+    candidateKey: string;
+    source: 'personal' | 'shared';
+    noteType: 'text' | 'photo';
+    text: string;
+    photoLocalUri: string | null;
+    locationName: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    radius: number | null;
+    createdAt: string;
+    updatedAt: string | null;
+    isFavorite: boolean;
+    hasDoodle: boolean;
+    doodleStrokesJson: string | null;
+    moodEmoji?: string | null;
+    authorDisplayName: string | null;
+    authorPhotoURLSnapshot: string | null;
 }
 
 type WidgetModule = {
@@ -86,7 +122,7 @@ type CandidateRepeatPolicy = 'strict' | 'avoid_consecutive' | 'allow_repeat';
 
 type FallbackBucket = {
     mode: WidgetSelectionMode;
-    notes: Note[];
+    notes: WidgetCandidate[];
 };
 
 export type WidgetSelectionMode =
@@ -95,6 +131,8 @@ export type WidgetSelectionMode =
     | 'photo_memory'
     | 'favorite_memory'
     | 'resurfaced_memory'
+    | 'shared_photo_memory'
+    | 'shared_memory'
     | 'latest_memory';
 
 const IOS_WIDGET_APP_GROUP_ID = 'group.com.acte.app';
@@ -104,8 +142,9 @@ const WIDGET_SLOT_HOURS = 6;
 const WIDGET_RESURFACE_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 const WIDGET_RECENT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const WIDGET_HISTORY_RETENTION_MS = 48 * 60 * 60 * 1000;
-const WIDGET_HISTORY_STORAGE_KEY = 'widget.timeline.history.v1';
+const WIDGET_HISTORY_STORAGE_KEY = 'widget.timeline.history.v2';
 const MAX_WIDGET_HISTORY_ENTRIES = 32;
+const WIDGET_AVATAR_DIRECTORY_NAME = 'widget-avatars';
 
 function getWidget() {
     if (Platform.OS !== 'ios') {
@@ -192,6 +231,10 @@ function getModeLabelKey(selectionMode: WidgetSelectionMode) {
         return 'widget.modePhoto';
     }
 
+    if (selectionMode === 'shared_photo_memory' || selectionMode === 'shared_memory') {
+        return 'widget.modeShared';
+    }
+
     if (selectionMode === 'resurfaced_memory') {
         return 'widget.modeResurfaced';
     }
@@ -221,44 +264,44 @@ function buildTimelineDates(referenceDate: Date, count = WIDGET_TIMELINE_ENTRY_C
     });
 }
 
-function hasRenderableWidgetText(note: Pick<Note, 'type' | 'content'>) {
-    return note.type === 'text' && typeof note.content === 'string' && note.content.trim().length > 0;
+function hasRenderableWidgetText(note: Pick<WidgetCandidate, 'noteType' | 'text'>) {
+    return note.noteType === 'text' && typeof note.text === 'string' && note.text.trim().length > 0;
 }
 
-function isTextWidgetNote(note: Note) {
+function isTextWidgetNote(note: WidgetCandidate) {
     return hasRenderableWidgetText(note);
 }
 
-function isPhotoWidgetNote(note: Note) {
-    return note.type === 'photo';
+function isPhotoWidgetNote(note: WidgetCandidate) {
+    return note.noteType === 'photo';
 }
 
-function getWidgetSelectionTimestamp(note: Pick<Note, 'createdAt' | 'updatedAt'>) {
+function getWidgetSelectionTimestamp(note: Pick<WidgetCandidate, 'createdAt' | 'updatedAt'>) {
     const timestamp = new Date(note.updatedAt ?? note.createdAt ?? 0).getTime();
     return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function compareRecentWidgetNotes(left: Note, right: Note) {
+function compareRecentWidgetNotes(left: WidgetCandidate, right: WidgetCandidate) {
     const timestampDelta = getWidgetSelectionTimestamp(right) - getWidgetSelectionTimestamp(left);
     if (timestampDelta !== 0) {
         return timestampDelta;
     }
 
-    return left.id.localeCompare(right.id);
+    return left.candidateKey.localeCompare(right.candidateKey);
 }
 
-function compareOldestWidgetNotes(left: Note, right: Note) {
+function compareOldestWidgetNotes(left: WidgetCandidate, right: WidgetCandidate) {
     const timestampDelta = getWidgetSelectionTimestamp(left) - getWidgetSelectionTimestamp(right);
     if (timestampDelta !== 0) {
         return timestampDelta;
     }
 
-    return left.id.localeCompare(right.id);
+    return left.candidateKey.localeCompare(right.candidateKey);
 }
 
 function compareNearbyWidgetNotes(
-    left: { note: Note; distanceMeters: number },
-    right: { note: Note; distanceMeters: number }
+    left: { note: WidgetCandidate; distanceMeters: number },
+    right: { note: WidgetCandidate; distanceMeters: number }
 ) {
     const distanceDelta = left.distanceMeters - right.distanceMeters;
     if (distanceDelta !== 0) {
@@ -308,6 +351,9 @@ function buildIdleWidgetProps(noteCount: number, selectionMode: WidgetSelectionM
         hasDoodle: false,
         doodleStrokesJson: null,
         isIdleState: true,
+        isSharedContent: false,
+        authorDisplayName: '',
+        authorInitials: '',
         ...getTranslatedWidgetStrings(noteCount, 0, selectionMode),
     };
 }
@@ -344,7 +390,7 @@ async function loadWidgetHistory(referenceDate = new Date()) {
                 return Boolean(
                     entry &&
                     typeof entry === 'object' &&
-                    typeof entry.noteId === 'string' &&
+                    typeof entry.candidateKey === 'string' &&
                     typeof entry.slotKey === 'string' &&
                     typeof entry.slotStartedAt === 'string' &&
                     typeof entry.selectionMode === 'string'
@@ -377,11 +423,11 @@ function getPreviousHistoryEntry(history: WidgetHistoryEntry[], referenceDate: D
         .sort((left, right) => new Date(right.slotStartedAt).getTime() - new Date(left.slotStartedAt).getTime())[0] ?? null;
 }
 
-function hasShownRecently(noteId: string, history: WidgetHistoryEntry[], referenceDate: Date) {
+function hasShownRecently(candidateKey: string, history: WidgetHistoryEntry[], referenceDate: Date) {
     const referenceTime = referenceDate.getTime();
 
     return history.some((entry) => {
-        if (entry.noteId !== noteId) {
+        if (entry.candidateKey !== candidateKey) {
             return false;
         }
 
@@ -395,7 +441,7 @@ function hasShownRecently(noteId: string, history: WidgetHistoryEntry[], referen
 }
 
 function isCandidateAllowed(
-    note: Note,
+    note: WidgetCandidate,
     history: WidgetHistoryEntry[],
     referenceDate: Date,
     repeatPolicy: CandidateRepeatPolicy
@@ -405,7 +451,7 @@ function isCandidateAllowed(
     }
 
     const previousEntry = getPreviousHistoryEntry(history, referenceDate);
-    if (previousEntry?.noteId === note.id) {
+    if (previousEntry?.candidateKey === note.candidateKey) {
         return false;
     }
 
@@ -413,30 +459,30 @@ function isCandidateAllowed(
         return true;
     }
 
-    return !hasShownRecently(note.id, history, referenceDate);
+    return !hasShownRecently(note.candidateKey, history, referenceDate);
 }
 
-function getFallbackBuckets(notes: Note[], referenceDate: Date): FallbackBucket[] {
+function getFallbackBuckets(notes: WidgetCandidate[], referenceDate: Date): FallbackBucket[] {
     const referenceTime = referenceDate.getTime();
 
     return [
         {
             mode: 'favorite_photo',
-            notes: notes.filter((note) => isPhotoWidgetNote(note) && note.isFavorite).sort(compareRecentWidgetNotes),
+            notes: notes.filter((note) => note.source === 'personal' && isPhotoWidgetNote(note) && note.isFavorite).sort(compareRecentWidgetNotes),
         },
         {
             mode: 'photo_memory',
-            notes: notes.filter((note) => isPhotoWidgetNote(note) && !note.isFavorite).sort(compareRecentWidgetNotes),
+            notes: notes.filter((note) => note.source === 'personal' && isPhotoWidgetNote(note) && !note.isFavorite).sort(compareRecentWidgetNotes),
         },
         {
             mode: 'favorite_memory',
-            notes: notes.filter((note) => isTextWidgetNote(note) && note.isFavorite).sort(compareRecentWidgetNotes),
+            notes: notes.filter((note) => note.source === 'personal' && isTextWidgetNote(note) && note.isFavorite).sort(compareRecentWidgetNotes),
         },
         {
             mode: 'resurfaced_memory',
             notes: notes
                 .filter((note) => {
-                    if (!isTextWidgetNote(note) || note.isFavorite) {
+                    if (note.source !== 'personal' || !isTextWidgetNote(note) || note.isFavorite) {
                         return false;
                     }
 
@@ -445,17 +491,25 @@ function getFallbackBuckets(notes: Note[], referenceDate: Date): FallbackBucket[
                 .sort(compareOldestWidgetNotes),
         },
         {
+            mode: 'shared_photo_memory',
+            notes: notes.filter((note) => note.source === 'shared' && isPhotoWidgetNote(note)).sort(compareRecentWidgetNotes),
+        },
+        {
+            mode: 'shared_memory',
+            notes: notes.filter((note) => note.source === 'shared' && isTextWidgetNote(note)).sort(compareRecentWidgetNotes),
+        },
+        {
             mode: 'latest_memory',
-            notes: [...notes].sort(compareRecentWidgetNotes),
+            notes: notes.filter((note) => note.source === 'personal').sort(compareRecentWidgetNotes),
         },
     ];
 }
 
 function pickFallbackCandidate(
-    notes: Note[],
+    notes: WidgetCandidate[],
     referenceDate: Date,
     recentHistory: WidgetHistoryEntry[]
-): { note: Note; mode: WidgetSelectionMode } | null {
+): { note: WidgetCandidate; mode: WidgetSelectionMode } | null {
     const buckets = getFallbackBuckets(notes, referenceDate);
     const repeatPolicies: CandidateRepeatPolicy[] = ['strict', 'avoid_consecutive', 'allow_repeat'];
 
@@ -477,8 +531,88 @@ function pickFallbackCandidate(
     return null;
 }
 
+function getAuthorInitials(displayName: string | null | undefined) {
+    const normalized = typeof displayName === 'string' ? displayName.trim() : '';
+    if (!normalized) {
+        return '';
+    }
+
+    const segments = normalized.split(/\s+/).filter(Boolean);
+    if (segments.length === 0) {
+        return '';
+    }
+
+    return segments
+        .slice(0, 2)
+        .map((segment) => segment[0]?.toUpperCase() ?? '')
+        .join('');
+}
+
+function createPersonalWidgetCandidate(note: Note): WidgetCandidate {
+    return {
+        id: note.id,
+        candidateKey: `personal:${note.id}`,
+        source: 'personal',
+        noteType: note.type,
+        text: note.content,
+        photoLocalUri: getNotePhotoUri(note),
+        locationName: note.locationName,
+        latitude: note.latitude,
+        longitude: note.longitude,
+        radius: note.radius,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+        isFavorite: note.isFavorite,
+        hasDoodle: Boolean(note.hasDoodle && note.doodleStrokesJson),
+        doodleStrokesJson: note.doodleStrokesJson ?? null,
+        moodEmoji: note.moodEmoji ?? null,
+        authorDisplayName: null,
+        authorPhotoURLSnapshot: null,
+    };
+}
+
+function createSharedWidgetCandidate(post: SharedPost): WidgetCandidate {
+    return {
+        id: post.id,
+        candidateKey: `shared:${post.id}`,
+        source: 'shared',
+        noteType: post.type,
+        text: post.text,
+        photoLocalUri: post.photoLocalUri,
+        locationName: post.placeName,
+        latitude: null,
+        longitude: null,
+        radius: null,
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        isFavorite: false,
+        hasDoodle: Boolean(post.doodleStrokesJson),
+        doodleStrokesJson: post.doodleStrokesJson ?? null,
+        authorDisplayName: post.authorDisplayName ?? null,
+        authorPhotoURLSnapshot: post.authorPhotoURLSnapshot ?? null,
+    };
+}
+
+function isWidgetCandidate(value: Note | WidgetCandidate | SharedPost): value is WidgetCandidate {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'candidateKey' in value &&
+        typeof (value as { candidateKey?: unknown }).candidateKey === 'string'
+    );
+}
+
+function normalizePersonalCandidates(notes: Array<Note | WidgetCandidate>) {
+    return notes.map((note) => (isWidgetCandidate(note) ? note : createPersonalWidgetCandidate(note)));
+}
+
+function normalizeSharedCandidates(sharedPosts: Array<SharedPost | WidgetCandidate>) {
+    return sharedPosts.map((post) => (isWidgetCandidate(post) ? post : createSharedWidgetCandidate(post)));
+}
+
 export function selectWidgetNote(options: {
-    notes: Note[];
+    notes: Array<Note | WidgetCandidate>;
+    sharedPosts?: Array<SharedPost | WidgetCandidate>;
     currentLocation?: LocationCoords | null;
     nearbyRadiusMeters?: number;
     referenceDate?: Date;
@@ -486,14 +620,16 @@ export function selectWidgetNote(options: {
 }): WidgetSelectionResult {
     const {
         notes,
+        sharedPosts = [],
         currentLocation = null,
         referenceDate = new Date(),
         recentHistory = [],
     } = options;
 
-    if (notes.length === 0) {
+    if (notes.length === 0 && sharedPosts.length === 0) {
         return {
             selectedNote: null,
+            selectedCandidate: null,
             selectedLocationName: null,
             nearbyPlacesCount: 0,
             isIdleState: true,
@@ -501,11 +637,16 @@ export function selectWidgetNote(options: {
         };
     }
 
-    const selectableNotes = notes.filter((note) => isPhotoWidgetNote(note) || isTextWidgetNote(note));
+    const personalCandidates = normalizePersonalCandidates(notes);
+    const sharedCandidates = normalizeSharedCandidates(sharedPosts);
+    const selectableNotes = [...personalCandidates, ...sharedCandidates].filter(
+        (note) => isPhotoWidgetNote(note) || isTextWidgetNote(note)
+    );
 
     if (selectableNotes.length === 0) {
         return {
             selectedNote: null,
+            selectedCandidate: null,
             selectedLocationName: null,
             nearbyPlacesCount: 0,
             isIdleState: true,
@@ -518,17 +659,18 @@ export function selectWidgetNote(options: {
             .map((note) => ({
                 note,
                 distanceMeters: getDistanceMeters(currentLocation, {
-                    latitude: note.latitude,
-                    longitude: note.longitude,
+                    latitude: note.latitude ?? 0,
+                    longitude: note.longitude ?? 0,
                 }),
             }))
-            .filter((entry) => entry.distanceMeters <= Math.max(1, entry.note.radius))
+            .filter((entry) => entry.note.source === 'personal' && entry.distanceMeters <= Math.max(1, entry.note.radius ?? 0))
             .sort(compareNearbyWidgetNotes)
         : [];
 
     if (nearestCandidates.length > 0) {
         return {
             selectedNote: nearestCandidates[0]?.note ?? null,
+            selectedCandidate: nearestCandidates[0]?.note ?? null,
             selectedLocationName: nearestCandidates[0]?.note.locationName ?? null,
             nearbyPlacesCount: Math.max(0, nearestCandidates.length - 1),
             isIdleState: false,
@@ -541,6 +683,7 @@ export function selectWidgetNote(options: {
     if (!fallbackCandidate) {
         return {
             selectedNote: null,
+            selectedCandidate: null,
             selectedLocationName: null,
             nearbyPlacesCount: 0,
             isIdleState: true,
@@ -550,6 +693,7 @@ export function selectWidgetNote(options: {
 
     return {
         selectedNote: fallbackCandidate.note,
+        selectedCandidate: fallbackCandidate.note,
         selectedLocationName: fallbackCandidate.note.locationName ?? null,
         nearbyPlacesCount: 0,
         isIdleState: false,
@@ -614,6 +758,10 @@ async function getReadablePhotoUri(photoUri: string): Promise<string | undefined
         return undefined;
     }
 
+    if (/^https?:\/\//i.test(normalizedPhotoUri)) {
+        return normalizedPhotoUri;
+    }
+
     const candidates = Array.from(
         new Set([
             resolveStoredPhotoUri(normalizedPhotoUri),
@@ -652,21 +800,151 @@ async function encodePhotoForWidget(photoUri: string): Promise<string | undefine
     }
 }
 
-async function getEligibleWidgetNotes(notes: Note[]): Promise<EligibleWidgetNotes> {
-    const eligibleNotes: Note[] = [];
-    const readablePhotoUrisByNoteId = new Map<string, string>();
+async function downloadRemoteImageToWidgetContainer(
+    remoteImageUrl: string,
+    destinationDirectoryName: string,
+    destinationToken: string
+) {
+    const sharedContainerUri = getWidgetSharedContainerUri();
+    if (!sharedContainerUri) {
+        return undefined;
+    }
+
+    const normalizedRemoteImageUrl = remoteImageUrl.trim();
+    if (!normalizedRemoteImageUrl) {
+        return undefined;
+    }
+
+    const safeToken = destinationToken.replace(/[^a-zA-Z0-9_-]/g, '');
+    const destinationDirectory = `${sharedContainerUri}${destinationDirectoryName}/`;
+    const destinationPath = `${destinationDirectory}${safeToken}-${hashString(normalizedRemoteImageUrl)}.jpg`;
+
+    try {
+        await FileSystem.makeDirectoryAsync(destinationDirectory, { intermediates: true });
+
+        const existingInfo = await FileSystem.getInfoAsync(destinationPath);
+        if (existingInfo.exists && !existingInfo.isDirectory) {
+            return destinationPath;
+        }
+
+        await FileSystem.downloadAsync(normalizedRemoteImageUrl, destinationPath);
+        return destinationPath;
+    } catch (error) {
+        try {
+            const fallbackInfo = await FileSystem.getInfoAsync(destinationPath);
+            if (fallbackInfo.exists && !fallbackInfo.isDirectory) {
+                return destinationPath;
+            }
+        } catch {
+            // Ignore fallback lookup errors.
+        }
+
+        console.warn('[widgetService] Failed to download remote widget image:', error);
+        return undefined;
+    }
+}
+
+async function resolveWidgetAuthorAvatarProps(candidate: WidgetCandidate) {
+    if (candidate.source !== 'shared' || !candidate.authorPhotoURLSnapshot?.trim()) {
+        return {};
+    }
+
+    const readableAvatarUri = await getReadablePhotoUri(candidate.authorPhotoURLSnapshot);
+    if (!readableAvatarUri) {
+        return {};
+    }
+
+    if (/^https?:\/\//i.test(readableAvatarUri)) {
+        const downloadedAvatarUri = await downloadRemoteImageToWidgetContainer(
+            readableAvatarUri,
+            WIDGET_AVATAR_DIRECTORY_NAME,
+            `author-${candidate.id}`
+        );
+
+        if (downloadedAvatarUri) {
+            return {
+                authorAvatarImageUrl: downloadedAvatarUri,
+            };
+        }
+
+        return {};
+    }
+
+    const copiedAvatarUri = await copyPhotoForWidget(readableAvatarUri, `author-${candidate.id}`);
+    if (copiedAvatarUri) {
+        return {
+            authorAvatarImageUrl: copiedAvatarUri,
+        };
+    }
+
+    const avatarBase64 = await encodePhotoForWidget(readableAvatarUri);
+    if (avatarBase64) {
+        return {
+            authorAvatarImageBase64: avatarBase64,
+        };
+    }
+
+    return {};
+}
+
+async function getSharedWidgetFeedSnapshot(includeSharedRefresh = false): Promise<WidgetSharedFeedSnapshot> {
+    const currentUser = getFirebaseAuth()?.currentUser;
+    if (!currentUser) {
+        return {
+            currentUserUid: null,
+            sharedPosts: [],
+        };
+    }
+
+    let cachedPosts: SharedPost[] = [];
+    try {
+        const cachedSnapshot = await getCachedSharedFeedSnapshot(currentUser.uid);
+        cachedPosts = cachedSnapshot.sharedPosts.filter((post) => post.authorUid !== currentUser.uid);
+    } catch {
+        cachedPosts = [];
+    }
+
+    if (!includeSharedRefresh) {
+        return {
+            currentUserUid: currentUser.uid,
+            sharedPosts: cachedPosts,
+        };
+    }
+
+    try {
+        const liveSnapshot = await refreshSharedFeed(currentUser);
+        return {
+            currentUserUid: currentUser.uid,
+            sharedPosts: liveSnapshot.sharedPosts.filter((post) => post.authorUid !== currentUser.uid),
+        };
+    } catch (error) {
+        console.warn('[widgetService] Failed to refresh shared widget feed, using cache:', error);
+        return {
+            currentUserUid: currentUser.uid,
+            sharedPosts: cachedPosts,
+        };
+    }
+}
+
+async function getEligibleWidgetCandidates(
+    notes: Note[],
+    sharedPosts: SharedPost[]
+): Promise<EligibleWidgetCandidates> {
+    const eligibleCandidates: WidgetCandidate[] = [];
+    const readablePhotoUrisByCandidateKey = new Map<string, string>();
 
     for (const note of notes) {
-        if (isTextWidgetNote(note)) {
-            eligibleNotes.push(note);
+        const candidate = createPersonalWidgetCandidate(note);
+        if (isTextWidgetNote(candidate)) {
+            eligibleCandidates.push(candidate);
             continue;
         }
 
-        if (!isPhotoWidgetNote(note)) {
+        if (!isPhotoWidgetNote(candidate)) {
             continue;
         }
 
-        const selectedPhotoUri = getNotePhotoUri(note);
+        const selectedPhotoUri = candidate.photoLocalUri;
         if (!selectedPhotoUri) {
             continue;
         }
@@ -676,23 +954,57 @@ async function getEligibleWidgetNotes(notes: Note[]): Promise<EligibleWidgetNote
             continue;
         }
 
-        eligibleNotes.push(note);
-        readablePhotoUrisByNoteId.set(note.id, readablePhotoUri);
+        eligibleCandidates.push(candidate);
+        readablePhotoUrisByCandidateKey.set(candidate.candidateKey, readablePhotoUri);
+    }
+
+    for (const sharedPost of sharedPosts) {
+        const candidate = createSharedWidgetCandidate(sharedPost);
+        if (isTextWidgetNote(candidate)) {
+            eligibleCandidates.push(candidate);
+            continue;
+        }
+
+        if (!isPhotoWidgetNote(candidate) || !candidate.photoLocalUri) {
+            continue;
+        }
+
+        const readablePhotoUri = await getReadablePhotoUri(candidate.photoLocalUri);
+        if (!readablePhotoUri) {
+            continue;
+        }
+
+        eligibleCandidates.push(candidate);
+        readablePhotoUrisByCandidateKey.set(candidate.candidateKey, readablePhotoUri);
     }
 
     return {
-        notes: eligibleNotes,
-        readablePhotoUrisByNoteId,
+        candidates: eligibleCandidates,
+        readablePhotoUrisByCandidateKey,
     };
 }
 
 async function resolveWidgetPhotoProps(
-    note: Note,
+    note: WidgetCandidate,
     readablePhotoUri: string | undefined,
     destinationToken: string
 ): Promise<Pick<WidgetProps, 'backgroundImageUrl' | 'backgroundImageBase64'>> {
-    if (note.type !== 'photo' || !readablePhotoUri) {
+    if (note.noteType !== 'photo' || !readablePhotoUri) {
         return {};
+    }
+
+    if (/^https?:\/\//i.test(readablePhotoUri)) {
+        const downloadedPhotoUri = await downloadRemoteImageToWidgetContainer(
+            readablePhotoUri,
+            WIDGET_IMAGE_DIRECTORY_NAME,
+            destinationToken
+        );
+
+        if (downloadedPhotoUri) {
+            return {
+                backgroundImageUrl: downloadedPhotoUri,
+            };
+        }
     }
 
     const copiedPhotoUri = await copyPhotoForWidget(readablePhotoUri, destinationToken);
@@ -712,9 +1024,9 @@ async function resolveWidgetPhotoProps(
     return {};
 }
 
-function createHistoryEntry(note: Note, referenceDate: Date, selectionMode: WidgetSelectionMode): WidgetHistoryEntry {
+function createHistoryEntry(note: WidgetCandidate, referenceDate: Date, selectionMode: WidgetSelectionMode): WidgetHistoryEntry {
     return {
-        noteId: note.id,
+        candidateKey: note.candidateKey,
         slotKey: getSlotKey(referenceDate),
         slotStartedAt: getSlotStart(referenceDate).toISOString(),
         selectionMode,
@@ -725,7 +1037,7 @@ async function buildWidgetPropsFromSelection(
     noteCount: number,
     selection: WidgetSelectionResult,
     referenceDate: Date,
-    readablePhotoUrisByNoteId: Map<string, string>
+    readablePhotoUrisByCandidateKey: Map<string, string>
 ): Promise<WidgetProps> {
     const resolvedNearbyPlacesCount =
         selection.selectionMode === 'nearest_memory'
@@ -733,58 +1045,64 @@ async function buildWidgetPropsFromSelection(
             : 0;
     const translatedStrings = getTranslatedWidgetStrings(noteCount, resolvedNearbyPlacesCount, selection.selectionMode);
 
-    if (!selection.selectedNote || selection.isIdleState) {
+    if (!selection.selectedCandidate || selection.isIdleState) {
         return {
             ...buildIdleWidgetProps(noteCount, selection.selectionMode),
             ...translatedStrings,
         };
     }
 
-    const selectedNote = selection.selectedNote;
+    const selectedNote = selection.selectedCandidate;
     const dateStr = formatDate(selectedNote.createdAt, 'short');
     const props: WidgetProps = {
-        noteType: selectedNote.type,
+        noteType: selectedNote.noteType,
         text:
-            selectedNote.type === 'text'
-                ? formatNoteTextWithEmoji(selectedNote.content.trim(), selectedNote.moodEmoji)
+            selectedNote.noteType === 'text'
+                ? formatNoteTextWithEmoji(selectedNote.text.trim(), selectedNote.moodEmoji)
                 : '',
         locationName: selection.selectedLocationName ?? selectedNote.locationName ?? i18n.t('capture.unknownPlace'),
         date: dateStr,
         noteCount,
         nearbyPlacesCount: resolvedNearbyPlacesCount,
-        hasDoodle: Boolean(selectedNote.hasDoodle && selectedNote.doodleStrokesJson),
+        hasDoodle: selectedNote.hasDoodle,
         doodleStrokesJson: selectedNote.doodleStrokesJson ?? null,
         isIdleState: false,
+        isSharedContent: selectedNote.source === 'shared',
+        authorDisplayName: selectedNote.authorDisplayName ?? '',
+        authorInitials: getAuthorInitials(selectedNote.authorDisplayName),
         ...translatedStrings,
     };
 
-    if (selectedNote.type === 'photo') {
+    if (selectedNote.noteType === 'photo') {
         Object.assign(
             props,
             await resolveWidgetPhotoProps(
                 selectedNote,
-                readablePhotoUrisByNoteId.get(selectedNote.id),
-                `slot-${getSlotKey(referenceDate)}-note-${selectedNote.id}`
+                readablePhotoUrisByCandidateKey.get(selectedNote.candidateKey),
+                `slot-${getSlotKey(referenceDate)}-note-${selectedNote.candidateKey}`
             )
         );
     }
+
+    Object.assign(props, await resolveWidgetAuthorAvatarProps(selectedNote));
 
     return props;
 }
 
 async function buildWidgetTimeline(options: {
     notes: Note[];
+    sharedPosts?: SharedPost[];
     currentLocation?: LocationCoords | null;
     referenceDate: Date;
 }) {
-    const { notes, currentLocation = null, referenceDate } = options;
-    const { notes: eligibleNotes, readablePhotoUrisByNoteId } = await getEligibleWidgetNotes(notes);
+    const { notes, sharedPosts = [], currentLocation = null, referenceDate } = options;
+    const { candidates: eligibleNotes, readablePhotoUrisByCandidateKey } = await getEligibleWidgetCandidates(notes, sharedPosts);
     const history = await loadWidgetHistory(referenceDate);
     const timelineDates = buildTimelineDates(referenceDate);
     const nextHistory = [...history];
     const entries: WidgetTimelineEntry[] = [];
 
-    if (notes.length === 0 || eligibleNotes.length === 0) {
+    if ((notes.length === 0 && sharedPosts.length === 0) || eligibleNotes.length === 0) {
         const idleProps = buildIdleWidgetProps(notes.length);
         for (const date of timelineDates) {
             entries.push({
@@ -802,6 +1120,7 @@ async function buildWidgetTimeline(options: {
     for (const date of timelineDates) {
         const selection = selectWidgetNote({
             notes: eligibleNotes,
+            sharedPosts: [],
             currentLocation,
             referenceDate: date,
             recentHistory: nextHistory,
@@ -809,11 +1128,11 @@ async function buildWidgetTimeline(options: {
 
         entries.push({
             date,
-            props: await buildWidgetPropsFromSelection(notes.length, selection, date, readablePhotoUrisByNoteId),
+            props: await buildWidgetPropsFromSelection(notes.length, selection, date, readablePhotoUrisByCandidateKey),
         });
 
-        if (selection.selectedNote && !selection.isIdleState) {
-            nextHistory.push(createHistoryEntry(selection.selectedNote, date, selection.selectionMode));
+        if (selection.selectedCandidate && !selection.isIdleState) {
+            nextHistory.push(createHistoryEntry(selection.selectedCandidate, date, selection.selectionMode));
         }
     }
 
@@ -830,6 +1149,7 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
 
     try {
         const notes = options.notes ?? await getAllNotes();
+        const sharedFeedSnapshot = await getSharedWidgetFeedSnapshot(options.includeSharedRefresh === true);
 
         let currentLocation: Location.LocationObject | null = null;
         if (options.includeLocationLookup !== false) {
@@ -848,6 +1168,7 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
 
         const { entries, history } = await buildWidgetTimeline({
             notes,
+            sharedPosts: sharedFeedSnapshot.sharedPosts,
             currentLocation: currentLocation
                 ? {
                     latitude: currentLocation.coords.latitude,

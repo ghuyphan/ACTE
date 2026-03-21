@@ -12,8 +12,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import i18n, { i18nReady } from '../constants/i18n';
 import { ENABLE_SHARED_ROOMS } from '../constants/features';
-import { AuthProvider } from '../hooks/useAuth';
-import { ConnectivityProvider } from '../hooks/useConnectivity';
+import { AuthProvider, useAuth } from '../hooks/useAuth';
+import { ConnectivityProvider, useConnectivity } from '../hooks/useConnectivity';
 import { NotesProvider } from '../hooks/useNotes';
 import { NoteDetailSheetProvider, useNoteDetailSheet } from '../hooks/useNoteDetailSheet';
 import { RoomsProvider } from '../hooks/useRooms';
@@ -32,6 +32,8 @@ SplashScreen.preventAutoHideAsync();
 
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
+  const { user } = useAuth();
+  const { isOnline } = useConnectivity();
   const { openNoteDetail } = useNoteDetailSheet();
   const [dbReady, setDbReady] = useState(false);
   const [localeReady, setLocaleReady] = useState(i18n.isInitialized);
@@ -75,13 +77,25 @@ function AppContent() {
 
       void updateWidgetData({
         includeLocationLookup: true,
+        includeSharedRefresh: Boolean(user && isOnline),
       });
     });
 
     return () => {
       subscription.remove();
     };
-  }, [dbReady, localeReady]);
+  }, [dbReady, isOnline, localeReady, user]);
+
+  useEffect(() => {
+    if (!dbReady || !localeReady || !user) {
+      return;
+    }
+
+    void updateWidgetData({
+      includeLocationLookup: true,
+      includeSharedRefresh: isOnline,
+    });
+  }, [dbReady, isOnline, localeReady, user]);
 
   useEffect(() => {
     let cancelled = false;

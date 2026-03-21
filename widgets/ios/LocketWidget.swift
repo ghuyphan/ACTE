@@ -25,6 +25,11 @@ private struct LocketWidgetPayload {
     let accessoryAddLabelText: String
     let accessorySavedLabelText: String
     let accessoryNearLabelText: String
+    let isSharedContent: Bool
+    let authorDisplayName: String
+    let authorInitials: String
+    let authorAvatarImageUrl: String?
+    let authorAvatarImageBase64: String?
 
     static let placeholder = LocketWidgetPayload(
         noteType: "text",
@@ -48,7 +53,12 @@ private struct LocketWidgetPayload {
         accessoryOpenAppText: "Open Noto",
         accessoryAddLabelText: "Add",
         accessorySavedLabelText: "Saved",
-        accessoryNearLabelText: "Near"
+        accessoryNearLabelText: "Near",
+        isSharedContent: false,
+        authorDisplayName: "",
+        authorInitials: "",
+        authorAvatarImageUrl: nil,
+        authorAvatarImageBase64: nil
     )
 
     init(
@@ -73,7 +83,12 @@ private struct LocketWidgetPayload {
         accessoryOpenAppText: String,
         accessoryAddLabelText: String,
         accessorySavedLabelText: String,
-        accessoryNearLabelText: String
+        accessoryNearLabelText: String,
+        isSharedContent: Bool,
+        authorDisplayName: String,
+        authorInitials: String,
+        authorAvatarImageUrl: String?,
+        authorAvatarImageBase64: String?
     ) {
         self.noteType = noteType
         self.text = text
@@ -97,6 +112,11 @@ private struct LocketWidgetPayload {
         self.accessoryAddLabelText = accessoryAddLabelText
         self.accessorySavedLabelText = accessorySavedLabelText
         self.accessoryNearLabelText = accessoryNearLabelText
+        self.isSharedContent = isSharedContent
+        self.authorDisplayName = authorDisplayName
+        self.authorInitials = authorInitials
+        self.authorAvatarImageUrl = authorAvatarImageUrl
+        self.authorAvatarImageBase64 = authorAvatarImageBase64
     }
 
     init(rawProps: [String: Any]) {
@@ -124,6 +144,11 @@ private struct LocketWidgetPayload {
         accessoryAddLabelText = LocketWidgetPayload.stringValue(payload["accessoryAddLabelText"])
         accessorySavedLabelText = LocketWidgetPayload.stringValue(payload["accessorySavedLabelText"])
         accessoryNearLabelText = LocketWidgetPayload.stringValue(payload["accessoryNearLabelText"])
+        isSharedContent = LocketWidgetPayload.boolValue(payload["isSharedContent"])
+        authorDisplayName = LocketWidgetPayload.stringValue(payload["authorDisplayName"])
+        authorInitials = LocketWidgetPayload.stringValue(payload["authorInitials"])
+        authorAvatarImageUrl = LocketWidgetPayload.optionalStringValue(payload["authorAvatarImageUrl"])
+        authorAvatarImageBase64 = LocketWidgetPayload.optionalStringValue(payload["authorAvatarImageBase64"])
     }
 
     private static func unwrapPayload(from rawProps: [String: Any]) -> [String: Any] {
@@ -419,6 +444,20 @@ private struct LocketWidgetEntryView: View {
         return nil
     }
 
+    private var resolvedAuthorAvatar: UIImage? {
+        if let authorAvatarImageUrl = payload.authorAvatarImageUrl,
+           let image = loadImage(fromPath: authorAvatarImageUrl) {
+            return image
+        }
+
+        if let authorAvatarImageBase64 = payload.authorAvatarImageBase64,
+           let image = loadImage(fromBase64: authorAvatarImageBase64) {
+            return image
+        }
+
+        return nil
+    }
+
     private var hasPhotoBackground: Bool {
         resolvedImage != nil && !payload.isIdleState
     }
@@ -433,6 +472,13 @@ private struct LocketWidgetEntryView: View {
         payload.hasDoodle &&
         (payload.noteType == "photo" || !payload.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) &&
         !doodleStrokes.isEmpty
+    }
+
+    private var shouldShowAuthorChip: Bool {
+        !isAccessoryFamily &&
+        !payload.isIdleState &&
+        payload.isSharedContent &&
+        (!payload.authorDisplayName.isEmpty || !payload.authorInitials.isEmpty || resolvedAuthorAvatar != nil)
     }
 
     private var textSurfaceColors: [Color] {
@@ -580,6 +626,20 @@ private struct LocketWidgetEntryView: View {
         return firstSegment
     }
 
+    private var compactAuthorName: String {
+        let trimmed = payload.authorDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return ""
+        }
+
+        let firstSegment = trimmed
+            .split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? trimmed
+
+        return firstSegment
+    }
+
     var body: some View {
         Group {
             if isAccessoryFamily {
@@ -705,6 +765,14 @@ private struct LocketWidgetEntryView: View {
             }
 
             VStack(spacing: 0) {
+                if shouldShowAuthorChip {
+                    HStack {
+                        authorChip
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.bottom, 6)
+                }
+
                 Spacer(minLength: 0)
                 smallTextContent
                 Spacer(minLength: 0)
@@ -752,6 +820,11 @@ private struct LocketWidgetEntryView: View {
             }
 
             VStack(alignment: .leading, spacing: 0) {
+                if shouldShowAuthorChip {
+                    authorChip
+                        .padding(.bottom, 10)
+                }
+
                 if hasLocationEyebrow {
                     Text(payload.locationName)
                         .font(.system(size: 12, weight: .medium))
@@ -857,6 +930,48 @@ private struct LocketWidgetEntryView: View {
             .padding(.vertical, isLarge ? 6 : 5)
             .background(badgeBackgroundColor)
             .clipShape(Capsule())
+    }
+
+    private var authorChipBackgroundColor: Color {
+        hasPhotoBackground
+            ? Color.black.opacity(0.30)
+            : Color.white.opacity(0.84)
+    }
+
+    private var authorChipForegroundColor: Color {
+        hasPhotoBackground
+            ? Color.white
+            : Color(red: 0.17, green: 0.10, blue: 0.07)
+    }
+
+    private var authorChip: some View {
+        HStack(spacing: 6) {
+            if let authorAvatar = resolvedAuthorAvatar {
+                Image(uiImage: authorAvatar)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 18, height: 18)
+                    .clipShape(Circle())
+            } else if !payload.authorInitials.isEmpty {
+                Text(payload.authorInitials)
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(authorChipForegroundColor)
+                    .frame(width: 18, height: 18)
+                    .background(authorChipForegroundColor.opacity(hasPhotoBackground ? 0.16 : 0.10))
+                    .clipShape(Circle())
+            }
+
+            if !compactAuthorName.isEmpty {
+                Text(compactAuthorName)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(authorChipForegroundColor)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(authorChipBackgroundColor)
+        .clipShape(Capsule())
     }
 
     private func loadImage(fromPath path: String) -> UIImage? {
