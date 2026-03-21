@@ -1,7 +1,9 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useAuth } from './useAuth';
 import {
   CreateNoteInput,
+  LOCAL_NOTES_SCOPE,
   createNote as dbCreate,
   deleteAllNotes as dbDeleteAll,
   deleteNote as dbDelete,
@@ -39,10 +41,12 @@ interface NotesStoreValue {
 const NotesStoreContext = createContext<NotesStoreValue | undefined>(undefined);
 
 function useNotesStoreValue(): NotesStoreValue {
+  const { user, isReady: authReady } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const syncService = getSyncService();
   const notesRef = useRef<Note[]>([]);
+  const activeScopeRef = useRef<string>(user?.uid ?? LOCAL_NOTES_SCOPE);
   const widgetSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -81,6 +85,10 @@ function useNotesStoreValue(): NotesStoreValue {
   }, []);
 
   useEffect(() => {
+    if (!authReady) {
+      return;
+    }
+
     let cancelled = false;
     let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
     (async () => {
@@ -102,7 +110,24 @@ function useNotesStoreValue(): NotesStoreValue {
         clearTimeout(cleanupTimeout);
       }
     };
-  }, [refreshNotes]);
+  }, [authReady, refreshNotes]);
+
+  useEffect(() => {
+    if (!authReady) {
+      return;
+    }
+
+    const nextScope = user?.uid ?? LOCAL_NOTES_SCOPE;
+    if (activeScopeRef.current === nextScope) {
+      return;
+    }
+
+    activeScopeRef.current = nextScope;
+    notesRef.current = [];
+    setNotes([]);
+    setLoading(true);
+    void refreshNotes(true);
+  }, [authReady, refreshNotes, user?.uid]);
 
   useEffect(() => () => {
     if (widgetSyncTimeoutRef.current) {

@@ -8,6 +8,7 @@ import {
   findOwnedSharedPostIdsForNote,
   FriendConnection,
   FriendInvite,
+  getSharedFeedErrorMessage,
   refreshSharedFeed as fetchSharedFeed,
   removeFriend as deleteFriend,
   revokeFriendInvite as revokeInvite,
@@ -175,7 +176,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         setReady(true);
       },
       onError: (error) => {
-        console.warn('Shared feed subscription failed:', error);
+        console.warn('Shared feed subscription failed:', getSharedFeedErrorMessage(error));
         setLoading(false);
         setReady(true);
       },

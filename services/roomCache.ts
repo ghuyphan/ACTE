@@ -1,5 +1,5 @@
 import type { RoomInvite } from './roomService';
-import { getDB } from './database';
+import { getDB, withDatabaseTransaction } from './database';
 
 export type RoomRole = 'owner' | 'member';
 export type RoomPostOrigin = 'shared_note' | 'room_native';
@@ -169,13 +169,12 @@ export async function getCachedRooms(userUid: string): Promise<RoomSummary[]> {
 }
 
 export async function replaceCachedRooms(userUid: string, rooms: RoomSummary[]): Promise<void> {
-  const db = await getDB();
   const cachedAt = new Date().toISOString();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM rooms_cache WHERE user_uid = ?', userUid);
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync('DELETE FROM rooms_cache WHERE user_uid = ?', userUid);
 
     for (const room of rooms) {
-      await db.runAsync(
+      await tx.runAsync(
         `INSERT INTO rooms_cache (
           user_uid,
           id,
@@ -204,7 +203,7 @@ export async function replaceCachedRooms(userUid: string, rooms: RoomSummary[]):
       );
     }
 
-    await db.runAsync(
+    await tx.runAsync(
       `INSERT INTO rooms_cache_meta (user_uid, last_updated_at)
        VALUES (?, ?)
        ON CONFLICT(user_uid) DO UPDATE SET
@@ -282,16 +281,15 @@ export async function replaceCachedRoomMembers(
   roomId: string,
   members: RoomMember[]
 ): Promise<void> {
-  const db = await getDB();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync(
       'DELETE FROM room_memberships_cache WHERE user_uid = ? AND room_id = ?',
       userUid,
       roomId
     );
 
     for (const member of members) {
-      await db.runAsync(
+      await tx.runAsync(
         `INSERT INTO room_memberships_cache (
           user_uid,
           room_id,
@@ -334,13 +332,12 @@ export async function replaceCachedRoomPosts(
   roomId: string,
   posts: RoomPost[]
 ): Promise<void> {
-  const db = await getDB();
   const cachedAt = new Date().toISOString();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM room_posts_cache WHERE user_uid = ? AND room_id = ?', userUid, roomId);
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync('DELETE FROM room_posts_cache WHERE user_uid = ? AND room_id = ?', userUid, roomId);
 
     for (const post of posts) {
-      await db.runAsync(
+      await tx.runAsync(
         `INSERT INTO room_posts_cache (
           user_uid,
           room_id,
@@ -375,7 +372,7 @@ export async function replaceCachedRoomPosts(
       );
     }
 
-    await db.runAsync(
+    await tx.runAsync(
       `INSERT INTO rooms_cache_meta (user_uid, last_updated_at)
        VALUES (?, ?)
        ON CONFLICT(user_uid) DO UPDATE SET
@@ -416,9 +413,8 @@ export async function getCachedRoomInvite(userUid: string, roomId: string): Prom
 }
 
 export async function upsertCachedRoomInvite(userUid: string, invite: RoomInvite): Promise<void> {
-  const db = await getDB();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync(
       `INSERT INTO room_invites_cache (
         user_uid,
         room_id,
@@ -449,7 +445,7 @@ export async function upsertCachedRoomInvite(userUid: string, invite: RoomInvite
       invite.revokedAt,
       invite.url
     );
-    await db.runAsync(
+    await tx.runAsync(
       `INSERT INTO rooms_cache_meta (user_uid, last_updated_at)
        VALUES (?, ?)
        ON CONFLICT(user_uid) DO UPDATE SET
@@ -481,40 +477,38 @@ export async function getRoomsCacheLastUpdatedAt(userUid: string): Promise<strin
 }
 
 export async function clearCachedRoom(userUid: string, roomId: string): Promise<void> {
-  const db = await getDB();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM rooms_cache WHERE user_uid = ? AND id = ?', userUid, roomId);
-    await db.runAsync(
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync('DELETE FROM rooms_cache WHERE user_uid = ? AND id = ?', userUid, roomId);
+    await tx.runAsync(
       'DELETE FROM room_memberships_cache WHERE user_uid = ? AND room_id = ?',
       userUid,
       roomId
     );
-    await db.runAsync('DELETE FROM room_posts_cache WHERE user_uid = ? AND room_id = ?', userUid, roomId);
-    await db.runAsync('DELETE FROM room_invites_cache WHERE user_uid = ? AND room_id = ?', userUid, roomId);
-    await db.runAsync('DELETE FROM room_read_state WHERE user_uid = ? AND room_id = ?', userUid, roomId);
+    await tx.runAsync('DELETE FROM room_posts_cache WHERE user_uid = ? AND room_id = ?', userUid, roomId);
+    await tx.runAsync('DELETE FROM room_invites_cache WHERE user_uid = ? AND room_id = ?', userUid, roomId);
+    await tx.runAsync('DELETE FROM room_read_state WHERE user_uid = ? AND room_id = ?', userUid, roomId);
   });
 }
 
 export async function clearAllCachedRooms(userUid?: string | null): Promise<void> {
-  const db = await getDB();
   if (!userUid) {
-    await db.withTransactionAsync(async () => {
-      await db.runAsync('DELETE FROM rooms_cache');
-      await db.runAsync('DELETE FROM room_memberships_cache');
-      await db.runAsync('DELETE FROM room_posts_cache');
-      await db.runAsync('DELETE FROM room_invites_cache');
-      await db.runAsync('DELETE FROM room_read_state');
-      await db.runAsync('DELETE FROM rooms_cache_meta');
+    await withDatabaseTransaction(async (tx) => {
+      await tx.runAsync('DELETE FROM rooms_cache');
+      await tx.runAsync('DELETE FROM room_memberships_cache');
+      await tx.runAsync('DELETE FROM room_posts_cache');
+      await tx.runAsync('DELETE FROM room_invites_cache');
+      await tx.runAsync('DELETE FROM room_read_state');
+      await tx.runAsync('DELETE FROM rooms_cache_meta');
     });
     return;
   }
 
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM rooms_cache WHERE user_uid = ?', userUid);
-    await db.runAsync('DELETE FROM room_memberships_cache WHERE user_uid = ?', userUid);
-    await db.runAsync('DELETE FROM room_posts_cache WHERE user_uid = ?', userUid);
-    await db.runAsync('DELETE FROM room_invites_cache WHERE user_uid = ?', userUid);
-    await db.runAsync('DELETE FROM room_read_state WHERE user_uid = ?', userUid);
-    await db.runAsync('DELETE FROM rooms_cache_meta WHERE user_uid = ?', userUid);
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync('DELETE FROM rooms_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM room_memberships_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM room_posts_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM room_invites_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM room_read_state WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM rooms_cache_meta WHERE user_uid = ?', userUid);
   });
 }

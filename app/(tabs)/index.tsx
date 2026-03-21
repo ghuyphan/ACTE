@@ -425,7 +425,11 @@ export default function HomeScreen() {
   }, [showAlert, t]);
 
   const showSharedSaveSheet = useCallback(
-    (status: 'shared' | 'no-friends' | 'share-failed', onClose?: () => void) => {
+    (
+      status: 'shared' | 'no-friends' | 'share-failed',
+      onClose?: () => void,
+      failureMessage?: string | null
+    ) => {
       if (status === 'shared') {
         showAlert({
           variant: 'success',
@@ -468,10 +472,15 @@ export default function HomeScreen() {
       showAlert({
         variant: 'warning',
         title: t('shared.sharePublishFailedTitle', 'Saved, but not shared'),
-        message: t(
-          'shared.sharePublishFailedBody',
-          'Your note is safe in your journal, but we could not publish it to the shared feed right now.'
-        ),
+        message: [
+          t(
+            'shared.sharePublishFailedBody',
+            'Your note is safe in your journal, but we could not publish it to the shared feed right now.'
+          ),
+          failureMessage?.trim() || null,
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
         onClose,
         primaryAction: {
           label: t('common.done', 'Done'),
@@ -710,6 +719,7 @@ export default function HomeScreen() {
       }
 
       let shareOutcome: 'default' | 'shared' | 'no-friends' | 'share-failed' = 'default';
+      let shareFailureMessage: string | null = null;
 
       if (captureTarget === 'shared' && sharedEnabled && user) {
         if (friends.length === 0) {
@@ -719,7 +729,8 @@ export default function HomeScreen() {
             await createSharedPost(createdNote);
             shareOutcome = 'shared';
           } catch (shareError) {
-            console.warn('Shared publish failed:', shareError);
+            shareFailureMessage = getSharedFeedErrorMessage(shareError);
+            console.warn('Shared publish failed:', shareFailureMessage);
             shareOutcome = 'share-failed';
           }
         }
@@ -730,7 +741,7 @@ export default function HomeScreen() {
       if (shareOutcome === 'default') {
         showSavedSheet(finalizeSavedCapture);
       } else {
-        showSharedSaveSheet(shareOutcome, finalizeSavedCapture);
+        showSharedSaveSheet(shareOutcome, finalizeSavedCapture, shareFailureMessage);
       }
     } catch (error) {
       console.error('Save failed:', error);

@@ -1,8 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { countPhotoNotes } from '../constants/subscription';
 import { AppUser } from '../utils/appUser';
-import { getSupabase } from '../utils/supabase';
-import { Note, getAllNotes, getDB, getNoteById, upsertNote } from './database';
+import {
+  getCurrentSupabaseSession,
+  getSupabase,
+  getSupabaseErrorMessage,
+  isSupabaseNetworkError,
+  isSupabasePolicyError,
+} from '../utils/supabase';
+import { getActiveNotesScope, Note, getAllNotes, getDB, getNoteById, upsertNote } from './database';
 import { deletePhotoFromStorage, downloadPhotoFromStorage, NOTE_MEDIA_BUCKET, uploadPhotoToStorage } from './remoteMedia';
 import { upsertPublicUserProfile } from './publicProfileService';
 
@@ -123,6 +129,7 @@ interface RemoteMergeResult {
 
 interface QueueRow {
   id: number;
+  owner_uid?: string;
   entity: 'note';
   entity_id: string | null;
   operation: SyncChangeType;
@@ -145,6 +152,9 @@ const RETRY_DELAYS_MS = [
   24 * 60 * 60 * 1000,
 ];
 const REMOTE_SYNC_CURSOR_KEY_PREFIX = 'sync.lastRemoteCursor.';
+const EXPIRED_SESSION_SYNC_ERROR = 'Supabase session unavailable. Sign in again to resume sync.';
+const MISMATCHED_SESSION_SYNC_ERROR =
+  'Signed-in Supabase session does not match this account. Sign out and sign in again.';
 
 function rowToQueueItem(row: QueueRow): SyncQueueItem {
   return {
@@ -168,20 +178,57 @@ function getSyncTimestamp(note: Pick<Note, 'createdAt' | 'updatedAt'> | NoteRow)
 }
 
 function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
+  return getSupabaseErrorMessage(error);
+}
 
-  if (typeof error === 'object' && error && 'message' in error) {
-    return String((error as { message?: unknown }).message ?? 'Unknown sync error');
-  }
-
-  return 'Unknown sync error';
+function isSessionSyncError(error: unknown) {
+  const message = getErrorMessage(error);
+  return message === EXPIRED_SESSION_SYNC_ERROR || message === MISMATCHED_SESSION_SYNC_ERROR;
 }
 
 function isTerminalSyncError(error: unknown) {
   const message = getErrorMessage(error).toLowerCase();
-  return message.includes('too large to sync safely');
+  return (
+    message.includes('too large to sync safely') ||
+    isSessionSyncError(error) ||
+    isSupabasePolicyError(error)
+  );
+}
+
+function getBlockedSyncReason(error: unknown) {
+  if (isSessionSyncError(error)) {
+    return 'Your sign-in session expired. Sign out and sign back in to resume sync.';
+  }
+
+  if (isSupabasePolicyError(error)) {
+    return 'Supabase denied access to sync notes. Apply the latest Supabase migrations or sign in again.';
+  }
+
+  if (getErrorMessage(error).toLowerCase().includes('too large to sync safely')) {
+    return 'A photo is too large to sync safely. Retake it with a lower resolution, then try again.';
+  }
+
+  return null;
+}
+
+function getSyncFailureMessage(error: unknown) {
+  if (isSessionSyncError(error)) {
+    return 'Your sign-in session expired. Sign out and sign back in to resume sync.';
+  }
+
+  if (isSupabasePolicyError(error)) {
+    return 'Supabase denied access to sync notes. Apply the latest Supabase migrations or sign in again.';
+  }
+
+  if (isSupabaseNetworkError(error)) {
+    return 'Unable to reach Supabase right now. Check your connection and try again.';
+  }
+
+  return 'Unable to sync with Supabase right now. Please try again later.';
+}
+
+function shouldLogSyncWarning(error: unknown) {
+  return !isSessionSyncError(error) && !isSupabasePolicyError(error) && !isSupabaseNetworkError(error);
 }
 
 function getRetryDelayMs(attemptCount: number) {
@@ -200,9 +247,8 @@ function getRetryMetadata(item: SyncQueueItem, error: unknown) {
       nextRetryAt: null,
       terminal: true,
       blockedReason:
-        isTerminalSyncError(error)
-          ? 'A photo is too large to sync safely. Retake it with a lower resolution, then try again.'
-          : 'This note could not be synced after multiple attempts. Edit it and try again.',
+        getBlockedSyncReason(error) ??
+        'This note could not be synced after multiple attempts. Edit it and try again.',
     };
   }
 
@@ -224,6 +270,19 @@ async function getLastRemoteSyncCursor(userUid: string) {
 
 async function setLastRemoteSyncCursor(userUid: string, cursor: string) {
   await AsyncStorage.setItem(getRemoteSyncCursorKey(userUid), cursor);
+}
+
+async function ensureSupabaseSessionMatchesUser(userId: string) {
+  const session = await getCurrentSupabaseSession();
+  const sessionUserId = session?.user?.id?.trim();
+
+  if (!sessionUserId) {
+    throw new Error(EXPIRED_SESSION_SYNC_ERROR);
+  }
+
+  if (sessionUserId !== userId) {
+    throw new Error(MISMATCHED_SESSION_SYNC_ERROR);
+  }
 }
 
 async function serializeNoteForSupabase(
@@ -514,10 +573,12 @@ async function mergeRemoteNotesFromSupabase(
 const sqliteSyncRepository: SyncRepository = {
   async enqueue(change) {
     const db = await getDB();
+    const scope = getActiveNotesScope();
     const serializedPayload =
       change.payload === undefined ? null : JSON.stringify(change.payload);
     await db.runAsync(
       `INSERT INTO sync_queue (
+        owner_uid,
         entity,
         entity_id,
         operation,
@@ -530,7 +591,8 @@ const sqliteSyncRepository: SyncRepository = {
         blocked_reason,
         created_at
       )
-       VALUES (?, ?, ?, ?, 'pending', 0, NULL, NULL, 0, NULL, ?)`,
+       VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, 0, NULL, ?)`,
+      scope,
       change.entity,
       change.entityId ?? null,
       change.type,
@@ -541,15 +603,18 @@ const sqliteSyncRepository: SyncRepository = {
 
   async listPending(limit = 100) {
     const db = await getDB();
+    const scope = getActiveNotesScope();
     const now = new Date().toISOString();
     const rows = await db.getAllAsync<QueueRow>(
       `SELECT *
        FROM sync_queue
-       WHERE status IN ('pending', 'failed')
+       WHERE owner_uid = ?
+         AND status IN ('pending', 'failed')
          AND terminal = 0
          AND (next_retry_at IS NULL OR next_retry_at <= ?)
        ORDER BY created_at ASC
        LIMIT ?`,
+      scope,
       now,
       limit
     );
@@ -558,19 +623,22 @@ const sqliteSyncRepository: SyncRepository = {
 
   async markProcessing(id) {
     const db = await getDB();
+    const scope = getActiveNotesScope();
     await db.runAsync(
       `UPDATE sync_queue
        SET status = 'processing',
            attempts = attempts + 1,
            last_error = NULL,
            blocked_reason = NULL
-       WHERE id = ?`,
-      id
+       WHERE id = ? AND owner_uid = ?`,
+      id,
+      scope
     );
   },
 
   async getStats() {
     const db = await getDB();
+    const scope = getActiveNotesScope();
     const row = await db.getFirstAsync<{
       pending_count: number | null;
       failed_count: number | null;
@@ -580,7 +648,9 @@ const sqliteSyncRepository: SyncRepository = {
          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
          SUM(CASE WHEN status = 'failed' AND terminal = 0 THEN 1 ELSE 0 END) AS failed_count,
          SUM(CASE WHEN terminal = 1 THEN 1 ELSE 0 END) AS blocked_count
-       FROM sync_queue`
+       FROM sync_queue
+       WHERE owner_uid = ?`,
+      scope
     );
 
     return {
@@ -592,6 +662,7 @@ const sqliteSyncRepository: SyncRepository = {
 
   async markFailed(id, details) {
     const db = await getDB();
+    const scope = getActiveNotesScope();
     const normalizedDetails =
       typeof details === 'string'
         ? { error: details, nextRetryAt: null, terminal: false, blockedReason: null }
@@ -603,23 +674,26 @@ const sqliteSyncRepository: SyncRepository = {
            next_retry_at = ?,
            terminal = ?,
            blocked_reason = ?
-       WHERE id = ?`,
+       WHERE id = ? AND owner_uid = ?`,
       normalizedDetails?.error ?? null,
       normalizedDetails?.nextRetryAt ?? null,
       normalizedDetails?.terminal ? 1 : 0,
       normalizedDetails?.blockedReason ?? null,
-      id
+      id,
+      scope
     );
   },
 
   async markDone(id) {
     const db = await getDB();
-    await db.runAsync('DELETE FROM sync_queue WHERE id = ?', id);
+    const scope = getActiveNotesScope();
+    await db.runAsync('DELETE FROM sync_queue WHERE id = ? AND owner_uid = ?', id, scope);
   },
 
   async clearAll() {
     const db = await getDB();
-    await db.runAsync('DELETE FROM sync_queue');
+    const scope = getActiveNotesScope();
+    await db.runAsync('DELETE FROM sync_queue WHERE owner_uid = ?', scope);
   },
 };
 
@@ -658,6 +732,8 @@ export async function syncNotes(
   const userId = getSyncUserId(user);
 
   try {
+    await ensureSupabaseSessionMatchesUser(userId);
+
     const syncRepository = getSyncRepository();
     const syncMarker = new Date().toISOString();
     const lastRemoteCursor = await getLastRemoteSyncCursor(userId);
@@ -751,10 +827,13 @@ export async function syncNotes(
           : `Synced ${syncedCount} notes with Supabase.`,
     };
   } catch (error) {
-    console.warn('[syncService] Supabase sync failed:', error);
+    if (shouldLogSyncWarning(error)) {
+      console.warn('[syncService] Supabase sync failed:', error);
+    }
+
     return {
       status: 'error',
-      message: 'Unable to sync with Supabase right now. Please try again later.',
+      message: getSyncFailureMessage(error),
     };
   }
 }

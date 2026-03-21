@@ -11,7 +11,7 @@ import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getNotePhotoUri, resolveStoredPhotoUri } from './photoStorage';
 import { getDistanceMeters } from './reminderSelection';
 import { getCachedSharedFeedSnapshot } from './sharedFeedCache';
-import { refreshSharedFeed, SharedPost } from './sharedFeedService';
+import { getSharedFeedErrorMessage, refreshSharedFeed, SharedPost } from './sharedFeedService';
 
 // Lazy import to avoid circular dependency issues
 let widgetInstance: any = null;
@@ -177,6 +177,31 @@ function getAndroidWidgetModule(): AndroidWidgetModule | null {
     return androidWidgetModule ?? null;
 }
 
+function sanitizeWidgetPropsForBridge(props: WidgetProps) {
+    return Object.fromEntries(
+        Object.entries(props).filter(([, value]) => value !== undefined && value !== null)
+    ) as WidgetProps;
+}
+
+function getWidgetWarningMessage(error: unknown) {
+    if (error instanceof Error && error.message.toLowerCase().includes('hostfunction')) {
+        return 'Native widget bridge rejected the timeline update.';
+    }
+
+    if (typeof error === 'object' && error && 'message' in error) {
+        const message = String((error as { message?: unknown }).message ?? '').trim();
+        if (message) {
+            return message;
+        }
+    }
+
+    if (typeof error === 'string' && error.trim()) {
+        return error.trim();
+    }
+
+    return 'Unknown widget error';
+}
+
 function updatePlatformWidgetTimeline(entries: WidgetTimelineEntry[]) {
     if (entries.length === 0) {
         return;
@@ -188,10 +213,14 @@ function updatePlatformWidgetTimeline(entries: WidgetTimelineEntry[]) {
             return;
         }
 
-        widget.updateTimeline(entries.map((entry) => ({
-            date: entry.date,
-            props: { props: entry.props },
-        })));
+        try {
+            widget.updateTimeline(entries.map((entry) => ({
+                date: entry.date,
+                props: { props: sanitizeWidgetPropsForBridge(entry.props) },
+            })));
+        } catch (error) {
+            console.warn('[widgetService] Failed to push iOS widget timeline:', getWidgetWarningMessage(error));
+        }
         return;
     }
 
@@ -201,10 +230,15 @@ function updatePlatformWidgetTimeline(entries: WidgetTimelineEntry[]) {
             return;
         }
 
+        const firstEntry = entries[0];
+        if (!firstEntry) {
+            return;
+        }
+
         try {
-            androidWidgetModule.updateSnapshot(JSON.stringify(entries[0]?.props ?? null));
+            androidWidgetModule.updateSnapshot(JSON.stringify(sanitizeWidgetPropsForBridge(firstEntry.props)));
         } catch (error) {
-            console.warn('[widgetService] Failed to push Android widget snapshot:', error);
+            console.warn('[widgetService] Failed to push Android widget snapshot:', getWidgetWarningMessage(error));
         }
     }
 }
@@ -918,7 +952,10 @@ async function getSharedWidgetFeedSnapshot(includeSharedRefresh = false): Promis
             sharedPosts: liveSnapshot.sharedPosts.filter((post) => post.authorUid !== currentUser.id),
         };
     } catch (error) {
-        console.warn('[widgetService] Failed to refresh shared widget feed, using cache:', error);
+        console.warn(
+            '[widgetService] Failed to refresh shared widget feed, using cache:',
+            getSharedFeedErrorMessage(error)
+        );
         return {
             currentUserUid: currentUser.id,
             sharedPosts: cachedPosts,
@@ -1181,6 +1218,6 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
         updatePlatformWidgetTimeline(entries);
         await saveWidgetHistory(history, options.referenceDate ?? new Date());
     } catch (error) {
-        console.warn('[widgetService] Failed to update widget:', error);
+        console.warn('[widgetService] Failed to update widget:', getWidgetWarningMessage(error));
     }
 }

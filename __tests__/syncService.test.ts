@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type QueueRow = {
   id: number;
+  owner_uid: string;
   entity: 'note';
   entity_id: string | null;
   operation: 'create' | 'update' | 'delete' | 'deleteAll';
@@ -42,6 +43,9 @@ let localNotesStore: NoteRecord[] = [];
 const mockRemoteNotes = new Map<string, any>();
 const mockUserUsage = new Map<string, any>();
 const mockPublicProfiles = new Map<string, any>();
+let mockNotesUpsertError: unknown = null;
+const mockActiveNotesScope = 'test-scope';
+let mockSessionUserId = 'user-1';
 
 const mockUploadPhotoToStorage = jest.fn<Promise<string | null>, [string, string, string | null | undefined]>(
   async (_bucket: string, path: string) => path
@@ -65,9 +69,10 @@ const mockGetAllNotes = jest.fn(async () => localNotesStore);
 
 const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   if (sql.includes('INSERT INTO sync_queue')) {
-    const [entity, entityId, operation, payload, createdAt] = args;
+    const [ownerUid, entity, entityId, operation, payload, createdAt] = args;
     queueRows.push({
       id: queueId++,
+      owner_uid: ownerUid,
       entity,
       entity_id: entityId,
       operation,
@@ -84,9 +89,9 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   }
 
   if (sql.includes("SET status = 'processing'")) {
-    const [id] = args;
+    const [id, ownerUid] = args;
     queueRows = queueRows.map((row) =>
-      row.id === id
+      row.id === id && row.owner_uid === ownerUid
         ? { ...row, status: 'processing', attempts: row.attempts + 1, last_error: null, blocked_reason: null }
         : row
     );
@@ -94,9 +99,9 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   }
 
   if (sql.includes("SET status = 'failed'")) {
-    const [lastError, nextRetryAt, terminal, blockedReason, id] = args;
+    const [lastError, nextRetryAt, terminal, blockedReason, id, ownerUid] = args;
     queueRows = queueRows.map((row) =>
-      row.id === id
+      row.id === id && row.owner_uid === ownerUid
         ? {
             ...row,
             status: 'failed',
@@ -110,37 +115,41 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
     return;
   }
 
-  if (sql.includes('DELETE FROM sync_queue WHERE id = ?')) {
-    const [id] = args;
-    queueRows = queueRows.filter((row) => row.id !== id);
+  if (sql.includes('DELETE FROM sync_queue WHERE id = ? AND owner_uid = ?')) {
+    const [id, ownerUid] = args;
+    queueRows = queueRows.filter((row) => !(row.id === id && row.owner_uid === ownerUid));
     return;
   }
 
-  if (sql.includes('DELETE FROM sync_queue')) {
-    queueRows = [];
+  if (sql.includes('DELETE FROM sync_queue WHERE owner_uid = ?')) {
+    const [ownerUid] = args;
+    queueRows = queueRows.filter((row) => row.owner_uid !== ownerUid);
   }
 });
 
-const mockGetAllAsync = jest.fn(async (_sql: string, now: string, limit: number) =>
+const mockGetAllAsync = jest.fn(async (_sql: string, ownerUid: string, now: string, limit: number) =>
   queueRows
+    .filter((row) => row.owner_uid === ownerUid)
     .filter((row) => (row.status === 'pending' || row.status === 'failed') && row.terminal === 0)
     .filter((row) => !row.next_retry_at || row.next_retry_at <= now)
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
     .slice(0, limit)
 );
 
-const mockGetFirstAsync = jest.fn(async () => ({
-  pending_count: queueRows.filter((row) => row.status === 'pending').length,
-  failed_count: queueRows.filter((row) => row.status === 'failed' && row.terminal === 0).length,
-  blocked_count: queueRows.filter((row) => row.terminal === 1).length,
+const mockGetFirstAsync = jest.fn(async (_sql: string, ownerUid: string) => ({
+  pending_count: queueRows.filter((row) => row.owner_uid === ownerUid && row.status === 'pending').length,
+  failed_count: queueRows.filter((row) => row.owner_uid === ownerUid && row.status === 'failed' && row.terminal === 0).length,
+  blocked_count: queueRows.filter((row) => row.owner_uid === ownerUid && row.terminal === 1).length,
 }));
 
 jest.mock('../services/database', () => ({
   getDB: async () => ({
     runAsync: (sql: string, ...args: any[]) => mockRunAsync(sql, ...args),
-    getAllAsync: (sql: string, now: string, limit: number) => mockGetAllAsync(sql, now, limit),
-    getFirstAsync: () => mockGetFirstAsync(),
+    getAllAsync: (sql: string, ownerUid: string, now: string, limit: number) =>
+      mockGetAllAsync(sql, ownerUid, now, limit),
+    getFirstAsync: (sql: string, ownerUid: string) => mockGetFirstAsync(sql, ownerUid),
   }),
+  getActiveNotesScope: () => mockActiveNotesScope,
   getAllNotes: () => mockGetAllNotes(),
   getNoteById: (id: string) => mockGetNoteById(id),
   upsertNote: (note: NoteRecord) => mockUpsertNote(note),
@@ -208,6 +217,9 @@ function mockCreateNotesQueryBuilder() {
       return builder;
     },
     upsert: async (value: Record<string, unknown>) => {
+      if (mockNotesUpsertError) {
+        return { error: mockNotesUpsertError };
+      }
       mockRemoteNotes.set(String(value.id), value);
       return { error: null };
     },
@@ -240,6 +252,31 @@ function mockCreateNotesQueryBuilder() {
 }
 
 jest.mock('../utils/supabase', () => ({
+  getCurrentSupabaseSession: async () => ({
+    user: mockSessionUserId ? { id: mockSessionUserId } : null,
+  }),
+  getSupabaseErrorMessage: (error: unknown) =>
+    error instanceof Error
+      ? error.message
+      : typeof error === 'object' && error && 'message' in error
+        ? String((error as { message?: unknown }).message ?? 'Unknown Supabase error')
+        : 'Unknown Supabase error',
+  isSupabaseNetworkError: (error: unknown) =>
+    String(
+      error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error && 'message' in error
+          ? (error as { message?: unknown }).message ?? ''
+          : ''
+    )
+      .toLowerCase()
+      .includes('network'),
+  isSupabasePolicyError: (error: unknown) =>
+    String(
+      typeof error === 'object' && error && 'code' in error
+        ? (error as { code?: unknown }).code ?? ''
+        : ''
+    ) === '42501',
   getSupabase: () => ({
     from: (table: string) => {
       if (table === 'notes') {
@@ -301,6 +338,8 @@ beforeEach(async () => {
   await AsyncStorage.clear();
   queueRows = [];
   queueId = 1;
+  mockNotesUpsertError = null;
+  mockSessionUserId = 'user-1';
   localNotesStore = [];
   mockRemoteNotes.clear();
   mockUserUsage.clear();
@@ -332,6 +371,7 @@ describe('syncService', () => {
     queueRows = [
       {
         id: 1,
+        owner_uid: mockActiveNotesScope,
         entity: 'note',
         entity_id: 'note-1',
         operation: 'create',
@@ -346,6 +386,7 @@ describe('syncService', () => {
       },
       {
         id: 2,
+        owner_uid: mockActiveNotesScope,
         entity: 'note',
         entity_id: 'note-2',
         operation: 'update',
@@ -471,5 +512,23 @@ describe('syncService', () => {
     expect(result.status).toBe('success');
     expect(mockRemoteNotes.has('note-1')).toBe(false);
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-1');
+  });
+
+  it('returns an actionable message when Supabase policies reject note writes', async () => {
+    localNotesStore = [createTextNote('note-1')];
+    mockNotesUpsertError = {
+      code: '42501',
+      message: 'new row violates row-level security policy (USING expression) for table "notes"',
+    };
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'full' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'error',
+        message:
+          'Supabase denied access to sync notes. Apply the latest Supabase migrations or sign in again.',
+      })
+    );
   });
 });

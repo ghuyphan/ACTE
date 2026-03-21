@@ -1,5 +1,5 @@
 import type { FriendConnection, FriendInvite, SharedPost } from './sharedFeedService';
-import { getDB } from './database';
+import { getDB, withDatabaseTransaction } from './database';
 
 interface FriendRow {
   friend_uid: string;
@@ -117,13 +117,12 @@ export async function getCachedSharedFriends(userUid: string): Promise<FriendCon
 }
 
 export async function replaceCachedSharedFriends(userUid: string, friends: FriendConnection[]): Promise<void> {
-  const db = await getDB();
   const cachedAt = new Date().toISOString();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM shared_friends_cache WHERE user_uid = ?', userUid);
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync('DELETE FROM shared_friends_cache WHERE user_uid = ?', userUid);
 
     for (const friend of friends) {
-      await db.runAsync(
+      await tx.runAsync(
         `INSERT INTO shared_friends_cache (
           user_uid,
           friend_uid,
@@ -146,7 +145,7 @@ export async function replaceCachedSharedFriends(userUid: string, friends: Frien
       );
     }
 
-    await db.runAsync(
+    await tx.runAsync(
       `INSERT INTO shared_feed_cache_meta (user_uid, last_updated_at)
        VALUES (?, ?)
        ON CONFLICT(user_uid) DO UPDATE SET
@@ -170,13 +169,12 @@ export async function getCachedSharedPosts(userUid: string): Promise<SharedPost[
 }
 
 export async function replaceCachedSharedPosts(userUid: string, posts: SharedPost[]): Promise<void> {
-  const db = await getDB();
   const cachedAt = new Date().toISOString();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
 
     for (const post of posts) {
-      await db.runAsync(
+      await tx.runAsync(
         `INSERT INTO shared_posts_cache (
           user_uid,
           id,
@@ -213,7 +211,7 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
       );
     }
 
-    await db.runAsync(
+    await tx.runAsync(
       `INSERT INTO shared_feed_cache_meta (user_uid, last_updated_at)
        VALUES (?, ?)
        ON CONFLICT(user_uid) DO UPDATE SET
@@ -236,12 +234,11 @@ export async function getCachedSharedInvite(userUid: string): Promise<FriendInvi
 }
 
 export async function replaceCachedSharedInvite(userUid: string, invite: FriendInvite | null): Promise<void> {
-  const db = await getDB();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
 
     if (invite) {
-      await db.runAsync(
+      await tx.runAsync(
         `INSERT INTO shared_invites_cache (
           user_uid,
           id,
@@ -272,7 +269,7 @@ export async function replaceCachedSharedInvite(userUid: string, invite: FriendI
       );
     }
 
-    await db.runAsync(
+    await tx.runAsync(
       `INSERT INTO shared_feed_cache_meta (user_uid, last_updated_at)
        VALUES (?, ?)
        ON CONFLICT(user_uid) DO UPDATE SET
@@ -295,23 +292,21 @@ export async function getSharedFeedCacheLastUpdatedAt(userUid: string): Promise<
 }
 
 export async function clearSharedFeedCache(userUid?: string | null): Promise<void> {
-  const db = await getDB();
-
   if (!userUid) {
-    await db.withTransactionAsync(async () => {
-      await db.runAsync('DELETE FROM shared_friends_cache');
-      await db.runAsync('DELETE FROM shared_posts_cache');
-      await db.runAsync('DELETE FROM shared_invites_cache');
-      await db.runAsync('DELETE FROM shared_feed_cache_meta');
+    await withDatabaseTransaction(async (tx) => {
+      await tx.runAsync('DELETE FROM shared_friends_cache');
+      await tx.runAsync('DELETE FROM shared_posts_cache');
+      await tx.runAsync('DELETE FROM shared_invites_cache');
+      await tx.runAsync('DELETE FROM shared_feed_cache_meta');
     });
     return;
   }
 
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM shared_friends_cache WHERE user_uid = ?', userUid);
-    await db.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
-    await db.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
-    await db.runAsync('DELETE FROM shared_feed_cache_meta WHERE user_uid = ?', userUid);
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync('DELETE FROM shared_friends_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM shared_feed_cache_meta WHERE user_uid = ?', userUid);
   });
 }
 
@@ -323,16 +318,15 @@ export async function cacheSharedFeedSnapshot(
     activeInvite: FriendInvite | null;
   }
 ) {
-  const db = await getDB();
   const cachedAt = new Date().toISOString();
 
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM shared_friends_cache WHERE user_uid = ?', userUid);
-    await db.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
-    await db.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync('DELETE FROM shared_friends_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
 
     for (const friend of snapshot.friends) {
-      await db.runAsync(
+      await tx.runAsync(
         `INSERT INTO shared_friends_cache (
           user_uid,
           friend_uid,
@@ -356,7 +350,7 @@ export async function cacheSharedFeedSnapshot(
     }
 
     for (const post of snapshot.sharedPosts) {
-      await db.runAsync(
+      await tx.runAsync(
         `INSERT INTO shared_posts_cache (
           user_uid,
           id,
@@ -394,7 +388,7 @@ export async function cacheSharedFeedSnapshot(
     }
 
     if (snapshot.activeInvite) {
-      await db.runAsync(
+      await tx.runAsync(
         `INSERT INTO shared_invites_cache (
           user_uid,
           id,
@@ -425,7 +419,7 @@ export async function cacheSharedFeedSnapshot(
       );
     }
 
-    await db.runAsync(
+    await tx.runAsync(
       `INSERT INTO shared_feed_cache_meta (user_uid, last_updated_at)
        VALUES (?, ?)
        ON CONFLICT(user_uid) DO UPDATE SET

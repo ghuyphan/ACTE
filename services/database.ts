@@ -88,7 +88,10 @@ interface NoteRow {
 // ─── Database ───────────────────────────────────────────────────────
 let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-const APP_SCHEMA_VERSION = 5;
+const APP_SCHEMA_VERSION = 6;
+export const LOCAL_NOTES_SCOPE = '__local__';
+let activeNotesScope = LOCAL_NOTES_SCOPE;
+const SQLITE_LOCK_RETRY_DELAYS_MS = [30, 80, 160];
 const NOTES_SELECT_FIELDS = `notes.*,
       EXISTS(SELECT 1 FROM note_doodles doodles WHERE doodles.note_id = notes.id) AS has_doodle,
       (SELECT doodles.strokes_json FROM note_doodles doodles WHERE doodles.note_id = notes.id LIMIT 1) AS doodle_strokes_json`;
@@ -103,6 +106,37 @@ async function safelyCloseDatabase(database: SQLite.SQLiteDatabase | null) {
     } catch {
         // Ignore close failures while recovering from a broken native handle.
     }
+}
+
+function getDatabaseErrorMessage(error: unknown) {
+    if (error instanceof Error && error.message) {
+        return error.message;
+    }
+
+    if (typeof error === 'object' && error && 'message' in error) {
+        return String((error as { message?: unknown }).message ?? '');
+    }
+
+    return '';
+}
+
+function isDatabaseLockedError(error: unknown) {
+    const message = getDatabaseErrorMessage(error).toLowerCase();
+    return message.includes('database is locked') || message.includes('error code 5');
+}
+
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export type SQLiteTransactionExecutor = Pick<SQLite.SQLiteDatabase, 'runAsync' | 'getFirstAsync' | 'getAllAsync' | 'execAsync'>;
+
+export function getActiveNotesScope() {
+    return activeNotesScope;
+}
+
+export function setActiveNotesScope(scope: string | null | undefined) {
+    activeNotesScope = scope?.trim() || LOCAL_NOTES_SCOPE;
 }
 
 export async function getDB(): Promise<SQLite.SQLiteDatabase> {
@@ -132,6 +166,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS notes (
         id TEXT PRIMARY KEY NOT NULL,
+        owner_uid TEXT NOT NULL DEFAULT '__local__',
         type TEXT NOT NULL CHECK(type IN ('text', 'photo')),
         content TEXT NOT NULL,
         photo_local_uri TEXT,
@@ -158,6 +193,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
       );
       CREATE TABLE IF NOT EXISTS sync_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        owner_uid TEXT NOT NULL DEFAULT '__local__',
         entity TEXT NOT NULL CHECK(entity IN ('note')),
         entity_id TEXT,
         operation TEXT NOT NULL CHECK(operation IN ('create', 'update', 'delete', 'deleteAll')),
@@ -303,6 +339,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 if (!columns.includes('is_favorite')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0`);
                 }
+                if (!columns.includes('owner_uid')) {
+                    await database.execAsync(`ALTER TABLE notes ADD COLUMN owner_uid TEXT NOT NULL DEFAULT '${LOCAL_NOTES_SCOPE}'`);
+                }
                 if (!columns.includes('photo_local_uri')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_local_uri TEXT`);
                     shouldBackfillNoteMetadata = true;
@@ -330,6 +369,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 }
 
                 await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_search_text ON notes(search_text)`);
+                await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_owner_created ON notes(owner_uid, created_at DESC)`);
                 await database.execAsync(
                     `CREATE TABLE IF NOT EXISTS note_doodles (
                         note_id TEXT PRIMARY KEY NOT NULL,
@@ -389,6 +429,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 if (!syncQueueColumns.includes('next_retry_at')) {
                     await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN next_retry_at TEXT`);
                 }
+                if (!syncQueueColumns.includes('owner_uid')) {
+                    await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN owner_uid TEXT NOT NULL DEFAULT '${LOCAL_NOTES_SCOPE}'`);
+                }
                 if (!syncQueueColumns.includes('terminal')) {
                     await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN terminal INTEGER NOT NULL DEFAULT 0`);
                 }
@@ -398,6 +441,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
 
                 await database.execAsync(
                     `CREATE INDEX IF NOT EXISTS idx_sync_queue_retry_window ON sync_queue(status, terminal, next_retry_at, created_at ASC)`
+                );
+                await database.execAsync(
+                    `CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_status_created ON sync_queue(owner_uid, status, created_at ASC)`
                 );
                 await database.execAsync(
                     `CREATE TABLE IF NOT EXISTS room_invites_cache (
@@ -500,6 +546,38 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
     return dbInitPromise;
 }
 
+export async function withDatabaseTransaction<T>(
+    task: (txn: SQLiteTransactionExecutor) => Promise<T>
+): Promise<T> {
+    const database = await getDB();
+
+    if (Platform.OS === 'web') {
+        let result: T | undefined;
+        await database.withTransactionAsync(async () => {
+            result = await task(database);
+        });
+        return result as T;
+    }
+
+    for (let attempt = 0; attempt <= SQLITE_LOCK_RETRY_DELAYS_MS.length; attempt += 1) {
+        try {
+            let result: T | undefined;
+            await database.withExclusiveTransactionAsync(async (txn) => {
+                result = await task(txn);
+            });
+            return result as T;
+        } catch (error) {
+            if (!isDatabaseLockedError(error) || attempt === SQLITE_LOCK_RETRY_DELAYS_MS.length) {
+                throw error;
+            }
+
+            await sleep(SQLITE_LOCK_RETRY_DELAYS_MS[attempt] ?? 50);
+        }
+    }
+
+    throw new Error('Database transaction retry failed unexpectedly.');
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────
 function generateId(): string {
     // Replaced Math.random with cryptographically secure UUID
@@ -554,9 +632,14 @@ function rowToNote(row: NoteRow): Note {
     };
 }
 
+function getCurrentScope() {
+    return getActiveNotesScope();
+}
+
 // ─── CRUD Operations ────────────────────────────────────────────────
 export async function createNote(input: CreateNoteInput): Promise<Note> {
     const database = await getDB();
+    const scope = getCurrentScope();
     const id = generateId();
     const now = new Date().toISOString();
     const photoLocalUri =
@@ -573,6 +656,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
     await database.runAsync(
         `INSERT INTO notes (
             id,
+            owner_uid,
             type,
             content,
             photo_local_uri,
@@ -589,8 +673,9 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
             is_favorite,
             created_at
         )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
         id,
+        scope,
         input.type,
         normalizedContent,
         photoLocalUri,
@@ -631,27 +716,34 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
 
 export async function getAllNotes(): Promise<Note[]> {
     const database = await getDB();
+    const scope = getCurrentScope();
     const rows = await database.getAllAsync<NoteRow>(
         `SELECT ${NOTES_SELECT_FIELDS}
          FROM notes
+         WHERE owner_uid = ?
          ORDER BY created_at DESC`
+        ,
+        scope
     );
     return rows.map(rowToNote);
 }
 
 export async function getNoteById(id: string): Promise<Note | null> {
     const database = await getDB();
+    const scope = getCurrentScope();
     const row = await database.getFirstAsync<NoteRow>(
         `SELECT ${NOTES_SELECT_FIELDS}
          FROM notes
-         WHERE id = ?`,
-        id
+         WHERE id = ? AND owner_uid = ?`,
+        id,
+        scope
     );
     return row ? rowToNote(row) : null;
 }
 
 export async function updateNote(id: string, updates: NoteUpdates): Promise<void> {
     const database = await getDB();
+    const scope = getCurrentScope();
     const existing = await getNoteById(id);
     if (!existing) {
         return;
@@ -708,7 +800,7 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
              search_text = ?,
              radius = ?,
              updated_at = ?
-         WHERE id = ?`,
+         WHERE id = ? AND owner_uid = ?`,
         nextContent,
         nextPhotoLocalUri,
         nextPhotoRemoteBase64,
@@ -720,29 +812,34 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         searchText,
         nextRadius,
         now,
-        id
+        id,
+        scope
     );
 }
 
 export async function toggleFavorite(id: string): Promise<boolean> {
     const database = await getDB();
+    const scope = getCurrentScope();
     const row = await database.getFirstAsync<{ is_favorite: number }>(
-        'SELECT is_favorite FROM notes WHERE id = ?',
-        id
+        'SELECT is_favorite FROM notes WHERE id = ? AND owner_uid = ?',
+        id,
+        scope
     );
     if (!row) return false;
     const newValue = row.is_favorite === 1 ? 0 : 1;
     await database.runAsync(
-        'UPDATE notes SET is_favorite = ?, updated_at = ? WHERE id = ?',
+        'UPDATE notes SET is_favorite = ?, updated_at = ? WHERE id = ? AND owner_uid = ?',
         newValue,
         new Date().toISOString(),
-        id
+        id,
+        scope
     );
     return newValue === 1;
 }
 
 export async function searchNotes(query: string): Promise<Note[]> {
     const database = await getDB();
+    const scope = getCurrentScope();
     const normalizedTokens = buildNoteSearchText({
         type: 'text',
         content: query,
@@ -762,8 +859,10 @@ export async function searchNotes(query: string): Promise<Note[]> {
     const rows = await database.getAllAsync<NoteRow>(
         `SELECT ${NOTES_SELECT_FIELDS}
          FROM notes
-         WHERE ${whereClause}
+         WHERE owner_uid = ?
+           AND ${whereClause}
          ORDER BY created_at DESC`,
+        scope,
         ...params
     );
     return rows.map(rowToNote);
@@ -771,26 +870,38 @@ export async function searchNotes(query: string): Promise<Note[]> {
 
 export async function deleteNote(id: string): Promise<void> {
     const database = await getDB();
-    await database.runAsync('DELETE FROM note_doodles WHERE note_id = ?', id);
-    await database.runAsync('DELETE FROM notes WHERE id = ?', id);
+    const scope = getCurrentScope();
+    await database.runAsync(
+        'DELETE FROM note_doodles WHERE note_id IN (SELECT id FROM notes WHERE id = ? AND owner_uid = ?)',
+        id,
+        scope
+    );
+    await database.runAsync('DELETE FROM notes WHERE id = ? AND owner_uid = ?', id, scope);
 }
 
 export async function deleteAllNotes(): Promise<void> {
     const database = await getDB();
-    await database.runAsync('DELETE FROM note_doodles');
-    await database.runAsync('DELETE FROM notes');
+    const scope = getCurrentScope();
+    await database.runAsync(
+        'DELETE FROM note_doodles WHERE note_id IN (SELECT id FROM notes WHERE owner_uid = ?)',
+        scope
+    );
+    await database.runAsync('DELETE FROM notes WHERE owner_uid = ?', scope);
 }
 
 export async function getNotesCount(): Promise<number> {
     const database = await getDB();
+    const scope = getCurrentScope();
     const result = await database.getFirstAsync<{ count: number }>(
-        'SELECT COUNT(*) as count FROM notes'
+        'SELECT COUNT(*) as count FROM notes WHERE owner_uid = ?',
+        scope
     );
     return result?.count ?? 0;
 }
 
 export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
     const database = await getDB();
+    const scope = getCurrentScope();
     const photoLocalUri =
         input.type === 'photo'
             ? resolveStoredPhotoUri(input.photoLocalUri ?? input.content)
@@ -807,6 +918,7 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
     await database.runAsync(
         `INSERT INTO notes (
             id,
+            owner_uid,
             type,
             content,
             photo_local_uri,
@@ -824,8 +936,9 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
             created_at,
             updated_at
         )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
+            owner_uid = excluded.owner_uid,
             type = excluded.type,
             content = excluded.content,
             photo_local_uri = excluded.photo_local_uri,
@@ -843,6 +956,7 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
             created_at = excluded.created_at,
             updated_at = excluded.updated_at`,
         input.id,
+        scope,
         input.type,
         normalizedContent,
         photoLocalUri,

@@ -8,6 +8,7 @@ import {
   isGoogleSigninConfigured,
 } from '../constants/auth';
 import i18n from '../constants/i18n';
+import { LOCAL_NOTES_SCOPE, setActiveNotesScope } from '../services/database';
 import { upsertPublicUserProfile } from '../services/publicProfileService';
 import { AppUser, mapSupabaseUser } from '../utils/appUser';
 import { getSupabase, getSupabaseErrorMessage, hasSupabaseConfig } from '../utils/supabase';
@@ -181,6 +182,7 @@ function mapAuthErrorMessage(error: unknown) {
 
 async function syncUserProfile(session: Session | null) {
   const user = mapSupabaseUser(session?.user);
+  setActiveNotesScope(user?.uid ?? LOCAL_NOTES_SCOPE);
   if (!user) {
     return null;
   }
@@ -254,7 +256,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .catch((error) => {
           console.warn('[auth] Failed to sync auth state:', error);
           if (active) {
-            setUser(mapSupabaseUser(session?.user));
+            const fallbackUser = mapSupabaseUser(session?.user);
+            setActiveNotesScope(fallbackUser?.uid ?? LOCAL_NOTES_SCOPE);
+            setUser(fallbackUser);
             setIsReady(true);
           }
         });
@@ -435,6 +439,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        setActiveNotesScope(LOCAL_NOTES_SCOPE);
         setUser(null);
       },
     }),

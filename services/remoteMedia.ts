@@ -1,11 +1,123 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { decode } from 'base64-arraybuffer';
-import { ensurePhotoDirectory, readPhotoAsBase64 } from './photoStorage';
-import { requireSupabase } from '../utils/supabase';
+import {
+  ensurePhotoDirectory,
+  MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES,
+  readPhotoAsBase64,
+  resolveStoredPhotoUri,
+} from './photoStorage';
+import {
+  getSupabaseErrorMessage,
+  isSupabaseNetworkError,
+  requireSupabase,
+} from '../utils/supabase';
 
 export const NOTE_MEDIA_BUCKET = 'note-media';
 export const SHARED_POST_MEDIA_BUCKET = 'shared-post-media';
 export const ROOM_POST_MEDIA_BUCKET = 'room-post-media';
+const UPLOAD_RETRY_DELAYS_MS = [250];
+const PHOTO_UPLOAD_OPTIMIZATION_PRESETS = [
+  { width: 1600, compress: 0.5 },
+  { width: 1280, compress: 0.35 },
+  { width: 960, compress: 0.25 },
+];
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getLocalPhotoInfo(photoUri: string) {
+  const normalizedPhotoUri = resolveStoredPhotoUri(photoUri);
+  if (!normalizedPhotoUri) {
+    return null;
+  }
+
+  const info = await FileSystem.getInfoAsync(normalizedPhotoUri);
+  if (!info.exists || info.isDirectory) {
+    return null;
+  }
+
+  return {
+    uri: normalizedPhotoUri,
+    size: typeof info.size === 'number' ? info.size : null,
+  };
+}
+
+async function optimizePhotoForUpload(photoUri: string) {
+  const originalInfo = await getLocalPhotoInfo(photoUri);
+  if (!originalInfo) {
+    return null;
+  }
+
+  if (
+    typeof originalInfo.size !== 'number' ||
+    originalInfo.size <= MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES
+  ) {
+    return {
+      uri: originalInfo.uri,
+      cleanupUri: null as string | null,
+    };
+  }
+
+  let currentUri = originalInfo.uri;
+  let cleanupUri: string | null = null;
+
+  for (const preset of PHOTO_UPLOAD_OPTIMIZATION_PRESETS) {
+    const result = await manipulateAsync(
+      currentUri,
+      [{ resize: { width: preset.width } }],
+      {
+        compress: preset.compress,
+        format: SaveFormat.JPEG,
+      }
+    );
+
+    if (cleanupUri && cleanupUri !== originalInfo.uri) {
+      await FileSystem.deleteAsync(cleanupUri, { idempotent: true }).catch(() => undefined);
+    }
+
+    cleanupUri = result.uri !== originalInfo.uri ? result.uri : null;
+    currentUri = result.uri;
+
+    const optimizedInfo = await getLocalPhotoInfo(result.uri);
+    if (
+      optimizedInfo &&
+      (typeof optimizedInfo.size !== 'number' ||
+        optimizedInfo.size <= MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES)
+    ) {
+      return {
+        uri: result.uri,
+        cleanupUri,
+      };
+    }
+  }
+
+  if (cleanupUri && cleanupUri !== originalInfo.uri) {
+    await FileSystem.deleteAsync(cleanupUri, { idempotent: true }).catch(() => undefined);
+  }
+
+  throw new Error('Photo is too large to share right now. Try a smaller photo or retake it closer.');
+}
+
+async function uploadBytesWithRetry(bucket: string, path: string, payload: ArrayBuffer) {
+  for (let attempt = 0; attempt <= UPLOAD_RETRY_DELAYS_MS.length; attempt += 1) {
+    const { error } = await requireSupabase().storage.from(bucket).upload(path, payload, {
+      contentType: 'image/jpeg',
+      upsert: true,
+    });
+
+    if (!error) {
+      return;
+    }
+
+    if (!isSupabaseNetworkError(error) || attempt === UPLOAD_RETRY_DELAYS_MS.length) {
+      throw new Error(getSupabaseErrorMessage(error));
+    }
+
+    await sleep(UPLOAD_RETRY_DELAYS_MS[attempt] ?? 250);
+  }
+}
 
 export async function uploadPhotoToStorage(
   bucket: string,
@@ -16,21 +128,24 @@ export async function uploadPhotoToStorage(
     return null;
   }
 
-  const base64 = await readPhotoAsBase64(photoUri);
-  if (!base64) {
+  const preparedPhoto = await optimizePhotoForUpload(photoUri);
+  if (!preparedPhoto?.uri) {
     return null;
   }
 
-  const { error } = await requireSupabase().storage.from(bucket).upload(path, decode(base64), {
-    contentType: 'image/jpeg',
-    upsert: true,
-  });
+  try {
+    const base64 = await readPhotoAsBase64(preparedPhoto.uri);
+    if (!base64) {
+      return null;
+    }
 
-  if (error) {
-    throw error;
+    await uploadBytesWithRetry(bucket, path, decode(base64));
+    return path;
+  } finally {
+    if (preparedPhoto.cleanupUri) {
+      await FileSystem.deleteAsync(preparedPhoto.cleanupUri, { idempotent: true }).catch(() => undefined);
+    }
   }
-
-  return path;
 }
 
 export async function downloadPhotoFromStorage(

@@ -1,7 +1,13 @@
 import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
 import { AppUser, getUserDisplayName } from '../utils/appUser';
-import { getSupabase } from '../utils/supabase';
+import {
+  getCurrentSupabaseSession,
+  getSupabase,
+  getSupabaseErrorMessage,
+  isSupabaseNetworkError,
+  isSupabasePolicyError,
+} from '../utils/supabase';
 import { Note, NoteType } from './database';
 import { deletePhotoFromStorage, downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET, uploadPhotoToStorage } from './remoteMedia';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
@@ -101,6 +107,9 @@ interface SharedPostRow {
 }
 
 const ACTIVE_FRIEND_INVITE_QUERY_LIMIT = 50;
+const EXPIRED_SHARED_FEED_SESSION_ERROR = 'Supabase session unavailable. Sign in again to use shared moments.';
+const MISMATCHED_SHARED_FEED_SESSION_ERROR =
+  'Signed-in Supabase session does not match this account. Sign out and sign in again.';
 
 function requireSupabase() {
   const supabase = getSupabase();
@@ -117,6 +126,19 @@ function getNowIso() {
 
 function getDisplayName(user: AppUser) {
   return getUserDisplayName(user);
+}
+
+async function ensureSupabaseSessionMatchesUser(userId: string) {
+  const session = await getCurrentSupabaseSession();
+  const sessionUserId = session?.user?.id?.trim();
+
+  if (!sessionUserId) {
+    throw new Error(EXPIRED_SHARED_FEED_SESSION_ERROR);
+  }
+
+  if (sessionUserId !== userId) {
+    throw new Error(MISMATCHED_SHARED_FEED_SESSION_ERROR);
+  }
 }
 
 function isInviteActive(record: FriendInviteRow, nowMs = Date.now()) {
@@ -253,23 +275,24 @@ async function getFriendsForUser(userUid: string) {
 }
 
 export function getSharedFeedErrorMessage(error: unknown) {
-  const message =
-    error instanceof Error && error.message
-      ? error.message
-      : typeof error === 'object' && error && 'message' in error
-        ? String((error as { message?: unknown }).message ?? '')
-        : 'Shared moments are unavailable right now.';
-  const normalizedMessage = message.toLowerCase();
+  const message = getSupabaseErrorMessage(error);
 
-  if (normalizedMessage.includes('permission') || normalizedMessage.includes('policy')) {
-    return 'Shared moments need Supabase policies before this action can work in production.';
+  if (
+    message === EXPIRED_SHARED_FEED_SESSION_ERROR ||
+    message === MISMATCHED_SHARED_FEED_SESSION_ERROR
+  ) {
+    return 'Your sign-in session expired. Sign out and sign back in to keep sharing moments.';
   }
 
-  if (normalizedMessage.includes('network') || normalizedMessage.includes('fetch')) {
+  if (isSupabasePolicyError(error)) {
+    return 'Shared moments need the latest Supabase policies before this action can work.';
+  }
+
+  if (isSupabaseNetworkError(error)) {
     return 'Supabase is unavailable right now. Check your connection and try again.';
   }
 
-  return message;
+  return message || 'Shared moments are unavailable right now.';
 }
 
 export async function getActiveFriendInvite(user: AppUser): Promise<FriendInvite | null> {
@@ -291,6 +314,8 @@ export async function getActiveFriendInvite(user: AppUser): Promise<FriendInvite
 }
 
 export async function refreshSharedFeed(user: AppUser): Promise<SharedFeedSnapshot> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
   const friends = await getFriendsForUser(user.id);
   const friendUids = friends.map((friend: FriendConnection) => friend.userId);
   const authorWhitelist = [user.id, ...friendUids].slice(0, 30);
@@ -407,6 +432,8 @@ export function subscribeToSharedFeed(
 }
 
 export async function createFriendInvite(user: AppUser): Promise<FriendInvite> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
   const supabase = requireSupabase();
 
   await upsertPublicUserProfile({
@@ -522,6 +549,8 @@ export async function createSharedPost(
   note: Note,
   audienceUserIds: string[]
 ): Promise<SharedPost> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
   const supabase = requireSupabase();
   const dedupedAudience = Array.from(new Set(audienceUserIds.filter(Boolean)));
 

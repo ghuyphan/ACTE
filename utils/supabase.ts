@@ -91,6 +91,36 @@ export function getSupabaseErrorMessage(error: unknown) {
   return 'Unknown Supabase error';
 }
 
+export function getSupabaseErrorCode(error: unknown) {
+  if (typeof error === 'object' && error && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' && code.trim() ? code.trim() : null;
+  }
+
+  return null;
+}
+
+export function isSupabasePolicyError(error: unknown) {
+  const code = getSupabaseErrorCode(error);
+  const message = getSupabaseErrorMessage(error).toLowerCase();
+
+  return (
+    code === '42501' ||
+    message.includes('row-level security') ||
+    message.includes('policy') ||
+    message.includes('permission')
+  );
+}
+
+export function isSupabaseNetworkError(error: unknown) {
+  const message = getSupabaseErrorMessage(error).toLowerCase();
+  return (
+    message.includes('network request failed') ||
+    message.includes('network') ||
+    message.includes('fetch')
+  );
+}
+
 export async function getCurrentSupabaseSession(): Promise<Session | null> {
   const supabase = getSupabase();
   if (!supabase) {
