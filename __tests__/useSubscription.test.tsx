@@ -23,6 +23,15 @@ jest.mock('../hooks/useAuth', () => ({
   useAuth: () => mockAuthState,
 }));
 
+jest.mock('../hooks/useConnectivity', () => ({
+  useConnectivity: () => ({
+    status: 'online',
+    isOnline: true,
+    isInternetReachable: true,
+    lastChangedAt: null,
+  }),
+}));
+
 jest.mock('../utils/firebase', () => ({
   getFirestore: () => ({}),
 }));

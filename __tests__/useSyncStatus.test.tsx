@@ -43,12 +43,28 @@ jest.mock('../hooks/useAuth', () => ({
   useAuth: () => mockAuthState,
 }));
 
+jest.mock('../hooks/useConnectivity', () => ({
+  useConnectivity: () => ({
+    status: 'online',
+    isOnline: true,
+    isInternetReachable: true,
+    lastChangedAt: null,
+  }),
+}));
+
 jest.mock('../hooks/useNotes', () => ({
   useNotes: () => mockNotesState,
 }));
 
 jest.mock('../services/syncService', () => ({
   syncNotesToFirebase: (user: unknown, notes: unknown) => mockSyncNotesToFirebase(user, notes),
+  getSyncRepository: () => ({
+    getStats: async () => ({
+      pendingCount: 0,
+      failedCount: 0,
+      blockedCount: 0,
+    }),
+  }),
 }));
 
 function wrapper({ children }: { children: ReactNode }) {

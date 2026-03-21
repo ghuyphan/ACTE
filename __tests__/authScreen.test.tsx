@@ -127,6 +127,15 @@ jest.mock('../hooks/useTheme', () => ({
   }),
 }));
 
+jest.mock('../hooks/useConnectivity', () => ({
+  useConnectivity: () => ({
+    status: 'online',
+    isOnline: true,
+    isInternetReachable: true,
+    lastChangedAt: null,
+  }),
+}));
+
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
     ...mockAuthState,

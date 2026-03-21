@@ -25,9 +25,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppBackButton from '../../components/ui/AppBackButton';
+import OfflineNotice from '../../components/ui/OfflineNotice';
 import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Shadows, Typography } from '../../constants/theme';
 import { EmailRegistrationInput, useAuth } from '../../hooks/useAuth';
+import { useConnectivity } from '../../hooks/useConnectivity';
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
 
@@ -102,6 +104,7 @@ export default function LoginScreen() {
   const { intent } = useLocalSearchParams<{ intent?: AuthIntent }>();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const { isOnline } = useConnectivity();
   const {
     user,
     isReady,
@@ -384,9 +387,6 @@ export default function LoginScreen() {
   const landingSubtitle = isShareIntent
     ? t('auth.shareSubtitle', 'Sign in to share this note')
     : t('auth.subtitle', 'So you never forget what she likes');
-  const landingHint = isShareIntent
-    ? null
-    : t('auth.landingHint', 'Choose the easiest way to keep your notes backed up and ready everywhere.');
 
   const renderFormFields = () => (
     <>
@@ -495,6 +495,18 @@ export default function LoginScreen() {
       ) : null}
 
       <Animated.View layout={FORM_LAYOUT_TRANSITION}>
+        {!isOnline && isAuthAvailable ? (
+          <View style={styles.formNoticeWrap}>
+            <OfflineNotice
+              title={t('auth.offlineTitle', 'You are offline')}
+              body={t('auth.offlineBody', 'Sign-in and account recovery need a connection. You can still keep using local mode.')}
+              compact
+            />
+          </View>
+        ) : null}
+      </Animated.View>
+
+      <Animated.View layout={FORM_LAYOUT_TRANSITION}>
         <PrimaryButton
           label={primaryFormLabel}
           onPress={() => {
@@ -502,6 +514,7 @@ export default function LoginScreen() {
           }}
           loading={activeAction === 'signIn' || activeAction === 'register' || activeAction === 'reset'}
           variant="neutral"
+          disabled={!isOnline && isAuthAvailable}
           testID="auth-form-submit"
         />
       </Animated.View>
@@ -597,9 +610,6 @@ export default function LoginScreen() {
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
             {landingSubtitle}
           </Text>
-          {landingHint ? (
-            <Text style={[styles.landingHint, { color: colors.secondaryText }]}>{landingHint}</Text>
-          ) : null}
           <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.infoTitle, { color: colors.text }]}>
               {t('auth.signedInAs', 'Signed in as')}
@@ -652,9 +662,6 @@ export default function LoginScreen() {
         <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
           {landingSubtitle}
         </Text>
-        {landingHint ? (
-          <Text style={[styles.landingHint, { color: colors.secondaryText }]}>{landingHint}</Text>
-        ) : null}
 
         {!isAuthAvailable ? (
           <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -672,6 +679,15 @@ export default function LoginScreen() {
 
         {authMessage && !isFormVisible ? (
           <Text style={[styles.errorText, { color: colors.danger }]}>{authMessage}</Text>
+        ) : null}
+
+        {!isOnline && isAuthAvailable ? (
+          <View style={styles.landingNoticeWrap}>
+            <OfflineNotice
+              title={t('auth.offlineTitle', 'You are offline')}
+              body={t('auth.offlineBody', 'Sign-in and account recovery need a connection. You can still keep using local mode.')}
+            />
+          </View>
         ) : null}
       </Animated.View>
 
@@ -701,6 +717,7 @@ export default function LoginScreen() {
             }}
             loading={!isReady || activeAction === 'google'}
             variant="neutral"
+            disabled={!isOnline}
             testID="auth-google-button"
           />
         ) : null}
@@ -710,6 +727,7 @@ export default function LoginScreen() {
             label={t('auth.continueWithEmail', 'Continue with email')}
             onPress={() => openForm('signIn')}
             variant={isGoogleAvailable ? 'secondary' : 'neutral'}
+            disabled={!isOnline}
             testID="auth-continue-email"
           />
         ) : null}
@@ -830,12 +848,6 @@ const styles = StyleSheet.create({
     ...Typography.heroSubtitle,
     textAlign: 'center',
   },
-  landingHint: {
-    ...Typography.body,
-    marginTop: 14,
-    textAlign: 'center',
-    maxWidth: 320,
-  },
   infoCard: {
     width: '100%',
     marginTop: 28,
@@ -854,6 +866,14 @@ const styles = StyleSheet.create({
     ...Typography.body,
     marginTop: 16,
     textAlign: 'center',
+  },
+  formNoticeWrap: {
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  landingNoticeWrap: {
+    width: '100%',
+    marginTop: 18,
   },
   bottom: {
     width: '100%',

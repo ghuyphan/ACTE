@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../../components/ui/GlassView';
+import OfflineNotice from '../../components/ui/OfflineNotice';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -18,6 +19,7 @@ import {
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout, Shadows, Typography } from '../../constants/theme';
+import { useConnectivity } from '../../hooks/useConnectivity';
 import { useRoomsStore } from '../../hooks/useRooms';
 import { useTheme } from '../../hooks/useTheme';
 import { getRoomErrorMessage } from '../../services/roomService';
@@ -27,6 +29,7 @@ export default function JoinRoomScreen() {
   const { invite } = useLocalSearchParams<{ invite?: string }>();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const { isOnline } = useConnectivity();
   const { joinRoomByInvite } = useRoomsStore();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -36,7 +39,7 @@ export default function JoinRoomScreen() {
   const glassOverlay = isDark ? 'rgba(18,18,24,0.64)' : 'rgba(255,255,255,0.74)';
   const glassFallback = isDark ? 'rgba(18,18,24,0.92)' : 'rgba(255,255,255,0.94)';
   const softInputBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)';
-  const canSubmit = Boolean(inviteValue.trim()) && !joining;
+  const canSubmit = Boolean(inviteValue.trim()) && !joining && isOnline;
 
   useEffect(() => {
     if (typeof invite === 'string' && invite.trim()) {
@@ -90,6 +93,14 @@ export default function JoinRoomScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInUp.delay(80).springify().damping(18).mass(0.8)} style={styles.formRow}>
+          {!isOnline ? (
+            <View style={styles.noticeRow}>
+              <OfflineNotice
+                title={t('rooms.offlineJoinTitle', 'Invite links need a connection')}
+                body={t('rooms.offlineJoinBody', 'Cached rooms still open offline, but joining a new room needs internet access.')}
+              />
+            </View>
+          ) : null}
           <View
             style={[
               styles.formCard,
@@ -240,6 +251,9 @@ const styles = StyleSheet.create({
   },
   formRow: {
     paddingHorizontal: 12,
+  },
+  noticeRow: {
+    marginBottom: 12,
   },
   formCard: {
     borderRadius: 30,

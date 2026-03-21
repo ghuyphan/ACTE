@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useAuth } from '../../hooks/useAuth';
+import { useConnectivity } from '../../hooks/useConnectivity';
 import { useNotes } from '../../hooks/useNotes';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useSyncStatus } from '../../hooks/useSyncStatus';
@@ -12,12 +13,16 @@ import { useTheme } from '../../hooks/useTheme';
 export function useSettingsScreenModel() {
   const { t, i18n } = useTranslation();
   const { theme, setTheme, colors, isDark } = useTheme();
+  const { isOnline } = useConnectivity();
   const { notes, deleteAllNotes } = useNotes();
   const { user, isAuthAvailable } = useAuth();
   const {
     status: syncStatus,
     lastSyncedAt,
     lastMessage,
+    pendingCount,
+    failedCount,
+    blockedCount,
     isEnabled: syncEnabled,
     setSyncEnabled,
   } = useSyncStatus();
@@ -68,8 +73,12 @@ export function useSettingsScreenModel() {
       return t('settings.autoSyncingShort', 'Syncing');
     }
 
+    if (!isOnline && pendingCount > 0) {
+      return t('settings.syncPendingShort', 'Pending');
+    }
+
     return t('settings.autoSyncOnShort', 'On');
-  }, [syncEnabled, syncStatus, t, user]);
+  }, [isOnline, pendingCount, syncEnabled, syncStatus, t, user]);
 
   const plusValue = useMemo(() => {
     if (tier === 'plus') {
@@ -113,6 +122,10 @@ export function useSettingsScreenModel() {
       return null;
     }
 
+    if (!isOnline && pendingCount > 0) {
+      return t('settings.syncPendingOffline', 'Your notes are saved locally and will sync when you are back online.');
+    }
+
     if (syncStatus === 'syncing') {
       return t('settings.autoSyncing', 'Syncing your notes now.');
     }
@@ -138,8 +151,19 @@ export function useSettingsScreenModel() {
       );
     }
 
+    if (blockedCount > 0) {
+      return t(
+        'settings.syncBlockedDetail',
+        'Some notes need your attention before they can finish syncing.'
+      );
+    }
+
+    if (failedCount > 0) {
+      return t('settings.syncRetryQueued', 'Some notes are queued to retry syncing automatically.');
+    }
+
     return t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.');
-  }, [i18n.language, isAuthAvailable, lastMessage, lastSyncedAt, syncEnabled, syncStatus, t, user]);
+  }, [blockedCount, failedCount, i18n.language, isAuthAvailable, isOnline, lastMessage, lastSyncedAt, pendingCount, syncEnabled, syncStatus, t, user]);
 
   const promptClearAll = () => {
     showAlert({
@@ -186,6 +210,9 @@ export function useSettingsScreenModel() {
     showSync,
     showTheme,
     syncEnabled,
+    pendingCount,
+    failedCount,
+    blockedCount,
     setSyncEnabled,
     syncValue,
     t,

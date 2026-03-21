@@ -460,11 +460,13 @@ const LocketWidget = (props: { props: WidgetProps }) => {
 };
 
 type WidgetModule = {
+    updateTimeline: (entries: Array<{ date: Date; props: { props: WidgetProps } }>) => void;
     updateSnapshot: (snapshot: { props: WidgetProps }) => void;
 };
 
 function createFallbackWidget(): WidgetModule {
     return {
+        updateTimeline: () => undefined,
         updateSnapshot: () => undefined,
     };
 }

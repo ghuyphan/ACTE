@@ -46,6 +46,11 @@ export interface SyncQueueItem {
 export interface SyncRepository {
   enqueue: (change: SyncChange) => Promise<void>;
   listPending: (limit?: number) => Promise<SyncQueueItem[]>;
+  getStats: () => Promise<{
+    pendingCount: number;
+    failedCount: number;
+    blockedCount: number;
+  }>;
   markProcessing: (id: number) => Promise<void>;
   markFailed: (
     id: number,
@@ -601,6 +606,27 @@ const sqliteSyncRepository: SyncRepository = {
        WHERE id = ?`,
       id
     );
+  },
+
+  async getStats() {
+    const db = await getDB();
+    const row = await db.getFirstAsync<{
+      pending_count: number | null;
+      failed_count: number | null;
+      blocked_count: number | null;
+    }>(
+      `SELECT
+         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+         SUM(CASE WHEN status = 'failed' AND terminal = 0 THEN 1 ELSE 0 END) AS failed_count,
+         SUM(CASE WHEN terminal = 1 THEN 1 ELSE 0 END) AS blocked_count
+       FROM sync_queue`
+    );
+
+    return {
+      pendingCount: row?.pending_count ?? 0,
+      failedCount: row?.failed_count ?? 0,
+      blockedCount: row?.blocked_count ?? 0,
+    };
   },
 
   async markFailed(id, details) {

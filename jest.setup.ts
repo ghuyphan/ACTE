@@ -4,6 +4,34 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
+jest.mock('@react-native-community/netinfo', () => {
+  let listener: ((state: any) => void) | null = null;
+  const defaultState = {
+    type: 'wifi',
+    isConnected: true,
+    isInternetReachable: true,
+    details: null,
+  };
+
+  return {
+    __esModule: true,
+    default: {
+      addEventListener: jest.fn((callback: (state: any) => void) => {
+        listener = callback;
+        callback(defaultState);
+        return () => {
+          listener = null;
+        };
+      }),
+      fetch: jest.fn(async () => defaultState),
+      refresh: jest.fn(async () => defaultState),
+      __emit(state: any) {
+        listener?.({ ...defaultState, ...state });
+      },
+    },
+  };
+});
+
 jest.mock('react-native-gesture-handler', () => {
   const React = require('react');
   const { View } = require('react-native');

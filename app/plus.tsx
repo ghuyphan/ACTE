@@ -12,8 +12,10 @@ import {
 } from 'react-native';
 import { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import OfflineNotice from '../components/ui/OfflineNotice';
 import PrimaryButton from '../components/ui/PrimaryButton';
 import { Layout, Shadows, Typography } from '../constants/theme';
+import { useConnectivity } from '../hooks/useConnectivity';
 import { useSubscription } from '../hooks/useSubscription';
 import { useTheme } from '../hooks/useTheme';
 
@@ -46,6 +48,7 @@ function FeatureRow({
 export default function PlusScreen() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const { isOnline } = useConnectivity();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const {
@@ -164,6 +167,12 @@ export default function PlusScreen() {
         </View>
 
         <View style={styles.featuresList}>
+          {!isOnline ? (
+            <OfflineNotice
+              title={t('plus.offlineTitle', 'Offline right now')}
+              body={t('plus.offlineBody', 'Your last known plan is still visible, but purchases and restores need a connection.')}
+            />
+          ) : null}
           <FeatureRow
             icon="infinite"
             title={t('plus.features.unlimitedTitle', 'Unlimited Memories')}
@@ -203,7 +212,7 @@ export default function PlusScreen() {
             }}
             loading={isPurchaseInFlight}
             variant="neutral"
-            disabled={tier === 'plus' || !isPurchaseAvailable}
+            disabled={tier === 'plus' || !isPurchaseAvailable || !isOnline}
           />
 
           {monthlyPackage ? (
@@ -219,7 +228,7 @@ export default function PlusScreen() {
                 )
               }
               variant="secondary"
-              disabled={isPurchaseInFlight}
+              disabled={isPurchaseInFlight || !isOnline}
             />
           ) : null}
 
@@ -236,7 +245,7 @@ export default function PlusScreen() {
                 )
               }
               variant="secondary"
-              disabled={isPurchaseInFlight}
+              disabled={isPurchaseInFlight || !isOnline}
             />
           ) : null}
 
@@ -253,7 +262,7 @@ export default function PlusScreen() {
                 )
               }
               variant="secondary"
-              disabled={isPurchaseInFlight}
+              disabled={isPurchaseInFlight || !isOnline}
             />
           ) : null}
 
@@ -263,7 +272,7 @@ export default function PlusScreen() {
               void handleRestorePurchases();
             }}
             variant="secondary"
-            disabled={isPurchaseInFlight}
+            disabled={isPurchaseInFlight || !isOnline}
           />
 
           {tier === 'plus' ? (
@@ -273,7 +282,7 @@ export default function PlusScreen() {
                 void presentCustomerCenter();
               }}
               variant="secondary"
-              disabled={isPurchaseInFlight}
+              disabled={isPurchaseInFlight || !isOnline}
             />
           ) : null}
         </View>

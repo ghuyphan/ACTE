@@ -1,6 +1,12 @@
-import { resolveThemePreference } from '../hooks/useTheme';
+import { normalizeSystemColorScheme, resolveThemePreference } from '../hooks/useTheme';
 
 describe('theme resolution', () => {
+  it('keeps the last resolved system theme when iOS reports unspecified', () => {
+    expect(normalizeSystemColorScheme('unspecified', 'dark')).toBe('dark');
+    expect(normalizeSystemColorScheme(undefined, 'dark')).toBe('dark');
+    expect(normalizeSystemColorScheme(null, 'light')).toBe('light');
+  });
+
   it('follows the system scheme when theme preference is system', () => {
     expect(resolveThemePreference('system', 'dark')).toBe('dark');
     expect(resolveThemePreference('system', 'light')).toBe('light');

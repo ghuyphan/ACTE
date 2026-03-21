@@ -13,7 +13,7 @@ export default function SettingsSyncSheet({
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { isEnabled, setSyncEnabled } = useSyncStatus();
+  const { blockedCount, failedCount, isEnabled, pendingCount, setSyncEnabled } = useSyncStatus();
 
   const containerModifiers = [
     padding({ top: 24, leading: 24, trailing: 24, bottom: 40 }),
@@ -48,6 +48,20 @@ export default function SettingsSyncSheet({
         >
           <Toggle isOn={isEnabled} onIsOnChange={setSyncEnabled} label={t('settings.autoSync', 'Auto sync')} />
         </VStack>
+
+        <SwiftUIText
+          modifiers={[
+            foregroundStyle(colors.secondaryText),
+            font({ size: 13 }),
+            padding({ top: 16 }),
+          ]}
+        >
+          {t('settings.syncQueueSummary', 'Pending: {{pending}} · Retry: {{failed}} · Blocked: {{blocked}}', {
+            pending: pendingCount,
+            failed: failedCount,
+            blocked: blockedCount,
+          })}
+        </SwiftUIText>
 
         {accountHint && (
           <SwiftUIText

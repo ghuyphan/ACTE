@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../../components/ui/GlassView';
+import OfflineNotice from '../../components/ui/OfflineNotice';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -24,6 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout, Shadows, Typography } from '../../constants/theme';
+import { useConnectivity } from '../../hooks/useConnectivity';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useRoomsStore } from '../../hooks/useRooms';
 import { useTheme } from '../../hooks/useTheme';
@@ -125,6 +127,7 @@ export default function ShareToRoomScreen() {
   const { noteId } = useLocalSearchParams<{ noteId?: string }>();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const { isOnline } = useConnectivity();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { rooms, roomsReady, shareNoteToRoom } = useRoomsStore();
@@ -256,6 +259,14 @@ export default function ShareToRoomScreen() {
           </Animated.View>
         ) : (
           <View>
+            {!isOnline ? (
+              <View style={styles.noticeRow}>
+                <OfflineNotice
+                  title={t('rooms.offlineShareTitle', 'Sharing to a room is offline for now')}
+                  body={t('rooms.offlineShareBody', 'Your note is still saved locally. Share it to a room after you reconnect.')}
+                />
+              </View>
+            ) : null}
             {rooms.map((room, index) => (
               <SelectableRoomCard
                 key={room.id}
@@ -320,7 +331,7 @@ export default function ShareToRoomScreen() {
                 onPress={() => {
                   void handleShare();
                 }}
-                disabled={!selectedRoomId || sharing}
+                disabled={!selectedRoomId || sharing || !isOnline}
                 style={({ pressed }) => [
                   styles.primaryAction,
                   {
@@ -377,6 +388,10 @@ const styles = StyleSheet.create({
   previewRow: {
     paddingHorizontal: 12,
     paddingBottom: 14,
+  },
+  noticeRow: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
   },
   previewCard: {
     borderRadius: 30,

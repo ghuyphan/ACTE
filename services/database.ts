@@ -88,7 +88,7 @@ interface NoteRow {
 // ─── Database ───────────────────────────────────────────────────────
 let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-const APP_SCHEMA_VERSION = 4;
+const APP_SCHEMA_VERSION = 5;
 const NOTES_SELECT_FIELDS = `notes.*,
       EXISTS(SELECT 1 FROM note_doodles doodles WHERE doodles.note_id = notes.id) AS has_doodle,
       (SELECT doodles.strokes_json FROM note_doodles doodles WHERE doodles.note_id = notes.id LIMIT 1) AS doodle_strokes_json`;
@@ -223,6 +223,71 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         PRIMARY KEY (user_uid, room_id)
       );
       CREATE INDEX IF NOT EXISTS idx_room_read_state_user ON room_read_state(user_uid, room_id);
+      CREATE TABLE IF NOT EXISTS room_invites_cache (
+        user_uid TEXT NOT NULL,
+        room_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        token TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT,
+        revoked_at TEXT,
+        url TEXT NOT NULL,
+        PRIMARY KEY (user_uid, room_id)
+      );
+      CREATE TABLE IF NOT EXISTS rooms_cache_meta (
+        user_uid TEXT PRIMARY KEY NOT NULL,
+        last_updated_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS shared_friends_cache (
+        user_uid TEXT NOT NULL,
+        friend_uid TEXT NOT NULL,
+        display_name_snapshot TEXT,
+        photo_url_snapshot TEXT,
+        friended_at TEXT NOT NULL,
+        last_shared_at TEXT,
+        created_by_invite_id TEXT,
+        created_by_invite_token TEXT,
+        PRIMARY KEY (user_uid, friend_uid)
+      );
+      CREATE INDEX IF NOT EXISTS idx_shared_friends_cache_user ON shared_friends_cache(user_uid, friended_at ASC);
+      CREATE TABLE IF NOT EXISTS shared_posts_cache (
+        user_uid TEXT NOT NULL,
+        id TEXT NOT NULL,
+        author_uid TEXT NOT NULL,
+        author_display_name TEXT,
+        author_photo_url_snapshot TEXT,
+        audience_user_ids TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('text', 'photo')),
+        text TEXT NOT NULL DEFAULT '',
+        photo_local_uri TEXT,
+        photo_remote_base64 TEXT,
+        doodle_strokes_json TEXT,
+        place_name TEXT,
+        source_note_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        PRIMARY KEY (user_uid, id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_created ON shared_posts_cache(user_uid, created_at DESC);
+      CREATE TABLE IF NOT EXISTS shared_invites_cache (
+        user_uid TEXT PRIMARY KEY NOT NULL,
+        id TEXT NOT NULL,
+        inviter_uid TEXT NOT NULL,
+        inviter_display_name_snapshot TEXT,
+        inviter_photo_url_snapshot TEXT,
+        token TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        revoked_at TEXT,
+        accepted_by_uid TEXT,
+        accepted_at TEXT,
+        expires_at TEXT,
+        url TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS shared_feed_cache_meta (
+        user_uid TEXT PRIMARY KEY NOT NULL,
+        last_updated_at TEXT
+      );
     `);
 
             // Migration: add missing columns for existing databases before touching dependent indexes/queries.
@@ -333,6 +398,87 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
 
                 await database.execAsync(
                     `CREATE INDEX IF NOT EXISTS idx_sync_queue_retry_window ON sync_queue(status, terminal, next_retry_at, created_at ASC)`
+                );
+                await database.execAsync(
+                    `CREATE TABLE IF NOT EXISTS room_invites_cache (
+                        user_uid TEXT NOT NULL,
+                        room_id TEXT NOT NULL,
+                        id TEXT NOT NULL,
+                        token TEXT NOT NULL,
+                        created_by TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        expires_at TEXT,
+                        revoked_at TEXT,
+                        url TEXT NOT NULL,
+                        PRIMARY KEY (user_uid, room_id)
+                    )`
+                );
+                await database.execAsync(
+                    `CREATE TABLE IF NOT EXISTS rooms_cache_meta (
+                        user_uid TEXT PRIMARY KEY NOT NULL,
+                        last_updated_at TEXT
+                    )`
+                );
+                await database.execAsync(
+                    `CREATE TABLE IF NOT EXISTS shared_friends_cache (
+                        user_uid TEXT NOT NULL,
+                        friend_uid TEXT NOT NULL,
+                        display_name_snapshot TEXT,
+                        photo_url_snapshot TEXT,
+                        friended_at TEXT NOT NULL,
+                        last_shared_at TEXT,
+                        created_by_invite_id TEXT,
+                        created_by_invite_token TEXT,
+                        PRIMARY KEY (user_uid, friend_uid)
+                    )`
+                );
+                await database.execAsync(
+                    `CREATE INDEX IF NOT EXISTS idx_shared_friends_cache_user ON shared_friends_cache(user_uid, friended_at ASC)`
+                );
+                await database.execAsync(
+                    `CREATE TABLE IF NOT EXISTS shared_posts_cache (
+                        user_uid TEXT NOT NULL,
+                        id TEXT NOT NULL,
+                        author_uid TEXT NOT NULL,
+                        author_display_name TEXT,
+                        author_photo_url_snapshot TEXT,
+                        audience_user_ids TEXT NOT NULL,
+                        type TEXT NOT NULL CHECK(type IN ('text', 'photo')),
+                        text TEXT NOT NULL DEFAULT '',
+                        photo_local_uri TEXT,
+                        photo_remote_base64 TEXT,
+                        doodle_strokes_json TEXT,
+                        place_name TEXT,
+                        source_note_id TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT,
+                        PRIMARY KEY (user_uid, id)
+                    )`
+                );
+                await database.execAsync(
+                    `CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_created ON shared_posts_cache(user_uid, created_at DESC)`
+                );
+                await database.execAsync(
+                    `CREATE TABLE IF NOT EXISTS shared_invites_cache (
+                        user_uid TEXT PRIMARY KEY NOT NULL,
+                        id TEXT NOT NULL,
+                        inviter_uid TEXT NOT NULL,
+                        inviter_display_name_snapshot TEXT,
+                        inviter_photo_url_snapshot TEXT,
+                        token TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        revoked_at TEXT,
+                        accepted_by_uid TEXT,
+                        accepted_at TEXT,
+                        expires_at TEXT,
+                        url TEXT NOT NULL
+                    )`
+                );
+                await database.execAsync(
+                    `CREATE TABLE IF NOT EXISTS shared_feed_cache_meta (
+                        user_uid TEXT PRIMARY KEY NOT NULL,
+                        last_updated_at TEXT
+                    )`
                 );
 
                 if (currentUserVersion < APP_SCHEMA_VERSION) {

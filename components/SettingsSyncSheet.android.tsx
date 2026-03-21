@@ -13,7 +13,7 @@ export default function SettingsSyncSheetAndroid({
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { isEnabled, setSyncEnabled } = useSyncStatus();
+  const { blockedCount, failedCount, isEnabled, pendingCount, setSyncEnabled } = useSyncStatus();
 
   return (
     <View style={styles.container}>
@@ -39,6 +39,14 @@ export default function SettingsSyncSheetAndroid({
       {accountHint ? (
         <Text style={[styles.footnote, { color: colors.secondaryText }]}>{accountHint}</Text>
       ) : null}
+
+      <Text style={[styles.footnote, { color: colors.secondaryText }]}>
+        {t('settings.syncQueueSummary', 'Pending: {{pending}} · Retry: {{failed}} · Blocked: {{blocked}}', {
+          pending: pendingCount,
+          failed: failedCount,
+          blocked: blockedCount,
+        })}
+      </Text>
 
       <Pressable
         onPress={onClose}

@@ -52,6 +52,11 @@ jest.mock('../services/publicProfileService', () => ({
   }),
 }));
 
+jest.mock('../services/sharedFeedCache', () => ({
+  cacheSharedFeedSnapshot: jest.fn(async () => undefined),
+  replaceCachedSharedInvite: jest.fn(async () => undefined),
+}));
+
 jest.mock('../utils/firebase', () => ({
   getFirestore: () => ({}),
 }));

@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../../components/ui/GlassView';
+import OfflineNotice from '../../components/ui/OfflineNotice';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
@@ -16,6 +17,7 @@ import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout, Radii, Shadows, Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
+import { useConnectivity } from '../../hooks/useConnectivity';
 import { useRoomsStore } from '../../hooks/useRooms';
 import { useTheme } from '../../hooks/useTheme';
 import { RoomSummary } from '../../services/roomCache';
@@ -190,8 +192,9 @@ function RoomListItem({
 export default function RoomsTabScreen() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const { isOnline } = useConnectivity();
   const { user } = useAuth();
-  const { rooms, loading, enabled, roomsReady, refreshRooms } = useRoomsStore();
+  const { dataSource, lastUpdatedAt, rooms, loading, enabled, roomsReady, refreshRooms } = useRoomsStore();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -462,6 +465,24 @@ export default function RoomsTabScreen() {
                   ? t('rooms.emptyBody', 'Create your first private room or join one from an invite link.')
                   : t('rooms.listBody', 'Rooms you post in will rise back to the top automatically.')}
             </Text>
+            {!isOnline || dataSource === 'cache' ? (
+              <View style={styles.listNotice}>
+                <OfflineNotice
+                  title={
+                    !isOnline
+                      ? t('rooms.offlineTitle', 'Offline with cached rooms')
+                      : t('rooms.cachedTitle', 'Showing cached room data')
+                  }
+                  body={
+                    lastUpdatedAt
+                      ? t('rooms.cachedAtBody', 'Last refreshed {{date}}', {
+                          date: new Date(lastUpdatedAt).toLocaleString(),
+                        })
+                      : t('rooms.offlineBody', 'Room updates need a connection, but any cached rooms stay available.')
+                  }
+                />
+              </View>
+            ) : null}
           </View>
         }
         ListEmptyComponent={
@@ -599,6 +620,9 @@ const styles = StyleSheet.create({
   listLeadBody: {
     ...Typography.body,
     marginTop: 8,
+  },
+  listNotice: {
+    marginTop: 16,
   },
   roomRowPadding: {
     paddingHorizontal: 12,

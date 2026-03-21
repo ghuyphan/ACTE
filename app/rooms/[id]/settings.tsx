@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../../../components/ui/GlassView';
+import OfflineNotice from '../../../components/ui/OfflineNotice';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -17,6 +18,7 @@ import {
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout, Shadows, Typography } from '../../../constants/theme';
+import { useConnectivity } from '../../../hooks/useConnectivity';
 import { useRoomsStore } from '../../../hooks/useRooms';
 import { useTheme } from '../../../hooks/useTheme';
 import { getRoomErrorMessage, RoomDetails } from '../../../services/roomService';
@@ -40,6 +42,7 @@ export default function RoomSettingsScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const { isOnline } = useConnectivity();
   const insets = useSafeAreaInsets();
   const roomsStore = useRoomsStore();
   const [details, setDetails] = useState<RoomDetails | null>(null);
@@ -149,10 +152,23 @@ export default function RoomSettingsScreen() {
     );
   };
 
-  if (loading || !details) {
+  if (loading) {
     return (
       <View style={[styles.loadingScreen, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!details) {
+    return (
+      <View style={[styles.loadingScreen, { backgroundColor: colors.background }]}>
+        <View style={styles.emptyWrap}>
+          <OfflineNotice
+            title={t('rooms.offlineDetailTitle', 'No cached room available')}
+            body={t('rooms.offlineDetailBody', 'Reconnect once to load this room, then it will stay available from cache later.')}
+          />
+        </View>
       </View>
     );
   }
@@ -215,6 +231,24 @@ export default function RoomSettingsScreen() {
         }}
       >
         <SectionShell index={1}>
+          {!isOnline || roomsStore.dataSource === 'cache' ? (
+            <View style={styles.noticeWrap}>
+              <OfflineNotice
+                title={
+                  !isOnline
+                    ? t('rooms.offlineTitle', 'Offline with cached room data')
+                    : t('rooms.cachedTitle', 'Showing cached room data')
+                }
+                body={
+                  roomsStore.lastUpdatedAt
+                    ? t('rooms.cachedAtBody', 'Last refreshed {{date}}', {
+                        date: new Date(roomsStore.lastUpdatedAt).toLocaleString(),
+                      })
+                    : t('rooms.offlineBody', 'Room updates need a connection, but cached details stay visible.')
+                }
+              />
+            </View>
+          ) : null}
           <View
             style={[
               styles.settingsCard,
@@ -247,11 +281,12 @@ export default function RoomSettingsScreen() {
                 onPress={() => {
                   void handleRename();
                 }}
+                disabled={!isOnline}
                 style={({ pressed }) => [
                   styles.softAction,
                   {
                     backgroundColor: softInputBackground,
-                    opacity: pressed ? 0.92 : 1,
+                    opacity: !isOnline ? 0.5 : pressed ? 0.92 : 1,
                     transform: [{ scale: pressed ? 0.985 : 1 }],
                   },
                 ]}
@@ -286,11 +321,12 @@ export default function RoomSettingsScreen() {
                   onPress={() => {
                     void handleCreateOrShareInvite();
                   }}
+                  disabled={!isOnline}
                   style={({ pressed }) => [
                     styles.primaryAction,
                     {
                       backgroundColor: colors.primary,
-                      opacity: pressed ? 0.92 : 1,
+                      opacity: !isOnline ? 0.5 : pressed ? 0.92 : 1,
                       transform: [{ scale: pressed ? 0.985 : 1 }],
                     },
                   ]}
@@ -308,11 +344,12 @@ export default function RoomSettingsScreen() {
                     onPress={() => {
                       void handleRevokeInvite();
                     }}
+                    disabled={!isOnline}
                     style={({ pressed }) => [
                       styles.destructiveAction,
                       {
                         backgroundColor: isDark ? 'rgba(255,69,58,0.16)' : 'rgba(255,59,48,0.1)',
-                        opacity: pressed ? 0.92 : 1,
+                        opacity: !isOnline ? 0.5 : pressed ? 0.92 : 1,
                         transform: [{ scale: pressed ? 0.985 : 1 }],
                       },
                     ]}
@@ -405,6 +442,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  emptyWrap: {
+    width: '100%',
+    paddingHorizontal: Layout.screenPadding,
+  },
   screen: {
     flex: 1,
   },
@@ -445,6 +486,9 @@ const styles = StyleSheet.create({
   sectionRow: {
     paddingHorizontal: 12,
     paddingBottom: 12,
+  },
+  noticeWrap: {
+    marginBottom: 12,
   },
   settingsCard: {
     borderRadius: 30,

@@ -19,9 +19,12 @@ import { Note } from './database';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import {
   clearCachedRoom,
+  clearCachedRoomInvite,
   getCachedRoomMembers,
+  getCachedRoomInvite,
   getCachedRoomPosts,
   getCachedRooms,
+  getRoomsCacheLastUpdatedAt,
   replaceCachedRoomMembers,
   replaceCachedRoomPosts,
   replaceCachedRooms,
@@ -31,6 +34,7 @@ import {
   RoomSummary,
   setCachedRoomReadState,
   upsertCachedRoom,
+  upsertCachedRoomInvite,
 } from './roomCache';
 import { readPhotoAsBase64, writePhotoFromBase64 } from './photoStorage';
 import { getFirestore } from '../utils/firebase';
@@ -354,17 +358,22 @@ export async function loadCachedRoomDetails(userUid: string, roomId: string): Pr
     return null;
   }
 
-  const [members, posts] = await Promise.all([
+  const [members, posts, activeInvite] = await Promise.all([
     getCachedRoomMembers(userUid, roomId),
     getCachedRoomPosts(userUid, roomId),
+    getCachedRoomInvite(userUid, roomId),
   ]);
 
   return {
     room,
     members,
     posts,
-    activeInvite: null,
+    activeInvite,
   };
+}
+
+export async function loadRoomsCacheLastUpdatedAt(userUid: string) {
+  return getRoomsCacheLastUpdatedAt(userUid);
 }
 
 export async function refreshRooms(user: FirebaseAuthTypes.User): Promise<RoomSummary[]> {
@@ -445,6 +454,11 @@ export async function getRoomDetails(
   await upsertCachedRoom(user.uid, room);
   await replaceCachedRoomMembers(user.uid, roomId, members);
   await replaceCachedRoomPosts(user.uid, roomId, posts);
+  if (activeInvite) {
+    await upsertCachedRoomInvite(user.uid, activeInvite);
+  } else {
+    await clearCachedRoomInvite(user.uid, roomId);
+  }
   await setCachedRoomReadState(user.uid, roomId, getNowIso());
   await updateDoc(doc(firestore, 'rooms', roomId, 'members', user.uid), {
     lastReadAt: getNowIso(),
@@ -502,6 +516,7 @@ export async function createRoom(user: FirebaseAuthTypes.User, name: string) {
   await upsertCachedRoom(user.uid, room);
   await replaceCachedRoomMembers(user.uid, roomId, [membership]);
   await replaceCachedRoomPosts(user.uid, roomId, []);
+  await clearCachedRoomInvite(user.uid, roomId);
   await setCachedRoomReadState(user.uid, roomId, now);
 
   return room;
@@ -556,7 +571,7 @@ export async function createRoomInvite(user: FirebaseAuthTypes.User, roomId: str
     revokedAt: null,
   } satisfies RoomInviteRecord);
 
-  return {
+  const nextInvite = {
     id: inviteId,
     roomId,
     token,
@@ -572,6 +587,8 @@ export async function createRoomInvite(user: FirebaseAuthTypes.User, roomId: str
       },
     }),
   };
+  await upsertCachedRoomInvite(user.uid, nextInvite);
+  return nextInvite;
 }
 
 export async function revokeRoomInvite(
@@ -587,6 +604,7 @@ export async function revokeRoomInvite(
   await updateDoc(doc(requireFirestore(), 'rooms', roomId, 'invites', inviteId), {
     revokedAt: getNowIso(),
   });
+  await clearCachedRoomInvite(user.uid, roomId);
 }
 
 export async function joinRoomByInvite(user: FirebaseAuthTypes.User, inviteValue: string) {

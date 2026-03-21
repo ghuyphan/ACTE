@@ -1,9 +1,10 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import { useAuth } from './useAuth';
-import { Note } from '../services/database';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ENABLE_SHARED_ROOMS } from '../constants/features';
-import { clearAllCachedRooms } from '../services/roomCache';
+import { useAuth } from './useAuth';
+import { useConnectivity } from './useConnectivity';
+import { Note } from '../services/database';
+import { clearAllCachedRooms, RoomMember, RoomPost, RoomSummary } from '../services/roomCache';
 import {
   createRoom,
   createRoomInvite,
@@ -12,6 +13,7 @@ import {
   joinRoomByInvite,
   loadCachedRoomDetails,
   loadCachedRooms,
+  loadRoomsCacheLastUpdatedAt,
   refreshRooms,
   removeRoomMember,
   renameRoom,
@@ -20,13 +22,14 @@ import {
   RoomInvite,
   shareNoteToRoom as shareRoomNote,
 } from '../services/roomService';
-import { RoomMember, RoomPost, RoomSummary } from '../services/roomCache';
 
 interface RoomsStoreValue {
   enabled: boolean;
   loading: boolean;
   rooms: RoomSummary[];
   roomsReady: boolean;
+  dataSource: 'live' | 'cache';
+  lastUpdatedAt: string | null;
   refreshRooms: () => Promise<void>;
   getRoomDetails: (roomId: string, forceRefresh?: boolean) => Promise<RoomDetails | null>;
   createRoom: (name: string) => Promise<RoomSummary>;
@@ -51,16 +54,25 @@ type DetailMap = Record<string, RoomDetails>;
 
 function useRoomsStoreValue(): RoomsStoreValue {
   const { user, isAuthAvailable, isReady } = useAuth();
+  const { isOnline } = useConnectivity();
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [detailMap, setDetailMap] = useState<DetailMap>({});
   const [loading, setLoading] = useState(false);
   const [roomsReady, setRoomsReady] = useState(false);
+  const [dataSource, setDataSource] = useState<'live' | 'cache'>('cache');
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const previousUserUidRef = useRef<string | null>(null);
 
   const enabled = ENABLE_SHARED_ROOMS && isAuthAvailable;
 
   const hydrateFromCache = useCallback(async (activeUser: FirebaseAuthTypes.User) => {
-    const cachedRooms = await loadCachedRooms(activeUser.uid);
+    const [cachedRooms, cachedAt] = await Promise.all([
+      loadCachedRooms(activeUser.uid),
+      loadRoomsCacheLastUpdatedAt(activeUser.uid),
+    ]);
     setRooms(cachedRooms);
+    setLastUpdatedAt(cachedAt);
+    setDataSource('cache');
     setRoomsReady(true);
   }, []);
 
@@ -71,15 +83,23 @@ function useRoomsStoreValue(): RoomsStoreValue {
       return;
     }
 
+    if (!isOnline) {
+      setLoading(false);
+      setRoomsReady(true);
+      return;
+    }
+
     setLoading(true);
     try {
       const nextRooms = await refreshRooms(user);
       setRooms(nextRooms);
+      setDataSource('live');
+      setLastUpdatedAt(new Date().toISOString());
     } finally {
       setLoading(false);
       setRoomsReady(true);
     }
-  }, [enabled, user]);
+  }, [enabled, isOnline, user]);
 
   useEffect(() => {
     if (!isReady) {
@@ -89,17 +109,26 @@ function useRoomsStoreValue(): RoomsStoreValue {
     if (!enabled || !user) {
       setRooms([]);
       setDetailMap({});
+      setDataSource('cache');
+      setLastUpdatedAt(null);
       setRoomsReady(true);
-      void clearAllCachedRooms();
+      if (previousUserUidRef.current) {
+        void clearAllCachedRooms(previousUserUidRef.current);
+      }
+      previousUserUidRef.current = null;
       return;
     }
+
+    previousUserUidRef.current = user.uid;
 
     void hydrateFromCache(user)
       .catch(() => undefined)
       .finally(() => {
-        void refreshAllRooms().catch(() => undefined);
+        if (isOnline) {
+          void refreshAllRooms().catch(() => undefined);
+        }
       });
-  }, [enabled, hydrateFromCache, isReady, refreshAllRooms, user]);
+  }, [enabled, hydrateFromCache, isOnline, isReady, refreshAllRooms, user]);
 
   const requireUser = useCallback(() => {
     if (!enabled || !user) {
@@ -109,11 +138,17 @@ function useRoomsStoreValue(): RoomsStoreValue {
     return user;
   }, [enabled, user]);
 
+  const getOfflineRoomError = useCallback(() => {
+    return new Error('You are offline. Cached rooms are still available, but room changes need a connection.');
+  }, []);
+
   const syncRoomDetails = useCallback((details: RoomDetails) => {
     setDetailMap((prev) => ({
       ...prev,
       [details.room.id]: details,
     }));
+    setDataSource('live');
+    setLastUpdatedAt(new Date().toISOString());
     setRooms((prev) => {
       const next = prev.filter((item) => item.id !== details.room.id);
       return [details.room, ...next].sort((a, b) =>
@@ -128,20 +163,29 @@ function useRoomsStoreValue(): RoomsStoreValue {
       loading,
       rooms,
       roomsReady,
+      dataSource,
+      lastUpdatedAt,
       refreshRooms: refreshAllRooms,
       getRoomDetails: async (roomId: string, forceRefresh = false) => {
         const activeUser = requireUser();
+        const existing = detailMap[roomId];
+        const cached = existing ?? (await loadCachedRoomDetails(activeUser.uid, roomId));
 
-        if (!forceRefresh) {
-          const existing = detailMap[roomId];
-          if (existing) {
-            return existing;
+        if (!forceRefresh && cached) {
+          setDetailMap((prev) => ({ ...prev, [roomId]: cached }));
+          setDataSource('cache');
+          if (isOnline) {
+            void getRoomDetails(activeUser, roomId)
+              .then((details) => {
+                syncRoomDetails(details);
+              })
+              .catch(() => undefined);
           }
+          return cached;
+        }
 
-          const cached = await loadCachedRoomDetails(activeUser.uid, roomId);
-          if (cached) {
-            setDetailMap((prev) => ({ ...prev, [roomId]: cached }));
-          }
+        if (!isOnline) {
+          return cached ?? null;
         }
 
         const details = await getRoomDetails(activeUser, roomId);
@@ -149,20 +193,35 @@ function useRoomsStoreValue(): RoomsStoreValue {
         return details;
       },
       createRoom: async (name: string) => {
+        if (!isOnline) {
+          throw getOfflineRoomError();
+        }
         const activeUser = requireUser();
         const room = await createRoom(activeUser, name);
+        setDataSource('live');
+        setLastUpdatedAt(new Date().toISOString());
         setRooms((prev) => [room, ...prev.filter((item) => item.id !== room.id)]);
         return room;
       },
       joinRoomByInvite: async (inviteValue: string) => {
+        if (!isOnline) {
+          throw getOfflineRoomError();
+        }
         const activeUser = requireUser();
         const room = await joinRoomByInvite(activeUser, inviteValue);
+        setDataSource('live');
+        setLastUpdatedAt(new Date().toISOString());
         setRooms((prev) => [room, ...prev.filter((item) => item.id !== room.id)]);
         return room;
       },
       createInvite: async (roomId: string) => {
+        if (!isOnline) {
+          throw getOfflineRoomError();
+        }
         const activeUser = requireUser();
         const invite = await createRoomInvite(activeUser, roomId);
+        setDataSource('live');
+        setLastUpdatedAt(new Date().toISOString());
         setDetailMap((prev) => {
           const current = prev[roomId];
           if (!current) {
@@ -180,8 +239,13 @@ function useRoomsStoreValue(): RoomsStoreValue {
         return invite;
       },
       revokeInvite: async (roomId: string, inviteId: string) => {
+        if (!isOnline) {
+          throw getOfflineRoomError();
+        }
         const activeUser = requireUser();
         await revokeRoomInvite(activeUser, roomId, inviteId);
+        setDataSource('live');
+        setLastUpdatedAt(new Date().toISOString());
         setDetailMap((prev) => {
           const current = prev[roomId];
           if (!current) {
@@ -198,18 +262,29 @@ function useRoomsStoreValue(): RoomsStoreValue {
         });
       },
       createRoomPost: async (roomId: string, input) => {
+        if (!isOnline) {
+          throw getOfflineRoomError();
+        }
         const activeUser = requireUser();
         const details = await createRoomPost(activeUser, roomId, input);
         syncRoomDetails(details);
       },
       shareNoteToRoom: async (roomId: string, note: Note) => {
+        if (!isOnline) {
+          throw getOfflineRoomError();
+        }
         const activeUser = requireUser();
         const details = await shareRoomNote(activeUser, roomId, note);
         syncRoomDetails(details);
       },
       renameRoom: async (roomId: string, nextName: string) => {
+        if (!isOnline) {
+          throw getOfflineRoomError();
+        }
         const activeUser = requireUser();
         const nextRoom = await renameRoom(activeUser, roomId, nextName);
+        setDataSource('live');
+        setLastUpdatedAt(new Date().toISOString());
         setRooms((prev) => prev.map((item) => (item.id === roomId ? nextRoom : item)));
         setDetailMap((prev) => {
           const current = prev[roomId];
@@ -228,6 +303,9 @@ function useRoomsStoreValue(): RoomsStoreValue {
         return nextRoom;
       },
       removeMember: async (roomId: string, memberUserId: string) => {
+        if (!isOnline) {
+          throw getOfflineRoomError();
+        }
         const activeUser = requireUser();
         await removeRoomMember(activeUser, roomId, memberUserId);
         const details = await getRoomDetails(activeUser, roomId);
@@ -237,7 +315,7 @@ function useRoomsStoreValue(): RoomsStoreValue {
       getCachedPosts: (roomId: string) => detailMap[roomId]?.posts ?? [],
       getCachedInvite: (roomId: string) => detailMap[roomId]?.activeInvite ?? null,
     }),
-    [detailMap, enabled, loading, refreshAllRooms, requireUser, rooms, roomsReady, syncRoomDetails]
+    [dataSource, detailMap, enabled, getOfflineRoomError, isOnline, lastUpdatedAt, loading, refreshAllRooms, requireUser, rooms, roomsReady, syncRoomDetails]
   );
 }
 

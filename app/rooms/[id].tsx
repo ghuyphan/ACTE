@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../../components/ui/GlassView';
+import OfflineNotice from '../../components/ui/OfflineNotice';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
@@ -26,6 +27,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout, Radii, Shadows, Typography } from '../../constants/theme';
+import { useConnectivity } from '../../hooks/useConnectivity';
 import { useRoomsStore } from '../../hooks/useRooms';
 import { useTheme } from '../../hooks/useTheme';
 import { RoomPost } from '../../services/roomCache';
@@ -120,9 +122,10 @@ export default function RoomDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const { isOnline } = useConnectivity();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { getRoomDetails } = useRoomsStore();
+  const { dataSource, getRoomDetails, lastUpdatedAt } = useRoomsStore();
   const [details, setDetails] = useState<RoomDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
@@ -238,12 +241,25 @@ export default function RoomDetailScreen() {
     Keyboard.dismiss();
   };
 
-  const canPost = Boolean(draftText.trim() || draftPhotoUri);
+  const canPost = Boolean(draftText.trim() || draftPhotoUri) && isOnline;
 
-  if (loading || !details) {
+  if (loading) {
     return (
       <View style={[styles.screen, styles.center, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!details) {
+    return (
+      <View style={[styles.screen, styles.center, { backgroundColor: colors.background }]}>
+        <View style={styles.emptyStateWrap}>
+          <OfflineNotice
+            title={t('rooms.offlineDetailTitle', 'No cached room available')}
+            body={t('rooms.offlineDetailBody', 'Reconnect once to load this room, then it will stay available from cache later.')}
+          />
+        </View>
       </View>
     );
   }
@@ -278,6 +294,24 @@ export default function RoomDetailScreen() {
                 ? t('rooms.noPostsYet', 'No shared memories yet. Start the room with your first post.')
                 : t('rooms.timelineBody', 'Everything shared in this room flows together in one private timeline.')}
             </Text>
+            {!isOnline || dataSource === 'cache' ? (
+              <View style={styles.timelineNotice}>
+                <OfflineNotice
+                  title={
+                    !isOnline
+                      ? t('rooms.offlineTitle', 'Offline with cached room data')
+                      : t('rooms.cachedTitle', 'Showing cached room data')
+                  }
+                  body={
+                    lastUpdatedAt
+                      ? t('rooms.cachedAtBody', 'Last refreshed {{date}}', {
+                          date: new Date(lastUpdatedAt).toLocaleString(),
+                        })
+                      : t('rooms.offlineBody', 'Room updates need a connection, but cached posts stay readable.')
+                  }
+                />
+              </View>
+            ) : null}
           </View>
         }
         ListEmptyComponent={
@@ -479,11 +513,12 @@ export default function RoomDetailScreen() {
                   onPress={() => {
                     void handlePickPhoto();
                   }}
+                  disabled={!isOnline}
                   style={({ pressed }) => [
                     styles.composerIconButton,
                     {
                       backgroundColor: softInputBackground,
-                      opacity: pressed ? 0.92 : 1,
+                      opacity: !isOnline ? 0.5 : pressed ? 0.92 : 1,
                       transform: [{ scale: pressed ? 0.96 : 1 }],
                     },
                   ]}
@@ -636,6 +671,9 @@ const styles = StyleSheet.create({
     ...Typography.body,
     marginTop: 8,
   },
+  timelineNotice: {
+    marginTop: 16,
+  },
   topPanelWrap: {
     position: 'absolute',
     top: 12,
@@ -756,6 +794,10 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     ...Shadows.card,
+  },
+  emptyStateWrap: {
+    width: '100%',
+    paddingHorizontal: Layout.screenPadding,
   },
   emptyIconWrap: {
     width: 56,

@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../../components/ui/GlassView';
+import OfflineNotice from '../../components/ui/OfflineNotice';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -18,6 +19,7 @@ import {
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout, Shadows, Typography } from '../../constants/theme';
+import { useConnectivity } from '../../hooks/useConnectivity';
 import { useRoomsStore } from '../../hooks/useRooms';
 import { useTheme } from '../../hooks/useTheme';
 import { getRoomErrorMessage } from '../../services/roomService';
@@ -26,6 +28,7 @@ import { isOlderIOS } from '../../utils/platform';
 export default function CreateRoomScreen() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const { isOnline } = useConnectivity();
   const { createRoom } = useRoomsStore();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -35,7 +38,7 @@ export default function CreateRoomScreen() {
   const glassOverlay = isDark ? 'rgba(18,18,24,0.64)' : 'rgba(255,255,255,0.74)';
   const glassFallback = isDark ? 'rgba(18,18,24,0.92)' : 'rgba(255,255,255,0.94)';
   const softInputBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)';
-  const canSubmit = Boolean(name.trim()) && !saving;
+  const canSubmit = Boolean(name.trim()) && !saving && isOnline;
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -86,6 +89,14 @@ export default function CreateRoomScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInUp.delay(80).springify().damping(18).mass(0.8)} style={styles.formRow}>
+          {!isOnline ? (
+            <View style={styles.noticeRow}>
+              <OfflineNotice
+                title={t('rooms.offlineCreateTitle', 'Room creation is offline for now')}
+                body={t('rooms.offlineCreateBody', 'You can still browse cached rooms, but creating a new room needs a connection.')}
+              />
+            </View>
+          ) : null}
           <View
             style={[
               styles.formCard,
@@ -241,6 +252,9 @@ const styles = StyleSheet.create({
   },
   formRow: {
     paddingHorizontal: 12,
+  },
+  noticeRow: {
+    marginBottom: 12,
   },
   formCard: {
     borderRadius: 30,

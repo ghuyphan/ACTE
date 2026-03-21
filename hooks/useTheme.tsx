@@ -4,6 +4,11 @@ import { Appearance, AppState, Platform } from 'react-native';
 
 export type ThemeType = 'light' | 'dark' | 'system';
 type ResolvedColorScheme = 'light' | 'dark';
+type NativeColorScheme = ReturnType<typeof Appearance.getColorScheme>;
+
+type NativeAppearanceModule = {
+    getColorScheme?: () => NativeColorScheme;
+} | null;
 
 export interface ThemeColors {
     background: string;
@@ -123,6 +128,10 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = 'settings.theme';
 const VALID_THEMES: ThemeType[] = ['light', 'dark', 'system'];
+const nativeAppearance: NativeAppearanceModule =
+    Platform.OS === 'ios'
+        ? (require('react-native/Libraries/Utilities/NativeAppearance').default as NativeAppearanceModule)
+        : null;
 
 function normalizeTheme(value: string | null): ThemeType {
     if (value && VALID_THEMES.includes(value as ThemeType)) {
@@ -131,10 +140,24 @@ function normalizeTheme(value: string | null): ThemeType {
     return 'system';
 }
 
-function normalizeSystemColorScheme(
-    colorScheme: ReturnType<typeof Appearance.getColorScheme>
+function isResolvedColorScheme(colorScheme: NativeColorScheme): colorScheme is ResolvedColorScheme {
+    return colorScheme === 'light' || colorScheme === 'dark';
+}
+
+export function normalizeSystemColorScheme(
+    colorScheme: NativeColorScheme,
+    fallback: ResolvedColorScheme = 'light'
 ): ResolvedColorScheme {
-    return colorScheme === 'dark' ? 'dark' : 'light';
+    return isResolvedColorScheme(colorScheme) ? colorScheme : fallback;
+}
+
+function readSystemColorScheme(fallback: ResolvedColorScheme = 'light'): ResolvedColorScheme {
+    const colorScheme =
+        Platform.OS === 'ios'
+            ? nativeAppearance?.getColorScheme?.() ?? Appearance.getColorScheme()
+            : Appearance.getColorScheme();
+
+    return normalizeSystemColorScheme(colorScheme, fallback);
 }
 
 export function resolveThemePreference(
@@ -159,19 +182,19 @@ function syncNativeColorScheme(theme: ThemeType) {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const [theme, setThemeState] = useState<ThemeType>('system');
     const [systemTheme, setSystemTheme] = useState<ResolvedColorScheme>(() =>
-        normalizeSystemColorScheme(Appearance.getColorScheme())
+        readSystemColorScheme()
     );
     const [themeReady, setThemeReady] = useState(false);
 
     useEffect(() => {
         const syncSystemTheme = () => {
-            setSystemTheme(normalizeSystemColorScheme(Appearance.getColorScheme()));
+            setSystemTheme((previousTheme) => readSystemColorScheme(previousTheme));
         };
 
         syncSystemTheme();
 
         const appearanceSubscription = Appearance.addChangeListener(({ colorScheme }) => {
-            setSystemTheme(normalizeSystemColorScheme(colorScheme));
+            setSystemTheme((previousTheme) => normalizeSystemColorScheme(colorScheme, previousTheme));
         });
 
         const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {

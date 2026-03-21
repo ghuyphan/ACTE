@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import i18n from '../constants/i18n';
-import { SyncMode, syncNotesToFirebase } from '../services/syncService';
+import { useConnectivity } from './useConnectivity';
+import { getSyncRepository, SyncMode, syncNotesToFirebase } from '../services/syncService';
 import { useAuth } from './useAuth';
 import { useNotes } from './useNotes';
 
@@ -12,6 +13,9 @@ interface SyncStatusContextValue {
   status: SyncState;
   lastSyncedAt: string | null;
   lastMessage: string | null;
+  pendingCount: number;
+  failedCount: number;
+  blockedCount: number;
   isEnabled: boolean;
   setSyncEnabled: (enabled: boolean) => void;
   requestSync: () => void;
@@ -25,9 +29,13 @@ const SyncStatusContext = createContext<SyncStatusContextValue | undefined>(unde
 export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const { user, isReady, isAuthAvailable } = useAuth();
   const { notes, refreshNotes, loading } = useNotes();
+  const { isOnline, status: connectivityStatus } = useConnectivity();
   const [status, setStatus] = useState<SyncState>('idle');
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [lastMessage, setLastMessage] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [failedCount, setFailedCount] = useState(0);
+  const [blockedCount, setBlockedCount] = useState(0);
   const [syncEnabledState, setSyncEnabledState] = useState<boolean>(true);
   const [isSyncPrefReady, setIsSyncPrefReady] = useState(false);
 
@@ -43,6 +51,17 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
+    }
+  }, []);
+
+  const refreshQueueStats = useCallback(async () => {
+    try {
+      const stats = await getSyncRepository().getStats();
+      setPendingCount(stats.pendingCount);
+      setFailedCount(stats.failedCount);
+      setBlockedCount(stats.blockedCount);
+    } catch (error) {
+      console.warn('[syncStatus] Failed to load queue stats:', error);
     }
   }, []);
 
@@ -63,6 +82,17 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
   runSyncNowRef.current = async (mode: SyncMode = 'incremental') => {
     if (!isReady || !isAuthAvailable || !user || loading || !syncEnabledState || !isSyncPrefReady) {
+      await refreshQueueStats();
+      return;
+    }
+
+    if (!isOnline) {
+      setLastMessage(
+        pendingCount > 0
+          ? i18n.t('settings.syncPendingOffline', 'Your notes are saved locally and will sync when you are back online.')
+          : i18n.t('settings.offlineReadOnly', 'You are offline right now. Cloud sync will resume when you reconnect.')
+      );
+      await refreshQueueStats();
       return;
     }
 
@@ -85,11 +115,16 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       setLastMessage(null);
 
       const result = await syncNotesToFirebase(currentUser, notes, { mode });
+      await refreshQueueStats();
 
       if (result.status === 'success') {
         setStatus('success');
         setLastSyncedAt(new Date().toISOString());
-        setLastMessage(result.message ?? null);
+        setLastMessage(
+          pendingCount > 0
+            ? i18n.t('settings.syncPendingOffline', 'Your notes are saved locally and will sync when you are back online.')
+            : result.message ?? null
+        );
 
         if ((result.importedCount ?? 0) > 0) {
           suppressNextNotesEffectRef.current = true;
@@ -119,7 +154,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
   const queueSync = useCallback(
     (immediate = false, mode: SyncMode = 'incremental') => {
-      if (!isReady || !isAuthAvailable || !user || loading || !syncEnabledState || !isSyncPrefReady) {
+      if (!isReady || !isAuthAvailable || !user || loading || !syncEnabledState || !isSyncPrefReady || !isOnline) {
         return;
       }
 
@@ -135,7 +170,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
         void runSyncNowRef.current(mode);
       }, AUTO_SYNC_DEBOUNCE_MS);
     },
-    [clearDebounceTimer, isAuthAvailable, isReady, isSyncPrefReady, loading, syncEnabledState, user]
+    [clearDebounceTimer, isAuthAvailable, isOnline, isReady, isSyncPrefReady, loading, syncEnabledState, user]
   );
 
   useEffect(() => {
@@ -152,6 +187,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       setStatus('idle');
       setLastMessage(null);
       setLastSyncedAt(null);
+      void refreshQueueStats();
       return;
     }
 
@@ -166,7 +202,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       setLastSyncedAt(null);
       queueSync(true, 'full');
     }
-  }, [clearDebounceTimer, isAuthAvailable, isReady, isSyncPrefReady, loading, queueSync, syncEnabledState, user]);
+  }, [clearDebounceTimer, isAuthAvailable, isReady, isSyncPrefReady, loading, queueSync, refreshQueueStats, syncEnabledState, user]);
 
   useEffect(() => {
     if (!isReady || loading || !user || !isAuthAvailable) {
@@ -183,8 +219,9 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    void refreshQueueStats();
     queueSync(false, 'incremental');
-  }, [isAuthAvailable, isReady, loading, notes, queueSync, user]);
+  }, [isAuthAvailable, isReady, loading, notes, queueSync, refreshQueueStats, user]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -204,18 +241,40 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     };
   }, [clearDebounceTimer]);
 
+  useEffect(() => {
+    void refreshQueueStats();
+  }, [refreshQueueStats]);
+
+  useEffect(() => {
+    if (connectivityStatus !== 'online') {
+      if (pendingCount > 0) {
+        setLastMessage(
+          i18n.t('settings.syncPendingOffline', 'Your notes are saved locally and will sync when you are back online.')
+        );
+      }
+      return;
+    }
+
+    if (pendingCount > 0 || failedCount > 0) {
+      queueSync(true, 'incremental');
+    }
+  }, [connectivityStatus, failedCount, pendingCount, queueSync]);
+
   const value = useMemo<SyncStatusContextValue>(
     () => ({
       status,
       lastSyncedAt,
       lastMessage,
+      pendingCount,
+      failedCount,
+      blockedCount,
       isEnabled: syncEnabledState,
       setSyncEnabled,
       requestSync: () => {
         queueSync(true, 'full');
       },
     }),
-    [lastMessage, lastSyncedAt, queueSync, setSyncEnabled, status, syncEnabledState]
+    [blockedCount, failedCount, lastMessage, lastSyncedAt, pendingCount, queueSync, setSyncEnabled, status, syncEnabledState]
   );
 
   return <SyncStatusContext.Provider value={value}>{children}</SyncStatusContext.Provider>;

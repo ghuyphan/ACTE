@@ -20,6 +20,7 @@ import { Note, NoteType } from './database';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { readPhotoAsBase64, writePhotoFromBase64 } from './photoStorage';
 import { getPublicUserProfile, upsertPublicUserProfile } from './publicProfileService';
+import { cacheSharedFeedSnapshot, replaceCachedSharedInvite } from './sharedFeedCache';
 import { getFirestore } from '../utils/firebase';
 
 export interface FriendConnection {
@@ -330,11 +331,13 @@ export async function refreshSharedFeed(user: FirebaseAuthTypes.User): Promise<S
     )
   );
 
-  return {
+  const snapshot = {
     friends,
     sharedPosts,
     activeInvite,
   };
+  await cacheSharedFeedSnapshot(user.uid, snapshot);
+  return snapshot;
 }
 
 export function subscribeToSharedFeed(
@@ -408,6 +411,11 @@ export function subscribeToSharedFeed(
             sharedPosts,
           };
           initialPostsLoaded = true;
+          await cacheSharedFeedSnapshot(user.uid, {
+            friends: currentSnapshot.friends,
+            sharedPosts,
+            activeInvite: currentSnapshot.activeInvite,
+          });
           emitIfReady();
         } catch (error) {
           handleFailure(error);
@@ -465,6 +473,7 @@ export function subscribeToSharedFeed(
         activeInvite: inviteDoc ? mapInvite(inviteDoc.id, inviteDoc) : null,
       };
       initialInviteLoaded = true;
+      void replaceCachedSharedInvite(user.uid, currentSnapshot.activeInvite).catch(() => undefined);
       emitIfReady();
     },
     handleFailure
@@ -497,7 +506,7 @@ export async function createFriendInvite(user: FirebaseAuthTypes.User): Promise<
   const inviteId = await getFriendInviteDocumentId(user.uid);
   const inviteRef = doc(firestore, 'friendInvites', inviteId);
 
-  return runTransaction(firestore, async (transaction) => {
+  const invite = await runTransaction(firestore, async (transaction) => {
     const inviteSnapshot = await transaction.get(inviteRef);
     const currentInvite = inviteSnapshot.exists()
       ? (inviteSnapshot.data() as FriendInviteRecord)
@@ -522,6 +531,8 @@ export async function createFriendInvite(user: FirebaseAuthTypes.User): Promise<
     transaction.set(inviteRef, nextInvite);
     return mapInvite(inviteId, nextInvite);
   });
+  await replaceCachedSharedInvite(user.uid, invite);
+  return invite;
 }
 
 export async function revokeFriendInvite(user: FirebaseAuthTypes.User, inviteId: string): Promise<void> {
@@ -541,6 +552,7 @@ export async function revokeFriendInvite(user: FirebaseAuthTypes.User, inviteId:
   await updateDoc(inviteRef, {
     revokedAt: getNowIso(),
   });
+  await replaceCachedSharedInvite(user.uid, null);
 }
 
 export async function acceptFriendInvite(

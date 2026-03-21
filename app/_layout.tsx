@@ -7,12 +7,13 @@ import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import i18n, { i18nReady } from '../constants/i18n';
 import { ENABLE_SHARED_ROOMS } from '../constants/features';
 import { AuthProvider } from '../hooks/useAuth';
+import { ConnectivityProvider } from '../hooks/useConnectivity';
 import { NotesProvider } from '../hooks/useNotes';
 import { NoteDetailSheetProvider, useNoteDetailSheet } from '../hooks/useNoteDetailSheet';
 import { RoomsProvider } from '../hooks/useRooms';
@@ -61,6 +62,26 @@ function AppContent() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!dbReady || !localeReady) {
+      return;
+    }
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') {
+        return;
+      }
+
+      void updateWidgetData({
+        includeLocationLookup: true,
+      });
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [dbReady, localeReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -279,23 +300,25 @@ export default function RootLayout() {
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <I18nextProvider i18n={i18n}>
           <ThemeProvider>
-            <AuthProvider>
-              <SubscriptionProvider>
-                <NotesProvider>
-                  <SyncStatusProvider>
-                    <RoomsProvider>
-                      <SharedFeedProvider>
-                        <NoteDetailSheetProvider>
-                          <BottomSheetModalProvider>
-                            <AppContent />
-                          </BottomSheetModalProvider>
-                        </NoteDetailSheetProvider>
-                      </SharedFeedProvider>
-                    </RoomsProvider>
-                  </SyncStatusProvider>
-                </NotesProvider>
-              </SubscriptionProvider>
-            </AuthProvider>
+            <ConnectivityProvider>
+              <AuthProvider>
+                <SubscriptionProvider>
+                  <NotesProvider>
+                    <SyncStatusProvider>
+                      <RoomsProvider>
+                        <SharedFeedProvider>
+                          <NoteDetailSheetProvider>
+                            <BottomSheetModalProvider>
+                              <AppContent />
+                            </BottomSheetModalProvider>
+                          </NoteDetailSheetProvider>
+                        </SharedFeedProvider>
+                      </RoomsProvider>
+                    </SyncStatusProvider>
+                  </NotesProvider>
+                </SubscriptionProvider>
+              </AuthProvider>
+            </ConnectivityProvider>
           </ThemeProvider>
         </I18nextProvider>
       </SafeAreaProvider>

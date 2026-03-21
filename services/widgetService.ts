@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Paths } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
@@ -11,28 +12,6 @@ import { getDistanceMeters } from './reminderSelection';
 
 // Lazy import to avoid circular dependency issues
 let widgetInstance: any = null;
-
-function getWidget() {
-    if (Platform.OS !== 'ios') {
-        return null;
-    }
-
-    if (!widgetInstance) {
-        try {
-            const widgetModule = require('../widgets/LocketWidget') as { default?: unknown };
-            const candidate = widgetModule?.default ?? widgetModule;
-
-            if (candidate && typeof (candidate as { updateSnapshot?: unknown }).updateSnapshot === 'function') {
-                widgetInstance = candidate;
-            } else {
-                console.warn('[widgetService] Widget module loaded without updateSnapshot');
-            }
-        } catch (e) {
-            console.warn('[widgetService] Could not load widget:', e);
-        }
-    }
-    return widgetInstance;
-}
 
 export interface WidgetProps {
     noteType: 'text' | 'photo';
@@ -78,19 +57,77 @@ interface WidgetSelectionResult {
     selectionMode: WidgetSelectionMode;
 }
 
-export type WidgetSelectionMode =
-    | 'nearest_memory'
-    | 'random_favorite'
-    | 'around_this_area'
-    | 'latest_memory';
+interface WidgetTimelineEntry {
+    date: Date;
+    props: WidgetProps;
+}
 
-const IOS_WIDGET_APP_GROUP_ID = 'group.com.acte.app';
-const WIDGET_IMAGE_DIRECTORY_NAME = 'widget-images';
-const WIDGET_IMAGE_FILENAME = 'latest-photo.jpg';
+interface WidgetHistoryEntry {
+    noteId: string;
+    slotKey: string;
+    slotStartedAt: string;
+    selectionMode: WidgetSelectionMode;
+}
+
+interface EligibleWidgetNotes {
+    notes: Note[];
+    readablePhotoUrisByNoteId: Map<string, string>;
+}
+
+type WidgetModule = {
+    updateTimeline?: (entries: Array<{ date: Date; props: { props: WidgetProps } }>) => void;
+};
 
 type AndroidWidgetModule = {
     updateSnapshot?: (snapshotJson: string) => void;
 };
+
+type CandidateRepeatPolicy = 'strict' | 'avoid_consecutive' | 'allow_repeat';
+
+type FallbackBucket = {
+    mode: WidgetSelectionMode;
+    notes: Note[];
+};
+
+export type WidgetSelectionMode =
+    | 'nearest_memory'
+    | 'favorite_photo'
+    | 'photo_memory'
+    | 'favorite_memory'
+    | 'resurfaced_memory'
+    | 'latest_memory';
+
+const IOS_WIDGET_APP_GROUP_ID = 'group.com.acte.app';
+const WIDGET_IMAGE_DIRECTORY_NAME = 'widget-images';
+const WIDGET_TIMELINE_ENTRY_COUNT = 4;
+const WIDGET_SLOT_HOURS = 6;
+const WIDGET_RESURFACE_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const WIDGET_RECENT_WINDOW_MS = 24 * 60 * 60 * 1000;
+const WIDGET_HISTORY_RETENTION_MS = 48 * 60 * 60 * 1000;
+const WIDGET_HISTORY_STORAGE_KEY = 'widget.timeline.history.v1';
+const MAX_WIDGET_HISTORY_ENTRIES = 32;
+
+function getWidget() {
+    if (Platform.OS !== 'ios') {
+        return null;
+    }
+
+    if (!widgetInstance) {
+        try {
+            const widgetModule = require('../widgets/LocketWidget') as { default?: unknown };
+            const candidate = widgetModule?.default ?? widgetModule;
+
+            if (candidate && typeof (candidate as WidgetModule).updateTimeline === 'function') {
+                widgetInstance = candidate;
+            } else {
+                console.warn('[widgetService] Widget module loaded without updateTimeline');
+            }
+        } catch (e) {
+            console.warn('[widgetService] Could not load widget:', e);
+        }
+    }
+    return widgetInstance;
+}
 
 function getAndroidWidgetModule(): AndroidWidgetModule | null {
     if (Platform.OS !== 'android') {
@@ -101,14 +138,21 @@ function getAndroidWidgetModule(): AndroidWidgetModule | null {
     return androidWidgetModule ?? null;
 }
 
-function updatePlatformWidgetSnapshot(props: WidgetProps) {
+function updatePlatformWidgetTimeline(entries: WidgetTimelineEntry[]) {
+    if (entries.length === 0) {
+        return;
+    }
+
     if (Platform.OS === 'ios') {
         const widget = getWidget();
-        if (!widget) {
+        if (!widget?.updateTimeline) {
             return;
         }
 
-        widget.updateSnapshot({ props });
+        widget.updateTimeline(entries.map((entry) => ({
+            date: entry.date,
+            props: { props: entry.props },
+        })));
         return;
     }
 
@@ -119,7 +163,7 @@ function updatePlatformWidgetSnapshot(props: WidgetProps) {
         }
 
         try {
-            androidWidgetModule.updateSnapshot(JSON.stringify(props));
+            androidWidgetModule.updateSnapshot(JSON.stringify(entries[0]?.props ?? null));
         } catch (error) {
             console.warn('[widgetService] Failed to push Android widget snapshot:', error);
         }
@@ -140,36 +184,53 @@ function getModeLabelKey(selectionMode: WidgetSelectionMode) {
         return 'widget.modeNearest';
     }
 
-    if (selectionMode === 'random_favorite') {
+    if (selectionMode === 'favorite_photo' || selectionMode === 'favorite_memory') {
         return 'widget.modeFavorite';
     }
 
-    if (selectionMode === 'around_this_area') {
-        return 'widget.modeArea';
+    if (selectionMode === 'photo_memory') {
+        return 'widget.modePhoto';
+    }
+
+    if (selectionMode === 'resurfaced_memory') {
+        return 'widget.modeResurfaced';
     }
 
     return 'widget.memoryReminder';
 }
 
+function getSlotStart(referenceDate: Date) {
+    const slotStart = new Date(referenceDate);
+    slotStart.setMinutes(0, 0, 0);
+    slotStart.setHours(Math.floor(slotStart.getHours() / WIDGET_SLOT_HOURS) * WIDGET_SLOT_HOURS);
+    return slotStart;
+}
+
 function getSlotKey(referenceDate: Date) {
-    const slot = Math.floor(referenceDate.getHours() / 6);
-    return `${referenceDate.getFullYear()}-${referenceDate.getMonth() + 1}-${referenceDate.getDate()}-${slot}`;
+    const slotStart = getSlotStart(referenceDate);
+    const slot = Math.floor(slotStart.getHours() / WIDGET_SLOT_HOURS);
+    return `${slotStart.getFullYear()}-${slotStart.getMonth() + 1}-${slotStart.getDate()}-${slot}`;
+}
+
+function buildTimelineDates(referenceDate: Date, count = WIDGET_TIMELINE_ENTRY_COUNT) {
+    const slotStart = getSlotStart(referenceDate);
+    return Array.from({ length: count }, (_, index) => {
+        const slotDate = new Date(slotStart);
+        slotDate.setHours(slotDate.getHours() + index * WIDGET_SLOT_HOURS);
+        return slotDate;
+    });
 }
 
 function hasRenderableWidgetText(note: Pick<Note, 'type' | 'content'>) {
     return note.type === 'text' && typeof note.content === 'string' && note.content.trim().length > 0;
 }
 
-function isWidgetSelectableNote(note: Note) {
-    return note.type === 'photo' || hasRenderableWidgetText(note);
+function isTextWidgetNote(note: Note) {
+    return hasRenderableWidgetText(note);
 }
 
-function getWidgetSelectionTier(note: Note) {
-    if (hasRenderableWidgetText(note)) {
-        return 2;
-    }
-
-    return note.type === 'photo' ? 1 : 0;
+function isPhotoWidgetNote(note: Note) {
+    return note.type === 'photo';
 }
 
 function getWidgetSelectionTimestamp(note: Pick<Note, 'createdAt' | 'updatedAt'>) {
@@ -177,29 +238,34 @@ function getWidgetSelectionTimestamp(note: Pick<Note, 'createdAt' | 'updatedAt'>
     return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function compareWidgetNotes(a: Note, b: Note) {
-    const tierDelta = getWidgetSelectionTier(b) - getWidgetSelectionTier(a);
-    if (tierDelta !== 0) {
-        return tierDelta;
-    }
-
-    const timestampDelta = getWidgetSelectionTimestamp(b) - getWidgetSelectionTimestamp(a);
+function compareRecentWidgetNotes(left: Note, right: Note) {
+    const timestampDelta = getWidgetSelectionTimestamp(right) - getWidgetSelectionTimestamp(left);
     if (timestampDelta !== 0) {
         return timestampDelta;
     }
 
-    const favoriteDelta = Number(Boolean(b.isFavorite)) - Number(Boolean(a.isFavorite));
-    if (favoriteDelta !== 0) {
-        return favoriteDelta;
-    }
-
-    return a.id.localeCompare(b.id);
+    return left.id.localeCompare(right.id);
 }
 
-function getOrderedSelectionModes(referenceDate: Date): WidgetSelectionMode[] {
-    const modes: WidgetSelectionMode[] = ['nearest_memory', 'random_favorite', 'around_this_area'];
-    const startIndex = hashString(getSlotKey(referenceDate)) % modes.length;
-    return modes.map((_, offset) => modes[(startIndex + offset) % modes.length]!);
+function compareOldestWidgetNotes(left: Note, right: Note) {
+    const timestampDelta = getWidgetSelectionTimestamp(left) - getWidgetSelectionTimestamp(right);
+    if (timestampDelta !== 0) {
+        return timestampDelta;
+    }
+
+    return left.id.localeCompare(right.id);
+}
+
+function compareNearbyWidgetNotes(
+    left: { note: Note; distanceMeters: number },
+    right: { note: Note; distanceMeters: number }
+) {
+    const distanceDelta = left.distanceMeters - right.distanceMeters;
+    if (distanceDelta !== 0) {
+        return distanceDelta;
+    }
+
+    return compareRecentWidgetNotes(left.note, right.note);
 }
 
 function getTranslatedWidgetStrings(
@@ -231,17 +297,198 @@ function getTranslatedWidgetStrings(
     };
 }
 
+function buildIdleWidgetProps(noteCount: number, selectionMode: WidgetSelectionMode = 'latest_memory'): WidgetProps {
+    return {
+        noteType: 'text',
+        text: '',
+        locationName: '',
+        date: '',
+        noteCount,
+        nearbyPlacesCount: 0,
+        hasDoodle: false,
+        doodleStrokesJson: null,
+        isIdleState: true,
+        ...getTranslatedWidgetStrings(noteCount, 0, selectionMode),
+    };
+}
+
+function pruneWidgetHistory(history: WidgetHistoryEntry[], referenceDate = new Date()) {
+    const referenceTime = referenceDate.getTime();
+
+    return [...history]
+        .filter((entry) => {
+            const entryTime = new Date(entry.slotStartedAt).getTime();
+            return Number.isFinite(entryTime) && Math.abs(referenceTime - entryTime) <= WIDGET_HISTORY_RETENTION_MS;
+        })
+        .sort(
+            (left, right) =>
+                new Date(left.slotStartedAt).getTime() - new Date(right.slotStartedAt).getTime()
+        )
+        .slice(-MAX_WIDGET_HISTORY_ENTRIES);
+}
+
+async function loadWidgetHistory(referenceDate = new Date()) {
+    try {
+        const rawValue = await AsyncStorage.getItem(WIDGET_HISTORY_STORAGE_KEY);
+        if (!rawValue) {
+            return [] as WidgetHistoryEntry[];
+        }
+
+        const parsed = JSON.parse(rawValue);
+        if (!Array.isArray(parsed)) {
+            return [] as WidgetHistoryEntry[];
+        }
+
+        return pruneWidgetHistory(
+            parsed.filter((entry): entry is WidgetHistoryEntry => {
+                return Boolean(
+                    entry &&
+                    typeof entry === 'object' &&
+                    typeof entry.noteId === 'string' &&
+                    typeof entry.slotKey === 'string' &&
+                    typeof entry.slotStartedAt === 'string' &&
+                    typeof entry.selectionMode === 'string'
+                );
+            }),
+            referenceDate
+        );
+    } catch (error) {
+        console.warn('[widgetService] Failed to load widget history:', error);
+        return [] as WidgetHistoryEntry[];
+    }
+}
+
+async function saveWidgetHistory(history: WidgetHistoryEntry[], referenceDate = new Date()) {
+    try {
+        await AsyncStorage.setItem(
+            WIDGET_HISTORY_STORAGE_KEY,
+            JSON.stringify(pruneWidgetHistory(history, referenceDate))
+        );
+    } catch (error) {
+        console.warn('[widgetService] Failed to persist widget history:', error);
+    }
+}
+
+function getPreviousHistoryEntry(history: WidgetHistoryEntry[], referenceDate: Date) {
+    const referenceTime = referenceDate.getTime();
+
+    return [...history]
+        .filter((entry) => new Date(entry.slotStartedAt).getTime() < referenceTime)
+        .sort((left, right) => new Date(right.slotStartedAt).getTime() - new Date(left.slotStartedAt).getTime())[0] ?? null;
+}
+
+function hasShownRecently(noteId: string, history: WidgetHistoryEntry[], referenceDate: Date) {
+    const referenceTime = referenceDate.getTime();
+
+    return history.some((entry) => {
+        if (entry.noteId !== noteId) {
+            return false;
+        }
+
+        const entryTime = new Date(entry.slotStartedAt).getTime();
+        if (!Number.isFinite(entryTime) || entryTime > referenceTime) {
+            return false;
+        }
+
+        return referenceTime - entryTime < WIDGET_RECENT_WINDOW_MS;
+    });
+}
+
+function isCandidateAllowed(
+    note: Note,
+    history: WidgetHistoryEntry[],
+    referenceDate: Date,
+    repeatPolicy: CandidateRepeatPolicy
+) {
+    if (repeatPolicy === 'allow_repeat') {
+        return true;
+    }
+
+    const previousEntry = getPreviousHistoryEntry(history, referenceDate);
+    if (previousEntry?.noteId === note.id) {
+        return false;
+    }
+
+    if (repeatPolicy === 'avoid_consecutive') {
+        return true;
+    }
+
+    return !hasShownRecently(note.id, history, referenceDate);
+}
+
+function getFallbackBuckets(notes: Note[], referenceDate: Date): FallbackBucket[] {
+    const referenceTime = referenceDate.getTime();
+
+    return [
+        {
+            mode: 'favorite_photo',
+            notes: notes.filter((note) => isPhotoWidgetNote(note) && note.isFavorite).sort(compareRecentWidgetNotes),
+        },
+        {
+            mode: 'photo_memory',
+            notes: notes.filter((note) => isPhotoWidgetNote(note) && !note.isFavorite).sort(compareRecentWidgetNotes),
+        },
+        {
+            mode: 'favorite_memory',
+            notes: notes.filter((note) => isTextWidgetNote(note) && note.isFavorite).sort(compareRecentWidgetNotes),
+        },
+        {
+            mode: 'resurfaced_memory',
+            notes: notes
+                .filter((note) => {
+                    if (!isTextWidgetNote(note) || note.isFavorite) {
+                        return false;
+                    }
+
+                    return referenceTime - getWidgetSelectionTimestamp(note) >= WIDGET_RESURFACE_AGE_MS;
+                })
+                .sort(compareOldestWidgetNotes),
+        },
+        {
+            mode: 'latest_memory',
+            notes: [...notes].sort(compareRecentWidgetNotes),
+        },
+    ];
+}
+
+function pickFallbackCandidate(
+    notes: Note[],
+    referenceDate: Date,
+    recentHistory: WidgetHistoryEntry[]
+): { note: Note; mode: WidgetSelectionMode } | null {
+    const buckets = getFallbackBuckets(notes, referenceDate);
+    const repeatPolicies: CandidateRepeatPolicy[] = ['strict', 'avoid_consecutive', 'allow_repeat'];
+
+    for (const repeatPolicy of repeatPolicies) {
+        for (const bucket of buckets) {
+            const selectedNote = bucket.notes.find((note) =>
+                isCandidateAllowed(note, recentHistory, referenceDate, repeatPolicy)
+            );
+
+            if (selectedNote) {
+                return {
+                    note: selectedNote,
+                    mode: bucket.mode,
+                };
+            }
+        }
+    }
+
+    return null;
+}
+
 export function selectWidgetNote(options: {
     notes: Note[];
     currentLocation?: LocationCoords | null;
     nearbyRadiusMeters?: number;
     referenceDate?: Date;
+    recentHistory?: WidgetHistoryEntry[];
 }): WidgetSelectionResult {
     const {
         notes,
         currentLocation = null,
-        nearbyRadiusMeters = 5000,
         referenceDate = new Date(),
+        recentHistory = [],
     } = options;
 
     if (notes.length === 0) {
@@ -254,7 +501,7 @@ export function selectWidgetNote(options: {
         };
     }
 
-    const selectableNotes = notes.filter(isWidgetSelectableNote);
+    const selectableNotes = notes.filter((note) => isPhotoWidgetNote(note) || isTextWidgetNote(note));
 
     if (selectableNotes.length === 0) {
         return {
@@ -266,8 +513,6 @@ export function selectWidgetNote(options: {
         };
     }
 
-    const orderedModes = getOrderedSelectionModes(referenceDate);
-
     const nearestCandidates = currentLocation
         ? selectableNotes
             .map((note) => ({
@@ -278,113 +523,38 @@ export function selectWidgetNote(options: {
                 }),
             }))
             .filter((entry) => entry.distanceMeters <= Math.max(1, entry.note.radius))
-            .sort((left, right) => {
-                const distanceDelta = left.distanceMeters - right.distanceMeters;
-                if (distanceDelta !== 0) {
-                    return distanceDelta;
-                }
-
-                return compareWidgetNotes(left.note, right.note);
-            })
+            .sort(compareNearbyWidgetNotes)
         : [];
 
-    const nearbyAreaCandidates = currentLocation
-        ? selectableNotes
-            .map((note) => ({
-                note,
-                distanceMeters: getDistanceMeters(currentLocation, {
-                    latitude: note.latitude,
-                    longitude: note.longitude,
-                }),
-            }))
-            .filter((entry) => entry.distanceMeters <= nearbyRadiusMeters)
-            .sort((left, right) => {
-                const distanceDelta = left.distanceMeters - right.distanceMeters;
-                if (distanceDelta !== 0) {
-                    return distanceDelta;
-                }
-
-                return compareWidgetNotes(left.note, right.note);
-            })
-        : [];
-
-    const favoriteCandidates = selectableNotes.filter((note) => note.isFavorite);
-    const favoriteSelection =
-        favoriteCandidates.length > 0
-            ? [...favoriteCandidates].sort(compareWidgetNotes)[hashString(getSlotKey(referenceDate)) % favoriteCandidates.length] ?? null
-            : null;
-
-    for (const mode of orderedModes) {
-        if (mode === 'nearest_memory' && nearestCandidates.length > 0) {
-            return {
-                selectedNote: nearestCandidates[0]?.note ?? null,
-                selectedLocationName: nearestCandidates[0]?.note.locationName ?? null,
-                nearbyPlacesCount: Math.max(0, nearestCandidates.length - 1),
-                isIdleState: false,
-                selectionMode: mode,
-            };
-        }
-
-        if (mode === 'random_favorite' && favoriteSelection) {
-            return {
-                selectedNote: favoriteSelection,
-                selectedLocationName: favoriteSelection.locationName ?? null,
-                nearbyPlacesCount: 0,
-                isIdleState: false,
-                selectionMode: mode,
-            };
-        }
-
-        if (mode === 'around_this_area' && nearbyAreaCandidates.length > 0) {
-            return {
-                selectedNote: nearbyAreaCandidates[0]?.note ?? null,
-                selectedLocationName: nearbyAreaCandidates[0]?.note.locationName ?? null,
-                nearbyPlacesCount: Math.max(0, nearbyAreaCandidates.length - 1),
-                isIdleState: false,
-                selectionMode: mode,
-            };
-        }
+    if (nearestCandidates.length > 0) {
+        return {
+            selectedNote: nearestCandidates[0]?.note ?? null,
+            selectedLocationName: nearestCandidates[0]?.note.locationName ?? null,
+            nearbyPlacesCount: Math.max(0, nearestCandidates.length - 1),
+            isIdleState: false,
+            selectionMode: 'nearest_memory',
+        };
     }
 
-    const latestNote = [...selectableNotes].sort((left, right) =>
-        new Date(right.updatedAt ?? right.createdAt).getTime() - new Date(left.updatedAt ?? left.createdAt).getTime()
-    )[0] ?? null;
+    const fallbackCandidate = pickFallbackCandidate(selectableNotes, referenceDate, recentHistory);
+
+    if (!fallbackCandidate) {
+        return {
+            selectedNote: null,
+            selectedLocationName: null,
+            nearbyPlacesCount: 0,
+            isIdleState: true,
+            selectionMode: 'latest_memory',
+        };
+    }
 
     return {
-        selectedNote: latestNote,
-        selectedLocationName: latestNote?.locationName ?? null,
+        selectedNote: fallbackCandidate.note,
+        selectedLocationName: fallbackCandidate.note.locationName ?? null,
         nearbyPlacesCount: 0,
         isIdleState: false,
-        selectionMode: 'latest_memory',
+        selectionMode: fallbackCandidate.mode,
     };
-}
-
-async function resolveWidgetPhotoProps(note: Note): Promise<Pick<WidgetProps, 'backgroundImageUrl' | 'backgroundImageBase64'>> {
-    const selectedPhotoUri = getNotePhotoUri(note);
-    if (note.type !== 'photo' || !selectedPhotoUri) {
-        return {};
-    }
-
-    const readablePhotoUri = await getReadablePhotoUri(selectedPhotoUri);
-    if (!readablePhotoUri) {
-        return {};
-    }
-
-    const copiedPhotoUri = await copyPhotoForWidget(readablePhotoUri);
-    if (copiedPhotoUri) {
-        return {
-            backgroundImageUrl: copiedPhotoUri,
-        };
-    }
-
-    const photoBase64 = await encodePhotoForWidget(readablePhotoUri);
-    if (photoBase64) {
-        return {
-            backgroundImageBase64: photoBase64,
-        };
-    }
-
-    return {};
 }
 
 function getWidgetSharedContainerUri(): string | null {
@@ -404,7 +574,7 @@ function getWidgetSharedContainerUri(): string | null {
     return uri.endsWith('/') ? uri : `${uri}/`;
 }
 
-async function copyPhotoForWidget(photoUri: string): Promise<string | undefined> {
+async function copyPhotoForWidget(photoUri: string, destinationToken: string): Promise<string | undefined> {
     if (Platform.OS !== 'ios') {
         return undefined;
     }
@@ -423,8 +593,9 @@ async function copyPhotoForWidget(photoUri: string): Promise<string | undefined>
         return normalizedPhotoUri;
     }
 
+    const safeToken = destinationToken.replace(/[^a-zA-Z0-9_-]/g, '');
     const destinationDirectory = `${sharedContainerUri}${WIDGET_IMAGE_DIRECTORY_NAME}/`;
-    const destinationPath = `${destinationDirectory}${WIDGET_IMAGE_FILENAME}`;
+    const destinationPath = `${destinationDirectory}${safeToken}-${hashString(normalizedPhotoUri)}.jpg`;
 
     try {
         await FileSystem.makeDirectoryAsync(destinationDirectory, { intermediates: true });
@@ -481,6 +652,177 @@ async function encodePhotoForWidget(photoUri: string): Promise<string | undefine
     }
 }
 
+async function getEligibleWidgetNotes(notes: Note[]): Promise<EligibleWidgetNotes> {
+    const eligibleNotes: Note[] = [];
+    const readablePhotoUrisByNoteId = new Map<string, string>();
+
+    for (const note of notes) {
+        if (isTextWidgetNote(note)) {
+            eligibleNotes.push(note);
+            continue;
+        }
+
+        if (!isPhotoWidgetNote(note)) {
+            continue;
+        }
+
+        const selectedPhotoUri = getNotePhotoUri(note);
+        if (!selectedPhotoUri) {
+            continue;
+        }
+
+        const readablePhotoUri = await getReadablePhotoUri(selectedPhotoUri);
+        if (!readablePhotoUri) {
+            continue;
+        }
+
+        eligibleNotes.push(note);
+        readablePhotoUrisByNoteId.set(note.id, readablePhotoUri);
+    }
+
+    return {
+        notes: eligibleNotes,
+        readablePhotoUrisByNoteId,
+    };
+}
+
+async function resolveWidgetPhotoProps(
+    note: Note,
+    readablePhotoUri: string | undefined,
+    destinationToken: string
+): Promise<Pick<WidgetProps, 'backgroundImageUrl' | 'backgroundImageBase64'>> {
+    if (note.type !== 'photo' || !readablePhotoUri) {
+        return {};
+    }
+
+    const copiedPhotoUri = await copyPhotoForWidget(readablePhotoUri, destinationToken);
+    if (copiedPhotoUri) {
+        return {
+            backgroundImageUrl: copiedPhotoUri,
+        };
+    }
+
+    const photoBase64 = await encodePhotoForWidget(readablePhotoUri);
+    if (photoBase64) {
+        return {
+            backgroundImageBase64: photoBase64,
+        };
+    }
+
+    return {};
+}
+
+function createHistoryEntry(note: Note, referenceDate: Date, selectionMode: WidgetSelectionMode): WidgetHistoryEntry {
+    return {
+        noteId: note.id,
+        slotKey: getSlotKey(referenceDate),
+        slotStartedAt: getSlotStart(referenceDate).toISOString(),
+        selectionMode,
+    };
+}
+
+async function buildWidgetPropsFromSelection(
+    noteCount: number,
+    selection: WidgetSelectionResult,
+    referenceDate: Date,
+    readablePhotoUrisByNoteId: Map<string, string>
+): Promise<WidgetProps> {
+    const resolvedNearbyPlacesCount =
+        selection.selectionMode === 'nearest_memory'
+            ? Math.max(selection.nearbyPlacesCount, 1)
+            : 0;
+    const translatedStrings = getTranslatedWidgetStrings(noteCount, resolvedNearbyPlacesCount, selection.selectionMode);
+
+    if (!selection.selectedNote || selection.isIdleState) {
+        return {
+            ...buildIdleWidgetProps(noteCount, selection.selectionMode),
+            ...translatedStrings,
+        };
+    }
+
+    const selectedNote = selection.selectedNote;
+    const dateStr = formatDate(selectedNote.createdAt, 'short');
+    const props: WidgetProps = {
+        noteType: selectedNote.type,
+        text:
+            selectedNote.type === 'text'
+                ? formatNoteTextWithEmoji(selectedNote.content.trim(), selectedNote.moodEmoji)
+                : '',
+        locationName: selection.selectedLocationName ?? selectedNote.locationName ?? i18n.t('capture.unknownPlace'),
+        date: dateStr,
+        noteCount,
+        nearbyPlacesCount: resolvedNearbyPlacesCount,
+        hasDoodle: Boolean(selectedNote.hasDoodle && selectedNote.doodleStrokesJson),
+        doodleStrokesJson: selectedNote.doodleStrokesJson ?? null,
+        isIdleState: false,
+        ...translatedStrings,
+    };
+
+    if (selectedNote.type === 'photo') {
+        Object.assign(
+            props,
+            await resolveWidgetPhotoProps(
+                selectedNote,
+                readablePhotoUrisByNoteId.get(selectedNote.id),
+                `slot-${getSlotKey(referenceDate)}-note-${selectedNote.id}`
+            )
+        );
+    }
+
+    return props;
+}
+
+async function buildWidgetTimeline(options: {
+    notes: Note[];
+    currentLocation?: LocationCoords | null;
+    referenceDate: Date;
+}) {
+    const { notes, currentLocation = null, referenceDate } = options;
+    const { notes: eligibleNotes, readablePhotoUrisByNoteId } = await getEligibleWidgetNotes(notes);
+    const history = await loadWidgetHistory(referenceDate);
+    const timelineDates = buildTimelineDates(referenceDate);
+    const nextHistory = [...history];
+    const entries: WidgetTimelineEntry[] = [];
+
+    if (notes.length === 0 || eligibleNotes.length === 0) {
+        const idleProps = buildIdleWidgetProps(notes.length);
+        for (const date of timelineDates) {
+            entries.push({
+                date,
+                props: idleProps,
+            });
+        }
+
+        return {
+            entries,
+            history: nextHistory,
+        };
+    }
+
+    for (const date of timelineDates) {
+        const selection = selectWidgetNote({
+            notes: eligibleNotes,
+            currentLocation,
+            referenceDate: date,
+            recentHistory: nextHistory,
+        });
+
+        entries.push({
+            date,
+            props: await buildWidgetPropsFromSelection(notes.length, selection, date, readablePhotoUrisByNoteId),
+        });
+
+        if (selection.selectedNote && !selection.isIdleState) {
+            nextHistory.push(createHistoryEntry(selection.selectedNote, date, selection.selectionMode));
+        }
+    }
+
+    return {
+        entries,
+        history: pruneWidgetHistory(nextHistory, referenceDate),
+    };
+}
+
 export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): Promise<void> {
     if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
         return;
@@ -488,25 +830,7 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
 
     try {
         const notes = options.notes ?? await getAllNotes();
-        const translatedStrings = getTranslatedWidgetStrings(notes.length, 0, 'latest_memory');
 
-        if (notes.length === 0) {
-            updatePlatformWidgetSnapshot({
-                noteType: 'text',
-                text: '',
-                locationName: '',
-                date: '',
-                noteCount: 0,
-                nearbyPlacesCount: 0,
-                hasDoodle: false,
-                doodleStrokesJson: null,
-                isIdleState: true,
-                ...translatedStrings,
-            });
-            return;
-        }
-
-        // 1. Try to get current location
         let currentLocation: Location.LocationObject | null = null;
         if (options.includeLocationLookup !== false) {
             try {
@@ -522,13 +846,7 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
             }
         }
 
-        const {
-            selectedNote,
-            selectedLocationName,
-            nearbyPlacesCount,
-            isIdleState,
-            selectionMode,
-        } = selectWidgetNote({
+        const { entries, history } = await buildWidgetTimeline({
             notes,
             currentLocation: currentLocation
                 ? {
@@ -536,56 +854,11 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
                     longitude: currentLocation.coords.longitude,
                 }
                 : null,
-            nearbyRadiusMeters: 5000,
             referenceDate: options.referenceDate ?? new Date(),
         });
-        const resolvedNearbyPlacesCount =
-            isIdleState
-                ? 0
-                : selectionMode === 'nearest_memory' || selectionMode === 'around_this_area'
-                    ? Math.max(nearbyPlacesCount, 1)
-                    : 0;
-        const selectionTranslatedStrings = getTranslatedWidgetStrings(notes.length, resolvedNearbyPlacesCount, selectionMode);
 
-        if (!selectedNote || isIdleState) {
-            updatePlatformWidgetSnapshot({
-                noteType: 'text',
-                text: '',
-                locationName: '',
-                date: '',
-                noteCount: notes.length,
-                nearbyPlacesCount: 0,
-                hasDoodle: false,
-                doodleStrokesJson: null,
-                isIdleState: true,
-                ...selectionTranslatedStrings,
-            });
-            return;
-        }
-
-        const dateStr = formatDate(selectedNote.createdAt, 'short');
-
-        const props: WidgetProps = {
-            noteType: selectedNote.type,
-            text:
-                selectedNote.type === 'text'
-                    ? formatNoteTextWithEmoji(selectedNote.content.trim(), selectedNote.moodEmoji)
-                    : '',
-            locationName: selectedLocationName ?? selectedNote.locationName ?? i18n.t('capture.unknownPlace'),
-            date: dateStr,
-            noteCount: notes.length,
-            nearbyPlacesCount: resolvedNearbyPlacesCount,
-            hasDoodle: Boolean(selectedNote.hasDoodle && selectedNote.doodleStrokesJson),
-            doodleStrokesJson: selectedNote.doodleStrokesJson ?? null,
-            isIdleState,
-            ...selectionTranslatedStrings,
-        };
-
-        if (selectedNote.type === 'photo') {
-            Object.assign(props, await resolveWidgetPhotoProps(selectedNote));
-        }
-
-        updatePlatformWidgetSnapshot(props);
+        updatePlatformWidgetTimeline(entries);
+        await saveWidgetHistory(history, options.referenceDate ?? new Date());
     } catch (error) {
         console.warn('[widgetService] Failed to update widget:', error);
     }

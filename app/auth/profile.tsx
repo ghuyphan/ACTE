@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
+import { useConnectivity } from '../../hooks/useConnectivity';
 import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { useTheme } from '../../hooks/useTheme';
 
@@ -36,7 +37,8 @@ export default function ProfileScreen() {
   const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { user, isAuthAvailable, signOut } = useAuth();
-  const { status: syncStatus, lastSyncedAt, lastMessage } = useSyncStatus();
+  const { isOnline } = useConnectivity();
+  const { blockedCount, failedCount, pendingCount, status: syncStatus, lastSyncedAt, lastMessage } = useSyncStatus();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -75,6 +77,10 @@ export default function ProfileScreen() {
       return t('profile.syncingNow', 'Syncing your notes now.');
     }
 
+    if (!isOnline && pendingCount > 0) {
+      return t('profile.syncPendingOffline', 'Your notes are saved locally and will sync when you are back online.');
+    }
+
     if (syncStatus === 'success' && lastSyncedAt) {
       return t('profile.lastSynced', 'Last synced {{date}}', {
         date: new Date(lastSyncedAt).toLocaleString(i18n.language, {
@@ -93,8 +99,16 @@ export default function ProfileScreen() {
       );
     }
 
+    if (blockedCount > 0) {
+      return t('profile.syncBlockedHint', 'Some notes need attention before sync can finish.');
+    }
+
+    if (failedCount > 0) {
+      return t('profile.syncRetryHint', 'We could not sync right now. We will try again when the app is active.');
+    }
+
     return t('profile.autoSyncOn', 'Your notes sync automatically while you are signed in.');
-  }, [i18n.language, lastMessage, lastSyncedAt, syncStatus, t, user]);
+  }, [blockedCount, failedCount, i18n.language, isOnline, lastMessage, lastSyncedAt, pendingCount, syncStatus, t, user]);
 
   const handleSignOut = async () => {
     setIsSigningOut(true);

@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { doc, onSnapshot } from '@react-native-firebase/firestore';
@@ -19,6 +20,7 @@ import {
 } from '../constants/subscription';
 import { getFirestore } from '../utils/firebase';
 import { useAuth } from './useAuth';
+import { useConnectivity } from './useConnectivity';
 
 export interface SubscriptionActionResult {
   status: 'success' | 'cancelled' | 'unavailable' | 'error';
@@ -54,6 +56,15 @@ interface SubscriptionContextValue {
 }
 
 const SubscriptionContext = createContext<SubscriptionContextValue | undefined>(undefined);
+const SUBSCRIPTION_SNAPSHOT_KEY_PREFIX = 'subscription.snapshot.';
+
+interface SubscriptionSnapshot {
+  tier: PlanTier;
+  remotePhotoNoteCount: number | null;
+  plusPriceLabel: string | null;
+  plusPackageTitle: string | null;
+  cachedAt: string;
+}
 
 function getTierFromCustomerInfo(customerInfo: CustomerInfo | null): PlanTier {
   if (customerInfo?.entitlements.active?.[REVENUECAT_PRO_ENTITLEMENT_ID]) {
@@ -124,6 +135,7 @@ function isPurchaseCancelled(error: unknown) {
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const { isReady: authReady, user } = useAuth();
+  const { isOnline } = useConnectivity();
   const isConfigured = isRevenueCatConfigured();
   const revenueCatApiKey = getRevenueCatApiKey();
   const [isReady, setIsReady] = useState(() => !isConfigured);
@@ -131,12 +143,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [currentOffering, setCurrentOffering] = useState<PurchasesOffering | null>(null);
   const [isPurchaseInFlight, setIsPurchaseInFlight] = useState(false);
   const [remotePhotoNoteCount, setRemotePhotoNoteCount] = useState<number | null>(null);
+  const [cachedSnapshot, setCachedSnapshot] = useState<SubscriptionSnapshot | null>(null);
   const isConfiguredRef = useRef(false);
   const isInitializedRef = useRef(false);
   const currentRevenueCatUserIdRef = useRef<string | null>(null);
+  const snapshotStorageKey = `${SUBSCRIPTION_SNAPSHOT_KEY_PREFIX}${user?.uid ?? 'anonymous'}`;
 
   const loadRevenueCatState = useCallback(async () => {
-    if (!isConfiguredRef.current) {
+    if (!isConfiguredRef.current || !isOnline) {
       return;
     }
 
@@ -152,7 +166,26 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
     setCurrentOffering(offering);
     setCustomerInfo(customerInfo);
-  }, []);
+  }, [isOnline]);
+
+  useEffect(() => {
+    AsyncStorage.getItem(snapshotStorageKey)
+      .then((rawValue) => {
+        if (!rawValue) {
+          setCachedSnapshot(null);
+          return;
+        }
+
+        const parsed = JSON.parse(rawValue) as SubscriptionSnapshot;
+        setCachedSnapshot(parsed);
+        if (parsed.remotePhotoNoteCount !== null) {
+          setRemotePhotoNoteCount((current) => current ?? parsed.remotePhotoNoteCount);
+        }
+      })
+      .catch((error) => {
+        console.warn('[subscription] Failed to load cached subscription snapshot:', error);
+      });
+  }, [snapshotStorageKey]);
 
   useEffect(() => {
     if (!isConfigured) {
@@ -178,6 +211,13 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
     Purchases.addCustomerInfoUpdateListener(listener);
 
+    if (!isOnline) {
+      setIsReady(true);
+      return () => {
+        Purchases.removeCustomerInfoUpdateListener(listener);
+      };
+    }
+
     void loadRevenueCatState()
       .catch((error) => {
         console.warn('[subscription] Failed to initialize RevenueCat:', error);
@@ -189,7 +229,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     return () => {
       Purchases.removeCustomerInfoUpdateListener(listener);
     };
-  }, [isConfigured, loadRevenueCatState, revenueCatApiKey]);
+  }, [isConfigured, isOnline, loadRevenueCatState, revenueCatApiKey]);
 
   useEffect(() => {
     const firestore = getFirestore();
@@ -198,7 +238,12 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     }
 
     if (!user || !firestore) {
-      setRemotePhotoNoteCount(null);
+      setRemotePhotoNoteCount(cachedSnapshot?.remotePhotoNoteCount ?? null);
+      return;
+    }
+
+    if (!isOnline) {
+      setRemotePhotoNoteCount((current) => current ?? cachedSnapshot?.remotePhotoNoteCount ?? null);
       return;
     }
 
@@ -217,10 +262,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     );
 
     return unsubscribe;
-  }, [authReady, user]);
+  }, [authReady, cachedSnapshot?.remotePhotoNoteCount, isOnline, user]);
 
   useEffect(() => {
-    if (!isConfigured || !authReady) {
+    if (!isConfigured || !authReady || !isOnline) {
       return;
     }
 
@@ -246,9 +291,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         console.warn('[subscription] Failed to refresh RevenueCat user state:', error);
       }
     })();
-  }, [authReady, isConfigured, loadRevenueCatState, user?.uid]);
+  }, [authReady, isConfigured, isOnline, loadRevenueCatState, user?.uid]);
 
-  const tier = getTierFromCustomerInfo(customerInfo);
+  const tier = customerInfo ? getTierFromCustomerInfo(customerInfo) : cachedSnapshot?.tier ?? 'free';
   const selectedPackage = selectPreferredPackage(currentOffering);
   const availablePackages = currentOffering?.availablePackages ?? [];
   const monthlyPackage =
@@ -258,9 +303,24 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const lifetimePackage =
     availablePackages.find((item) => item.packageType === PACKAGE_TYPE.LIFETIME) ?? null;
 
+  useEffect(() => {
+    const nextSnapshot: SubscriptionSnapshot = {
+      tier,
+      remotePhotoNoteCount,
+      plusPriceLabel: selectedPackage?.product.priceString ?? cachedSnapshot?.plusPriceLabel ?? null,
+      plusPackageTitle: getPlusOfferingLabel(selectedPackage) ?? cachedSnapshot?.plusPackageTitle ?? null,
+      cachedAt: new Date().toISOString(),
+    };
+
+    setCachedSnapshot(nextSnapshot);
+    void AsyncStorage.setItem(snapshotStorageKey, JSON.stringify(nextSnapshot)).catch((error) => {
+      console.warn('[subscription] Failed to persist subscription snapshot:', error);
+    });
+  }, [remotePhotoNoteCount, selectedPackage, snapshotStorageKey, tier]);
+
   const purchasePackage = useCallback(
     async (pkg: PurchasesPackage | null): Promise<SubscriptionActionResult> => {
-      if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured || !pkg) {
+      if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured || !pkg || !isOnline) {
         return { status: 'unavailable' };
       }
 
@@ -280,7 +340,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         setIsPurchaseInFlight(false);
       }
     },
-    [isConfigured]
+    [isConfigured, isOnline]
   );
 
   const value = useMemo<SubscriptionContextValue>(
@@ -291,20 +351,21 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       isPurchaseAvailable:
         (Platform.OS === 'ios' || Platform.OS === 'android') &&
         isConfigured &&
+        isOnline &&
         availablePackages.length > 0,
       isPurchaseInFlight,
       hasProEntitlement: tier === 'plus',
       canImportFromLibrary: tier === 'plus',
       photoNoteLimit: getPhotoNoteLimitForTier(tier),
-      remotePhotoNoteCount,
+      remotePhotoNoteCount: remotePhotoNoteCount ?? cachedSnapshot?.remotePhotoNoteCount ?? null,
       customerInfo,
       currentOffering,
       availablePackages,
       monthlyPackage,
       annualPackage,
       lifetimePackage,
-      plusPriceLabel: selectedPackage?.product.priceString ?? null,
-      plusPackageTitle: getPlusOfferingLabel(selectedPackage),
+      plusPriceLabel: selectedPackage?.product.priceString ?? cachedSnapshot?.plusPriceLabel ?? null,
+      plusPackageTitle: getPlusOfferingLabel(selectedPackage) ?? cachedSnapshot?.plusPackageTitle ?? null,
       purchasePackage,
       purchasePlus: async () => {
         if (!selectedPackage) {
@@ -314,7 +375,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         return purchasePackage(selectedPackage);
       },
       restorePurchases: async () => {
-        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured) {
+        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured || !isOnline) {
           return { status: 'unavailable' };
         }
 
@@ -331,7 +392,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         }
       },
       presentPaywall: async () => {
-        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured) {
+        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured || !isOnline) {
           return null;
         }
 
@@ -346,7 +407,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         }
       },
       presentPaywallIfNeeded: async () => {
-        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured) {
+        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured || !isOnline) {
           return null;
         }
 
@@ -362,7 +423,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         }
       },
       presentCustomerCenter: async () => {
-        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured) {
+        if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured || !isOnline) {
           return;
         }
 
@@ -382,7 +443,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         }
       },
       refreshSubscription: async () => {
-        if (!isConfigured) {
+        if (!isConfigured || !isOnline) {
           return;
         }
 
@@ -392,9 +453,11 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     [
       annualPackage,
       availablePackages,
+      cachedSnapshot,
       currentOffering,
       customerInfo,
       isConfigured,
+      isOnline,
       isPurchaseInFlight,
       isReady,
       lifetimePackage,

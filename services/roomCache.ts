@@ -1,3 +1,4 @@
+import type { RoomInvite } from './roomService';
 import { getDB } from './database';
 
 export type RoomRole = 'owner' | 'member';
@@ -82,6 +83,21 @@ interface RoomPostRow {
   updated_at: string | null;
 }
 
+interface RoomInviteRow {
+  id: string;
+  room_id: string;
+  token: string;
+  created_by: string;
+  created_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  url: string;
+}
+
+interface CacheMetaRow {
+  last_updated_at: string | null;
+}
+
 function rowToRoomSummary(row: RoomSummaryRow): RoomSummary {
   return {
     id: row.id,
@@ -127,6 +143,19 @@ function rowToRoomPost(row: RoomPostRow): RoomPost {
   };
 }
 
+function rowToRoomInvite(row: RoomInviteRow): RoomInvite {
+  return {
+    id: row.id,
+    roomId: row.room_id,
+    token: row.token,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    revokedAt: row.revoked_at,
+    url: row.url,
+  };
+}
+
 export async function getCachedRooms(userUid: string): Promise<RoomSummary[]> {
   const db = await getDB();
   const rows = await db.getAllAsync<RoomSummaryRow>(
@@ -141,6 +170,7 @@ export async function getCachedRooms(userUid: string): Promise<RoomSummary[]> {
 
 export async function replaceCachedRooms(userUid: string, rooms: RoomSummary[]): Promise<void> {
   const db = await getDB();
+  const cachedAt = new Date().toISOString();
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM rooms_cache WHERE user_uid = ?', userUid);
 
@@ -173,6 +203,15 @@ export async function replaceCachedRooms(userUid: string, rooms: RoomSummary[]):
         room.lastPostPreview
       );
     }
+
+    await db.runAsync(
+      `INSERT INTO rooms_cache_meta (user_uid, last_updated_at)
+       VALUES (?, ?)
+       ON CONFLICT(user_uid) DO UPDATE SET
+         last_updated_at = excluded.last_updated_at`,
+      userUid,
+      cachedAt
+    );
   });
 }
 
@@ -214,6 +253,14 @@ export async function upsertCachedRoom(userUid: string, room: RoomSummary): Prom
     room.currentUserRole,
     room.memberCount,
     room.lastPostPreview
+  );
+  await db.runAsync(
+    `INSERT INTO rooms_cache_meta (user_uid, last_updated_at)
+     VALUES (?, ?)
+     ON CONFLICT(user_uid) DO UPDATE SET
+       last_updated_at = excluded.last_updated_at`,
+    userUid,
+    new Date().toISOString()
   );
 }
 
@@ -288,6 +335,7 @@ export async function replaceCachedRoomPosts(
   posts: RoomPost[]
 ): Promise<void> {
   const db = await getDB();
+  const cachedAt = new Date().toISOString();
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM room_posts_cache WHERE user_uid = ? AND room_id = ?', userUid, roomId);
 
@@ -326,6 +374,15 @@ export async function replaceCachedRoomPosts(
         post.updatedAt
       );
     }
+
+    await db.runAsync(
+      `INSERT INTO rooms_cache_meta (user_uid, last_updated_at)
+       VALUES (?, ?)
+       ON CONFLICT(user_uid) DO UPDATE SET
+         last_updated_at = excluded.last_updated_at`,
+      userUid,
+      cachedAt
+    );
   });
 }
 
@@ -346,6 +403,83 @@ export async function setCachedRoomReadState(
   );
 }
 
+export async function getCachedRoomInvite(userUid: string, roomId: string): Promise<RoomInvite | null> {
+  const db = await getDB();
+  const row = await db.getFirstAsync<RoomInviteRow>(
+    `SELECT *
+     FROM room_invites_cache
+     WHERE user_uid = ? AND room_id = ?`,
+    userUid,
+    roomId
+  );
+  return row ? rowToRoomInvite(row) : null;
+}
+
+export async function upsertCachedRoomInvite(userUid: string, invite: RoomInvite): Promise<void> {
+  const db = await getDB();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO room_invites_cache (
+        user_uid,
+        room_id,
+        id,
+        token,
+        created_by,
+        created_at,
+        expires_at,
+        revoked_at,
+        url
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_uid, room_id) DO UPDATE SET
+        id = excluded.id,
+        token = excluded.token,
+        created_by = excluded.created_by,
+        created_at = excluded.created_at,
+        expires_at = excluded.expires_at,
+        revoked_at = excluded.revoked_at,
+        url = excluded.url`,
+      userUid,
+      invite.roomId,
+      invite.id,
+      invite.token,
+      invite.createdBy,
+      invite.createdAt,
+      invite.expiresAt,
+      invite.revokedAt,
+      invite.url
+    );
+    await db.runAsync(
+      `INSERT INTO rooms_cache_meta (user_uid, last_updated_at)
+       VALUES (?, ?)
+       ON CONFLICT(user_uid) DO UPDATE SET
+         last_updated_at = excluded.last_updated_at`,
+      userUid,
+      new Date().toISOString()
+    );
+  });
+}
+
+export async function clearCachedRoomInvite(userUid: string, roomId: string): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    'DELETE FROM room_invites_cache WHERE user_uid = ? AND room_id = ?',
+    userUid,
+    roomId
+  );
+}
+
+export async function getRoomsCacheLastUpdatedAt(userUid: string): Promise<string | null> {
+  const db = await getDB();
+  const row = await db.getFirstAsync<CacheMetaRow>(
+    `SELECT last_updated_at
+     FROM rooms_cache_meta
+     WHERE user_uid = ?`,
+    userUid
+  );
+  return row?.last_updated_at ?? null;
+}
+
 export async function clearCachedRoom(userUid: string, roomId: string): Promise<void> {
   const db = await getDB();
   await db.withTransactionAsync(async () => {
@@ -356,6 +490,7 @@ export async function clearCachedRoom(userUid: string, roomId: string): Promise<
       roomId
     );
     await db.runAsync('DELETE FROM room_posts_cache WHERE user_uid = ? AND room_id = ?', userUid, roomId);
+    await db.runAsync('DELETE FROM room_invites_cache WHERE user_uid = ? AND room_id = ?', userUid, roomId);
     await db.runAsync('DELETE FROM room_read_state WHERE user_uid = ? AND room_id = ?', userUid, roomId);
   });
 }
@@ -367,7 +502,9 @@ export async function clearAllCachedRooms(userUid?: string | null): Promise<void
       await db.runAsync('DELETE FROM rooms_cache');
       await db.runAsync('DELETE FROM room_memberships_cache');
       await db.runAsync('DELETE FROM room_posts_cache');
+      await db.runAsync('DELETE FROM room_invites_cache');
       await db.runAsync('DELETE FROM room_read_state');
+      await db.runAsync('DELETE FROM rooms_cache_meta');
     });
     return;
   }
@@ -376,6 +513,8 @@ export async function clearAllCachedRooms(userUid?: string | null): Promise<void
     await db.runAsync('DELETE FROM rooms_cache WHERE user_uid = ?', userUid);
     await db.runAsync('DELETE FROM room_memberships_cache WHERE user_uid = ?', userUid);
     await db.runAsync('DELETE FROM room_posts_cache WHERE user_uid = ?', userUid);
+    await db.runAsync('DELETE FROM room_invites_cache WHERE user_uid = ?', userUid);
     await db.runAsync('DELETE FROM room_read_state WHERE user_uid = ?', userUid);
+    await db.runAsync('DELETE FROM rooms_cache_meta WHERE user_uid = ?', userUid);
   });
 }
