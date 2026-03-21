@@ -1,6 +1,10 @@
 import type { ExpoConfig } from 'expo/config';
 
 const googleMapsAndroidApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY;
+const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() ?? '';
+const googleIosUrlScheme = googleIosClientId
+  ? `com.googleusercontent.apps.${googleIosClientId.replace(/\.apps\.googleusercontent\.com$/i, '')}`
+  : '';
 
 const config = {
   name: 'Noto',
@@ -14,7 +18,6 @@ const config = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.acte.app',
-    googleServicesFile: './GoogleService-Info.plist',
   },
   android: {
     package: 'com.acte.app',
@@ -24,7 +27,6 @@ const config = {
       backgroundImage: './assets/images/android-icon-background.png',
       monochromeImage: './assets/images/android-icon-monochrome.png',
     },
-    googleServicesFile: './google-services.json',
     predictiveBackGestureEnabled: false,
     config: googleMapsAndroidApiKey
       ? {
@@ -63,9 +65,21 @@ const config = {
       },
     ],
     'expo-sqlite',
-    '@react-native-firebase/app',
-    '@react-native-firebase/auth',
-    '@react-native-google-signin/google-signin',
+    googleIosUrlScheme
+      ? [
+          '@react-native-google-signin/google-signin',
+          {
+            iosUrlScheme: googleIosUrlScheme,
+          },
+        ]
+      : null,
+    [
+      'expo-secure-store',
+      {
+        configureAndroidBackup: true,
+        faceIDPermission: 'Allow Noto to securely access your saved account session.',
+      },
+    ],
     './plugins/withExpoWidgetsBundleFix.js',
     [
       'expo-widgets',
@@ -108,10 +122,7 @@ const config = {
     'expo-font',
     'expo-image',
     'expo-web-browser',
-    './plugins/withAllowNonModularIncludes.js',
-    './plugins/withSafeFirebaseInitialization.js',
-    './plugins/withRNFirebaseAsStaticFramework.js',
-  ],
+  ].filter(Boolean),
   experiments: {
     typedRoutes: true,
     reactCompiler: true,

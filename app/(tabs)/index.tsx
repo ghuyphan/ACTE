@@ -765,7 +765,6 @@ export default function HomeScreen() {
     showSavedSheet,
     canSaveAnotherPhotoNote,
     captureTarget,
-    refreshNotes,
     createSharedPost,
     friends.length,
     sharedEnabled,

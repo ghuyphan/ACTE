@@ -1,10 +1,16 @@
-import authModule, { FirebaseAuthTypes, onAuthStateChanged } from '@react-native-firebase/auth';
+import type { Session } from '@supabase/supabase-js';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
-import { GOOGLE_WEB_CLIENT_ID, isGoogleSigninConfigured } from '../constants/auth';
+import {
+  GOOGLE_IOS_CLIENT_ID,
+  GOOGLE_WEB_CLIENT_ID,
+  isGoogleSigninConfigured,
+} from '../constants/auth';
 import i18n from '../constants/i18n';
-import { getFirebaseAuth, hasFirebaseApp } from '../utils/firebase';
+import { upsertPublicUserProfile } from '../services/publicProfileService';
+import { AppUser, mapSupabaseUser } from '../utils/appUser';
+import { getSupabase, getSupabaseErrorMessage, hasSupabaseConfig } from '../utils/supabase';
 
 export interface AuthActionResult {
   status: 'success' | 'cancelled' | 'unavailable' | 'error';
@@ -18,7 +24,7 @@ export interface EmailRegistrationInput {
 }
 
 interface AuthContextValue {
-  user: FirebaseAuthTypes.User | null;
+  user: AppUser | null;
   isReady: boolean;
   isAuthAvailable: boolean;
   isGoogleAvailable: boolean;
@@ -35,12 +41,12 @@ function isSupportedPlatform() {
   return Platform.OS === 'ios' || Platform.OS === 'android';
 }
 
-function isFirebaseAuthAvailable() {
-  return isSupportedPlatform() && hasFirebaseApp();
+function isSupabaseAuthAvailable() {
+  return isSupportedPlatform() && hasSupabaseConfig();
 }
 
 function isGoogleAuthAvailable() {
-  return isFirebaseAuthAvailable() && isGoogleSigninConfigured;
+  return isSupabaseAuthAvailable() && isGoogleSigninConfigured;
 }
 
 function getUnavailableResult(provider: 'auth' | 'google'): AuthActionResult {
@@ -54,7 +60,7 @@ function getUnavailableResult(provider: 'auth' | 'google'): AuthActionResult {
     };
   }
 
-  if (!hasFirebaseApp()) {
+  if (!hasSupabaseConfig()) {
     return {
       status: 'unavailable',
       message: i18n.t('auth.unavailableFirebase', 'Account sign-in is unavailable right now.'),
@@ -74,65 +80,122 @@ function getUnavailableResult(provider: 'auth' | 'google'): AuthActionResult {
   };
 }
 
-function mapAuthErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error && 'code' in error) {
-    const code = String((error as { code?: string }).code);
-
-    switch (code) {
-      case 'auth/invalid-email':
-        return i18n.t('auth.errorInvalidEmail', 'Enter a valid email address.');
-      case 'auth/user-not-found':
-      case 'auth/wrong-password':
-      case 'auth/invalid-credential':
-        return i18n.t('auth.errorWrongCredentials', 'The email or password is incorrect.');
-      case 'auth/email-already-in-use':
-        return i18n.t('auth.errorEmailInUse', 'That email is already being used by another account.');
-      case 'auth/weak-password':
-        return i18n.t('auth.errorWeakPassword', 'Choose a password with at least 6 characters.');
-      case 'auth/too-many-requests':
-        return i18n.t('auth.errorTooManyRequests', 'Too many attempts right now. Please try again in a bit.');
-      case 'auth/user-disabled':
-        return i18n.t('auth.errorUserDisabled', 'This account has been disabled.');
-      case 'auth/network-request-failed':
-        return i18n.t('auth.errorNetwork', 'Check your connection and try again.');
-      case 'auth/account-exists-with-different-credential':
-      case 'auth/credential-already-in-use':
-        return i18n.t(
-          'auth.errorProviderConflict',
-          'This email is already linked to a different sign-in method.'
-        );
-      default:
-        break;
-    }
-
-    if (code === statusCodes.IN_PROGRESS) {
-      return i18n.t('auth.errorInProgress', 'Sign-in is already in progress.');
-    }
-
-    if (code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-      return i18n.t(
-        'auth.errorPlayServices',
-        'Google Play Services are unavailable on this device.'
-      );
-    }
-
-    if (code === 'DEVELOPER_ERROR' || code === '10' || code === '12500') {
-      return i18n.t(
-        'auth.errorGoogleConfig',
-        'Google sign-in is not configured correctly for this build yet.'
-      );
-    }
+function normalizeGoogleIdToken(response: unknown) {
+  if (typeof response !== 'object' || !response) {
+    return null;
   }
 
-  if (error instanceof Error && error.message) {
-    return error.message;
+  if ('data' in response) {
+    const data = (response as { data?: { idToken?: string | null } }).data;
+    return data?.idToken ?? null;
+  }
+
+  if ('idToken' in response) {
+    return (response as { idToken?: string | null }).idToken ?? null;
+  }
+
+  return null;
+}
+
+function isCancelledGoogleResponse(response: unknown) {
+  return Boolean(
+    typeof response === 'object' &&
+      response &&
+      'type' in response &&
+      String((response as { type?: string }).type) === 'cancelled'
+  );
+}
+
+function mapAuthErrorMessage(error: unknown) {
+  const code =
+    typeof error === 'object' && error && 'code' in error
+      ? String((error as { code?: string }).code)
+      : '';
+  const message = getSupabaseErrorMessage(error);
+  const normalizedMessage = message.toLowerCase();
+
+  if (
+    code === 'email_address_invalid' ||
+    normalizedMessage.includes('invalid email') ||
+    normalizedMessage.includes('unable to validate email')
+  ) {
+    return i18n.t('auth.errorInvalidEmail', 'Enter a valid email address.');
+  }
+
+  if (
+    code === 'invalid_credentials' ||
+    normalizedMessage.includes('invalid login credentials') ||
+    normalizedMessage.includes('email not confirmed')
+  ) {
+    return i18n.t('auth.errorWrongCredentials', 'The email or password is incorrect.');
+  }
+
+  if (
+    code === 'user_already_exists' ||
+    normalizedMessage.includes('already registered') ||
+    normalizedMessage.includes('already been registered')
+  ) {
+    return i18n.t('auth.errorEmailInUse', 'That email is already being used by another account.');
+  }
+
+  if (normalizedMessage.includes('password should be at least')) {
+    return i18n.t('auth.errorWeakPassword', 'Choose a password with at least 6 characters.');
+  }
+
+  if (
+    code === 'over_request_rate_limit' ||
+    normalizedMessage.includes('rate limit') ||
+    normalizedMessage.includes('too many requests')
+  ) {
+    return i18n.t('auth.errorTooManyRequests', 'Too many attempts right now. Please try again in a bit.');
+  }
+
+  if (normalizedMessage.includes('network') || normalizedMessage.includes('fetch')) {
+    return i18n.t('auth.errorNetwork', 'Check your connection and try again.');
+  }
+
+  if (code === statusCodes.IN_PROGRESS) {
+    return i18n.t('auth.errorInProgress', 'Sign-in is already in progress.');
+  }
+
+  if (code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+    return i18n.t(
+      'auth.errorPlayServices',
+      'Google Play Services are unavailable on this device.'
+    );
+  }
+
+  if (code === 'DEVELOPER_ERROR' || code === '10' || code === '12500') {
+    return i18n.t(
+      'auth.errorGoogleConfig',
+      'Google sign-in is not configured correctly for this build yet.'
+    );
+  }
+
+  if (message) {
+    return message;
   }
 
   return i18n.t('auth.errorGeneric', 'Unable to sign in right now. Please try again later.');
 }
 
+async function syncUserProfile(session: Session | null) {
+  const user = mapSupabaseUser(session?.user);
+  if (!user) {
+    return null;
+  }
+
+  await upsertPublicUserProfile({
+    userUid: user.id,
+    displayName: user.displayName,
+    photoURL: user.photoURL,
+  });
+
+  return user;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [isReady, setIsReady] = useState(() => !isSupportedPlatform());
 
   useEffect(() => {
@@ -142,37 +205,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     GoogleSignin.configure({
       webClientId: GOOGLE_WEB_CLIENT_ID,
+      iosClientId: GOOGLE_IOS_CLIENT_ID,
     });
   }, []);
 
   useEffect(() => {
-    const firebaseAuth = getFirebaseAuth();
-    if (!isSupportedPlatform() || !firebaseAuth) {
+    const supabase = getSupabase();
+    if (!isSupportedPlatform() || !supabase) {
       setIsReady(true);
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (nextUser) => {
-      setUser(nextUser);
-      setIsReady(true);
+    let active = true;
+
+    void supabase.auth
+      .getSession()
+      .then(async ({ data, error }) => {
+        if (error) {
+          throw error;
+        }
+
+        const nextUser = await syncUserProfile(data.session ?? null);
+        if (active) {
+          setUser(nextUser);
+          setIsReady(true);
+        }
+      })
+      .catch((error) => {
+        console.warn('[auth] Failed to load Supabase session:', error);
+        if (active) {
+          setUser(null);
+          setIsReady(true);
+        }
+      });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      void syncUserProfile(session)
+        .then((nextUser) => {
+          if (!active) {
+            return;
+          }
+
+          setUser(nextUser);
+          setIsReady(true);
+        })
+        .catch((error) => {
+          console.warn('[auth] Failed to sync auth state:', error);
+          if (active) {
+            setUser(mapSupabaseUser(session?.user));
+            setIsReady(true);
+          }
+        });
     });
 
-    return unsubscribe;
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       isReady,
-      isAuthAvailable: isFirebaseAuthAvailable(),
+      isAuthAvailable: isSupabaseAuthAvailable(),
       isGoogleAvailable: isGoogleAuthAvailable(),
       signInWithGoogle: async () => {
         if (!isGoogleAuthAvailable()) {
           return getUnavailableResult('google');
         }
 
-        const firebaseAuth = getFirebaseAuth();
-        if (!firebaseAuth) {
+        const supabase = getSupabase();
+        if (!supabase) {
           return getUnavailableResult('auth');
         }
 
@@ -182,12 +288,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           const response = await GoogleSignin.signIn();
-
-          if (response.type === 'cancelled') {
+          if (isCancelledGoogleResponse(response)) {
             return { status: 'cancelled' };
           }
 
-          const idToken = response.data.idToken;
+          const idToken = normalizeGoogleIdToken(response);
           if (!idToken) {
             return {
               status: 'error',
@@ -198,8 +303,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             };
           }
 
-          const credential = authModule.GoogleAuthProvider.credential(idToken);
-          await firebaseAuth.signInWithCredential(credential);
+          const { data, error } = await supabase.auth.signInWithIdToken({
+            provider: 'google',
+            token: idToken,
+          });
+          if (error) {
+            throw error;
+          }
+
+          const nextUser = await syncUserProfile(data.session ?? null);
+          setUser(nextUser);
           return { status: 'success' };
         } catch (error: unknown) {
           if (typeof error === 'object' && error && 'code' in error) {
@@ -216,17 +329,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
       signInWithEmail: async (email: string, password: string) => {
-        if (!isFirebaseAuthAvailable()) {
+        if (!isSupabaseAuthAvailable()) {
           return getUnavailableResult('auth');
         }
 
-        const firebaseAuth = getFirebaseAuth();
-        if (!firebaseAuth) {
+        const supabase = getSupabase();
+        if (!supabase) {
           return getUnavailableResult('auth');
         }
 
         try {
-          await firebaseAuth.signInWithEmailAndPassword(email.trim(), password);
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password,
+          });
+          if (error) {
+            throw error;
+          }
+
+          const nextUser = await syncUserProfile(data.session ?? null);
+          setUser(nextUser);
           return { status: 'success' };
         } catch (error) {
           return {
@@ -236,22 +358,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
       registerWithEmail: async ({ email, password, displayName }) => {
-        if (!isFirebaseAuthAvailable()) {
+        if (!isSupabaseAuthAvailable()) {
           return getUnavailableResult('auth');
         }
 
-        const firebaseAuth = getFirebaseAuth();
-        if (!firebaseAuth) {
+        const supabase = getSupabase();
+        if (!supabase) {
           return getUnavailableResult('auth');
         }
 
         try {
-          const credential = await firebaseAuth.createUserWithEmailAndPassword(email.trim(), password);
-          const trimmedName = displayName?.trim();
+          const trimmedName = displayName?.trim() || null;
+          const { data, error } = await supabase.auth.signUp({
+            email: email.trim(),
+            password,
+            options: {
+              data: {
+                display_name: trimmedName,
+                displayName: trimmedName,
+              },
+            },
+          });
+          if (error) {
+            throw error;
+          }
 
-          if (trimmedName) {
-            await credential.user.updateProfile({ displayName: trimmedName });
-            setUser(credential.user);
+          const nextUser = await syncUserProfile(data.session ?? null);
+          setUser(nextUser ?? mapSupabaseUser(data.user));
+          return { status: 'success' };
+        } catch (error) {
+          return {
+            status: 'error',
+            message: mapAuthErrorMessage(error),
+          };
+        }
+      },
+      sendPasswordReset: async (email: string) => {
+        if (!isSupabaseAuthAvailable()) {
+          return getUnavailableResult('auth');
+        }
+
+        const supabase = getSupabase();
+        if (!supabase) {
+          return getUnavailableResult('auth');
+        }
+
+        try {
+          const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+            redirectTo: undefined,
+          });
+          if (error) {
+            throw error;
           }
 
           return { status: 'success' };
@@ -262,38 +419,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
         }
       },
-      sendPasswordReset: async (email: string) => {
-        if (!isFirebaseAuthAvailable()) {
-          return getUnavailableResult('auth');
-        }
-
-        const firebaseAuth = getFirebaseAuth();
-        if (!firebaseAuth) {
-          return getUnavailableResult('auth');
-        }
-
-        try {
-          await firebaseAuth.sendPasswordResetEmail(email.trim());
-          return { status: 'success' };
-        } catch (error) {
-          return {
-            status: 'error',
-            message: mapAuthErrorMessage(error),
-          };
-        }
-      },
       signOut: async () => {
-        const firebaseAuth = getFirebaseAuth();
+        const supabase = getSupabase();
 
         try {
           await GoogleSignin.signOut();
         } catch {
-          // Ignore Google sign-out failures and still clear the Firebase session.
+          // Ignore Google sign-out failures and still clear the Supabase session.
         }
 
-        if (firebaseAuth) {
-          await firebaseAuth.signOut();
+        if (supabase) {
+          const { error } = await supabase.auth.signOut();
+          if (error) {
+            throw error;
+          }
         }
+
+        setUser(null);
       },
     }),
     [isReady, user]

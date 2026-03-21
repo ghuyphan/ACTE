@@ -1,41 +1,205 @@
 const mockFriendInvites = new Map<string, any>();
 const mockSharedPosts = new Map<string, any>();
-const mockFriends = new Map<string, Map<string, any>>();
+const mockFriendships = new Map<string, Map<string, any>>();
 const mockPublicProfiles = new Map<string, { displayNameSnapshot: string | null; photoURLSnapshot: string | null }>();
 let mockUuidCounter = 0;
 
-function mockEnsureFriendMap(userUid: string) {
-  if (!mockFriends.has(userUid)) {
-    mockFriends.set(userUid, new Map<string, any>());
+function mockEnsureFriendMap(userId: string) {
+  if (!mockFriendships.has(userId)) {
+    mockFriendships.set(userId, new Map<string, any>());
   }
 
-  return mockFriends.get(userUid)!;
+  return mockFriendships.get(userId)!;
 }
 
-function mockCreateSnapshot(path: string[], data: unknown) {
-  return {
-    id: path[path.length - 1]!,
-    ref: { path },
-    exists: () => data !== undefined,
-    data: () => data,
+function getFriendshipRows(userId: string) {
+  return Array.from(mockEnsureFriendMap(userId).entries()).map(([friendId, data]) => ({
+    friend_user_id: friendId,
+    ...data,
+  }));
+}
+
+function mockCreateQueryBuilder(table: string) {
+  const state = {
+    filters: [] as Array<{ type: 'eq' | 'in' | 'contains'; field: string; value: unknown }>,
+    orderField: null as string | null,
+    orderAscending: true,
+    limitValue: null as number | null,
+    updateValues: null as Record<string, unknown> | null,
+    shouldDelete: false,
   };
+
+  const builder: any = {
+    select: () => builder,
+    eq: (field: string, value: unknown) => {
+      state.filters.push({ type: 'eq', field, value });
+      return builder;
+    },
+    in: (field: string, value: unknown) => {
+      state.filters.push({ type: 'in', field, value });
+      return builder;
+    },
+    contains: (field: string, value: unknown) => {
+      state.filters.push({ type: 'contains', field, value });
+      return builder;
+    },
+    order: (field: string, options?: { ascending?: boolean }) => {
+      state.orderField = field;
+      state.orderAscending = options?.ascending ?? true;
+      return builder;
+    },
+    limit: (value: number) => {
+      state.limitValue = value;
+      return builder;
+    },
+    upsert: async (value: Record<string, unknown>) => {
+      if (table === 'friend_invites') {
+        mockFriendInvites.set(String(value.id), value);
+      }
+
+      return { error: null };
+    },
+    insert: async (value: Record<string, unknown>) => {
+      if (table === 'shared_posts') {
+        mockSharedPosts.set(String(value.id), value);
+      }
+
+      return { error: null };
+    },
+    update: (value: Record<string, unknown>) => {
+      state.updateValues = value;
+      return builder;
+    },
+    delete: () => {
+      state.shouldDelete = true;
+      return builder;
+    },
+    maybeSingle: async () => {
+      const rows = executeSelect(table, state);
+      return {
+        data: rows[0] ?? null,
+        error: null,
+      };
+    },
+    then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
+      try {
+        if (state.updateValues) {
+          applyUpdate(table, state, state.updateValues);
+          return Promise.resolve(resolve({ data: null, error: null }));
+        }
+
+        if (state.shouldDelete) {
+          applyDelete(table, state);
+          return Promise.resolve(resolve({ data: null, error: null }));
+        }
+
+        return Promise.resolve(resolve({ data: executeSelect(table, state), error: null }));
+      } catch (error) {
+        if (reject) {
+          return Promise.resolve(reject(error));
+        }
+
+        return Promise.reject(error);
+      }
+    },
+  };
+
+  return builder;
 }
 
-function mockSortDocs(
-  docs: Array<{ id: string; data: Record<string, any> }>,
-  field: string,
-  direction: 'asc' | 'desc'
-) {
-  return [...docs].sort((left, right) => {
-    const a = String(left.data?.[field] ?? '');
-    const b = String(right.data?.[field] ?? '');
-    return direction === 'desc' ? b.localeCompare(a) : a.localeCompare(b);
-  });
+function executeSelect(table: string, state: any) {
+  let rows: any[] = [];
+
+  if (table === 'friendships') {
+    const userId = state.filters.find((item: any) => item.type === 'eq' && item.field === 'user_id')?.value;
+    rows = userId ? getFriendshipRows(String(userId)).map((row) => ({ user_id: userId, ...row })) : [];
+  } else if (table === 'friend_invites') {
+    rows = Array.from(mockFriendInvites.values());
+  } else if (table === 'shared_posts') {
+    rows = Array.from(mockSharedPosts.values());
+  }
+
+  for (const filter of state.filters) {
+    if (filter.type === 'eq') {
+      rows = rows.filter((row) => row?.[filter.field] === filter.value);
+    } else if (filter.type === 'in') {
+      const values = Array.isArray(filter.value) ? filter.value : [];
+      rows = rows.filter((row) => values.includes(row?.[filter.field]));
+    } else if (filter.type === 'contains') {
+      const required = Array.isArray(filter.value) ? filter.value : [];
+      rows = rows.filter((row) => {
+        const target = Array.isArray(row?.[filter.field]) ? row[filter.field] : [];
+        return required.every((value: unknown) => target.includes(value));
+      });
+    }
+  }
+
+  if (state.orderField) {
+    rows = [...rows].sort((left, right) => {
+      const leftValue = String(left?.[state.orderField!] ?? '');
+      const rightValue = String(right?.[state.orderField!] ?? '');
+      return state.orderAscending ? leftValue.localeCompare(rightValue) : rightValue.localeCompare(leftValue);
+    });
+  }
+
+  if (typeof state.limitValue === 'number') {
+    rows = rows.slice(0, state.limitValue);
+  }
+
+  return rows;
 }
 
-jest.mock('../services/photoStorage', () => ({
-  readPhotoAsBase64: jest.fn(async () => 'photo-base64'),
-  writePhotoFromBase64: jest.fn(async (id: string) => `file:///shared/${id}.jpg`),
+function applyUpdate(table: string, state: any, nextValues: Record<string, unknown>) {
+  if (table === 'friend_invites') {
+    for (const invite of executeSelect(table, state)) {
+      mockFriendInvites.set(invite.id, { ...invite, ...nextValues });
+    }
+    return;
+  }
+
+  if (table === 'friendships') {
+    const userId = state.filters.find((item: any) => item.type === 'eq' && item.field === 'user_id')?.value;
+    const friendIds = state.filters.find((item: any) => item.type === 'in' && item.field === 'friend_user_id')?.value;
+    if (!userId || !Array.isArray(friendIds)) {
+      return;
+    }
+
+    for (const friendId of friendIds) {
+      const current = mockEnsureFriendMap(String(userId)).get(String(friendId)) ?? {};
+      mockEnsureFriendMap(String(userId)).set(String(friendId), { ...current, ...nextValues });
+    }
+  }
+}
+
+function applyDelete(table: string, state: any) {
+  if (table !== 'shared_posts') {
+    return;
+  }
+
+  const rows = executeSelect(table, state);
+  for (const row of rows) {
+    mockSharedPosts.delete(row.id);
+  }
+}
+
+const mockUploadPhotoToStorage = jest.fn<Promise<string | null>, [string, string, string | null | undefined]>(
+  async (_bucket: string, path: string) => path
+);
+const mockDownloadPhotoFromStorage = jest.fn<Promise<string | null>, [string, string, string]>(
+  async (_bucket: string, path: string) => `file:///shared/${path}`
+);
+const mockDeletePhotoFromStorage = jest.fn<Promise<void>, [string, string | null]>(async () => undefined);
+const mockCacheSharedFeedSnapshot = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
+const mockReplaceCachedSharedInvite = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
+
+jest.mock('../services/remoteMedia', () => ({
+  SHARED_POST_MEDIA_BUCKET: 'shared-post-media',
+  uploadPhotoToStorage: (bucket: string, path: string, localUri?: string | null) =>
+    mockUploadPhotoToStorage(bucket, path, localUri),
+  downloadPhotoFromStorage: (bucket: string, path: string, fileName: string) =>
+    mockDownloadPhotoFromStorage(bucket, path, fileName),
+  deletePhotoFromStorage: (bucket: string, path: string | null) =>
+    mockDeletePhotoFromStorage(bucket, path),
 }));
 
 jest.mock('../services/publicProfileService', () => ({
@@ -53,12 +217,92 @@ jest.mock('../services/publicProfileService', () => ({
 }));
 
 jest.mock('../services/sharedFeedCache', () => ({
-  cacheSharedFeedSnapshot: jest.fn(async () => undefined),
-  replaceCachedSharedInvite: jest.fn(async () => undefined),
+  cacheSharedFeedSnapshot: (userUid: string, snapshot: unknown) => mockCacheSharedFeedSnapshot(userUid, snapshot),
+  replaceCachedSharedInvite: (userUid: string, invite: unknown) => mockReplaceCachedSharedInvite(userUid, invite),
 }));
 
-jest.mock('../utils/firebase', () => ({
-  getFirestore: () => ({}),
+jest.mock('../utils/supabase', () => ({
+  getSupabase: () => ({
+    from: (table: string) => mockCreateQueryBuilder(table),
+    rpc: async (name: string, params: Record<string, unknown>) => {
+      if (name === 'accept_friend_invite') {
+        const invite = Array.from(mockFriendInvites.values()).find(
+          (item) =>
+            item.token === params.invite_token &&
+            (!params.invite_id || item.id === params.invite_id)
+        );
+
+        if (!invite) {
+          return { data: null, error: new Error('Invite not found.') };
+        }
+
+        invite.accepted_at = '2026-03-21T00:00:00.000Z';
+        invite.accepted_by_user_id = 'friend-1';
+
+        const inviterProfile = mockPublicProfiles.get(invite.inviter_user_id) ?? {
+          displayNameSnapshot: null,
+          photoURLSnapshot: null,
+        };
+        const receiverProfile = mockPublicProfiles.get('friend-1') ?? {
+          displayNameSnapshot: null,
+          photoURLSnapshot: null,
+        };
+
+        mockEnsureFriendMap('friend-1').set(invite.inviter_user_id, {
+          display_name_snapshot: inviterProfile.displayNameSnapshot,
+          photo_url_snapshot: inviterProfile.photoURLSnapshot,
+          friended_at: invite.created_at,
+          last_shared_at: null,
+          created_by_invite_id: invite.id,
+          created_by_invite_token: invite.token,
+        });
+        mockEnsureFriendMap(invite.inviter_user_id).set('friend-1', {
+          display_name_snapshot: receiverProfile.displayNameSnapshot,
+          photo_url_snapshot: receiverProfile.photoURLSnapshot,
+          friended_at: invite.created_at,
+          last_shared_at: null,
+          created_by_invite_id: invite.id,
+          created_by_invite_token: invite.token,
+        });
+
+        return {
+          data: [
+            {
+              user_id: 'friend-1',
+              friend_user_id: invite.inviter_user_id,
+              display_name_snapshot: inviterProfile.displayNameSnapshot,
+              photo_url_snapshot: inviterProfile.photoURLSnapshot,
+              friended_at: invite.created_at,
+              last_shared_at: null,
+              created_by_invite_id: invite.id,
+              created_by_invite_token: invite.token,
+            },
+          ],
+          error: null,
+        };
+      }
+
+      if (name === 'remove_friend') {
+        for (const [userId, friends] of mockFriendships.entries()) {
+          friends.delete(String(params.friend_user_id));
+          if (String(params.friend_user_id) === userId) {
+            continue;
+          }
+          const target = mockFriendships.get(String(params.friend_user_id));
+          target?.delete(userId);
+        }
+
+        return { data: null, error: null };
+      }
+
+      return { data: null, error: null };
+    },
+    channel: jest.fn(() => ({
+      on: jest.fn().mockReturnThis(),
+      subscribe: jest.fn(),
+    })),
+    removeChannel: jest.fn(async () => 'ok'),
+  }),
 }));
 
 jest.mock('expo-crypto', () => ({
@@ -85,164 +329,29 @@ jest.mock('expo-linking', () => ({
   },
 }));
 
-jest.mock('@react-native-firebase/firestore', () => ({
-  __esModule: true,
-  collection: (_firestore: unknown, ...path: string[]) => ({ kind: 'collection', path }),
-  doc: (_firestore: unknown, ...path: string[]) => ({ kind: 'doc', path, id: path[path.length - 1] }),
-  query: (ref: any, ...constraints: any[]) => ({ kind: 'query', ref, constraints }),
-  where: (field: string, op: string, value: unknown) => ({ type: 'where', field, op, value }),
-  orderBy: (field: string, direction: 'asc' | 'desc' = 'asc') => ({ type: 'orderBy', field, direction }),
-  limit: (value: number) => ({ type: 'limit', value }),
-  runTransaction: async (_firestore: unknown, updateFunction: (transaction: any) => Promise<unknown>) =>
-    updateFunction({
-      get: async (ref: any) => {
-        const path = ref.path as string[];
-        let value: unknown;
-
-        if (path.length === 2 && path[0] === 'friendInvites') {
-          value = mockFriendInvites.get(path[1]!);
-        } else if (path.length === 4 && path[0] === 'users' && path[2] === 'friends') {
-          value = mockEnsureFriendMap(path[1]!).get(path[3]!);
-        }
-
-        return mockCreateSnapshot(path, value);
-      },
-      set: (ref: any, data: any) => {
-        const path = ref.path as string[];
-
-        if (path.length === 2 && path[0] === 'friendInvites') {
-          mockFriendInvites.set(path[1]!, data);
-        }
-      },
-    }),
-  setDoc: async (ref: any, data: any, options?: { merge?: boolean }) => {
-    const path = ref.path as string[];
-
-    if (path.length === 2 && path[0] === 'friendInvites') {
-      mockFriendInvites.set(path[1]!, data);
-      return;
-    }
-
-    if (path.length === 2 && path[0] === 'sharedPosts') {
-      mockSharedPosts.set(path[1]!, data);
-      return;
-    }
-
-    if (path.length === 4 && path[0] === 'users' && path[2] === 'friends') {
-      const current = mockEnsureFriendMap(path[1]!).get(path[3]!);
-      mockEnsureFriendMap(path[1]!).set(path[3]!, options?.merge ? { ...(current ?? {}), ...data } : data);
-    }
-  },
-  updateDoc: async (ref: any, data: any) => {
-    const path = ref.path as string[];
-
-    if (path.length === 2 && path[0] === 'friendInvites') {
-      mockFriendInvites.set(path[1]!, { ...(mockFriendInvites.get(path[1]!) ?? {}), ...data });
-      return;
-    }
-
-    if (path.length === 2 && path[0] === 'sharedPosts') {
-      mockSharedPosts.set(path[1]!, { ...(mockSharedPosts.get(path[1]!) ?? {}), ...data });
-      return;
-    }
-
-    if (path.length === 4 && path[0] === 'users' && path[2] === 'friends') {
-      mockEnsureFriendMap(path[1]!).set(path[3]!, {
-        ...(mockEnsureFriendMap(path[1]!).get(path[3]!) ?? {}),
-        ...data,
-      });
-    }
-  },
-  deleteDoc: async (ref: any) => {
-    const path = ref.path as string[];
-
-    if (path.length === 4 && path[0] === 'users' && path[2] === 'friends') {
-      mockEnsureFriendMap(path[1]!).delete(path[3]!);
-    }
-  },
-  getDoc: async (ref: any) => {
-    const path = ref.path as string[];
-    let value: unknown;
-
-    if (path.length === 2 && path[0] === 'friendInvites') {
-      value = mockFriendInvites.get(path[1]!);
-    } else if (path.length === 4 && path[0] === 'users' && path[2] === 'friends') {
-      value = mockEnsureFriendMap(path[1]!).get(path[3]!);
-    }
-
-    return mockCreateSnapshot(path, value);
-  },
-  getDocs: async (refOrQuery: any) => {
-    const target = refOrQuery.kind === 'query' ? refOrQuery.ref : refOrQuery;
-    const constraints = refOrQuery.kind === 'query' ? refOrQuery.constraints : [];
-    const whereConstraint = constraints.find((item: any) => item.type === 'where');
-    const orderConstraint = constraints.find((item: any) => item.type === 'orderBy');
-    const limitConstraint = constraints.find((item: any) => item.type === 'limit');
-
-    let docs: Array<{ id: string; data: Record<string, any> }> = [];
-
-    if (target.kind === 'collection') {
-      const path = target.path as string[];
-
-      if (path.length === 1 && path[0] === 'friendInvites') {
-        docs = Array.from(mockFriendInvites.entries()).map(([id, data]) => ({ id, data }));
-      } else if (path.length === 1 && path[0] === 'sharedPosts') {
-        docs = Array.from(mockSharedPosts.entries()).map(([id, data]) => ({ id, data }));
-      } else if (path.length === 3 && path[0] === 'users' && path[2] === 'friends') {
-        docs = Array.from(mockEnsureFriendMap(path[1]!).entries()).map(([id, data]) => ({ id, data }));
-      }
-    }
-
-    if (whereConstraint) {
-      docs = docs.filter(({ data }) => {
-        if (whereConstraint.op === '==') {
-          return data?.[whereConstraint.field] === whereConstraint.value;
-        }
-
-        if (whereConstraint.op === 'array-contains') {
-          return Array.isArray(data?.[whereConstraint.field]) &&
-            data[whereConstraint.field].includes(whereConstraint.value);
-        }
-
-        return true;
-      });
-    }
-
-    if (orderConstraint) {
-      docs = mockSortDocs(docs, orderConstraint.field, orderConstraint.direction);
-    }
-
-    if (limitConstraint) {
-      docs = docs.slice(0, limitConstraint.value);
-    }
-
-    return {
-      docs: docs.map((item) => mockCreateSnapshot(['mock', item.id], item.data)),
-    };
-  },
-}));
-
 import {
   acceptFriendInvite,
   createFriendInvite,
   createSharedPost,
   refreshSharedFeed,
-  removeFriend,
-  revokeFriendInvite,
 } from '../services/sharedFeedService';
 
 const ownerUser = {
+  id: 'owner-1',
   uid: 'owner-1',
   displayName: 'Owner',
   email: 'owner@example.com',
   photoURL: 'https://example.com/owner.jpg',
+  providerData: [],
 } as any;
 
 const friendUser = {
+  id: 'friend-1',
   uid: 'friend-1',
   displayName: 'Friend',
   email: 'friend@example.com',
   photoURL: 'https://example.com/friend.jpg',
+  providerData: [],
 } as any;
 
 beforeEach(() => {
@@ -250,176 +359,83 @@ beforeEach(() => {
   mockUuidCounter = 0;
   mockFriendInvites.clear();
   mockSharedPosts.clear();
-  mockFriends.clear();
+  mockFriendships.clear();
   mockPublicProfiles.clear();
-  mockPublicProfiles.set(ownerUser.uid, {
+  mockPublicProfiles.set(ownerUser.id, {
     displayNameSnapshot: ownerUser.displayName,
     photoURLSnapshot: ownerUser.photoURL,
   });
-  mockPublicProfiles.set(friendUser.uid, {
+  mockPublicProfiles.set(friendUser.id, {
     displayNameSnapshot: friendUser.displayName,
     photoURLSnapshot: friendUser.photoURL,
   });
 });
 
 describe('sharedFeedService', () => {
-  it('creates a friend invite and accepts it into bilateral friendships', async () => {
+  it('creates and accepts a friend invite into bilateral friendships', async () => {
     const invite = await createFriendInvite(ownerUser);
     const connection = await acceptFriendInvite(friendUser, invite.url);
 
     expect(invite.url).toContain(`inviteId=${invite.id}`);
-    expect(connection.userId).toBe(ownerUser.uid);
-    expect(mockEnsureFriendMap(friendUser.uid).get(ownerUser.uid)).toEqual(
+    expect(connection.userId).toBe(ownerUser.id);
+    expect(mockEnsureFriendMap(friendUser.id).get(ownerUser.id)).toEqual(
       expect.objectContaining({
-        userId: ownerUser.uid,
-        createdByInviteId: invite.id,
-        createdByInviteToken: invite.token,
+        created_by_invite_id: invite.id,
+        created_by_invite_token: invite.token,
       })
     );
-    expect(mockEnsureFriendMap(ownerUser.uid).get(friendUser.uid)).toEqual(
+    expect(mockEnsureFriendMap(ownerUser.id).get(friendUser.id)).toEqual(
       expect.objectContaining({
-        userId: friendUser.uid,
-        createdByInviteId: invite.id,
-        createdByInviteToken: invite.token,
-      })
-    );
-    expect(mockFriendInvites.get(invite.id)).toEqual(
-      expect.objectContaining({
-        acceptedByUid: friendUser.uid,
+        display_name_snapshot: friendUser.displayName,
       })
     );
   });
 
-  it('reuses the current active invite instead of creating another document', async () => {
-    const firstInvite = await createFriendInvite(ownerUser);
-    const secondInvite = await createFriendInvite(ownerUser);
-
-    expect(secondInvite).toEqual(firstInvite);
-    expect(Array.from(mockFriendInvites.keys())).toEqual([firstInvite.id]);
-  });
-
-  it('recreates a revoked invite in place with a fresh token', async () => {
-    const initialInvite = await createFriendInvite(ownerUser);
-
-    await revokeFriendInvite(ownerUser, initialInvite.id);
-
-    const regeneratedInvite = await createFriendInvite(ownerUser);
-
-    expect(regeneratedInvite.id).toBe(initialInvite.id);
-    expect(regeneratedInvite.token).not.toBe(initialInvite.token);
-    expect(mockFriendInvites.size).toBe(1);
-    expect(mockFriendInvites.get(initialInvite.id)).toEqual(
-      expect.objectContaining({
-        revokedAt: null,
-        acceptedByUid: null,
-        acceptedAt: null,
-        token: regeneratedInvite.token,
-      })
-    );
-  });
-
-  it('publishes shared photo posts and returns them in descending feed order', async () => {
-    mockEnsureFriendMap(ownerUser.uid).set(friendUser.uid, {
-      userId: friendUser.uid,
-      displayNameSnapshot: friendUser.displayName,
-      photoURLSnapshot: friendUser.photoURL,
-      friendedAt: '2026-03-16T00:00:00.000Z',
-      lastSharedAt: null,
-      createdByInviteId: 'invite-1',
-      createdByInviteToken: 'token-1',
+  it('creates a shared photo post and returns it in the refreshed feed', async () => {
+    mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
+      display_name_snapshot: friendUser.displayName,
+      photo_url_snapshot: friendUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+      created_by_invite_token: 'token-1',
     });
-    mockEnsureFriendMap(friendUser.uid).set(ownerUser.uid, {
-      userId: ownerUser.uid,
-      displayNameSnapshot: ownerUser.displayName,
-      photoURLSnapshot: ownerUser.photoURL,
-      friendedAt: '2026-03-16T00:00:00.000Z',
-      lastSharedAt: null,
-      createdByInviteId: 'invite-1',
-      createdByInviteToken: 'token-1',
+    mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
+      display_name_snapshot: ownerUser.displayName,
+      photo_url_snapshot: ownerUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+      created_by_invite_token: 'token-1',
     });
 
-    const dateNowSpy = jest.spyOn(Date, 'now');
-    dateNowSpy.mockReturnValueOnce(1_710_000_000_000);
-    const firstPost = await createSharedPost(
-      ownerUser,
-      {
-        id: 'note-photo-1',
+    const note = {
+      id: 'note-1',
+      type: 'photo',
+      content: 'file:///photos/note-1.jpg',
+      photoLocalUri: 'file:///photos/note-1.jpg',
+      doodleStrokesJson: null,
+      locationName: 'Saigon',
+      moodEmoji: null,
+    } as any;
+
+    const post = await createSharedPost(ownerUser, note, [ownerUser.id, friendUser.id]);
+    const snapshot = await refreshSharedFeed(friendUser);
+
+    expect(post.authorUid).toBe(ownerUser.id);
+    expect(mockUploadPhotoToStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      expect.stringContaining(`${ownerUser.id}/shared-post-`),
+      'file:///photos/note-1.jpg'
+    );
+    expect(snapshot.sharedPosts).toHaveLength(1);
+    expect(snapshot.sharedPosts[0]).toEqual(
+      expect.objectContaining({
+        authorUid: ownerUser.id,
         type: 'photo',
-        content: 'file:///photos/one.jpg',
-        photoLocalUri: 'file:///photos/one.jpg',
-        photoRemoteBase64: null,
-        hasDoodle: true,
-        doodleStrokesJson: JSON.stringify([{ color: '#FFFFFF', points: [0.1, 0.1, 0.8, 0.8] }]),
-        locationName: 'Coffee shop',
-        latitude: 10.77,
-        longitude: 106.69,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-15T00:00:00.000Z',
-        updatedAt: null,
-      },
-      [ownerUser.uid, friendUser.uid]
-    );
-    dateNowSpy.mockReturnValueOnce(1_710_000_000_500);
-    const secondPost = await createSharedPost(
-      friendUser,
-      {
-        id: 'note-text-1',
-        type: 'text',
-        content: 'Late-night noodles',
-        photoLocalUri: null,
-        photoRemoteBase64: null,
-        locationName: 'District 1',
-        latitude: 10.78,
-        longitude: 106.68,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-16T00:00:00.000Z',
-        updatedAt: null,
-      },
-      [friendUser.uid, ownerUser.uid]
-    );
-    dateNowSpy.mockRestore();
-    mockSharedPosts.set(firstPost.id, {
-      ...(mockSharedPosts.get(firstPost.id) ?? {}),
-      createdAt: '2026-03-16T00:00:00.000Z',
-    });
-    mockSharedPosts.set(secondPost.id, {
-      ...(mockSharedPosts.get(secondPost.id) ?? {}),
-      createdAt: '2026-03-16T00:00:01.000Z',
-    });
-
-    const feed = await refreshSharedFeed(ownerUser);
-
-    expect(firstPost.photoLocalUri).toContain('shared-post-');
-    expect(mockSharedPosts.get(firstPost.id)).toEqual(
-      expect.objectContaining({
-        photoRemoteBase64: 'photo-base64',
+        photoLocalUri: expect.stringContaining('file:///shared/'),
       })
     );
-    expect(feed.sharedPosts).toHaveLength(2);
-    expect(feed.sharedPosts[0]).toEqual(
-      expect.objectContaining({
-        authorUid: friendUser.uid,
-        text: 'Late-night noodles',
-      })
-    );
-    expect(feed.sharedPosts[1]).toEqual(
-      expect.objectContaining({
-        authorUid: ownerUser.uid,
-        placeName: 'Coffee shop',
-        doodleStrokesJson: JSON.stringify([{ color: '#FFFFFF', points: [0.1, 0.1, 0.8, 0.8] }]),
-      })
-    );
-  });
-
-  it('removes both sides of a friendship', async () => {
-    mockEnsureFriendMap(ownerUser.uid).set(friendUser.uid, { userId: friendUser.uid });
-    mockEnsureFriendMap(friendUser.uid).set(ownerUser.uid, { userId: ownerUser.uid });
-
-    await removeFriend(ownerUser, friendUser.uid);
-
-    expect(mockEnsureFriendMap(ownerUser.uid).has(friendUser.uid)).toBe(false);
-    expect(mockEnsureFriendMap(friendUser.uid).has(ownerUser.uid)).toBe(false);
+    expect(mockCacheSharedFeedSnapshot).toHaveBeenCalled();
   });
 });

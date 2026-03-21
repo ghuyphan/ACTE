@@ -1,27 +1,12 @@
 import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  runTransaction,
-  setDoc,
-  updateDoc,
-  where,
-} from '@react-native-firebase/firestore';
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import { AppUser, getUserDisplayName } from '../utils/appUser';
+import { getSupabase } from '../utils/supabase';
 import { Note, NoteType } from './database';
+import { deletePhotoFromStorage, downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET, uploadPhotoToStorage } from './remoteMedia';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
-import { readPhotoAsBase64, writePhotoFromBase64 } from './photoStorage';
 import { getPublicUserProfile, upsertPublicUserProfile } from './publicProfileService';
 import { cacheSharedFeedSnapshot, replaceCachedSharedInvite } from './sharedFeedCache';
-import { getFirestore } from '../utils/firebase';
 
 export interface FriendConnection {
   userId: string;
@@ -75,67 +60,70 @@ interface SubscribeToSharedFeedOptions {
   onError?: (error: unknown) => void;
 }
 
-interface FriendConnectionRecord {
-  userId: string;
-  displayNameSnapshot: string | null;
-  photoURLSnapshot: string | null;
-  friendedAt: string;
-  lastSharedAt: string | null;
-  createdByInviteId: string | null;
-  createdByInviteToken: string | null;
+interface FriendshipRow {
+  user_id: string;
+  friend_user_id: string;
+  display_name_snapshot: string | null;
+  photo_url_snapshot: string | null;
+  friended_at: string;
+  last_shared_at: string | null;
+  created_by_invite_id: string | null;
+  created_by_invite_token: string | null;
 }
 
-interface FriendInviteRecord {
-  inviterUid: string;
-  inviterDisplayNameSnapshot: string | null;
-  inviterPhotoURLSnapshot: string | null;
+interface FriendInviteRow {
+  id: string;
+  inviter_user_id: string;
+  inviter_display_name_snapshot: string | null;
+  inviter_photo_url_snapshot: string | null;
   token: string;
-  createdAt: string;
-  revokedAt: string | null;
-  acceptedByUid: string | null;
-  acceptedAt: string | null;
-  expiresAt: string | null;
+  created_at: string;
+  revoked_at: string | null;
+  accepted_by_user_id: string | null;
+  accepted_at: string | null;
+  expires_at: string | null;
 }
 
-interface SharedPostRecord {
-  authorUid: string;
-  authorDisplayName: string | null;
-  authorPhotoURLSnapshot: string | null;
-  audienceUserIds: string[];
+interface SharedPostRow {
+  id: string;
+  author_user_id: string;
+  author_display_name: string | null;
+  author_photo_url_snapshot: string | null;
+  audience_user_ids: string[];
   type: NoteType;
   text: string;
-  photoRemoteBase64: string | null;
-  doodleStrokesJson?: string | null;
-  placeName: string | null;
-  sourceNoteId: string | null;
-  createdAt: string;
-  updatedAt: string | null;
+  photo_path: string | null;
+  doodle_strokes_json?: string | null;
+  place_name: string | null;
+  source_note_id: string | null;
+  created_at: string;
+  updated_at: string | null;
 }
 
 const ACTIVE_FRIEND_INVITE_QUERY_LIMIT = 50;
 
-function requireFirestore() {
-  const firestore = getFirestore();
-  if (!firestore) {
+function requireSupabase() {
+  const supabase = getSupabase();
+  if (!supabase) {
     throw new Error('Shared feed is unavailable in this build.');
   }
 
-  return firestore;
+  return supabase;
 }
 
 function getNowIso() {
   return new Date().toISOString();
 }
 
-function getDisplayName(user: FirebaseAuthTypes.User) {
-  return user.displayName?.trim() || user.email?.trim() || 'Noto user';
+function getDisplayName(user: AppUser) {
+  return getUserDisplayName(user);
 }
 
-function isInviteActive(record: FriendInviteRecord, nowMs = Date.now()) {
+function isInviteActive(record: FriendInviteRow, nowMs = Date.now()) {
   return (
-    !record.revokedAt &&
-    !record.acceptedByUid &&
-    (!record.expiresAt || new Date(record.expiresAt).getTime() > nowMs)
+    !record.revoked_at &&
+    !record.accepted_by_user_id &&
+    (!record.expires_at || new Date(record.expires_at).getTime() > nowMs)
   );
 }
 
@@ -157,19 +145,31 @@ function buildInviteUrl(inviteId: string, token: string) {
   });
 }
 
-function mapInvite(id: string, record: FriendInviteRecord): FriendInvite {
+function mapInvite(record: FriendInviteRow): FriendInvite {
   return {
-    id,
-    inviterUid: record.inviterUid,
-    inviterDisplayNameSnapshot: record.inviterDisplayNameSnapshot ?? null,
-    inviterPhotoURLSnapshot: record.inviterPhotoURLSnapshot ?? null,
+    id: record.id,
+    inviterUid: record.inviter_user_id,
+    inviterDisplayNameSnapshot: record.inviter_display_name_snapshot ?? null,
+    inviterPhotoURLSnapshot: record.inviter_photo_url_snapshot ?? null,
     token: record.token,
-    createdAt: record.createdAt,
-    revokedAt: record.revokedAt ?? null,
-    acceptedByUid: record.acceptedByUid ?? null,
-    acceptedAt: record.acceptedAt ?? null,
-    expiresAt: record.expiresAt ?? null,
-    url: buildInviteUrl(id, record.token),
+    createdAt: record.created_at,
+    revokedAt: record.revoked_at ?? null,
+    acceptedByUid: record.accepted_by_user_id ?? null,
+    acceptedAt: record.accepted_at ?? null,
+    expiresAt: record.expires_at ?? null,
+    url: buildInviteUrl(record.id, record.token),
+  };
+}
+
+function mapFriend(row: FriendshipRow): FriendConnection {
+  return {
+    userId: row.friend_user_id,
+    displayNameSnapshot: row.display_name_snapshot ?? null,
+    photoURLSnapshot: row.photo_url_snapshot ?? null,
+    friendedAt: row.friended_at,
+    lastSharedAt: row.last_shared_at ?? null,
+    createdByInviteId: row.created_by_invite_id ?? null,
+    createdByInviteToken: row.created_by_invite_token ?? null,
   };
 }
 
@@ -196,43 +196,39 @@ function parseInvitePayload(rawValue: string) {
   };
 }
 
-async function serializeSharedPhoto(photoUri?: string | null) {
-  if (!photoUri?.trim()) {
+async function hydrateSharedPostPhoto(postId: string, photoPath?: string | null) {
+  if (!photoPath?.trim()) {
     return null;
   }
 
-  return readPhotoAsBase64(photoUri);
+  return downloadPhotoFromStorage(
+    SHARED_POST_MEDIA_BUCKET,
+    photoPath,
+    `shared-post-${postId}`
+  );
 }
 
-async function hydrateSharedPostPhoto(postId: string, photoRemoteBase64?: string | null) {
-  if (!photoRemoteBase64?.trim()) {
-    return null;
-  }
-
-  return writePhotoFromBase64(`shared-post-${postId}`, photoRemoteBase64);
-}
-
-async function mapSharedPost(id: string, record: SharedPostRecord): Promise<SharedPost> {
+async function mapSharedPost(record: SharedPostRow): Promise<SharedPost> {
   const photoLocalUri =
     record.type === 'photo'
-      ? await hydrateSharedPostPhoto(id, record.photoRemoteBase64)
+      ? await hydrateSharedPostPhoto(record.id, record.photo_path)
       : null;
 
   return {
-    id,
-    authorUid: record.authorUid,
-    authorDisplayName: record.authorDisplayName ?? null,
-    authorPhotoURLSnapshot: record.authorPhotoURLSnapshot ?? null,
-    audienceUserIds: Array.isArray(record.audienceUserIds) ? record.audienceUserIds : [],
+    id: record.id,
+    authorUid: record.author_user_id,
+    authorDisplayName: record.author_display_name ?? null,
+    authorPhotoURLSnapshot: record.author_photo_url_snapshot ?? null,
+    audienceUserIds: Array.isArray(record.audience_user_ids) ? record.audience_user_ids : [],
     type: record.type,
     text: record.text ?? '',
     photoLocalUri,
-    photoRemoteBase64: record.photoRemoteBase64 ?? null,
-    doodleStrokesJson: record.doodleStrokesJson ?? null,
-    placeName: record.placeName ?? null,
-    sourceNoteId: record.sourceNoteId ?? null,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt ?? null,
+    photoRemoteBase64: null,
+    doodleStrokesJson: record.doodle_strokes_json ?? null,
+    placeName: record.place_name ?? null,
+    sourceNoteId: record.source_note_id ?? null,
+    createdAt: record.created_at,
+    updatedAt: record.updated_at ?? null,
   };
 }
 
@@ -241,94 +237,83 @@ async function getUserProfileSnapshot(userUid: string) {
 }
 
 async function getFriendsForUser(userUid: string) {
-  const firestore = requireFirestore();
-  const snapshot = await getDocs(
-    query(collection(firestore, 'users', userUid, 'friends'), orderBy('friendedAt', 'asc'))
-  );
+  const { data, error } = await requireSupabase()
+    .from('friendships')
+    .select(
+      'user_id, friend_user_id, display_name_snapshot, photo_url_snapshot, friended_at, last_shared_at, created_by_invite_id, created_by_invite_token'
+    )
+    .eq('user_id', userUid)
+    .order('friended_at', { ascending: true });
 
-  return snapshot.docs.map((item: { id: string; data: () => unknown }) => {
-    const data = item.data() as FriendConnectionRecord;
-    return {
-      userId: data.userId ?? item.id,
-      displayNameSnapshot: data.displayNameSnapshot ?? null,
-      photoURLSnapshot: data.photoURLSnapshot ?? null,
-      friendedAt: data.friendedAt,
-      lastSharedAt: data.lastSharedAt ?? null,
-      createdByInviteId: data.createdByInviteId ?? null,
-      createdByInviteToken: data.createdByInviteToken ?? null,
-    } satisfies FriendConnection;
-  });
+  if (error) {
+    throw error;
+  }
+
+  return ((data ?? []) as FriendshipRow[]).map(mapFriend);
 }
 
 export function getSharedFeedErrorMessage(error: unknown) {
-  const code =
-    typeof error === 'object' && error && 'code' in error
-      ? String((error as { code?: string }).code)
-      : null;
   const message =
     error instanceof Error && error.message
       ? error.message
-      : 'Shared moments are unavailable right now.';
+      : typeof error === 'object' && error && 'message' in error
+        ? String((error as { message?: unknown }).message ?? '')
+        : 'Shared moments are unavailable right now.';
+  const normalizedMessage = message.toLowerCase();
 
-  if (code === 'firestore/permission-denied' || message.includes('permission-denied')) {
-    return 'Shared moments need Firestore security rules before this action can work in production.';
+  if (normalizedMessage.includes('permission') || normalizedMessage.includes('policy')) {
+    return 'Shared moments need Supabase policies before this action can work in production.';
   }
 
-  if (code === 'firestore/unavailable') {
-    return 'Firestore is unavailable right now. Check your connection and try again.';
-  }
-
-  if (code === 'firestore/failed-precondition' || message.includes('requires an index')) {
-    return 'Shared moments need Firestore indexes before this screen can finish loading. Deploy the shared feed indexes and try again in a minute.';
+  if (normalizedMessage.includes('network') || normalizedMessage.includes('fetch')) {
+    return 'Supabase is unavailable right now. Check your connection and try again.';
   }
 
   return message;
 }
 
-export async function getActiveFriendInvite(user: FirebaseAuthTypes.User): Promise<FriendInvite | null> {
-  const firestore = requireFirestore();
-  const snapshot = await getDocs(
-    query(
-      collection(firestore, 'friendInvites'),
-      where('inviterUid', '==', user.uid),
-      orderBy('createdAt', 'desc'),
-      limit(ACTIVE_FRIEND_INVITE_QUERY_LIMIT)
+export async function getActiveFriendInvite(user: AppUser): Promise<FriendInvite | null> {
+  const { data, error } = await requireSupabase()
+    .from('friend_invites')
+    .select(
+      'id, inviter_user_id, inviter_display_name_snapshot, inviter_photo_url_snapshot, token, created_at, revoked_at, accepted_by_user_id, accepted_at, expires_at'
     )
-  );
+    .eq('inviter_user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(ACTIVE_FRIEND_INVITE_QUERY_LIMIT);
 
-  const inviteDoc = snapshot.docs
-    .map((item: { id: string; data: () => unknown }) => ({
-      id: item.id,
-      ...(item.data() as FriendInviteRecord),
-    }))
-    .find((item: FriendInviteRecord) => isInviteActive(item));
+  if (error) {
+    throw error;
+  }
 
-  return inviteDoc ? mapInvite(inviteDoc.id, inviteDoc) : null;
+  const invite = ((data ?? []) as FriendInviteRow[]).find((item) => isInviteActive(item));
+  return invite ? mapInvite(invite) : null;
 }
 
-export async function refreshSharedFeed(user: FirebaseAuthTypes.User): Promise<SharedFeedSnapshot> {
-  const firestore = requireFirestore();
-  const friends = await getFriendsForUser(user.uid);
+export async function refreshSharedFeed(user: AppUser): Promise<SharedFeedSnapshot> {
+  const friends = await getFriendsForUser(user.id);
   const friendUids = friends.map((friend: FriendConnection) => friend.userId);
-  const authorWhitelist = [user.uid, ...friendUids].slice(0, 30);
+  const authorWhitelist = [user.id, ...friendUids].slice(0, 30);
 
-  const [activeInvite, postsSnapshot] = await Promise.all([
+  const [activeInvite, postsResponse] = await Promise.all([
     getActiveFriendInvite(user),
-    getDocs(
-      query(
-        collection(firestore, 'sharedPosts'),
-        where('audienceUserIds', 'array-contains', user.uid),
-        where('authorUid', 'in', authorWhitelist),
-        orderBy('createdAt', 'desc'),
-        limit(20)
+    requireSupabase()
+      .from('shared_posts')
+      .select(
+        'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, place_name, source_note_id, created_at, updated_at'
       )
-    ),
+      .contains('audience_user_ids', [user.id])
+      .in('author_user_id', authorWhitelist)
+      .order('created_at', { ascending: false })
+      .limit(20),
   ]);
 
+  if (postsResponse.error) {
+    throw postsResponse.error;
+  }
+
   const sharedPosts = await Promise.all(
-    postsSnapshot.docs.map((item: { id: string; data: () => unknown }) =>
-      mapSharedPost(item.id, item.data() as SharedPostRecord)
-    )
+    ((postsResponse.data ?? []) as SharedPostRow[]).map((item) => mapSharedPost(item))
   );
 
   const snapshot = {
@@ -336,164 +321,96 @@ export async function refreshSharedFeed(user: FirebaseAuthTypes.User): Promise<S
     sharedPosts,
     activeInvite,
   };
-  await cacheSharedFeedSnapshot(user.uid, snapshot);
+  await cacheSharedFeedSnapshot(user.id, snapshot);
   return snapshot;
 }
 
 export function subscribeToSharedFeed(
-  user: FirebaseAuthTypes.User,
+  user: AppUser,
   { onSnapshot: handleSnapshot, onError }: SubscribeToSharedFeedOptions
 ) {
-  const firestore = requireFirestore();
+  const supabase = requireSupabase();
   let disposed = false;
-  let latestPostsVersion = 0;
-  let initialFriendsLoaded = false;
-  let initialInviteLoaded = false;
-  let initialPostsLoaded = false;
-  let unsubscribeSharedPosts: (() => void) | null = null;
-  let currentSnapshot: SharedFeedSnapshot = {
-    friends: [],
-    sharedPosts: [],
-    activeInvite: null,
-  };
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const emitIfReady = () => {
-    if (disposed || !initialFriendsLoaded || !initialInviteLoaded || !initialPostsLoaded) {
+  const refresh = () => {
+    if (disposed) {
       return;
     }
 
-    handleSnapshot({
-      friends: currentSnapshot.friends,
-      sharedPosts: currentSnapshot.sharedPosts,
-      activeInvite: currentSnapshot.activeInvite,
-    });
-  };
-
-  const handleFailure = (error: unknown) => {
-    if (!disposed) {
-      onError?.(error);
-    }
-  };
-
-  const resubscribePosts = (friends: FriendConnection[]) => {
-    if (unsubscribeSharedPosts) {
-      unsubscribeSharedPosts();
-    }
-
-    const friendUids = friends.map((friend: FriendConnection) => friend.userId);
-    const authorWhitelist = [user.uid, ...friendUids].slice(0, 30);
-
-    unsubscribeSharedPosts = onSnapshot(
-      query(
-        collection(firestore, 'sharedPosts'),
-        where('audienceUserIds', 'array-contains', user.uid),
-        where('authorUid', 'in', authorWhitelist),
-        orderBy('createdAt', 'desc'),
-        limit(20)
-      ),
-      async (postsSnapshot) => {
-        const version = latestPostsVersion + 1;
-        latestPostsVersion = version;
-
-        try {
-          const sharedPosts = await Promise.all(
-            postsSnapshot.docs.map((item: { id: string; data: () => unknown }) =>
-              mapSharedPost(item.id, item.data() as SharedPostRecord)
-            )
-          );
-
-          if (disposed || version !== latestPostsVersion) {
-            return;
-          }
-
-          currentSnapshot = {
-            ...currentSnapshot,
-            sharedPosts,
-          };
-          initialPostsLoaded = true;
-          await cacheSharedFeedSnapshot(user.uid, {
-            friends: currentSnapshot.friends,
-            sharedPosts,
-            activeInvite: currentSnapshot.activeInvite,
-          });
-          emitIfReady();
-        } catch (error) {
-          handleFailure(error);
+    void refreshSharedFeed(user)
+      .then((snapshot) => {
+        if (!disposed) {
+          handleSnapshot(snapshot);
         }
-      },
-      handleFailure
-    );
+      })
+      .catch((error) => {
+        if (!disposed) {
+          onError?.(error);
+        }
+      });
   };
 
-  const unsubscribeFriends = onSnapshot(
-    query(collection(firestore, 'users', user.uid, 'friends'), orderBy('friendedAt', 'asc')),
-    (friendsSnapshot) => {
-      const nextFriends = friendsSnapshot.docs.map((item: { id: string; data: () => unknown }) => {
-        const data = item.data() as FriendConnectionRecord;
-        return {
-          userId: data.userId ?? item.id,
-          displayNameSnapshot: data.displayNameSnapshot ?? null,
-          photoURLSnapshot: data.photoURLSnapshot ?? null,
-          friendedAt: data.friendedAt,
-          lastSharedAt: data.lastSharedAt ?? null,
-          createdByInviteId: data.createdByInviteId ?? null,
-          createdByInviteToken: data.createdByInviteToken ?? null,
-        } satisfies FriendConnection;
-      });
+  const scheduleRefresh = () => {
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+    }
 
-      currentSnapshot = {
-        ...currentSnapshot,
-        friends: nextFriends,
-      };
-      initialFriendsLoaded = true;
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      refresh();
+    }, 120);
+  };
 
-      // When friends change, we must resubscribe to posts because the authorWhitelist depends on friends.
-      resubscribePosts(nextFriends);
-    },
-    handleFailure
-  );
+  const channel = supabase
+    .channel(`shared-feed:${user.id}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'friendships',
+        filter: `user_id=eq.${user.id}`,
+      },
+      scheduleRefresh
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'friend_invites',
+        filter: `inviter_user_id=eq.${user.id}`,
+      },
+      scheduleRefresh
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'shared_posts',
+      },
+      scheduleRefresh
+    )
+    .subscribe();
 
-  const unsubscribeActiveInvite = onSnapshot(
-    query(
-      collection(firestore, 'friendInvites'),
-      where('inviterUid', '==', user.uid),
-      orderBy('createdAt', 'desc'),
-      limit(ACTIVE_FRIEND_INVITE_QUERY_LIMIT)
-    ),
-    (inviteSnapshot) => {
-      const inviteDoc = inviteSnapshot.docs
-        .map((item: { id: string; data: () => unknown }) => ({
-          id: item.id,
-          ...(item.data() as FriendInviteRecord),
-        }))
-        .find((item: FriendInviteRecord) => isInviteActive(item));
-
-      currentSnapshot = {
-        ...currentSnapshot,
-        activeInvite: inviteDoc ? mapInvite(inviteDoc.id, inviteDoc) : null,
-      };
-      initialInviteLoaded = true;
-      void replaceCachedSharedInvite(user.uid, currentSnapshot.activeInvite).catch(() => undefined);
-      emitIfReady();
-    },
-    handleFailure
-  );
+  refresh();
 
   return () => {
     disposed = true;
-    unsubscribeFriends();
-    unsubscribeActiveInvite();
-    if (unsubscribeSharedPosts) {
-      unsubscribeSharedPosts();
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
     }
+    void supabase.removeChannel(channel);
   };
 }
 
-export async function createFriendInvite(user: FirebaseAuthTypes.User): Promise<FriendInvite> {
-  const firestore = requireFirestore();
+export async function createFriendInvite(user: AppUser): Promise<FriendInvite> {
+  const supabase = requireSupabase();
 
   await upsertPublicUserProfile({
-    userUid: user.uid,
+    userUid: user.id,
     displayName: getDisplayName(user),
     photoURL: user.photoURL ?? null,
   });
@@ -503,63 +420,53 @@ export async function createFriendInvite(user: FirebaseAuthTypes.User): Promise<
     return existingInvite;
   }
 
-  const inviteId = await getFriendInviteDocumentId(user.uid);
-  const inviteRef = doc(firestore, 'friendInvites', inviteId);
+  const inviteId = await getFriendInviteDocumentId(user.id);
+  const nextInvite: FriendInviteRow = {
+    id: inviteId,
+    inviter_user_id: user.id,
+    inviter_display_name_snapshot: getDisplayName(user),
+    inviter_photo_url_snapshot: user.photoURL ?? null,
+    token: Crypto.randomUUID(),
+    created_at: getNowIso(),
+    revoked_at: null,
+    accepted_by_user_id: null,
+    accepted_at: null,
+    expires_at: null,
+  };
 
-  const invite = await runTransaction(firestore, async (transaction) => {
-    const inviteSnapshot = await transaction.get(inviteRef);
-    const currentInvite = inviteSnapshot.exists()
-      ? (inviteSnapshot.data() as FriendInviteRecord)
-      : null;
-
-    if (currentInvite && isInviteActive(currentInvite)) {
-      return mapInvite(inviteId, currentInvite);
-    }
-
-    const nextInvite: FriendInviteRecord = {
-      inviterUid: user.uid,
-      inviterDisplayNameSnapshot: getDisplayName(user),
-      inviterPhotoURLSnapshot: user.photoURL ?? null,
-      token: Crypto.randomUUID(),
-      createdAt: getNowIso(),
-      revokedAt: null,
-      acceptedByUid: null,
-      acceptedAt: null,
-      expiresAt: null,
-    };
-
-    transaction.set(inviteRef, nextInvite);
-    return mapInvite(inviteId, nextInvite);
+  const { error } = await supabase.from('friend_invites').upsert(nextInvite, {
+    onConflict: 'id',
   });
-  await replaceCachedSharedInvite(user.uid, invite);
+  if (error) {
+    throw error;
+  }
+
+  const invite = mapInvite(nextInvite);
+  await replaceCachedSharedInvite(user.id, invite);
   return invite;
 }
 
-export async function revokeFriendInvite(user: FirebaseAuthTypes.User, inviteId: string): Promise<void> {
-  const firestore = requireFirestore();
-  const inviteRef = doc(firestore, 'friendInvites', inviteId);
-  const inviteSnapshot = await getDoc(inviteRef);
+export async function revokeFriendInvite(user: AppUser, inviteId: string): Promise<void> {
+  const supabase = requireSupabase();
+  const { error } = await supabase
+    .from('friend_invites')
+    .update({
+      revoked_at: getNowIso(),
+    })
+    .eq('id', inviteId)
+    .eq('inviter_user_id', user.id);
 
-  if (!inviteSnapshot.exists()) {
-    throw new Error('Invite not found.');
+  if (error) {
+    throw error;
   }
 
-  const data = inviteSnapshot.data() as FriendInviteRecord;
-  if (data.inviterUid !== user.uid) {
-    throw new Error('Only the inviter can revoke this link.');
-  }
-
-  await updateDoc(inviteRef, {
-    revokedAt: getNowIso(),
-  });
-  await replaceCachedSharedInvite(user.uid, null);
+  await replaceCachedSharedInvite(user.id, null);
 }
 
 export async function acceptFriendInvite(
-  user: FirebaseAuthTypes.User,
+  user: AppUser,
   inviteValue: string
 ): Promise<FriendConnection> {
-  const firestore = requireFirestore();
   const { inviteId, token } = parseInvitePayload(inviteValue);
 
   if (!inviteId && !token) {
@@ -570,112 +477,52 @@ export async function acceptFriendInvite(
     throw new Error('This invite link is invalid.');
   }
 
-  let resolvedInviteId = inviteId;
-  let inviteSnapshot;
-
-  if (resolvedInviteId) {
-    inviteSnapshot = await getDoc(doc(firestore, 'friendInvites', resolvedInviteId));
-  } else {
-    const inviteQuery = await getDocs(
-      query(collection(firestore, 'friendInvites'), where('token', '==', token), limit(1))
-    );
-    const inviteDoc = inviteQuery.docs[0];
-    if (inviteDoc) {
-      resolvedInviteId = inviteDoc.id;
-      inviteSnapshot = inviteDoc;
-    }
-  }
-
-  if (!inviteSnapshot || !inviteSnapshot.exists()) {
-    throw new Error('Invite not found.');
-  }
-
-  const invite = inviteSnapshot.data() as FriendInviteRecord;
-  if (invite.revokedAt) {
-    throw new Error('This invite link is no longer active.');
-  }
-  if (invite.acceptedByUid && invite.acceptedByUid !== user.uid) {
-    throw new Error('This invite link has already been used.');
-  }
-  if (invite.expiresAt && new Date(invite.expiresAt).getTime() <= Date.now()) {
-    throw new Error('This invite link has expired.');
-  }
-  if (invite.token !== token && token) {
-    throw new Error('This invite link is invalid.');
-  }
-  if (invite.inviterUid === user.uid) {
-    throw new Error('You cannot accept your own invite.');
-  }
-
-  const now = getNowIso();
   await upsertPublicUserProfile({
-    userUid: user.uid,
+    userUid: user.id,
     displayName: getDisplayName(user),
     photoURL: user.photoURL ?? null,
   });
-  const inviterProfile = await getUserProfileSnapshot(invite.inviterUid);
 
-  const currentUserConnection: FriendConnectionRecord = {
-    userId: invite.inviterUid,
-    displayNameSnapshot:
-      inviterProfile.displayNameSnapshot ?? invite.inviterDisplayNameSnapshot ?? null,
-    photoURLSnapshot:
-      inviterProfile.photoURLSnapshot ?? invite.inviterPhotoURLSnapshot ?? null,
-    friendedAt: now,
-    lastSharedAt: null,
-    createdByInviteId: resolvedInviteId,
-    createdByInviteToken: token,
-  };
+  const { data, error } = await requireSupabase().rpc('accept_friend_invite', {
+    invite_token: token,
+    invite_id: inviteId || null,
+  });
 
-  const inviterConnection: FriendConnectionRecord = {
-    userId: user.uid,
-    displayNameSnapshot: getDisplayName(user),
-    photoURLSnapshot: user.photoURL ?? null,
-    friendedAt: now,
-    lastSharedAt: null,
-    createdByInviteId: resolvedInviteId,
-    createdByInviteToken: token,
-  };
+  if (error) {
+    throw error;
+  }
 
-  await Promise.all([
-    setDoc(doc(firestore, 'users', user.uid, 'friends', invite.inviterUid), currentUserConnection, {
-      merge: true,
-    }),
-    setDoc(doc(firestore, 'users', invite.inviterUid, 'friends', user.uid), inviterConnection, {
-      merge: true,
-    }),
-    updateDoc(doc(firestore, 'friendInvites', resolvedInviteId), {
-      acceptedByUid: user.uid,
-      acceptedAt: now,
-    }),
-  ]);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    throw new Error('Invite not found.');
+  }
+
+  const connection = mapFriend(row as FriendshipRow);
+  const inviterProfile = await getUserProfileSnapshot(connection.userId);
 
   return {
-    userId: currentUserConnection.userId,
-    displayNameSnapshot: currentUserConnection.displayNameSnapshot,
-    photoURLSnapshot: currentUserConnection.photoURLSnapshot,
-    friendedAt: currentUserConnection.friendedAt,
-    lastSharedAt: currentUserConnection.lastSharedAt,
-    createdByInviteId: currentUserConnection.createdByInviteId,
-    createdByInviteToken: currentUserConnection.createdByInviteToken,
+    ...connection,
+    displayNameSnapshot: inviterProfile.displayNameSnapshot ?? connection.displayNameSnapshot,
+    photoURLSnapshot: inviterProfile.photoURLSnapshot ?? connection.photoURLSnapshot,
   };
 }
 
-export async function removeFriend(user: FirebaseAuthTypes.User, friendUid: string): Promise<void> {
-  const firestore = requireFirestore();
+export async function removeFriend(user: AppUser, friendUid: string): Promise<void> {
+  const { error } = await requireSupabase().rpc('remove_friend', {
+    friend_user_id: friendUid,
+  });
 
-  await Promise.all([
-    deleteDoc(doc(firestore, 'users', user.uid, 'friends', friendUid)),
-    deleteDoc(doc(firestore, 'users', friendUid, 'friends', user.uid)),
-  ]);
+  if (error) {
+    throw error;
+  }
 }
 
 export async function createSharedPost(
-  user: FirebaseAuthTypes.User,
+  user: AppUser,
   note: Note,
   audienceUserIds: string[]
 ): Promise<SharedPost> {
-  const firestore = requireFirestore();
+  const supabase = requireSupabase();
   const dedupedAudience = Array.from(new Set(audienceUserIds.filter(Boolean)));
 
   if (dedupedAudience.length <= 1) {
@@ -684,80 +531,148 @@ export async function createSharedPost(
 
   const postId = `shared-post-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}`;
   const now = getNowIso();
-  const photoRemoteBase64 =
-    note.type === 'photo' ? await serializeSharedPhoto(note.photoLocalUri ?? note.content) : null;
+  const photoPath =
+    note.type === 'photo'
+      ? await uploadPhotoToStorage(
+          SHARED_POST_MEDIA_BUCKET,
+          `${user.id}/${postId}`,
+          note.photoLocalUri ?? note.content
+        )
+      : null;
 
-  const record: SharedPostRecord = {
-    authorUid: user.uid,
-    authorDisplayName: getDisplayName(user),
-    authorPhotoURLSnapshot: user.photoURL ?? null,
-    audienceUserIds: dedupedAudience,
+  const record: SharedPostRow = {
+    id: postId,
+    author_user_id: user.id,
+    author_display_name: getDisplayName(user),
+    author_photo_url_snapshot: user.photoURL ?? null,
+    audience_user_ids: dedupedAudience,
     type: note.type,
     text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
-    photoRemoteBase64: photoRemoteBase64 ?? null,
-    doodleStrokesJson: note.doodleStrokesJson ?? null,
-    placeName: note.locationName ?? null,
-    sourceNoteId: note.id,
-    createdAt: now,
-    updatedAt: null,
+    photo_path: photoPath ?? null,
+    doodle_strokes_json: note.doodleStrokesJson ?? null,
+    place_name: note.locationName ?? null,
+    source_note_id: note.id,
+    created_at: now,
+    updated_at: null,
   };
 
-  await setDoc(doc(firestore, 'sharedPosts', postId), record);
-
-  const friendRefs = dedupedAudience.filter((uid) => uid !== user.uid);
-  if (friendRefs.length > 0) {
-    await Promise.all(
-      friendRefs.map((friendUid) =>
-        updateDoc(doc(firestore, 'users', user.uid, 'friends', friendUid), {
-          lastSharedAt: now,
-        }).catch(() => undefined)
-      )
-    );
+  const { error } = await supabase.from('shared_posts').insert(record);
+  if (error) {
+    throw error;
   }
 
-  return mapSharedPost(postId, record);
+  const friendRefs = dedupedAudience.filter((uid) => uid !== user.id);
+  if (friendRefs.length > 0) {
+    await supabase
+      .from('friendships')
+      .update({ last_shared_at: now })
+      .eq('user_id', user.id)
+      .in('friend_user_id', friendRefs);
+  }
+
+  return mapSharedPost(record);
 }
 
 export async function updateSharedPost(
-  user: FirebaseAuthTypes.User,
+  user: AppUser,
   postId: string,
   note: Note
 ): Promise<void> {
-  const firestore = requireFirestore();
-  const photoRemoteBase64 =
-    note.type === 'photo' ? await serializeSharedPhoto(note.photoLocalUri ?? note.content) : null;
+  const supabase = requireSupabase();
+  const { data: existing, error: fetchError } = await supabase
+    .from('shared_posts')
+    .select(
+      'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, place_name, source_note_id, created_at, updated_at'
+    )
+    .eq('id', postId)
+    .eq('author_user_id', user.id)
+    .maybeSingle();
 
-  await updateDoc(doc(firestore, 'sharedPosts', postId), {
-    text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
-    photoRemoteBase64: photoRemoteBase64 ?? null,
-    doodleStrokesJson: note.doodleStrokesJson ?? null,
-    placeName: note.locationName ?? null,
-    updatedAt: getNowIso(),
-    authorUid: user.uid,
-  });
+  if (fetchError) {
+    throw fetchError;
+  }
+
+  const current = existing as SharedPostRow | null;
+  if (!current) {
+    throw new Error('Shared post not found.');
+  }
+
+  if (current.photo_path && note.type !== 'photo') {
+    await deletePhotoFromStorage(SHARED_POST_MEDIA_BUCKET, current.photo_path).catch(() => undefined);
+  }
+
+  const nextPhotoPath =
+    note.type === 'photo'
+      ? await uploadPhotoToStorage(
+          SHARED_POST_MEDIA_BUCKET,
+          `${user.id}/${postId}`,
+          note.photoLocalUri ?? note.content
+        )
+      : null;
+
+  const { error } = await supabase
+    .from('shared_posts')
+    .update({
+      text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
+      photo_path: nextPhotoPath ?? null,
+      doodle_strokes_json: note.doodleStrokesJson ?? null,
+      place_name: note.locationName ?? null,
+      updated_at: getNowIso(),
+      type: note.type,
+    })
+    .eq('id', postId)
+    .eq('author_user_id', user.id);
+
+  if (error) {
+    throw error;
+  }
 }
 
 export async function findOwnedSharedPostIdsForNote(
-  user: FirebaseAuthTypes.User,
+  user: AppUser,
   noteId: string
 ): Promise<string[]> {
-  const firestore = requireFirestore();
-  const snapshot = await getDocs(
-    query(collection(firestore, 'sharedPosts'), where('authorUid', '==', user.uid))
-  );
+  const { data, error } = await requireSupabase()
+    .from('shared_posts')
+    .select('id')
+    .eq('author_user_id', user.id)
+    .eq('source_note_id', noteId);
 
-  return snapshot.docs
-    .filter((item: { data: () => unknown }) => {
-      const data = item.data() as SharedPostRecord;
-      return data.sourceNoteId === noteId;
-    })
-    .map((item: { id: string }) => item.id);
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map((item) => item.id as string);
 }
 
 export async function deleteSharedPost(
-  _user: FirebaseAuthTypes.User,
+  user: AppUser,
   postId: string
 ): Promise<void> {
-  const firestore = requireFirestore();
-  await deleteDoc(doc(firestore, 'sharedPosts', postId));
+  const supabase = requireSupabase();
+  const { data: existing, error: fetchError } = await supabase
+    .from('shared_posts')
+    .select('photo_path')
+    .eq('id', postId)
+    .eq('author_user_id', user.id)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw fetchError;
+  }
+
+  await deletePhotoFromStorage(
+    SHARED_POST_MEDIA_BUCKET,
+    (existing as { photo_path?: string | null } | null)?.photo_path ?? null
+  ).catch(() => undefined);
+
+  const { error } = await supabase
+    .from('shared_posts')
+    .delete()
+    .eq('id', postId)
+    .eq('author_user_id', user.id);
+
+  if (error) {
+    throw error;
+  }
 }

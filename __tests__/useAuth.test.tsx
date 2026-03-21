@@ -1,47 +1,118 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import type { Session } from '@supabase/supabase-js';
 import { ReactNode } from 'react';
 import { Platform } from 'react-native';
 
 const mockAuthState = {
-  configured: true,
-  hasFirebaseApp: true,
-  googleSignInResult: { type: 'success', data: { idToken: 'token-123' } },
-  googleSignInError: null as { code?: string } | null,
-  emailSignInError: null as { code?: string } | null,
-  registerError: null as { code?: string } | null,
-  resetPasswordError: null as { code?: string } | null,
-  initialUser: null as unknown,
+  hasSupabaseConfig: true,
+  googleConfigured: true,
+  googleSignInResult: { type: 'success', data: { idToken: 'token-123' } } as unknown,
+  googleSignInError: null as { code?: string; message?: string } | null,
+  emailSignInError: null as { code?: string; message?: string } | null,
+  registerError: null as { code?: string; message?: string } | null,
+  resetPasswordError: null as { code?: string; message?: string } | null,
+  initialSession: null as Session | null,
   webClientId: 'client-id.apps.googleusercontent.com',
+  iosClientId: 'ios-client-id.apps.googleusercontent.com',
 };
 
-const mockOnAuthStateChanged = jest.fn((callback: (user: unknown) => void) => {
-  callback(mockAuthState.initialUser);
-  return () => undefined;
+function buildSession(overrides?: Partial<Session>): Session {
+  return {
+    access_token: 'access-token',
+    refresh_token: 'refresh-token',
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: 1_900_000_000,
+    user: {
+      id: 'user-1',
+      email: 'huy@example.com',
+      user_metadata: {
+        display_name: 'Huy',
+        avatar_url: 'https://example.com/avatar.jpg',
+      },
+      app_metadata: {},
+      aud: 'authenticated',
+      created_at: '2026-03-10T00:00:00.000Z',
+    } as Session['user'],
+    ...overrides,
+  };
+}
+
+const mockUpsertPublicUserProfile = jest.fn<Promise<void>, [unknown]>(async () => undefined);
+const mockGetSession = jest.fn(async () => ({
+  data: { session: mockAuthState.initialSession },
+  error: null,
+}));
+const mockOnAuthStateChange = jest.fn((_callback: (event: string, session: Session | null) => void) => ({
+  data: {
+    subscription: {
+      unsubscribe: jest.fn(),
+    },
+  },
+}));
+const mockSignInWithIdToken = jest.fn(async (_input?: unknown) => {
+  return {
+    data: { session: buildSession() },
+    error: null,
+  };
 });
-const mockSignInWithCredential = jest.fn(async () => undefined);
-const mockSignInWithEmailAndPassword = jest.fn(async () => {
+const mockSignInWithPassword = jest.fn(async ({ email }: { email: string; password: string }) => {
   if (mockAuthState.emailSignInError) {
-    throw mockAuthState.emailSignInError;
-  }
-});
-const mockUpdateProfile = jest.fn<Promise<void>, [unknown]>(async () => undefined);
-const mockCreateUserWithEmailAndPassword = jest.fn(async () => {
-  if (mockAuthState.registerError) {
-    throw mockAuthState.registerError;
+    return { data: { session: null }, error: mockAuthState.emailSignInError };
   }
 
   return {
-    user: {
-      updateProfile: (profile: unknown) => mockUpdateProfile(profile),
+    data: {
+      session: buildSession({
+        user: {
+          ...buildSession().user,
+          email,
+        } as Session['user'],
+      }),
     },
+    error: null,
   };
 });
-const mockSendPasswordResetEmail = jest.fn(async () => {
-  if (mockAuthState.resetPasswordError) {
-    throw mockAuthState.resetPasswordError;
+const mockSignUp = jest.fn(async ({ email, options }: { email: string; password: string; options?: { data?: Record<string, unknown> } }) => {
+  if (mockAuthState.registerError) {
+    return {
+      data: { session: null, user: null },
+      error: mockAuthState.registerError,
+    };
   }
+
+  return {
+    data: {
+      session: buildSession({
+        user: {
+          ...buildSession().user,
+          email,
+          user_metadata: {
+            ...buildSession().user.user_metadata,
+            ...(options?.data ?? {}),
+          },
+        } as Session['user'],
+      }),
+      user: {
+        ...buildSession().user,
+        email,
+        user_metadata: {
+          ...buildSession().user.user_metadata,
+          ...(options?.data ?? {}),
+        },
+      },
+    },
+    error: null,
+  };
 });
-const mockFirebaseSignOut = jest.fn(async () => undefined);
+const mockResetPasswordForEmail = jest.fn(async (_email?: string, _options?: unknown) => {
+  if (mockAuthState.resetPasswordError) {
+    return { error: mockAuthState.resetPasswordError };
+  }
+
+  return { error: null };
+});
+const mockSupabaseSignOut = jest.fn(async () => ({ error: null }));
 const mockGoogleConfigure = jest.fn();
 const mockGoogleHasPlayServices = jest.fn(async () => undefined);
 const mockGoogleSignIn = jest.fn(async () => {
@@ -57,24 +128,41 @@ jest.mock('../constants/auth', () => ({
   get GOOGLE_WEB_CLIENT_ID() {
     return mockAuthState.webClientId;
   },
+  get GOOGLE_IOS_CLIENT_ID() {
+    return mockAuthState.iosClientId;
+  },
   get isGoogleSigninConfigured() {
-    return mockAuthState.configured;
+    return mockAuthState.googleConfigured;
   },
 }));
 
-jest.mock('../utils/firebase', () => ({
-  hasFirebaseApp: () => mockAuthState.hasFirebaseApp,
-  getFirebaseAuth: () =>
-    mockAuthState.hasFirebaseApp
-      ? {
-          onAuthStateChanged: mockOnAuthStateChanged,
-          signInWithCredential: mockSignInWithCredential,
-          signInWithEmailAndPassword: mockSignInWithEmailAndPassword,
-          createUserWithEmailAndPassword: mockCreateUserWithEmailAndPassword,
-          sendPasswordResetEmail: mockSendPasswordResetEmail,
-          signOut: mockFirebaseSignOut,
-        }
-      : null,
+jest.mock('../services/publicProfileService', () => ({
+  upsertPublicUserProfile: (input: unknown) => mockUpsertPublicUserProfile(input),
+}));
+
+const mockSupabaseClient = {
+  auth: {
+    getSession: () => mockGetSession(),
+    onAuthStateChange: (callback: (event: string, session: Session | null) => void) =>
+      mockOnAuthStateChange(callback),
+    signInWithIdToken: (input: unknown) => mockSignInWithIdToken(input),
+    signInWithPassword: (input: { email: string; password: string }) => mockSignInWithPassword(input),
+    signUp: (input: { email: string; password: string; options?: { data?: Record<string, unknown> } }) =>
+      mockSignUp(input),
+    resetPasswordForEmail: (email: string, options: unknown) => mockResetPasswordForEmail(email, options),
+    signOut: () => mockSupabaseSignOut(),
+  },
+};
+
+jest.mock('../utils/supabase', () => ({
+  hasSupabaseConfig: () => mockAuthState.hasSupabaseConfig,
+  getSupabase: () => (mockAuthState.hasSupabaseConfig ? mockSupabaseClient : null),
+  getSupabaseErrorMessage: (error: unknown) =>
+    typeof error === 'object' && error && 'message' in error
+      ? String((error as { message?: unknown }).message ?? '')
+      : error instanceof Error
+        ? error.message
+        : '',
 }));
 
 jest.mock('@react-native-google-signin/google-signin', () => ({
@@ -89,17 +177,6 @@ jest.mock('@react-native-google-signin/google-signin', () => ({
     IN_PROGRESS: 'IN_PROGRESS',
     PLAY_SERVICES_NOT_AVAILABLE: 'PLAY_SERVICES_NOT_AVAILABLE',
   },
-}));
-
-jest.mock('@react-native-firebase/auth', () => ({
-  __esModule: true,
-  default: {
-    GoogleAuthProvider: {
-      credential: (idToken: string) => `credential:${idToken}`,
-    },
-  },
-  onAuthStateChanged: (_firebaseAuth: unknown, callback: (user: unknown) => void) =>
-    mockOnAuthStateChanged(callback),
 }));
 
 import { AuthProvider, useAuth } from '../hooks/useAuth';
@@ -117,19 +194,20 @@ describe('useAuth', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     setPlatformOS('ios');
-    mockAuthState.configured = true;
-    mockAuthState.hasFirebaseApp = true;
+    mockAuthState.hasSupabaseConfig = true;
+    mockAuthState.googleConfigured = true;
     mockAuthState.googleSignInResult = { type: 'success', data: { idToken: 'token-123' } };
     mockAuthState.googleSignInError = null;
     mockAuthState.emailSignInError = null;
     mockAuthState.registerError = null;
     mockAuthState.resetPasswordError = null;
-    mockAuthState.initialUser = null;
+    mockAuthState.initialSession = null;
     mockAuthState.webClientId = 'client-id.apps.googleusercontent.com';
+    mockAuthState.iosClientId = 'ios-client-id.apps.googleusercontent.com';
   });
 
   it('exposes email auth even when Google sign-in is not configured', async () => {
-    mockAuthState.configured = false;
+    mockAuthState.googleConfigured = false;
 
     const hook = renderHook(() => useAuth(), { wrapper });
 
@@ -142,10 +220,13 @@ describe('useAuth', () => {
 
     const result = await hook.result.current.signInWithEmail('huy@example.com', 'secret123');
     expect(result).toEqual({ status: 'success' });
-    expect(mockSignInWithEmailAndPassword).toHaveBeenCalledWith('huy@example.com', 'secret123');
+    expect(mockSignInWithPassword).toHaveBeenCalledWith({
+      email: 'huy@example.com',
+      password: 'secret123',
+    });
   });
 
-  it('supports Android Google sign-in when Firebase and Google are configured', async () => {
+  it('supports Android Google sign-in when Supabase and Google are configured', async () => {
     setPlatformOS('android');
 
     const hook = renderHook(() => useAuth(), { wrapper });
@@ -163,13 +244,17 @@ describe('useAuth', () => {
     expect(result.status).toBe('success');
     expect(mockGoogleConfigure).toHaveBeenCalledWith({
       webClientId: 'client-id.apps.googleusercontent.com',
+      iosClientId: 'ios-client-id.apps.googleusercontent.com',
     });
     expect(mockGoogleHasPlayServices).toHaveBeenCalled();
     expect(mockGoogleSignIn).toHaveBeenCalled();
-    expect(mockSignInWithCredential).toHaveBeenCalledWith('credential:token-123');
+    expect(mockSignInWithIdToken).toHaveBeenCalledWith({
+      provider: 'google',
+      token: 'token-123',
+    });
   });
 
-  it('creates an email account and updates the display name', async () => {
+  it('creates an email account and stores the display name in Supabase metadata', async () => {
     const hook = renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => {
@@ -186,11 +271,20 @@ describe('useAuth', () => {
     });
 
     expect(result).toEqual({ status: 'success' });
-    expect(mockCreateUserWithEmailAndPassword).toHaveBeenCalledWith('new@example.com', 'secret123');
-    expect(mockUpdateProfile).toHaveBeenCalledWith({ displayName: 'Huy' });
+    expect(mockSignUp).toHaveBeenCalledWith({
+      email: 'new@example.com',
+      password: 'secret123',
+      options: {
+        data: {
+          display_name: 'Huy',
+          displayName: 'Huy',
+        },
+      },
+    });
+    expect(mockUpsertPublicUserProfile).toHaveBeenCalled();
   });
 
-  it('sends reset-password emails through Firebase auth', async () => {
+  it('sends reset-password emails through Supabase auth', async () => {
     const hook = renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => {
@@ -199,11 +293,16 @@ describe('useAuth', () => {
 
     const result = await hook.result.current.sendPasswordReset('reset@example.com');
     expect(result).toEqual({ status: 'success' });
-    expect(mockSendPasswordResetEmail).toHaveBeenCalledWith('reset@example.com');
+    expect(mockResetPasswordForEmail).toHaveBeenCalledWith('reset@example.com', {
+      redirectTo: undefined,
+    });
   });
 
   it('maps common email/password auth errors to friendly messages', async () => {
-    mockAuthState.emailSignInError = { code: 'auth/wrong-password' };
+    mockAuthState.emailSignInError = {
+      code: 'invalid_credentials',
+      message: 'Invalid login credentials',
+    };
 
     const hook = renderHook(() => useAuth(), { wrapper });
 

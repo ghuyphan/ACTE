@@ -1,20 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  collection,
-  doc,
-  FirebaseFirestoreTypes,
-  getDocs,
-  orderBy,
-  query,
-  setDoc,
-  where,
-  writeBatch,
-} from '@react-native-firebase/firestore';
 import { countPhotoNotes } from '../constants/subscription';
+import { AppUser } from '../utils/appUser';
+import { getSupabase } from '../utils/supabase';
 import { Note, getAllNotes, getDB, getNoteById, upsertNote } from './database';
-import { readPhotoAsBase64, writePhotoFromBase64 } from './photoStorage';
+import { deletePhotoFromStorage, downloadPhotoFromStorage, NOTE_MEDIA_BUCKET, uploadPhotoToStorage } from './remoteMedia';
 import { upsertPublicUserProfile } from './publicProfileService';
-import { getFirestore } from '../utils/firebase';
 
 export type SyncChangeType = 'create' | 'update' | 'delete' | 'deleteAll';
 export type SyncQueueStatus = 'pending' | 'processing' | 'failed';
@@ -72,16 +62,11 @@ export interface SyncService {
   recordChange: (change: SyncChange) => Promise<void>;
 }
 
-export interface SyncUser {
-  uid: string;
-  displayName: string | null;
-  email: string | null;
-  photoURL: string | null;
+export interface SyncUser extends Pick<AppUser, 'uid' | 'displayName' | 'email' | 'photoURL'> {
+  id?: string;
 }
 
-export type FirebaseSyncUser = SyncUser;
-
-export interface FirebaseSyncResult {
+export interface SyncResult {
   status: 'success' | 'unavailable' | 'error';
   message?: string;
   syncedCount?: number;
@@ -94,25 +79,26 @@ export interface SyncOptions {
   mode?: SyncMode;
 }
 
-interface FirebaseNoteRecord {
+interface NoteRow {
   id: string;
+  user_id: string;
   type: Note['type'];
   content: string;
-  photoRemoteBase64?: string | null;
-  hasDoodle?: boolean;
-  doodleStrokesJson?: string | null;
-  locationName: string | null;
-  promptId?: string | null;
-  promptTextSnapshot?: string | null;
-  promptAnswer?: string | null;
-  moodEmoji?: string | null;
+  photo_path: string | null;
+  has_doodle: boolean;
+  doodle_strokes_json: string | null;
+  location_name: string | null;
+  prompt_id: string | null;
+  prompt_text_snapshot: string | null;
+  prompt_answer: string | null;
+  mood_emoji: string | null;
   latitude: number;
   longitude: number;
   radius: number;
-  isFavorite: boolean;
-  createdAt: string;
-  updatedAt: string | null;
-  syncedAt: string;
+  is_favorite: boolean;
+  created_at: string;
+  updated_at: string | null;
+  synced_at: string;
 }
 
 interface QueueFlushFailure {
@@ -150,7 +136,6 @@ interface QueueRow {
   created_at: string;
 }
 
-const FIRESTORE_BATCH_LIMIT = 400;
 const MAX_SYNC_ATTEMPTS = 5;
 const RETRY_DELAYS_MS = [
   5 * 60 * 1000,
@@ -160,10 +145,6 @@ const RETRY_DELAYS_MS = [
   24 * 60 * 60 * 1000,
 ];
 const REMOTE_SYNC_CURSOR_KEY_PREFIX = 'sync.lastRemoteCursor.';
-
-type FirestoreDocument = FirebaseFirestoreTypes.DocumentData;
-type FirestoreCollection = FirebaseFirestoreTypes.CollectionReference<FirestoreDocument>;
-type FirestoreWriteBatch = Pick<FirebaseFirestoreTypes.WriteBatch, 'commit' | 'delete' | 'set'>;
 
 function rowToQueueItem(row: QueueRow): SyncQueueItem {
   return {
@@ -182,13 +163,17 @@ function rowToQueueItem(row: QueueRow): SyncQueueItem {
   };
 }
 
-function getSyncTimestamp(note: Pick<Note, 'createdAt' | 'updatedAt'> | FirebaseNoteRecord) {
-  return new Date(note.updatedAt ?? note.createdAt).getTime();
+function getSyncTimestamp(note: Pick<Note, 'createdAt' | 'updatedAt'> | NoteRow) {
+  return new Date(('updatedAt' in note ? note.updatedAt : note.updated_at) ?? ('createdAt' in note ? note.createdAt : note.created_at)).getTime();
 }
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) {
     return error.message;
+  }
+
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message?: unknown }).message ?? 'Unknown sync error');
   }
 
   return 'Unknown sync error';
@@ -241,44 +226,56 @@ async function setLastRemoteSyncCursor(userUid: string, cursor: string) {
   await AsyncStorage.setItem(getRemoteSyncCursorKey(userUid), cursor);
 }
 
-async function serializeNoteForFirebase(note: Note, syncedAt: string): Promise<FirebaseNoteRecord> {
-  let photoRemoteBase64 = note.photoRemoteBase64 ?? null;
-
-  if (note.type === 'photo' && !photoRemoteBase64) {
-    photoRemoteBase64 = await readPhotoAsBase64(note.photoLocalUri ?? note.content);
-  }
+async function serializeNoteForSupabase(
+  userId: string,
+  note: Note,
+  syncedAt: string
+): Promise<NoteRow> {
+  const photoPath =
+    note.type === 'photo'
+      ? await uploadPhotoToStorage(
+          NOTE_MEDIA_BUCKET,
+          `${userId}/${note.id}`,
+          note.photoLocalUri ?? note.content
+        )
+      : null;
 
   return {
     id: note.id,
+    user_id: userId,
     type: note.type,
     content: note.type === 'text' ? note.content : '',
-    photoRemoteBase64,
-    hasDoodle: Boolean(note.hasDoodle && note.doodleStrokesJson),
-    doodleStrokesJson: note.doodleStrokesJson ?? null,
-    locationName: note.locationName,
-    promptId: note.promptId ?? null,
-    promptTextSnapshot: note.promptTextSnapshot ?? null,
-    promptAnswer: note.promptAnswer ?? null,
-    moodEmoji: note.moodEmoji ?? null,
+    photo_path: photoPath,
+    has_doodle: Boolean(note.hasDoodle && note.doodleStrokesJson),
+    doodle_strokes_json: note.doodleStrokesJson ?? null,
+    location_name: note.locationName,
+    prompt_id: note.promptId ?? null,
+    prompt_text_snapshot: note.promptTextSnapshot ?? null,
+    prompt_answer: note.promptAnswer ?? null,
+    mood_emoji: note.moodEmoji ?? null,
     latitude: note.latitude,
     longitude: note.longitude,
     radius: note.radius,
-    isFavorite: note.isFavorite,
-    createdAt: note.createdAt,
-    updatedAt: note.updatedAt,
-    syncedAt,
+    is_favorite: note.isFavorite,
+    created_at: note.createdAt,
+    updated_at: note.updatedAt,
+    synced_at: syncedAt,
   };
 }
 
+function getSyncUserId(user: SyncUser) {
+  return user.id ?? user.uid;
+}
+
 async function deserializeRemoteNote(
-  record: FirebaseNoteRecord,
+  record: NoteRow,
   existingLocalNote: Note | null
 ): Promise<Note | null> {
   if (record.type !== 'text' && record.type !== 'photo') {
     return null;
   }
 
-  if (!record.id || !record.createdAt) {
+  if (!record.id || !record.created_at) {
     return null;
   }
 
@@ -286,8 +283,13 @@ async function deserializeRemoteNote(
   if (!photoLocalUri && existingLocalNote?.type === 'photo') {
     photoLocalUri = existingLocalNote.content;
   }
-  if (record.type === 'photo' && record.photoRemoteBase64) {
-    photoLocalUri = await writePhotoFromBase64(record.id, record.photoRemoteBase64);
+
+  if (record.type === 'photo' && record.photo_path) {
+    photoLocalUri = await downloadPhotoFromStorage(
+      NOTE_MEDIA_BUCKET,
+      record.photo_path,
+      record.id
+    );
   }
 
   if (record.type === 'photo' && !photoLocalUri) {
@@ -299,20 +301,20 @@ async function deserializeRemoteNote(
     type: record.type,
     content: record.type === 'photo' ? photoLocalUri ?? '' : record.content ?? '',
     photoLocalUri,
-    photoRemoteBase64: record.photoRemoteBase64 ?? null,
-    locationName: record.locationName ?? null,
-    promptId: record.promptId ?? null,
-    promptTextSnapshot: record.promptTextSnapshot ?? null,
-    promptAnswer: record.promptAnswer ?? null,
-    moodEmoji: record.moodEmoji ?? null,
+    photoRemoteBase64: null,
+    locationName: record.location_name ?? null,
+    promptId: record.prompt_id ?? null,
+    promptTextSnapshot: record.prompt_text_snapshot ?? null,
+    promptAnswer: record.prompt_answer ?? null,
+    moodEmoji: record.mood_emoji ?? null,
     latitude: record.latitude,
     longitude: record.longitude,
     radius: typeof record.radius === 'number' ? record.radius : 150,
-    isFavorite: Boolean(record.isFavorite),
-    hasDoodle: Boolean(record.hasDoodle && record.doodleStrokesJson),
-    doodleStrokesJson: record.doodleStrokesJson ?? null,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt ?? null,
+    isFavorite: Boolean(record.is_favorite),
+    hasDoodle: Boolean(record.has_doodle && record.doodle_strokes_json),
+    doodleStrokesJson: record.doodle_strokes_json ?? null,
+    createdAt: record.created_at,
+    updatedAt: record.updated_at ?? null,
   };
 }
 
@@ -331,142 +333,106 @@ async function markItemFailed(
   };
 }
 
-async function commitBatch({
-  batch,
-  items,
-  syncRepository,
-}: {
-  batch: FirestoreWriteBatch;
-  items: SyncQueueItem[];
-  syncRepository: SyncRepository;
-}) {
-  if (items.length === 0) {
-    return {
-      processedCount: 0,
-      failedCount: 0,
-      error: null as string | null,
-      blockedReason: null as string | null,
-    };
+async function deleteRemoteNote(userId: string, noteId: string) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Supabase sync is unavailable in this build.');
   }
 
-  try {
-    await batch.commit();
-    await Promise.all(items.map((item) => syncRepository.markDone(item.id)));
-    return {
-      processedCount: items.length,
-      failedCount: 0,
-      error: null as string | null,
-      blockedReason: null as string | null,
-    };
-  } catch (error) {
-    const failures = await Promise.all(items.map((item) => markItemFailed(syncRepository, item, error)));
-    return {
-      processedCount: 0,
-      failedCount: failures.length,
-      error: failures[failures.length - 1]?.error ?? getErrorMessage(error),
-      blockedReason: failures.find((failure) => failure.blockedReason)?.blockedReason ?? null,
-    };
+  await deletePhotoFromStorage(NOTE_MEDIA_BUCKET, `${userId}/${noteId}`).catch(() => undefined);
+  const { error } = await supabase.from('notes').delete().eq('id', noteId).eq('user_id', userId);
+  if (error) {
+    throw error;
   }
 }
 
-async function deleteAllRemoteNotesInChunks(
-  notesCollection: FirestoreCollection,
-  firestore: FirebaseFirestoreTypes.Module
-) {
-  const snapshot = await getDocs(notesCollection);
-  const docs = snapshot.docs ?? [];
+async function deleteAllRemoteNotesForUser(userId: string) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Supabase sync is unavailable in this build.');
+  }
 
-  for (let index = 0; index < docs.length; index += FIRESTORE_BATCH_LIMIT) {
-    const nextBatch = writeBatch(firestore);
-    const chunk = docs.slice(index, index + FIRESTORE_BATCH_LIMIT);
-    chunk.forEach((snapshotItem: FirebaseFirestoreTypes.QueryDocumentSnapshot<FirestoreDocument>) => {
-      nextBatch.delete(snapshotItem.ref);
-    });
-    await nextBatch.commit();
+  const { data, error } = await supabase
+    .from('notes')
+    .select('id, photo_path')
+    .eq('user_id', userId);
+  if (error) {
+    throw error;
+  }
+
+  for (const row of data ?? []) {
+    await deletePhotoFromStorage(NOTE_MEDIA_BUCKET, row.photo_path as string | null).catch(() => undefined);
+  }
+
+  const { error: deleteError } = await supabase.from('notes').delete().eq('user_id', userId);
+  if (deleteError) {
+    throw deleteError;
   }
 }
 
-async function flushPendingQueueToFirebase(
-  notesCollection: FirestoreCollection,
-  firestore: FirebaseFirestoreTypes.Module,
+async function upsertRemoteNote(userId: string, note: Note, syncMarker: string) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Supabase sync is unavailable in this build.');
+  }
+
+  const serializedNote = await serializeNoteForSupabase(userId, note, syncMarker);
+  const { error } = await supabase.from('notes').upsert(serializedNote, {
+    onConflict: 'id',
+  });
+  if (error) {
+    throw error;
+  }
+}
+
+async function flushPendingQueueToSupabase(
+  user: SyncUser,
   syncRepository: SyncRepository,
   notes: Note[],
   syncMarker: string
 ): Promise<FlushQueueResult> {
   const pendingChanges = await syncRepository.listPending(5000);
   const noteMap = new Map(notes.map((note) => [note.id, note]));
+  const userId = getSyncUserId(user);
 
-  let currentBatch = writeBatch(firestore);
-  let currentBatchItems: SyncQueueItem[] = [];
-  let currentBatchOps = 0;
   let processedCount = 0;
   let failedCount = 0;
   let lastError: string | null = null;
   let lastBlockedReason: string | null = null;
   let hadLocalWrites = false;
 
-  const commitCurrentBatch = async () => {
-    const result = await commitBatch({
-      batch: currentBatch,
-      items: currentBatchItems,
-      syncRepository,
-    });
-    processedCount += result.processedCount;
-    failedCount += result.failedCount;
-    lastError = result.error ?? lastError;
-    lastBlockedReason = result.blockedReason ?? lastBlockedReason;
-    currentBatch = writeBatch(firestore);
-    currentBatchItems = [];
-    currentBatchOps = 0;
-  };
-
   for (const change of pendingChanges) {
     await syncRepository.markProcessing(change.id);
 
-    if (change.operation === 'deleteAll') {
-      await commitCurrentBatch();
-
-      try {
-        await deleteAllRemoteNotesInChunks(notesCollection, firestore);
+    try {
+      if (change.operation === 'deleteAll') {
+        await deleteAllRemoteNotesForUser(userId);
         await syncRepository.markDone(change.id);
         processedCount += 1;
         hadLocalWrites = true;
-      } catch (error) {
-        const failure = await markItemFailed(syncRepository, change, error);
-        failedCount += 1;
-        lastError = failure.error;
-        lastBlockedReason = failure.blockedReason ?? lastBlockedReason;
+        continue;
       }
-      continue;
-    }
 
-    if (!change.entityId) {
-      await syncRepository.markDone(change.id);
-      processedCount += 1;
-      continue;
-    }
+      if (!change.entityId) {
+        await syncRepository.markDone(change.id);
+        processedCount += 1;
+        continue;
+      }
 
-    try {
-      const docRef = doc(notesCollection, change.entityId);
       if (change.operation === 'delete') {
-        currentBatch.delete(docRef);
+        await deleteRemoteNote(userId, change.entityId);
       } else {
         const note = noteMap.get(change.entityId);
         if (!note) {
-          currentBatch.delete(docRef);
+          await deleteRemoteNote(userId, change.entityId);
         } else {
-          const serializedNote = await serializeNoteForFirebase(note, syncMarker);
-          currentBatch.set(docRef, serializedNote, { merge: true });
+          await upsertRemoteNote(userId, note, syncMarker);
         }
       }
 
-      currentBatchItems.push(change);
-      currentBatchOps += 1;
+      await syncRepository.markDone(change.id);
+      processedCount += 1;
       hadLocalWrites = true;
-
-      if (currentBatchOps >= FIRESTORE_BATCH_LIMIT) {
-        await commitCurrentBatch();
-      }
     } catch (error) {
       const failure = await markItemFailed(syncRepository, change, error);
       failedCount += 1;
@@ -474,8 +440,6 @@ async function flushPendingQueueToFirebase(
       lastBlockedReason = failure.blockedReason ?? lastBlockedReason;
     }
   }
-
-  await commitCurrentBatch();
 
   return {
     processedCount,
@@ -486,65 +450,62 @@ async function flushPendingQueueToFirebase(
   };
 }
 
-async function uploadLocalSnapshotToFirebase(
-  notesCollection: FirestoreCollection,
-  firestore: FirebaseFirestoreTypes.Module,
-  notes: Note[],
-  syncMarker: string
-) {
-  let uploadedCount = 0;
-
-  for (let index = 0; index < notes.length; index += FIRESTORE_BATCH_LIMIT) {
-    const nextBatch = writeBatch(firestore);
-    const chunk = notes.slice(index, index + FIRESTORE_BATCH_LIMIT);
-
-    for (const note of chunk) {
-      const serializedNote = await serializeNoteForFirebase(note, syncMarker);
-      nextBatch.set(doc(notesCollection, note.id), serializedNote, { merge: true });
-    }
-
-    await nextBatch.commit();
-    uploadedCount += chunk.length;
+async function uploadLocalSnapshotToSupabase(userId: string, notes: Note[], syncMarker: string) {
+  for (const note of notes) {
+    await upsertRemoteNote(userId, note, syncMarker);
   }
 
-  return uploadedCount;
+  return notes.length;
 }
 
-async function mergeRemoteNotesFromFirebase(
-  notesCollection: FirestoreCollection,
+async function mergeRemoteNotesFromSupabase(
+  userId: string,
   localNotes: Note[],
   options: { since: string | null }
 ): Promise<RemoteMergeResult> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Supabase sync is unavailable in this build.');
+  }
+
+  let request = supabase
+    .from('notes')
+    .select(
+      'id, user_id, type, content, photo_path, has_doodle, doodle_strokes_json, location_name, prompt_id, prompt_text_snapshot, prompt_answer, mood_emoji, latitude, longitude, radius, is_favorite, created_at, updated_at, synced_at'
+    )
+    .eq('user_id', userId)
+    .order('synced_at', { ascending: true });
+
+  if (options.since) {
+    request = request.gt('synced_at', options.since);
+  }
+
+  const { data, error } = await request;
+  if (error) {
+    throw error;
+  }
+
   const localNoteMap = new Map(localNotes.map((note) => [note.id, note]));
-  const remoteRef = options.since
-    ? query(notesCollection, where('syncedAt', '>', options.since), orderBy('syncedAt', 'asc'))
-    : notesCollection;
-  const snapshot = await getDocs(remoteRef);
   let importedCount = 0;
   let latestSyncedAt: string | null = options.since;
 
-  for (const snapshotDoc of snapshot.docs) {
-    const nextRemoteRecord = {
-      ...snapshotDoc.data(),
-      id: snapshotDoc.id,
-    } as FirebaseNoteRecord;
-    const existingLocalNote =
-      localNoteMap.get(nextRemoteRecord.id) ?? (await getNoteById(nextRemoteRecord.id));
-    const nextLocalNote = await deserializeRemoteNote(nextRemoteRecord, existingLocalNote);
+  for (const row of (data ?? []) as NoteRow[]) {
+    const existingLocalNote = localNoteMap.get(row.id) ?? (await getNoteById(row.id));
+    const nextLocalNote = await deserializeRemoteNote(row, existingLocalNote);
     if (!nextLocalNote) {
-      latestSyncedAt = nextRemoteRecord.syncedAt ?? latestSyncedAt;
+      latestSyncedAt = row.synced_at ?? latestSyncedAt;
       continue;
     }
 
-    if (existingLocalNote && getSyncTimestamp(existingLocalNote) >= getSyncTimestamp(nextLocalNote)) {
-      latestSyncedAt = nextRemoteRecord.syncedAt ?? latestSyncedAt;
+    if (existingLocalNote && getSyncTimestamp(existingLocalNote) >= getSyncTimestamp(row)) {
+      latestSyncedAt = row.synced_at ?? latestSyncedAt;
       continue;
     }
 
     await upsertNote(nextLocalNote);
     localNoteMap.set(nextLocalNote.id, nextLocalNote);
     importedCount += 1;
-    latestSyncedAt = nextRemoteRecord.syncedAt ?? latestSyncedAt;
+    latestSyncedAt = row.synced_at ?? latestSyncedAt;
   }
 
   return { importedCount, latestSyncedAt };
@@ -663,7 +624,7 @@ const sqliteSyncRepository: SyncRepository = {
 };
 
 const localFirstSyncService: SyncService = {
-  isAvailable: Boolean(getFirestore()),
+  isAvailable: Boolean(getSupabase()),
   async recordChange(change) {
     try {
       await sqliteSyncRepository.enqueue(change);
@@ -673,11 +634,11 @@ const localFirstSyncService: SyncService = {
   },
 };
 
-export async function syncNotesToFirebase(
+export async function syncNotes(
   user: SyncUser | null,
   notes: Note[],
   options: SyncOptions = {}
-): Promise<FirebaseSyncResult> {
+): Promise<SyncResult> {
   if (!user) {
     return {
       status: 'unavailable',
@@ -685,27 +646,26 @@ export async function syncNotesToFirebase(
     };
   }
 
-  const firestore = getFirestore();
-  if (!firestore) {
+  const supabase = getSupabase();
+  if (!supabase) {
     return {
       status: 'unavailable',
-      message: 'Firebase sync is unavailable in this build.',
+      message: 'Supabase sync is unavailable in this build.',
     };
   }
 
   const requestedMode = options.mode ?? 'incremental';
+  const userId = getSyncUserId(user);
 
   try {
     const syncRepository = getSyncRepository();
-    const notesCollection = collection(firestore, 'users', user.uid, 'notes');
     const syncMarker = new Date().toISOString();
-    const lastRemoteCursor = await getLastRemoteSyncCursor(user.uid);
+    const lastRemoteCursor = await getLastRemoteSyncCursor(userId);
     const mode: SyncMode =
       requestedMode === 'full' || !lastRemoteCursor ? 'full' : 'incremental';
 
-    const queueResult = await flushPendingQueueToFirebase(
-      notesCollection,
-      firestore,
+    const queueResult = await flushPendingQueueToSupabase(
+      user,
       syncRepository,
       notes,
       syncMarker
@@ -731,20 +691,15 @@ export async function syncNotesToFirebase(
     let finalPhotoNoteCount = countPhotoNotes(notes);
 
     if (mode === 'full') {
-      const remoteMergeResult = await mergeRemoteNotesFromFirebase(notesCollection, notes, { since: null });
+      const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, notes, { since: null });
       importedCount = remoteMergeResult.importedCount;
       const latestLocalNotes = remoteMergeResult.importedCount > 0 ? await getAllNotes() : notes;
       finalNoteCount = latestLocalNotes.length;
       finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
-      uploadedSnapshotCount = await uploadLocalSnapshotToFirebase(
-        notesCollection,
-        firestore,
-        latestLocalNotes,
-        syncMarker
-      );
+      uploadedSnapshotCount = await uploadLocalSnapshotToSupabase(userId, latestLocalNotes, syncMarker);
       nextCursor = syncMarker;
     } else {
-      const remoteMergeResult = await mergeRemoteNotesFromFirebase(notesCollection, notes, {
+      const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, notes, {
         since: lastRemoteCursor,
       });
       importedCount = remoteMergeResult.importedCount;
@@ -761,24 +716,26 @@ export async function syncNotesToFirebase(
       }
     }
 
+    const { error: usageError } = await supabase.from('user_usage').upsert(
+      {
+        user_id: userId,
+        note_count: finalNoteCount,
+        photo_note_count: finalPhotoNoteCount,
+        last_synced_at: syncMarker,
+      },
+      { onConflict: 'user_id' }
+    );
+    if (usageError) {
+      throw usageError;
+    }
+
     await Promise.all([
-      setDoc(
-        doc(firestore, 'users', user.uid),
-        {
-          displayName: user.displayName ?? null,
-          photoURL: user.photoURL ?? null,
-          noteCount: finalNoteCount,
-          photoNoteCount: finalPhotoNoteCount,
-          lastSyncedAt: syncMarker,
-        },
-        { merge: true }
-      ),
       upsertPublicUserProfile({
-        userUid: user.uid,
+        userUid: userId,
         displayName: user.displayName,
         photoURL: user.photoURL,
       }),
-      setLastRemoteSyncCursor(user.uid, nextCursor),
+      setLastRemoteSyncCursor(userId, nextCursor),
     ]);
 
     const syncedCount = queueResult.processedCount + uploadedSnapshotCount + importedCount;
@@ -790,17 +747,18 @@ export async function syncNotesToFirebase(
       failedCount: 0,
       message:
         syncedCount === 1
-          ? 'Synced 1 note with Firebase.'
-          : `Synced ${syncedCount} notes with Firebase.`,
+          ? 'Synced 1 note with Supabase.'
+          : `Synced ${syncedCount} notes with Supabase.`,
     };
   } catch (error) {
-    console.warn('[syncService] Firebase sync failed:', error);
+    console.warn('[syncService] Supabase sync failed:', error);
     return {
       status: 'error',
-      message: 'Unable to sync with Firebase right now. Please try again later.',
+      message: 'Unable to sync with Supabase right now. Please try again later.',
     };
   }
 }
+
 
 export function getSyncRepository(): SyncRepository {
   return sqliteSyncRepository;
@@ -809,6 +767,6 @@ export function getSyncRepository(): SyncRepository {
 export function getSyncService(): SyncService {
   return {
     ...localFirstSyncService,
-    isAvailable: Boolean(getFirestore()),
+    isAvailable: Boolean(getSupabase()),
   };
 }

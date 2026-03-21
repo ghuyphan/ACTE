@@ -1,20 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
-import {
-  collection,
-  deleteDoc,
-  doc,
-  FirebaseFirestoreTypes,
-  getDoc,
-  getDocs,
-  limit,
-  orderBy,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  query,
-} from '@react-native-firebase/firestore';
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import { AppUser, getUserDisplayName } from '../utils/appUser';
+import { getSupabase } from '../utils/supabase';
 import { Note } from './database';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import {
@@ -36,8 +23,7 @@ import {
   upsertCachedRoom,
   upsertCachedRoomInvite,
 } from './roomCache';
-import { readPhotoAsBase64, writePhotoFromBase64 } from './photoStorage';
-import { getFirestore } from '../utils/firebase';
+import { deletePhotoFromStorage, downloadPhotoFromStorage, ROOM_POST_MEDIA_BUCKET, uploadPhotoToStorage } from './remoteMedia';
 
 export interface RoomInvite {
   id: string;
@@ -51,57 +37,51 @@ export interface RoomInvite {
 }
 
 interface RoomRecord {
+  id: string;
   name: string;
-  ownerId: string;
-  createdAt: string;
-  updatedAt: string;
-  lastPostAt: string | null;
-  coverPhotoUrl?: string | null;
+  owner_user_id: string;
+  created_at: string;
+  updated_at: string;
+  last_post_at: string | null;
+  cover_photo_path: string | null;
 }
 
 interface RoomMembershipRecord {
-  roomId: string;
-  userId: string;
+  room_id: string;
+  user_id: string;
   role: RoomRole;
-  displayNameSnapshot: string | null;
-  photoURLSnapshot: string | null;
-  joinedAt: string;
-  lastReadAt: string | null;
-  joinedViaInviteId?: string | null;
-  joinedViaInviteToken?: string | null;
-}
-
-interface RoomMembershipIndexRecord {
-  roomId: string;
-  joinedAt: string;
-  role: RoomRole;
+  display_name_snapshot: string | null;
+  photo_url_snapshot: string | null;
+  joined_at: string;
+  last_read_at: string | null;
+  joined_via_invite_id?: string | null;
+  joined_via_invite_token?: string | null;
 }
 
 interface RoomPostRecord {
-  roomId: string;
-  authorId: string;
-  authorDisplayName: string | null;
+  id: string;
+  room_id: string;
+  author_user_id: string;
+  author_display_name: string | null;
   origin: RoomPost['origin'];
   type: RoomPost['type'];
   text: string;
-  photoRemoteBase64: string | null;
-  placeName: string | null;
-  sourceNoteId: string | null;
-  createdAt: string;
-  updatedAt: string | null;
+  photo_path: string | null;
+  place_name: string | null;
+  source_note_id: string | null;
+  created_at: string;
+  updated_at: string | null;
 }
 
 interface RoomInviteRecord {
-  roomId: string;
+  id: string;
+  room_id: string;
   token: string;
-  createdBy: string;
-  createdAt: string;
-  expiresAt: string | null;
-  revokedAt: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
 }
-
-type FirestoreDocument = FirebaseFirestoreTypes.DocumentData;
-type FirestoreSnapshot = FirebaseFirestoreTypes.QueryDocumentSnapshot<FirestoreDocument>;
 
 export interface RoomDetails {
   room: RoomSummary;
@@ -117,21 +97,20 @@ export interface CreateRoomPostInput {
 }
 
 export function getRoomErrorMessage(error: unknown) {
-  const code =
-    typeof error === 'object' && error && 'code' in error
-      ? String((error as { code?: string }).code)
-      : null;
   const message =
     error instanceof Error && error.message
       ? error.message
-      : 'Shared rooms are unavailable right now.';
+      : typeof error === 'object' && error && 'message' in error
+        ? String((error as { message?: unknown }).message ?? '')
+        : 'Shared rooms are unavailable right now.';
+  const normalizedMessage = message.toLowerCase();
 
-  if (code === 'firestore/permission-denied' || message.includes('permission-denied')) {
-    return 'Shared rooms need Firestore security rules before this action can work in production.';
+  if (normalizedMessage.includes('permission') || normalizedMessage.includes('policy')) {
+    return 'Shared rooms need Supabase policies before this action can work in production.';
   }
 
-  if (code === 'firestore/unavailable') {
-    return 'Firestore is unavailable right now. Check your connection and try again.';
+  if (normalizedMessage.includes('network') || normalizedMessage.includes('fetch')) {
+    return 'Supabase is unavailable right now. Check your connection and try again.';
   }
 
   return message;
@@ -145,17 +124,17 @@ function generateId(prefix: string) {
   return `${prefix}-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}`;
 }
 
-function requireFirestore() {
-  const firestore = getFirestore();
-  if (!firestore) {
+function requireSupabase() {
+  const supabase = getSupabase();
+  if (!supabase) {
     throw new Error('Rooms are unavailable in this build.');
   }
 
-  return firestore;
+  return supabase;
 }
 
-function getDisplayName(user: FirebaseAuthTypes.User) {
-  return user.displayName?.trim() || user.email?.trim() || 'Noto user';
+function getDisplayName(user: AppUser) {
+  return getUserDisplayName(user);
 }
 
 function parseInvitePayload(rawValue: string) {
@@ -194,43 +173,121 @@ function parseInvitePayload(rawValue: string) {
 }
 
 function mapRoomSummary(
-  roomId: string,
   roomRecord: RoomRecord,
   role: RoomRole,
   memberCount: number,
   lastPostPreview: string | null
 ): RoomSummary {
   return {
-    id: roomId,
+    id: roomRecord.id,
     name: roomRecord.name,
-    ownerId: roomRecord.ownerId,
-    createdAt: roomRecord.createdAt,
-    updatedAt: roomRecord.updatedAt,
-    lastPostAt: roomRecord.lastPostAt ?? null,
-    coverPhotoUrl: roomRecord.coverPhotoUrl ?? null,
+    ownerId: roomRecord.owner_user_id,
+    createdAt: roomRecord.created_at,
+    updatedAt: roomRecord.updated_at,
+    lastPostAt: roomRecord.last_post_at ?? null,
+    coverPhotoUrl: roomRecord.cover_photo_path ?? null,
     currentUserRole: role,
     memberCount,
     lastPostPreview,
   };
 }
 
-async function getRoomMemberCount(roomId: string) {
-  const firestore = requireFirestore();
-  const snapshot = await getDocs(collection(firestore, 'rooms', roomId, 'members'));
-  return snapshot.docs.length;
+function mapRoomInvite(record: RoomInviteRecord): RoomInvite {
+  return {
+    id: record.id,
+    roomId: record.room_id,
+    token: record.token,
+    createdBy: record.created_by_user_id,
+    createdAt: record.created_at,
+    expiresAt: record.expires_at ?? null,
+    revokedAt: record.revoked_at ?? null,
+    url: Linking.createURL('/rooms/join', {
+      queryParams: {
+        roomId: record.room_id,
+        inviteId: record.id,
+        invite: record.token,
+      },
+    }),
+  };
 }
 
-async function getLatestPostPreview(roomId: string) {
-  const firestore = requireFirestore();
-  const snapshot = await getDocs(
-    query(collection(firestore, 'rooms', roomId, 'posts'), orderBy('createdAt', 'desc'), limit(1))
-  );
-  const latestDoc = snapshot.docs[0];
-  if (!latestDoc) {
+async function hydrateRoomPostPhoto(postId: string, photoPath?: string | null) {
+  if (!photoPath?.trim()) {
     return null;
   }
 
-  const latestData = latestDoc.data() as Partial<RoomPostRecord>;
+  return downloadPhotoFromStorage(
+    ROOM_POST_MEDIA_BUCKET,
+    photoPath,
+    `room-post-${postId}`
+  );
+}
+
+async function fetchRoomRecord(roomId: string) {
+  const { data, error } = await requireSupabase()
+    .from('rooms')
+    .select('id, name, owner_user_id, created_at, updated_at, last_post_at, cover_photo_path')
+    .eq('id', roomId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as RoomRecord | null) ?? null;
+}
+
+async function ensureMembership(roomId: string, userUid: string) {
+  const { data, error } = await requireSupabase()
+    .from('room_members')
+    .select(
+      'room_id, user_id, role, display_name_snapshot, photo_url_snapshot, joined_at, last_read_at, joined_via_invite_id, joined_via_invite_token'
+    )
+    .eq('room_id', roomId)
+    .eq('user_id', userUid)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new Error('You no longer have access to this room.');
+  }
+
+  return data as RoomMembershipRecord;
+}
+
+async function getRoomMemberCount(roomId: string) {
+  const { count, error } = await requireSupabase()
+    .from('room_members')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('room_id', roomId);
+
+  if (error) {
+    throw error;
+  }
+
+  return count ?? 0;
+}
+
+async function getLatestPostPreview(roomId: string) {
+  const { data, error } = await requireSupabase()
+    .from('room_posts')
+    .select('type, text')
+    .eq('room_id', roomId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  const latestData = data?.[0] as { type?: string; text?: string } | undefined;
+  if (!latestData) {
+    return null;
+  }
+
   if (latestData.type === 'photo') {
     return 'Photo';
   }
@@ -241,96 +298,22 @@ async function getLatestPostPreview(roomId: string) {
 }
 
 async function getActiveInviteRecord(roomId: string): Promise<RoomInvite | null> {
-  const firestore = requireFirestore();
-  const snapshot = await getDocs(
-    query(collection(firestore, 'rooms', roomId, 'invites'), orderBy('createdAt', 'desc'), limit(10))
+  const { data, error } = await requireSupabase()
+    .from('room_invites')
+    .select('id, room_id, token, created_by_user_id, created_at, expires_at, revoked_at')
+    .eq('room_id', roomId)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  if (error) {
+    throw error;
+  }
+
+  const invite = ((data ?? []) as RoomInviteRecord[]).find(
+    (item) => !item.revoked_at && (!item.expires_at || new Date(item.expires_at).getTime() > Date.now())
   );
 
-  const inviteDoc = snapshot.docs
-    .map((item: FirestoreSnapshot) => ({ id: item.id, ...(item.data() as RoomInviteRecord) }))
-    .find(
-      (item: RoomInviteRecord & { id: string }) =>
-        !item.revokedAt && (!item.expiresAt || new Date(item.expiresAt).getTime() > Date.now())
-    );
-
-  if (!inviteDoc) {
-    return null;
-  }
-
-  return {
-    id: inviteDoc.id,
-    roomId,
-    token: inviteDoc.token,
-    createdBy: inviteDoc.createdBy,
-    createdAt: inviteDoc.createdAt,
-    expiresAt: inviteDoc.expiresAt ?? null,
-    revokedAt: inviteDoc.revokedAt ?? null,
-    url: Linking.createURL('/rooms/join', {
-      queryParams: {
-        roomId,
-        inviteId: inviteDoc.id,
-        invite: inviteDoc.token,
-      },
-    }),
-  };
-}
-
-async function serializeRoomPostPhoto(photoLocalUri?: string | null) {
-  if (!photoLocalUri) {
-    return null;
-  }
-
-  return readPhotoAsBase64(photoLocalUri);
-}
-
-async function hydrateRoomPostPhoto(postId: string, photoRemoteBase64?: string | null) {
-  if (!photoRemoteBase64) {
-    return null;
-  }
-
-  return writePhotoFromBase64(`room-post-${postId}`, photoRemoteBase64);
-}
-
-async function fetchRoomRecord(roomId: string) {
-  const firestore = requireFirestore();
-  const roomSnapshot = await getDoc(doc(firestore, 'rooms', roomId));
-  if (!roomSnapshot.exists()) {
-    return null;
-  }
-
-  return roomSnapshot.data() as RoomRecord;
-}
-
-async function ensureMembership(roomId: string, userUid: string) {
-  const firestore = requireFirestore();
-  const membershipSnapshot = await getDoc(doc(firestore, 'rooms', roomId, 'members', userUid));
-  if (!membershipSnapshot.exists()) {
-    throw new Error('You no longer have access to this room.');
-  }
-
-  return membershipSnapshot.data() as RoomMembershipRecord;
-}
-
-async function updateMembershipIndex(
-  userUid: string,
-  roomId: string,
-  record: RoomMembershipIndexRecord | null
-) {
-  const firestore = requireFirestore();
-  const indexRef = doc(firestore, 'users', userUid, 'roomMemberships', roomId);
-  if (!record) {
-    await deleteDoc(indexRef);
-    return;
-  }
-
-  await setDoc(
-    indexRef,
-    {
-      ...record,
-      syncedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
+  return invite ? mapRoomInvite(invite) : null;
 }
 
 async function buildRoomSummary(roomId: string, role: RoomRole) {
@@ -344,7 +327,7 @@ async function buildRoomSummary(roomId: string, role: RoomRole) {
     getLatestPostPreview(roomId),
   ]);
 
-  return mapRoomSummary(roomId, roomRecord, role, memberCount, lastPostPreview);
+  return mapRoomSummary(roomRecord, role, memberCount, lastPostPreview);
 }
 
 export async function loadCachedRooms(userUid: string) {
@@ -376,93 +359,108 @@ export async function loadRoomsCacheLastUpdatedAt(userUid: string) {
   return getRoomsCacheLastUpdatedAt(userUid);
 }
 
-export async function refreshRooms(user: FirebaseAuthTypes.User): Promise<RoomSummary[]> {
-  const firestore = requireFirestore();
-  const membershipSnapshot = await getDocs(collection(firestore, 'users', user.uid, 'roomMemberships'));
-  const roomIds = membershipSnapshot.docs.map((item: FirestoreSnapshot) => {
-    const data = item.data() as RoomMembershipIndexRecord;
-    return {
-      roomId: item.id,
-      role: data.role ?? 'member',
-    };
-  });
+export async function refreshRooms(user: AppUser): Promise<RoomSummary[]> {
+  const { data, error } = await requireSupabase()
+    .from('room_members')
+    .select('room_id, role')
+    .eq('user_id', user.id);
 
+  if (error) {
+    throw error;
+  }
+
+  const roomIds = (data ?? []) as Array<{ room_id: string; role: RoomRole }>;
   const rooms = (
     await Promise.all(
-      roomIds.map(async ({ roomId, role }: { roomId: string; role: RoomRole }) =>
-        buildRoomSummary(roomId, role)
-      )
+      roomIds.map(async ({ room_id, role }) => buildRoomSummary(room_id, role ?? 'member'))
     )
   ).filter(Boolean) as RoomSummary[];
 
-  await replaceCachedRooms(user.uid, rooms);
+  await replaceCachedRooms(user.id, rooms);
   return rooms;
 }
 
 export async function getRoomDetails(
-  user: FirebaseAuthTypes.User,
+  user: AppUser,
   roomId: string
 ): Promise<RoomDetails> {
-  const membership = await ensureMembership(roomId, user.uid);
+  const membership = await ensureMembership(roomId, user.id);
   const room = await buildRoomSummary(roomId, membership.role);
   if (!room) {
     throw new Error('Room not found.');
   }
 
-  const firestore = requireFirestore();
-  const [memberSnapshot, postSnapshot, activeInvite] = await Promise.all([
-    getDocs(query(collection(firestore, 'rooms', roomId, 'members'), orderBy('joinedAt', 'asc'))),
-    getDocs(query(collection(firestore, 'rooms', roomId, 'posts'), orderBy('createdAt', 'desc'))),
+  const [memberResponse, postResponse, activeInvite] = await Promise.all([
+    requireSupabase()
+      .from('room_members')
+      .select(
+        'room_id, user_id, role, display_name_snapshot, photo_url_snapshot, joined_at, last_read_at'
+      )
+      .eq('room_id', roomId)
+      .order('joined_at', { ascending: true }),
+    requireSupabase()
+      .from('room_posts')
+      .select(
+        'id, room_id, author_user_id, author_display_name, origin, type, text, photo_path, place_name, source_note_id, created_at, updated_at'
+      )
+      .eq('room_id', roomId)
+      .order('created_at', { ascending: false }),
     membership.role === 'owner' ? getActiveInviteRecord(roomId) : Promise.resolve(null),
   ]);
 
-  const members = memberSnapshot.docs.map((item: FirestoreSnapshot) => {
-    const data = item.data() as RoomMembershipRecord;
-    return {
-      roomId,
-      userId: item.id,
-      role: data.role,
-      displayNameSnapshot: data.displayNameSnapshot ?? null,
-      photoURLSnapshot: data.photoURLSnapshot ?? null,
-      joinedAt: data.joinedAt,
-      lastReadAt: data.lastReadAt ?? null,
-    } satisfies RoomMember;
-  });
+  if (memberResponse.error) {
+    throw memberResponse.error;
+  }
+
+  if (postResponse.error) {
+    throw postResponse.error;
+  }
+
+  const members = ((memberResponse.data ?? []) as RoomMembershipRecord[]).map((item) => ({
+    roomId,
+    userId: item.user_id,
+    role: item.role,
+    displayNameSnapshot: item.display_name_snapshot ?? null,
+    photoURLSnapshot: item.photo_url_snapshot ?? null,
+    joinedAt: item.joined_at,
+    lastReadAt: item.last_read_at ?? null,
+  }));
 
   const posts = await Promise.all(
-    postSnapshot.docs.map(async (item: FirestoreSnapshot) => {
-      const data = item.data() as RoomPostRecord;
-      const photoLocalUri = await hydrateRoomPostPhoto(item.id, data.photoRemoteBase64);
+    ((postResponse.data ?? []) as RoomPostRecord[]).map(async (item) => {
+      const photoLocalUri = await hydrateRoomPostPhoto(item.id, item.photo_path);
       return {
         id: item.id,
         roomId,
-        authorId: data.authorId,
-        authorDisplayName: data.authorDisplayName ?? null,
-        origin: data.origin,
-        type: data.type,
-        text: data.text ?? '',
+        authorId: item.author_user_id,
+        authorDisplayName: item.author_display_name ?? null,
+        origin: item.origin,
+        type: item.type,
+        text: item.text ?? '',
         photoLocalUri,
-        photoRemoteBase64: data.photoRemoteBase64 ?? null,
-        placeName: data.placeName ?? null,
-        sourceNoteId: data.sourceNoteId ?? null,
-        createdAt: data.createdAt,
-        updatedAt: data.updatedAt ?? null,
+        photoRemoteBase64: null,
+        placeName: item.place_name ?? null,
+        sourceNoteId: item.source_note_id ?? null,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at ?? null,
       } satisfies RoomPost;
     })
   );
 
-  await upsertCachedRoom(user.uid, room);
-  await replaceCachedRoomMembers(user.uid, roomId, members);
-  await replaceCachedRoomPosts(user.uid, roomId, posts);
+  await upsertCachedRoom(user.id, room);
+  await replaceCachedRoomMembers(user.id, roomId, members);
+  await replaceCachedRoomPosts(user.id, roomId, posts);
   if (activeInvite) {
-    await upsertCachedRoomInvite(user.uid, activeInvite);
+    await upsertCachedRoomInvite(user.id, activeInvite);
   } else {
-    await clearCachedRoomInvite(user.uid, roomId);
+    await clearCachedRoomInvite(user.id, roomId);
   }
-  await setCachedRoomReadState(user.uid, roomId, getNowIso());
-  await updateDoc(doc(firestore, 'rooms', roomId, 'members', user.uid), {
-    lastReadAt: getNowIso(),
-  }).catch(() => undefined);
+  await setCachedRoomReadState(user.id, roomId, getNowIso());
+  await requireSupabase()
+    .from('room_members')
+    .update({ last_read_at: getNowIso() })
+    .eq('room_id', roomId)
+    .eq('user_id', user.id);
 
   return {
     room,
@@ -472,62 +470,60 @@ export async function getRoomDetails(
   };
 }
 
-export async function createRoom(user: FirebaseAuthTypes.User, name: string) {
-  const firestore = requireFirestore();
+export async function createRoom(user: AppUser, name: string) {
   const normalizedName = name.trim();
   if (!normalizedName) {
     throw new Error('Enter a room name.');
   }
 
   const roomId = generateId('room');
+  const { error } = await requireSupabase().rpc('create_room_with_owner', {
+    room_id: roomId,
+    room_name: normalizedName,
+  });
+
+  if (error) {
+    throw error;
+  }
+
   const now = getNowIso();
-  const roomRecord: RoomRecord = {
+  const room = {
+    id: roomId,
     name: normalizedName,
-    ownerId: user.uid,
+    ownerId: user.id,
     createdAt: now,
     updatedAt: now,
     lastPostAt: null,
     coverPhotoUrl: null,
+    currentUserRole: 'owner' as RoomRole,
+    memberCount: 1,
+    lastPostPreview: null,
   };
-  const membership: RoomMembershipRecord = {
+  const membership: RoomMember = {
     roomId,
-    userId: user.uid,
+    userId: user.id,
     role: 'owner',
     displayNameSnapshot: getDisplayName(user),
     photoURLSnapshot: user.photoURL ?? null,
     joinedAt: now,
     lastReadAt: now,
-    joinedViaInviteId: null,
-    joinedViaInviteToken: null,
   };
 
-  await setDoc(doc(firestore, 'rooms', roomId), {
-    ...roomRecord,
-    syncedAt: serverTimestamp(),
-  });
-  await setDoc(doc(firestore, 'rooms', roomId, 'members', user.uid), membership);
-  await updateMembershipIndex(user.uid, roomId, {
-    roomId,
-    joinedAt: now,
-    role: 'owner',
-  });
-
-  const room = mapRoomSummary(roomId, roomRecord, 'owner', 1, null);
-  await upsertCachedRoom(user.uid, room);
-  await replaceCachedRoomMembers(user.uid, roomId, [membership]);
-  await replaceCachedRoomPosts(user.uid, roomId, []);
-  await clearCachedRoomInvite(user.uid, roomId);
-  await setCachedRoomReadState(user.uid, roomId, now);
+  await upsertCachedRoom(user.id, room);
+  await replaceCachedRoomMembers(user.id, roomId, [membership]);
+  await replaceCachedRoomPosts(user.id, roomId, []);
+  await clearCachedRoomInvite(user.id, roomId);
+  await setCachedRoomReadState(user.id, roomId, now);
 
   return room;
 }
 
 export async function renameRoom(
-  user: FirebaseAuthTypes.User,
+  user: AppUser,
   roomId: string,
   nextName: string
 ): Promise<RoomSummary> {
-  const membership = await ensureMembership(roomId, user.uid);
+  const membership = await ensureMembership(roomId, user.id);
   if (membership.role !== 'owner') {
     throw new Error('Only the room owner can rename this room.');
   }
@@ -538,23 +534,29 @@ export async function renameRoom(
   }
 
   const now = getNowIso();
-  await updateDoc(doc(requireFirestore(), 'rooms', roomId), {
-    name: normalizedName,
-    updatedAt: now,
-    syncedAt: serverTimestamp(),
-  });
+  const { error } = await requireSupabase()
+    .from('rooms')
+    .update({
+      name: normalizedName,
+      updated_at: now,
+    })
+    .eq('id', roomId);
+
+  if (error) {
+    throw error;
+  }
 
   const updatedRoom = await buildRoomSummary(roomId, membership.role);
   if (!updatedRoom) {
     throw new Error('Room not found.');
   }
 
-  await upsertCachedRoom(user.uid, updatedRoom);
+  await upsertCachedRoom(user.id, updatedRoom);
   return updatedRoom;
 }
 
-export async function createRoomInvite(user: FirebaseAuthTypes.User, roomId: string): Promise<RoomInvite> {
-  const membership = await ensureMembership(roomId, user.uid);
+export async function createRoomInvite(user: AppUser, roomId: string): Promise<RoomInvite> {
+  const membership = await ensureMembership(roomId, user.id);
   if (membership.role !== 'owner') {
     throw new Error('Only the room owner can create invites.');
   }
@@ -562,207 +564,201 @@ export async function createRoomInvite(user: FirebaseAuthTypes.User, roomId: str
   const inviteId = generateId('invite');
   const token = Crypto.randomUUID();
   const now = getNowIso();
-  await setDoc(doc(requireFirestore(), 'rooms', roomId, 'invites', inviteId), {
-    roomId,
-    token,
-    createdBy: user.uid,
-    createdAt: now,
-    expiresAt: null,
-    revokedAt: null,
-  } satisfies RoomInviteRecord);
-
-  const nextInvite = {
+  const record: RoomInviteRecord = {
     id: inviteId,
-    roomId,
+    room_id: roomId,
     token,
-    createdBy: user.uid,
-    createdAt: now,
-    expiresAt: null,
-    revokedAt: null,
-    url: Linking.createURL('/rooms/join', {
-      queryParams: {
-        roomId,
-        inviteId,
-        invite: token,
-      },
-    }),
+    created_by_user_id: user.id,
+    created_at: now,
+    expires_at: null,
+    revoked_at: null,
   };
-  await upsertCachedRoomInvite(user.uid, nextInvite);
+
+  const { error } = await requireSupabase().from('room_invites').insert(record);
+  if (error) {
+    throw error;
+  }
+
+  const nextInvite = mapRoomInvite(record);
+  await upsertCachedRoomInvite(user.id, nextInvite);
   return nextInvite;
 }
 
 export async function revokeRoomInvite(
-  user: FirebaseAuthTypes.User,
+  user: AppUser,
   roomId: string,
   inviteId: string
 ): Promise<void> {
-  const membership = await ensureMembership(roomId, user.uid);
+  const membership = await ensureMembership(roomId, user.id);
   if (membership.role !== 'owner') {
     throw new Error('Only the room owner can revoke invites.');
   }
 
-  await updateDoc(doc(requireFirestore(), 'rooms', roomId, 'invites', inviteId), {
-    revokedAt: getNowIso(),
-  });
-  await clearCachedRoomInvite(user.uid, roomId);
+  const { error } = await requireSupabase()
+    .from('room_invites')
+    .update({
+      revoked_at: getNowIso(),
+    })
+    .eq('id', inviteId)
+    .eq('room_id', roomId);
+
+  if (error) {
+    throw error;
+  }
+
+  await clearCachedRoomInvite(user.id, roomId);
 }
 
-export async function joinRoomByInvite(user: FirebaseAuthTypes.User, inviteValue: string) {
+export async function joinRoomByInvite(user: AppUser, inviteValue: string) {
   const { roomId, inviteId, token } = parseInvitePayload(inviteValue);
   if (!roomId || !inviteId || !token) {
     throw new Error('Paste a valid invite link.');
   }
 
-  const firestore = requireFirestore();
-  const inviteSnapshot = await getDoc(doc(firestore, 'rooms', roomId, 'invites', inviteId));
-  if (!inviteSnapshot.exists()) {
-    throw new Error('Invite not found.');
-  }
-
-  const invite = inviteSnapshot.data() as RoomInviteRecord;
-  if (invite.revokedAt) {
-    throw new Error('This invite link is no longer active.');
-  }
-  if (invite.expiresAt && new Date(invite.expiresAt).getTime() <= Date.now()) {
-    throw new Error('This invite link has expired.');
-  }
-  if (invite.token !== token) {
-    throw new Error('This invite link is invalid.');
-  }
-
-  const now = getNowIso();
-  const memberRecord: RoomMembershipRecord = {
-    roomId,
-    userId: user.uid,
-    role: 'member',
-    displayNameSnapshot: getDisplayName(user),
-    photoURLSnapshot: user.photoURL ?? null,
-    joinedAt: now,
-    lastReadAt: now,
-    joinedViaInviteId: inviteId,
-    joinedViaInviteToken: token,
-  };
-
-  await setDoc(doc(firestore, 'rooms', roomId, 'members', user.uid), memberRecord, { merge: true });
-  await updateMembershipIndex(user.uid, roomId, {
-    roomId,
-    joinedAt: now,
-    role: 'member',
+  const { error } = await requireSupabase().rpc('join_room_by_invite', {
+    room_id: roomId,
+    invite_id: inviteId,
+    invite_token: token,
   });
+
+  if (error) {
+    throw error;
+  }
 
   const details = await getRoomDetails(user, roomId);
   return details.room;
 }
 
 export async function createRoomPost(
-  user: FirebaseAuthTypes.User,
+  user: AppUser,
   roomId: string,
   input: CreateRoomPostInput
 ): Promise<RoomDetails> {
-  const membership = await ensureMembership(roomId, user.uid);
-  const firestore = requireFirestore();
+  const membership = await ensureMembership(roomId, user.id);
   const text = input.text?.trim() ?? '';
-  const photoRemoteBase64 = await serializeRoomPostPhoto(input.photoLocalUri);
+  const postId = generateId('room-post');
+  const photoPath = await uploadPhotoToStorage(
+    ROOM_POST_MEDIA_BUCKET,
+    `${roomId}/${postId}`,
+    input.photoLocalUri
+  );
 
-  if (!text && !photoRemoteBase64) {
+  if (!text && !photoPath) {
     throw new Error('Add a message or photo before posting.');
   }
 
-  const postId = generateId('room-post');
   const now = getNowIso();
-  await setDoc(doc(firestore, 'rooms', roomId, 'posts', postId), {
-    roomId,
-    authorId: user.uid,
-    authorDisplayName: getDisplayName(user),
+  const { error } = await requireSupabase().from('room_posts').insert({
+    id: postId,
+    room_id: roomId,
+    author_user_id: user.id,
+    author_display_name: getDisplayName(user),
     origin: 'room_native',
-    type: photoRemoteBase64 ? 'photo' : 'text',
+    type: photoPath ? 'photo' : 'text',
     text,
-    photoRemoteBase64: photoRemoteBase64 ?? null,
-    placeName: input.placeName ?? null,
-    sourceNoteId: null,
-    createdAt: now,
-    updatedAt: null,
-  } satisfies RoomPostRecord);
-  await updateDoc(doc(firestore, 'rooms', roomId), {
-    updatedAt: now,
-    lastPostAt: now,
-    syncedAt: serverTimestamp(),
+    photo_path: photoPath ?? null,
+    place_name: input.placeName ?? null,
+    source_note_id: null,
+    created_at: now,
+    updated_at: null,
   });
-  await updateDoc(doc(firestore, 'rooms', roomId, 'members', user.uid), {
-    lastReadAt: now,
-  }).catch(() => undefined);
-  await setCachedRoomReadState(user.uid, roomId, now);
+
+  if (error) {
+    throw error;
+  }
+
+  await requireSupabase()
+    .from('room_members')
+    .update({ last_read_at: now })
+    .eq('room_id', roomId)
+    .eq('user_id', user.id);
+  await setCachedRoomReadState(user.id, roomId, now);
 
   const room = await buildRoomSummary(roomId, membership.role);
   if (room) {
-    await upsertCachedRoom(user.uid, room);
+    await upsertCachedRoom(user.id, room);
   }
 
   return getRoomDetails(user, roomId);
 }
 
 export async function shareNoteToRoom(
-  user: FirebaseAuthTypes.User,
+  user: AppUser,
   roomId: string,
   note: Note
 ): Promise<RoomDetails> {
-  const membership = await ensureMembership(roomId, user.uid);
-  const firestore = requireFirestore();
+  const membership = await ensureMembership(roomId, user.id);
   const postId = generateId('room-post');
   const now = getNowIso();
-  const photoRemoteBase64 =
-    note.type === 'photo' ? await serializeRoomPostPhoto(note.photoLocalUri ?? note.content) : null;
+  const photoPath =
+    note.type === 'photo'
+      ? await uploadPhotoToStorage(
+          ROOM_POST_MEDIA_BUCKET,
+          `${roomId}/${postId}`,
+          note.photoLocalUri ?? note.content
+        )
+      : null;
 
-  await setDoc(doc(firestore, 'rooms', roomId, 'posts', postId), {
-    roomId,
-    authorId: user.uid,
-    authorDisplayName: getDisplayName(user),
+  const { error } = await requireSupabase().from('room_posts').insert({
+    id: postId,
+    room_id: roomId,
+    author_user_id: user.id,
+    author_display_name: getDisplayName(user),
     origin: 'shared_note',
     type: note.type,
     text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
-    photoRemoteBase64: photoRemoteBase64 ?? null,
-    placeName: note.locationName ?? null,
-    sourceNoteId: note.id,
-    createdAt: now,
-    updatedAt: null,
-  } satisfies RoomPostRecord);
-  await updateDoc(doc(firestore, 'rooms', roomId), {
-    updatedAt: now,
-    lastPostAt: now,
-    syncedAt: serverTimestamp(),
+    photo_path: photoPath ?? null,
+    place_name: note.locationName ?? null,
+    source_note_id: note.id,
+    created_at: now,
+    updated_at: null,
   });
-  await updateDoc(doc(firestore, 'rooms', roomId, 'members', user.uid), {
-    lastReadAt: now,
-  }).catch(() => undefined);
-  await setCachedRoomReadState(user.uid, roomId, now);
+
+  if (error) {
+    throw error;
+  }
+
+  await requireSupabase()
+    .from('room_members')
+    .update({ last_read_at: now })
+    .eq('room_id', roomId)
+    .eq('user_id', user.id);
+  await setCachedRoomReadState(user.id, roomId, now);
 
   const room = await buildRoomSummary(roomId, membership.role);
   if (room) {
-    await upsertCachedRoom(user.uid, room);
+    await upsertCachedRoom(user.id, room);
   }
 
   return getRoomDetails(user, roomId);
 }
 
 export async function removeRoomMember(
-  user: FirebaseAuthTypes.User,
+  user: AppUser,
   roomId: string,
   memberUserId: string
 ): Promise<void> {
-  const membership = await ensureMembership(roomId, user.uid);
+  const membership = await ensureMembership(roomId, user.id);
   if (membership.role !== 'owner') {
     throw new Error('Only the room owner can remove members.');
   }
 
-  await deleteDoc(doc(requireFirestore(), 'rooms', roomId, 'members', memberUserId));
-  await updateMembershipIndex(memberUserId, roomId, null);
-  if (memberUserId === user.uid) {
-    await clearCachedRoom(user.uid, roomId);
+  const { error } = await requireSupabase().rpc('remove_room_member', {
+    room_id: roomId,
+    member_user_id: memberUserId,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (memberUserId === user.id) {
+    await clearCachedRoom(user.id, roomId);
   }
 }
 
-export async function getRoomInvite(user: FirebaseAuthTypes.User, roomId: string) {
-  const membership = await ensureMembership(roomId, user.uid);
+export async function getRoomInvite(user: AppUser, roomId: string) {
+  const membership = await ensureMembership(roomId, user.id);
   if (membership.role !== 'owner') {
     return null;
   }

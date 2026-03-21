@@ -1,6 +1,6 @@
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ENABLE_SHARED_ROOMS } from '../constants/features';
+import { AppUser } from '../utils/appUser';
 import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
 import { Note } from '../services/database';
@@ -65,7 +65,7 @@ function useRoomsStoreValue(): RoomsStoreValue {
 
   const enabled = ENABLE_SHARED_ROOMS && isAuthAvailable;
 
-  const hydrateFromCache = useCallback(async (activeUser: FirebaseAuthTypes.User) => {
+  const hydrateFromCache = useCallback(async (activeUser: AppUser) => {
     const [cachedRooms, cachedAt] = await Promise.all([
       loadCachedRooms(activeUser.uid),
       loadRoomsCacheLastUpdatedAt(activeUser.uid),

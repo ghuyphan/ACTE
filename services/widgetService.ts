@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
 import { NativeModules, Platform } from 'react-native';
 import i18n from '../constants/i18n';
-import { getFirebaseAuth } from '../utils/firebase';
+import { getSupabaseUser } from '../utils/supabase';
 import { formatDate } from '../utils/dateUtils';
 import { getAllNotes, Note } from './database';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
@@ -888,7 +888,7 @@ async function resolveWidgetAuthorAvatarProps(candidate: WidgetCandidate) {
 }
 
 async function getSharedWidgetFeedSnapshot(includeSharedRefresh = false): Promise<WidgetSharedFeedSnapshot> {
-    const currentUser = getFirebaseAuth()?.currentUser;
+    const currentUser = await getSupabaseUser();
     if (!currentUser) {
         return {
             currentUserUid: null,
@@ -898,15 +898,15 @@ async function getSharedWidgetFeedSnapshot(includeSharedRefresh = false): Promis
 
     let cachedPosts: SharedPost[] = [];
     try {
-        const cachedSnapshot = await getCachedSharedFeedSnapshot(currentUser.uid);
-        cachedPosts = cachedSnapshot.sharedPosts.filter((post) => post.authorUid !== currentUser.uid);
+        const cachedSnapshot = await getCachedSharedFeedSnapshot(currentUser.id);
+        cachedPosts = cachedSnapshot.sharedPosts.filter((post) => post.authorUid !== currentUser.id);
     } catch {
         cachedPosts = [];
     }
 
     if (!includeSharedRefresh) {
         return {
-            currentUserUid: currentUser.uid,
+            currentUserUid: currentUser.id,
             sharedPosts: cachedPosts,
         };
     }
@@ -914,13 +914,13 @@ async function getSharedWidgetFeedSnapshot(includeSharedRefresh = false): Promis
     try {
         const liveSnapshot = await refreshSharedFeed(currentUser);
         return {
-            currentUserUid: currentUser.uid,
-            sharedPosts: liveSnapshot.sharedPosts.filter((post) => post.authorUid !== currentUser.uid),
+            currentUserUid: currentUser.id,
+            sharedPosts: liveSnapshot.sharedPosts.filter((post) => post.authorUid !== currentUser.id),
         };
     } catch (error) {
         console.warn('[widgetService] Failed to refresh shared widget feed, using cache:', error);
         return {
-            currentUserUid: currentUser.uid,
+            currentUserUid: currentUser.id,
             sharedPosts: cachedPosts,
         };
     }

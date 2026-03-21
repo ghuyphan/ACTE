@@ -13,7 +13,7 @@ const mockReadAsStringAsync = jest.fn();
 const mockGetInfoAsync = jest.fn();
 const mockGetCachedSharedFeedSnapshot = jest.fn();
 const mockRefreshSharedFeed = jest.fn();
-let mockCurrentUser: { uid: string } | null = null;
+let mockCurrentUser: { id: string; uid: string } | null = null;
 
 jest.mock('../constants/i18n', () => {
   let currentLanguage = 'en';
@@ -129,8 +129,8 @@ jest.mock('../services/sharedFeedService', () => ({
   refreshSharedFeed: (...args: unknown[]) => mockRefreshSharedFeed(...args),
 }));
 
-jest.mock('../utils/firebase', () => ({
-  getFirebaseAuth: () => (mockCurrentUser ? { currentUser: mockCurrentUser } : null),
+jest.mock('../utils/supabase', () => ({
+  getSupabaseUser: async () => mockCurrentUser,
 }));
 
 jest.mock('expo-location', () => ({
@@ -374,7 +374,7 @@ describe('widgetService', () => {
   });
 
   it('can use shared friend content as a fallback with author attribution', async () => {
-    mockCurrentUser = { uid: 'me' };
+    mockCurrentUser = { id: 'me', uid: 'me' };
     mockGetCachedSharedFeedSnapshot.mockResolvedValue({
       friends: [],
       sharedPosts: [
@@ -421,7 +421,7 @@ describe('widgetService', () => {
   });
 
   it('refreshes shared widget content from the network when asked', async () => {
-    mockCurrentUser = { uid: 'me' };
+    mockCurrentUser = { id: 'me', uid: 'me' };
     mockRefreshSharedFeed.mockResolvedValue({
       friends: [],
       sharedPosts: [

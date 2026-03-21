@@ -1,13 +1,13 @@
 # Noto
 
-Noto is an Expo SDK 55 React Native app for saving text notes and photo memories tied to real places. It is local-first, location-aware, and includes private sharing flows, room-based collaboration, geofence reminders, Firebase sync, and widget support.
+Noto is an Expo SDK 55 React Native app for saving text notes and photo memories tied to real places. It is local-first, location-aware, and includes private sharing flows, room-based collaboration, geofence reminders, Supabase sync, and widget support.
 
 ## What The App Does
 
 - Save text notes or photo notes with your current location and place name.
 - Revisit notes from the home feed or the map.
 - Get geofence-based reminders when you return to saved places.
-- Sync notes with Firebase when signed in, while still working offline with SQLite.
+- Sync notes with Supabase when signed in, while still working offline with SQLite.
 - Share moments privately with connected friends.
 - Create rooms, invite people, and post shared memories together.
 - Show recent or nearby notes in the Home Screen widget flow.
@@ -29,7 +29,7 @@ Noto is an Expo SDK 55 React Native app for saving text notes and photo memories
 
 - Expo + React Native + Expo Router
 - SQLite for local persistence
-- Firebase Auth + Firestore for optional account + sync
+- Supabase Auth + Postgres + Storage for optional account + sync
 - RevenueCat for native subscription/entitlement handling
 - Expo Camera, Image Picker, Location, Notifications, Haptics, and Widgets
 - React Native Reanimated and Expo glass-effect for UI motion and visual treatment
@@ -49,7 +49,7 @@ Noto is an Expo SDK 55 React Native app for saving text notes and photo memories
 - `services/database.ts`: SQLite schema and note persistence
 - `services/roomService.ts`: room creation, invites, membership, and room posts
 - `services/sharedFeedService.ts`: friend graph and shared moments feed
-- `services/syncService.ts`: Firestore sync pipeline
+- `services/syncService.ts`: Supabase sync pipeline
 - `services/widgetService.ts`: widget selection and payload generation
 - `widgets/ios/LocketWidget.swift`: source of truth for the iOS widget UI
 - `app.config.ts`: Expo app config and env-backed native settings
@@ -80,10 +80,13 @@ npx expo run:ios
 
 ## Optional Configuration
 
-Firebase:
+Supabase + Google sign-in:
 
-- `GoogleService-Info.plist`
-- `google-services.json`
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
+- `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`
+- `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
 
 RevenueCat for Plus:
 
@@ -92,6 +95,8 @@ RevenueCat for Plus:
 - `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`
 - `EXPO_PUBLIC_REVENUECAT_PLUS_ENTITLEMENT_ID` optional, defaults to `plus`
 - `EXPO_PUBLIC_REVENUECAT_PLUS_OFFERING_ID` optional
+
+See [docs/supabase-setup.md](./docs/supabase-setup.md) for the SQL migration, bucket policies, and dashboard setup checklist.
 
 ## Quality Checks
 

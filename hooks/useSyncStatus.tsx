@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import i18n from '../constants/i18n';
 import { useConnectivity } from './useConnectivity';
-import { getSyncRepository, SyncMode, syncNotesToFirebase } from '../services/syncService';
+import { getSyncRepository, SyncMode, syncNotes } from '../services/syncService';
 import { useAuth } from './useAuth';
 import { useNotes } from './useNotes';
 
@@ -114,7 +114,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       setStatus('syncing');
       setLastMessage(null);
 
-      const result = await syncNotesToFirebase(currentUser, notes, { mode });
+      const result = await syncNotes(currentUser, notes, { mode });
       await refreshQueueStats();
 
       if (result.status === 'success') {

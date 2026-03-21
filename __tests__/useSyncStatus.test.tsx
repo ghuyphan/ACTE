@@ -4,7 +4,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { ReactNode } from 'react';
 import { SyncStatusProvider, useSyncStatus } from '../hooks/useSyncStatus';
 
-const mockSyncNotesToFirebase = jest.fn<Promise<unknown>, [unknown, unknown, unknown?]>();
+const mockSyncNotes = jest.fn<Promise<unknown>, [unknown, unknown, unknown?]>();
 const mockRefreshNotes = jest.fn<Promise<void>, [boolean?]>(async () => undefined);
 
 let appStateListener: ((state: AppStateStatus) => void) | null = null;
@@ -57,7 +57,8 @@ jest.mock('../hooks/useNotes', () => ({
 }));
 
 jest.mock('../services/syncService', () => ({
-  syncNotesToFirebase: (user: unknown, notes: unknown) => mockSyncNotesToFirebase(user, notes),
+  syncNotes: (user: unknown, notes: unknown, options?: unknown) =>
+    mockSyncNotes(user, notes, options),
   getSyncRepository: () => ({
     getStats: async () => ({
       pendingCount: 0,
@@ -98,7 +99,7 @@ beforeEach(() => {
   mockAuthState.isAuthAvailable = true;
   mockNotesState.notes = [];
   mockNotesState.loading = false;
-  mockSyncNotesToFirebase.mockResolvedValue({
+  mockSyncNotes.mockResolvedValue({
     status: 'success',
     syncedCount: 0,
     importedCount: 0,
@@ -138,7 +139,7 @@ describe('useSyncStatus', () => {
       jest.advanceTimersByTime(5000);
     });
 
-    expect(mockSyncNotesToFirebase).not.toHaveBeenCalled();
+    expect(mockSyncNotes).not.toHaveBeenCalled();
   });
 
   it('triggers an initial sync after auth restoration', async () => {
@@ -153,7 +154,7 @@ describe('useSyncStatus', () => {
     await flushSyncPref();
 
     await waitFor(() => {
-      expect(mockSyncNotesToFirebase).toHaveBeenCalledTimes(1);
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
       expect(result.current.status).toBe('success');
     });
   });
@@ -173,10 +174,10 @@ describe('useSyncStatus', () => {
     await flushSyncPref();
 
     await waitFor(() => {
-      expect(mockSyncNotesToFirebase).toHaveBeenCalledTimes(1);
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
     });
 
-    mockSyncNotesToFirebase.mockClear();
+    mockSyncNotes.mockClear();
     mockNotesState.notes = [createNote('note-1')];
     rerender({ marker: 1 });
 
@@ -184,14 +185,14 @@ describe('useSyncStatus', () => {
       jest.advanceTimersByTime(1100);
     });
 
-    expect(mockSyncNotesToFirebase).not.toHaveBeenCalled();
+    expect(mockSyncNotes).not.toHaveBeenCalled();
 
     act(() => {
       jest.advanceTimersByTime(200);
     });
 
     await waitFor(() => {
-      expect(mockSyncNotesToFirebase).toHaveBeenCalledTimes(1);
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -207,17 +208,17 @@ describe('useSyncStatus', () => {
     await flushSyncPref();
 
     await waitFor(() => {
-      expect(mockSyncNotesToFirebase).toHaveBeenCalledTimes(1);
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
     });
 
-    mockSyncNotesToFirebase.mockClear();
+    mockSyncNotes.mockClear();
 
     await act(async () => {
       appStateListener?.('active');
     });
 
     await waitFor(() => {
-      expect(mockSyncNotesToFirebase).toHaveBeenCalledTimes(1);
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -230,7 +231,7 @@ describe('useSyncStatus', () => {
     };
 
     let resolveSync!: (value: unknown) => void;
-    mockSyncNotesToFirebase.mockImplementation(
+    mockSyncNotes.mockImplementation(
       () =>
         new Promise((resolve) => {
           resolveSync = resolve;
@@ -244,7 +245,7 @@ describe('useSyncStatus', () => {
     await flushSyncPref();
 
     await waitFor(() => {
-      expect(mockSyncNotesToFirebase).toHaveBeenCalledTimes(1);
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
     });
 
     mockNotesState.notes = [createNote('note-1')];
@@ -254,7 +255,7 @@ describe('useSyncStatus', () => {
       jest.advanceTimersByTime(1300);
     });
 
-    expect(mockSyncNotesToFirebase).toHaveBeenCalledTimes(1);
+    expect(mockSyncNotes).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       resolveSync({
@@ -268,7 +269,7 @@ describe('useSyncStatus', () => {
     });
 
     await waitFor(() => {
-      expect(mockSyncNotesToFirebase).toHaveBeenCalledTimes(2);
+      expect(mockSyncNotes).toHaveBeenCalledTimes(2);
     });
   });
 });

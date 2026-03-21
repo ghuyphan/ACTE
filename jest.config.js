@@ -8,19 +8,19 @@ module.exports = {
       + '|@react-native'
       + '|react-native-reanimated'
       + '|react-native-worklets'
+      + '|react-native-purchases'
+      + '|react-native-purchases-ui'
       + '|expo(?:nent)?'
       + '|expo-.*'
       + '|@expo(?:nent)?'
       + '|@expo-google-fonts'
       + '|@react-navigation'
-      + '|@firebase'
-      + '|firebase'
+      + '|@supabase'
+      + '|@revenuecat'
       + ')/)',
   ],
   moduleNameMapper: {
     '^supercluster$': '<rootDir>/node_modules/supercluster/dist/supercluster.js',
-    '^firebase/compat/database$': '<rootDir>/test-support/noopFirebaseCompat.js',
-    '^firebase/compat/storage$': '<rootDir>/test-support/noopFirebaseCompat.js',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
 };

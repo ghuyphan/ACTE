@@ -2,7 +2,6 @@ const mockRemoteRooms = new Map<string, any>();
 const mockRemoteMembers = new Map<string, Map<string, any>>();
 const mockRemotePosts = new Map<string, Map<string, any>>();
 const mockRemoteInvites = new Map<string, Map<string, any>>();
-const mockRemoteMembershipIndices = new Map<string, Map<string, any>>();
 
 const mockReplaceCachedRooms = jest.fn<Promise<void>, [string, unknown[]]>(async () => undefined);
 const mockUpsertCachedRoom = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
@@ -12,7 +11,18 @@ const mockSetCachedRoomReadState = jest.fn<Promise<void>, [string, string, strin
 const mockGetCachedRooms = jest.fn<Promise<unknown[]>, [string]>(async () => []);
 const mockGetCachedRoomMembers = jest.fn<Promise<unknown[]>, [string, string]>(async () => []);
 const mockGetCachedRoomPosts = jest.fn<Promise<unknown[]>, [string, string]>(async () => []);
+const mockGetCachedRoomInvite = jest.fn<Promise<unknown | null>, [string, string]>(async () => null);
+const mockUpsertCachedRoomInvite = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
+const mockClearCachedRoomInvite = jest.fn<Promise<void>, [string, string]>(async () => undefined);
 const mockClearCachedRoom = jest.fn<Promise<void>, [string, string]>(async () => undefined);
+const mockGetRoomsCacheLastUpdatedAt = jest.fn<Promise<string | null>, [string]>(async () => null);
+
+const mockUploadPhotoToStorage = jest.fn<Promise<string | null>, [string, string, string | null | undefined]>(
+  async (_bucket: string, path: string) => path
+);
+const mockDownloadPhotoFromStorage = jest.fn<Promise<string | null>, [string, string, string]>(
+  async (_bucket: string, path: string) => `file:///rooms/${path}`
+);
 
 function mockEnsureMapEntry<T>(map: Map<string, Map<string, T>>, key: string) {
   if (!map.has(key)) {
@@ -22,29 +32,157 @@ function mockEnsureMapEntry<T>(map: Map<string, Map<string, T>>, key: string) {
   return map.get(key)!;
 }
 
-function mockCreateDoc(path: string[], data: unknown) {
-  return {
-    id: path[path.length - 1]!,
-    ref: { path },
-    data: () => data,
-  };
+function getRows(table: string, state: any) {
+  let rows: any[] = [];
+
+  if (table === 'rooms') {
+    rows = Array.from(mockRemoteRooms.values());
+  } else if (table === 'room_members') {
+    const roomId = state.filters.find((item: any) => item.field === 'room_id')?.value;
+    const userId = state.filters.find((item: any) => item.field === 'user_id')?.value;
+
+    if (roomId) {
+      rows = Array.from(mockEnsureMapEntry(mockRemoteMembers, String(roomId)).entries()).map(([id, data]) => ({
+        user_id: id,
+        room_id: roomId,
+        ...data,
+      }));
+    } else if (userId) {
+      rows = Array.from(mockRemoteMembers.entries()).flatMap(([nextRoomId, members]) => {
+        const member = members.get(String(userId));
+        return member ? [{ room_id: nextRoomId, user_id: userId, ...member }] : [];
+      });
+    }
+  } else if (table === 'room_posts') {
+    const roomId = state.filters.find((item: any) => item.field === 'room_id')?.value;
+    rows = roomId
+      ? Array.from(mockEnsureMapEntry(mockRemotePosts, String(roomId)).entries()).map(([id, data]) => ({
+          id,
+          room_id: roomId,
+          ...data,
+        }))
+      : [];
+  } else if (table === 'room_invites') {
+    const roomId = state.filters.find((item: any) => item.field === 'room_id')?.value;
+    rows = roomId
+      ? Array.from(mockEnsureMapEntry(mockRemoteInvites, String(roomId)).entries()).map(([id, data]) => ({
+          id,
+          room_id: roomId,
+          ...data,
+        }))
+      : [];
+  }
+
+  for (const filter of state.filters) {
+    rows = rows.filter((row) => row?.[filter.field] === filter.value);
+  }
+
+  if (state.orderField) {
+    rows = [...rows].sort((left, right) => {
+      const leftValue = String(left?.[state.orderField!] ?? '');
+      const rightValue = String(right?.[state.orderField!] ?? '');
+      return state.ascending ? leftValue.localeCompare(rightValue) : rightValue.localeCompare(leftValue);
+    });
+  }
+
+  if (typeof state.limitValue === 'number') {
+    rows = rows.slice(0, state.limitValue);
+  }
+
+  return rows;
 }
 
-function mockGetSortedDocs(values: Array<{ id: string; data: any }>, field: string, direction: 'asc' | 'desc') {
-  return [...values].sort((a, b) => {
-    const left = String(a.data?.[field] ?? '');
-    const right = String(b.data?.[field] ?? '');
-    if (direction === 'desc') {
-      return right.localeCompare(left);
+function applyUpdate(table: string, state: any, values: Record<string, unknown>) {
+  const rows = getRows(table, state);
+
+  for (const row of rows) {
+    if (table === 'rooms') {
+      mockRemoteRooms.set(row.id, { ...row, ...values });
+    } else if (table === 'room_members') {
+      mockEnsureMapEntry(mockRemoteMembers, row.room_id).set(row.user_id, { ...row, ...values });
+    } else if (table === 'room_invites') {
+      mockEnsureMapEntry(mockRemoteInvites, row.room_id).set(row.id, { ...row, ...values });
     }
-    return left.localeCompare(right);
-  });
+  }
+}
+
+function mockCreateQueryBuilder(table: string) {
+  const state = {
+    filters: [] as Array<{ field: string; value: unknown }>,
+    orderField: null as string | null,
+    ascending: true,
+    limitValue: null as number | null,
+    updateValues: null as Record<string, unknown> | null,
+    isCountHead: false,
+  };
+
+  const builder: any = {
+    select: (_fields?: string, options?: { count?: 'exact'; head?: boolean }) => {
+      state.isCountHead = Boolean(options?.count === 'exact' && options.head);
+      return builder;
+    },
+    eq: (field: string, value: unknown) => {
+      state.filters.push({ field, value });
+      return builder;
+    },
+    order: (field: string, options?: { ascending?: boolean }) => {
+      state.orderField = field;
+      state.ascending = options?.ascending ?? true;
+      return builder;
+    },
+    limit: (value: number) => {
+      state.limitValue = value;
+      return builder;
+    },
+    insert: async (value: Record<string, unknown>) => {
+      if (table === 'room_invites') {
+        mockEnsureMapEntry(mockRemoteInvites, String(value.room_id)).set(String(value.id), value);
+      } else if (table === 'room_posts') {
+        mockEnsureMapEntry(mockRemotePosts, String(value.room_id)).set(String(value.id), value);
+      }
+
+      return { error: null };
+    },
+    update: (value: Record<string, unknown>) => {
+      state.updateValues = value;
+      return builder;
+    },
+    maybeSingle: async () => ({
+      data: getRows(table, state)[0] ?? null,
+      error: null,
+    }),
+    then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
+      try {
+        if (state.updateValues) {
+          applyUpdate(table, state, state.updateValues);
+          return Promise.resolve(resolve({ data: null, error: null }));
+        }
+
+        const rows = getRows(table, state);
+        if (state.isCountHead) {
+          return Promise.resolve(resolve({ data: null, count: rows.length, error: null }));
+        }
+
+        return Promise.resolve(resolve({ data: rows, error: null }));
+      } catch (error) {
+        if (reject) {
+          return Promise.resolve(reject(error));
+        }
+
+        return Promise.reject(error);
+      }
+    },
+  };
+
+  return builder;
 }
 
 jest.mock('../services/roomCache', () => ({
   getCachedRooms: (userUid: string) => mockGetCachedRooms(userUid),
   getCachedRoomMembers: (userUid: string, roomId: string) => mockGetCachedRoomMembers(userUid, roomId),
   getCachedRoomPosts: (userUid: string, roomId: string) => mockGetCachedRoomPosts(userUid, roomId),
+  getCachedRoomInvite: (userUid: string, roomId: string) => mockGetCachedRoomInvite(userUid, roomId),
+  getRoomsCacheLastUpdatedAt: (userUid: string) => mockGetRoomsCacheLastUpdatedAt(userUid),
   replaceCachedRooms: (userUid: string, rooms: unknown[]) => mockReplaceCachedRooms(userUid, rooms),
   upsertCachedRoom: (userUid: string, room: unknown) => mockUpsertCachedRoom(userUid, room),
   replaceCachedRoomMembers: (userUid: string, roomId: string, members: unknown[]) =>
@@ -53,16 +191,71 @@ jest.mock('../services/roomCache', () => ({
     mockReplaceCachedRoomPosts(userUid, roomId, posts),
   setCachedRoomReadState: (userUid: string, roomId: string, lastReadAt: string) =>
     mockSetCachedRoomReadState(userUid, roomId, lastReadAt),
+  upsertCachedRoomInvite: (userUid: string, invite: unknown) => mockUpsertCachedRoomInvite(userUid, invite),
+  clearCachedRoomInvite: (userUid: string, roomId: string) => mockClearCachedRoomInvite(userUid, roomId),
   clearCachedRoom: (userUid: string, roomId: string) => mockClearCachedRoom(userUid, roomId),
 }));
 
-jest.mock('../services/photoStorage', () => ({
-  readPhotoAsBase64: jest.fn(async () => 'photo-base64'),
-  writePhotoFromBase64: jest.fn(async (id: string) => `file:///rooms/${id}.jpg`),
+jest.mock('../services/remoteMedia', () => ({
+  ROOM_POST_MEDIA_BUCKET: 'room-post-media',
+  uploadPhotoToStorage: (bucket: string, path: string, localUri?: string | null) =>
+    mockUploadPhotoToStorage(bucket, path, localUri),
+  downloadPhotoFromStorage: (bucket: string, path: string, fileName: string) =>
+    mockDownloadPhotoFromStorage(bucket, path, fileName),
+  deletePhotoFromStorage: jest.fn(async () => undefined),
 }));
 
-jest.mock('../utils/firebase', () => ({
-  getFirestore: () => ({}),
+jest.mock('../utils/supabase', () => ({
+  getSupabase: () => ({
+    from: (table: string) => mockCreateQueryBuilder(table),
+    rpc: async (name: string, params: Record<string, unknown>) => {
+      if (name === 'create_room_with_owner') {
+        const now = '2026-03-21T00:00:00.000Z';
+        mockRemoteRooms.set(String(params.room_id), {
+          id: params.room_id,
+          name: params.room_name,
+          owner_user_id: 'owner-1',
+          created_at: now,
+          updated_at: now,
+          last_post_at: null,
+          cover_photo_path: null,
+        });
+        mockEnsureMapEntry(mockRemoteMembers, String(params.room_id)).set('owner-1', {
+          role: 'owner',
+          display_name_snapshot: 'Owner',
+          photo_url_snapshot: null,
+          joined_at: now,
+          last_read_at: now,
+        });
+        return { error: null };
+      }
+
+      if (name === 'join_room_by_invite') {
+        const invite = mockEnsureMapEntry(mockRemoteInvites, String(params.room_id)).get(String(params.invite_id));
+        if (!invite || invite.token !== params.invite_token) {
+          return { error: new Error('Invite not found.') };
+        }
+
+        mockEnsureMapEntry(mockRemoteMembers, String(params.room_id)).set('member-1', {
+          role: 'member',
+          display_name_snapshot: 'Member',
+          photo_url_snapshot: null,
+          joined_at: '2026-03-21T01:00:00.000Z',
+          last_read_at: null,
+          joined_via_invite_id: params.invite_id,
+          joined_via_invite_token: params.invite_token,
+        });
+        return { error: null };
+      }
+
+      if (name === 'remove_room_member') {
+        mockEnsureMapEntry(mockRemoteMembers, String(params.room_id)).delete(String(params.member_user_id));
+        return { error: null };
+      }
+
+      return { error: null };
+    },
+  }),
 }));
 
 jest.mock('expo-crypto', () => ({
@@ -86,135 +279,6 @@ jest.mock('expo-linking', () => ({
   },
 }));
 
-jest.mock('@react-native-firebase/firestore', () => ({
-  __esModule: true,
-  collection: (_firestore: unknown, ...path: string[]) => ({ kind: 'collection', path }),
-  doc: (_firestore: unknown, ...path: string[]) => ({ kind: 'doc', path, id: path[path.length - 1] }),
-  query: (ref: any, ...constraints: any[]) => ({ kind: 'query', ref, constraints }),
-  where: (field: string, op: string, value: unknown) => ({ type: 'where', field, op, value }),
-  orderBy: (field: string, direction: 'asc' | 'desc' = 'asc') => ({ type: 'orderBy', field, direction }),
-  limit: (value: number) => ({ type: 'limit', value }),
-  serverTimestamp: () => 'SERVER_TIMESTAMP',
-  setDoc: async (ref: any, data: any) => {
-    const path = ref.path as string[];
-    if (path.length === 2 && path[0] === 'rooms') {
-      mockRemoteRooms.set(path[1]!, data);
-      return;
-    }
-    if (path.length === 4 && path[0] === 'rooms' && path[2] === 'members') {
-      mockEnsureMapEntry(mockRemoteMembers, path[1]!).set(path[3]!, data);
-      return;
-    }
-    if (path.length === 4 && path[0] === 'rooms' && path[2] === 'posts') {
-      mockEnsureMapEntry(mockRemotePosts, path[1]!).set(path[3]!, data);
-      return;
-    }
-    if (path.length === 4 && path[0] === 'rooms' && path[2] === 'invites') {
-      mockEnsureMapEntry(mockRemoteInvites, path[1]!).set(path[3]!, data);
-      return;
-    }
-    if (path.length === 4 && path[0] === 'users' && path[2] === 'roomMemberships') {
-      mockEnsureMapEntry(mockRemoteMembershipIndices, path[1]!).set(path[3]!, data);
-    }
-  },
-  updateDoc: async (ref: any, data: any) => {
-    const path = ref.path as string[];
-    if (path.length === 2 && path[0] === 'rooms') {
-      mockRemoteRooms.set(path[1]!, { ...(mockRemoteRooms.get(path[1]!) ?? {}), ...data });
-      return;
-    }
-    if (path.length === 4 && path[0] === 'rooms' && path[2] === 'members') {
-      const roomMembers = mockEnsureMapEntry(mockRemoteMembers, path[1]!);
-      roomMembers.set(path[3]!, { ...(roomMembers.get(path[3]!) ?? {}), ...data });
-      return;
-    }
-    if (path.length === 4 && path[0] === 'rooms' && path[2] === 'invites') {
-      const invites = mockEnsureMapEntry(mockRemoteInvites, path[1]!);
-      invites.set(path[3]!, { ...(invites.get(path[3]!) ?? {}), ...data });
-    }
-  },
-  deleteDoc: async (ref: any) => {
-    const path = ref.path as string[];
-    if (path.length === 4 && path[0] === 'rooms' && path[2] === 'members') {
-      mockEnsureMapEntry(mockRemoteMembers, path[1]!).delete(path[3]!);
-      return;
-    }
-    if (path.length === 4 && path[0] === 'users' && path[2] === 'roomMemberships') {
-      mockEnsureMapEntry(mockRemoteMembershipIndices, path[1]!).delete(path[3]!);
-    }
-  },
-  getDoc: async (ref: any) => {
-    const path = ref.path as string[];
-    let value: unknown;
-    if (path.length === 2 && path[0] === 'rooms') {
-      value = mockRemoteRooms.get(path[1]!);
-    } else if (path.length === 4 && path[0] === 'rooms' && path[2] === 'members') {
-      value = mockEnsureMapEntry(mockRemoteMembers, path[1]!).get(path[3]!);
-    } else if (path.length === 4 && path[0] === 'rooms' && path[2] === 'invites') {
-      value = mockEnsureMapEntry(mockRemoteInvites, path[1]!).get(path[3]!);
-    }
-
-    return {
-      exists: () => value !== undefined,
-      data: () => value,
-    };
-  },
-  getDocs: async (refOrQuery: any) => {
-    const target = refOrQuery.kind === 'query' ? refOrQuery.ref : refOrQuery;
-    const constraints = refOrQuery.kind === 'query' ? refOrQuery.constraints : [];
-    const orderConstraint = constraints.find((item: any) => item.type === 'orderBy');
-    const limitConstraint = constraints.find((item: any) => item.type === 'limit');
-    const whereConstraint = constraints.find((item: any) => item.type === 'where');
-
-    let docs: Array<{ id: string; data: any }> = [];
-    if (target.kind === 'collection') {
-      const path = target.path as string[];
-      if (path.length === 3 && path[0] === 'users' && path[2] === 'roomMemberships') {
-        docs = Array.from(mockEnsureMapEntry(mockRemoteMembershipIndices, path[1]!).entries()).map(([id, data]) => ({
-          id,
-          data,
-        }));
-      } else if (path.length === 3 && path[0] === 'rooms' && path[2] === 'members') {
-        docs = Array.from(mockEnsureMapEntry(mockRemoteMembers, path[1]!).entries()).map(([id, data]) => ({
-          id,
-          data,
-        }));
-      } else if (path.length === 3 && path[0] === 'rooms' && path[2] === 'posts') {
-        docs = Array.from(mockEnsureMapEntry(mockRemotePosts, path[1]!).entries()).map(([id, data]) => ({
-          id,
-          data,
-        }));
-      } else if (path.length === 3 && path[0] === 'rooms' && path[2] === 'invites') {
-        docs = Array.from(mockEnsureMapEntry(mockRemoteInvites, path[1]!).entries()).map(([id, data]) => ({
-          id,
-          data,
-        }));
-      }
-    } else if (target.kind === 'collectionGroup' && target.collectionId === 'invites' && whereConstraint) {
-      docs = Array.from(mockRemoteInvites.entries()).flatMap(([roomId, inviteMap]) =>
-        Array.from(inviteMap.entries())
-          .filter(([, data]) => data?.[whereConstraint.field] === whereConstraint.value)
-          .map(([id, data]) => ({
-            id,
-            data: { ...data, roomId },
-          }))
-      );
-    }
-
-    if (orderConstraint) {
-      docs = mockGetSortedDocs(docs, orderConstraint.field, orderConstraint.direction);
-    }
-
-    if (limitConstraint) {
-      docs = docs.slice(0, limitConstraint.value);
-    }
-
-    return {
-      docs: docs.map((item) => mockCreateDoc(['mock', item.id], item.data)),
-    };
-  },
-}));
-
 import {
   createRoom,
   createRoomInvite,
@@ -225,17 +289,21 @@ import {
 } from '../services/roomService';
 
 const ownerUser = {
+  id: 'owner-1',
   uid: 'owner-1',
   displayName: 'Owner',
   email: 'owner@example.com',
   photoURL: null,
+  providerData: [],
 } as any;
 
 const memberUser = {
+  id: 'member-1',
   uid: 'member-1',
   displayName: 'Member',
   email: 'member@example.com',
   photoURL: null,
+  providerData: [],
 } as any;
 
 beforeEach(() => {
@@ -244,7 +312,6 @@ beforeEach(() => {
   mockRemoteMembers.clear();
   mockRemotePosts.clear();
   mockRemoteInvites.clear();
-  mockRemoteMembershipIndices.clear();
 });
 
 describe('roomService', () => {
@@ -274,42 +341,41 @@ describe('roomService', () => {
 
     expect(joinedRoom.id).toBe(room.id);
     expect(details.members.map((member) => member.userId)).toEqual(
-      expect.arrayContaining(['owner-1', 'member-1'])
+      expect.arrayContaining([ownerUser.id, memberUser.id])
     );
-    expect(mockEnsureMapEntry(mockRemoteMembers, room.id).get(memberUser.uid)).toEqual(
+    expect(mockEnsureMapEntry(mockRemoteMembers, room.id).get(memberUser.id)).toEqual(
       expect.objectContaining({
-        joinedViaInviteId: invite.id,
-        joinedViaInviteToken: invite.token,
+        joined_via_invite_id: invite.id,
       })
     );
   });
 
-  it('shares a personal note into a room as a copied post', async () => {
-    const room = await createRoom(ownerUser, 'Weekend');
-
-    const details = await shareNoteToRoom(ownerUser, room.id, {
+  it('shares a photo note to a room and hydrates the room posts', async () => {
+    const room = await createRoom(ownerUser, 'Photo room');
+    const note = {
       id: 'note-1',
-      type: 'text',
-      content: 'Bring the spicy dipping sauce',
-      photoLocalUri: null,
-      photoRemoteBase64: null,
-      locationName: 'Pho Hoa',
-      latitude: 10.77,
-      longitude: 106.69,
-      radius: 150,
-      isFavorite: false,
-      createdAt: '2026-03-10T00:00:00.000Z',
-      updatedAt: null,
-    });
+      type: 'photo',
+      content: 'file:///photos/note-1.jpg',
+      photoLocalUri: 'file:///photos/note-1.jpg',
+      locationName: 'Saigon',
+      moodEmoji: null,
+    } as any;
 
-    expect(details.posts).toHaveLength(1);
+    const details = await shareNoteToRoom(ownerUser, room.id, note);
+
+    expect(mockUploadPhotoToStorage).toHaveBeenCalledWith(
+      'room-post-media',
+      expect.stringContaining(`${room.id}/room-post-`),
+      'file:///photos/note-1.jpg'
+    );
     expect(details.posts[0]).toEqual(
       expect.objectContaining({
-        origin: 'shared_note',
+        roomId: room.id,
+        type: 'photo',
         sourceNoteId: 'note-1',
-        placeName: 'Pho Hoa',
-        text: 'Bring the spicy dipping sauce',
+        photoLocalUri: expect.stringContaining('file:///rooms/'),
       })
     );
+    expect(mockReplaceCachedRoomPosts).toHaveBeenCalled();
   });
 });

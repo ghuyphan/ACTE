@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
-import { doc, onSnapshot } from '@react-native-firebase/firestore';
 import Purchases, {
   CustomerInfo,
   LOG_LEVEL,
@@ -18,7 +17,7 @@ import {
   getPhotoNoteLimitForTier,
   isRevenueCatConfigured,
 } from '../constants/subscription';
-import { getFirestore } from '../utils/firebase';
+import { getSupabase } from '../utils/supabase';
 import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
 
@@ -232,12 +231,12 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   }, [isConfigured, isOnline, loadRevenueCatState, revenueCatApiKey]);
 
   useEffect(() => {
-    const firestore = getFirestore();
     if (!authReady) {
       return;
     }
 
-    if (!user || !firestore) {
+    const supabase = getSupabase();
+    if (!user || !supabase) {
       setRemotePhotoNoteCount(cachedSnapshot?.remotePhotoNoteCount ?? null);
       return;
     }
@@ -247,21 +246,58 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const unsubscribe = onSnapshot(
-      doc(firestore, 'users', user.uid),
-      (snapshot) => {
-        const data = snapshot.data() as { photoNoteCount?: unknown } | undefined;
-        const nextCount = data?.photoNoteCount;
+    let active = true;
+    const channel = supabase
+      .channel(`user-usage:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_usage',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const nextCount =
+            typeof payload.new === 'object' && payload.new && 'photo_note_count' in payload.new
+              ? (payload.new as { photo_note_count?: unknown }).photo_note_count
+              : null;
+          setRemotePhotoNoteCount(
+            typeof nextCount === 'number' && Number.isFinite(nextCount) ? nextCount : null
+          );
+        }
+      )
+      .subscribe();
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_usage')
+          .select('photo_note_count')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (!active) {
+          return;
+        }
+
+        if (error) {
+          throw error;
+        }
+
+        const nextCount = data?.photo_note_count;
         setRemotePhotoNoteCount(
           typeof nextCount === 'number' && Number.isFinite(nextCount) ? nextCount : null
         );
-      },
-      (error) => {
-        console.warn('[subscription] Failed to observe remote usage:', error);
+      } catch (error: unknown) {
+        console.warn('[subscription] Failed to load remote usage:', error);
       }
-    );
+    })();
 
-    return unsubscribe;
+    return () => {
+      active = false;
+      void supabase.removeChannel(channel);
+    };
   }, [authReady, cachedSnapshot?.remotePhotoNoteCount, isOnline, user]);
 
   useEffect(() => {

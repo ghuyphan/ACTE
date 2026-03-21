@@ -1,10 +1,16 @@
-import { doc, getDoc, setDoc } from '@react-native-firebase/firestore';
-import { getFirestore } from '../utils/firebase';
+import { getSupabase, isSupabaseNoRowsError } from '../utils/supabase';
 
 export interface PublicUserProfile {
   displayName: string | null;
   photoURL: string | null;
   updatedAt: string;
+}
+
+interface ProfileRow {
+  id: string;
+  display_name: string | null;
+  photo_url: string | null;
+  updated_at: string;
 }
 
 export interface PublicProfileSnapshot {
@@ -27,45 +33,58 @@ export async function upsertPublicUserProfile(input: {
   displayName: string | null | undefined;
   photoURL: string | null | undefined;
 }) {
-  const firestore = getFirestore();
-  if (!firestore) {
+  const supabase = getSupabase();
+  if (!supabase) {
     return;
   }
 
   const now = new Date().toISOString();
   const { displayNameSnapshot, photoURLSnapshot } = buildPublicProfileSnapshot(input);
-
-  await setDoc(
-    doc(firestore, 'publicUserProfiles', input.userUid),
+  const { error } = await supabase.from('profiles').upsert(
     {
-      displayName: displayNameSnapshot,
-      photoURL: photoURLSnapshot,
-      updatedAt: now,
-    } satisfies PublicUserProfile,
-    { merge: true }
+      id: input.userUid,
+      display_name: displayNameSnapshot,
+      photo_url: photoURLSnapshot,
+      updated_at: now,
+    },
+    {
+      onConflict: 'id',
+    }
   );
+
+  if (error) {
+    throw error;
+  }
 }
 
 export async function getPublicUserProfile(userUid: string): Promise<PublicProfileSnapshot> {
-  const firestore = getFirestore();
-  if (!firestore) {
+  const supabase = getSupabase();
+  if (!supabase) {
     return {
       displayNameSnapshot: null,
       photoURLSnapshot: null,
     };
   }
 
-  const snapshot = await getDoc(doc(firestore, 'publicUserProfiles', userUid));
-  if (!snapshot.exists()) {
-    return {
-      displayNameSnapshot: null,
-      photoURLSnapshot: null,
-    };
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, photo_url, updated_at')
+    .eq('id', userUid)
+    .single<ProfileRow>();
+
+  if (error) {
+    if (isSupabaseNoRowsError(error)) {
+      return {
+        displayNameSnapshot: null,
+        photoURLSnapshot: null,
+      };
+    }
+
+    throw error;
   }
 
-  const data = snapshot.data() as Partial<PublicUserProfile>;
   return buildPublicProfileSnapshot({
-    displayName: data.displayName ?? null,
-    photoURL: data.photoURL ?? null,
+    displayName: data.display_name ?? null,
+    photoURL: data.photo_url ?? null,
   });
 }

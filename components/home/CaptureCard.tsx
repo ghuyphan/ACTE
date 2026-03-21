@@ -28,7 +28,7 @@ import { DOODLE_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { Layout, Shadows, Typography } from '../../constants/theme';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { getCaptureNoteGradient } from '../../services/noteAppearance';
-import { applyCommittedInlineEmoji, resolveAutoNoteEmoji } from '../../services/noteDecorations';
+import { applyCommittedInlineEmoji } from '../../services/noteDecorations';
 import NoteDoodleCanvas, { DoodleStroke } from '../NoteDoodleCanvas';
 import PrimaryButton from '../ui/PrimaryButton';
 import { isOlderIOS } from '../../utils/platform';
@@ -379,18 +379,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     },
     [noteText, onChangeNoteText]
   );
-  const previewEmoji = useMemo(() => {
-    const previewContent = noteText.trim() || restaurantName.trim();
-    if (!previewContent) {
-      return null;
-    }
-
-    return resolveAutoNoteEmoji({
-      type: 'text',
-      content: noteText.trim(),
-      locationName: restaurantName.trim() || null,
-    });
-  }, [noteText, restaurantName]);
   const captureGradient = getCaptureNoteGradient();
 
   return (

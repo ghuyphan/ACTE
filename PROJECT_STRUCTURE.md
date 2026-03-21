@@ -35,8 +35,7 @@
 ├── eslint.config.js
 ├── jest.config.js
 ├── jest.setup.ts
-├── GoogleService-Info.plist
-├── google-services.json
+├── supabase/
 └── README.md
 ```
 
@@ -59,7 +58,7 @@
 - `constants/locales/`: Translation JSON files for English and Vietnamese.
 - `docs/`: Short maintenance docs for widgets and release flows.
 - `hooks/`: App-wide hooks/providers for notes, auth, theme, sync, geofence, and more.
-- `hooks/useRooms.tsx`: Room list/detail state and Firestore-backed refresh behavior.
+- `hooks/useRooms.tsx`: Room list/detail state and Supabase-backed refresh behavior.
 - `hooks/useSharedFeed.tsx`: Friend graph and shared moments state for the home feed.
 - `hooks/useSubscription.tsx`: RevenueCat subscription provider and entitlement state.
 - `hooks/map/`: Map domain modeling and map screen state.
@@ -67,25 +66,25 @@
 - `services/`: Database, sync, geofence, photo, search, sharing, and widget business logic.
 - `services/roomService.ts`: Room lifecycle, invites, membership, and room posts.
 - `services/sharedFeedService.ts`: Friends, invites, and private shared-feed operations.
-- `services/syncService.ts`: Firebase sync queue flush + snapshot upload/merge.
+- `services/syncService.ts`: Supabase sync queue flush + snapshot upload/merge.
 - `utils/`: Background task registration and smaller cross-cutting helpers.
-- `utils/firebase.ts`: Safe modular accessors for Firebase app, auth, and Firestore.
+- `utils/supabase.ts`: Supabase client bootstrap plus secure auth-session persistence.
 - `widgets/`: Expo widget registration and JS-side widget definition.
 - `widgets/ios/`: Source Swift widget implementation copied into the native target by a plugin.
 - `__tests__/`: Jest tests for screens, hooks, services, map logic, and widgets.
 - `android/`: Native Android project.
 - `ios/`: Native iOS project and widget target.
+- `supabase/`: SQL migrations and local project config for the hosted Supabase backend.
 
 ## Key Top-Level Files
 
 - `package.json`: Dependencies plus dev/run/lint/test scripts; app entry is `expo-router/entry`.
 - `app.config.ts`: Expo app config, plugins, permissions, widget registration, native identifiers, and env-backed Android Maps setup.
 - `README.md`: Product overview, setup, and current Plus configuration notes.
+- `supabase/config.toml`: Local Supabase project metadata for migrations and generated types.
 - `docs/release-checklist.md`: Current manual release gate, including Plus validation.
 - `tsconfig.json`: Strict TypeScript config with the `@/*` alias.
 - `eslint.config.js`: Flat ESLint config based on `eslint-config-expo`.
 - `jest.config.js`: Jest Expo preset and module mapping.
 - `jest.setup.ts`: Test setup and React Native dependency mocks.
-- `GoogleService-Info.plist`: iOS Firebase config file.
-- `google-services.json`: Android Firebase config file.
 - `expo-env.d.ts`: Expo-generated type declarations used by the project.

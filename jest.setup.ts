@@ -4,6 +4,14 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(async () => null),
+  setItemAsync: jest.fn(async () => undefined),
+  deleteItemAsync: jest.fn(async () => undefined),
+}));
+
+jest.mock('react-native-url-polyfill/auto', () => ({}));
+
 jest.mock('@react-native-community/netinfo', () => {
   let listener: ((state: any) => void) | null = null;
   const defaultState = {

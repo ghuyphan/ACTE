@@ -6,7 +6,7 @@ import RevenueCatUI from 'react-native-purchases-ui';
 
 const mockAuthState = {
   isReady: true,
-  user: null as { uid: string } | null,
+  user: null as { id: string; uid: string } | null,
 };
 
 const mockSubscriptionConfig = {
@@ -17,7 +17,24 @@ const mockSubscriptionConfig = {
 const mockRemoteUsage = {
   photoNoteCount: null as number | null,
 };
-const mockUsageUnsubscribe = jest.fn();
+const mockRemoveChannel = jest.fn<Promise<string>, [unknown]>(async () => 'ok');
+type MockSupabaseChannel = {
+  on: jest.MockedFunction<
+    (
+      type: string,
+      filter: unknown,
+      callback: (payload: { new: { photo_note_count: number | null } }) => void
+    ) => MockSupabaseChannel
+  >;
+  subscribe: jest.MockedFunction<() => MockSupabaseChannel>;
+};
+type MockUserUsageQuery = {
+  select: jest.MockedFunction<() => MockUserUsageQuery>;
+  eq: jest.MockedFunction<(field: string, value: unknown) => MockUserUsageQuery>;
+  maybeSingle: jest.MockedFunction<
+    () => Promise<{ data: { photo_note_count: number | null }; error: null }>
+  >;
+};
 
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => mockAuthState,
@@ -32,22 +49,28 @@ jest.mock('../hooks/useConnectivity', () => ({
   }),
 }));
 
-jest.mock('../utils/firebase', () => ({
-  getFirestore: () => ({}),
-}));
+const mockSupabaseChannel = {} as MockSupabaseChannel;
+mockSupabaseChannel.on = jest.fn<MockSupabaseChannel, [string, unknown, (payload: { new: { photo_note_count: number | null } }) => void]>(
+  () => mockSupabaseChannel
+);
+mockSupabaseChannel.subscribe = jest.fn<MockSupabaseChannel, []>(() => mockSupabaseChannel);
 
-jest.mock('@react-native-firebase/firestore', () => ({
-  __esModule: true,
-  doc: (_firestore: unknown, ...path: string[]) => ({ path }),
-  onSnapshot: (_ref: unknown, onNext: (snapshot: { data: () => { photoNoteCount: number | null } }) => void) => {
-    onNext({
-      data: () => ({
-        photoNoteCount: mockRemoteUsage.photoNoteCount,
-      }),
-    });
+const mockUserUsageQuery = {} as MockUserUsageQuery;
+mockUserUsageQuery.select = jest.fn<MockUserUsageQuery, []>(() => mockUserUsageQuery);
+mockUserUsageQuery.eq = jest.fn<MockUserUsageQuery, [string, unknown]>(() => mockUserUsageQuery);
+mockUserUsageQuery.maybeSingle = jest.fn(async () => ({
+    data: {
+      photo_note_count: mockRemoteUsage.photoNoteCount,
+    },
+    error: null,
+  }));
 
-    return mockUsageUnsubscribe;
-  },
+jest.mock('../utils/supabase', () => ({
+  getSupabase: () => ({
+    channel: jest.fn(() => mockSupabaseChannel),
+    removeChannel: (channel: unknown) => mockRemoveChannel(channel),
+    from: jest.fn(() => mockUserUsageQuery),
+  }),
 }));
 
 jest.mock('../constants/subscription', () => {
@@ -228,8 +251,8 @@ describe('useSubscription', () => {
     expect(restoreResult).toEqual({ status: 'unavailable' });
   });
 
-  it('surfaces the remote photo note count from Firestore usage data', async () => {
-    mockAuthState.user = { uid: 'user-1' };
+  it('surfaces the remote photo note count from Supabase usage data', async () => {
+    mockAuthState.user = { id: 'user-1', uid: 'user-1' };
     mockRemoteUsage.photoNoteCount = 7;
 
     const hook = renderHook(() => useSubscription(), { wrapper });
