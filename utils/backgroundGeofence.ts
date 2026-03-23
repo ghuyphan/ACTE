@@ -54,7 +54,7 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
         };
 
         if (eventType === LocationGeofencingEventType.Enter) {
-            console.log('You entered region:', region.identifier);
+            console.info('You entered region:', region.identifier);
 
             let title = i18n.t('notification.title');
             let body = i18n.t('notification.body');
@@ -164,7 +164,7 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
                 await setCooldown('note', cooldownNoteId);
             }
         } else if (eventType === LocationGeofencingEventType.Exit) {
-            console.log('You left region:', region.identifier);
+            console.info('You left region:', region.identifier);
         }
     }
 });

@@ -18,9 +18,9 @@ export const SHARED_POST_MEDIA_BUCKET = 'shared-post-media';
 export const ROOM_POST_MEDIA_BUCKET = 'room-post-media';
 const UPLOAD_RETRY_DELAYS_MS = [250];
 const PHOTO_UPLOAD_OPTIMIZATION_PRESETS = [
-  { width: 1600, compress: 0.5 },
-  { width: 1280, compress: 0.35 },
-  { width: 960, compress: 0.25 },
+  { width: 1200, compress: 0.6 },
+  { width: 960, compress: 0.4 },
+  { width: 800, compress: 0.3 },
 ];
 
 interface UploadPhotoOptions {
@@ -77,7 +77,7 @@ async function optimizePhotoForUpload(photoUri: string) {
       [{ resize: { width: preset.width } }],
       {
         compress: preset.compress,
-        format: SaveFormat.JPEG,
+        format: SaveFormat.WEBP,
       }
     );
 

@@ -39,7 +39,7 @@ export async function detectInitialLanguage(): Promise<AppLanguageCode> {
             return normalizeAppLanguage(storedLanguage);
         }
     } catch (error) {
-        console.log('Error reading language', error);
+        console.error('Error reading language', error);
     }
 
     const [deviceLocale] = getLocales();
@@ -90,7 +90,7 @@ export async function setAppLanguage(language: string): Promise<void> {
             [STORE_LANGUAGE_SOURCE_KEY, EXPLICIT_LANGUAGE_SOURCE],
         ]);
     } catch (error) {
-        console.log('Error saving language', error);
+        console.error('Error saving language', error);
     }
 
     await i18n.changeLanguage(normalizedLanguage);

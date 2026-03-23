@@ -15,7 +15,7 @@ import { getCachedSharedFeedSnapshot } from './sharedFeedCache';
 import { getSharedFeedErrorMessage, refreshSharedFeed, SharedPost } from './sharedFeedService';
 
 // Lazy import to avoid circular dependency issues
-let widgetInstance: any = null;
+let widgetInstance: WidgetModule | null = null;
 
 export interface WidgetProps {
     noteType: 'text' | 'photo';

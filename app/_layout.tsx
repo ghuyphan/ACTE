@@ -1,4 +1,3 @@
-
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
@@ -6,8 +5,7 @@ import * as SystemUI from 'expo-system-ui';
 import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { I18nextProvider } from 'react-i18next';
+import { useTranslation, I18nextProvider } from 'react-i18next';
 import { ActivityIndicator, AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
@@ -26,6 +24,8 @@ import { syncGeofenceRegions } from '../services/geofenceService';
 import { configureNotificationChannels } from '../services/notificationService';
 import { updateWidgetData } from '../services/widgetService';
 import '../utils/backgroundGeofence';
+
+export { ErrorBoundary } from 'expo-router';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
