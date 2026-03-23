@@ -1,8 +1,9 @@
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
+import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
@@ -112,14 +113,32 @@ export default function ProfileScreen() {
     return t('profile.autoSyncOn', 'Your notes sync automatically while you are signed in.');
   }, [blockedCount, failedCount, i18n.language, isOnline, lastMessage, lastSyncedAt, pendingCount, syncStatus, t, user]);
 
-  const handleSignOut = async () => {
+  const performSignOut = async () => {
     setIsSigningOut(true);
-    try {
-      await signOut();
-      router.replace('/(tabs)/settings');
-    } finally {
-      setIsSigningOut(false);
-    }
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    router.replace('/(tabs)/settings');
+    
+    setTimeout(() => {
+      signOut().catch((error) => {
+        console.warn('Sign out failed asynchronously:', error);
+      });
+    }, 150);
+  };
+
+  const handleSignOut = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      t('profile.logoutConfirmTitle', 'Log out of Noto?'),
+      t('profile.logoutConfirmMsg', 'Your notes will remain safely synced. You can sign back in anytime.'),
+      [
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+        {
+          text: t('profile.logout', 'Log out'),
+          style: 'destructive',
+          onPress: performSignOut,
+        },
+      ]
+    );
   };
 
   return (

@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Layout } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import ImageMemoryCard from '../ImageMemoryCard';
 import TextMemoryCard from '../TextMemoryCard';
 import { SharedPost } from '../../services/sharedFeedService';
-import { downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET } from '../../services/remoteMedia';
+import { getPublicPhotoUrl, SHARED_POST_MEDIA_BUCKET } from '../../services/remoteMedia';
 
 export default function SharedPostCardVisual({
   post,
@@ -16,39 +16,17 @@ export default function SharedPostCardVisual({
   fallbackText: string;
 }) {
   const { colors } = useTheme();
-  const [photoUri, setPhotoUri] = useState(post.photoLocalUri);
-
-  useEffect(() => {
-    setPhotoUri(post.photoLocalUri ?? null);
-  }, [post.photoLocalUri]);
-
-  useEffect(() => {
-    if (post.type !== 'photo' || photoUri || !post.photoPath) {
-      return;
+  const photoUri = useMemo(() => {
+    if (post.type !== 'photo') {
+      return null;
     }
-
-    let cancelled = false;
-
-    void downloadPhotoFromStorage(
-      SHARED_POST_MEDIA_BUCKET,
-      post.photoPath,
-      `shared-post-${post.id}`
-    )
-      .then((nextUri) => {
-        if (!cancelled && nextUri) {
-          setPhotoUri(nextUri);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.warn('[shared-post] Failed to hydrate photo:', error);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [photoUri, post.id, post.photoPath, post.type]);
+    
+    if (post.photoLocalUri) {
+      return post.photoLocalUri;
+    }
+    
+    return getPublicPhotoUrl(SHARED_POST_MEDIA_BUCKET, post.photoPath);
+  }, [post.photoLocalUri, post.photoPath, post.type]);
 
   if (post.type === 'photo') {
     if (photoUri) {
