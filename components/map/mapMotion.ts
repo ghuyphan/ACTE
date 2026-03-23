@@ -30,7 +30,7 @@ export const mapMotionPressTiming = {
 export function getMapLayoutTransition(reduceMotionEnabled: boolean) {
   return reduceMotionEnabled
     ? LinearTransition.duration(mapMotionDurations.fast)
-    : LinearTransition.duration(mapMotionDurations.standard).easing(mapMotionEasing.standard);
+    : LinearTransition.springify().damping(16).stiffness(160).mass(0.6);
 }
 
 export function getMapOverlayEnter(reduceMotionEnabled: boolean) {
@@ -50,9 +50,7 @@ export function getMapOverlayExit(reduceMotionEnabled: boolean) {
 export function getMapCardEnter(reduceMotionEnabled: boolean) {
   return reduceMotionEnabled
     ? FadeInUp.duration(mapMotionDurations.fast).reduceMotion(ReduceMotion.Never)
-    : FadeInUp.duration(mapMotionDurations.standard)
-        .easing(mapMotionEasing.emphasis)
-        .reduceMotion(ReduceMotion.Never);
+    : FadeInUp.springify().damping(16).stiffness(140).mass(0.5).reduceMotion(ReduceMotion.Never);
 }
 
 export function getMapCardExit(reduceMotionEnabled: boolean) {

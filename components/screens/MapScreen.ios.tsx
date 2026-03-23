@@ -172,7 +172,7 @@ export default function MapScreenIOS() {
         longitudeDelta: 0.02,
       };
 
-      mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 700);
+      mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 450);
       setVisibleRegion(nextRegion);
       emitLightHaptic();
     }
@@ -208,7 +208,7 @@ export default function MapScreenIOS() {
         longitudeDelta: Math.max(baseRegion.longitudeDelta / zoomFactor, MIN_ZOOM_DELTA),
       };
 
-      mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 450);
+      mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
       setVisibleRegion(nextRegion);
     },
     [
@@ -252,7 +252,7 @@ export default function MapScreenIOS() {
         longitudeDelta: Math.max(Math.min(baseRegion.longitudeDelta, 0.025), MIN_ZOOM_DELTA),
       };
 
-      mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 420);
+      mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
       setVisibleRegion(nextRegion);
     },
     [initialRegion, nearbyItems, reduceMotionEnabled, setVisibleRegion, visibleRegion]

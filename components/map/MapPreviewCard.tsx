@@ -17,6 +17,7 @@ import Reanimated, {
   interpolate,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import type { MapPointGroup, NearbyNoteItem } from '../../hooks/map/mapDomain';
@@ -164,9 +165,9 @@ export default function MapPreviewCard({
   useEffect(() => {
     modeProgress.value = reduceMotionEnabled
       ? withTiming(previewMode === 'group' ? 1 : 0, { duration: mapMotionDurations.fast })
-      : withTiming(previewMode === 'group' ? 1 : 0, {
-          duration: mapMotionDurations.standard,
-          easing: mapMotionEasing.emphasis,
+      : withSpring(previewMode === 'group' ? 1 : 0, {
+          damping: 16,
+          stiffness: 140,
         });
 
     contentOpacity.value = 0.68;
@@ -193,9 +194,10 @@ export default function MapPreviewCard({
     railOffsetY.value = delta;
     railOffsetY.value = reduceMotionEnabled
       ? withTiming(0, { duration: mapMotionDurations.fast })
-      : withTiming(0, {
-          duration: mapMotionDurations.standard,
-          easing: mapMotionEasing.standard,
+      : withSpring(0, {
+          damping: 16,
+          stiffness: 160,
+          mass: 0.8,
         });
   }, [bottomOffset, railOffsetY, reduceMotionEnabled]);
 

@@ -50,8 +50,8 @@ function AppContent() {
       .then(() => {
         setDbReady(true);
         startupTimeout = setTimeout(() => {
-          void updateWidgetData();
-          void syncGeofenceRegions();
+          updateWidgetData().catch((err) => console.warn('Widget init failed:', err));
+          syncGeofenceRegions().catch((err) => console.warn('Geofence sync failed:', err));
         }, 250);
       })
       .catch((err) => {
@@ -76,10 +76,10 @@ function AppContent() {
         return;
       }
 
-      void updateWidgetData({
+      updateWidgetData({
         includeLocationLookup: true,
         includeSharedRefresh: Boolean(user && isOnline),
-      });
+      }).catch((err) => console.warn('Widget background update failed:', err));
     });
 
     return () => {
@@ -92,10 +92,10 @@ function AppContent() {
       return;
     }
 
-    void updateWidgetData({
+    updateWidgetData({
       includeLocationLookup: true,
       includeSharedRefresh: isOnline,
-    });
+    }).catch((err) => console.warn('Widget data update failed:', err));
   }, [dbReady, isOnline, localeReady, user]);
 
   useEffect(() => {
