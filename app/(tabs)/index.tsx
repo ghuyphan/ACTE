@@ -16,7 +16,6 @@ import {
   InteractionManager,
   Keyboard,
   Platform,
-  Pressable,
   Share,
   StyleSheet,
   Text,
@@ -32,6 +31,7 @@ import SharedManageSheet from '../../components/home/SharedManageSheet';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useAuth } from '../../hooks/useAuth';
 import { useCaptureFlow } from '../../hooks/useCaptureFlow';
+import { useFeedFocus } from '../../hooks/useFeedFocus';
 import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { useNotesStore } from '../../hooks/useNotes';
@@ -46,10 +46,15 @@ import {
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { saveNoteDoodle } from '../../services/noteDoodles';
 import { filterNotesByQuery } from '../../services/noteSearch';
-import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
+import { Note } from '../../services/database';
+import { getSharedFeedErrorMessage, SharedPost } from '../../services/sharedFeedService';
 import { isIOS26OrNewer } from '../../utils/platform';
 
 const { height } = Dimensions.get('window');
+
+type FeedFocusItem =
+  | { id: string; kind: 'note'; createdAt: string; note: Note }
+  | { id: string; kind: 'shared-post'; createdAt: string; post: SharedPost };
 
 export default function HomeScreen() {
   const { t } = useTranslation();
@@ -88,6 +93,7 @@ export default function HomeScreen() {
     openAppSettings,
   } = useGeofence();
   const { alertProps, showAlert } = useAppSheetAlert();
+  const { consumeFeedFocus } = useFeedFocus();
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
   const isScreenFocused = useIsFocused();
@@ -109,7 +115,6 @@ export default function HomeScreen() {
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const searchAnim = useRef(new Animated.Value(0)).current;
-  const hintAnim = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<any>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
   useScrollToTop(flatListRef);
@@ -163,6 +168,28 @@ export default function HomeScreen() {
   const filteredNotes = useMemo(() => {
     return filterNotesByQuery(notes, deferredSearchQuery);
   }, [deferredSearchQuery, notes]);
+  const friendPosts = useMemo(
+    () => sharedPosts.filter((post) => post.authorUid !== user?.uid),
+    [sharedPosts, user?.uid]
+  );
+  const archiveFeedItems = useMemo<FeedFocusItem[]>(
+    () =>
+      [
+        ...notes.map((note) => ({
+          id: note.id,
+          kind: 'note' as const,
+          createdAt: note.createdAt,
+          note,
+        })),
+        ...friendPosts.map((post) => ({
+          id: post.id,
+          kind: 'shared-post' as const,
+          createdAt: post.createdAt,
+          post,
+        })),
+      ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
+    [friendPosts, notes]
+  );
   const localPhotoNoteCount = useMemo(() => countPhotoNotes(notes), [notes]);
   const photoNoteCount = useMemo(
     () => Math.max(localPhotoNoteCount, remotePhotoNoteCount ?? 0),
@@ -203,11 +230,9 @@ export default function HomeScreen() {
     cameraPreviewReady;
   const visibleSharedPosts = useMemo(
     () =>
-      (useInlineHeaderSearch && isSearching ? [] : sharedPosts).filter((post) => post.authorUid !== user?.uid),
-    [isSearching, sharedPosts, useInlineHeaderSearch, user?.uid]
+      useInlineHeaderSearch && isSearching ? [] : friendPosts,
+    [friendPosts, isSearching, useInlineHeaderSearch]
   );
-  const hasNotesHintTarget = displayedNotes.length + visibleSharedPosts.length > 0;
-  const shouldShowNotesHint = hasNotesHintTarget;
 
   const resetCaptureDraft = useCallback(() => {
     resetCapture();
@@ -218,14 +243,6 @@ export default function HomeScreen() {
     resetCaptureDraft();
     setCaptureTarget('private');
   }, [resetCaptureDraft]);
-
-  useEffect(() => {
-    Animated.timing(hintAnim, {
-      toValue: shouldShowNotesHint ? 1 : 0,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-  }, [hintAnim, shouldShowNotesHint]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -287,6 +304,63 @@ export default function HomeScreen() {
         dismissSharedManageSheet();
       };
     }, [dismissSharedManageSheet])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (loading || (sharedLoading && archiveFeedItems.length === 0)) {
+        return undefined;
+      }
+
+      const target = consumeFeedFocus();
+      if (!target) {
+        return undefined;
+      }
+
+      if (useInlineHeaderSearch) {
+        Keyboard.dismiss();
+        searchAnim.stopAnimation();
+        searchAnim.setValue(0);
+        if (isSearching || searchQuery.length > 0) {
+          setIsSearching(false);
+          setSearchQuery('');
+        }
+      }
+
+      const targetIndex = archiveFeedItems.findIndex(
+        (item) => item.kind === target.kind && item.id === target.id
+      );
+      if (targetIndex < 0) {
+        return undefined;
+      }
+
+      const interactionHandle = InteractionManager.runAfterInteractions(() => {
+        const timeout = setTimeout(() => {
+          flatListRef.current?.scrollToOffset({
+            offset: (targetIndex + 1) * snapHeight,
+            animated: true,
+          });
+        }, 0);
+
+        return () => {
+          clearTimeout(timeout);
+        };
+      });
+
+      return () => {
+        interactionHandle.cancel();
+      };
+    }, [
+      archiveFeedItems,
+      consumeFeedFocus,
+      isSearching,
+      loading,
+      searchAnim,
+      searchQuery.length,
+      sharedLoading,
+      snapHeight,
+      useInlineHeaderSearch,
+    ])
   );
 
   const onRefresh = useCallback(async () => {
@@ -878,6 +952,13 @@ export default function HomeScreen() {
     [openNoteDetail, router]
   );
 
+  const openSharedPost = useCallback(
+    (postId: string) => {
+      router.push(`/shared/${postId}` as any);
+    },
+    [router]
+  );
+
   const handleCaptureTargetChange = useCallback(
     (nextTarget: 'private' | 'shared') => {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1089,42 +1170,6 @@ export default function HomeScreen() {
         onChangeShareTarget={handleCaptureTargetChange}
         onDoodleModeChange={setCaptureScrollLocked}
       />
-      {hasNotesHintTarget ? (
-        <Animated.View
-          pointerEvents={shouldShowNotesHint ? 'auto' : 'none'}
-          style={[
-            styles.homeNotesHintWrap,
-            {
-              opacity: hintAnim,
-              transform: [
-                {
-                  translateY: hintAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-8, 0],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <Pressable
-            style={[
-              styles.homeNotesHintButton,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-              },
-            ]}
-            onPress={handleOpenNotes}
-            hitSlop={20}
-          >
-            <Ionicons name="grid-outline" size={18} color={colors.text} />
-            <Text style={[styles.homeNotesHintLabel, { color: colors.text }]}>
-              {t('notes.viewAllButton', 'View all notes')}
-            </Text>
-          </Pressable>
-        </Animated.View>
-      ) : null}
     </View>
   );
 
@@ -1188,6 +1233,8 @@ export default function HomeScreen() {
         topInset={insets.top}
         snapHeight={snapHeight}
         onOpenNote={openNote}
+        onOpenSharedPost={openSharedPost}
+        onOpenArchive={handleOpenNotes}
         colors={colors}
         t={t}
         scrollEnabled={!captureScrollLocked}
@@ -1220,26 +1267,6 @@ const styles = StyleSheet.create({
   },
   captureItemWrapper: {
     width: '100%',
-  },
-  homeNotesHintWrap: {
-    position: 'absolute',
-    bottom: -18,
-    alignSelf: 'center',
-  },
-  homeNotesHintButton: {
-    minHeight: 48,
-    paddingHorizontal: 18,
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  homeNotesHintLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    fontFamily: 'System',
   },
   center: {
     flex: 1,

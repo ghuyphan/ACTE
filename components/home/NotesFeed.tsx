@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { TFunction } from 'i18next';
 import { ReactElement, RefObject, memo, useCallback, useEffect, useMemo, useRef } from 'react';
@@ -6,8 +7,10 @@ import {
   Dimensions,
   Easing as RNEasing,
   Platform,
+  Pressable,
   RefreshControl,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 import { Note } from '../../services/database';
@@ -104,15 +107,18 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   index,
   colors,
   t,
+  onOpenSharedPost,
 }: {
   item: SharedPost;
   index: number;
+  onOpenSharedPost?: (postId: string) => void;
   colors: {
     primary: string;
     text: string;
     secondaryText: string;
     danger: string;
     card: string;
+    border?: string;
   };
   t: TFunction;
 }) {
@@ -143,6 +149,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
     <Animated.View style={{ transform: [{ translateY }, { scale }] }}>
       <SharedPostMemoryCard
         post={item}
+        onPress={onOpenSharedPost ? () => onOpenSharedPost(item.id) : undefined}
         colors={colors}
         t={t}
       />
@@ -152,6 +159,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   prevProps.index === nextProps.index &&
   prevProps.colors === nextProps.colors &&
   prevProps.t === nextProps.t &&
+  prevProps.onOpenSharedPost === nextProps.onOpenSharedPost &&
   prevProps.item.id === nextProps.item.id &&
   prevProps.item.type === nextProps.item.type &&
   prevProps.item.text === nextProps.item.text &&
@@ -186,10 +194,12 @@ interface NotesFeedProps {
     secondaryText: string;
     danger: string;
     card: string;
+    border?: string;
   };
   t: TFunction;
   onCaptureVisibilityChange?: (isVisible: boolean) => void;
   scrollEnabled?: boolean;
+  onOpenArchive?: () => void;
 }
 
 export default function NotesFeed({
@@ -203,10 +213,12 @@ export default function NotesFeed({
   topInset,
   snapHeight,
   onOpenNote,
+  onOpenSharedPost,
   colors,
   t,
   onCaptureVisibilityChange,
   scrollEnabled = true,
+  onOpenArchive,
 }: NotesFeedProps) {
   const captureVisibilityRef = useRef(true);
   const isAdjustingSnapRef = useRef(false);
@@ -229,6 +241,35 @@ export default function NotesFeed({
     [notes, sharedPosts]
   );
   const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
+  const shouldShowArchiveCta = Boolean(onOpenArchive) && listData.length > 0;
+
+  const renderArchiveCta = useCallback(() => {
+    if (!shouldShowArchiveCta || !onOpenArchive) {
+      return null;
+    }
+
+    return (
+      <View style={styles.archiveCtaWrap}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
+          onPress={onOpenArchive}
+          style={[
+            styles.archiveCtaButton,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border ?? colors.card,
+            },
+          ]}
+        >
+          <Ionicons name="grid-outline" size={18} color={colors.text} />
+          <Text style={[styles.archiveCtaLabel, { color: colors.text }]}>
+            {t('notes.viewAllButton', 'View all notes')}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }, [colors.border, colors.card, colors.text, onOpenArchive, shouldShowArchiveCta, t]);
 
   const reportCaptureVisibility = useCallback(
     (offsetY: number) => {
@@ -283,32 +324,41 @@ export default function NotesFeed({
 
   const renderItem = useCallback(
     ({ item, index }: { item: NotesFeedListItem; index: number }) => {
+      const archiveCta = index === 0 ? renderArchiveCta() : null;
+
       if (item.kind === 'shared-post') {
         return (
           <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
-            <AnimatedSharedPostCard
-              item={item.post}
-              index={index}
-              colors={colors}
-              t={t}
-            />
+            <View style={styles.cardStage}>
+              <AnimatedSharedPostCard
+                item={item.post}
+                index={index}
+                onOpenSharedPost={onOpenSharedPost}
+                colors={colors}
+                t={t}
+              />
+            </View>
+            {archiveCta}
           </View>
         );
       }
 
       return (
         <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
-          <AnimatedNoteCard
-            item={item.note}
-            index={index}
-            onOpenNote={onOpenNote}
-            colors={colors}
-            t={t}
-          />
+          <View style={styles.cardStage}>
+            <AnimatedNoteCard
+              item={item.note}
+              index={index}
+              onOpenNote={onOpenNote}
+              colors={colors}
+              t={t}
+            />
+          </View>
+          {archiveCta}
         </View>
       );
     },
-    [colors, onOpenNote, snapHeight, t, topInset]
+    [colors, onOpenNote, onOpenSharedPost, renderArchiveCta, snapHeight, t, topInset]
   );
 
   return (
@@ -356,6 +406,29 @@ export default function NotesFeed({
 const styles = StyleSheet.create({
   snapItem: {
     width,
+    justifyContent: 'flex-start',
+  },
+  cardStage: {
+    flex: 1,
     justifyContent: 'center',
+  },
+  archiveCtaWrap: {
+    alignSelf: 'center',
+    marginBottom: 18,
+  },
+  archiveCtaButton: {
+    minHeight: 48,
+    paddingHorizontal: 18,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  archiveCtaLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'System',
   },
 });

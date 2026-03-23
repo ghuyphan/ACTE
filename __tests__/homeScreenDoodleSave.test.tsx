@@ -136,6 +136,12 @@ jest.mock('../hooks/useNoteDetailSheet', () => ({
   }),
 }));
 
+jest.mock('../hooks/useFeedFocus', () => ({
+  useFeedFocus: () => ({
+    consumeFeedFocus: jest.fn(() => null),
+  }),
+}));
+
 jest.mock('../hooks/useCaptureFlow', () => ({
   useCaptureFlow: () => ({
     ...(() => {

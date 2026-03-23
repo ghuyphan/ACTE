@@ -13,6 +13,7 @@ import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-c
 import i18n, { i18nReady } from '../constants/i18n';
 import { AuthProvider, useAuth } from '../hooks/useAuth';
 import { ConnectivityProvider, useConnectivity } from '../hooks/useConnectivity';
+import { FeedFocusProvider } from '../hooks/useFeedFocus';
 import { NotesProvider } from '../hooks/useNotes';
 import { NoteDetailSheetProvider, useNoteDetailSheet } from '../hooks/useNoteDetailSheet';
 import { SharedFeedProvider } from '../hooks/useSharedFeed';
@@ -268,17 +269,19 @@ export default function RootLayout() {
             <ConnectivityProvider>
               <AuthProvider>
                 <SubscriptionProvider>
-                  <NotesProvider>
-                    <SyncStatusProvider>
-                      <SharedFeedProvider>
-                        <NoteDetailSheetProvider>
-                          <BottomSheetModalProvider>
-                            <AppContent />
-                          </BottomSheetModalProvider>
-                        </NoteDetailSheetProvider>
-                      </SharedFeedProvider>
-                    </SyncStatusProvider>
-                  </NotesProvider>
+                  <FeedFocusProvider>
+                    <NotesProvider>
+                      <SyncStatusProvider>
+                        <SharedFeedProvider>
+                          <NoteDetailSheetProvider>
+                            <BottomSheetModalProvider>
+                              <AppContent />
+                            </BottomSheetModalProvider>
+                          </NoteDetailSheetProvider>
+                        </SharedFeedProvider>
+                      </SyncStatusProvider>
+                    </NotesProvider>
+                  </FeedFocusProvider>
                 </SubscriptionProvider>
               </AuthProvider>
             </ConnectivityProvider>

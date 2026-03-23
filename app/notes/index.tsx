@@ -1,7 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import { Stack, useRouter } from 'expo-router';
+import { Href, Stack, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
+import { useFeedFocus } from '../../hooks/useFeedFocus';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
@@ -148,6 +149,7 @@ export default function NotesIndexScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const { requestFeedFocus } = useFeedFocus();
   const { notes, loading } = useNotesStore();
   const { sharedPosts, loading: sharedLoading } = useSharedFeedStore();
 
@@ -182,13 +184,15 @@ export default function NotesIndexScreen() {
   const openItem = useCallback(
     (item: NoteGridItem) => {
       if (item.kind === 'note') {
-        router.push(`/note/${item.note.id}` as any);
+        requestFeedFocus({ kind: 'note', id: item.note.id });
+        router.replace('/(tabs)' as Href);
         return;
       }
 
-      router.push(`/shared/${item.post.id}` as any);
+      requestFeedFocus({ kind: 'shared-post', id: item.post.id });
+      router.replace('/(tabs)' as Href);
     },
-    [router]
+    [requestFeedFocus, router]
   );
 
   return (

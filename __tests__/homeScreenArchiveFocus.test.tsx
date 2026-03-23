@@ -1,5 +1,10 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, render, waitFor } from '@testing-library/react-native';
+import { Dimensions, InteractionManager } from 'react-native';
+import HomeScreen from '../app/(tabs)/index';
+
+const mockConsumeFeedFocus = jest.fn();
+const mockScrollToOffset = jest.fn();
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -26,9 +31,21 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
+jest.mock('expo-haptics', () => ({
+  impactAsync: jest.fn(),
+  notificationAsync: jest.fn(),
+  ImpactFeedbackStyle: {
+    Light: 'light',
+    Medium: 'medium',
+  },
+  NotificationFeedbackType: {
+    Success: 'success',
+  },
+}));
+
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
-    user: null,
+    user: { uid: 'me' },
     isAuthAvailable: true,
   }),
 }));
@@ -85,25 +102,23 @@ jest.mock('../hooks/useAppSheetAlert', () => ({
   }),
 }));
 
+jest.mock('../hooks/useFeedFocus', () => ({
+  useFeedFocus: () => ({
+    consumeFeedFocus: (...args: unknown[]) => mockConsumeFeedFocus(...args),
+  }),
+}));
+
 jest.mock('../hooks/useNoteDetailSheet', () => ({
   useNoteDetailSheet: () => ({
     openNoteDetail: jest.fn(),
   }),
 }));
 
-jest.mock('../hooks/useFeedFocus', () => ({
-  useFeedFocus: () => ({
-    consumeFeedFocus: jest.fn(() => null),
-  }),
-}));
-
 jest.mock('../hooks/useCaptureFlow', () => ({
   useCaptureFlow: () => ({
-    // Build Animated values inside the factory to satisfy Jest's hoisting rules.
     ...(() => {
       const { Animated } = require('react-native');
       return {
-        captureOpacity: new Animated.Value(1),
         captureScale: new Animated.Value(1),
         captureTranslateY: new Animated.Value(0),
         flashAnim: new Animated.Value(0),
@@ -119,18 +134,6 @@ jest.mock('../hooks/useCaptureFlow', () => ({
     setNoteText: jest.fn(),
     capturedPhoto: null,
     setCapturedPhoto: jest.fn(),
-    selectedPromptId: 'future-notice',
-    setSelectedPromptId: jest.fn(),
-    selectedPromptText: 'What should future-you notice here?',
-    setSelectedPromptText: jest.fn(),
-    promptAnswer: '',
-    setPromptAnswer: jest.fn(),
-    moodEmoji: null,
-    setMoodEmoji: jest.fn(),
-    promptExpanded: false,
-    setPromptExpanded: jest.fn(),
-    hasShuffledPrompt: false,
-    setHasShuffledPrompt: jest.fn(),
     radius: 150,
     setRadius: jest.fn(),
     facing: 'back',
@@ -138,7 +141,6 @@ jest.mock('../hooks/useCaptureFlow', () => ({
     permission: { granted: true },
     requestPermission: jest.fn(),
     cameraRef: { current: null },
-    animateModeSwitch: jest.fn(),
     toggleCaptureMode: jest.fn(),
     handleShutterPressIn: jest.fn(),
     handleShutterPressOut: jest.fn(),
@@ -153,25 +155,24 @@ jest.mock('../hooks/useNotes', () => ({
     loading: false,
     notes: [
       {
-        id: 'photo-1',
-        type: 'photo',
-        content: 'file:///private/photo-1.jpg',
-        photoLocalUri: 'file:///private/photo-1.jpg',
-        locationName: 'District 3',
-        latitude: 10.8,
-        longitude: 106.7,
+        id: 'note-new',
+        type: 'text',
+        content: 'Newest note',
+        locationName: 'District 1',
+        latitude: 10.7,
+        longitude: 106.6,
         radius: 150,
         isFavorite: false,
         createdAt: '2026-03-11T00:00:00.000Z',
         updatedAt: null,
       },
       {
-        id: 'text-1',
+        id: 'note-old',
         type: 'text',
-        content: 'Best iced coffee',
-        locationName: 'District 1',
-        latitude: 10.7,
-        longitude: 106.6,
+        content: 'Older note',
+        locationName: 'District 3',
+        latitude: 10.8,
+        longitude: 106.7,
         radius: 150,
         isFavorite: false,
         createdAt: '2026-03-10T00:00:00.000Z',
@@ -191,7 +192,8 @@ jest.mock('../hooks/useSubscription', () => ({
     isPurchaseInFlight: false,
     plusPriceLabel: null,
     canImportFromLibrary: false,
-    purchasePlus: jest.fn(async () => ({ status: 'unavailable' })),
+    remotePhotoNoteCount: null,
+    presentPaywallIfNeeded: jest.fn(async () => 'not_presented'),
     restorePurchases: jest.fn(async () => ({ status: 'unavailable' })),
   }),
 }));
@@ -202,12 +204,30 @@ jest.mock('../hooks/useSharedFeed', () => ({
     loading: false,
     ready: true,
     friends: [],
-    sharedPosts: [],
+    sharedPosts: [
+      {
+        id: 'shared-friend',
+        authorUid: 'friend-1',
+        authorDisplayName: 'Lan',
+        type: 'text',
+        text: 'Friend memory',
+        placeName: 'District 5',
+        createdAt: '2026-03-12T00:00:00.000Z',
+      },
+      {
+        id: 'shared-owned',
+        authorUid: 'me',
+        authorDisplayName: 'You',
+        type: 'text',
+        text: 'Owned shared memory',
+        placeName: 'District 4',
+        createdAt: '2026-03-13T00:00:00.000Z',
+      },
+    ],
     activeInvite: null,
     refreshSharedFeed: jest.fn(async () => undefined),
     createFriendInvite: jest.fn(async () => undefined),
     revokeFriendInvite: jest.fn(async () => undefined),
-    acceptFriendInvite: jest.fn(async () => undefined),
     removeFriend: jest.fn(async () => undefined),
     createSharedPost: jest.fn(async () => undefined),
   }),
@@ -236,43 +256,27 @@ jest.mock('../components/home/CaptureCard', () => {
 
 jest.mock('../components/home/HomeHeaderSearch', () => {
   const React = require('react');
-  const { Pressable, Text, TextInput, View } = require('react-native');
-  return function MockHomeHeaderSearch(props: any) {
-    return (
-      <View>
-        <Pressable testID="home-open-search" onPress={props.onOpenSearch}>
-          <Text>Open search</Text>
-        </Pressable>
-        <TextInput
-          testID="home-search-input"
-          value={props.searchQuery}
-          onChangeText={props.onSearchChange}
-        />
-      </View>
-    );
+  const { View } = require('react-native');
+  return function MockHomeHeaderSearch() {
+    return <View testID="home-header-search" />;
   };
 });
 
 jest.mock('../components/home/NotesFeed', () => {
   const React = require('react');
-  const { Text, View } = require('react-native');
-  return function MockNotesFeed({ notes }: { notes: Array<{ id: string }> }) {
-    return (
-      <View>
-        <Text testID="home-notes-count">{String(notes.length)}</Text>
-        {notes.map((note) => (
-          <Text key={note.id}>{note.id}</Text>
-        ))}
-      </View>
-    );
-  };
-});
-
-jest.mock('../components/home/SharedMomentsStrip', () => {
-  const React = require('react');
   const { View } = require('react-native');
-  return function MockSharedMomentsStrip() {
-    return <View testID="shared-moments-strip" />;
+  return function MockNotesFeed({ flatListRef }: { flatListRef: React.MutableRefObject<any> }) {
+    React.useEffect(() => {
+      flatListRef.current = {
+        scrollToOffset: (...args: unknown[]) => mockScrollToOffset(...args),
+      };
+
+      return () => {
+        flatListRef.current = null;
+      };
+    }, [flatListRef]);
+
+    return <View testID="notes-feed" />;
   };
 });
 
@@ -288,25 +292,74 @@ jest.mock('../utils/platform', () => ({
   isIOS26OrNewer: false,
 }));
 
-import HomeScreen from '../app/(tabs)/index';
+describe('HomeScreen archive focus', () => {
+  const runAfterInteractionsSpy = jest.spyOn(InteractionManager, 'runAfterInteractions');
+  const snapHeight = Dimensions.get('window').height - 90;
 
-describe('HomeScreen search', () => {
-  it('filters with shared search logic and ignores photo file uris', async () => {
-    const { getByTestId, queryByText } = render(<HomeScreen />);
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    runAfterInteractionsSpy.mockImplementation((task: any) => {
+      task?.();
+      return { cancel: jest.fn() } as any;
+    });
+  });
 
-    fireEvent.press(getByTestId('home-open-search'));
-    fireEvent.changeText(getByTestId('home-search-input'), 'photo-1.jpg');
+  afterEach(() => {
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
+  });
 
-    await waitFor(() => {
-      expect(getByTestId('home-notes-count').props.children).toBe('0');
-      expect(queryByText('photo-1')).toBeNull();
+  afterAll(() => {
+    runAfterInteractionsSpy.mockRestore();
+  });
+
+  it('scrolls to the matching note card when a pending note focus exists', async () => {
+    mockConsumeFeedFocus.mockReturnValueOnce({ kind: 'note', id: 'note-old' });
+
+    render(<HomeScreen />);
+
+    act(() => {
+      jest.runAllTimers();
     });
 
-    fireEvent.changeText(getByTestId('home-search-input'), 'District 3');
+    await waitFor(() => {
+      expect(mockScrollToOffset).toHaveBeenCalledWith({
+        offset: snapHeight * 3,
+        animated: true,
+      });
+    });
+  });
+
+  it('scrolls to the matching shared post card when a pending shared focus exists', async () => {
+    mockConsumeFeedFocus.mockReturnValueOnce({ kind: 'shared-post', id: 'shared-friend' });
+
+    render(<HomeScreen />);
+
+    act(() => {
+      jest.runAllTimers();
+    });
 
     await waitFor(() => {
-      expect(getByTestId('home-notes-count').props.children).toBe('1');
-      expect(queryByText('photo-1')).toBeTruthy();
+      expect(mockScrollToOffset).toHaveBeenCalledWith({
+        offset: snapHeight,
+        animated: true,
+      });
     });
+  });
+
+  it('clears a missing focus target without opening a fallback scroll', async () => {
+    mockConsumeFeedFocus.mockReturnValueOnce({ kind: 'note', id: 'missing-note' });
+
+    render(<HomeScreen />);
+
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    await waitFor(() => {
+      expect(mockConsumeFeedFocus).toHaveBeenCalled();
+    });
+    expect(mockScrollToOffset).not.toHaveBeenCalled();
   });
 });
