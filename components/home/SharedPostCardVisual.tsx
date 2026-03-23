@@ -1,4 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { Layout } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import ImageMemoryCard from '../ImageMemoryCard';
 import TextMemoryCard from '../TextMemoryCard';
 import { SharedPost } from '../../services/sharedFeedService';
@@ -11,6 +15,7 @@ export default function SharedPostCardVisual({
   post: SharedPost;
   fallbackText: string;
 }) {
+  const { colors } = useTheme();
   const [photoUri, setPhotoUri] = useState(post.photoLocalUri);
 
   useEffect(() => {
@@ -45,9 +50,53 @@ export default function SharedPostCardVisual({
     };
   }, [photoUri, post.id, post.photoPath, post.type]);
 
-  if (post.type === 'photo' && photoUri) {
-    return <ImageMemoryCard imageUrl={photoUri} doodleStrokesJson={post.doodleStrokesJson} />;
+  if (post.type === 'photo') {
+    if (photoUri) {
+      return <ImageMemoryCard imageUrl={photoUri} doodleStrokesJson={post.doodleStrokesJson} />;
+    }
+
+    return (
+      <View
+        testID="shared-post-photo-placeholder"
+        style={[
+          styles.photoPlaceholder,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.photoPlaceholderBadge,
+            { backgroundColor: colors.primarySoft },
+          ]}
+        >
+          <Ionicons name="image-outline" size={22} color={colors.primary} />
+        </View>
+        <ActivityIndicator size="small" color={colors.primary} />
+      </View>
+    );
   }
 
   return <TextMemoryCard text={post.text || fallbackText} noteId={post.id} doodleStrokesJson={post.doodleStrokesJson} />;
 }
+
+const styles = StyleSheet.create({
+  photoPlaceholder: {
+    flex: 1,
+    borderRadius: Layout.cardRadius,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  photoPlaceholderBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

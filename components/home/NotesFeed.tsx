@@ -358,7 +358,15 @@ export default function NotesFeed({
         </View>
       );
     },
-    [colors, onOpenNote, onOpenSharedPost, renderArchiveCta, snapHeight, t, topInset]
+    [
+      colors,
+      onOpenNote,
+      onOpenSharedPost,
+      renderArchiveCta,
+      snapHeight,
+      t,
+      topInset,
+    ]
   );
 
   return (

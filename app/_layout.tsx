@@ -6,6 +6,7 @@ import * as SystemUI from 'expo-system-ui';
 import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { I18nextProvider } from 'react-i18next';
 import { ActivityIndicator, AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -31,6 +32,7 @@ SplashScreen.preventAutoHideAsync();
 
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { isOnline } = useConnectivity();
   const { openNoteDetail } = useNoteDetailSheet();
@@ -201,6 +203,7 @@ function AppContent() {
               headerShown: true,
               headerTransparent: true,
               headerTitle: '',
+              headerBackTitle: t('settings.title', 'Settings'),
               headerTintColor: colors.text,
               headerBackButtonDisplayMode: 'minimal',
               headerBackButtonMenuEnabled: false,
@@ -212,6 +215,7 @@ function AppContent() {
               headerShown: true,
               headerTransparent: true,
               headerTitle: '',
+              headerBackTitle: t('settings.title', 'Settings'),
               headerTintColor: colors.text,
               headerBackButtonDisplayMode: 'minimal',
               headerBackButtonMenuEnabled: false,
@@ -223,6 +227,7 @@ function AppContent() {
               headerShown: true,
               headerTransparent: true,
               headerTitle: '',
+              headerBackTitle: t('settings.title', 'Settings'),
               headerTintColor: colors.text,
               headerBackButtonDisplayMode: 'minimal',
               headerBackButtonMenuEnabled: false,
@@ -250,6 +255,7 @@ function AppContent() {
           <Stack.Screen
             name="shared/[id]"
             options={{
+              presentation: 'transparentModal',
               animation: 'none',
             }}
           />

@@ -1,10 +1,47 @@
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import NotesIndexScreen from '../app/notes/index';
 
 const mockRouterReplace = jest.fn();
 const mockRouterPush = jest.fn();
 const mockRequestFeedFocus = jest.fn();
+const mockDownloadPhotoFromStorage = jest.fn();
+
+const mockNotes = [
+  {
+    id: 'note-1',
+    type: 'text',
+    content: 'Newest note',
+    locationName: 'District 1',
+    latitude: 10.7,
+    longitude: 106.6,
+    radius: 150,
+    isFavorite: false,
+    createdAt: '2026-03-11T00:00:00.000Z',
+    updatedAt: null,
+  },
+];
+
+const mockSharedPosts: any[] = [
+  {
+    id: 'shared-1',
+    authorUid: 'friend-1',
+    authorDisplayName: 'Lan',
+    type: 'text',
+    text: 'Shared memory',
+    placeName: 'District 3',
+    createdAt: '2026-03-12T00:00:00.000Z',
+  },
+  {
+    id: 'shared-owned',
+    authorUid: 'me',
+    authorDisplayName: 'You',
+    type: 'text',
+    text: 'Owned shared memory',
+    placeName: 'District 4',
+    createdAt: '2026-03-13T00:00:00.000Z',
+  },
+];
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -42,6 +79,11 @@ jest.mock('expo-linear-gradient', () => {
   };
 });
 
+jest.mock('../services/remoteMedia', () => ({
+  SHARED_POST_MEDIA_BUCKET: 'shared-media',
+  downloadPhotoFromStorage: (...args: unknown[]) => mockDownloadPhotoFromStorage(...args),
+}));
+
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
     user: { uid: 'me' },
@@ -56,6 +98,7 @@ jest.mock('../hooks/useTheme', () => ({
       card: '#FFFFFF',
       border: '#E5E5EA',
       primary: '#FFC107',
+      primarySoft: '#FFF3CD',
       text: '#1C1C1E',
       secondaryText: '#8E8E93',
     },
@@ -71,27 +114,23 @@ jest.mock('../hooks/useFeedFocus', () => ({
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
-    notes: [
-      {
-        id: 'note-1',
-        type: 'text',
-        content: 'Newest note',
-        locationName: 'District 1',
-        latitude: 10.7,
-        longitude: 106.6,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-11T00:00:00.000Z',
-        updatedAt: null,
-      },
-    ],
+    notes: mockNotes,
   }),
 }));
 
 jest.mock('../hooks/useSharedFeed', () => ({
   useSharedFeedStore: () => ({
     loading: false,
-    sharedPosts: [
+    sharedPosts: mockSharedPosts,
+  }),
+}));
+
+describe('NotesIndexScreen', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSharedPosts.splice(
+      0,
+      mockSharedPosts.length,
       {
         id: 'shared-1',
         authorUid: 'friend-1',
@@ -109,14 +148,8 @@ jest.mock('../hooks/useSharedFeed', () => ({
         text: 'Owned shared memory',
         placeName: 'District 4',
         createdAt: '2026-03-13T00:00:00.000Z',
-      },
-    ],
-  }),
-}));
-
-describe('NotesIndexScreen', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+      }
+    );
   });
 
   it('queues a note focus request and returns to Home instead of pushing note detail', () => {
@@ -137,5 +170,37 @@ describe('NotesIndexScreen', () => {
     expect(mockRequestFeedFocus).toHaveBeenCalledWith({ kind: 'shared-post', id: 'shared-1' });
     expect(mockRouterReplace).toHaveBeenCalledWith('/(tabs)');
     expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it('keeps shared photo tiles on a photo placeholder until the image hydrates', async () => {
+    let resolveDownload: ((value: string) => void) | undefined;
+    mockSharedPosts.splice(0, mockSharedPosts.length, {
+      id: 'shared-photo',
+      authorUid: 'friend-1',
+      authorDisplayName: 'Lan',
+      type: 'photo',
+      text: 'Friend photo caption',
+      photoPath: 'photos/friend-photo.jpg',
+      photoLocalUri: null,
+      placeName: 'District 5',
+      createdAt: '2026-03-14T00:00:00.000Z',
+    });
+    mockDownloadPhotoFromStorage.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveDownload = resolve;
+        })
+    );
+
+    const { getByTestId, queryByText, queryByTestId } = render(<NotesIndexScreen />);
+
+    expect(getByTestId('shared-photo-grid-placeholder')).toBeTruthy();
+    expect(queryByText('Friend photo caption')).toBeNull();
+
+    resolveDownload?.('file:///friend-photo.jpg');
+
+    await waitFor(() => {
+      expect(queryByTestId('shared-photo-grid-placeholder')).toBeNull();
+    });
   });
 });

@@ -231,11 +231,19 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             return;
         }
 
+        let cancelled = false;
         closeCompletionHandledRef.current = false;
         setLoading(true);
+        setNote(null);
         setIsEditing(false);
         setIsDeleting(false);
         pendingDeleteNoteIdRef.current = null;
+        setEditContent('');
+        setEditLocation('');
+        setEditRadius(150);
+        setEditDoodleStrokes([]);
+        setDoodleModeEnabled(false);
+        favoriteFillProgress.setValue(0);
         cardScale.setValue(0.97);
         cardOpacity.setValue(0);
         infoTranslateY.setValue(12);
@@ -243,54 +251,71 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         actionsOpacity.setValue(0);
         editModeAnim.setValue(0);
 
-        getNoteById(noteId).then((nextNote) => {
-            setNote(nextNote);
-            favoriteFillProgress.setValue(nextNote?.isFavorite ? 1 : 0);
-            if (nextNote) {
-                setEditContent(nextNote.content);
-                setEditLocation(nextNote.locationName || '');
-                setEditRadius(nextNote.radius);
-                setEditDoodleStrokes(parseNoteDoodleStrokes(nextNote.doodleStrokesJson));
-                setDoodleModeEnabled(false);
-            }
-            setLoading(false);
+        getNoteById(noteId)
+            .then((nextNote) => {
+                if (cancelled) {
+                    return;
+                }
 
-            Animated.parallel([
-                Animated.timing(cardScale, {
-                    toValue: 1,
-                    duration: reduceMotionEnabled ? 140 : 180,
-                    easing: Easing.out(Easing.cubic),
-                    useNativeDriver: true
-                }),
-                Animated.timing(cardOpacity, {
-                    toValue: 1,
-                    duration: reduceMotionEnabled ? 140 : 180,
-                    easing: Easing.out(Easing.cubic),
-                    useNativeDriver: true
-                }),
-                Animated.timing(actionsOpacity, {
-                    toValue: 1,
-                    duration: reduceMotionEnabled ? 120 : 160,
-                    delay: 70,
-                    easing: Easing.out(Easing.cubic),
-                    useNativeDriver: true
-                }),
-                Animated.timing(infoOpacity, {
-                    toValue: 1,
-                    duration: reduceMotionEnabled ? 140 : 180,
-                    delay: 100,
-                    easing: Easing.out(Easing.cubic),
-                    useNativeDriver: true
-                }),
-                Animated.timing(infoTranslateY, {
-                    toValue: 0,
-                    duration: reduceMotionEnabled ? 140 : 180,
-                    delay: 100,
-                    easing: Easing.out(Easing.cubic),
-                    useNativeDriver: true
-                }),
-            ]).start();
-        });
+                setNote(nextNote);
+                favoriteFillProgress.setValue(nextNote?.isFavorite ? 1 : 0);
+                if (nextNote) {
+                    setEditContent(nextNote.content);
+                    setEditLocation(nextNote.locationName || '');
+                    setEditRadius(nextNote.radius);
+                    setEditDoodleStrokes(parseNoteDoodleStrokes(nextNote.doodleStrokesJson));
+                    setDoodleModeEnabled(false);
+                }
+                setLoading(false);
+
+                Animated.parallel([
+                    Animated.timing(cardScale, {
+                        toValue: 1,
+                        duration: reduceMotionEnabled ? 140 : 180,
+                        easing: Easing.out(Easing.cubic),
+                        useNativeDriver: true
+                    }),
+                    Animated.timing(cardOpacity, {
+                        toValue: 1,
+                        duration: reduceMotionEnabled ? 140 : 180,
+                        easing: Easing.out(Easing.cubic),
+                        useNativeDriver: true
+                    }),
+                    Animated.timing(actionsOpacity, {
+                        toValue: 1,
+                        duration: reduceMotionEnabled ? 120 : 160,
+                        delay: 70,
+                        easing: Easing.out(Easing.cubic),
+                        useNativeDriver: true
+                    }),
+                    Animated.timing(infoOpacity, {
+                        toValue: 1,
+                        duration: reduceMotionEnabled ? 140 : 180,
+                        delay: 100,
+                        easing: Easing.out(Easing.cubic),
+                        useNativeDriver: true
+                    }),
+                    Animated.timing(infoTranslateY, {
+                        toValue: 0,
+                        duration: reduceMotionEnabled ? 140 : 180,
+                        delay: 100,
+                        easing: Easing.out(Easing.cubic),
+                        useNativeDriver: true
+                    }),
+                ]).start();
+            })
+            .catch(() => {
+                if (cancelled) {
+                    return;
+                }
+
+                setNote(null);
+                setLoading(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
     }, [actionsOpacity, cardOpacity, cardScale, editModeAnim, favoriteFillProgress, getNoteById, infoOpacity, infoTranslateY, noteId, reduceMotionEnabled, visible]);
 
     useEffect(() => {

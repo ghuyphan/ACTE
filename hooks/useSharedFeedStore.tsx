@@ -16,7 +16,11 @@ import {
   subscribeToSharedFeed,
   updateSharedPost as updatePost,
 } from '../services/sharedFeedService';
-import { clearSharedFeedCache, getCachedSharedFeedSnapshot } from '../services/sharedFeedCache';
+import {
+  clearSharedFeedCache,
+  getCachedSharedFeedSnapshot,
+  replaceCachedActiveInvite,
+} from '../services/sharedFeedCache';
 import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
 
@@ -42,6 +46,22 @@ interface SharedFeedStoreValue {
 
 const SharedFeedStoreContext = createContext<SharedFeedStoreValue | undefined>(undefined);
 
+function sortFriendsByFriendedAt(friends: FriendConnection[]) {
+  return [...friends].sort(
+    (left, right) => new Date(left.friendedAt).getTime() - new Date(right.friendedAt).getTime()
+  );
+}
+
+function upsertFriendConnection(
+  friends: FriendConnection[],
+  nextFriend: FriendConnection
+) {
+  return sortFriendsByFriendedAt([
+    ...friends.filter((friend) => friend.userId !== nextFriend.userId),
+    nextFriend,
+  ]);
+}
+
 function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const { user, isAuthAvailable, isReady } = useAuth();
   const { isOnline } = useConnectivity();
@@ -55,6 +75,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const friendsRef = useRef<FriendConnection[]>([]);
   const sharedPostsRef = useRef<SharedPost[]>([]);
   const activeInviteRef = useRef<FriendInvite | null>(null);
+  const suppressActiveInviteRef = useRef(false);
   const createInvitePromiseRef = useRef<Promise<FriendInvite> | null>(null);
   const previousUserUidRef = useRef<string | null>(null);
 
@@ -82,12 +103,14 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       source: 'live' | 'cache',
       updatedAt: string | null
     ) => {
+      const nextActiveInvite =
+        suppressActiveInviteRef.current && snapshot.activeInvite ? null : snapshot.activeInvite;
       friendsRef.current = snapshot.friends;
       sharedPostsRef.current = snapshot.sharedPosts;
-      activeInviteRef.current = snapshot.activeInvite;
+      activeInviteRef.current = nextActiveInvite;
       setFriends(snapshot.friends);
       setSharedPosts(snapshot.sharedPosts);
-      setActiveInvite(snapshot.activeInvite);
+      setActiveInvite(nextActiveInvite);
       setDataSource(source);
       setLastUpdatedAt(updatedAt);
     },
@@ -108,6 +131,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       friendsRef.current = [];
       sharedPostsRef.current = [];
       activeInviteRef.current = null;
+      suppressActiveInviteRef.current = false;
       createInvitePromiseRef.current = null;
       setLoading(false);
       setReady(true);
@@ -142,6 +166,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       setSharedPosts([]);
       setActiveInvite(null);
       activeInviteRef.current = null;
+      suppressActiveInviteRef.current = false;
       createInvitePromiseRef.current = null;
       setLoading(false);
       setReady(true);
@@ -224,10 +249,12 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         const activeUser = requireUser();
         const invitePromise = createInvite(activeUser)
           .then((invite) => {
+            suppressActiveInviteRef.current = false;
             activeInviteRef.current = invite;
             setActiveInvite(invite);
             setDataSource('live');
             setLastUpdatedAt(new Date().toISOString());
+            void replaceCachedActiveInvite(activeUser.uid, invite).catch(() => undefined);
             return invite;
           })
           .finally(() => {
@@ -241,23 +268,40 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         requireOnline();
         const activeUser = requireUser();
         await revokeInvite(activeUser, inviteId);
+        suppressActiveInviteRef.current = true;
         setDataSource('live');
         setLastUpdatedAt(new Date().toISOString());
         setActiveInvite((current) => {
           const nextInvite = current?.id === inviteId ? null : current;
           activeInviteRef.current = nextInvite;
+          void replaceCachedActiveInvite(activeUser.uid, nextInvite).catch(() => undefined);
           return nextInvite;
         });
       },
       acceptFriendInvite: async (inviteValue: string) => {
         requireOnline();
         const activeUser = requireUser();
-        await acceptInvite(activeUser, inviteValue);
+        const connection = await acceptInvite(activeUser, inviteValue);
+        const nextFriends = upsertFriendConnection(friendsRef.current, connection);
+        friendsRef.current = nextFriends;
+        setFriends(nextFriends);
+        setDataSource('live');
+        setLastUpdatedAt(new Date().toISOString());
+        void refreshAll().catch(() => undefined);
       },
       removeFriend: async (friendUid: string) => {
         requireOnline();
         const activeUser = requireUser();
         await deleteFriend(activeUser, friendUid);
+        const nextFriends = friendsRef.current.filter((friend) => friend.userId !== friendUid);
+        const nextSharedPosts = sharedPostsRef.current.filter((post) => post.authorUid !== friendUid);
+        friendsRef.current = nextFriends;
+        sharedPostsRef.current = nextSharedPosts;
+        setFriends(nextFriends);
+        setSharedPosts(nextSharedPosts);
+        setDataSource('live');
+        setLastUpdatedAt(new Date().toISOString());
+        void refreshAll().catch(() => undefined);
       },
       createSharedPost: async (note: Note, audienceUserIds?: string[]) => {
         requireOnline();

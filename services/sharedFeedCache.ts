@@ -1,4 +1,4 @@
-import type { FriendConnection, SharedFeedSnapshot, SharedPost } from './sharedFeedService';
+import type { FriendConnection, FriendInvite, SharedFeedSnapshot, SharedPost } from './sharedFeedService';
 import { getDB, withDatabaseTransaction } from './database';
 
 interface FriendRow {
@@ -29,6 +29,20 @@ interface SharedPostRow {
 
 interface MetaRow {
   last_updated_at: string | null;
+}
+
+interface InviteRow {
+  id: string;
+  inviter_uid: string;
+  inviter_display_name_snapshot: string | null;
+  inviter_photo_url_snapshot: string | null;
+  token: string;
+  created_at: string;
+  revoked_at: string | null;
+  accepted_by_uid: string | null;
+  accepted_at: string | null;
+  expires_at: string | null;
+  url: string;
 }
 
 function rowToFriend(row: FriendRow): FriendConnection {
@@ -69,6 +83,22 @@ function rowToSharedPost(row: SharedPostRow): SharedPost {
     sourceNoteId: row.source_note_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function rowToInvite(row: InviteRow): FriendInvite {
+  return {
+    id: row.id,
+    inviterUid: row.inviter_uid,
+    inviterDisplayNameSnapshot: row.inviter_display_name_snapshot,
+    inviterPhotoURLSnapshot: row.inviter_photo_url_snapshot,
+    token: row.token,
+    createdAt: row.created_at,
+    revokedAt: row.revoked_at,
+    acceptedByUid: row.accepted_by_uid,
+    acceptedAt: row.accepted_at,
+    expiresAt: row.expires_at,
+    url: row.url,
   };
 }
 
@@ -188,6 +218,70 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
   });
 }
 
+export async function getCachedActiveInvite(userUid: string): Promise<FriendInvite | null> {
+  const db = await getDB();
+  const row = await db.getFirstAsync<InviteRow>(
+    `SELECT *
+     FROM shared_invites_cache
+     WHERE user_uid = ?`,
+    userUid
+  );
+
+  return row ? rowToInvite(row) : null;
+}
+
+export async function replaceCachedActiveInvite(
+  userUid: string,
+  invite: FriendInvite | null
+): Promise<void> {
+  const cachedAt = new Date().toISOString();
+
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
+
+    if (invite) {
+      await tx.runAsync(
+        `INSERT INTO shared_invites_cache (
+          user_uid,
+          id,
+          inviter_uid,
+          inviter_display_name_snapshot,
+          inviter_photo_url_snapshot,
+          token,
+          created_at,
+          revoked_at,
+          accepted_by_uid,
+          accepted_at,
+          expires_at,
+          url
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        userUid,
+        invite.id,
+        invite.inviterUid,
+        invite.inviterDisplayNameSnapshot,
+        invite.inviterPhotoURLSnapshot,
+        invite.token,
+        invite.createdAt,
+        invite.revokedAt,
+        invite.acceptedByUid,
+        invite.acceptedAt,
+        invite.expiresAt,
+        invite.url
+      );
+    }
+
+    await tx.runAsync(
+      `INSERT INTO shared_feed_cache_meta (user_uid, last_updated_at)
+       VALUES (?, ?)
+       ON CONFLICT(user_uid) DO UPDATE SET
+         last_updated_at = excluded.last_updated_at`,
+      userUid,
+      cachedAt
+    );
+  });
+}
+
 export async function getSharedFeedCacheLastUpdatedAt(userUid: string): Promise<string | null> {
   const db = await getDB();
   const row = await db.getFirstAsync<MetaRow>(
@@ -204,6 +298,7 @@ export async function clearSharedFeedCache(userUid?: string | null): Promise<voi
     await withDatabaseTransaction(async (tx) => {
       await tx.runAsync('DELETE FROM shared_friends_cache');
       await tx.runAsync('DELETE FROM shared_posts_cache');
+      await tx.runAsync('DELETE FROM shared_invites_cache');
       await tx.runAsync('DELETE FROM shared_feed_cache_meta');
     });
     return;
@@ -212,19 +307,21 @@ export async function clearSharedFeedCache(userUid?: string | null): Promise<voi
   await withDatabaseTransaction(async (tx) => {
     await tx.runAsync('DELETE FROM shared_friends_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_feed_cache_meta WHERE user_uid = ?', userUid);
   });
 }
 
 export async function cacheSharedFeedSnapshot(
   userUid: string,
-  snapshot: Pick<SharedFeedSnapshot, 'friends' | 'sharedPosts'>
+  snapshot: Pick<SharedFeedSnapshot, 'friends' | 'sharedPosts' | 'activeInvite'>
 ) {
   const cachedAt = new Date().toISOString();
 
   await withDatabaseTransaction(async (tx) => {
     await tx.runAsync('DELETE FROM shared_friends_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
 
     for (const friend of snapshot.friends) {
       await tx.runAsync(
@@ -286,6 +383,38 @@ export async function cacheSharedFeedSnapshot(
       );
     }
 
+    if (snapshot.activeInvite) {
+      await tx.runAsync(
+        `INSERT INTO shared_invites_cache (
+          user_uid,
+          id,
+          inviter_uid,
+          inviter_display_name_snapshot,
+          inviter_photo_url_snapshot,
+          token,
+          created_at,
+          revoked_at,
+          accepted_by_uid,
+          accepted_at,
+          expires_at,
+          url
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        userUid,
+        snapshot.activeInvite.id,
+        snapshot.activeInvite.inviterUid,
+        snapshot.activeInvite.inviterDisplayNameSnapshot,
+        snapshot.activeInvite.inviterPhotoURLSnapshot,
+        snapshot.activeInvite.token,
+        snapshot.activeInvite.createdAt,
+        snapshot.activeInvite.revokedAt,
+        snapshot.activeInvite.acceptedByUid,
+        snapshot.activeInvite.acceptedAt,
+        snapshot.activeInvite.expiresAt,
+        snapshot.activeInvite.url
+      );
+    }
+
     await tx.runAsync(
       `INSERT INTO shared_feed_cache_meta (user_uid, last_updated_at)
        VALUES (?, ?)
@@ -300,19 +429,20 @@ export async function cacheSharedFeedSnapshot(
 export async function getCachedSharedFeedSnapshot(userUid: string): Promise<{
   friends: FriendConnection[];
   sharedPosts: SharedPost[];
-  activeInvite: null;
+  activeInvite: FriendInvite | null;
   lastUpdatedAt: string | null;
 }> {
-  const [friends, sharedPosts, lastUpdatedAt] = await Promise.all([
+  const [friends, sharedPosts, activeInvite, lastUpdatedAt] = await Promise.all([
     getCachedSharedFriends(userUid),
     getCachedSharedPosts(userUid),
+    getCachedActiveInvite(userUid),
     getSharedFeedCacheLastUpdatedAt(userUid),
   ]);
 
   return {
     friends,
     sharedPosts,
-    activeInvite: null,
+    activeInvite,
     lastUpdatedAt,
   };
 }

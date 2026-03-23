@@ -44,6 +44,8 @@ function GridTile({
   colors: {
     card: string;
     border: string;
+    primary: string;
+    primarySoft: string;
   };
   onPress: () => void;
   index: number;
@@ -96,6 +98,7 @@ function GridTile({
       : item.post.type === 'photo'
         ? sharedPhotoUri ?? ''
         : '';
+  const isPhotoTile = (item.kind === 'note' ? item.note.type : item.post.type) === 'photo';
   const text =
     item.kind === 'note'
       ? item.note.content.trim()
@@ -107,7 +110,8 @@ function GridTile({
   });
   const tileText =
     text ||
-    ((item.kind === 'note' ? item.note.type : item.post.type) === 'photo' ? photoFallbackLabel : '...');
+    (isPhotoTile ? photoFallbackLabel : '...');
+  const showPhotoPlaceholder = item.kind === 'shared-post' && item.post.type === 'photo' && !imageUri;
 
   return (
     <Pressable
@@ -130,6 +134,29 @@ function GridTile({
             contentFit="cover"
             transition={120}
           />
+        ) : showPhotoPlaceholder ? (
+          <View
+            testID="shared-photo-grid-placeholder"
+            style={[
+              styles.photoPlaceholder,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.photoPlaceholderBadge,
+                {
+                  backgroundColor: colors.primarySoft,
+                },
+              ]}
+            >
+              <Text style={[styles.photoPlaceholderIcon, { color: colors.primary }]}>+</Text>
+            </View>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
         ) : (
           <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.tileTextFill}>
             <Text style={styles.tileText} numberOfLines={4}>
@@ -273,6 +300,26 @@ const styles = StyleSheet.create({
   tileImage: {
     width: '100%',
     height: '100%',
+  },
+  photoPlaceholder: {
+    flex: 1,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  photoPlaceholderBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoPlaceholderIcon: {
+    fontSize: 20,
+    lineHeight: 20,
+    fontWeight: '700',
   },
   tileTextFill: {
     flex: 1,

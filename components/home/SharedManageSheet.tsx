@@ -1,12 +1,29 @@
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
-import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
+import {
+  environment,
+  presentationDetents,
+  presentationDragIndicator,
+} from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Animated,
+  Easing,
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  UIManager,
+  View,
+} from 'react-native';
 import AppBottomSheet from '../AppBottomSheet';
 import AppBackButton from '../ui/AppBackButton';
 import PrimaryButton from '../ui/PrimaryButton';
@@ -79,14 +96,18 @@ function ManageBody({
   ];
 
   return (
-    <View style={styles.sheetContent}>
+    <View style={[styles.sheetContent, Platform.OS === 'ios' ? styles.sheetContentIOS : null]}>
       {Platform.OS !== 'ios' ? (
         <View style={styles.grabberWrap}>
           <View style={[styles.grabber, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.16)' }]} />
         </View>
       ) : null}
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.sheetScroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={[styles.header, Platform.OS === 'ios' ? styles.headerWithNativeHandle : null]}>
           <Text style={[styles.title, { color: colors.text }]}>{friendsTitle}</Text>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
@@ -299,7 +320,7 @@ function JoinBody({
   const { colors, isDark } = useTheme();
 
   return (
-    <View style={styles.sheetContent}>
+    <View style={[styles.sheetContent, Platform.OS === 'ios' ? styles.sheetContentIOS : null]}>
       {Platform.OS !== 'ios' ? (
         <View style={styles.grabberWrap}>
           <View style={[styles.grabber, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.16)' }]} />
@@ -429,6 +450,54 @@ export default function SharedManageSheet(props: {
   const [mode, setMode] = useState<'manage' | 'join'>('manage');
   const [inviteValue, setInviteValue] = useState('');
   const [joining, setJoining] = useState(false);
+  const hasInviteValue = inviteValue.trim().length > 0;
+  const contentOpacity = useState(() => new Animated.Value(1))[0];
+  const contentTranslateY = useState(() => new Animated.Value(0))[0];
+
+  const animateSheetLayout = useCallback(() => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+
+    LayoutAnimation.configureNext({
+      duration: 220,
+      create: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+        duration: 160,
+      },
+      update: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+      },
+      delete: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+        duration: 180,
+      },
+    });
+  }, []);
+
+  const animateContentChange = useCallback(() => {
+    contentOpacity.stopAnimation();
+    contentTranslateY.stopAnimation();
+    contentOpacity.setValue(0.92);
+    contentTranslateY.setValue(10);
+
+    Animated.parallel([
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(contentTranslateY, {
+        toValue: 0,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [contentOpacity, contentTranslateY]);
 
   useEffect(() => {
     if (!visible) {
@@ -437,6 +506,15 @@ export default function SharedManageSheet(props: {
       setJoining(false);
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    animateSheetLayout();
+    animateContentChange();
+  }, [activeInvite?.id, animateContentChange, animateSheetLayout, friends.length, hasInviteValue, mode, visible]);
 
   const handleOpenJoin = useCallback(() => {
     setMode('join');
@@ -497,55 +575,74 @@ export default function SharedManageSheet(props: {
     }
   }, [acceptFriendInvite, handleGoToAuth, inviteValue, t, user]);
 
-  const content = mode === 'join' ? (
-    <JoinBody
-      user={user}
-      isAuthAvailable={isAuthAvailable}
-      inviteValue={inviteValue}
-      joining={joining}
-      onChangeInvite={setInviteValue}
-      onBack={handleBackToManage}
-      onClose={onClose}
-      onSubmit={() => {
-        void handleJoinInvite();
+  const content = (
+    <Animated.View
+      style={{
+        opacity: contentOpacity,
+        transform: [{ translateY: contentTranslateY }],
       }}
-      onGoToAuth={handleGoToAuth}
-    />
-  ) : (
-    <ManageBody
-      friends={friends}
-      activeInvite={activeInvite}
-      loading={loading}
-      onClose={onClose}
-      onOpenJoin={handleOpenJoin}
-      onShareInvite={onShareInvite}
-      onRevokeInvite={onRevokeInvite}
-      onRemoveFriend={onRemoveFriend}
-      friendsTitle={t('shared.manageTitle', 'Friends')}
-      emptyLoadingBody={t('shared.refreshingFriends', 'Refreshing your shared circle...')}
-      emptyBody={t(
-        'shared.emptyManageBody',
-        'Invite someone to start a simple shared feed on Home.'
+    >
+      {mode === 'join' ? (
+        <JoinBody
+          user={user}
+          isAuthAvailable={isAuthAvailable}
+          inviteValue={inviteValue}
+          joining={joining}
+          onChangeInvite={setInviteValue}
+          onBack={handleBackToManage}
+          onClose={onClose}
+          onSubmit={() => {
+            void handleJoinInvite();
+          }}
+          onGoToAuth={handleGoToAuth}
+        />
+      ) : (
+        <ManageBody
+          friends={friends}
+          activeInvite={activeInvite}
+          loading={loading}
+          onClose={onClose}
+          onOpenJoin={handleOpenJoin}
+          onShareInvite={onShareInvite}
+          onRevokeInvite={onRevokeInvite}
+          onRemoveFriend={onRemoveFriend}
+          friendsTitle={t('shared.manageTitle', 'Friends')}
+          emptyLoadingBody={t('shared.refreshingFriends', 'Refreshing your shared circle...')}
+          emptyBody={t(
+            'shared.emptyManageBody',
+            'Invite someone to start a simple shared feed on Home.'
+          )}
+          friendFallback={t('shared.friendFallback', 'Friend')}
+          connectedOnLabel={t('shared.connectedOn', 'Connected')}
+          doneLabel={t('common.done', 'Done')}
+        />
       )}
-      friendFallback={t('shared.friendFallback', 'Friend')}
-      connectedOnLabel={t('shared.connectedOn', 'Connected')}
-      doneLabel={t('common.done', 'Done')}
-    />
+    </Animated.View>
   );
-  const iosSheetKey = `shared-manage-${mode}`;
+
+  const iosDetents =
+    mode === 'join'
+      ? ([{ height: 430 }, { height: 520 }] as const)
+      : friends.length === 0
+        ? ([{ height: 540 }, 'large'] as const)
+        : ([{ height: 640 }, 'large'] as const);
 
   if (Platform.OS === 'ios') {
     return (
       <View pointerEvents={visible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
         <Host style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'}>
           <BottomSheet
-            key={iosSheetKey}
             isPresented={visible}
             onIsPresentedChange={(next) => (!next ? onClose() : null)}
-            fitToContents
           >
-            <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
-              <RNHostView key={iosSheetKey} matchContents>
+            <Group
+              modifiers={[
+                presentationDetents([...iosDetents]),
+                presentationDragIndicator('visible'),
+                environment('colorScheme', isDark ? 'dark' : 'light'),
+              ]}
+            >
+              <RNHostView>
                 <View
                   style={[
                     styles.iosContainer,
@@ -581,6 +678,14 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: Platform.OS === 'ios' ? 28 : 20,
     maxHeight: 680,
+  },
+  sheetContentIOS: {
+    flex: 1,
+    minHeight: 0,
+  },
+  sheetScroll: {
+    flex: 1,
+    minHeight: 0,
   },
   scrollContent: {
     paddingBottom: Platform.OS === 'ios' ? 28 : 8,
@@ -825,6 +930,10 @@ const styles = StyleSheet.create({
   joinIconButton: {
     width: 44,
     height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   joinBadge: {
     width: 46,

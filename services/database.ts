@@ -237,6 +237,20 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         PRIMARY KEY (user_uid, id)
       );
       CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_created ON shared_posts_cache(user_uid, created_at DESC);
+      CREATE TABLE IF NOT EXISTS shared_invites_cache (
+        user_uid TEXT PRIMARY KEY NOT NULL,
+        id TEXT NOT NULL,
+        inviter_uid TEXT NOT NULL,
+        inviter_display_name_snapshot TEXT,
+        inviter_photo_url_snapshot TEXT,
+        token TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        revoked_at TEXT,
+        accepted_by_uid TEXT,
+        accepted_at TEXT,
+        expires_at TEXT,
+        url TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS shared_feed_cache_meta (
         user_uid TEXT PRIMARY KEY NOT NULL,
         last_updated_at TEXT
@@ -415,6 +429,22 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 );
                 await database.execAsync(
                     `CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_created ON shared_posts_cache(user_uid, created_at DESC)`
+                );
+                await database.execAsync(
+                    `CREATE TABLE IF NOT EXISTS shared_invites_cache (
+                        user_uid TEXT PRIMARY KEY NOT NULL,
+                        id TEXT NOT NULL,
+                        inviter_uid TEXT NOT NULL,
+                        inviter_display_name_snapshot TEXT,
+                        inviter_photo_url_snapshot TEXT,
+                        token TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        revoked_at TEXT,
+                        accepted_by_uid TEXT,
+                        accepted_at TEXT,
+                        expires_at TEXT,
+                        url TEXT NOT NULL
+                    )`
                 );
                 await database.execAsync(
                     `CREATE TABLE IF NOT EXISTS shared_feed_cache_meta (

@@ -30,6 +30,7 @@ export function NoteDetailSheetProvider({ children }: { children: ReactNode }) {
       {children}
       {selectedNoteId ? (
         <NoteDetailSheet
+          key={selectedNoteId}
           noteId={selectedNoteId}
           visible={visible}
           onClose={() => {

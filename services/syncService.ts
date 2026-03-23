@@ -1,4 +1,5 @@
 import { countPhotoNotes } from '../constants/subscription';
+import i18n from '../constants/i18n';
 import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 import { AppUser } from '../utils/appUser';
 import {
@@ -197,15 +198,24 @@ function isTerminalSyncError(error: unknown) {
 
 function getBlockedSyncReason(error: unknown) {
   if (isSessionSyncError(error)) {
-    return 'Your sign-in session expired. Sign out and sign back in to resume sync.';
+    return i18n.t(
+      'settings.syncSessionExpiredMsg',
+      'Your sign-in session expired. Sign out and sign back in to resume sync.'
+    );
   }
 
   if (isSupabasePolicyError(error)) {
-    return 'Supabase denied access to sync notes. Apply the latest Supabase migrations or sign in again.';
+    return i18n.t(
+      'settings.syncPolicyDeniedMsg',
+      'Supabase denied access to sync notes. Apply the latest Supabase migrations or sign in again.'
+    );
   }
 
   if (getErrorMessage(error).toLowerCase().includes('too large to sync safely')) {
-    return 'A photo is too large to sync safely. Retake it with a lower resolution, then try again.';
+    return i18n.t(
+      'settings.syncPhotoTooLargeMsg',
+      'A photo is too large to sync safely. Retake it with a lower resolution, then try again.'
+    );
   }
 
   return null;
@@ -213,18 +223,30 @@ function getBlockedSyncReason(error: unknown) {
 
 function getSyncFailureMessage(error: unknown) {
   if (isSessionSyncError(error)) {
-    return 'Your sign-in session expired. Sign out and sign back in to resume sync.';
+    return i18n.t(
+      'settings.syncSessionExpiredMsg',
+      'Your sign-in session expired. Sign out and sign back in to resume sync.'
+    );
   }
 
   if (isSupabasePolicyError(error)) {
-    return 'Supabase denied access to sync notes. Apply the latest Supabase migrations or sign in again.';
+    return i18n.t(
+      'settings.syncPolicyDeniedMsg',
+      'Supabase denied access to sync notes. Apply the latest Supabase migrations or sign in again.'
+    );
   }
 
   if (isSupabaseNetworkError(error)) {
-    return 'Unable to reach Supabase right now. Check your connection and try again.';
+    return i18n.t(
+      'settings.syncNetworkMsg',
+      'Unable to reach Supabase right now. Check your connection and try again.'
+    );
   }
 
-  return 'Unable to sync with Supabase right now. Please try again later.';
+  return i18n.t(
+    'settings.syncFailedMsg',
+    'Unable to sync with Supabase right now. Please try again later.'
+  );
 }
 
 function shouldLogSyncWarning(error: unknown) {
@@ -248,7 +270,10 @@ function getRetryMetadata(item: SyncQueueItem, error: unknown) {
       terminal: true,
       blockedReason:
         getBlockedSyncReason(error) ??
-        'This note could not be synced after multiple attempts. Edit it and try again.',
+        i18n.t(
+          'settings.syncBlockedRetryMsg',
+          'This note could not be synced after multiple attempts. Edit it and try again.'
+        ),
     };
   }
 

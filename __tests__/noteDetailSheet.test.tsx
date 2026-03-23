@@ -288,7 +288,6 @@ describe('NoteDetailSheet', () => {
     expect(mockUpdateNote).toHaveBeenCalledWith('note-1', {
       content: 'Updated note',
       locationName: 'New place',
-      moodEmoji: '✨',
       radius: 250,
     });
   });
@@ -465,5 +464,70 @@ describe('NoteDetailSheet', () => {
     });
 
     expect(queryByTestId('note-detail-share-room')).toBeNull();
+  });
+
+  it('ignores stale note loads when the selected note changes quickly', async () => {
+    let resolveFirstNote: ((value: unknown) => void) | null = null;
+    let resolveSecondNote: ((value: unknown) => void) | null = null;
+
+    mockGetNoteById.mockImplementation((noteId: string) => new Promise((resolve) => {
+      if (noteId === 'note-1') {
+        resolveFirstNote = resolve;
+        return;
+      }
+
+      resolveSecondNote = resolve;
+    }));
+
+    const { queryByDisplayValue, rerender } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    rerender(
+      <NoteDetailSheet noteId="note-2" visible onClose={() => undefined} />
+    );
+
+    await act(async () => {
+      resolveSecondNote?.({
+        id: 'note-2',
+        type: 'text',
+        content: 'Second note',
+        photoLocalUri: null,
+        photoRemoteBase64: null,
+        locationName: 'New place',
+        latitude: 10.78,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: false,
+        hasDoodle: false,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      });
+    });
+
+    await waitFor(() => {
+      expect(queryByDisplayValue('Second note')).toBeTruthy();
+    });
+
+    await act(async () => {
+      resolveFirstNote?.({
+        id: 'note-1',
+        type: 'text',
+        content: 'First note',
+        photoLocalUri: null,
+        photoRemoteBase64: null,
+        locationName: 'Old place',
+        latitude: 10.77,
+        longitude: 106.69,
+        radius: 150,
+        isFavorite: false,
+        hasDoodle: false,
+        createdAt: '2026-03-10T00:00:00.000Z',
+        updatedAt: null,
+      });
+    });
+
+    expect(queryByDisplayValue('Second note')).toBeTruthy();
+    expect(queryByDisplayValue('First note')).toBeNull();
   });
 });

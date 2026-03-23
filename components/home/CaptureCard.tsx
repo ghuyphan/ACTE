@@ -11,10 +11,13 @@ import {
   Dimensions,
   Platform,
   Pressable,
+  type PressableProps,
+  type StyleProp,
   StyleSheet,
   Text,
   TextInput,
   View,
+  type ViewStyle,
 } from 'react-native';
 import Reanimated, {
   Easing,
@@ -39,7 +42,10 @@ const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
 const TOP_CONTROL_INSET = 24;
 const TOP_CONTROL_HEIGHT = 38;
 const TOP_CONTROL_RADIUS = 19;
+const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad) };
+const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
 const AnimatedIonicons = Reanimated.createAnimatedComponent(Ionicons);
+const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
 const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Note about this place...',
   'Leave a tiny clue for future you...',
@@ -63,6 +69,63 @@ function getCaptureTextPlaceholderVariants(t: TFunction) {
 export interface CaptureCardHandle {
   getDoodleSnapshot: () => { enabled: boolean; strokes: DoodleStroke[] };
   resetDoodle: () => void;
+}
+
+type CaptureAnimatedPressableProps = Omit<PressableProps, 'style'> & {
+  style?: StyleProp<ViewStyle>;
+  pressedScale?: number;
+};
+
+function CaptureAnimatedPressable({
+  children,
+  disabled,
+  onPressIn,
+  onPressOut,
+  pressedScale = 0.97,
+  style,
+  ...props
+}: CaptureAnimatedPressableProps) {
+  const pressScale = useSharedValue(1);
+
+  useEffect(() => {
+    if (disabled) {
+      pressScale.value = 1;
+    }
+  }, [disabled, pressScale]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pressScale.value }],
+  }));
+
+  const handlePressIn = useCallback<NonNullable<PressableProps['onPressIn']>>(
+    (event) => {
+      if (!disabled) {
+        pressScale.value = withTiming(pressedScale, CAPTURE_BUTTON_PRESS_IN);
+      }
+      onPressIn?.(event);
+    },
+    [disabled, onPressIn, pressScale, pressedScale]
+  );
+
+  const handlePressOut = useCallback<NonNullable<PressableProps['onPressOut']>>(
+    (event) => {
+      pressScale.value = withTiming(1, CAPTURE_BUTTON_PRESS_OUT);
+      onPressOut?.(event);
+    },
+    [onPressOut, pressScale]
+  );
+
+  return (
+    <AnimatedPressable
+      {...props}
+      disabled={disabled}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={[style, animatedStyle]}
+    >
+      {children}
+    </AnimatedPressable>
+  );
 }
 
 interface CaptureCardProps {
@@ -405,7 +468,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             end={{ x: 0.94, y: 0.94 }}
           >
             <View pointerEvents="box-none" style={styles.textCardTopRow}>
-              <Pressable
+              <CaptureAnimatedPressable
                 testID="capture-doodle-toggle"
                 onPress={handleToggleDoodleMode}
                 style={[
@@ -421,11 +484,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   size={16}
                   color={doodleModeEnabled ? textCardActiveIconColor : colors.captureGlassText}
                 />
-              </Pressable>
+              </CaptureAnimatedPressable>
 
               {doodleModeEnabled ? (
                 <View style={styles.textCardActionCluster}>
-                  <Pressable
+                  <CaptureAnimatedPressable
                     testID="capture-doodle-undo"
                     onPress={handleUndoDoodle}
                     disabled={doodleStrokes.length === 0}
@@ -439,8 +502,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     ]}
                   >
                     <Ionicons name="arrow-undo-outline" size={14} color={colors.captureGlassText} />
-                  </Pressable>
-                  <Pressable
+                  </CaptureAnimatedPressable>
+                  <CaptureAnimatedPressable
                     testID="capture-doodle-clear"
                     onPress={handleClearDoodle}
                     disabled={doodleStrokes.length === 0}
@@ -454,7 +517,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     ]}
                   >
                     <Ionicons name="close-outline" size={14} color={colors.captureGlassText} />
-                  </Pressable>
+                  </CaptureAnimatedPressable>
                 </View>
               ) : null}
             </View>
@@ -524,7 +587,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           <View style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}>
             <Image source={{ uri: capturedPhoto }} style={styles.cameraPreview} contentFit="cover" />
             <View pointerEvents="box-none" style={styles.photoDoodleToolbar}>
-              <Pressable
+              <CaptureAnimatedPressable
                 testID="capture-doodle-toggle"
                 accessibilityLabel={
                   doodleModeEnabled ? t('capture.doneDrawing', 'Done') : t('capture.draw', 'Draw')
@@ -544,11 +607,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   size={16}
                   color={doodleModeEnabled ? photoPreviewActiveText : photoPreviewControlText}
                 />
-              </Pressable>
+              </CaptureAnimatedPressable>
 
               {doodleModeEnabled ? (
                 <View pointerEvents="box-none" style={styles.photoDoodleActionsCluster}>
-                  <Pressable
+                  <CaptureAnimatedPressable
                     testID="capture-doodle-undo"
                     onPress={handleUndoDoodle}
                     disabled={doodleStrokes.length === 0}
@@ -563,8 +626,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     ]}
                   >
                     <Ionicons name="arrow-undo-outline" size={14} color={photoPreviewControlText} />
-                  </Pressable>
-                  <Pressable
+                  </CaptureAnimatedPressable>
+                  <CaptureAnimatedPressable
                     testID="capture-doodle-clear"
                     onPress={handleClearDoodle}
                     disabled={doodleStrokes.length === 0}
@@ -579,7 +642,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     ]}
                   >
                     <Ionicons name="close-outline" size={14} color={photoPreviewControlText} />
-                  </Pressable>
+                  </CaptureAnimatedPressable>
                 </View>
               ) : null}
             </View>
@@ -671,7 +734,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 { backgroundColor: colors.captureFlashOverlay, opacity: flashAnim, zIndex: 50 },
               ]}
             />
-            <Pressable
+            <CaptureAnimatedPressable
               style={[
                 styles.cameraOverlayButton,
                 styles.libraryBtn,
@@ -692,9 +755,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   </Text>
                 </>
               )}
-            </Pressable>
+            </CaptureAnimatedPressable>
             {!showCameraUnavailableState ? (
-              <Pressable
+              <CaptureAnimatedPressable
                 style={[
                   styles.cameraOverlayButton,
                   styles.flipBtn,
@@ -706,7 +769,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 onPress={onToggleFacing}
               >
                 <Ionicons name="camera-reverse" size={20} color={colors.captureCameraOverlayText} />
-              </Pressable>
+              </CaptureAnimatedPressable>
             ) : null}
           </View>
         )}
@@ -720,10 +783,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             accessibilityState={{ selected: isSharedTarget }}
             onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
             onPressIn={() => {
-              audiencePressScale.value = withTiming(0.97, { duration: 120, easing: Easing.out(Easing.quad) });
+              audiencePressScale.value = withTiming(0.97, CAPTURE_BUTTON_PRESS_IN);
             }}
             onPressOut={() => {
-              audiencePressScale.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.cubic) });
+              audiencePressScale.value = withTiming(1, CAPTURE_BUTTON_PRESS_OUT);
             }}
           >
             <Reanimated.View
@@ -774,10 +837,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         {captureMode === 'camera' && !capturedPhoto ? (
           <View style={styles.belowCardShutterRow}>
             {permissionGranted ? (
-              <Pressable
+              <CaptureAnimatedPressable
                 onPressIn={onShutterPressIn}
                 onPressOut={onShutterPressOut}
                 onPress={onTakePicture}
+                pressedScale={0.985}
                 style={[styles.shutterOuter, { borderColor: colors.border }]}
               >
                 <Animated.View
@@ -793,17 +857,18 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     <Text style={styles.shutterInnerCountText}>{remainingPhotoSlots}</Text>
                   ) : null}
                 </Animated.View>
-              </Pressable>
+              </CaptureAnimatedPressable>
             ) : null}
           </View>
         ) : capturedPhoto ? (
           <View style={[styles.belowCardShutterRow, styles.belowCardCapturedPhotoActions]}>
             <View pointerEvents="none" style={styles.capturedPhotoActionSpacer} />
 
-            <Pressable
+            <CaptureAnimatedPressable
               testID="capture-save-button"
               onPress={onSaveNote}
               disabled={saving}
+              pressedScale={0.985}
               style={[
                 styles.shutterOuter,
                 {
@@ -831,9 +896,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   />
                 )}
               </View>
-            </Pressable>
+            </CaptureAnimatedPressable>
 
-            <Pressable
+            <CaptureAnimatedPressable
               testID="capture-retake-button"
               accessibilityLabel={t('capture.retake', 'Retake')}
               onPress={onRetakePhoto}
@@ -846,14 +911,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               ]}
             >
               <Ionicons name="refresh" size={18} color={colors.text} />
-            </Pressable>
+            </CaptureAnimatedPressable>
           </View>
         ) : (
           <View style={styles.belowCardShutterRow}>
-            <Pressable
+            <CaptureAnimatedPressable
               testID="capture-save-button"
               onPress={onSaveNote}
               disabled={saving}
+              pressedScale={0.985}
               style={[
                 styles.shutterOuter,
                 {
@@ -881,7 +947,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   />
                 )}
               </View>
-            </Pressable>
+            </CaptureAnimatedPressable>
           </View>
         )}
         {footerContent ? <View style={styles.footerSlot}>{footerContent}</View> : null}

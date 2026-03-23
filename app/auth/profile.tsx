@@ -8,6 +8,7 @@ import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useConnectivity } from '../../hooks/useConnectivity';
+import { useSubscription } from '../../hooks/useSubscription';
 import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { useTheme } from '../../hooks/useTheme';
 
@@ -38,6 +39,7 @@ export default function ProfileScreen() {
   const { colors } = useTheme();
   const { user, isAuthAvailable, signOut } = useAuth();
   const { isOnline } = useConnectivity();
+  const { tier } = useSubscription();
   const { blockedCount, failedCount, pendingCount, status: syncStatus, lastSyncedAt, lastMessage } = useSyncStatus();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -145,7 +147,24 @@ export default function ProfileScreen() {
                   </View>
                 )}
                 <View style={styles.heroCopy}>
-                  <Text style={[styles.name, { color: colors.text }]}>{profileName}</Text>
+                  <View style={styles.nameRow}>
+                    <Text style={[styles.name, { color: colors.text }]}>{profileName}</Text>
+                    {tier === 'plus' ? (
+                      <View
+                        style={[
+                          styles.plusBadge,
+                          {
+                            backgroundColor: colors.primarySoft,
+                            borderColor: colors.primary + '33',
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.plusBadgeText, { color: colors.primary }]}>
+                          {t('profile.plusBadge', 'Noto Plus')}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
                   {user.email ? (
                     <Text style={[styles.email, { color: colors.secondaryText }]}>{user.email}</Text>
                   ) : null}
@@ -162,6 +181,10 @@ export default function ProfileScreen() {
               {user.email ? (
                 <ProfileRow label={t('profile.email', 'Email')} value={user.email} />
               ) : null}
+              <ProfileRow
+                label={t('profile.membership', 'Membership')}
+                value={tier === 'plus' ? t('settings.plusTitle', 'Noto Plus') : t('settings.plusInactive', 'Standard')}
+              />
               <ProfileRow label={t('profile.provider', 'Sign-in method')} value={providerLabel} />
               <ProfileRow label={t('profile.sync', 'Sync')} value={t('profile.autoSyncShort', 'Auto sync on')} />
               {syncSummary ? (
@@ -238,6 +261,12 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   avatarImage: {
     width: 72,
     height: 72,
@@ -258,6 +287,19 @@ const styles = StyleSheet.create({
   name: {
     ...Typography.button,
     fontSize: 20,
+    flexShrink: 1,
+  },
+  plusBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  plusBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    fontFamily: 'System',
   },
   email: {
     ...Typography.body,

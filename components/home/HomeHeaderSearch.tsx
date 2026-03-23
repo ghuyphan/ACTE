@@ -73,7 +73,7 @@ export default function HomeHeaderSearch({
   const useDetachedWordmark = isIOS26OrNewer;
   const useDetachedControls = isIOS26OrNewer && !showSearchButton;
   const useNativeLiquidGlassControls = Platform.OS === 'ios' && isIOS26OrNewer;
-  const useIconOnlyHeaderControls = useNativeLiquidGlassControls;
+  const useIconOnlyHeaderControls = Platform.OS === 'ios';
 
   useEffect(() => {
     if (!didMountRef.current) {
