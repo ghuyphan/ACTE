@@ -9,10 +9,10 @@ import {
   isSupabasePolicyError,
 } from '../utils/supabase';
 import { Note, NoteType } from './database';
-import { deletePhotoFromStorage, downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET, uploadPhotoToStorage } from './remoteMedia';
+import { deletePhotoFromStorage, SHARED_POST_MEDIA_BUCKET, uploadPhotoToStorage } from './remoteMedia';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getPublicUserProfile, upsertPublicUserProfile } from './publicProfileService';
-import { cacheSharedFeedSnapshot, replaceCachedSharedInvite } from './sharedFeedCache';
+import { cacheSharedFeedSnapshot } from './sharedFeedCache';
 
 export interface FriendConnection {
   userId: string;
@@ -21,7 +21,6 @@ export interface FriendConnection {
   friendedAt: string;
   lastSharedAt: string | null;
   createdByInviteId: string | null;
-  createdByInviteToken: string | null;
 }
 
 export interface FriendInvite {
@@ -46,8 +45,8 @@ export interface SharedPost {
   audienceUserIds: string[];
   type: NoteType;
   text: string;
+  photoPath: string | null;
   photoLocalUri: string | null;
-  photoRemoteBase64: string | null;
   doodleStrokesJson?: string | null;
   placeName: string | null;
   sourceNoteId: string | null;
@@ -74,7 +73,6 @@ interface FriendshipRow {
   friended_at: string;
   last_shared_at: string | null;
   created_by_invite_id: string | null;
-  created_by_invite_token: string | null;
 }
 
 interface FriendInviteRow {
@@ -191,7 +189,6 @@ function mapFriend(row: FriendshipRow): FriendConnection {
     friendedAt: row.friended_at,
     lastSharedAt: row.last_shared_at ?? null,
     createdByInviteId: row.created_by_invite_id ?? null,
-    createdByInviteToken: row.created_by_invite_token ?? null,
   };
 }
 
@@ -218,24 +215,7 @@ function parseInvitePayload(rawValue: string) {
   };
 }
 
-async function hydrateSharedPostPhoto(postId: string, photoPath?: string | null) {
-  if (!photoPath?.trim()) {
-    return null;
-  }
-
-  return downloadPhotoFromStorage(
-    SHARED_POST_MEDIA_BUCKET,
-    photoPath,
-    `shared-post-${postId}`
-  );
-}
-
-async function mapSharedPost(record: SharedPostRow): Promise<SharedPost> {
-  const photoLocalUri =
-    record.type === 'photo'
-      ? await hydrateSharedPostPhoto(record.id, record.photo_path)
-      : null;
-
+function mapSharedPost(record: SharedPostRow): SharedPost {
   return {
     id: record.id,
     authorUid: record.author_user_id,
@@ -244,8 +224,8 @@ async function mapSharedPost(record: SharedPostRow): Promise<SharedPost> {
     audienceUserIds: Array.isArray(record.audience_user_ids) ? record.audience_user_ids : [],
     type: record.type,
     text: record.text ?? '',
-    photoLocalUri,
-    photoRemoteBase64: null,
+    photoPath: record.photo_path ?? null,
+    photoLocalUri: null,
     doodleStrokesJson: record.doodle_strokes_json ?? null,
     placeName: record.place_name ?? null,
     sourceNoteId: record.source_note_id ?? null,
@@ -262,7 +242,7 @@ async function getFriendsForUser(userUid: string) {
   const { data, error } = await requireSupabase()
     .from('friendships')
     .select(
-      'user_id, friend_user_id, display_name_snapshot, photo_url_snapshot, friended_at, last_shared_at, created_by_invite_id, created_by_invite_token'
+      'user_id, friend_user_id, display_name_snapshot, photo_url_snapshot, friended_at, last_shared_at, created_by_invite_id'
     )
     .eq('user_id', userUid)
     .order('friended_at', { ascending: true });
@@ -337,9 +317,7 @@ export async function refreshSharedFeed(user: AppUser): Promise<SharedFeedSnapsh
     throw postsResponse.error;
   }
 
-  const sharedPosts = await Promise.all(
-    ((postsResponse.data ?? []) as SharedPostRow[]).map((item) => mapSharedPost(item))
-  );
+  const sharedPosts = ((postsResponse.data ?? []) as SharedPostRow[]).map(mapSharedPost);
 
   const snapshot = {
     friends,
@@ -468,9 +446,7 @@ export async function createFriendInvite(user: AppUser): Promise<FriendInvite> {
     throw error;
   }
 
-  const invite = mapInvite(nextInvite);
-  await replaceCachedSharedInvite(user.id, invite);
-  return invite;
+  return mapInvite(nextInvite);
 }
 
 export async function revokeFriendInvite(user: AppUser, inviteId: string): Promise<void> {
@@ -486,8 +462,6 @@ export async function revokeFriendInvite(user: AppUser, inviteId: string): Promi
   if (error) {
     throw error;
   }
-
-  await replaceCachedSharedInvite(user.id, null);
 }
 
 export async function acceptFriendInvite(
@@ -599,7 +573,10 @@ export async function createSharedPost(
       .in('friend_user_id', friendRefs);
   }
 
-  return mapSharedPost(record);
+  return {
+    ...mapSharedPost(record),
+    photoLocalUri: note.type === 'photo' ? note.photoLocalUri ?? note.content : null,
+  };
 }
 
 export async function updateSharedPost(
@@ -635,7 +612,8 @@ export async function updateSharedPost(
       ? await uploadPhotoToStorage(
           SHARED_POST_MEDIA_BUCKET,
           `${user.id}/${postId}`,
-          note.photoLocalUri ?? note.content
+          note.photoLocalUri ?? note.content,
+          { allowOverwrite: true }
         )
       : null;
 

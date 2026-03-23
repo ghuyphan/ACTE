@@ -1,6 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Appearance, AppState, Platform } from 'react-native';
+import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 
 export type ThemeType = 'light' | 'dark' | 'system';
 type ResolvedColorScheme = 'light' | 'dark';
@@ -210,7 +210,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     useEffect(() => {
-        AsyncStorage.getItem(THEME_STORAGE_KEY).then((savedTheme) => {
+        getPersistentItem(THEME_STORAGE_KEY).then((savedTheme) => {
             const nextTheme = normalizeTheme(savedTheme);
             setThemeState(nextTheme);
             syncNativeColorScheme(nextTheme);
@@ -224,7 +224,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const setTheme = async (newTheme: ThemeType) => {
         setThemeState(newTheme);
         syncNativeColorScheme(newTheme);
-        await AsyncStorage.setItem(THEME_STORAGE_KEY, newTheme);
+        await setPersistentItem(THEME_STORAGE_KEY, newTheme);
     };
 
     const resolvedTheme = resolveThemePreference(theme, systemTheme);

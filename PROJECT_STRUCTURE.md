@@ -8,7 +8,6 @@
 │   ├── (tabs)/
 │   ├── auth/
 │   ├── friends/
-│   ├── rooms/
 │   └── note/
 ├── assets/
 │   └── images/
@@ -42,10 +41,9 @@
 ## Major Directories
 
 - `app/`: Expo Router route tree and screen entry points.
-- `app/(tabs)/`: Main app tabs for home, map, rooms, settings, and search.
+- `app/(tabs)/`: Main app tabs for home, map, settings, and search.
 - `app/auth/`: Onboarding plus account/auth flows.
 - `app/friends/`: Friend invite acceptance and sharing entry points.
-- `app/rooms/`: Room creation, joining, detail, and room settings routes.
 - `app/note/`: Note detail route wrapper for modal-style navigation.
 - `assets/images/`: Icons, splash assets, and image resources.
 - `components/`: Shared React Native UI components.
@@ -58,13 +56,11 @@
 - `constants/locales/`: Translation JSON files for English and Vietnamese.
 - `docs/`: Short maintenance docs for widgets and release flows.
 - `hooks/`: App-wide hooks/providers for notes, auth, theme, sync, geofence, and more.
-- `hooks/useRooms.tsx`: Room list/detail state and Supabase-backed refresh behavior.
 - `hooks/useSharedFeed.tsx`: Friend graph and shared moments state for the home feed.
 - `hooks/useSubscription.tsx`: RevenueCat subscription provider and entitlement state.
 - `hooks/map/`: Map domain modeling and map screen state.
 - `plugins/`: Custom Expo config plugins used during native generation/build setup.
 - `services/`: Database, sync, geofence, photo, search, sharing, and widget business logic.
-- `services/roomService.ts`: Room lifecycle, invites, membership, and room posts.
 - `services/sharedFeedService.ts`: Friends, invites, and private shared-feed operations.
 - `services/syncService.ts`: Supabase sync queue flush + snapshot upload/merge.
 - `utils/`: Background task registration and smaller cross-cutting helpers.

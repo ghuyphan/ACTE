@@ -15,8 +15,7 @@ import { Radii, Shadows, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { FriendConnection, SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
-import ImageMemoryCard from '../ImageMemoryCard';
-import TextMemoryCard from '../TextMemoryCard';
+import SharedPostCardVisual from './SharedPostCardVisual';
 import InfoPill from '../ui/InfoPill';
 
 function PostCard({ post }: { post: SharedPost }) {
@@ -29,11 +28,10 @@ function PostCard({ post }: { post: SharedPost }) {
     <View>
       <View style={styles.postCard}>
         <View style={styles.postVisual}>
-          {post.type === 'photo' && post.photoLocalUri ? (
-            <ImageMemoryCard imageUrl={post.photoLocalUri} doodleStrokesJson={post.doodleStrokesJson} />
-          ) : (
-            <TextMemoryCard text={post.text || t('shared.photoMemory', 'Photo memory')} noteId={post.id} />
-          )}
+          <SharedPostCardVisual
+            post={post}
+            fallbackText={t('shared.photoMemory', 'Photo memory')}
+          />
         </View>
 
         <View style={styles.metaRow}>

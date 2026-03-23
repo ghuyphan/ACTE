@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import Purchases, {
@@ -17,6 +16,7 @@ import {
   getPhotoNoteLimitForTier,
   isRevenueCatConfigured,
 } from '../constants/subscription';
+import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 import { getSupabase } from '../utils/supabase';
 import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
@@ -168,7 +168,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   }, [isOnline]);
 
   useEffect(() => {
-    AsyncStorage.getItem(snapshotStorageKey)
+    getPersistentItem(snapshotStorageKey)
       .then((rawValue) => {
         if (!rawValue) {
           setCachedSnapshot(null);
@@ -349,7 +349,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     };
 
     setCachedSnapshot(nextSnapshot);
-    void AsyncStorage.setItem(snapshotStorageKey, JSON.stringify(nextSnapshot)).catch((error) => {
+    void setPersistentItem(snapshotStorageKey, JSON.stringify(nextSnapshot)).catch((error) => {
       console.warn('[subscription] Failed to persist subscription snapshot:', error);
     });
   }, [remotePhotoNoteCount, selectedPackage, snapshotStorageKey, tier]);

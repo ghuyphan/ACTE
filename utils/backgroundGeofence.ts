@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LocationGeofencingEventType, LocationRegion } from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
@@ -7,6 +6,7 @@ import { getAllNotes, getNoteById } from '../services/database';
 import { buildNearbyReminderCopy, buildReminderNotificationContent } from '../services/notificationService';
 import { buildReminderTextExcerpt, findReminderPlaceGroupByNoteId } from '../services/reminderSelection';
 import { getGeofenceCooldownKey, getLocationCooldownId, getSkipNextEnterKey } from './geofenceKeys';
+import { getPersistentItem, removePersistentItem, setPersistentItem } from './appStorage';
 
 export const GEOFENCE_TASK_NAME = 'BACKGROUND_GEOFENCE_TASK';
 const NOTE_NOTIFICATION_COOLDOWN_MS = 6 * 60 * 60 * 1000;
@@ -17,7 +17,7 @@ function getCooldownKey(scope: 'note' | 'location', id: string) {
 }
 
 async function isOnCooldown(scope: 'note' | 'location', id: string, durationMs: number) {
-    const lastTriggeredAt = await AsyncStorage.getItem(getCooldownKey(scope, id));
+    const lastTriggeredAt = await getPersistentItem(getCooldownKey(scope, id));
     if (!lastTriggeredAt) {
         return false;
     }
@@ -27,7 +27,7 @@ async function isOnCooldown(scope: 'note' | 'location', id: string, durationMs: 
 }
 
 async function setCooldown(scope: 'note' | 'location', id: string) {
-    await AsyncStorage.setItem(getCooldownKey(scope, id), String(Date.now()));
+    await setPersistentItem(getCooldownKey(scope, id), String(Date.now()));
 }
 
 // Configure how notifications appear when the app is in the foreground
@@ -62,9 +62,9 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
 
             if (regionId) {
                 const skipNextEnterKey = getSkipNextEnterKey(regionId);
-                const shouldSkip = await AsyncStorage.getItem(skipNextEnterKey);
+                const shouldSkip = await getPersistentItem(skipNextEnterKey);
                 if (shouldSkip === '1') {
-                    await AsyncStorage.removeItem(skipNextEnterKey);
+                    await removePersistentItem(skipNextEnterKey);
                     return;
                 }
             }

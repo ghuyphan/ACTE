@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
@@ -6,7 +7,6 @@ import { useCallback, useDeferredValue, useMemo, useState, useTransition } from 
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
-  FlatList,
   Platform,
   Pressable,
   StyleSheet,
@@ -16,7 +16,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout, Shadows } from '../../../constants/theme';
 import { CardGradients, useTheme } from '../../../hooks/useTheme';
-import { useNoteDetailSheet } from '../../../hooks/useNoteDetailSheet';
 import { useNotesStore } from '../../../hooks/useNotes';
 import { Note } from '../../../services/database';
 import { filterNotesByQuery } from '../../../services/noteSearch';
@@ -49,28 +48,27 @@ export default function SearchScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { notes, loading } = useNotesStore();
-  const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [, startSearchTransition] = useTransition();
   const deferredQuery = useDeferredValue(query);
+  const hasQuery = query.trim().length > 0;
+  const hasDeferredQuery = deferredQuery.trim().length > 0;
 
   const filteredNotes = useMemo(() => {
+    if (!hasDeferredQuery) {
+      return [];
+    }
     return filterNotesByQuery(notes, deferredQuery);
-  }, [deferredQuery, notes]);
+  }, [deferredQuery, hasDeferredQuery, notes]);
+  const shouldShowEmptyState = filteredNotes.length === 0;
 
   const openNote = useCallback(
     (noteId: string) => {
-      if (Platform.OS === 'ios') {
-        openNoteDetail(noteId);
-        return;
-      }
       router.push(`/note/${noteId}` as any);
     },
-    [openNoteDetail, router]
+    [router]
   );
-
-  const hasQuery = query.trim().length > 0;
 
   const handleSearchChange = useCallback((nextQuery: string) => {
     startSearchTransition(() => {
@@ -166,6 +164,8 @@ export default function SearchScreen() {
     [colors.border, colors.danger, colors.secondaryText, colors.surface, colors.text, isDark, openNote, t]
   );
 
+  const renderSeparator = useCallback(() => <View style={styles.resultSeparator} />, []);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen
@@ -185,52 +185,52 @@ export default function SearchScreen() {
         <View style={styles.centerWrap}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
+      ) : shouldShowEmptyState ? (
+        <View
+          style={[
+            styles.centerWrap,
+            styles.emptyScreen,
+            {
+              paddingTop: insets.top + 10,
+              paddingBottom: insets.bottom + 20,
+            },
+          ]}
+        >
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconWrap}>
+              <Ionicons
+                name="search-outline"
+                size={Platform.OS === 'ios' ? 54 : 30}
+                color={colors.secondaryText}
+              />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              {hasQuery
+                ? t('home.noResults', 'No notes found')
+                : t('home.searchPlaceholder', 'Search notes...')}
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
+              {hasQuery
+                ? t('home.noResultsMsg', 'Try a different keyword')
+                : t('home.count', '{{count}} notes saved', { count: notes.length })}
+            </Text>
+          </View>
+        </View>
       ) : (
-        <FlatList
+        <FlashList
           data={filteredNotes}
           keyExtractor={(item) => item.id}
           renderItem={renderNote}
+          ItemSeparatorComponent={renderSeparator}
           contentInsetAdjustmentBehavior="never"
           automaticallyAdjustContentInsets={false}
           automaticallyAdjustsScrollIndicatorInsets={false}
           contentContainerStyle={[
             styles.listContent,
             { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 },
-            filteredNotes.length === 0 ? styles.listContentEmpty : null,
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.centerWrap}>
-              <View
-                style={[
-                  styles.emptyCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={[styles.emptyIconWrap, { backgroundColor: colors.primarySoft }]}>
-                  <Ionicons
-                    name={hasQuery ? 'search-outline' : 'search-circle-outline'}
-                    size={28}
-                    color={colors.primary}
-                  />
-                </View>
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                  {hasQuery
-                    ? t('home.noResults', 'No notes found')
-                    : t('home.searchPlaceholder', 'Search notes...')}
-                </Text>
-                <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-                  {hasQuery
-                    ? t('home.noResultsMsg', 'Try a different keyword')
-                    : t('home.count', '{{count}} notes saved', { count: notes.length })}
-                </Text>
-              </View>
-            </View>
-          }
         />
       )}
     </View>
@@ -244,10 +244,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingTop: 16,
     paddingHorizontal: Layout.screenPadding,
-    gap: 14,
-  },
-  listContentEmpty: {
-    flex: 1,
   },
   resultPress: {
     width: '100%',
@@ -257,6 +253,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     padding: 12,
     ...Shadows.floating,
+  },
+  resultSeparator: {
+    height: 14,
   },
   resultTopRow: {
     flexDirection: 'row',
@@ -332,32 +331,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 20,
   },
-  emptyCard: {
-    width: '100%',
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 28,
-    paddingHorizontal: 18,
-    alignItems: 'center',
-    gap: 10,
-    ...Shadows.floating,
+  emptyScreen: {
+    paddingHorizontal: Layout.screenPadding,
   },
-  emptyIconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  emptyState: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 24,
+    marginTop: -48,
+  },
+  emptyIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '600',
     fontFamily: 'System',
+    textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
     fontFamily: 'System',
+    marginTop: 8,
+    maxWidth: 240,
   },
 });

@@ -12,6 +12,35 @@ jest.mock('expo-secure-store', () => ({
 
 jest.mock('react-native-url-polyfill/auto', () => ({}));
 
+jest.mock('@shopify/flash-list', () => {
+  const React = require('react');
+  const { FlatList } = require('react-native');
+
+  return {
+    FlashList: React.forwardRef((props: any, ref: any) =>
+      React.createElement(FlatList, { ...props, ref })
+    ),
+  };
+});
+
+jest.mock('react-native-mmkv', () => ({
+  MMKV: class MockMMKV {
+    private store = new Map<string, string>();
+
+    getString(key: string) {
+      return this.store.get(key);
+    }
+
+    set(key: string, value: string) {
+      this.store.set(key, value);
+    }
+
+    delete(key: string) {
+      this.store.delete(key);
+    }
+  },
+}));
+
 jest.mock('@react-native-community/netinfo', () => {
   let listener: ((state: any) => void) | null = null;
   const defaultState = {

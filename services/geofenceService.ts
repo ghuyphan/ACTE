@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
@@ -6,6 +5,7 @@ import { Note, getAllNotes } from './database';
 import { getReminderPlaceGroups } from './reminderSelection';
 import { GEOFENCE_TASK_NAME } from '../utils/backgroundGeofence';
 import { getSkipNextEnterKey } from '../utils/geofenceKeys';
+import { getPersistentItem, removePersistentItem, setPersistentItem } from '../utils/appStorage';
 
 export interface ReminderPermissionState {
   foregroundGranted: boolean;
@@ -88,7 +88,7 @@ export async function syncGeofenceRegions(): Promise<boolean> {
   const signature = buildGeofenceSignature(regions);
   const [hasTask, previousSignature] = await Promise.all([
     Location.hasStartedGeofencingAsync(GEOFENCE_TASK_NAME),
-    AsyncStorage.getItem(GEOFENCE_SIGNATURE_STORAGE_KEY),
+    getPersistentItem(GEOFENCE_SIGNATURE_STORAGE_KEY),
   ]);
 
   if (hasTask && previousSignature === signature) {
@@ -96,7 +96,7 @@ export async function syncGeofenceRegions(): Promise<boolean> {
   }
 
   await Location.startGeofencingAsync(GEOFENCE_TASK_NAME, regions);
-  await AsyncStorage.setItem(GEOFENCE_SIGNATURE_STORAGE_KEY, signature);
+  await setPersistentItem(GEOFENCE_SIGNATURE_STORAGE_KEY, signature);
   return true;
 }
 
@@ -110,7 +110,7 @@ export async function skipImmediateReminderForNewNote(noteId: string): Promise<v
     return;
   }
 
-  await AsyncStorage.setItem(getSkipNextEnterKey(noteId), '1');
+  await setPersistentItem(getSkipNextEnterKey(noteId), '1');
 }
 
 export async function clearGeofenceRegions(): Promise<void> {
@@ -118,5 +118,5 @@ export async function clearGeofenceRegions(): Promise<void> {
   if (hasTask) {
     await Location.stopGeofencingAsync(GEOFENCE_TASK_NAME);
   }
-  await AsyncStorage.removeItem(GEOFENCE_SIGNATURE_STORAGE_KEY);
+  await removePersistentItem(GEOFENCE_SIGNATURE_STORAGE_KEY);
 }

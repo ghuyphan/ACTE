@@ -45,6 +45,7 @@ describe('NotesFeed capture visibility', () => {
         topInset={0}
         snapHeight={700}
         onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
         colors={{
           primary: '#FFC107',
           text: '#1C1C1E',
@@ -145,6 +146,7 @@ describe('NotesFeed capture visibility', () => {
         topInset={0}
         snapHeight={700}
         onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
         colors={{
           primary: '#FFC107',
           text: '#1C1C1E',
@@ -176,6 +178,7 @@ describe('NotesFeed capture visibility', () => {
         topInset={0}
         snapHeight={700}
         onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
         colors={{
           primary: '#FFC107',
           text: '#1C1C1E',
@@ -224,6 +227,7 @@ describe('NotesFeed capture visibility', () => {
           topInset={0}
           snapHeight={700}
           onOpenNote={jest.fn()}
+          onOpenSharedPost={jest.fn()}
           colors={{
             primary: '#FFC107',
             text: '#1C1C1E',

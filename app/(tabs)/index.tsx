@@ -13,7 +13,6 @@ import {
   Animated,
   AppState,
   Dimensions,
-  FlatList,
   InteractionManager,
   Keyboard,
   Platform,
@@ -111,7 +110,7 @@ export default function HomeScreen() {
 
   const searchAnim = useRef(new Animated.Value(0)).current;
   const hintAnim = useRef(new Animated.Value(1)).current;
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<any>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
   useScrollToTop(flatListRef);
 
@@ -865,8 +864,8 @@ export default function HomeScreen() {
 
   const handleOpenNotes = useCallback(() => {
     Keyboard.dismiss();
-    flatListRef.current?.scrollToOffset({ offset: snapHeight, animated: true });
-  }, [snapHeight]);
+    router.push('/notes');
+  }, [router]);
 
   const openNote = useCallback(
     (noteId: string) => {
@@ -1109,11 +1108,20 @@ export default function HomeScreen() {
           ]}
         >
           <Pressable
-            style={styles.homeNotesHintButton}
+            style={[
+              styles.homeNotesHintButton,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+              },
+            ]}
             onPress={handleOpenNotes}
             hitSlop={20}
           >
-            <Ionicons name="chevron-down" size={22} color={colors.text} />
+            <Ionicons name="grid-outline" size={18} color={colors.text} />
+            <Text style={[styles.homeNotesHintLabel, { color: colors.text }]}>
+              {t('notes.viewAllButton', 'View all notes')}
+            </Text>
           </Pressable>
         </Animated.View>
       ) : null}
@@ -1215,14 +1223,23 @@ const styles = StyleSheet.create({
   },
   homeNotesHintWrap: {
     position: 'absolute',
-    bottom: -12,
+    bottom: -18,
     alignSelf: 'center',
   },
   homeNotesHintButton: {
-    width: 56,
-    height: 48,
+    minHeight: 48,
+    paddingHorizontal: 18,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  homeNotesHintLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'System',
   },
   center: {
     flex: 1,

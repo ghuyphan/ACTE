@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GlassView } from '../../components/ui/GlassView';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -9,6 +8,7 @@ import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
+import { setPersistentItem } from '../../utils/appStorage';
 import { isOlderIOS } from '../../utils/platform';
 
 const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
@@ -26,7 +26,7 @@ export default function OnboardingScreen() {
     const [step, setStep] = useState(0);
 
     const completeOnboarding = async () => {
-        await AsyncStorage.setItem(HAS_LAUNCHED_KEY, 'true');
+        await setPersistentItem(HAS_LAUNCHED_KEY, 'true');
         router.replace('/(tabs)');
     };
 

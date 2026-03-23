@@ -1,10 +1,10 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getLocales } from 'expo-localization';
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 import en from './locales/en.json';
 import vi from './locales/vi.json';
+import { getPersistentItem, multiSetPersistent } from '../utils/appStorage';
 
 const STORE_LANGUAGE_KEY = 'settings.lang';
 const STORE_LANGUAGE_SOURCE_KEY = 'settings.lang.source';
@@ -33,8 +33,8 @@ export function normalizeAppLanguage(language: string | null | undefined): AppLa
 
 export async function detectInitialLanguage(): Promise<AppLanguageCode> {
     try {
-        const languageSource = await AsyncStorage.getItem(STORE_LANGUAGE_SOURCE_KEY);
-        const storedLanguage = await AsyncStorage.getItem(STORE_LANGUAGE_KEY);
+        const languageSource = await getPersistentItem(STORE_LANGUAGE_SOURCE_KEY);
+        const storedLanguage = await getPersistentItem(STORE_LANGUAGE_KEY);
         if (languageSource === EXPLICIT_LANGUAGE_SOURCE && storedLanguage) {
             return normalizeAppLanguage(storedLanguage);
         }
@@ -85,7 +85,7 @@ export async function setAppLanguage(language: string): Promise<void> {
     const normalizedLanguage = normalizeAppLanguage(language);
 
     try {
-        await AsyncStorage.multiSet([
+        await multiSetPersistent([
             [STORE_LANGUAGE_KEY, normalizedLanguage],
             [STORE_LANGUAGE_SOURCE_KEY, EXPLICIT_LANGUAGE_SOURCE],
         ]);

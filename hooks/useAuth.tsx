@@ -10,6 +10,7 @@ import {
 import i18n from '../constants/i18n';
 import { LOCAL_NOTES_SCOPE, setActiveNotesScope } from '../services/database';
 import { upsertPublicUserProfile } from '../services/publicProfileService';
+import { clearSharedFeedCache } from '../services/sharedFeedCache';
 import { AppUser, mapSupabaseUser } from '../utils/appUser';
 import { getSupabase, getSupabaseErrorMessage, hasSupabaseConfig } from '../utils/supabase';
 
@@ -439,6 +440,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        await clearSharedFeedCache(user?.uid ?? null).catch(() => undefined);
         setActiveNotesScope(LOCAL_NOTES_SCOPE);
         setUser(null);
       },

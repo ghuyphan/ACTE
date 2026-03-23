@@ -50,7 +50,7 @@ export default function TabLayoutIOS() {
         <NativeTabs.Trigger.Label>{t('tabs.home', 'Home')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="map">
+      <NativeTabs.Trigger name="map" disableTransparentOnScrollEdge>
         <NativeTabs.Trigger.Icon sf={{ default: 'map', selected: 'map.fill' }} />
         <NativeTabs.Trigger.Label>{t('tabs.map', 'Map')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>

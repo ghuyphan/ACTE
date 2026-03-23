@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import i18n from '../constants/i18n';
@@ -6,6 +5,7 @@ import { useConnectivity } from './useConnectivity';
 import { getSyncRepository, SyncMode, syncNotes } from '../services/syncService';
 import { useAuth } from './useAuth';
 import { useNotes } from './useNotes';
+import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 
 type SyncState = 'idle' | 'syncing' | 'success' | 'error';
 
@@ -67,7 +67,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
   // Load persistence
   useEffect(() => {
-    AsyncStorage.getItem(SYNC_ENABLED_KEY).then((value) => {
+    getPersistentItem(SYNC_ENABLED_KEY).then((value) => {
       if (value !== null) {
         setSyncEnabledState(value === 'true');
       }
@@ -77,7 +77,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
   const setSyncEnabled = useCallback(async (enabled: boolean) => {
     setSyncEnabledState(enabled);
-    await AsyncStorage.setItem(SYNC_ENABLED_KEY, enabled.toString());
+    await setPersistentItem(SYNC_ENABLED_KEY, enabled.toString());
   }, []);
 
   runSyncNowRef.current = async (mode: SyncMode = 'incremental') => {

@@ -1,31 +1,21 @@
-import { Ionicons } from '@expo/vector-icons';
+import { FlashList } from '@shopify/flash-list';
 import { TFunction } from 'i18next';
 import { ReactElement, RefObject, memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Animated,
   Dimensions,
   Easing as RNEasing,
-  FlatList,
   Platform,
-  Pressable,
   RefreshControl,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { Layout, Typography } from '../../constants/theme';
 import { Note } from '../../services/database';
-import { getNotePhotoUri } from '../../services/photoStorage';
 import { SharedPost } from '../../services/sharedFeedService';
-import { formatDate } from '../../utils/dateUtils';
-import ImageMemoryCard from '../ImageMemoryCard';
-import TextMemoryCard from '../TextMemoryCard';
-import InfoPill from '../ui/InfoPill';
+import { Layout } from '../../constants/theme';
+import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
 
 const { width, height } = Dimensions.get('window');
-const HORIZONTAL_PADDING = Layout.screenPadding - 8;
-const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
 
 const AnimatedNoteCard = memo(function AnimatedNoteCard({
   item,
@@ -49,15 +39,9 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   const scale = useRef(new Animated.Value(0.9)).current;
   const cardTranslateY = useRef(new Animated.Value(18)).current;
   const metaTranslateY = useRef(new Animated.Value(10)).current;
-  const pressScale = useRef(new Animated.Value(1)).current;
   const mountIndex = useRef(index).current;
-  const handlePress = useCallback(() => {
-    onOpenNote(item.id);
-  }, [item.id, onOpenNote]);
 
   useEffect(() => {
-    // Avoid opacity fades here: the metadata pills use GlassView and can stop rendering
-    // correctly when an ancestor animates opacity on iOS.
     Animated.parallel([
       Animated.timing(scale, {
         toValue: 1,
@@ -83,73 +67,21 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
     ]).start();
   }, [cardTranslateY, metaTranslateY, mountIndex, scale]);
 
-  const handlePressIn = () => {
-    Animated.timing(pressScale, {
-      toValue: 0.98,
-      duration: 120,
-      easing: RNEasing.out(RNEasing.quad),
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.timing(pressScale, {
-      toValue: 1,
-      duration: 180,
-      easing: RNEasing.out(RNEasing.cubic),
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const dateStr = formatDate(item.createdAt, 'short');
-
   return (
-    <Pressable onPress={handlePress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
-      <Animated.View
-        style={[
-          styles.noteCardWrapper,
-          {
-            transform: [
-              { translateY: cardTranslateY },
-              { scale: Animated.multiply(scale, pressScale) },
-            ],
-          },
-        ]}
-      >
-        {item.type === 'photo' ? (
-          <ImageMemoryCard imageUrl={getNotePhotoUri(item)} doodleStrokesJson={item.doodleStrokesJson} />
-        ) : (
-          <TextMemoryCard
-            text={item.content}
-            noteId={item.id}
-            emoji={item.moodEmoji}
-            doodleStrokesJson={item.doodleStrokesJson}
-          />
-        )}
-
-        {item.isFavorite ? (
-          <View style={[styles.favBadge, { backgroundColor: colors.card }]}>
-            <Ionicons name="heart" size={16} color={colors.danger} />
-          </View>
-        ) : null}
+    <Animated.View
+      style={{
+        transform: [{ translateY: cardTranslateY }, { scale }],
+      }}
+    >
+      <Animated.View style={{ transform: [{ translateY: metaTranslateY }] }}>
+        <NoteMemoryCard
+          note={item}
+          onPress={() => onOpenNote(item.id)}
+          colors={colors}
+          t={t}
+        />
       </Animated.View>
-
-      <Animated.View style={[styles.belowCardMetaContainer, { transform: [{ translateY: metaTranslateY }] }]}>
-        <InfoPill icon="location" iconColor={colors.secondaryText} style={styles.metadataPill}>
-          <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
-            {item.locationName ?? t('home.unknownLocation', 'Unknown location')}
-          </Text>
-          <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-          <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
-          {item.hasDoodle ? (
-            <>
-              <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-              <Ionicons name="brush-outline" size={14} color={colors.secondaryText} />
-            </>
-          ) : null}
-        </InfoPill>
-      </Animated.View>
-    </Pressable>
+    </Animated.View>
   );
 }, (prevProps, nextProps) => (
   prevProps.index === nextProps.index &&
@@ -160,7 +92,6 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   prevProps.item.type === nextProps.item.type &&
   prevProps.item.content === nextProps.item.content &&
   prevProps.item.photoLocalUri === nextProps.item.photoLocalUri &&
-  prevProps.item.photoRemoteBase64 === nextProps.item.photoRemoteBase64 &&
   prevProps.item.locationName === nextProps.item.locationName &&
   prevProps.item.createdAt === nextProps.item.createdAt &&
   prevProps.item.isFavorite === nextProps.item.isFavorite &&
@@ -208,46 +139,13 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
     ]).start();
   }, [mountIndex, scale, translateY]);
 
-  const authorLabel = item.authorDisplayName ?? t('shared.someone', 'Someone');
-  const dateStr = formatDate(item.createdAt, 'short');
-
   return (
-    <Animated.View style={[styles.sharedCardWrap, { transform: [{ translateY }, { scale }] }]}>
-      <View style={styles.noteCardWrapper}>
-        {item.type === 'photo' && item.photoLocalUri ? (
-          <ImageMemoryCard imageUrl={item.photoLocalUri} doodleStrokesJson={item.doodleStrokesJson} />
-        ) : (
-          <TextMemoryCard
-            text={item.text || t('shared.photoMemory', 'Photo memory')}
-            noteId={item.id}
-            doodleStrokesJson={item.doodleStrokesJson}
-          />
-        )}
-      </View>
-
-      <View style={styles.sharedMetaContainer}>
-        <View style={styles.sharedMetaRow}>
-          <InfoPill style={styles.sharedAuthorPill}>
-            {item.authorPhotoURLSnapshot ? (
-              <Image source={{ uri: item.authorPhotoURLSnapshot }} style={styles.sharedAvatarImage} contentFit="cover" />
-            ) : (
-              <View style={[styles.sharedAvatarFallback, { backgroundColor: colors.card }]}>
-                <Text style={[styles.sharedAvatarLabel, { color: colors.primary }]}>
-                  {authorLabel.trim().charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
-          </InfoPill>
-
-          <InfoPill icon="location" iconColor={colors.secondaryText} style={[styles.metadataPill, styles.sharedMetadataPill]}>
-            <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
-              {item.placeName ?? t('shared.sharedNow', 'Shared now')}
-            </Text>
-            <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-            <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
-          </InfoPill>
-        </View>
-      </View>
+    <Animated.View style={{ transform: [{ translateY }, { scale }] }}>
+      <SharedPostMemoryCard
+        post={item}
+        colors={colors}
+        t={t}
+      />
     </Animated.View>
   );
 }, (prevProps, nextProps) => (
@@ -258,6 +156,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   prevProps.item.type === nextProps.item.type &&
   prevProps.item.text === nextProps.item.text &&
   prevProps.item.photoLocalUri === nextProps.item.photoLocalUri &&
+  prevProps.item.photoPath === nextProps.item.photoPath &&
   prevProps.item.doodleStrokesJson === nextProps.item.doodleStrokesJson &&
   prevProps.item.placeName === nextProps.item.placeName &&
   prevProps.item.createdAt === nextProps.item.createdAt &&
@@ -270,7 +169,7 @@ type NotesFeedListItem =
   | { id: string; kind: 'shared-post'; post: SharedPost; createdAt: string };
 
 interface NotesFeedProps {
-  flatListRef: RefObject<FlatList<any> | null>;
+  flatListRef: RefObject<any>;
   captureHeader: ReactElement;
   captureMode: 'text' | 'camera';
   notes: Note[];
@@ -280,6 +179,7 @@ interface NotesFeedProps {
   topInset: number;
   snapHeight: number;
   onOpenNote: (noteId: string) => void;
+  onOpenSharedPost?: (postId: string) => void;
   colors: {
     primary: string;
     text: string;
@@ -350,12 +250,9 @@ export default function NotesFeed({
     onCaptureVisibilityChange?.(true);
   }, [onCaptureVisibilityChange]);
 
-  const settleCaptureVisibility = useCallback(
-    (offsetY: number) => {
-      reportCaptureVisibility(offsetY);
-    },
-    [reportCaptureVisibility]
-  );
+  const settleCaptureVisibility = useCallback((offsetY: number) => {
+    reportCaptureVisibility(offsetY);
+  }, [reportCaptureVisibility]);
 
   const settleAndroidSnap = useCallback(
     (offsetY: number) => {
@@ -384,30 +281,25 @@ export default function NotesFeed({
     [flatListRef, listData.length, snapHeight]
   );
 
-  const getItemLayout = useCallback(
-    (_data: ArrayLike<NotesFeedListItem> | null | undefined, index: number) => ({
-      length: snapHeight,
-      offset: snapHeight * (index + 1),
-      index,
-    }),
-    [snapHeight]
-  );
-
   const renderItem = useCallback(
     ({ item, index }: { item: NotesFeedListItem; index: number }) => {
       if (item.kind === 'shared-post') {
         return (
           <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
-            <AnimatedSharedPostCard item={item.post} index={index} colors={colors} t={t} />
+            <AnimatedSharedPostCard
+              item={item.post}
+              index={index}
+              colors={colors}
+              t={t}
+            />
           </View>
         );
       }
 
-      const note = item.note;
       return (
         <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
           <AnimatedNoteCard
-            item={note}
+            item={item.note}
             index={index}
             onOpenNote={onOpenNote}
             colors={colors}
@@ -420,15 +312,11 @@ export default function NotesFeed({
   );
 
   return (
-    <FlatList
+    <FlashList
       ref={flatListRef}
       data={listData}
       keyExtractor={(item) => `${item.kind}:${item.id}`}
       renderItem={renderItem}
-      getItemLayout={getItemLayout}
-      initialNumToRender={3}
-      maxToRenderPerBatch={4}
-      windowSize={5}
       removeClippedSubviews={Platform.OS === 'android' && captureMode !== 'camera'}
       snapToInterval={snapHeight}
       disableIntervalMomentum={Platform.OS === 'android'}
@@ -469,119 +357,5 @@ const styles = StyleSheet.create({
   snapItem: {
     width,
     justifyContent: 'center',
-  },
-  noteCardWrapper: {
-    width: CARD_SIZE,
-    height: CARD_SIZE,
-    alignSelf: 'center',
-    justifyContent: 'center',
-  },
-  favBadge: {
-    position: 'absolute',
-    top: 18,
-    right: 24,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-    backgroundColor: '#fff',
-  },
-  belowCardMetaContainer: {
-    width: CARD_SIZE,
-    alignSelf: 'center',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    minHeight: 56,
-    paddingTop: 16,
-  },
-  sharedCardWrap: {
-    width: CARD_SIZE,
-    alignSelf: 'center',
-  },
-  sharedMetaContainer: {
-    width: CARD_SIZE,
-    alignSelf: 'center',
-    minHeight: 56,
-    paddingTop: 16,
-  },
-  sharedMetaRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sharedAuthorPill: {
-    width: 44,
-    minWidth: 44,
-    paddingHorizontal: 0,
-    justifyContent: 'center',
-  },
-  sharedAvatarImage: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-  },
-  sharedAvatarFallback: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sharedAvatarLabel: {
-    fontSize: 11,
-    lineHeight: 13,
-    fontWeight: '800',
-  },
-  metadataPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    gap: 6,
-    maxWidth: CARD_SIZE - 64,
-  },
-  sharedMetadataPill: {
-    flex: 1,
-    minWidth: 0,
-    maxWidth: CARD_SIZE - 52,
-  },
-  metadataPillText: {
-    fontSize: 14,
-    fontWeight: '600',
-    flexShrink: 1,
-    fontFamily: 'System',
-  },
-  metadataPillDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    marginHorizontal: 2,
-    opacity: 0.5,
-  },
-  metadataPillDate: {
-    ...Typography.body,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  shareButtonPressable: {
-    position: 'absolute',
-    right: 0,
-    top: 16,
-  },
-  shareButton: {
-    minHeight: 40,
-    paddingHorizontal: 13,
-    paddingVertical: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });

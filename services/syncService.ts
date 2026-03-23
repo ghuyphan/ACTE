@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { countPhotoNotes } from '../constants/subscription';
+import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 import { AppUser } from '../utils/appUser';
 import {
   getCurrentSupabaseSession,
@@ -265,11 +265,11 @@ function getRemoteSyncCursorKey(userUid: string) {
 }
 
 async function getLastRemoteSyncCursor(userUid: string) {
-  return AsyncStorage.getItem(getRemoteSyncCursorKey(userUid));
+  return getPersistentItem(getRemoteSyncCursorKey(userUid));
 }
 
 async function setLastRemoteSyncCursor(userUid: string, cursor: string) {
-  await AsyncStorage.setItem(getRemoteSyncCursorKey(userUid), cursor);
+  await setPersistentItem(getRemoteSyncCursorKey(userUid), cursor);
 }
 
 async function ensureSupabaseSessionMatchesUser(userId: string) {
@@ -295,7 +295,8 @@ async function serializeNoteForSupabase(
       ? await uploadPhotoToStorage(
           NOTE_MEDIA_BUCKET,
           `${userId}/${note.id}`,
-          note.photoLocalUri ?? note.content
+          note.photoLocalUri ?? note.content,
+          { allowOverwrite: true }
         )
       : null;
 

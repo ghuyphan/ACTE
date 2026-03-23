@@ -11,12 +11,10 @@ import { ActivityIndicator, AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import i18n, { i18nReady } from '../constants/i18n';
-import { ENABLE_SHARED_ROOMS } from '../constants/features';
 import { AuthProvider, useAuth } from '../hooks/useAuth';
 import { ConnectivityProvider, useConnectivity } from '../hooks/useConnectivity';
 import { NotesProvider } from '../hooks/useNotes';
 import { NoteDetailSheetProvider, useNoteDetailSheet } from '../hooks/useNoteDetailSheet';
-import { RoomsProvider } from '../hooks/useRooms';
 import { SharedFeedProvider } from '../hooks/useSharedFeed';
 import { SyncStatusProvider } from '../hooks/useSyncStatus';
 import { SubscriptionProvider } from '../hooks/useSubscription';
@@ -231,61 +229,6 @@ function AppContent() {
           />
           <Stack.Screen name="auth/onboarding" />
           <Stack.Screen name="(tabs)" />
-          {ENABLE_SHARED_ROOMS ? (
-            <Stack.Screen
-              name="rooms/create"
-              options={{
-                headerShown: true,
-                title: i18n.t('rooms.createTitle', 'Create Room'),
-                headerBackButtonDisplayMode: 'minimal',
-                headerBackButtonMenuEnabled: false,
-              }}
-            />
-          ) : null}
-          {ENABLE_SHARED_ROOMS ? (
-            <Stack.Screen
-              name="rooms/join"
-              options={{
-                headerShown: true,
-                title: i18n.t('rooms.joinTitle', 'Join Room'),
-                headerBackButtonDisplayMode: 'minimal',
-                headerBackButtonMenuEnabled: false,
-              }}
-            />
-          ) : null}
-          {ENABLE_SHARED_ROOMS ? (
-            <Stack.Screen
-              name="rooms/share"
-              options={{
-                headerShown: true,
-                title: i18n.t('rooms.shareTitle', 'Share to Room'),
-                headerBackButtonDisplayMode: 'minimal',
-                headerBackButtonMenuEnabled: false,
-              }}
-            />
-          ) : null}
-          {ENABLE_SHARED_ROOMS ? (
-            <Stack.Screen
-              name="rooms/[id]"
-              options={{
-                headerShown: true,
-                title: i18n.t('rooms.roomTitle', 'Room'),
-                headerBackButtonDisplayMode: 'minimal',
-                headerBackButtonMenuEnabled: false,
-              }}
-            />
-          ) : null}
-          {ENABLE_SHARED_ROOMS ? (
-            <Stack.Screen
-              name="rooms/[id]/settings"
-              options={{
-                headerShown: true,
-                title: i18n.t('rooms.settingsTitle', 'Room Settings'),
-                headerBackButtonDisplayMode: 'minimal',
-                headerBackButtonMenuEnabled: false,
-              }}
-            />
-          ) : null}
           <Stack.Screen
             name="friends/join"
             options={{
@@ -298,6 +241,14 @@ function AppContent() {
             name="note/[id]"
             options={{
               presentation: 'transparentModal',
+              animation: 'none',
+            }}
+          />
+          <Stack.Screen name="notes/index" />
+          <Stack.Screen name="shared/index" />
+          <Stack.Screen
+            name="shared/[id]"
+            options={{
               animation: 'none',
             }}
           />
@@ -319,15 +270,13 @@ export default function RootLayout() {
                 <SubscriptionProvider>
                   <NotesProvider>
                     <SyncStatusProvider>
-                      <RoomsProvider>
-                        <SharedFeedProvider>
-                          <NoteDetailSheetProvider>
-                            <BottomSheetModalProvider>
-                              <AppContent />
-                            </BottomSheetModalProvider>
-                          </NoteDetailSheetProvider>
-                        </SharedFeedProvider>
-                      </RoomsProvider>
+                      <SharedFeedProvider>
+                        <NoteDetailSheetProvider>
+                          <BottomSheetModalProvider>
+                            <AppContent />
+                          </BottomSheetModalProvider>
+                        </NoteDetailSheetProvider>
+                      </SharedFeedProvider>
                     </SyncStatusProvider>
                   </NotesProvider>
                 </SubscriptionProvider>

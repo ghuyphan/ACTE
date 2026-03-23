@@ -34,7 +34,6 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useTheme } from '../hooks/useTheme';
 import { Note } from '../services/database';
 import { getTextNoteCardGradient } from '../services/noteAppearance';
-import { resolveAutoNoteEmoji } from '../services/noteDecorations';
 import { clearNoteDoodle, parseNoteDoodleStrokes, saveNoteDoodle } from '../services/noteDoodles';
 import { getNotePhotoUri } from '../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
@@ -571,17 +570,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             updates.radius = editRadius;
         }
 
-        const nextContent = note.type === 'text' ? (updates.content ?? note.content) : note.content;
-        const nextLocation = updates.locationName !== undefined ? updates.locationName : note.locationName;
-        const autoEmoji = resolveAutoNoteEmoji({
-            type: note.type,
-            content: note.type === 'text' ? nextContent : nextLocation ?? '',
-            locationName: nextLocation,
-        });
-        if (autoEmoji !== note.moodEmoji) {
-            updates.moodEmoji = autoEmoji;
-        }
-
         if (Object.keys(updates).length > 0 || doodleChanged) {
             const nextUpdatedAt = new Date().toISOString();
             const nextNote = {
@@ -716,7 +704,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     <Animated.View style={{ transform: [{ scale: cardScale }] }}>
                         {note.type === 'photo' ? (
                             <View style={styles.photoContainer}>
-                                <Image source={{ uri: getNotePhotoUri(note) }} style={styles.photo} contentFit="cover" transition={300} />
+                                <View style={styles.photo}>
+                                    <Image source={{ uri: getNotePhotoUri(note) }} style={styles.photo} contentFit="cover" transition={300} />
+                                </View>
                                 {displayedDoodleStrokes.length > 0 || isEditing ? (
                                     <View
                                         pointerEvents={isEditing && doodleModeEnabled ? 'auto' : 'none'}
@@ -1124,6 +1114,7 @@ const styles = StyleSheet.create({
     },
     textGradient: {
         flex: 1,
+        width: '100%',
         padding: 24,
         justifyContent: 'center',
         alignItems: 'center',
@@ -1153,7 +1144,7 @@ const styles = StyleSheet.create({
         zIndex: 2,
     },
     editFieldBadge: {
-        backgroundColor: 'rgba(0,0,0,0.25)',
+        backgroundColor: 'rgba(255,255,255,0.16)',
         color: 'rgba(255,255,255,0.9)',
         paddingHorizontal: 10,
         paddingVertical: 5,
@@ -1161,6 +1152,8 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '700',
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.14)',
         zIndex: 2,
         fontFamily: 'System',
     },
@@ -1180,7 +1173,8 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.18)',
     },
     textCardActionButtonActive: {
-        backgroundColor: 'rgba(0,0,0,0.34)',
+        backgroundColor: 'rgba(255,255,255,0.24)',
+        borderColor: 'rgba(255,255,255,0.28)',
     },
     textCardActionPill: {
         width: 32,
@@ -1207,11 +1201,13 @@ const styles = StyleSheet.create({
         textShadowRadius: 4,
     },
     editTextInputActive: {
-        paddingHorizontal: 12,
-        borderWidth: 1.5,
-        borderColor: 'rgba(255,255,255,0.55)',
-        borderRadius: 16,
-        backgroundColor: 'rgba(0,0,0,0.12)',
+        width: '100%',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.22)',
+        borderRadius: 24,
+        backgroundColor: 'rgba(255,255,255,0.06)',
     },
     actionRow: {
         flexDirection: 'row',

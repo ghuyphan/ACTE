@@ -1,14 +1,15 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Paths } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
 import { NativeModules, Platform } from 'react-native';
 import i18n from '../constants/i18n';
+import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 import { getSupabaseUser } from '../utils/supabase';
 import { formatDate } from '../utils/dateUtils';
 import { getAllNotes, Note } from './database';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getNotePhotoUri, resolveStoredPhotoUri } from './photoStorage';
+import { downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET } from './remoteMedia';
 import { getDistanceMeters } from './reminderSelection';
 import { getCachedSharedFeedSnapshot } from './sharedFeedCache';
 import { getSharedFeedErrorMessage, refreshSharedFeed, SharedPost } from './sharedFeedService';
@@ -95,6 +96,7 @@ interface WidgetCandidate {
     source: 'personal' | 'shared';
     noteType: 'text' | 'photo';
     text: string;
+    photoPath: string | null;
     photoLocalUri: string | null;
     locationName: string | null;
     latitude: number | null;
@@ -145,6 +147,8 @@ const WIDGET_HISTORY_RETENTION_MS = 48 * 60 * 60 * 1000;
 const WIDGET_HISTORY_STORAGE_KEY = 'widget.timeline.history.v2';
 const MAX_WIDGET_HISTORY_ENTRIES = 32;
 const WIDGET_AVATAR_DIRECTORY_NAME = 'widget-avatars';
+let widgetUpdateInFlight: Promise<void> | null = null;
+let pendingWidgetUpdateOptions: UpdateWidgetDataOptions | null = null;
 
 function getWidget() {
     if (Platform.OS !== 'ios') {
@@ -409,7 +413,7 @@ function pruneWidgetHistory(history: WidgetHistoryEntry[], referenceDate = new D
 
 async function loadWidgetHistory(referenceDate = new Date()) {
     try {
-        const rawValue = await AsyncStorage.getItem(WIDGET_HISTORY_STORAGE_KEY);
+        const rawValue = await getPersistentItem(WIDGET_HISTORY_STORAGE_KEY);
         if (!rawValue) {
             return [] as WidgetHistoryEntry[];
         }
@@ -440,7 +444,7 @@ async function loadWidgetHistory(referenceDate = new Date()) {
 
 async function saveWidgetHistory(history: WidgetHistoryEntry[], referenceDate = new Date()) {
     try {
-        await AsyncStorage.setItem(
+        await setPersistentItem(
             WIDGET_HISTORY_STORAGE_KEY,
             JSON.stringify(pruneWidgetHistory(history, referenceDate))
         );
@@ -589,6 +593,7 @@ function createPersonalWidgetCandidate(note: Note): WidgetCandidate {
         source: 'personal',
         noteType: note.type,
         text: note.content,
+        photoPath: null,
         photoLocalUri: getNotePhotoUri(note),
         locationName: note.locationName,
         latitude: note.latitude,
@@ -612,6 +617,7 @@ function createSharedWidgetCandidate(post: SharedPost): WidgetCandidate {
         source: 'shared',
         noteType: post.type,
         text: post.text,
+        photoPath: post.photoPath ?? null,
         photoLocalUri: post.photoLocalUri,
         locationName: post.placeName,
         latitude: null,
@@ -1002,15 +1008,30 @@ async function getEligibleWidgetCandidates(
             continue;
         }
 
-        if (!isPhotoWidgetNote(candidate) || !candidate.photoLocalUri) {
+        if (!isPhotoWidgetNote(candidate)) {
             continue;
         }
 
-        const readablePhotoUri = await getReadablePhotoUri(candidate.photoLocalUri);
+        let readablePhotoUri = candidate.photoLocalUri
+            ? await getReadablePhotoUri(candidate.photoLocalUri)
+            : undefined;
+
+        if (!readablePhotoUri && candidate.photoPath) {
+            const downloadedPhotoUri = await downloadPhotoFromStorage(
+                SHARED_POST_MEDIA_BUCKET,
+                candidate.photoPath,
+                `shared-post-${candidate.id}`
+            );
+            readablePhotoUri = downloadedPhotoUri
+                ? await getReadablePhotoUri(downloadedPhotoUri)
+                : undefined;
+        }
+
         if (!readablePhotoUri) {
             continue;
         }
 
+        candidate.photoLocalUri = readablePhotoUri;
         eligibleCandidates.push(candidate);
         readablePhotoUrisByCandidateKey.set(candidate.candidateKey, readablePhotoUri);
     }
@@ -1179,7 +1200,7 @@ async function buildWidgetTimeline(options: {
     };
 }
 
-export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): Promise<void> {
+async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<void> {
     if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
         return;
     }
@@ -1194,9 +1215,6 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
                 const { status } = await Location.getForegroundPermissionsAsync();
                 if (status === 'granted') {
                     currentLocation = await Location.getLastKnownPositionAsync();
-                    if (!currentLocation) {
-                        currentLocation = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-                    }
                 }
             } catch (e) {
                 console.warn('[widgetService] Location fetch failed:', e);
@@ -1220,4 +1238,30 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
     } catch (error) {
         console.warn('[widgetService] Failed to update widget:', getWidgetWarningMessage(error));
     }
+}
+
+export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): Promise<void> {
+    if (widgetUpdateInFlight) {
+        pendingWidgetUpdateOptions = {
+            ...(pendingWidgetUpdateOptions ?? {}),
+            ...options,
+        };
+        await widgetUpdateInFlight;
+        return;
+    }
+
+    widgetUpdateInFlight = runWidgetUpdate(options)
+        .finally(async () => {
+            widgetUpdateInFlight = null;
+
+            if (!pendingWidgetUpdateOptions) {
+                return;
+            }
+
+            const nextOptions = pendingWidgetUpdateOptions;
+            pendingWidgetUpdateOptions = null;
+            await updateWidgetData(nextOptions);
+        });
+
+    await widgetUpdateInFlight;
 }

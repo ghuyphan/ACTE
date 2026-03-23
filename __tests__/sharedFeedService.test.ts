@@ -3,6 +3,7 @@ const mockSharedPosts = new Map<string, any>();
 const mockFriendships = new Map<string, Map<string, any>>();
 const mockPublicProfiles = new Map<string, { displayNameSnapshot: string | null; photoURLSnapshot: string | null }>();
 let mockUuidCounter = 0;
+let mockSessionUserId = 'owner-1';
 
 function mockEnsureFriendMap(userId: string) {
   if (!mockFriendships.has(userId)) {
@@ -190,8 +191,6 @@ const mockDownloadPhotoFromStorage = jest.fn<Promise<string | null>, [string, st
 );
 const mockDeletePhotoFromStorage = jest.fn<Promise<void>, [string, string | null]>(async () => undefined);
 const mockCacheSharedFeedSnapshot = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
-const mockReplaceCachedSharedInvite = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
-
 jest.mock('../services/remoteMedia', () => ({
   SHARED_POST_MEDIA_BUCKET: 'shared-post-media',
   uploadPhotoToStorage: (bucket: string, path: string, localUri?: string | null) =>
@@ -218,10 +217,14 @@ jest.mock('../services/publicProfileService', () => ({
 
 jest.mock('../services/sharedFeedCache', () => ({
   cacheSharedFeedSnapshot: (userUid: string, snapshot: unknown) => mockCacheSharedFeedSnapshot(userUid, snapshot),
-  replaceCachedSharedInvite: (userUid: string, invite: unknown) => mockReplaceCachedSharedInvite(userUid, invite),
 }));
 
 jest.mock('../utils/supabase', () => ({
+  getCurrentSupabaseSession: async () => ({
+    user: {
+      id: mockSessionUserId,
+    },
+  }),
   getSupabase: () => ({
     from: (table: string) => mockCreateQueryBuilder(table),
     rpc: async (name: string, params: Record<string, unknown>) => {
@@ -254,7 +257,6 @@ jest.mock('../utils/supabase', () => ({
           friended_at: invite.created_at,
           last_shared_at: null,
           created_by_invite_id: invite.id,
-          created_by_invite_token: invite.token,
         });
         mockEnsureFriendMap(invite.inviter_user_id).set('friend-1', {
           display_name_snapshot: receiverProfile.displayNameSnapshot,
@@ -262,7 +264,6 @@ jest.mock('../utils/supabase', () => ({
           friended_at: invite.created_at,
           last_shared_at: null,
           created_by_invite_id: invite.id,
-          created_by_invite_token: invite.token,
         });
 
         return {
@@ -275,7 +276,6 @@ jest.mock('../utils/supabase', () => ({
               friended_at: invite.created_at,
               last_shared_at: null,
               created_by_invite_id: invite.id,
-              created_by_invite_token: invite.token,
             },
           ],
           error: null,
@@ -303,6 +303,10 @@ jest.mock('../utils/supabase', () => ({
     })),
     removeChannel: jest.fn(async () => 'ok'),
   }),
+  getSupabaseErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : typeof error === 'string' ? error : '',
+  isSupabaseNetworkError: () => false,
+  isSupabasePolicyError: () => false,
 }));
 
 jest.mock('expo-crypto', () => ({
@@ -357,6 +361,7 @@ const friendUser = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockUuidCounter = 0;
+  mockSessionUserId = 'owner-1';
   mockFriendInvites.clear();
   mockSharedPosts.clear();
   mockFriendships.clear();
@@ -381,7 +386,6 @@ describe('sharedFeedService', () => {
     expect(mockEnsureFriendMap(friendUser.id).get(ownerUser.id)).toEqual(
       expect.objectContaining({
         created_by_invite_id: invite.id,
-        created_by_invite_token: invite.token,
       })
     );
     expect(mockEnsureFriendMap(ownerUser.id).get(friendUser.id)).toEqual(
@@ -398,7 +402,6 @@ describe('sharedFeedService', () => {
       friended_at: '2026-03-20T00:00:00.000Z',
       last_shared_at: null,
       created_by_invite_id: 'invite-1',
-      created_by_invite_token: 'token-1',
     });
     mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
       display_name_snapshot: ownerUser.displayName,
@@ -406,7 +409,6 @@ describe('sharedFeedService', () => {
       friended_at: '2026-03-20T00:00:00.000Z',
       last_shared_at: null,
       created_by_invite_id: 'invite-1',
-      created_by_invite_token: 'token-1',
     });
 
     const note = {
@@ -420,6 +422,7 @@ describe('sharedFeedService', () => {
     } as any;
 
     const post = await createSharedPost(ownerUser, note, [ownerUser.id, friendUser.id]);
+    mockSessionUserId = friendUser.id;
     const snapshot = await refreshSharedFeed(friendUser);
 
     expect(post.authorUid).toBe(ownerUser.id);
@@ -433,7 +436,8 @@ describe('sharedFeedService', () => {
       expect.objectContaining({
         authorUid: ownerUser.id,
         type: 'photo',
-        photoLocalUri: expect.stringContaining('file:///shared/'),
+        photoPath: expect.stringContaining(`${ownerUser.id}/shared-post-`),
+        photoLocalUri: null,
       })
     );
     expect(mockCacheSharedFeedSnapshot).toHaveBeenCalled();

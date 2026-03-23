@@ -1,6 +1,6 @@
 # Noto
 
-Noto is an Expo SDK 55 React Native app for saving text notes and photo memories tied to real places. It is local-first, location-aware, and includes private sharing flows, room-based collaboration, geofence reminders, Supabase sync, and widget support.
+Noto is an Expo SDK 55 React Native app for saving text notes and photo memories tied to real places. It is local-first, location-aware, and includes private sharing with friends, geofence reminders, Supabase sync, and widget support.
 
 ## What The App Does
 
@@ -9,7 +9,6 @@ Noto is an Expo SDK 55 React Native app for saving text notes and photo memories
 - Get geofence-based reminders when you return to saved places.
 - Sync notes with Supabase when signed in, while still working offline with SQLite.
 - Share moments privately with connected friends.
-- Create rooms, invite people, and post shared memories together.
 - Show recent or nearby notes in the Home Screen widget flow.
 - Offer a `Noto Plus` plan that unlocks more photo notes and importing from the Photos library.
 
@@ -37,17 +36,15 @@ Noto is an Expo SDK 55 React Native app for saving text notes and photo memories
 ## Important Paths
 
 - `app/`: file-based routes and screen entry points
-- `app/(tabs)/`: home, map, rooms, settings, and search tabs
+- `app/(tabs)/`: home, map, settings, and search tabs
 - `app/auth/`: onboarding and auth/account flows
 - `app/friends/`: friend invite and join flows
-- `app/rooms/`: room creation, join, detail, and settings flows
 - `components/home/`: capture, feed, and search UI
 - `components/map/`: map canvas, filters, preview cards, and overlays
 - `components/screens/`: platform-specific screen implementations
 - `hooks/`: app providers and side-effect orchestration
 - `hooks/useSubscription.tsx`: RevenueCat entitlement state
 - `services/database.ts`: SQLite schema and note persistence
-- `services/roomService.ts`: room creation, invites, membership, and room posts
 - `services/sharedFeedService.ts`: friend graph and shared moments feed
 - `services/syncService.ts`: Supabase sync pipeline
 - `services/widgetService.ts`: widget selection and payload generation

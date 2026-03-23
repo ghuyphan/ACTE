@@ -13,6 +13,7 @@ const mockReadAsStringAsync = jest.fn();
 const mockGetInfoAsync = jest.fn();
 const mockGetCachedSharedFeedSnapshot = jest.fn();
 const mockRefreshSharedFeed = jest.fn();
+const mockDownloadPhotoFromStorage = jest.fn();
 let mockCurrentUser: { id: string; uid: string } | null = null;
 
 jest.mock('../constants/i18n', () => {
@@ -129,6 +130,11 @@ jest.mock('../services/sharedFeedService', () => ({
   refreshSharedFeed: (...args: unknown[]) => mockRefreshSharedFeed(...args),
 }));
 
+jest.mock('../services/remoteMedia', () => ({
+  SHARED_POST_MEDIA_BUCKET: 'shared-post-media',
+  downloadPhotoFromStorage: (...args: unknown[]) => mockDownloadPhotoFromStorage(...args),
+}));
+
 jest.mock('../utils/supabase', () => ({
   getSupabaseUser: async () => mockCurrentUser,
 }));
@@ -214,6 +220,7 @@ beforeEach(async () => {
     sharedPosts: [],
     activeInvite: null,
   });
+  mockDownloadPhotoFromStorage.mockResolvedValue('file:///mock-documents/photos/shared-downloaded.jpg');
   mockGetInfoAsync.mockResolvedValue({
     exists: true,
     isDirectory: false,
@@ -386,8 +393,8 @@ describe('widgetService', () => {
           audienceUserIds: ['me'],
           type: 'photo',
           text: '',
-          photoLocalUri: 'file:///mock-documents/photos/shared.jpg',
-          photoRemoteBase64: null,
+          photoPath: 'friend-1/shared-photo-1',
+          photoLocalUri: null,
           doodleStrokesJson: null,
           placeName: 'Shared Place',
           sourceNoteId: null,
@@ -418,6 +425,11 @@ describe('widgetService', () => {
         locationName: 'Shared Place',
       })
     );
+    expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'friend-1/shared-photo-1',
+      'shared-post-shared-photo-1'
+    );
   });
 
   it('refreshes shared widget content from the network when asked', async () => {
@@ -433,8 +445,8 @@ describe('widgetService', () => {
           audienceUserIds: ['me'],
           type: 'text',
           text: 'Shared hello',
+          photoPath: null,
           photoLocalUri: null,
-          photoRemoteBase64: null,
           doodleStrokesJson: null,
           placeName: 'Friend Cafe',
           sourceNoteId: null,

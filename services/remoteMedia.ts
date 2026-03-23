@@ -23,6 +23,14 @@ const PHOTO_UPLOAD_OPTIMIZATION_PRESETS = [
   { width: 960, compress: 0.25 },
 ];
 
+interface UploadPhotoOptions {
+  allowOverwrite?: boolean;
+}
+
+interface DownloadPhotoOptions {
+  preferCached?: boolean;
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -100,11 +108,16 @@ async function optimizePhotoForUpload(photoUri: string) {
   throw new Error('Photo is too large to share right now. Try a smaller photo or retake it closer.');
 }
 
-async function uploadBytesWithRetry(bucket: string, path: string, payload: ArrayBuffer) {
+async function uploadBytesWithRetry(
+  bucket: string,
+  path: string,
+  payload: ArrayBuffer,
+  options: UploadPhotoOptions = {}
+) {
   for (let attempt = 0; attempt <= UPLOAD_RETRY_DELAYS_MS.length; attempt += 1) {
     const { error } = await requireSupabase().storage.from(bucket).upload(path, payload, {
       contentType: 'image/jpeg',
-      upsert: true,
+      upsert: options.allowOverwrite === true,
     });
 
     if (!error) {
@@ -122,7 +135,8 @@ async function uploadBytesWithRetry(bucket: string, path: string, payload: Array
 export async function uploadPhotoToStorage(
   bucket: string,
   path: string,
-  photoUri: string | null | undefined
+  photoUri: string | null | undefined,
+  options: UploadPhotoOptions = {}
 ) {
   if (!photoUri?.trim()) {
     return null;
@@ -139,7 +153,7 @@ export async function uploadPhotoToStorage(
       return null;
     }
 
-    await uploadBytesWithRetry(bucket, path, decode(base64));
+    await uploadBytesWithRetry(bucket, path, decode(base64), options);
     return path;
   } finally {
     if (preparedPhoto.cleanupUri) {
@@ -151,7 +165,8 @@ export async function uploadPhotoToStorage(
 export async function downloadPhotoFromStorage(
   bucket: string,
   path: string | null | undefined,
-  localId: string
+  localId: string,
+  options: DownloadPhotoOptions = {}
 ) {
   if (!path?.trim()) {
     return null;
@@ -168,7 +183,12 @@ export async function downloadPhotoFromStorage(
   }
 
   const destinationPath = `${directory}${localId}.jpg`;
-  await FileSystem.deleteAsync(destinationPath, { idempotent: true });
+  if (options.preferCached !== false) {
+    const cachedInfo = await FileSystem.getInfoAsync(destinationPath).catch(() => null);
+    if (cachedInfo?.exists && !cachedInfo.isDirectory) {
+      return destinationPath;
+    }
+  }
 
   const result = await FileSystem.downloadAsync(data.signedUrl, destinationPath);
   return result.uri ?? destinationPath;

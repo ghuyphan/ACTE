@@ -37,6 +37,7 @@ interface SharedFeedStoreValue {
   createSharedPost: (note: Note, audienceUserIds?: string[]) => Promise<SharedPost>;
   updateSharedNote: (note: Note) => Promise<void>;
   deleteSharedNote: (noteId: string) => Promise<void>;
+  deleteSharedPostById: (postId: string) => Promise<void>;
 }
 
 const SharedFeedStoreContext = createContext<SharedFeedStoreValue | undefined>(undefined);
@@ -317,6 +318,15 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         }
 
         await Promise.all(matchingPostIds.map((postId) => deletePost(activeUser, postId)));
+        setDataSource('live');
+        setLastUpdatedAt(new Date().toISOString());
+      },
+      deleteSharedPostById: async (postId: string) => {
+        requireOnline();
+        const activeUser = requireUser();
+        await deletePost(activeUser, postId);
+        sharedPostsRef.current = sharedPostsRef.current.filter((post) => post.id !== postId);
+        setSharedPosts((current) => current.filter((post) => post.id !== postId));
         setDataSource('live');
         setLastUpdatedAt(new Date().toISOString());
       },

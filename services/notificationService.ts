@@ -1,7 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import i18n from '../constants/i18n';
+import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 
 // Android channel sound settings are immutable after the channel is first created,
 // so we version the id when fixing channel-level sound behavior.
@@ -107,7 +107,7 @@ function interpolateTemplate(template: string, values: Record<string, string>) {
 
 async function readReminderVariantCursorState() {
   try {
-    const rawValue = await AsyncStorage.getItem(REMINDER_VARIANT_CURSOR_STORAGE_KEY);
+    const rawValue = await getPersistentItem(REMINDER_VARIANT_CURSOR_STORAGE_KEY);
     if (!rawValue) {
       return {};
     }
@@ -121,7 +121,7 @@ async function readReminderVariantCursorState() {
 
 async function writeReminderVariantCursorState(state: ReminderVariantCursorState) {
   try {
-    await AsyncStorage.setItem(REMINDER_VARIANT_CURSOR_STORAGE_KEY, JSON.stringify(state));
+    await setPersistentItem(REMINDER_VARIANT_CURSOR_STORAGE_KEY, JSON.stringify(state));
   } catch {
     // Ignore cursor persistence failures and fall back to the first variant.
   }

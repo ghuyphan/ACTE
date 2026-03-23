@@ -33,10 +33,12 @@ export default function MapStatusCard({
   clearLabel,
 }: MapStatusCardProps) {
   const isFiltered = overlayState === 'no-filter-results';
-  const shouldUseGlass = Platform.OS === 'ios';
-  const fallbackFill = isDark ? 'rgba(18,18,24,0.92)' : 'rgba(255,255,255,0.94)';
-  const statusGlassTintColor = isDark ? 'rgba(18,18,24,0.34)' : 'rgba(255,255,255,0.42)';
-  const statusGlassScrimColor = isDark ? 'rgba(12,12,18,0.18)' : 'rgba(255,255,255,0.20)';
+  const isIOS = Platform.OS === 'ios';
+  const shouldUseGlass = isIOS;
+  const fallbackFill = isDark ? 'rgba(26,26,32,0.95)' : 'rgba(250,250,252,0.96)';
+  const statusGlassTintColor = isDark ? 'rgba(28,28,34,0.26)' : 'rgba(255,255,255,0.34)';
+  const statusGlassScrimColor = isDark ? 'rgba(12,12,18,0.10)' : 'rgba(255,255,255,0.12)';
+  const iconColor = isIOS ? secondaryTextColor : primaryColor;
 
   return (
     <Reanimated.View
@@ -45,7 +47,16 @@ export default function MapStatusCard({
       layout={getMapLayoutTransition(reduceMotionEnabled)}
       style={styles.wrap}
     >
-      <View style={[styles.card, { borderColor: getOverlayBorderColor(isDark) }]}>
+      <View
+        style={[
+          styles.card,
+          isIOS ? styles.cardIOS : styles.cardAndroid,
+          {
+            borderColor: isIOS ? getOverlayBorderColor(isDark) : 'transparent',
+            backgroundColor: shouldUseGlass ? 'transparent' : fallbackFill,
+          },
+        ]}
+      >
         {shouldUseGlass ? (
           <GlassView
             pointerEvents="none"
@@ -60,27 +71,50 @@ export default function MapStatusCard({
           style={[
             StyleSheet.absoluteFillObject,
             styles.scrim,
+            isIOS ? styles.scrimIOS : styles.scrimAndroid,
             {
               backgroundColor: shouldUseGlass ? statusGlassScrimColor : fallbackFill,
             },
           ]}
         />
-        <View style={styles.content}>
+        <View style={[styles.content, isIOS ? styles.contentIOS : styles.contentAndroid]}>
           <Ionicons
             name={isFiltered ? 'filter-outline' : 'map-outline'}
-            size={isFiltered ? 36 : 40}
-            color={primaryColor}
+            size={isIOS ? (isFiltered ? 26 : 28) : isFiltered ? 32 : 34}
+            color={iconColor}
             style={styles.icon}
           />
-          <Text style={[styles.title, { color: textColor }]}>{title}</Text>
-          <Text style={[styles.subtitle, { color: secondaryTextColor }]}>{subtitle}</Text>
+          <Text style={[styles.title, isIOS ? styles.titleIOS : styles.titleAndroid, { color: textColor }]}>
+            {title}
+          </Text>
+          <Text
+            style={[
+              styles.subtitle,
+              isIOS ? styles.subtitleIOS : styles.subtitleAndroid,
+              { color: secondaryTextColor },
+            ]}
+          >
+            {subtitle}
+          </Text>
           {isFiltered ? (
             <Pressable
               testID="map-clear-filters"
-              style={[styles.clearFiltersBtn, { backgroundColor: `${primaryColor}20` }]}
+              style={[
+                styles.clearFiltersBtn,
+                isIOS ? styles.clearFiltersBtnIOS : styles.clearFiltersBtnAndroid,
+                isIOS ? null : { backgroundColor: `${primaryColor}14` },
+              ]}
               onPress={onClearFilters}
             >
-              <Text style={[styles.clearFiltersText, { color: primaryColor }]}>{clearLabel}</Text>
+              <Text
+                style={[
+                  styles.clearFiltersText,
+                  isIOS ? styles.clearFiltersTextIOS : styles.clearFiltersTextAndroid,
+                  { color: primaryColor },
+                ]}
+              >
+                {clearLabel}
+              </Text>
             </Pressable>
           ) : null}
         </View>
@@ -96,45 +130,95 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    maxWidth: 320,
-    borderRadius: 24,
-    borderWidth: 1,
     overflow: 'hidden',
+  },
+  cardIOS: {
+    maxWidth: 292,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    borderCurve: 'continuous',
+  },
+  cardAndroid: {
+    maxWidth: 320,
+    borderRadius: 22,
+    borderWidth: 0,
     ...mapOverlayTokens.overlayShadow,
   },
   content: {
-    paddingHorizontal: 32,
-    paddingVertical: 28,
     alignItems: 'center',
+  },
+  contentIOS: {
+    paddingHorizontal: 22,
+    paddingVertical: 18,
+  },
+  contentAndroid: {
+    paddingHorizontal: 28,
+    paddingVertical: 24,
   },
   scrim: {
     borderRadius: 24,
   },
+  scrimIOS: {
+    borderRadius: 20,
+  },
+  scrimAndroid: {
+    borderRadius: 22,
+  },
   icon: {
-    marginBottom: 8,
+    marginBottom: 10,
   },
   title: {
+    textAlign: 'center',
+    fontFamily: 'System',
+  },
+  titleIOS: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  titleAndroid: {
     fontSize: 17,
     fontWeight: '700',
-    textAlign: 'center',
     marginBottom: 6,
-    fontFamily: 'System',
   },
   subtitle: {
-    fontSize: 14,
     textAlign: 'center',
-    lineHeight: 20,
     fontFamily: 'System',
+  },
+  subtitleIOS: {
+    fontSize: 13,
+    lineHeight: 18,
+    maxWidth: 220,
+  },
+  subtitleAndroid: {
+    fontSize: 14,
+    lineHeight: 20,
   },
   clearFiltersBtn: {
-    marginTop: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    marginTop: 12,
     borderRadius: 999,
   },
+  clearFiltersBtnIOS: {
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  clearFiltersBtnAndroid: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
   clearFiltersText: {
+    fontFamily: 'System',
+  },
+  clearFiltersTextIOS: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  clearFiltersTextAndroid: {
     fontSize: 13,
     fontWeight: '700',
-    fontFamily: 'System',
   },
 });
