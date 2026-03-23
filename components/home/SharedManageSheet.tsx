@@ -1,9 +1,5 @@
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
-import {
-  environment,
-  presentationDetents,
-  presentationDragIndicator,
-} from '@expo/ui/swift-ui/modifiers';
+import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
@@ -96,18 +92,14 @@ function ManageBody({
   ];
 
   return (
-    <View style={[styles.sheetContent, Platform.OS === 'ios' ? styles.sheetContentIOS : null]}>
+    <View style={styles.sheetContent}>
       {Platform.OS !== 'ios' ? (
         <View style={styles.grabberWrap}>
           <View style={[styles.grabber, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.16)' }]} />
         </View>
       ) : null}
 
-      <ScrollView
-        style={styles.sheetScroll}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={[styles.header, Platform.OS === 'ios' ? styles.headerWithNativeHandle : null]}>
           <Text style={[styles.title, { color: colors.text }]}>{friendsTitle}</Text>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
@@ -320,7 +312,7 @@ function JoinBody({
   const { colors, isDark } = useTheme();
 
   return (
-    <View style={[styles.sheetContent, Platform.OS === 'ios' ? styles.sheetContentIOS : null]}>
+    <View style={styles.sheetContent}>
       {Platform.OS !== 'ios' ? (
         <View style={styles.grabberWrap}>
           <View style={[styles.grabber, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.16)' }]} />
@@ -620,29 +612,20 @@ export default function SharedManageSheet(props: {
     </Animated.View>
   );
 
-  const iosDetents =
-    mode === 'join'
-      ? ([{ height: 430 }, { height: 520 }] as const)
-      : friends.length === 0
-        ? ([{ height: 540 }, 'large'] as const)
-        : ([{ height: 640 }, 'large'] as const);
+  const iosSheetKey = `shared-manage-${mode}`;
 
   if (Platform.OS === 'ios') {
     return (
       <View pointerEvents={visible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
         <Host style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'}>
           <BottomSheet
+            key={iosSheetKey}
             isPresented={visible}
             onIsPresentedChange={(next) => (!next ? onClose() : null)}
+            fitToContents
           >
-            <Group
-              modifiers={[
-                presentationDetents([...iosDetents]),
-                presentationDragIndicator('visible'),
-                environment('colorScheme', isDark ? 'dark' : 'light'),
-              ]}
-            >
-              <RNHostView>
+            <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
+              <RNHostView key={iosSheetKey} matchContents>
                 <View
                   style={[
                     styles.iosContainer,
@@ -678,14 +661,6 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: Platform.OS === 'ios' ? 28 : 20,
     maxHeight: 680,
-  },
-  sheetContentIOS: {
-    flex: 1,
-    minHeight: 0,
-  },
-  sheetScroll: {
-    flex: 1,
-    minHeight: 0,
   },
   scrollContent: {
     paddingBottom: Platform.OS === 'ios' ? 28 : 8,
