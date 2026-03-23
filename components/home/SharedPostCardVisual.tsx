@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Layout } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
+import { SharedPost } from '../../services/sharedFeedService';
+import { downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET } from '../../services/remoteMedia';
 import ImageMemoryCard from '../ImageMemoryCard';
 import TextMemoryCard from '../TextMemoryCard';
-import { SharedPost } from '../../services/sharedFeedService';
-import { getPublicPhotoUrl, SHARED_POST_MEDIA_BUCKET } from '../../services/remoteMedia';
 
 export default function SharedPostCardVisual({
   post,
@@ -16,17 +16,32 @@ export default function SharedPostCardVisual({
   fallbackText: string;
 }) {
   const { colors } = useTheme();
-  const photoUri = useMemo(() => {
-    if (post.type !== 'photo') {
-      return null;
+  
+  const [photoUri, setPhotoUri] = useState<string | null>(
+    post.type === 'photo' ? post.photoLocalUri ?? null : null
+  );
+
+  useEffect(() => {
+    let active = true;
+
+    if (post.type !== 'photo' || photoUri || !post.photoPath) {
+      return;
     }
-    
-    if (post.photoLocalUri) {
-      return post.photoLocalUri;
-    }
-    
-    return getPublicPhotoUrl(SHARED_POST_MEDIA_BUCKET, post.photoPath);
-  }, [post.photoLocalUri, post.photoPath, post.type]);
+
+    downloadPhotoFromStorage(SHARED_POST_MEDIA_BUCKET, post.photoPath, post.id)
+      .then((downloadedUri) => {
+        if (active && downloadedUri) {
+          setPhotoUri(downloadedUri);
+        }
+      })
+      .catch(() => {
+        // Fallback or ignore for now, activity indicator remains
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [post.id, post.type, post.photoPath, photoUri]);
 
   if (post.type === 'photo') {
     if (photoUri) {

@@ -162,14 +162,7 @@ export async function uploadPhotoToStorage(
   }
 }
 
-export function getPublicPhotoUrl(bucket: string, path: string | null | undefined) {
-  if (!path?.trim()) {
-    return null;
-  }
-  
-  const { data } = requireSupabase().storage.from(bucket).getPublicUrl(path);
-  return data.publicUrl;
-}
+
 
 export async function downloadPhotoFromStorage(
   bucket: string,
