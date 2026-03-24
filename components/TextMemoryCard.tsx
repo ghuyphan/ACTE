@@ -33,7 +33,14 @@ export default function TextMemoryCard({ text, noteId, emoji = null, doodleStrok
                         <NoteDoodleCanvas strokes={doodleStrokes} />
                     </View>
                 ) : null}
-                <Text style={styles.memoryText} numberOfLines={5}>
+                <Text 
+                    style={[
+                        styles.memoryText, 
+                        displayText.length > 200 ? styles.memoryTextSmall :
+                        displayText.length > 100 ? styles.memoryTextMedium : null
+                    ]} 
+                    numberOfLines={8}
+                >
                     {displayText}
                 </Text>
             </LinearGradient>
@@ -73,5 +80,13 @@ const styles = StyleSheet.create({
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 4,
         zIndex: 1,
+    },
+    memoryTextMedium: {
+        fontSize: 18,
+        lineHeight: 26,
+    },
+    memoryTextSmall: {
+        fontSize: 16,
+        lineHeight: 22,
     },
 });

@@ -3,6 +3,7 @@ import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { decode } from 'base64-arraybuffer';
 import {
   ensurePhotoDirectory,
+  ensureSharedPhotoCacheDirectory,
   MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES,
   readPhotoAsBase64,
   resolveStoredPhotoUri,
@@ -174,14 +175,12 @@ export async function downloadPhotoFromStorage(
     return null;
   }
 
-  const directory = await ensurePhotoDirectory();
+  const directory = bucket === NOTE_MEDIA_BUCKET 
+    ? await ensurePhotoDirectory() 
+    : await ensureSharedPhotoCacheDirectory();
+  
   if (!directory) {
     return null;
-  }
-
-  const { data, error } = await requireSupabase().storage.from(bucket).createSignedUrl(path, 60 * 5);
-  if (error) {
-    throw error;
   }
 
   const destinationPath = `${directory}${localId}.jpg`;
@@ -190,6 +189,11 @@ export async function downloadPhotoFromStorage(
     if (cachedInfo?.exists && !cachedInfo.isDirectory) {
       return destinationPath;
     }
+  }
+
+  const { data, error } = await requireSupabase().storage.from(bucket).createSignedUrl(path, 60 * 5);
+  if (error) {
+    throw error;
   }
 
   const result = await FileSystem.downloadAsync(data.signedUrl, destinationPath);

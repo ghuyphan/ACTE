@@ -188,11 +188,12 @@ async function syncUserProfile(session: Session | null) {
     return null;
   }
 
-  await upsertPublicUserProfile({
+  // Fire and forget profile sync to unblock the rest of the application
+  upsertPublicUserProfile({
     userUid: user.id,
     displayName: user.displayName,
     photoURL: user.photoURL,
-  });
+  }).catch((err) => console.warn('[auth] Background profile sync failed:', err));
 
   return user;
 }

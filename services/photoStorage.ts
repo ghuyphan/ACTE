@@ -65,6 +65,19 @@ export async function ensurePhotoDirectory() {
   return PHOTO_DIRECTORY;
 }
 
+export const SHARED_PHOTO_CACHE_DIRECTORY = FileSystem.cacheDirectory
+  ? `${FileSystem.cacheDirectory}shared-photos/`
+  : null;
+
+export async function ensureSharedPhotoCacheDirectory() {
+  if (!SHARED_PHOTO_CACHE_DIRECTORY) {
+    return null;
+  }
+
+  await FileSystem.makeDirectoryAsync(SHARED_PHOTO_CACHE_DIRECTORY, { intermediates: true });
+  return SHARED_PHOTO_CACHE_DIRECTORY;
+}
+
 export async function readPhotoAsBase64(photoUri: string) {
   const normalizedPhotoUri = resolveStoredPhotoUri(photoUri);
   if (!normalizedPhotoUri) {

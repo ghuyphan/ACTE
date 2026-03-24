@@ -4,11 +4,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GlassView } from '../ui/GlassView';
 import { Image } from 'expo-image';
 import { TFunction } from 'i18next';
-import { forwardRef, ReactNode, RefObject, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, ReactNode, RefObject, useCallback, useEffect, useRef, useState, useMemo, useImperativeHandle } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Keyboard,
   Platform,
   Pressable,
   type PressableProps,
@@ -535,7 +537,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               <TextInput
                 testID="capture-note-input"
                 key={`note-text-${isSearching}`}
-                style={[styles.textInput, { color: colors.captureCardText }]}
+                style={[
+                  styles.textInput,
+                  { color: colors.captureCardText },
+                  noteText.length > 200 ? { fontSize: 16, lineHeight: 22 } :
+                  noteText.length > 100 ? { fontSize: 20, lineHeight: 28 } : null,
+                ]}
                 placeholder={activeTextPlaceholder}
                 placeholderTextColor={colors.captureCardPlaceholder}
                 multiline
@@ -986,12 +993,14 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     textAlign: 'center',
+    textAlignVertical: 'center',
     lineHeight: 34,
     paddingTop: 0,
     paddingBottom: 0,
     width: '100%',
     textShadowRadius: 6,
     fontFamily: 'System',
+    maxHeight: 260,
   },
   cardTextCenter: {
     flex: 1,
@@ -1076,6 +1085,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingTop: 0,
     paddingBottom: 0,
+    paddingRight: 48,
   },
   cameraContainer: {
     width: CARD_SIZE,

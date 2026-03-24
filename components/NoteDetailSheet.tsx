@@ -41,6 +41,7 @@ import { formatDate } from '../utils/dateUtils';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
 import { isOlderIOS } from '../utils/platform';
 import AppBottomSheet from './AppBottomSheet';
+import { GlassView } from './ui/GlassView';
 import NoteDoodleCanvas, { DoodleStroke } from './NoteDoodleCanvas';
 import TransientStatusChip from './ui/TransientStatusChip';
 
@@ -888,7 +889,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                     <TextInput
                                         ref={contentInputRef}
                                         testID="note-detail-content-input"
-                                        style={[styles.editTextInput, isEditing ? styles.editTextInputActive : null]}
+                                        style={[
+                                            styles.editTextInput, 
+                                            isEditing ? styles.editTextInputActive : null,
+                                            editContent.length > 200 ? { fontSize: 16, lineHeight: 22 } :
+                                            editContent.length > 100 ? { fontSize: 18, lineHeight: 26 } : null
+                                        ]}
                                         value={isEditing ? editContent : formatNoteTextWithEmoji(note.content, note.moodEmoji)}
                                         onChangeText={isEditing ? setEditContent : undefined}
                                         editable={isEditing && !doodleModeEnabled}
@@ -1337,6 +1343,7 @@ const styles = StyleSheet.create({
         ...Typography.body,
         fontWeight: '700',
         flex: 1,
+        paddingRight: 48,
     },
     radiusChipsRow: {
         flex: 1,

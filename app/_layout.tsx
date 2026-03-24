@@ -23,6 +23,7 @@ import { getDB } from '../services/database';
 import { syncGeofenceRegions } from '../services/geofenceService';
 import { configureNotificationChannels } from '../services/notificationService';
 import { updateWidgetData } from '../services/widgetService';
+import { runMediaCacheEviction } from '../services/mediaCacheManager';
 import '../utils/backgroundGeofence';
 
 export { ErrorBoundary } from 'expo-router';
@@ -52,6 +53,7 @@ function AppContent() {
         startupTimeout = setTimeout(() => {
           updateWidgetData().catch((err) => console.warn('Widget init failed:', err));
           syncGeofenceRegions().catch((err) => console.warn('Geofence sync failed:', err));
+          runMediaCacheEviction().catch((err) => console.warn('Cache eviction failed:', err));
         }, 250);
       })
       .catch((err) => {
