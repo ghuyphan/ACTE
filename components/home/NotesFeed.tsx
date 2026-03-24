@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { TFunction } from 'i18next';
 import { ReactElement, RefObject, memo, useCallback, useEffect, useMemo, useRef } from 'react';
@@ -17,6 +16,7 @@ import { Note } from '../../services/database';
 import { SharedPost } from '../../services/sharedFeedService';
 import { Layout } from '../../constants/theme';
 import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
+import InfoPill from '../ui/InfoPill';
 
 const { width, height } = Dimensions.get('window');
 
@@ -254,22 +254,17 @@ export default function NotesFeed({
           accessibilityRole="button"
           accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
           onPress={onOpenArchive}
-          style={[
-            styles.archiveCtaButton,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border ?? colors.card,
-            },
-          ]}
+          style={({ pressed }) => [styles.archiveCtaButtonPressable, pressed ? styles.archiveCtaPressed : null]}
         >
-          <Ionicons name="grid-outline" size={18} color={colors.text} />
-          <Text style={[styles.archiveCtaLabel, { color: colors.text }]}>
-            {t('notes.viewAllButton', 'View all notes')}
-          </Text>
+          <InfoPill icon="grid-outline" iconColor={colors.secondaryText} style={styles.archiveCtaButton}>
+            <Text style={[styles.archiveCtaLabel, { color: colors.text }]}>
+              {t('notes.viewAllButton', 'View all notes')}
+            </Text>
+          </InfoPill>
         </Pressable>
       </View>
     );
-  }, [colors.border, colors.card, colors.text, onOpenArchive, shouldShowArchiveCta, t]);
+  }, [colors.secondaryText, colors.text, onOpenArchive, shouldShowArchiveCta, t]);
 
   const reportCaptureVisibility = useCallback(
     (offsetY: number) => {
@@ -424,19 +419,19 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 18,
   },
+  archiveCtaButtonPressable: {
+    borderRadius: Layout.pillRadius,
+  },
   archiveCtaButton: {
-    minHeight: 48,
-    paddingHorizontal: 18,
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: 20,
   },
   archiveCtaLabel: {
     fontSize: 14,
     fontWeight: '700',
     fontFamily: 'System',
+  },
+  archiveCtaPressed: {
+    opacity: 0.9,
   },
 });
