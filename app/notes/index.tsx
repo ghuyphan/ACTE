@@ -14,12 +14,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout } from '../../constants/theme';
+import { DOODLE_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { useAuth } from '../../hooks/useAuth';
 import { useFeedFocus } from '../../hooks/useFeedFocus';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
+import NoteDoodleCanvas from '../../components/NoteDoodleCanvas';
 import { getTextNoteCardGradient } from '../../services/noteAppearance';
+import { parseNoteDoodleStrokes } from '../../services/noteDoodles';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET } from '../../services/remoteMedia';
 import { Note } from '../../services/database';
@@ -99,6 +102,14 @@ function GridTile({
         ? sharedPhotoUri ?? ''
         : '';
   const isPhotoTile = (item.kind === 'note' ? item.note.type : item.post.type) === 'photo';
+  const doodleStrokesJson =
+    item.kind === 'note'
+      ? item.note.doodleStrokesJson
+      : item.post.doodleStrokesJson ?? null;
+  const doodleStrokes = useMemo(
+    () => parseNoteDoodleStrokes(doodleStrokesJson),
+    [doodleStrokesJson]
+  );
   const text =
     item.kind === 'note'
       ? item.note.content.trim()
@@ -128,12 +139,19 @@ function GridTile({
     >
       <View style={[styles.tile, { backgroundColor: colors.card, borderColor: colors.border }]}>
         {imageUri ? (
-          <Image
-            source={{ uri: imageUri }}
-            style={styles.tileImage}
-            contentFit="cover"
-            transition={120}
-          />
+          <View style={styles.tileMediaWrap}>
+            <Image
+              source={{ uri: imageUri }}
+              style={styles.tileImage}
+              contentFit="cover"
+              transition={120}
+            />
+            {doodleStrokes.length > 0 ? (
+              <View pointerEvents="none" style={styles.tileDoodleOverlay}>
+                <NoteDoodleCanvas strokes={doodleStrokes} />
+              </View>
+            ) : null}
+          </View>
         ) : showPhotoPlaceholder ? (
           <View
             testID="shared-photo-grid-placeholder"
@@ -159,6 +177,11 @@ function GridTile({
           </View>
         ) : (
           <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.tileTextFill}>
+            {doodleStrokes.length > 0 ? (
+              <View pointerEvents="none" style={[styles.tileDoodleOverlay, styles.tileTextDoodleOverlay]}>
+                <NoteDoodleCanvas strokes={doodleStrokes} />
+              </View>
+            ) : null}
             <Text style={styles.tileText} numberOfLines={4}>
               {tileText}
             </Text>
@@ -300,6 +323,16 @@ const styles = StyleSheet.create({
   tileImage: {
     width: '100%',
     height: '100%',
+  },
+  tileMediaWrap: {
+    flex: 1,
+  },
+  tileDoodleOverlay: {
+    position: 'absolute',
+    ...DOODLE_ARTBOARD_FRAME,
+  },
+  tileTextDoodleOverlay: {
+    opacity: 0.58,
   },
   photoPlaceholder: {
     flex: 1,

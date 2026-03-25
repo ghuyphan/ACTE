@@ -5,12 +5,10 @@ import { GlassView } from '../ui/GlassView';
 import { Image } from 'expo-image';
 import { TFunction } from 'i18next';
 import { forwardRef, ReactNode, RefObject, useCallback, useEffect, useRef, useState, useMemo, useImperativeHandle } from 'react';
-import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  Keyboard,
   Platform,
   Pressable,
   type PressableProps,
@@ -31,6 +29,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { DOODLE_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { Layout, Shadows, Typography } from '../../constants/theme';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { getCaptureNoteGradient } from '../../services/noteAppearance';
 import { applyCommittedInlineEmoji } from '../../services/noteDecorations';
@@ -181,6 +180,7 @@ interface CaptureCardProps {
   onTakePicture: () => void;
   onSaveNote: () => void;
   saving: boolean;
+  saveState?: 'idle' | 'saving' | 'success';
   shutterScale: Animated.Value;
   cameraStatusText?: string | null;
   remainingPhotoSlots?: number | null;
@@ -222,6 +222,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onTakePicture,
   onSaveNote,
   saving,
+  saveState = 'idle',
   shutterScale,
   cameraStatusText,
   remainingPhotoSlots,
@@ -232,6 +233,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onDoodleModeChange,
   footerContent,
 }, ref) {
+  const reduceMotionEnabled = useReducedMotion();
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
   const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
@@ -275,12 +277,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const audienceProgress = useSharedValue(isSharedTarget ? 1 : 0);
   const audiencePressScale = useSharedValue(1);
   const audienceStateScale = useSharedValue(1);
+  const saveStateScale = useSharedValue(1);
+  const saveSuccessProgress = useSharedValue(saveState === 'success' ? 1 : 0);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
   const activeTextPlaceholder =
     placeholderVariants[textPlaceholderIndex % placeholderVariants.length] ??
     DEFAULT_CAPTURE_TEXT_PLACEHOLDERS[0];
+  const isSaveBusy = saving || saveState === 'saving';
+  const isSaveSuccessful = saveState === 'success';
+  const saveIdleBackground = isCameraSaveMode ? colors.primary : colors.captureButtonBg;
 
   useEffect(() => {
     if (captureMode === 'camera' && !capturedPhoto && permissionGranted && shouldRenderCameraPreview) {
@@ -332,6 +339,35 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       withTiming(1, { duration: 220, easing: Easing.out(Easing.back(1.1)) })
     );
   }, [audienceProgress, audienceStateScale, isSharedTarget]);
+
+  useEffect(() => {
+    if (saveState === 'success') {
+      saveSuccessProgress.value = withTiming(1, {
+        duration: reduceMotionEnabled ? 120 : 220,
+        easing: Easing.out(Easing.cubic),
+      });
+      saveStateScale.value = withSequence(
+        withTiming(reduceMotionEnabled ? 1.01 : 1.05, {
+          duration: reduceMotionEnabled ? 90 : 150,
+          easing: Easing.out(Easing.cubic),
+        }),
+        withTiming(1, {
+          duration: reduceMotionEnabled ? 120 : 220,
+          easing: Easing.out(Easing.back(1.1)),
+        })
+      );
+      return;
+    }
+
+    saveSuccessProgress.value = withTiming(0, {
+      duration: reduceMotionEnabled ? 90 : 170,
+      easing: Easing.out(Easing.cubic),
+    });
+    saveStateScale.value = withTiming(saveState === 'saving' ? 0.98 : 1, {
+      duration: reduceMotionEnabled ? 90 : 150,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [reduceMotionEnabled, saveState, saveStateScale, saveSuccessProgress]);
 
   useEffect(() => {
     if (captureMode !== 'text') {
@@ -406,6 +442,23 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
   const animatedAudienceTextStyle = useAnimatedStyle(() => ({
     color: interpolateColor(audienceProgress.value, [0, 1], [privateAudienceColor, sharedAudienceColor]),
+  }));
+  const animatedSaveButtonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: saveStateScale.value }],
+  }));
+  const animatedSaveInnerStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      saveSuccessProgress.value,
+      [0, 1],
+      [saveIdleBackground, colors.primary]
+    ),
+  }));
+  const animatedSaveHaloStyle = useAnimatedStyle(() => ({
+    opacity: saveSuccessProgress.value * (reduceMotionEnabled ? 0.16 : 0.28),
+    transform: [{ scale: 1 + saveSuccessProgress.value * (reduceMotionEnabled ? 0.03 : 0.08) }],
+  }));
+  const animatedSaveIconStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + saveSuccessProgress.value * 0.12 }],
   }));
   const showCameraUnavailableState =
     captureMode === 'camera' && !capturedPhoto && permissionGranted && cameraUnavailable;
@@ -874,46 +927,59 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             <CaptureAnimatedPressable
               testID="capture-save-button"
               onPress={onSaveNote}
-              disabled={saving}
+              disabled={isSaveBusy || isSaveSuccessful}
               pressedScale={0.985}
               style={[
                 styles.shutterOuter,
                 {
                   borderColor: colors.border,
-                  opacity: saving ? 0.72 : 1,
+                  opacity: isSaveBusy ? 0.72 : 1,
                 },
+                animatedSaveButtonStyle,
               ]}
             >
-              <View
+              <Reanimated.View
                 style={[
                   styles.shutterInner,
                   styles.saveInner,
-                  {
-                    backgroundColor: isCameraSaveMode ? colors.primary : colors.captureButtonBg,
-                  },
+                  animatedSaveInnerStyle,
                 ]}
               >
-                {saving ? (
+                <Reanimated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.saveHalo,
+                    {
+                      backgroundColor: colors.primary,
+                    },
+                    animatedSaveHaloStyle,
+                  ]}
+                />
+                {isSaveBusy ? (
                   <ActivityIndicator size="small" color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'} />
                 ) : (
-                  <Ionicons
-                    name="checkmark"
-                    size={24}
-                    color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'}
-                  />
+                  <Reanimated.View style={animatedSaveIconStyle}>
+                    <Ionicons
+                      name={isSaveSuccessful ? 'checkmark-done' : 'checkmark'}
+                      size={24}
+                      color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'}
+                    />
+                  </Reanimated.View>
                 )}
-              </View>
+              </Reanimated.View>
             </CaptureAnimatedPressable>
 
             <CaptureAnimatedPressable
               testID="capture-retake-button"
               accessibilityLabel={t('capture.retake', 'Retake')}
               onPress={onRetakePhoto}
+              disabled={isSaveBusy || isSaveSuccessful}
               style={[
                 styles.secondaryActionButton,
                 {
                   borderColor: colors.border,
                   backgroundColor: colors.card,
+                  opacity: isSaveBusy || isSaveSuccessful ? 0.55 : 1,
                 },
               ]}
             >
@@ -925,35 +991,46 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             <CaptureAnimatedPressable
               testID="capture-save-button"
               onPress={onSaveNote}
-              disabled={saving}
+              disabled={isSaveBusy || isSaveSuccessful}
               pressedScale={0.985}
               style={[
                 styles.shutterOuter,
                 {
                   borderColor: colors.border,
-                  opacity: saving ? 0.72 : 1,
+                  opacity: isSaveBusy ? 0.72 : 1,
                 },
+                animatedSaveButtonStyle,
               ]}
             >
-              <View
+              <Reanimated.View
                 style={[
                   styles.shutterInner,
                   styles.saveInner,
-                  {
-                    backgroundColor: isCameraSaveMode ? colors.primary : colors.captureButtonBg,
-                  },
+                  animatedSaveInnerStyle,
                 ]}
               >
-                {saving ? (
+                <Reanimated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.saveHalo,
+                    {
+                      backgroundColor: colors.primary,
+                    },
+                    animatedSaveHaloStyle,
+                  ]}
+                />
+                {isSaveBusy ? (
                   <ActivityIndicator size="small" color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'} />
                 ) : (
-                  <Ionicons
-                    name="checkmark"
-                    size={24}
-                    color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'}
-                  />
+                  <Reanimated.View style={animatedSaveIconStyle}>
+                    <Ionicons
+                      name={isSaveSuccessful ? 'checkmark-done' : 'checkmark'}
+                      size={24}
+                      color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'}
+                    />
+                  </Reanimated.View>
                 )}
-              </View>
+              </Reanimated.View>
             </CaptureAnimatedPressable>
           </View>
         )}
@@ -1285,6 +1362,11 @@ const styles = StyleSheet.create({
   },
   saveInner: {
     transform: [{ scale: 1 }],
+    overflow: 'hidden',
+  },
+  saveHalo: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 27,
   },
   shutterInnerCountText: {
     color: '#FFFFFF',

@@ -6,17 +6,15 @@ import {
   Dimensions,
   Easing as RNEasing,
   Platform,
-  Pressable,
   RefreshControl,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import { Note } from '../../services/database';
 import { SharedPost } from '../../services/sharedFeedService';
 import { Layout } from '../../constants/theme';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
-import InfoPill from '../ui/InfoPill';
 
 const { width, height } = Dimensions.get('window');
 
@@ -26,6 +24,8 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   onOpenNote,
   colors,
   t,
+  shouldReveal,
+  revealToken,
 }: {
   item: Note;
   index: number;
@@ -38,10 +38,17 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
     card: string;
   };
   t: TFunction;
+  shouldReveal: boolean;
+  revealToken: number;
 }) {
+  const reduceMotionEnabled = useReducedMotion();
   const scale = useRef(new Animated.Value(0.9)).current;
   const cardTranslateY = useRef(new Animated.Value(18)).current;
   const metaTranslateY = useRef(new Animated.Value(10)).current;
+  const revealScale = useRef(new Animated.Value(1)).current;
+  const revealTranslateY = useRef(new Animated.Value(0)).current;
+  const revealGlow = useRef(new Animated.Value(0)).current;
+  const lastRevealTokenRef = useRef<number | null>(null);
   const mountIndex = useRef(index).current;
 
   useEffect(() => {
@@ -70,21 +77,85 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
     ]).start();
   }, [cardTranslateY, metaTranslateY, mountIndex, scale]);
 
+  useEffect(() => {
+    if (!shouldReveal || revealToken === 0 || lastRevealTokenRef.current === revealToken) {
+      return;
+    }
+
+    lastRevealTokenRef.current = revealToken;
+    revealScale.setValue(reduceMotionEnabled ? 0.99 : 0.965);
+    revealTranslateY.setValue(reduceMotionEnabled ? 4 : 12);
+    revealGlow.setValue(0);
+
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(revealScale, {
+          toValue: 1.02,
+          duration: reduceMotionEnabled ? 90 : 190,
+          easing: RNEasing.out(RNEasing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(revealTranslateY, {
+          toValue: 0,
+          duration: reduceMotionEnabled ? 100 : 220,
+          easing: RNEasing.out(RNEasing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(revealGlow, {
+          toValue: 1,
+          duration: reduceMotionEnabled ? 90 : 180,
+          easing: RNEasing.out(RNEasing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.parallel([
+        Animated.timing(revealScale, {
+          toValue: 1,
+          duration: reduceMotionEnabled ? 140 : 260,
+          easing: RNEasing.out(RNEasing.back(1.05)),
+          useNativeDriver: true,
+        }),
+        Animated.timing(revealGlow, {
+          toValue: 0,
+          duration: reduceMotionEnabled ? 220 : 620,
+          easing: RNEasing.out(RNEasing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }, [reduceMotionEnabled, revealGlow, revealScale, revealToken, revealTranslateY, shouldReveal]);
+
   return (
-    <Animated.View
-      style={{
-        transform: [{ translateY: cardTranslateY }, { scale }],
-      }}
-    >
-      <Animated.View style={{ transform: [{ translateY: metaTranslateY }] }}>
-        <NoteMemoryCard
-          note={item}
-          onPress={() => onOpenNote(item.id)}
-          colors={colors}
-          t={t}
-        />
+    <View style={styles.revealWrap}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.revealGlow,
+          {
+            backgroundColor: colors.primary,
+            opacity: revealGlow,
+            transform: [{ scale: revealScale }],
+          },
+        ]}
+      />
+      <Animated.View
+        style={{
+          transform: [
+            { translateY: Animated.add(cardTranslateY, revealTranslateY) },
+            { scale: Animated.multiply(scale, revealScale) },
+          ],
+        }}
+      >
+        <Animated.View style={{ transform: [{ translateY: metaTranslateY }] }}>
+          <NoteMemoryCard
+            note={item}
+            onPress={() => onOpenNote(item.id)}
+            colors={colors}
+            t={t}
+          />
+        </Animated.View>
       </Animated.View>
-    </Animated.View>
+    </View>
   );
 }, (prevProps, nextProps) => (
   prevProps.index === nextProps.index &&
@@ -99,7 +170,9 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   prevProps.item.createdAt === nextProps.item.createdAt &&
   prevProps.item.isFavorite === nextProps.item.isFavorite &&
   prevProps.item.moodEmoji === nextProps.item.moodEmoji &&
-  prevProps.item.hasDoodle === nextProps.item.hasDoodle
+  prevProps.item.hasDoodle === nextProps.item.hasDoodle &&
+  prevProps.shouldReveal === nextProps.shouldReveal &&
+  prevProps.revealToken === nextProps.revealToken
 ));
 
 const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
@@ -199,7 +272,8 @@ interface NotesFeedProps {
   t: TFunction;
   onCaptureVisibilityChange?: (isVisible: boolean) => void;
   scrollEnabled?: boolean;
-  onOpenArchive?: () => void;
+  revealedNoteId?: string | null;
+  revealToken?: number;
 }
 
 export default function NotesFeed({
@@ -218,7 +292,8 @@ export default function NotesFeed({
   t,
   onCaptureVisibilityChange,
   scrollEnabled = true,
-  onOpenArchive,
+  revealedNoteId = null,
+  revealToken = 0,
 }: NotesFeedProps) {
   const captureVisibilityRef = useRef(true);
   const isAdjustingSnapRef = useRef(false);
@@ -241,30 +316,6 @@ export default function NotesFeed({
     [notes, sharedPosts]
   );
   const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
-  const shouldShowArchiveCta = Boolean(onOpenArchive) && listData.length > 0;
-
-  const renderArchiveCta = useCallback(() => {
-    if (!shouldShowArchiveCta || !onOpenArchive) {
-      return null;
-    }
-
-    return (
-      <View style={styles.archiveCtaWrap}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
-          onPress={onOpenArchive}
-          style={({ pressed }) => [styles.archiveCtaButtonPressable, pressed ? styles.archiveCtaPressed : null]}
-        >
-          <InfoPill icon="grid-outline" iconColor={colors.secondaryText} style={styles.archiveCtaButton}>
-            <Text style={[styles.archiveCtaLabel, { color: colors.text }]}>
-              {t('notes.viewAllButton', 'View all notes')}
-            </Text>
-          </InfoPill>
-        </Pressable>
-      </View>
-    );
-  }, [colors.secondaryText, colors.text, onOpenArchive, shouldShowArchiveCta, t]);
 
   const reportCaptureVisibility = useCallback(
     (offsetY: number) => {
@@ -319,8 +370,6 @@ export default function NotesFeed({
 
   const renderItem = useCallback(
     ({ item, index }: { item: NotesFeedListItem; index: number }) => {
-      const archiveCta = index === 0 ? renderArchiveCta() : null;
-
       if (item.kind === 'shared-post') {
         return (
           <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
@@ -333,7 +382,6 @@ export default function NotesFeed({
                 t={t}
               />
             </View>
-            {archiveCta}
           </View>
         );
       }
@@ -347,9 +395,10 @@ export default function NotesFeed({
               onOpenNote={onOpenNote}
               colors={colors}
               t={t}
+              shouldReveal={item.note.id === revealedNoteId}
+              revealToken={revealToken}
             />
           </View>
-          {archiveCta}
         </View>
       );
     },
@@ -357,7 +406,8 @@ export default function NotesFeed({
       colors,
       onOpenNote,
       onOpenSharedPost,
-      renderArchiveCta,
+      revealedNoteId,
+      revealToken,
       snapHeight,
       t,
       topInset,
@@ -415,23 +465,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  archiveCtaWrap: {
+  revealWrap: {
     alignSelf: 'center',
-    marginBottom: 18,
+    overflow: 'visible',
   },
-  archiveCtaButtonPressable: {
-    borderRadius: Layout.pillRadius,
-  },
-  archiveCtaButton: {
-    minHeight: 40,
-    paddingHorizontal: 20,
-  },
-  archiveCtaLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    fontFamily: 'System',
-  },
-  archiveCtaPressed: {
-    opacity: 0.9,
+  revealGlow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: Layout.cardRadius + 18,
   },
 });

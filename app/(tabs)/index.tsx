@@ -16,6 +16,7 @@ import {
   InteractionManager,
   Keyboard,
   Platform,
+  Pressable,
   Share,
   StyleSheet,
   Text,
@@ -28,6 +29,8 @@ import CaptureCard, { type CaptureCardHandle } from '../../components/home/Captu
 import HomeHeaderSearch from '../../components/home/HomeHeaderSearch';
 import NotesFeed from '../../components/home/NotesFeed';
 import SharedManageSheet from '../../components/home/SharedManageSheet';
+import InfoPill from '../../components/ui/InfoPill';
+import TransientStatusChip from '../../components/ui/TransientStatusChip';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useAuth } from '../../hooks/useAuth';
 import { useCaptureFlow } from '../../hooks/useCaptureFlow';
@@ -35,9 +38,11 @@ import { useFeedFocus } from '../../hooks/useFeedFocus';
 import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { useNotesStore } from '../../hooks/useNotes';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
+import { Layout } from '../../constants/theme';
 import {
   canCreatePhotoNote,
   countPhotoNotes,
@@ -56,9 +61,13 @@ type FeedFocusItem =
   | { id: string; kind: 'note'; createdAt: string; note: Note }
   | { id: string; kind: 'shared-post'; createdAt: string; post: SharedPost };
 
+type SaveButtonState = 'idle' | 'saving' | 'success';
+type InlineSaveFeedbackVariant = 'saved' | 'shared';
+
 export default function HomeScreen() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const reduceMotionEnabled = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { notes, loading, refreshNotes, createNote } = useNotesStore();
   const { user, isAuthAvailable } = useAuth();
@@ -104,6 +113,11 @@ export default function HomeScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveButtonState, setSaveButtonState] = useState<SaveButtonState>('idle');
+  const [inlineSaveFeedback, setInlineSaveFeedback] = useState<{
+    token: number;
+    variant: InlineSaveFeedbackVariant;
+  } | null>(null);
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [appState, setAppState] = useState(AppState.currentState);
   const [cameraPreviewReady, setCameraPreviewReady] = useState(Platform.OS !== 'android');
@@ -111,12 +125,18 @@ export default function HomeScreen() {
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [sharedManageSheetVersion, setSharedManageSheetVersion] = useState(0);
+  const [revealedNoteId, setRevealedNoteId] = useState<string | null>(null);
+  const [revealToken, setRevealToken] = useState(0);
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const searchAnim = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<any>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
+  const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearInlineFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focusSavedNoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useScrollToTop(flatListRef);
 
   const dismissSharedManageSheet = useCallback(() => {
@@ -243,6 +263,74 @@ export default function HomeScreen() {
     resetCaptureDraft();
     setCaptureTarget('private');
   }, [resetCaptureDraft]);
+
+  const clearInlineSaveTimers = useCallback(() => {
+    if (finalizeInlineSaveTimeoutRef.current) {
+      clearTimeout(finalizeInlineSaveTimeoutRef.current);
+      finalizeInlineSaveTimeoutRef.current = null;
+    }
+
+    if (resetSaveStateTimeoutRef.current) {
+      clearTimeout(resetSaveStateTimeoutRef.current);
+      resetSaveStateTimeoutRef.current = null;
+    }
+
+    if (clearInlineFeedbackTimeoutRef.current) {
+      clearTimeout(clearInlineFeedbackTimeoutRef.current);
+      clearInlineFeedbackTimeoutRef.current = null;
+    }
+
+    if (focusSavedNoteTimeoutRef.current) {
+      clearTimeout(focusSavedNoteTimeoutRef.current);
+      focusSavedNoteTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearInlineSaveTimers();
+    };
+  }, [clearInlineSaveTimers]);
+
+  const completeInlineSaveFlow = useCallback(
+    (noteId: string, variant: InlineSaveFeedbackVariant) => {
+      const token = Date.now();
+      const finalizeDelay = reduceMotionEnabled ? 120 : 520;
+      const focusNoteDelay = reduceMotionEnabled ? 140 : 380;
+      const resetStateDelay = reduceMotionEnabled ? 240 : 1080;
+      const clearFeedbackDelay = reduceMotionEnabled ? 1200 : 2200;
+
+      clearInlineSaveTimers();
+      setSaveButtonState('success');
+      setInlineSaveFeedback({ token, variant });
+      setRevealedNoteId(noteId);
+      setRevealToken((current) => current + 1);
+
+      finalizeInlineSaveTimeoutRef.current = setTimeout(() => {
+        finalizeSavedCapture();
+        finalizeInlineSaveTimeoutRef.current = null;
+      }, finalizeDelay);
+
+      focusSavedNoteTimeoutRef.current = setTimeout(() => {
+        flatListRef.current?.scrollToOffset({
+          offset: snapHeight,
+          animated: !reduceMotionEnabled,
+        });
+        focusSavedNoteTimeoutRef.current = null;
+      }, focusNoteDelay);
+
+      resetSaveStateTimeoutRef.current = setTimeout(() => {
+        setSaveButtonState('idle');
+        resetSaveStateTimeoutRef.current = null;
+      }, resetStateDelay);
+
+      clearInlineFeedbackTimeoutRef.current = setTimeout(() => {
+        setInlineSaveFeedback((current) => (current?.token === token ? null : current));
+        clearInlineFeedbackTimeoutRef.current = null;
+      }, clearFeedbackDelay);
+    },
+    [clearInlineSaveTimers, finalizeSavedCapture, reduceMotionEnabled, snapHeight]
+  );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -741,6 +829,9 @@ export default function HomeScreen() {
       return;
     }
 
+    clearInlineSaveTimers();
+    setInlineSaveFeedback(null);
+    setSaveButtonState('saving');
     setSaving(true);
     let destinationPath: string | null = null;
 
@@ -811,13 +902,20 @@ export default function HomeScreen() {
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      if (shareOutcome === 'default') {
+      if (shareOutcome === 'default' && remindersEnabled) {
+        completeInlineSaveFlow(createdNote.id, 'saved');
+      } else if (shareOutcome === 'shared') {
+        completeInlineSaveFlow(createdNote.id, 'shared');
+      } else if (shareOutcome === 'default') {
+        setSaveButtonState('idle');
         showSavedSheet(finalizeSavedCapture);
       } else {
+        setSaveButtonState('idle');
         showSharedSaveSheet(shareOutcome, finalizeSavedCapture, shareFailureMessage);
       }
     } catch (error) {
       console.error('Save failed:', error);
+      setSaveButtonState('idle');
       if (destinationPath) {
         try {
           await FileSystem.deleteAsync(destinationPath, { idempotent: true });
@@ -836,6 +934,8 @@ export default function HomeScreen() {
   }, [
     location,
     requestForegroundLocation,
+    clearInlineSaveTimers,
+    completeInlineSaveFlow,
     showDoneSheet,
     t,
     captureMode,
@@ -851,6 +951,7 @@ export default function HomeScreen() {
     captureTarget,
     createSharedPost,
     friends.length,
+    remindersEnabled,
     sharedEnabled,
     showPlusSheet,
     showSharedSaveSheet,
@@ -1161,6 +1262,7 @@ export default function HomeScreen() {
           void saveNote();
         }}
         saving={saving}
+        saveState={saveButtonState}
         shutterScale={shutterScale}
         cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
         remainingPhotoSlots={captureMode === 'camera' ? remainingPhotoSlots : null}
@@ -1169,6 +1271,33 @@ export default function HomeScreen() {
         shareTarget={captureTarget}
         onChangeShareTarget={handleCaptureTargetChange}
         onDoodleModeChange={setCaptureScrollLocked}
+        footerContent={
+          <View style={styles.captureFooterRow}>
+            {inlineSaveFeedback ? (
+              <TransientStatusChip
+                key={inlineSaveFeedback.token}
+                icon={inlineSaveFeedback.variant === 'shared' ? 'people' : 'checkmark-circle'}
+                label={
+                  inlineSaveFeedback.variant === 'shared'
+                    ? t('shared.savedSharedQuick', 'Saved and shared')
+                    : t('capture.savedQuick', 'Saved to your journal')
+                }
+              />
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
+              onPress={handleOpenNotes}
+              style={({ pressed }) => [styles.captureFooterButtonPressable, pressed ? styles.captureFooterPressed : null]}
+            >
+              <InfoPill icon="grid-outline" iconColor={colors.primary} style={styles.captureFooterButton}>
+                <Text style={[styles.captureFooterLabel, { color: colors.text }]}>
+                  {t('notes.viewAllButton', 'View all notes')}
+                </Text>
+              </InfoPill>
+            </Pressable>
+          </View>
+        }
       />
     </View>
   );
@@ -1234,9 +1363,10 @@ export default function HomeScreen() {
         snapHeight={snapHeight}
         onOpenNote={openNote}
         onOpenSharedPost={openSharedPost}
-        onOpenArchive={handleOpenNotes}
         colors={colors}
         t={t}
+        revealedNoteId={revealedNoteId}
+        revealToken={revealToken}
         scrollEnabled={!captureScrollLocked}
       />
 
@@ -1285,5 +1415,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     fontFamily: 'System',
+  },
+  captureFooterRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingTop: 2,
+  },
+  captureFooterButtonPressable: {
+    borderRadius: Layout.pillRadius,
+  },
+  captureFooterButton: {
+    minHeight: 40,
+    paddingHorizontal: 18,
+  },
+  captureFooterLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: 'System',
+  },
+  captureFooterPressed: {
+    opacity: 0.84,
   },
 });
