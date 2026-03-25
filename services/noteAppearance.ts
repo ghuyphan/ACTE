@@ -101,6 +101,15 @@ function hashToIndex(str: string, max: number): number {
   return Math.abs(hash) % max;
 }
 
+function hashToUnit(str: string): number {
+  let hash = 0;
+  for (let index = 0; index < str.length; index += 1) {
+    hash = (hash * 131 + str.charCodeAt(index)) % 1009;
+  }
+
+  return (Math.abs(hash) % 1000) / 999;
+}
+
 function resolvePaletteEmoji(text: string, emoji?: string | null) {
   const trimmedEmoji = typeof emoji === 'string' ? emoji.trim() : '';
   if (trimmedEmoji && EMOJI_NOTE_PALETTES[trimmedEmoji]) {
@@ -165,6 +174,30 @@ function blendGradients(base: GradientPair, accent: GradientPair, amount: number
   ];
 }
 
+const GRADIENT_VARIANT_ACCENTS: string[] = [
+  '#E8C27B',
+  '#F0A98D',
+  '#7FD0B6',
+  '#80B3F2',
+  '#B6A0E6',
+  '#D4D97C',
+  '#F1B6D2',
+  '#9ED8E0',
+];
+
+function createGradientVariation(base: GradientPair, seed: string): GradientPair {
+  const accentIndex = hashToIndex(`${seed}:accent`, GRADIENT_VARIANT_ACCENTS.length);
+  const accentColor = GRADIENT_VARIANT_ACCENTS[accentIndex] ?? GRADIENT_VARIANT_ACCENTS[0];
+  const blendAmount = 0.08 + hashToUnit(`${seed}:amount`) * 0.14;
+  const softenedStart = softenGradientColor(base[0], 0.03 + hashToUnit(`${seed}:soft-start`) * 0.08);
+  const softenedEnd = softenGradientColor(base[1], 0.01 + hashToUnit(`${seed}:soft-end`) * 0.05);
+  const variedGradient = blendGradients([softenedStart, softenedEnd], [accentColor, accentColor], blendAmount);
+
+  return hashToUnit(`${seed}:reverse`) > 0.56
+    ? [variedGradient[1], variedGradient[0]]
+    : variedGradient;
+}
+
 function getBaseGradientSeed(text: string, noteId?: string) {
   const safeSeed = (typeof noteId === 'string' && noteId.trim()) || (typeof text === 'string' ? text.trim() : '');
   const gradientIndex = hashToIndex(safeSeed || 'noto', CardGradients.length);
@@ -193,9 +226,12 @@ export function getTextNoteCardGradient(options: {
 }): GradientPair {
   const baseGradient = getBaseGradientSeed(options.text, options.noteId);
   const paletteEmoji = resolvePaletteEmoji(options.text, options.emoji);
-  if (paletteEmoji) {
-    return blendGradients(baseGradient, EMOJI_NOTE_PALETTES[paletteEmoji].card, 0.42);
-  }
+  const blendedGradient = paletteEmoji
+    ? blendGradients(baseGradient, EMOJI_NOTE_PALETTES[paletteEmoji].card, 0.42)
+    : baseGradient;
 
-  return baseGradient;
+  return createGradientVariation(
+    blendedGradient,
+    `${options.noteId ?? options.text}:${options.emoji ?? ''}`
+  );
 }

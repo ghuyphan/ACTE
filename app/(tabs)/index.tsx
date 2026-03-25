@@ -29,7 +29,6 @@ import CaptureCard, { type CaptureCardHandle } from '../../components/home/Captu
 import HomeHeaderSearch from '../../components/home/HomeHeaderSearch';
 import NotesFeed from '../../components/home/NotesFeed';
 import SharedManageSheet from '../../components/home/SharedManageSheet';
-import InfoPill from '../../components/ui/InfoPill';
 import TransientStatusChip from '../../components/ui/TransientStatusChip';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useAuth } from '../../hooks/useAuth';
@@ -42,7 +41,6 @@ import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
-import { Layout } from '../../constants/theme';
 import {
   canCreatePhotoNote,
   countPhotoNotes,
@@ -131,9 +129,11 @@ export default function HomeScreen() {
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const searchAnim = useRef(new Animated.Value(0)).current;
+  const saveTransitionProgress = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<any>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focusSavedNoteSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearInlineFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusSavedNoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -275,6 +275,11 @@ export default function HomeScreen() {
       resetSaveStateTimeoutRef.current = null;
     }
 
+    if (focusSavedNoteSettleTimeoutRef.current) {
+      clearTimeout(focusSavedNoteSettleTimeoutRef.current);
+      focusSavedNoteSettleTimeoutRef.current = null;
+    }
+
     if (clearInlineFeedbackTimeoutRef.current) {
       clearTimeout(clearInlineFeedbackTimeoutRef.current);
       clearInlineFeedbackTimeoutRef.current = null;
@@ -295,16 +300,24 @@ export default function HomeScreen() {
   const completeInlineSaveFlow = useCallback(
     (noteId: string, variant: InlineSaveFeedbackVariant) => {
       const token = Date.now();
-      const finalizeDelay = reduceMotionEnabled ? 120 : 520;
-      const focusNoteDelay = reduceMotionEnabled ? 140 : 380;
-      const resetStateDelay = reduceMotionEnabled ? 240 : 1080;
+      const finalizeDelay = reduceMotionEnabled ? 120 : 260;
+      const focusNoteDelay = reduceMotionEnabled ? 120 : 120;
+      const resetStateDelay = reduceMotionEnabled ? 240 : 980;
       const clearFeedbackDelay = reduceMotionEnabled ? 1200 : 2200;
+      const previewOffset = Math.max(48, snapHeight * 0.46);
 
       clearInlineSaveTimers();
       setSaveButtonState('success');
       setInlineSaveFeedback({ token, variant });
       setRevealedNoteId(noteId);
       setRevealToken((current) => current + 1);
+      saveTransitionProgress.stopAnimation();
+      saveTransitionProgress.setValue(0);
+      Animated.timing(saveTransitionProgress, {
+        toValue: 1,
+        duration: reduceMotionEnabled ? 90 : 220,
+        useNativeDriver: true,
+      }).start();
 
       finalizeInlineSaveTimeoutRef.current = setTimeout(() => {
         finalizeSavedCapture();
@@ -313,14 +326,27 @@ export default function HomeScreen() {
 
       focusSavedNoteTimeoutRef.current = setTimeout(() => {
         flatListRef.current?.scrollToOffset({
-          offset: snapHeight,
+          offset: reduceMotionEnabled ? snapHeight : previewOffset,
           animated: !reduceMotionEnabled,
         });
+
+        if (!reduceMotionEnabled) {
+          focusSavedNoteSettleTimeoutRef.current = setTimeout(() => {
+            flatListRef.current?.scrollToOffset({
+              offset: snapHeight,
+              animated: true,
+            });
+            focusSavedNoteSettleTimeoutRef.current = null;
+          }, 220);
+        }
+
         focusSavedNoteTimeoutRef.current = null;
       }, focusNoteDelay);
 
       resetSaveStateTimeoutRef.current = setTimeout(() => {
         setSaveButtonState('idle');
+        saveTransitionProgress.stopAnimation();
+        saveTransitionProgress.setValue(0);
         resetSaveStateTimeoutRef.current = null;
       }, resetStateDelay);
 
@@ -329,7 +355,7 @@ export default function HomeScreen() {
         clearInlineFeedbackTimeoutRef.current = null;
       }, clearFeedbackDelay);
     },
-    [clearInlineSaveTimers, finalizeSavedCapture, reduceMotionEnabled, snapHeight]
+    [clearInlineSaveTimers, finalizeSavedCapture, reduceMotionEnabled, saveTransitionProgress, snapHeight]
   );
 
   useEffect(() => {
@@ -500,6 +526,20 @@ export default function HomeScreen() {
     [openAppSettings, showAlert, t]
   );
 
+  const showSharedUnavailableSheet = useCallback(() => {
+    showAlert({
+      variant: 'info',
+      title: t('shared.unavailableTitle', 'Shared moments unavailable'),
+      message: t(
+        'shared.unavailableBody',
+        'This build does not have shared social enabled right now.'
+      ),
+      primaryAction: {
+        label: t('common.done', 'Done'),
+      },
+    });
+  }, [showAlert, t]);
+
   const showSavedSheet = useCallback((onClose?: () => void) => {
     if (remindersEnabled) {
       showAlert({
@@ -570,20 +610,6 @@ export default function HomeScreen() {
       },
     });
   }, [remindersEnabled, requestReminderPermissions, showAlert, showDoneSheet, t]);
-
-  const showSharedUnavailableSheet = useCallback(() => {
-    showAlert({
-      variant: 'info',
-      title: t('shared.unavailableTitle', 'Shared moments unavailable'),
-      message: t(
-        'shared.unavailableBody',
-        'This build does not have shared social enabled right now.'
-      ),
-      primaryAction: {
-        label: t('common.done', 'Done'),
-      },
-    });
-  }, [showAlert, t]);
 
   const showSharedSaveSheet = useCallback(
     (
@@ -1234,6 +1260,7 @@ export default function HomeScreen() {
         cameraSessionKey={cameraSessionKey}
         captureScale={captureScale}
         captureTranslateY={captureTranslateY}
+        saveTransitionProgress={saveTransitionProgress}
         colors={colors}
         t={t}
         noteText={noteText}
@@ -1264,6 +1291,23 @@ export default function HomeScreen() {
         saving={saving}
         saveState={saveButtonState}
         shutterScale={shutterScale}
+        leadingAccessory={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
+            onPress={handleOpenNotes}
+            style={({ pressed }) => [
+              styles.captureIconAction,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                opacity: pressed ? 0.84 : 1,
+              },
+            ]}
+          >
+            <Ionicons name="grid-outline" size={18} color={colors.text} />
+          </Pressable>
+        }
         cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
         remainingPhotoSlots={captureMode === 'camera' ? remainingPhotoSlots : null}
         libraryImportLocked={!canImportFromLibrary}
@@ -1272,31 +1316,17 @@ export default function HomeScreen() {
         onChangeShareTarget={handleCaptureTargetChange}
         onDoodleModeChange={setCaptureScrollLocked}
         footerContent={
-          <View style={styles.captureFooterRow}>
-            {inlineSaveFeedback ? (
-              <TransientStatusChip
-                key={inlineSaveFeedback.token}
-                icon={inlineSaveFeedback.variant === 'shared' ? 'people' : 'checkmark-circle'}
-                label={
-                  inlineSaveFeedback.variant === 'shared'
-                    ? t('shared.savedSharedQuick', 'Saved and shared')
-                    : t('capture.savedQuick', 'Saved to your journal')
-                }
-              />
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
-              onPress={handleOpenNotes}
-              style={({ pressed }) => [styles.captureFooterButtonPressable, pressed ? styles.captureFooterPressed : null]}
-            >
-              <InfoPill icon="grid-outline" iconColor={colors.primary} style={styles.captureFooterButton}>
-                <Text style={[styles.captureFooterLabel, { color: colors.text }]}>
-                  {t('notes.viewAllButton', 'View all notes')}
-                </Text>
-              </InfoPill>
-            </Pressable>
-          </View>
+          inlineSaveFeedback ? (
+            <TransientStatusChip
+              key={inlineSaveFeedback.token}
+              icon={inlineSaveFeedback.variant === 'shared' ? 'people' : 'checkmark-circle'}
+              label={
+                inlineSaveFeedback.variant === 'shared'
+                  ? t('shared.savedSharedQuick', 'Saved and shared')
+                  : t('capture.savedQuick', 'Saved to your journal')
+              }
+            />
+          ) : null
         }
       />
     </View>
@@ -1416,28 +1446,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: 'System',
   },
-  captureFooterRow: {
-    width: '100%',
-    flexDirection: 'row',
+  captureIconAction: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
-    flexWrap: 'wrap',
-    gap: 10,
-    paddingTop: 2,
-  },
-  captureFooterButtonPressable: {
-    borderRadius: Layout.pillRadius,
-  },
-  captureFooterButton: {
-    minHeight: 40,
-    paddingHorizontal: 18,
-  },
-  captureFooterLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    fontFamily: 'System',
-  },
-  captureFooterPressed: {
-    opacity: 0.84,
   },
 });

@@ -43,6 +43,10 @@ const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
 const TOP_CONTROL_INSET = 24;
 const TOP_CONTROL_HEIGHT = 38;
 const TOP_CONTROL_RADIUS = 19;
+const SHUTTER_OUTER_SIZE = 68;
+const SIDE_ACTION_SIZE = 46;
+const SHUTTER_SIDE_ACTION_GAP = 14;
+const SHUTTER_SIDE_ACTION_OFFSET = SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP + SIDE_ACTION_SIZE;
 const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad) };
 const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
 const AnimatedIonicons = Reanimated.createAnimatedComponent(Ionicons);
@@ -137,6 +141,7 @@ interface CaptureCardProps {
   cameraSessionKey: number;
   captureScale: Animated.Value;
   captureTranslateY: Animated.Value;
+  saveTransitionProgress?: Animated.Value;
   colors: Pick<
     ThemeColors,
     | 'primary'
@@ -182,6 +187,7 @@ interface CaptureCardProps {
   saving: boolean;
   saveState?: 'idle' | 'saving' | 'success';
   shutterScale: Animated.Value;
+  leadingAccessory?: ReactNode;
   cameraStatusText?: string | null;
   remainingPhotoSlots?: number | null;
   libraryImportLocked?: boolean;
@@ -200,6 +206,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   cameraSessionKey,
   captureScale,
   captureTranslateY,
+  saveTransitionProgress,
   colors,
   t,
   noteText,
@@ -224,6 +231,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   saving,
   saveState = 'idle',
   shutterScale,
+  leadingAccessory,
   cameraStatusText,
   remainingPhotoSlots,
   libraryImportLocked = false,
@@ -234,6 +242,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   footerContent,
 }, ref) {
   const reduceMotionEnabled = useReducedMotion();
+  const internalSaveTransitionProgress = useRef(new Animated.Value(0)).current;
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
   const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
@@ -460,6 +469,19 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const animatedSaveIconStyle = useAnimatedStyle(() => ({
     transform: [{ scale: 1 + saveSuccessProgress.value * 0.12 }],
   }));
+  const effectiveSaveTransitionProgress = saveTransitionProgress ?? internalSaveTransitionProgress;
+  const saveTransitionOpacity = effectiveSaveTransitionProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.1],
+  });
+  const saveTransitionTranslateY = effectiveSaveTransitionProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -24],
+  });
+  const saveTransitionScale = effectiveSaveTransitionProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.965],
+  });
   const showCameraUnavailableState =
     captureMode === 'camera' && !capturedPhoto && permissionGranted && cameraUnavailable;
   const cameraUnavailableDetail =
@@ -505,7 +527,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         style={[
           styles.captureArea,
           {
-            transform: [{ translateY: captureTranslateY }, { scale: captureScale }],
+            opacity: saveTransitionOpacity,
+            transform: [
+              { translateY: Animated.add(captureTranslateY, saveTransitionTranslateY) },
+              { scale: Animated.multiply(captureScale, saveTransitionScale) },
+            ],
           },
         ]}
         pointerEvents={isSearching ? 'none' : 'auto'}
@@ -887,7 +913,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         style={[
           styles.belowCardSection,
           {
-            transform: [{ translateY: captureTranslateY }, { scale: captureScale }],
+            opacity: saveTransitionOpacity,
+            transform: [
+              { translateY: Animated.add(captureTranslateY, saveTransitionTranslateY) },
+              { scale: Animated.multiply(captureScale, saveTransitionScale) },
+            ],
           },
         ]}
       >
@@ -896,6 +926,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         ) : null}
         {captureMode === 'camera' && !capturedPhoto ? (
           <View style={styles.belowCardShutterRow}>
+            {leadingAccessory ? <View style={styles.shutterLeadingAccessory}>{leadingAccessory}</View> : null}
             {permissionGranted ? (
               <CaptureAnimatedPressable
                 onPressIn={onShutterPressIn}
@@ -922,7 +953,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           </View>
         ) : capturedPhoto ? (
           <View style={[styles.belowCardShutterRow, styles.belowCardCapturedPhotoActions]}>
-            <View pointerEvents="none" style={styles.capturedPhotoActionSpacer} />
+            {leadingAccessory ? <View style={styles.shutterLeadingAccessory}>{leadingAccessory}</View> : null}
 
             <CaptureAnimatedPressable
               testID="capture-save-button"
@@ -976,6 +1007,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               disabled={isSaveBusy || isSaveSuccessful}
               style={[
                 styles.secondaryActionButton,
+                styles.shutterTrailingAccessory,
                 {
                   borderColor: colors.border,
                   backgroundColor: colors.card,
@@ -988,6 +1020,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           </View>
         ) : (
           <View style={styles.belowCardShutterRow}>
+            {leadingAccessory ? <View style={styles.shutterLeadingAccessory}>{leadingAccessory}</View> : null}
             <CaptureAnimatedPressable
               testID="capture-save-button"
               onPress={onSaveNote}
@@ -1328,26 +1361,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 4,
+    width: '100%',
+    position: 'relative',
   },
   belowCardCapturedPhotoActions: {
-    gap: 14,
+    minHeight: 68,
   },
-  capturedPhotoActionSpacer: {
-    width: 46,
-    height: 46,
+  shutterLeadingAccessory: {
+    position: 'absolute',
+    left: '50%',
+    marginLeft: -SHUTTER_SIDE_ACTION_OFFSET,
+    width: SIDE_ACTION_SIZE,
+    height: SIDE_ACTION_SIZE,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   secondaryActionButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: SIDE_ACTION_SIZE,
+    height: SIDE_ACTION_SIZE,
+    borderRadius: SIDE_ACTION_SIZE / 2,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  shutterTrailingAccessory: {
+    position: 'absolute',
+    left: '50%',
+    marginLeft: SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP,
+  },
   shutterOuter: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: SHUTTER_OUTER_SIZE,
+    height: SHUTTER_OUTER_SIZE,
+    borderRadius: SHUTTER_OUTER_SIZE / 2,
     borderWidth: 4,
     borderColor: 'rgba(150,150,150,0.4)',
     justifyContent: 'center',
