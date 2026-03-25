@@ -86,6 +86,11 @@
     "typescript": "~5.9.2"
   },
   "private": true,
+  "reanimated": {
+    "staticFeatureFlags": {
+      "ENABLE_SHARED_ELEMENT_TRANSITIONS": true
+    }
+  },
   "overrides": {
     "@tootallnate/once": "^3.0.1"
   }

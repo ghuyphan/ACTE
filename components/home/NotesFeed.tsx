@@ -1,6 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
 import { TFunction } from 'i18next';
 import { ReactElement, RefObject, memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import Reanimated from 'react-native-reanimated';
 import {
   Animated,
   Dimensions,
@@ -50,6 +51,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   const revealGlow = useRef(new Animated.Value(0)).current;
   const lastRevealTokenRef = useRef<number | null>(null);
   const mountIndex = useRef(index).current;
+  const sharedTransitionTag = `feed-note-card-${item.id}`;
 
   useEffect(() => {
     Animated.parallel([
@@ -138,23 +140,25 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
           },
         ]}
       />
-      <Animated.View
-        style={{
-          transform: [
-            { translateY: Animated.add(cardTranslateY, revealTranslateY) },
-            { scale: Animated.multiply(scale, revealScale) },
-          ],
-        }}
-      >
-        <Animated.View style={{ transform: [{ translateY: metaTranslateY }] }}>
-          <NoteMemoryCard
-            note={item}
-            onPress={() => onOpenNote(item.id)}
-            colors={colors}
-            t={t}
-          />
+      <Reanimated.View sharedTransitionTag={sharedTransitionTag}>
+        <Animated.View
+          style={{
+            transform: [
+              { translateY: Animated.add(cardTranslateY, revealTranslateY) },
+              { scale: Animated.multiply(scale, revealScale) },
+            ],
+          }}
+        >
+          <Animated.View style={{ transform: [{ translateY: metaTranslateY }] }}>
+            <NoteMemoryCard
+              note={item}
+              onPress={() => onOpenNote(item.id)}
+              colors={colors}
+              t={t}
+            />
+          </Animated.View>
         </Animated.View>
-      </Animated.View>
+      </Reanimated.View>
     </View>
   );
 }, (prevProps, nextProps) => (

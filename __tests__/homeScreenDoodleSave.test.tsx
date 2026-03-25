@@ -19,6 +19,8 @@ const mockResetCapture = jest.fn();
 const mockSaveNoteDoodle = jest.fn<Promise<void>, [string, string]>(async () => undefined);
 const mockResetDoodle = jest.fn();
 const mockShowAlert = jest.fn();
+const mockScrollToOffset = jest.fn();
+let mockRemindersEnabled = false;
 let mockNoteText = 'A doodled note';
 const mockGetDoodleSnapshot = jest.fn(() => ({
   enabled: true,
@@ -116,7 +118,7 @@ jest.mock('../hooks/useGeofence', () => ({
         longitude: 106.69,
       },
     },
-    remindersEnabled: false,
+    remindersEnabled: mockRemindersEnabled,
     requestForegroundLocation: jest.fn(async () => ({ location: null, requiresSettings: false })),
     requestReminderPermissions: jest.fn(async () => ({ enabled: false, requiresSettings: false })),
     openAppSettings: jest.fn(async () => undefined),
@@ -282,6 +284,9 @@ jest.mock('../components/home/NotesFeed', () => {
   const React = require('react');
   const { View } = require('react-native');
   return function MockNotesFeed(props: any) {
+    props.flatListRef.current = {
+      scrollToOffset: (...args: unknown[]) => mockScrollToOffset(...args),
+    };
     return <View>{props.captureHeader}</View>;
   };
 });
@@ -303,6 +308,7 @@ import HomeScreen from '../app/(tabs)/index';
 describe('HomeScreen doodle save flow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRemindersEnabled = false;
     mockNoteText = 'A doodled note';
     mockGetDoodleSnapshot.mockImplementation(() => ({
       enabled: true,
@@ -310,7 +316,7 @@ describe('HomeScreen doodle save flow', () => {
     }));
   });
 
-  it('keeps the doodle visible until the save sheet closes', async () => {
+  it('clears the capture card before showing the local save sheet', async () => {
     const { getByTestId } = render(<HomeScreen />);
 
     fireEvent.press(getByTestId('capture-save-button'));
@@ -335,20 +341,10 @@ describe('HomeScreen doodle save flow', () => {
     expect(mockRefreshNotes).not.toHaveBeenCalled();
     expect(mockShowAlert).toHaveBeenCalledWith(expect.objectContaining({
       variant: 'success',
-      onClose: expect.any(Function),
     }));
-    expect(mockResetCapture).not.toHaveBeenCalled();
-    expect(mockResetDoodle).not.toHaveBeenCalled();
-
-    const latestAlertCall = mockShowAlert.mock.calls[mockShowAlert.mock.calls.length - 1];
-    const [{ onClose }] = latestAlertCall ?? [];
-
-    act(() => {
-      onClose?.();
-    });
-
     expect(mockResetCapture).toHaveBeenCalled();
     expect(mockResetDoodle).toHaveBeenCalled();
+    expect(mockScrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: false });
   });
 
   it('allows saving a doodle-only text note', async () => {
@@ -374,5 +370,30 @@ describe('HomeScreen doodle save flow', () => {
       'note-1',
       JSON.stringify([{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }])
     );
+  });
+
+  it('re-anchors Home on the capture card after an inline save', async () => {
+    jest.useFakeTimers();
+    mockRemindersEnabled = true;
+
+    try {
+      const { getByTestId } = render(<HomeScreen />);
+
+      fireEvent.press(getByTestId('capture-save-button'));
+
+      await waitFor(() => {
+        expect(mockCreateNote).toHaveBeenCalled();
+      });
+
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      expect(mockScrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: false });
+      expect(mockResetCapture).toHaveBeenCalled();
+      expect(mockResetDoodle).toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

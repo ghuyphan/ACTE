@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Href, Stack, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import Reanimated from 'react-native-reanimated';
 import {
   ActivityIndicator,
   Pressable,
@@ -123,6 +124,7 @@ function GridTile({
     text ||
     (isPhotoTile ? photoFallbackLabel : '...');
   const showPhotoPlaceholder = item.kind === 'shared-post' && item.post.type === 'photo' && !imageUri;
+  const sharedTransitionTag = item.kind === 'note' ? `feed-note-card-${item.note.id}` : undefined;
 
   return (
     <Pressable
@@ -137,7 +139,10 @@ function GridTile({
         },
       ]}
     >
-      <View style={[styles.tile, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Reanimated.View
+        sharedTransitionTag={sharedTransitionTag}
+        style={[styles.tile, { backgroundColor: colors.card, borderColor: colors.border }]}
+      >
         {imageUri ? (
           <View style={styles.tileMediaWrap}>
             <Image
@@ -187,7 +192,7 @@ function GridTile({
             </Text>
           </LinearGradient>
         )}
-      </View>
+      </Reanimated.View>
     </Pressable>
   );
 }

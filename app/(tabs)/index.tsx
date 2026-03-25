@@ -123,8 +123,6 @@ export default function HomeScreen() {
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [sharedManageSheetVersion, setSharedManageSheetVersion] = useState(0);
-  const [revealedNoteId, setRevealedNoteId] = useState<string | null>(null);
-  const [revealToken, setRevealToken] = useState(0);
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -133,10 +131,8 @@ export default function HomeScreen() {
   const flatListRef = useRef<any>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const focusSavedNoteSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearInlineFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const focusSavedNoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useScrollToTop(flatListRef);
 
   const dismissSharedManageSheet = useCallback(() => {
@@ -262,6 +258,7 @@ export default function HomeScreen() {
   const finalizeSavedCapture = useCallback(() => {
     resetCaptureDraft();
     setCaptureTarget('private');
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, [resetCaptureDraft]);
 
   const clearInlineSaveTimers = useCallback(() => {
@@ -275,19 +272,9 @@ export default function HomeScreen() {
       resetSaveStateTimeoutRef.current = null;
     }
 
-    if (focusSavedNoteSettleTimeoutRef.current) {
-      clearTimeout(focusSavedNoteSettleTimeoutRef.current);
-      focusSavedNoteSettleTimeoutRef.current = null;
-    }
-
     if (clearInlineFeedbackTimeoutRef.current) {
       clearTimeout(clearInlineFeedbackTimeoutRef.current);
       clearInlineFeedbackTimeoutRef.current = null;
-    }
-
-    if (focusSavedNoteTimeoutRef.current) {
-      clearTimeout(focusSavedNoteTimeoutRef.current);
-      focusSavedNoteTimeoutRef.current = null;
     }
   }, []);
 
@@ -298,19 +285,15 @@ export default function HomeScreen() {
   }, [clearInlineSaveTimers]);
 
   const completeInlineSaveFlow = useCallback(
-    (noteId: string, variant: InlineSaveFeedbackVariant) => {
+    (variant: InlineSaveFeedbackVariant) => {
       const token = Date.now();
       const finalizeDelay = reduceMotionEnabled ? 120 : 260;
-      const focusNoteDelay = reduceMotionEnabled ? 120 : 120;
       const resetStateDelay = reduceMotionEnabled ? 240 : 980;
       const clearFeedbackDelay = reduceMotionEnabled ? 1200 : 2200;
-      const previewOffset = Math.max(48, snapHeight * 0.46);
 
       clearInlineSaveTimers();
       setSaveButtonState('success');
       setInlineSaveFeedback({ token, variant });
-      setRevealedNoteId(noteId);
-      setRevealToken((current) => current + 1);
       saveTransitionProgress.stopAnimation();
       saveTransitionProgress.setValue(0);
       Animated.timing(saveTransitionProgress, {
@@ -324,25 +307,6 @@ export default function HomeScreen() {
         finalizeInlineSaveTimeoutRef.current = null;
       }, finalizeDelay);
 
-      focusSavedNoteTimeoutRef.current = setTimeout(() => {
-        flatListRef.current?.scrollToOffset({
-          offset: reduceMotionEnabled ? snapHeight : previewOffset,
-          animated: !reduceMotionEnabled,
-        });
-
-        if (!reduceMotionEnabled) {
-          focusSavedNoteSettleTimeoutRef.current = setTimeout(() => {
-            flatListRef.current?.scrollToOffset({
-              offset: snapHeight,
-              animated: true,
-            });
-            focusSavedNoteSettleTimeoutRef.current = null;
-          }, 220);
-        }
-
-        focusSavedNoteTimeoutRef.current = null;
-      }, focusNoteDelay);
-
       resetSaveStateTimeoutRef.current = setTimeout(() => {
         setSaveButtonState('idle');
         saveTransitionProgress.stopAnimation();
@@ -355,7 +319,7 @@ export default function HomeScreen() {
         clearInlineFeedbackTimeoutRef.current = null;
       }, clearFeedbackDelay);
     },
-    [clearInlineSaveTimers, finalizeSavedCapture, reduceMotionEnabled, saveTransitionProgress, snapHeight]
+    [clearInlineSaveTimers, finalizeSavedCapture, reduceMotionEnabled, saveTransitionProgress]
   );
 
   useEffect(() => {
@@ -540,13 +504,12 @@ export default function HomeScreen() {
     });
   }, [showAlert, t]);
 
-  const showSavedSheet = useCallback((onClose?: () => void) => {
+  const showSavedSheet = useCallback(() => {
     if (remindersEnabled) {
       showAlert({
         variant: 'success',
         title: t('capture.saved', 'Saved!'),
         message: t('capture.savedMsg', "We'll remind you next time you're here!"),
-        onClose,
         primaryAction: {
           label: t('common.done', 'Done'),
         },
@@ -561,7 +524,6 @@ export default function HomeScreen() {
         'capture.savedLocalMsg',
         'Your note is saved on this device. Enable reminders to get notified when you revisit this place.'
       ),
-      onClose,
       primaryAction: {
         label: t('capture.enableReminders', 'Enable reminders'),
         onPress: async () => {
@@ -612,11 +574,7 @@ export default function HomeScreen() {
   }, [remindersEnabled, requestReminderPermissions, showAlert, showDoneSheet, t]);
 
   const showSharedSaveSheet = useCallback(
-    (
-      status: 'shared' | 'no-friends' | 'share-failed',
-      onClose?: () => void,
-      failureMessage?: string | null
-    ) => {
+    (status: 'shared' | 'no-friends' | 'share-failed', failureMessage?: string | null) => {
       if (status === 'shared') {
         showAlert({
           variant: 'success',
@@ -625,7 +583,6 @@ export default function HomeScreen() {
             'shared.savedSharedBody',
             'This note is in your journal and has been published to your shared Home feed.'
           ),
-          onClose,
           primaryAction: {
             label: t('common.done', 'Done'),
           },
@@ -641,7 +598,6 @@ export default function HomeScreen() {
             'shared.savedLocalOnlyBody',
             'Your note is saved locally. Invite a friend to start sharing moments from Home.'
           ),
-          onClose,
           primaryAction: {
             label: t('shared.inviteFriendButton', 'Invite friend'),
             onPress: () => {
@@ -668,7 +624,6 @@ export default function HomeScreen() {
         ]
           .filter(Boolean)
           .join('\n\n'),
-        onClose,
         primaryAction: {
           label: t('common.done', 'Done'),
         },
@@ -929,15 +884,17 @@ export default function HomeScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       if (shareOutcome === 'default' && remindersEnabled) {
-        completeInlineSaveFlow(createdNote.id, 'saved');
+        completeInlineSaveFlow('saved');
       } else if (shareOutcome === 'shared') {
-        completeInlineSaveFlow(createdNote.id, 'shared');
+        completeInlineSaveFlow('shared');
       } else if (shareOutcome === 'default') {
         setSaveButtonState('idle');
-        showSavedSheet(finalizeSavedCapture);
+        finalizeSavedCapture();
+        showSavedSheet();
       } else {
         setSaveButtonState('idle');
-        showSharedSaveSheet(shareOutcome, finalizeSavedCapture, shareFailureMessage);
+        finalizeSavedCapture();
+        showSharedSaveSheet(shareOutcome, shareFailureMessage);
       }
     } catch (error) {
       console.error('Save failed:', error);
@@ -1395,8 +1352,8 @@ export default function HomeScreen() {
         onOpenSharedPost={openSharedPost}
         colors={colors}
         t={t}
-        revealedNoteId={revealedNoteId}
-        revealToken={revealToken}
+        revealedNoteId={null}
+        revealToken={0}
         scrollEnabled={!captureScrollLocked}
       />
 
