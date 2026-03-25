@@ -236,7 +236,12 @@ function AppContent() {
             }}
           />
           <Stack.Screen name="auth/onboarding" />
-          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="(tabs)"
+            options={{
+              title: t('tabs.home', 'Home'),
+            }}
+          />
           <Stack.Screen
             name="friends/join"
             options={{

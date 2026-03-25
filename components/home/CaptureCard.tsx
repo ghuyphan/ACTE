@@ -45,7 +45,7 @@ const TOP_CONTROL_HEIGHT = 38;
 const TOP_CONTROL_RADIUS = 19;
 const SHUTTER_OUTER_SIZE = 68;
 const SIDE_ACTION_SIZE = 46;
-const SHUTTER_SIDE_ACTION_GAP = 14;
+const SHUTTER_SIDE_ACTION_GAP = 22;
 const SHUTTER_SIDE_ACTION_OFFSET = SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP + SIDE_ACTION_SIZE;
 const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad) };
 const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
@@ -489,6 +489,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       'capture.cameraUnavailableHint',
       'This can happen on a simulator or when the camera session gets stuck. Try again or use a physical device.'
     );
+  const showLeadingAccessory =
+    Boolean(leadingAccessory) && (captureMode !== 'camera' || Boolean(capturedPhoto) || permissionGranted);
   const handleToggleDoodleMode = useCallback(() => {
     if (isPhotoDoodleSurface) {
       setPhotoDoodleModeEnabled((current) => !current);
@@ -926,7 +928,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         ) : null}
         {captureMode === 'camera' && !capturedPhoto ? (
           <View style={styles.belowCardShutterRow}>
-            {leadingAccessory ? <View style={styles.shutterLeadingAccessory}>{leadingAccessory}</View> : null}
+            {showLeadingAccessory ? <View style={styles.shutterLeadingAccessory}>{leadingAccessory}</View> : null}
             {permissionGranted ? (
               <CaptureAnimatedPressable
                 onPressIn={onShutterPressIn}
@@ -953,7 +955,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           </View>
         ) : capturedPhoto ? (
           <View style={[styles.belowCardShutterRow, styles.belowCardCapturedPhotoActions]}>
-            {leadingAccessory ? <View style={styles.shutterLeadingAccessory}>{leadingAccessory}</View> : null}
+            {showLeadingAccessory ? <View style={styles.shutterLeadingAccessory}>{leadingAccessory}</View> : null}
 
             <CaptureAnimatedPressable
               testID="capture-save-button"
@@ -1020,7 +1022,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           </View>
         ) : (
           <View style={styles.belowCardShutterRow}>
-            {leadingAccessory ? <View style={styles.shutterLeadingAccessory}>{leadingAccessory}</View> : null}
+            {showLeadingAccessory ? <View style={styles.shutterLeadingAccessory}>{leadingAccessory}</View> : null}
             <CaptureAnimatedPressable
               testID="capture-save-button"
               onPress={onSaveNote}

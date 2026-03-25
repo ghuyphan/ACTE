@@ -153,6 +153,18 @@ function renderCaptureCard(
 }
 
 describe('CaptureCard doodle handle', () => {
+  it('hides the leading accessory while camera permission is missing', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { queryByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      needsCameraPermission: true,
+      permissionGranted: false,
+      leadingAccessory: <View testID="leading-accessory" />,
+    });
+
+    expect(queryByTestId('leading-accessory')).toBeNull();
+  });
+
   it('tracks local doodle state through the imperative handle', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const { getByTestId } = renderCaptureCard(ref);

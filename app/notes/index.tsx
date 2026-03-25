@@ -258,6 +258,7 @@ export default function NotesIndexScreen() {
           headerTransparent: true,
           headerShadowVisible: false,
           title: t('notes.viewAllTitle', 'All notes'),
+          headerBackTitle: t('tabs.home', 'Home'),
           headerTintColor: colors.text,
           headerBackButtonDisplayMode: 'minimal',
           headerBackButtonMenuEnabled: false,
