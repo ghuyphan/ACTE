@@ -41,7 +41,6 @@ import { formatDate } from '../utils/dateUtils';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
 import { isOlderIOS } from '../utils/platform';
 import AppBottomSheet from './AppBottomSheet';
-import { GlassView } from './ui/GlassView';
 import NoteDoodleCanvas, { DoodleStroke } from './NoteDoodleCanvas';
 import TransientStatusChip from './ui/TransientStatusChip';
 

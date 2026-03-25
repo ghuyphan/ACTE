@@ -48,6 +48,10 @@ const config = {
       {
         locationAlwaysAndWhenInUsePermission:
           'Allow Noto to use your location to save and find your nearby memories.',
+        locationAlwaysPermission:
+          'Allow Noto to use your location in the background so it can remind you when you return to saved places.',
+        locationWhenInUsePermission:
+          'Allow Noto to use your location so you can attach notes to the places you visit.',
         isAndroidBackgroundLocationEnabled: true,
         isIosBackgroundLocationEnabled: true,
       },
@@ -103,12 +107,20 @@ const config = {
       },
     ],
     './plugins/withCustomWidgetSwift.js',
-    'expo-camera',
+    [
+      'expo-camera',
+      {
+        cameraPermission: 'Allow Noto to use your camera so you can save photo memories.',
+        microphonePermission: false,
+        recordAudioAndroid: false,
+      },
+    ],
     [
       'expo-image-picker',
       {
         photosPermission:
           'Allow Noto to access your photo library so you can save memories from your existing photos.',
+        microphonePermission: false,
       },
     ],
     [

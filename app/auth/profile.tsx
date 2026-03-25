@@ -1,5 +1,6 @@
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useRouter } from 'expo-router';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useMemo, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
@@ -9,9 +10,21 @@ import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useConnectivity } from '../../hooks/useConnectivity';
+import { useNotes } from '../../hooks/useNotes';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { useTheme } from '../../hooks/useTheme';
+import { deleteAllNotesForScope, getAllNotesForScope } from '../../services/database';
+import { clearGeofenceRegions } from '../../services/geofenceService';
+import {
+  hasAccountDeletionLink,
+  hasPrivacyPolicyLink,
+  hasSupportLink,
+  openAccountDeletionHelp,
+  openPrivacyPolicy,
+  openSupport,
+} from '../../services/legalLinks';
+import { getNotePhotoUri } from '../../services/photoStorage';
 
 function ProfileRow({ label, value }: { label: string; value: string }) {
   const { colors } = useTheme();
@@ -38,14 +51,16 @@ function getProviderLabel(providerId: string, fallback: string) {
 export default function ProfileScreen() {
   const { t, i18n } = useTranslation();
   const { colors } = useTheme();
-  const { user, isAuthAvailable, signOut } = useAuth();
+  const { user, isAuthAvailable, deleteAccount, signOut } = useAuth();
   const { isOnline } = useConnectivity();
+  const { refreshNotes } = useNotes();
   const { tier } = useSubscription();
   const { blockedCount, failedCount, pendingCount, status: syncStatus, lastSyncedAt, lastMessage } = useSyncStatus();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const fallbackName = t('settings.notSignedIn', 'Not signed in');
   const profileName = user?.displayName || user?.email || fallbackName;
@@ -141,6 +156,107 @@ export default function ProfileScreen() {
     );
   };
 
+  const handleOpenPrivacyPolicy = () => {
+    void openPrivacyPolicy();
+  };
+
+  const handleOpenSupport = () => {
+    void openSupport();
+  };
+
+  const handleDeleteAccount = () => {
+    if (!user) {
+      return;
+    }
+
+    const deletingUserScope = user.uid;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    Alert.alert(
+      t('profile.deleteAccountConfirmTitle', 'Delete your Noto account?'),
+      t(
+        'profile.deleteAccountConfirmMsg',
+        'This permanently deletes your account, cloud sync data, shared posts, invites, and notes stored for this account. This cannot be undone.'
+      ),
+      [
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+        {
+          text: t('profile.deleteAccount', 'Delete account'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsDeletingAccount(true);
+              const result = await deleteAccount();
+
+              if (result.status !== 'success') {
+                if (hasAccountDeletionLink()) {
+                  Alert.alert(
+                    t('profile.deleteAccountNeedsSupportTitle', 'Need help deleting your account?'),
+                    result.message ??
+                      t(
+                        'profile.deleteAccountNeedsSupportMsg',
+                        'This build could not finish the deletion automatically. You can continue from our deletion page or contact support.'
+                      ),
+                    [
+                      { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+                      {
+                        text: t('profile.deleteAccountHelp', 'Open deletion help'),
+                        onPress: () => {
+                          void openAccountDeletionHelp();
+                        },
+                      },
+                    ]
+                  );
+                } else {
+                  Alert.alert(
+                    t('profile.deleteAccountFailedTitle', 'Could not delete account'),
+                    result.message ??
+                      t(
+                        'profile.deleteAccountFailed',
+                        'We could not delete your account right now. Please try again in a moment.'
+                      )
+                  );
+                }
+                return;
+              }
+
+              const scopedNotes = await getAllNotesForScope(deletingUserScope);
+              await deleteAllNotesForScope(deletingUserScope);
+
+              for (const note of scopedNotes) {
+                const photoUri = getNotePhotoUri(note);
+                if (note.type !== 'photo' || !photoUri) {
+                  continue;
+                }
+
+                try {
+                  const fileInfo = await FileSystem.getInfoAsync(photoUri);
+                  if (fileInfo.exists) {
+                    await FileSystem.deleteAsync(photoUri, { idempotent: true });
+                  }
+                } catch (error) {
+                  console.warn('Failed to delete account photo file:', error);
+                }
+              }
+
+              await clearGeofenceRegions().catch(() => undefined);
+              await refreshNotes(false).catch(() => undefined);
+              router.replace('/(tabs)/settings');
+              Alert.alert(
+                t('profile.deleteAccountSuccessTitle', 'Account deleted'),
+                t(
+                  'profile.deleteAccountSuccessMsg',
+                  'Your Noto account and synced data have been deleted from this device and the cloud.'
+                )
+              );
+            } finally {
+              setIsDeletingAccount(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
@@ -211,13 +327,41 @@ export default function ProfileScreen() {
               ) : null}
             </View>
 
+            {(hasPrivacyPolicyLink() || hasSupportLink()) ? (
+              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  {t('profile.legalTitle', 'Privacy & support')}
+                </Text>
+                {hasPrivacyPolicyLink() ? (
+                  <PrimaryButton
+                    label={t('settings.privacyPolicy', 'Privacy Policy')}
+                    onPress={handleOpenPrivacyPolicy}
+                    variant="secondary"
+                  />
+                ) : null}
+                {hasSupportLink() ? (
+                  <PrimaryButton
+                    label={t('settings.support', 'Support')}
+                    onPress={handleOpenSupport}
+                    variant="secondary"
+                  />
+                ) : null}
+              </View>
+            ) : null}
+
             <PrimaryButton
               label={t('profile.logout', 'Log out')}
               onPress={() => {
                 void handleSignOut();
               }}
-              loading={isSigningOut}
+              loading={isSigningOut && !isDeletingAccount}
               variant="destructive"
+            />
+            <PrimaryButton
+              label={t('profile.deleteAccount', 'Delete account')}
+              onPress={handleDeleteAccount}
+              loading={isDeletingAccount}
+              variant="secondary"
             />
           </>
         ) : (

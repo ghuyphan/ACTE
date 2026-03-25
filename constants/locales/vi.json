@@ -39,6 +39,8 @@
         "savedLocalTitle": "Đã lưu trên thiết bị",
         "savedLocalMsg": "Ghi chú đã được lưu trên thiết bị này. Bật nhắc nhở để nhận thông báo khi bạn quay lại địa điểm này.",
         "enableReminders": "Bật nhắc nhở",
+        "reminderDisclosureTitle": "Bật nhắc nền",
+        "reminderDisclosureMsg": "Noto dùng vị trí nền để nhận ra khi bạn quay lại một nơi đã lưu, kể cả khi ứng dụng đã đóng hoặc không hiển thị trên màn hình. Chúng tôi chỉ dùng dữ liệu này để kích hoạt nhắc nhở ghi chú của bạn.",
         "remindersEnabledTitle": "Đã bật nhắc nhở",
         "remindersEnabledMsg": "Noto sẽ nhắc bạn khi quay lại những nơi đã lưu.",
         "remindersUnavailableTitle": "Nhắc nhở vẫn đang tắt",
@@ -287,7 +289,14 @@
         "plusHintWithLimit": "Bản miễn phí lưu được {{count}} ghi chú ảnh.",
         "plusActiveHint": "Đã mở khóa kỉ niệm ảnh không giới hạn.",
         "plusUnavailable": "Plus sẽ sớm có mặt trên thiết bị này.",
-        "about": "Để anh không bao giờ quên em thích gì 💛"
+        "about": "Để anh không bao giờ quên em thích gì 💛",
+        "legal": "Pháp lý & Hỗ trợ",
+        "privacyPolicy": "Chính sách quyền riêng tư",
+        "privacyPolicyHint": "Xem cách Noto xử lý dữ liệu và quyền truy cập của bạn.",
+        "support": "Hỗ trợ",
+        "supportHint": "Liên hệ hỗ trợ nếu đăng nhập, đồng bộ, hoặc tài khoản cần trợ giúp.",
+        "accountDeletion": "Hỗ trợ xóa tài khoản",
+        "accountDeletionHint": "Mở trang xóa tài khoản bên ngoài hoặc kênh hỗ trợ cho phần niêm yết cửa hàng."
     },
     "profile": {
         "title": "Hồ sơ",
@@ -313,7 +322,20 @@
         "signedOutTitle": "Chưa kết nối tài khoản",
         "signedOutMsg": "Đăng nhập để sao lưu ghi chú và đồng bộ chúng trên các thiết bị của bạn.",
         "unavailableMsg": "Đăng nhập tài khoản hiện chưa khả dụng, nhưng ghi chú của bạn vẫn được lưu an toàn trên thiết bị này.",
-        "logout": "Đăng xuất"
+        "logout": "Đăng xuất",
+        "legalTitle": "Riêng tư & hỗ trợ",
+        "deleteAccount": "Xóa tài khoản",
+        "deleteAccountHelp": "Mở hướng dẫn xóa",
+        "deleteAccountUnavailable": "Hãy đăng nhập để xóa tài khoản này.",
+        "deleteAccountNotReady": "Tính năng xóa tài khoản chưa được cấu hình cho bản dựng này. Vui lòng liên hệ hỗ trợ.",
+        "deleteAccountConfirmTitle": "Xóa tài khoản Noto của bạn?",
+        "deleteAccountConfirmMsg": "Thao tác này sẽ xóa vĩnh viễn tài khoản, dữ liệu đồng bộ đám mây, bài chia sẻ, lời mời và các ghi chú được lưu cho tài khoản này. Không thể hoàn tác.",
+        "deleteAccountFailedTitle": "Không thể xóa tài khoản",
+        "deleteAccountFailed": "Hiện chưa thể xóa tài khoản của bạn. Vui lòng thử lại sau ít phút nữa.",
+        "deleteAccountNeedsSupportTitle": "Cần hỗ trợ để xóa tài khoản?",
+        "deleteAccountNeedsSupportMsg": "Bản dựng này chưa thể hoàn tất việc xóa tự động. Bạn có thể tiếp tục từ trang xóa tài khoản hoặc liên hệ hỗ trợ.",
+        "deleteAccountSuccessTitle": "Đã xóa tài khoản",
+        "deleteAccountSuccessMsg": "Tài khoản Noto và dữ liệu đã đồng bộ của bạn đã được xóa khỏi thiết bị này và đám mây."
     },
     "auth": {
         "title": "Noto",
@@ -494,6 +516,7 @@
     },
     "common": {
         "cancel": "Hủy",
+        "continue": "Tiếp tục",
         "delete": "Xóa",
         "goBack": "Quay lại",
         "done": "Xong",

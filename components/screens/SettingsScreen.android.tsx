@@ -150,11 +150,17 @@ export default function SettingsScreenAndroid() {
     isPurchaseAvailable,
     notes,
     openAccountScreen,
+    openAccountDeletionHelpLink,
     openPlusScreen,
+    openPrivacyPolicyLink,
+    openSupportLink,
     plusHint,
     plusValue,
     promptClearAll,
     setTheme,
+    showAccountDeletionLink,
+    showPrivacyPolicyLink,
+    showSupportLink,
     syncValue,
     t,
     theme,
@@ -288,6 +294,42 @@ export default function SettingsScreenAndroid() {
             ) : null}
           </SettingsCard>
         </View>
+
+        {(showPrivacyPolicyLink || showSupportLink || showAccountDeletionLink) ? (
+          <View style={styles.section}>
+            <SectionTitle colors={colors} title={t('settings.legal', 'Legal & Support')} />
+            <SettingsCard colors={colors}>
+              {showPrivacyPolicyLink ? (
+                <SettingRow
+                  colors={colors}
+                  title={t('settings.privacyPolicy', 'Privacy Policy')}
+                  subtitle={t('settings.privacyPolicyHint', 'Review how Noto handles your data and permissions.')}
+                  onPress={openPrivacyPolicyLink}
+                />
+              ) : null}
+              {showPrivacyPolicyLink && (showSupportLink || showAccountDeletionLink) ? (
+                <CardDivider colors={colors} />
+              ) : null}
+              {showSupportLink ? (
+                <SettingRow
+                  colors={colors}
+                  title={t('settings.support', 'Support')}
+                  subtitle={t('settings.supportHint', 'Contact support if sign-in, sync, or account issues need a hand.')}
+                  onPress={openSupportLink}
+                />
+              ) : null}
+              {showSupportLink && showAccountDeletionLink ? <CardDivider colors={colors} /> : null}
+              {showAccountDeletionLink ? (
+                <SettingRow
+                  colors={colors}
+                  title={t('settings.accountDeletion', 'Account deletion help')}
+                  subtitle={t('settings.accountDeletionHint', 'Open the external deletion page or support contact for your store listing.')}
+                  onPress={openAccountDeletionHelpLink}
+                />
+              ) : null}
+            </SettingsCard>
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <SectionTitle colors={colors} title={t('settings.account', 'Account')} />

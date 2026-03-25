@@ -517,6 +517,63 @@ export default function HomeScreen() {
       return;
     }
 
+    const promptReminderPermissionsFromDisclosure = () => {
+      showAlert({
+        variant: 'info',
+        title: t('capture.reminderDisclosureTitle', 'Enable background reminders'),
+        message: t(
+          'capture.reminderDisclosureMsg',
+          'Noto uses your location in the background to notice when you return to a saved place, even when the app is closed or not on screen. We only use this to trigger your note reminders.'
+        ),
+        primaryAction: {
+          label: t('common.continue', 'Continue'),
+          onPress: async () => {
+            const result = await requestReminderPermissions();
+            if (result.enabled) {
+              showAlert({
+                variant: 'success',
+                title: t('capture.remindersEnabledTitle', 'Reminders enabled'),
+                message: t(
+                  'capture.remindersEnabledMsg',
+                  'Noto will remind you when you return to saved places.'
+                ),
+                primaryAction: {
+                  label: t('common.done', 'Done'),
+                },
+              });
+              return;
+            }
+
+            if (result.requiresSettings) {
+              showDoneSheet(
+                'warning',
+                t('capture.remindersUnavailableTitle', 'Reminders still off'),
+                t(
+                  'capture.remindersUnavailableSettingsMsg',
+                  'Background location or notifications are blocked for Noto. Open Settings to enable reminders.'
+                ),
+                true
+              );
+              return;
+            }
+
+            showDoneSheet(
+              'warning',
+              t('capture.remindersUnavailableTitle', 'Reminders still off'),
+              t(
+                'capture.remindersUnavailableMsg',
+                'Your note is still saved locally. Noto needs background location and notifications to send reminders.'
+              )
+            );
+          },
+        },
+        secondaryAction: {
+          label: t('common.cancel', 'Cancel'),
+          variant: 'secondary',
+        },
+      });
+    };
+
     showAlert({
       variant: 'success',
       title: t('capture.savedLocalTitle', 'Saved locally'),
@@ -526,45 +583,7 @@ export default function HomeScreen() {
       ),
       primaryAction: {
         label: t('capture.enableReminders', 'Enable reminders'),
-        onPress: async () => {
-          const result = await requestReminderPermissions();
-          if (result.enabled) {
-            showAlert({
-              variant: 'success',
-              title: t('capture.remindersEnabledTitle', 'Reminders enabled'),
-              message: t(
-                'capture.remindersEnabledMsg',
-                'Noto will remind you when you return to saved places.'
-              ),
-              primaryAction: {
-                label: t('common.done', 'Done'),
-              },
-            });
-            return;
-          }
-
-          if (result.requiresSettings) {
-            showDoneSheet(
-              'warning',
-              t('capture.remindersUnavailableTitle', 'Reminders still off'),
-              t(
-                'capture.remindersUnavailableSettingsMsg',
-                'Background location or notifications are blocked for Noto. Open Settings to enable reminders.'
-              ),
-              true
-            );
-            return;
-          }
-
-          showDoneSheet(
-            'warning',
-            t('capture.remindersUnavailableTitle', 'Reminders still off'),
-            t(
-              'capture.remindersUnavailableMsg',
-              'Your note is still saved locally. Noto needs background location and notifications to send reminders.'
-            )
-          );
-        },
+        onPress: promptReminderPermissionsFromDisclosure,
       },
       secondaryAction: {
         label: t('common.done', 'Done'),

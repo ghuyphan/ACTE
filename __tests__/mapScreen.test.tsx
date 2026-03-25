@@ -506,7 +506,7 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
-      expect(lastCall?.[1]).toBe(450);
+      expect(lastCall?.[1]).toBe(350);
       expect(mockImpactAsync).toHaveBeenCalled();
     });
   });

@@ -10,7 +10,28 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(async () => undefined),
 }));
 
+jest.mock('expo-web-browser', () => ({
+  openBrowserAsync: jest.fn(async () => ({ type: 'opened' })),
+  WebBrowserPresentationStyle: {
+    AUTOMATIC: 'automatic',
+  },
+}));
+
 jest.mock('react-native-url-polyfill/auto', () => ({}));
+
+jest.mock('@react-native-google-signin/google-signin', () => ({
+  GoogleSignin: {
+    configure: jest.fn(),
+    hasPlayServices: jest.fn(async () => undefined),
+    signIn: jest.fn(async () => ({ type: 'success', data: { idToken: 'test-token' } })),
+    signOut: jest.fn(async () => undefined),
+  },
+  statusCodes: {
+    SIGN_IN_CANCELLED: 'SIGN_IN_CANCELLED',
+    IN_PROGRESS: 'IN_PROGRESS',
+    PLAY_SERVICES_NOT_AVAILABLE: 'PLAY_SERVICES_NOT_AVAILABLE',
+  },
+}));
 
 jest.mock('@shopify/flash-list', () => {
   const React = require('react');

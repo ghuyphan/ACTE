@@ -11,6 +11,10 @@ const mockRecordChange = jest.fn();
 const mockCleanupOrphanPhotoFiles = jest.fn();
 const mockGetInfoAsync = jest.fn();
 const mockDeleteAsync = jest.fn();
+const mockUseAuth = jest.fn(() => ({
+  user: null,
+  isReady: true,
+}));
 
 let mockNotesDb: Note[] = [];
 let mockIdCounter = 1;
@@ -95,6 +99,10 @@ jest.mock('../services/database', () => ({
   deleteAllNotes: jest.fn(async () => {
     mockNotesDb = [];
   }),
+}));
+
+jest.mock('../hooks/useAuth', () => ({
+  useAuth: () => mockUseAuth(),
 }));
 
 function TestWrapper({ children }: { children: ReactNode }) {

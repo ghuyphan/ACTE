@@ -641,8 +641,12 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
 }
 
 export async function getAllNotes(): Promise<Note[]> {
-    const database = await getDB();
     const scope = getCurrentScope();
+    return getAllNotesForScope(scope);
+}
+
+export async function getAllNotesForScope(scope: string): Promise<Note[]> {
+    const database = await getDB();
     const rows = await database.getAllAsync<NoteRow>(
         `SELECT ${NOTES_SELECT_FIELDS}
          FROM notes
@@ -806,8 +810,12 @@ export async function deleteNote(id: string): Promise<void> {
 }
 
 export async function deleteAllNotes(): Promise<void> {
-    const database = await getDB();
     const scope = getCurrentScope();
+    await deleteAllNotesForScope(scope);
+}
+
+export async function deleteAllNotesForScope(scope: string): Promise<void> {
+    const database = await getDB();
     await database.runAsync(
         'DELETE FROM note_doodles WHERE note_id IN (SELECT id FROM notes WHERE owner_uid = ?)',
         scope

@@ -31,7 +31,6 @@ import {
   getMapCardExit,
   getMapLayoutTransition,
   mapMotionDurations,
-  mapMotionEasing,
 } from './mapMotion';
 import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
 

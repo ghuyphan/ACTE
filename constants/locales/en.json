@@ -39,6 +39,8 @@
         "savedLocalTitle": "Saved locally",
         "savedLocalMsg": "Your note is saved on this device. Enable reminders to get notified when you revisit this place.",
         "enableReminders": "Enable reminders",
+        "reminderDisclosureTitle": "Enable background reminders",
+        "reminderDisclosureMsg": "Noto uses your location in the background to notice when you return to a saved place, even when the app is closed or not on screen. We only use this to trigger your note reminders.",
         "remindersEnabledTitle": "Reminders enabled",
         "remindersEnabledMsg": "Noto will remind you when you return to saved places.",
         "remindersUnavailableTitle": "Reminders still off",
@@ -287,7 +289,14 @@
         "plusHintWithLimit": "Free plan includes {{count}} photo notes.",
         "plusActiveHint": "Unlimited photo notes and library import unlocked.",
         "plusUnavailable": "Plus is coming soon to this build.",
-        "about": "So you never forget what she likes 💛"
+        "about": "So you never forget what she likes 💛",
+        "legal": "Legal & Support",
+        "privacyPolicy": "Privacy Policy",
+        "privacyPolicyHint": "Review how Noto handles your data and permissions.",
+        "support": "Support",
+        "supportHint": "Contact support if sign-in, sync, or account issues need a hand.",
+        "accountDeletion": "Account deletion help",
+        "accountDeletionHint": "Open the external deletion page or support contact for your store listing."
     },
     "profile": {
         "title": "Profile",
@@ -313,7 +322,20 @@
         "signedOutTitle": "No account connected",
         "signedOutMsg": "Sign in to back up your notes and keep them synced across your devices.",
         "unavailableMsg": "Account sign-in is unavailable right now, but your notes stay safely on this device.",
-        "logout": "Log out"
+        "logout": "Log out",
+        "legalTitle": "Privacy & support",
+        "deleteAccount": "Delete account",
+        "deleteAccountHelp": "Open deletion help",
+        "deleteAccountUnavailable": "Sign in to delete this account.",
+        "deleteAccountNotReady": "Account deletion is not configured for this build yet. Please contact support.",
+        "deleteAccountConfirmTitle": "Delete your Noto account?",
+        "deleteAccountConfirmMsg": "This permanently deletes your account, cloud sync data, shared posts, invites, and notes stored for this account. This cannot be undone.",
+        "deleteAccountFailedTitle": "Could not delete account",
+        "deleteAccountFailed": "We could not delete your account right now. Please try again in a moment.",
+        "deleteAccountNeedsSupportTitle": "Need help deleting your account?",
+        "deleteAccountNeedsSupportMsg": "This build could not finish the deletion automatically. You can continue from our deletion page or contact support.",
+        "deleteAccountSuccessTitle": "Account deleted",
+        "deleteAccountSuccessMsg": "Your Noto account and synced data have been deleted from this device and the cloud."
     },
     "auth": {
         "title": "Noto",
@@ -494,6 +516,7 @@
     },
     "common": {
         "cancel": "Cancel",
+        "continue": "Continue",
         "delete": "Delete",
         "goBack": "Go Back",
         "done": "Done",

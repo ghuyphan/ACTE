@@ -45,14 +45,20 @@ export default function SettingsScreenIOS() {
     isPurchaseAvailable,
     notes,
     openAccountScreen,
+    openAccountDeletionHelpLink,
     openPlusScreen,
+    openPrivacyPolicyLink,
+    openSupportLink,
     plusHint,
     plusValue,
     promptClearAll,
     setShowLanguage,
     setShowSync,
     setShowTheme,
+    showAccountDeletionLink,
     showLanguage,
+    showPrivacyPolicyLink,
+    showSupportLink,
     showSync,
     showTheme,
     syncValue,
@@ -189,6 +195,44 @@ export default function SettingsScreenIOS() {
               </HStack>
             </Button>
           </Section>
+
+          {(showPrivacyPolicyLink || showSupportLink || showAccountDeletionLink) ? (
+            <Section title={t('settings.legal', 'Legal & Support')}>
+              {showPrivacyPolicyLink ? (
+                <Button onPress={openPrivacyPolicyLink}>
+                  <HStack>
+                    <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                      {t('settings.privacyPolicy', 'Privacy Policy')}
+                    </SwiftUIText>
+                    <Spacer />
+                    <SwiftUIImage systemName="arrow.up.right" color={colors.secondaryText} size={14} />
+                  </HStack>
+                </Button>
+              ) : null}
+              {showSupportLink ? (
+                <Button onPress={openSupportLink}>
+                  <HStack>
+                    <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                      {t('settings.support', 'Support')}
+                    </SwiftUIText>
+                    <Spacer />
+                    <SwiftUIImage systemName="arrow.up.right" color={colors.secondaryText} size={14} />
+                  </HStack>
+                </Button>
+              ) : null}
+              {showAccountDeletionLink ? (
+                <Button onPress={openAccountDeletionHelpLink}>
+                  <HStack>
+                    <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                      {t('settings.accountDeletion', 'Account deletion help')}
+                    </SwiftUIText>
+                    <Spacer />
+                    <SwiftUIImage systemName="arrow.up.right" color={colors.secondaryText} size={14} />
+                  </HStack>
+                </Button>
+              ) : null}
+            </Section>
+          ) : null}
 
           <Section
             title={t('settings.account', 'Backup & Sync')}

@@ -34,6 +34,7 @@ interface AuthContextValue {
   signInWithEmail: (email: string, password: string) => Promise<AuthActionResult>;
   registerWithEmail: (input: EmailRegistrationInput) => Promise<AuthActionResult>;
   sendPasswordReset: (email: string) => Promise<AuthActionResult>;
+  deleteAccount: () => Promise<AuthActionResult>;
   signOut: () => Promise<void>;
 }
 
@@ -80,6 +81,12 @@ function getUnavailableResult(provider: 'auth' | 'google'): AuthActionResult {
     status: 'unavailable',
     message: i18n.t('auth.unavailableGeneric', 'Account sign-in is unavailable right now.'),
   };
+}
+
+async function clearAuthenticatedUserState(currentUserUid: string | null, setUser: (nextUser: AppUser | null) => void) {
+  await clearSharedFeedCache(currentUserUid).catch(() => undefined);
+  setActiveNotesScope(LOCAL_NOTES_SCOPE);
+  setUser(null);
 }
 
 function normalizeGoogleIdToken(response: unknown) {
@@ -425,6 +432,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
         }
       },
+      deleteAccount: async () => {
+        if (!isSupabaseAuthAvailable()) {
+          return getUnavailableResult('auth');
+        }
+
+        const supabase = getSupabase();
+        if (!supabase) {
+          return getUnavailableResult('auth');
+        }
+
+        if (!user) {
+          return {
+            status: 'unavailable',
+            message: i18n.t('profile.deleteAccountUnavailable', 'Sign in to delete this account.'),
+          };
+        }
+
+        try {
+          const { data, error } = await supabase.functions.invoke('delete-account', {
+            body: {},
+          });
+          if (error) {
+            throw error;
+          }
+
+          if (
+            data &&
+            typeof data === 'object' &&
+            'success' in data &&
+            (data as { success?: boolean }).success === false
+          ) {
+            throw new Error(
+              typeof (data as { error?: unknown }).error === 'string'
+                ? (data as { error?: string }).error
+                : 'Could not delete this account right now.'
+            );
+          }
+
+          try {
+            await GoogleSignin.signOut();
+          } catch {
+            // Ignore Google sign-out failures after the account is already deleted.
+          }
+
+          await supabase.auth.signOut().catch(() => undefined);
+          await clearAuthenticatedUserState(user.uid, setUser);
+          return { status: 'success' };
+        } catch (error) {
+          const message = getSupabaseErrorMessage(error);
+
+          if (message.toLowerCase().includes('not found')) {
+            return {
+              status: 'error',
+              message: i18n.t(
+                'profile.deleteAccountNotReady',
+                'Account deletion is not configured for this build yet. Please contact support.'
+              ),
+            };
+          }
+
+          return {
+            status: 'error',
+            message:
+              message ||
+              i18n.t(
+                'profile.deleteAccountFailed',
+                'We could not delete your account right now. Please try again in a moment.'
+              ),
+          };
+        }
+      },
       signOut: async () => {
         const supabase = getSupabase();
 
@@ -441,9 +519,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        await clearSharedFeedCache(user?.uid ?? null).catch(() => undefined);
-        setActiveNotesScope(LOCAL_NOTES_SCOPE);
-        setUser(null);
+        await clearAuthenticatedUserState(user?.uid ?? null, setUser);
       },
     }),
     [isReady, user]

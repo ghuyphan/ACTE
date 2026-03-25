@@ -9,6 +9,14 @@ import { useNotes } from '../../hooks/useNotes';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { useTheme } from '../../hooks/useTheme';
+import {
+  hasAccountDeletionLink,
+  hasPrivacyPolicyLink,
+  hasSupportLink,
+  openAccountDeletionHelp,
+  openPrivacyPolicy,
+  openSupport,
+} from '../../services/legalLinks';
 
 export function useSettingsScreenModel() {
   const { t, i18n } = useTranslation();
@@ -45,6 +53,18 @@ export function useSettingsScreenModel() {
 
   const openPlusScreen = () => {
     router.push('/plus');
+  };
+
+  const openPrivacyPolicyLink = () => {
+    void openPrivacyPolicy();
+  };
+
+  const openSupportLink = () => {
+    void openSupport();
+  };
+
+  const openAccountDeletionHelpLink = () => {
+    void openAccountDeletionHelp();
   };
 
   const themeLabel =
@@ -199,7 +219,10 @@ export function useSettingsScreenModel() {
     isPurchaseAvailable,
     notes,
     openAccountScreen,
+    openAccountDeletionHelpLink,
     openPlusScreen,
+    openPrivacyPolicyLink,
+    openSupportLink,
     plusHint,
     plusValue,
     promptClearAll,
@@ -209,6 +232,9 @@ export function useSettingsScreenModel() {
     showLanguage,
     showSync,
     showTheme,
+    showAccountDeletionLink: hasAccountDeletionLink(),
+    showPrivacyPolicyLink: hasPrivacyPolicyLink(),
+    showSupportLink: hasSupportLink(),
     syncEnabled,
     pendingCount,
     failedCount,

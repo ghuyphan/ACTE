@@ -4,6 +4,7 @@
 - [ ] Onboarding appears on first launch and routes to app after completion.
 - [ ] Auth screen supports local mode and configured Google sign-in path.
 - [ ] Account screen includes the expected production-safe actions and copy.
+- [ ] Signed-in users can delete their account from inside the app.
 - [ ] Home capture: text note save with valid location.
 - [ ] Home capture: photo note save, retake flow, and camera permission denied handling.
 - [ ] Home capture: Photos library import works for Plus users.
@@ -26,10 +27,19 @@
 ## Map / Reminder / Widget / Sharing
 - [ ] Map first load centers on user or notes fallback.
 - [ ] Map marker callout opens note detail on iOS and Android.
+- [ ] Reminder flow shows a clear background-location disclosure before requesting Always/background access.
 - [ ] Reminder permission flow is action-triggered and supports Open Settings escalation.
 - [ ] Notification deep-link opens the related note.
 - [ ] Widget updates deterministically from latest/nearby note.
 - [ ] Friend invites and room invites deep-link into the expected join surfaces.
+
+## Store Metadata
+- [ ] Privacy policy URL is configured and opens from Settings/Profile.
+- [ ] Support URL or support email is configured and opens from Settings/Profile.
+- [ ] External account deletion help URL is configured for Play Console listing requirements.
+- [ ] Apple App Privacy details are filled out in App Store Connect.
+- [ ] Google Play Data safety is filled out accurately.
+- [ ] Background location declaration assets are ready for Google Play review.
 
 ## iOS Release Focus
 - [ ] iOS: theme + language changes apply immediately.

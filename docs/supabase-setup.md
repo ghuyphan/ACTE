@@ -9,6 +9,10 @@ Add these values to `.env.local`:
 - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
 - `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`
 - `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
+- `EXPO_PUBLIC_PRIVACY_POLICY_URL`
+- `EXPO_PUBLIC_SUPPORT_URL`
+- `EXPO_PUBLIC_ACCOUNT_DELETION_URL`
+- `EXPO_PUBLIC_SUPPORT_EMAIL`
 
 Do not add a Supabase `service_role` key to the app.
 
@@ -49,3 +53,15 @@ Enable Realtime for:
 ## 5. Native Builds
 
 The app no longer uses Firebase native config files. Google sign-in is configured with OAuth client IDs and an iOS URL scheme derived from the iOS client ID.
+
+## 6. Account Deletion Function
+
+This repo now includes `supabase/functions/delete-account/index.ts`.
+
+Deploy it before shipping account-based builds:
+
+1. `supabase functions deploy delete-account`
+2. Set `SUPABASE_SERVICE_ROLE_KEY` for the function environment.
+3. Keep the service-role key out of the app bundle.
+
+The app calls this function from the Profile screen, then clears local account-scoped notes on-device.

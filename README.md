@@ -93,6 +93,13 @@ RevenueCat for Plus:
 - `EXPO_PUBLIC_REVENUECAT_PLUS_ENTITLEMENT_ID` optional, defaults to `plus`
 - `EXPO_PUBLIC_REVENUECAT_PLUS_OFFERING_ID` optional
 
+Store listing / legal links:
+
+- `EXPO_PUBLIC_PRIVACY_POLICY_URL`
+- `EXPO_PUBLIC_SUPPORT_URL`
+- `EXPO_PUBLIC_ACCOUNT_DELETION_URL`
+- `EXPO_PUBLIC_SUPPORT_EMAIL`
+
 See [docs/supabase-setup.md](./docs/supabase-setup.md) for the SQL migration, bucket policies, and dashboard setup checklist.
 
 ## Quality Checks
