@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView } from 'expo-camera';
-import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassView } from '../ui/GlassView';
 import { Image } from 'expo-image';
@@ -8,6 +8,7 @@ import { TFunction } from 'i18next';
 import { forwardRef, ReactNode, RefObject, useCallback, useEffect, useRef, useState, useMemo, useImperativeHandle, type ComponentProps } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   Platform,
@@ -312,6 +313,7 @@ interface CaptureCardProps {
   colors: Pick<
     ThemeColors,
     | 'primary'
+    | 'primarySoft'
     | 'captureButtonBg'
     | 'card'
     | 'border'
@@ -735,22 +737,44 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       return;
     }
 
+    let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (mediaPermission.status !== 'granted') {
+      mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    }
+
+    if (mediaPermission.status !== 'granted') {
+      Alert.alert(
+        t('capture.photoLibraryPermissionTitle', 'Photo access needed'),
+        mediaPermission.canAskAgain === false
+          ? t(
+              'capture.photoLibraryPermissionSettingsMsg',
+              'Photo library access is blocked for Noto. Open Settings to import from your library.'
+            )
+          : t(
+              'capture.photoLibraryPermissionMsg',
+              'Allow photo library access so you can import an image into this note.'
+            )
+      );
+      return;
+    }
+
     setImportingSticker(true);
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        multiple: false,
-        copyToCacheDirectory: true,
-        type: ['image/png', 'image/webp'],
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 1,
+        selectionLimit: 1,
       });
 
-      if (result.canceled || !result.assets?.[0]) {
+      if (result.canceled || !result.assets?.[0]?.uri) {
         return;
       }
 
       const importedAsset = await importStickerAsset({
         uri: result.assets[0].uri,
         mimeType: result.assets[0].mimeType,
-        name: result.assets[0].name,
+        name: result.assets[0].fileName,
       });
       const nextPlacement = createStickerPlacement(importedAsset, stickerPlacements);
       if (isPhotoDoodleSurface) {
@@ -767,10 +791,16 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       setTextDoodleModeEnabled(false);
     } catch (error) {
       console.warn('Sticker import failed:', error);
+      Alert.alert(
+        t('capture.error', 'Error'),
+        error instanceof Error
+          ? error.message
+          : t('capture.photoImportFailed', 'We could not import that photo right now.')
+      );
     } finally {
       setImportingSticker(false);
     }
-  }, [importingSticker, isPhotoDoodleSurface, stickerPlacements]);
+  }, [importingSticker, isPhotoDoodleSurface, stickerPlacements, t]);
   const handleToggleStickerMode = useCallback(() => {
     if (!ENABLE_PHOTO_STICKERS) {
       return;
@@ -989,8 +1019,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                           testID="capture-sticker-toggle"
                           onPress={handleToggleStickerMode}
                           active={stickerModeEnabled}
-                          activeIconName="sparkles"
-                          inactiveIconName="sparkles-outline"
+                          activeIconName="pricetags"
+                          inactiveIconName="pricetags-outline"
                           activeBackgroundColor={colors.captureButtonBg}
                           inactiveBackgroundColor={colors.captureGlassFill}
                           activeBorderColor="rgba(255,255,255,0.18)"
@@ -1051,8 +1081,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                             testID="capture-sticker-toggle"
                             onPress={handleToggleStickerMode}
                             active={stickerModeEnabled}
-                            activeIconName="sparkles"
-                            inactiveIconName="sparkles-outline"
+                            activeIconName="pricetags"
+                            inactiveIconName="pricetags-outline"
                             activeBackgroundColor={colors.captureButtonBg}
                             inactiveBackgroundColor={colors.captureGlassFill}
                             activeBorderColor="rgba(255,255,255,0.18)"
@@ -1230,8 +1260,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                           accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
                           onPress={handleToggleStickerMode}
                           active={stickerModeEnabled}
-                          activeIconName="sparkles"
-                          inactiveIconName="sparkles-outline"
+                          activeIconName="pricetags"
+                          inactiveIconName="pricetags-outline"
                           activeBackgroundColor={photoPreviewActiveFill}
                           inactiveBackgroundColor={photoPreviewControlFill}
                           activeBorderColor={photoPreviewActiveFill}
@@ -1304,8 +1334,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                             accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
                             onPress={handleToggleStickerMode}
                             active={stickerModeEnabled}
-                            activeIconName="sparkles"
-                            inactiveIconName="sparkles-outline"
+                            activeIconName="pricetags"
+                            inactiveIconName="pricetags-outline"
                             activeBackgroundColor={photoPreviewActiveFill}
                             inactiveBackgroundColor={photoPreviewControlFill}
                             activeBorderColor={photoPreviewActiveFill}

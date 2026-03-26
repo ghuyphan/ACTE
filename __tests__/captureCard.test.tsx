@@ -106,6 +106,7 @@ function createCaptureCardProps(
     captureTranslateY: zeroValue,
     colors: {
       primary: '#FFC107',
+      primarySoft: 'rgba(255, 193, 7, 0.2)',
       captureButtonBg: '#1C1C1E',
       card: '#FFFFFF',
       border: '#E5E5EA',
@@ -311,6 +312,7 @@ describe('CaptureCard doodle handle', () => {
         captureTranslateY={new Animated.Value(0)}
         colors={{
           primary: '#FFC107',
+          primarySoft: 'rgba(255, 193, 7, 0.2)',
           captureButtonBg: '#1C1C1E',
           card: '#FFFFFF',
           border: '#E5E5EA',

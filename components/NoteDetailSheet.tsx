@@ -1,8 +1,8 @@
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
 import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -410,22 +410,44 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
 
         Keyboard.dismiss();
+        let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
+        if (mediaPermission.status !== 'granted') {
+            mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        }
+
+        if (mediaPermission.status !== 'granted') {
+            Alert.alert(
+                t('capture.photoLibraryPermissionTitle', 'Photo access needed'),
+                mediaPermission.canAskAgain === false
+                    ? t(
+                        'capture.photoLibraryPermissionSettingsMsg',
+                        'Photo library access is blocked for Noto. Open Settings to import from your library.'
+                    )
+                    : t(
+                        'capture.photoLibraryPermissionMsg',
+                        'Allow photo library access so you can import an image into this note.'
+                    )
+            );
+            return;
+        }
+
         setImportingSticker(true);
         try {
-            const result = await DocumentPicker.getDocumentAsync({
-                multiple: false,
-                copyToCacheDirectory: true,
-                type: ['image/png', 'image/webp'],
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: false,
+                quality: 1,
+                selectionLimit: 1,
             });
 
-            if (result.canceled || !result.assets?.[0]) {
+            if (result.canceled || !result.assets?.[0]?.uri) {
                 return;
             }
 
             const importedAsset = await importStickerAsset({
                 uri: result.assets[0].uri,
                 mimeType: result.assets[0].mimeType,
-                name: result.assets[0].name,
+                name: result.assets[0].fileName,
             });
 
             const nextPlacement = createStickerPlacement(importedAsset, editStickerPlacements);
@@ -435,10 +457,16 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             setDoodleModeEnabled(false);
         } catch (error) {
             console.warn('Sticker import failed:', error);
+            Alert.alert(
+                t('capture.error', 'Error'),
+                error instanceof Error
+                    ? error.message
+                    : t('capture.photoImportFailed', 'We could not import that photo right now.')
+            );
         } finally {
             setImportingSticker(false);
         }
-    }, [editStickerPlacements, importingSticker, isEditing, note]);
+    }, [editStickerPlacements, importingSticker, isEditing, note, t]);
     const handleToggleStickerMode = useCallback(() => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note) {
             return;
@@ -958,7 +986,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                     ]}
                                                 >
                                                     <Ionicons
-                                                        name={stickerModeEnabled ? 'sparkles' : 'sparkles-outline'}
+                                                        name={stickerModeEnabled ? 'pricetags' : 'pricetags-outline'}
                                                         size={16}
                                                         color="#FFFFFF"
                                                     />
@@ -1099,7 +1127,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                         ]}
                                                     >
                                                         <Ionicons
-                                                            name={stickerModeEnabled ? 'sparkles' : 'sparkles-outline'}
+                                                            name={stickerModeEnabled ? 'pricetags' : 'pricetags-outline'}
                                                             size={16}
                                                             color="#FFFFFF"
                                                         />
