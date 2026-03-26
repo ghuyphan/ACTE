@@ -76,6 +76,18 @@ jest.mock('../components/NoteDoodleCanvas', () => {
   };
 });
 
+jest.mock('../components/NoteStickerCanvas', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  return {
+    __esModule: true,
+    default: function MockNoteStickerCanvas() {
+      return <View testID="mock-sticker-canvas" />;
+    },
+  };
+});
+
 function createCaptureCardProps(
   ref: React.RefObject<CaptureCardHandle | null>,
   props: Partial<React.ComponentProps<typeof CaptureCard>> = {}
@@ -153,16 +165,13 @@ function renderCaptureCard(
 }
 
 describe('CaptureCard doodle handle', () => {
-  it('hides the leading accessory while camera permission is missing', () => {
+  it('shows the restaurant field by default in text mode', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const { queryByTestId } = renderCaptureCard(ref, {
-      captureMode: 'camera',
-      needsCameraPermission: true,
-      permissionGranted: false,
-      leadingAccessory: <View testID="leading-accessory" />,
+    const { getByTestId } = renderCaptureCard(ref, {
+      restaurantName: '',
     });
 
-    expect(queryByTestId('leading-accessory')).toBeNull();
+    expect(getByTestId('capture-restaurant-input')).toBeTruthy();
   });
 
   it('tracks local doodle state through the imperative handle', () => {
@@ -171,10 +180,17 @@ describe('CaptureCard doodle handle', () => {
 
     expect(ref.current?.getDoodleSnapshot()).toEqual({ enabled: false, strokes: [] });
 
-    fireEvent.press(getByTestId('capture-doodle-toggle'));
+    act(() => {
+      fireEvent.press(getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(getByTestId('capture-doodle-toggle'));
+    });
     expect(getByTestId('mock-doodle-editable')).toHaveTextContent('true');
 
-    fireEvent.press(getByTestId('mock-doodle-commit'));
+    act(() => {
+      fireEvent.press(getByTestId('mock-doodle-commit'));
+    });
     expect(ref.current?.getDoodleSnapshot()).toEqual({
       enabled: true,
       strokes: [
@@ -183,13 +199,17 @@ describe('CaptureCard doodle handle', () => {
       ],
     });
 
-    fireEvent.press(getByTestId('capture-doodle-undo'));
+    act(() => {
+      fireEvent.press(getByTestId('capture-doodle-undo'));
+    });
     expect(ref.current?.getDoodleSnapshot()).toEqual({
       enabled: true,
       strokes: [{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }],
     });
 
-    fireEvent.press(getByTestId('capture-doodle-clear'));
+    act(() => {
+      fireEvent.press(getByTestId('capture-doodle-clear'));
+    });
     expect(ref.current?.getDoodleSnapshot()).toEqual({ enabled: true, strokes: [] });
 
     act(() => {
@@ -249,10 +269,17 @@ describe('CaptureCard doodle handle', () => {
       capturedPhoto: 'file:///photo.jpg',
     });
 
-    fireEvent.press(getByTestId('capture-doodle-toggle'));
+    act(() => {
+      fireEvent.press(getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(getByTestId('capture-doodle-toggle'));
+    });
     expect(getByTestId('mock-doodle-editable')).toHaveTextContent('true');
 
-    fireEvent.press(getByTestId('mock-doodle-commit'));
+    act(() => {
+      fireEvent.press(getByTestId('mock-doodle-commit'));
+    });
     expect(ref.current?.getDoodleSnapshot().strokes).toHaveLength(2);
   });
 
@@ -260,8 +287,15 @@ describe('CaptureCard doodle handle', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const view = renderCaptureCard(ref);
 
-    fireEvent.press(view.getByTestId('capture-doodle-toggle'));
-    fireEvent.press(view.getByTestId('mock-doodle-commit'));
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-doodle-toggle'));
+    });
+    act(() => {
+      fireEvent.press(view.getByTestId('mock-doodle-commit'));
+    });
     expect(ref.current?.getDoodleSnapshot().strokes).toHaveLength(2);
 
     view.rerender(
@@ -327,5 +361,20 @@ describe('CaptureCard doodle handle', () => {
     );
 
     expect(ref.current?.getDoodleSnapshot()).toEqual({ enabled: false, strokes: [] });
+  });
+
+  it('keeps the share toggle visible beside the restaurant field', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const handleChangeShareTarget = jest.fn();
+    const { getByTestId } = renderCaptureCard(ref, {
+      restaurantName: '',
+      onChangeShareTarget: handleChangeShareTarget,
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-share-target-toggle'));
+    });
+
+    expect(handleChangeShareTarget).toHaveBeenCalledWith('shared');
   });
 });

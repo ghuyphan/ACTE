@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView } from 'expo-camera';
+import * as DocumentPicker from 'expo-document-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassView } from '../ui/GlassView';
 import { Image } from 'expo-image';
@@ -28,12 +29,22 @@ import Reanimated, {
   withTiming,
 } from 'react-native-reanimated';
 import { DOODLE_ARTBOARD_FRAME } from '../../constants/doodleLayout';
+import { ENABLE_PHOTO_STICKERS } from '../../constants/experiments';
 import { Layout, Shadows, Typography } from '../../constants/theme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { getCaptureNoteGradient } from '../../services/noteAppearance';
 import { applyCommittedInlineEmoji } from '../../services/noteDecorations';
+import NoteStickerCanvas from '../NoteStickerCanvas';
 import NoteDoodleCanvas, { DoodleStroke } from '../NoteDoodleCanvas';
+import {
+  bringStickerPlacementToFront,
+  createStickerPlacement,
+  duplicateStickerPlacement,
+  importStickerAsset,
+  type NoteStickerPlacement,
+  updateStickerPlacementTransform,
+} from '../../services/noteStickers';
 import PrimaryButton from '../ui/PrimaryButton';
 import { isOlderIOS } from '../../utils/platform';
 
@@ -46,10 +57,8 @@ const TOP_CONTROL_RADIUS = 19;
 const SHUTTER_OUTER_SIZE = 68;
 const SIDE_ACTION_SIZE = 46;
 const SHUTTER_SIDE_ACTION_GAP = 22;
-const SHUTTER_SIDE_ACTION_OFFSET = SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP + SIDE_ACTION_SIZE;
 const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad) };
 const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
-const AnimatedIonicons = Reanimated.createAnimatedComponent(Ionicons);
 const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
 const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Note about this place...',
@@ -73,7 +82,9 @@ function getCaptureTextPlaceholderVariants(t: TFunction) {
 
 export interface CaptureCardHandle {
   getDoodleSnapshot: () => { enabled: boolean; strokes: DoodleStroke[] };
+  getStickerSnapshot: () => { enabled: boolean; placements: NoteStickerPlacement[] };
   resetDoodle: () => void;
+  resetStickers: () => void;
 }
 
 type CaptureAnimatedPressableProps = Omit<PressableProps, 'style'> & {
@@ -141,7 +152,6 @@ interface CaptureCardProps {
   cameraSessionKey: number;
   captureScale: Animated.Value;
   captureTranslateY: Animated.Value;
-  saveTransitionProgress?: Animated.Value;
   colors: Pick<
     ThemeColors,
     | 'primary'
@@ -187,7 +197,6 @@ interface CaptureCardProps {
   saving: boolean;
   saveState?: 'idle' | 'saving' | 'success';
   shutterScale: Animated.Value;
-  leadingAccessory?: ReactNode;
   cameraStatusText?: string | null;
   remainingPhotoSlots?: number | null;
   libraryImportLocked?: boolean;
@@ -206,7 +215,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   cameraSessionKey,
   captureScale,
   captureTranslateY,
-  saveTransitionProgress,
   colors,
   t,
   noteText,
@@ -231,7 +239,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   saving,
   saveState = 'idle',
   shutterScale,
-  leadingAccessory,
   cameraStatusText,
   remainingPhotoSlots,
   libraryImportLocked = false,
@@ -242,19 +249,31 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   footerContent,
 }, ref) {
   const reduceMotionEnabled = useReducedMotion();
-  const internalSaveTransitionProgress = useRef(new Animated.Value(0)).current;
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
   const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
   const [cameraRetryNonce, setCameraRetryNonce] = useState(0);
   const [textDoodleModeEnabled, setTextDoodleModeEnabled] = useState(false);
   const [photoDoodleModeEnabled, setPhotoDoodleModeEnabled] = useState(false);
+  const [textDecorateMenuExpanded, setTextDecorateMenuExpanded] = useState(false);
+  const [photoDecorateMenuExpanded, setPhotoDecorateMenuExpanded] = useState(false);
   const [textDoodleStrokes, setTextDoodleStrokes] = useState<DoodleStroke[]>([]);
   const [photoDoodleStrokes, setPhotoDoodleStrokes] = useState<DoodleStroke[]>([]);
+  const [textStickerModeEnabled, setTextStickerModeEnabled] = useState(false);
+  const [photoStickerModeEnabled, setPhotoStickerModeEnabled] = useState(false);
+  const [textStickerPlacements, setTextStickerPlacements] = useState<NoteStickerPlacement[]>([]);
+  const [photoStickerPlacements, setPhotoStickerPlacements] = useState<NoteStickerPlacement[]>([]);
+  const [textSelectedStickerId, setTextSelectedStickerId] = useState<string | null>(null);
+  const [photoSelectedStickerId, setPhotoSelectedStickerId] = useState<string | null>(null);
+  const [importingSticker, setImportingSticker] = useState(false);
   const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
   const isPhotoDoodleSurface = captureMode === 'camera' && Boolean(capturedPhoto);
   const doodleModeEnabled = isPhotoDoodleSurface ? photoDoodleModeEnabled : textDoodleModeEnabled;
   const doodleStrokes = isPhotoDoodleSurface ? photoDoodleStrokes : textDoodleStrokes;
+  const stickerModeEnabled = isPhotoDoodleSurface ? photoStickerModeEnabled : textStickerModeEnabled;
+  const stickerPlacements = isPhotoDoodleSurface ? photoStickerPlacements : textStickerPlacements;
+  const selectedStickerId = isPhotoDoodleSurface ? photoSelectedStickerId : textSelectedStickerId;
+  const decorateMenuExpanded = isPhotoDoodleSurface ? photoDecorateMenuExpanded : textDecorateMenuExpanded;
   const isCameraSaveMode = captureMode === 'camera';
   const isSharedTarget = shareTarget === 'shared';
   const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
@@ -268,24 +287,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const photoPreviewControlText = capturedPhoto ? colors.captureGlassText : colors.captureCameraOverlayText;
   const photoPreviewActiveFill = colors.primary;
   const photoPreviewActiveText = colors.captureCardText;
-  const privateAudienceLabel = t('shared.capturePrivate', 'Just me');
-  const sharedAudienceLabel = t('shared.manageTitle', 'Friends');
-  const audienceLabel = isSharedTarget ? sharedAudienceLabel : privateAudienceLabel;
-  const audienceSizerLabel =
-    privateAudienceLabel.length >= sharedAudienceLabel.length ? privateAudienceLabel : sharedAudienceLabel;
-  const privateAudienceSurfaceBackground =
-    captureMode === 'text' ? colors.captureGlassFill : photoPreviewControlFill;
-  const sharedAudienceSurfaceBackground = '#FFF4DE';
-  const privateAudienceSurfaceBorder =
-    captureMode === 'text' ? colors.captureGlassBorder : photoPreviewControlBorder;
-  const sharedAudienceSurfaceBorder = 'rgba(255,255,255,0.56)';
-  const privateAudienceColor =
-    captureMode === 'text' ? colors.captureGlassText : photoPreviewControlText;
-  const sharedAudienceColor = colors.primary;
-  const audienceIconColor = isSharedTarget ? sharedAudienceColor : privateAudienceColor;
-  const audienceProgress = useSharedValue(isSharedTarget ? 1 : 0);
-  const audiencePressScale = useSharedValue(1);
-  const audienceStateScale = useSharedValue(1);
   const saveStateScale = useSharedValue(1);
   const saveSuccessProgress = useSharedValue(saveState === 'success' ? 1 : 0);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
@@ -294,9 +295,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const activeTextPlaceholder =
     placeholderVariants[textPlaceholderIndex % placeholderVariants.length] ??
     DEFAULT_CAPTURE_TEXT_PLACEHOLDERS[0];
+  const showDecorateControls = decorateMenuExpanded || doodleModeEnabled || stickerModeEnabled;
   const isSaveBusy = saving || saveState === 'saving';
   const isSaveSuccessful = saveState === 'success';
+  const interactionsDisabled = isSaveBusy || isSaveSuccessful;
   const saveIdleBackground = isCameraSaveMode ? colors.primary : colors.captureButtonBg;
+  const decorateProgress = useSharedValue(showDecorateControls ? 1 : 0);
 
   useEffect(() => {
     if (captureMode === 'camera' && !capturedPhoto && permissionGranted && shouldRenderCameraPreview) {
@@ -339,15 +343,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   }, [captureMode, capturedPhoto, permissionGranted, cameraSessionKey, cameraRetryNonce, shouldRenderCameraPreview]);
 
   useEffect(() => {
-    audienceProgress.value = withTiming(isSharedTarget ? 1 : 0, {
-      duration: 220,
+    decorateProgress.value = withTiming(showDecorateControls ? 1 : 0, {
+      duration: reduceMotionEnabled ? 120 : 260,
       easing: Easing.out(Easing.cubic),
     });
-    audienceStateScale.value = withSequence(
-      withTiming(0.94, { duration: 110, easing: Easing.out(Easing.quad) }),
-      withTiming(1, { duration: 220, easing: Easing.out(Easing.back(1.1)) })
-    );
-  }, [audienceProgress, audienceStateScale, isSharedTarget]);
+  }, [decorateProgress, reduceMotionEnabled, showDecorateControls]);
 
   useEffect(() => {
     if (saveState === 'success') {
@@ -381,10 +381,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   useEffect(() => {
     if (captureMode !== 'text') {
       setTextDoodleModeEnabled(false);
+      setTextStickerModeEnabled(false);
+      setTextDecorateMenuExpanded(false);
     }
 
     if (!capturedPhoto) {
       setPhotoDoodleModeEnabled(false);
+      setPhotoStickerModeEnabled(false);
+      setPhotoDecorateMenuExpanded(false);
     }
   }, [captureMode, capturedPhoto]);
 
@@ -416,6 +420,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setPhotoDoodleStrokes([]);
   }, []);
 
+  const resetStickers = useCallback(() => {
+    setTextStickerModeEnabled(false);
+    setPhotoStickerModeEnabled(false);
+    setTextStickerPlacements([]);
+    setPhotoStickerPlacements([]);
+    setTextSelectedStickerId(null);
+    setPhotoSelectedStickerId(null);
+  }, []);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -426,34 +439,53 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           points: [...stroke.points],
         })),
       }),
+      getStickerSnapshot: () => ({
+        enabled: stickerModeEnabled,
+        placements: stickerPlacements.map((placement) => ({
+          ...placement,
+          asset: {
+            ...placement.asset,
+          },
+        })),
+      }),
       resetDoodle,
+      resetStickers,
     }),
-    [doodleModeEnabled, doodleStrokes, resetDoodle]
+    [doodleModeEnabled, doodleStrokes, resetDoodle, resetStickers, stickerModeEnabled, stickerPlacements]
   );
 
-  const animatedAudienceBadgeStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      audienceProgress.value,
-      [0, 1],
-      [privateAudienceSurfaceBackground, sharedAudienceSurfaceBackground]
-    ),
-    borderColor: interpolateColor(
-      audienceProgress.value,
-      [0, 1],
-      [privateAudienceSurfaceBorder, sharedAudienceSurfaceBorder]
-    ),
-    transform: [{ scale: audiencePressScale.value * audienceStateScale.value }],
-  }));
-
-  const animatedAudienceIconStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(audienceProgress.value, [0, 1], [privateAudienceColor, sharedAudienceColor]),
-  }));
-
-  const animatedAudienceTextStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(audienceProgress.value, [0, 1], [privateAudienceColor, sharedAudienceColor]),
-  }));
   const animatedSaveButtonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: saveStateScale.value }],
+  }));
+  const animatedDecorateButtonStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      decorateProgress.value,
+      [0, 1],
+      [isCameraSaveMode ? photoPreviewControlFill : colors.captureGlassFill, isCameraSaveMode ? photoPreviewActiveFill : colors.captureButtonBg]
+    ),
+    borderColor: interpolateColor(
+      decorateProgress.value,
+      [0, 1],
+      [isCameraSaveMode ? photoPreviewControlBorder : colors.captureGlassBorder, 'rgba(255,255,255,0.18)']
+    ),
+    transform: [
+      { scale: 1 + decorateProgress.value * 0.04 },
+      { translateY: decorateProgress.value * -1.5 },
+    ],
+  }));
+  const animatedDecorateIconStyle = useAnimatedStyle(() => ({
+    transform: [
+      { rotate: `${decorateProgress.value * 14}deg` },
+      { scale: 1 + decorateProgress.value * 0.08 },
+    ],
+  }));
+  const animatedDecorateControlsStyle = useAnimatedStyle(() => ({
+    opacity: decorateProgress.value,
+    maxHeight: 14 + TOP_CONTROL_HEIGHT + decorateProgress.value * 4,
+    transform: [
+      { translateY: (1 - decorateProgress.value) * -8 },
+      { scale: 0.96 + decorateProgress.value * 0.04 },
+    ],
   }));
   const animatedSaveInnerStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
@@ -469,19 +501,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const animatedSaveIconStyle = useAnimatedStyle(() => ({
     transform: [{ scale: 1 + saveSuccessProgress.value * 0.12 }],
   }));
-  const effectiveSaveTransitionProgress = saveTransitionProgress ?? internalSaveTransitionProgress;
-  const saveTransitionOpacity = effectiveSaveTransitionProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 0.1],
-  });
-  const saveTransitionTranslateY = effectiveSaveTransitionProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -24],
-  });
-  const saveTransitionScale = effectiveSaveTransitionProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 0.965],
-  });
   const showCameraUnavailableState =
     captureMode === 'camera' && !capturedPhoto && permissionGranted && cameraUnavailable;
   const cameraUnavailableDetail =
@@ -489,14 +508,38 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       'capture.cameraUnavailableHint',
       'This can happen on a simulator or when the camera session gets stuck. Try again or use a physical device.'
     );
-  const showLeadingAccessory =
-    Boolean(leadingAccessory) && (captureMode !== 'camera' || Boolean(capturedPhoto) || permissionGranted);
+  const handleToggleDecorateMenu = useCallback(() => {
+    if (doodleModeEnabled || stickerModeEnabled) {
+      if (isPhotoDoodleSurface) {
+        setPhotoDoodleModeEnabled(false);
+        setPhotoStickerModeEnabled(false);
+        setPhotoDecorateMenuExpanded(false);
+        return;
+      }
+
+      setTextDoodleModeEnabled(false);
+      setTextStickerModeEnabled(false);
+      setTextDecorateMenuExpanded(false);
+      return;
+    }
+
+    if (isPhotoDoodleSurface) {
+      setPhotoDecorateMenuExpanded((current) => !current);
+      return;
+    }
+
+    setTextDecorateMenuExpanded((current) => !current);
+  }, [doodleModeEnabled, isPhotoDoodleSurface, stickerModeEnabled]);
   const handleToggleDoodleMode = useCallback(() => {
     if (isPhotoDoodleSurface) {
+      setPhotoDecorateMenuExpanded(true);
+      setPhotoStickerModeEnabled(false);
       setPhotoDoodleModeEnabled((current) => !current);
       return;
     }
 
+    setTextDecorateMenuExpanded(true);
+    setTextStickerModeEnabled(false);
     setTextDoodleModeEnabled((current) => !current);
   }, [isPhotoDoodleSurface]);
   const handleUndoDoodle = useCallback(() => {
@@ -515,6 +558,140 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
     setTextDoodleStrokes([]);
   }, [isPhotoDoodleSurface]);
+  const handleImportSticker = useCallback(async () => {
+    if (!ENABLE_PHOTO_STICKERS || importingSticker) {
+      return;
+    }
+
+    setImportingSticker(true);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        multiple: false,
+        copyToCacheDirectory: true,
+        type: ['image/png', 'image/webp'],
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return;
+      }
+
+      const importedAsset = await importStickerAsset({
+        uri: result.assets[0].uri,
+        mimeType: result.assets[0].mimeType,
+        name: result.assets[0].name,
+      });
+      const nextPlacement = createStickerPlacement(importedAsset, stickerPlacements);
+      if (isPhotoDoodleSurface) {
+        setPhotoStickerPlacements((current) => [...current, nextPlacement]);
+        setPhotoSelectedStickerId(nextPlacement.id);
+        setPhotoStickerModeEnabled(true);
+        setPhotoDoodleModeEnabled(false);
+        return;
+      }
+
+      setTextStickerPlacements((current) => [...current, nextPlacement]);
+      setTextSelectedStickerId(nextPlacement.id);
+      setTextStickerModeEnabled(true);
+      setTextDoodleModeEnabled(false);
+    } catch (error) {
+      console.warn('Sticker import failed:', error);
+    } finally {
+      setImportingSticker(false);
+    }
+  }, [importingSticker, isPhotoDoodleSurface, stickerPlacements]);
+  const handleToggleStickerMode = useCallback(() => {
+    if (!ENABLE_PHOTO_STICKERS) {
+      return;
+    }
+
+    if (!stickerModeEnabled && stickerPlacements.length === 0 && !importingSticker) {
+      void handleImportSticker();
+      return;
+    }
+
+    if (isPhotoDoodleSurface) {
+      setPhotoDecorateMenuExpanded(true);
+      setPhotoDoodleModeEnabled(false);
+      setPhotoStickerModeEnabled((current) => !current);
+      return;
+    }
+
+    setTextDecorateMenuExpanded(true);
+    setTextDoodleModeEnabled(false);
+    setTextStickerModeEnabled((current) => !current);
+  }, [handleImportSticker, importingSticker, isPhotoDoodleSurface, stickerModeEnabled, stickerPlacements.length]);
+  const handleChangeStickerPlacements = useCallback(
+    (nextPlacements: NoteStickerPlacement[]) => {
+      if (isPhotoDoodleSurface) {
+        setPhotoStickerPlacements(nextPlacements);
+        return;
+      }
+
+      setTextStickerPlacements(nextPlacements);
+    },
+    [isPhotoDoodleSurface]
+  );
+  const handleSelectSticker = useCallback(
+    (nextId: string | null) => {
+      if (isPhotoDoodleSurface) {
+        setPhotoSelectedStickerId(nextId);
+        return;
+      }
+
+      setTextSelectedStickerId(nextId);
+    },
+    [isPhotoDoodleSurface]
+  );
+  const handleSelectedStickerAction = useCallback(
+    (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove') => {
+      if (!selectedStickerId) {
+        return;
+      }
+
+      const currentPlacements = stickerPlacements;
+      let nextPlacements = currentPlacements;
+
+      if (action === 'duplicate') {
+        nextPlacements = duplicateStickerPlacement(currentPlacements, selectedStickerId);
+      } else if (action === 'front') {
+        nextPlacements = bringStickerPlacementToFront(currentPlacements, selectedStickerId);
+      } else if (action === 'remove') {
+        nextPlacements = currentPlacements.filter((placement) => placement.id !== selectedStickerId);
+        handleSelectSticker(null);
+      } else if (action === 'rotate-left') {
+        const selectedPlacement = currentPlacements.find((placement) => placement.id === selectedStickerId);
+        nextPlacements = selectedPlacement
+          ? updateStickerPlacementTransform(currentPlacements, selectedStickerId, {
+              rotation: selectedPlacement.rotation - 15,
+            })
+          : currentPlacements;
+      } else if (action === 'rotate-right') {
+        const selectedPlacement = currentPlacements.find((placement) => placement.id === selectedStickerId);
+        nextPlacements = selectedPlacement
+          ? updateStickerPlacementTransform(currentPlacements, selectedStickerId, {
+              rotation: selectedPlacement.rotation + 15,
+            })
+          : currentPlacements;
+      } else if (action === 'smaller') {
+        const selectedPlacement = currentPlacements.find((placement) => placement.id === selectedStickerId);
+        nextPlacements = selectedPlacement
+          ? updateStickerPlacementTransform(currentPlacements, selectedStickerId, {
+              scale: selectedPlacement.scale - 0.12,
+            })
+          : currentPlacements;
+      } else if (action === 'larger') {
+        const selectedPlacement = currentPlacements.find((placement) => placement.id === selectedStickerId);
+        nextPlacements = selectedPlacement
+          ? updateStickerPlacementTransform(currentPlacements, selectedStickerId, {
+              scale: selectedPlacement.scale + 0.12,
+            })
+          : currentPlacements;
+      }
+
+      handleChangeStickerPlacements(nextPlacements);
+    },
+    [handleChangeStickerPlacements, handleSelectSticker, selectedStickerId, stickerPlacements]
+  );
   const handleChangeNoteText = useCallback(
     (nextText: string) => {
       onChangeNoteText(applyCommittedInlineEmoji(noteText, nextText));
@@ -529,14 +706,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         style={[
           styles.captureArea,
           {
-            opacity: saveTransitionOpacity,
             transform: [
-              { translateY: Animated.add(captureTranslateY, saveTransitionTranslateY) },
-              { scale: Animated.multiply(captureScale, saveTransitionScale) },
+              { translateY: captureTranslateY },
+              { scale: captureScale },
             ],
           },
         ]}
-        pointerEvents={isSearching ? 'none' : 'auto'}
+        pointerEvents={isSearching || interactionsDisabled ? 'none' : 'auto'}
       >
         {captureMode === 'text' ? (
           <LinearGradient
@@ -550,61 +726,156 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             start={{ x: 0.08, y: 0.06 }}
             end={{ x: 0.94, y: 0.94 }}
           >
-            <View pointerEvents="box-none" style={styles.textCardTopRow}>
-              <CaptureAnimatedPressable
-                testID="capture-doodle-toggle"
-                onPress={handleToggleDoodleMode}
-                style={[
-                  styles.textCardActionButton,
-                  {
-                    backgroundColor: doodleModeEnabled ? colors.captureButtonBg : colors.captureGlassFill,
-                    borderColor: doodleModeEnabled ? 'rgba(255,255,255,0.18)' : colors.captureGlassBorder,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={doodleModeEnabled ? 'create' : 'create-outline'}
-                  size={16}
-                  color={doodleModeEnabled ? textCardActiveIconColor : colors.captureGlassText}
-                />
-              </CaptureAnimatedPressable>
+            <View pointerEvents="box-none" style={styles.cardTopOverlay}>
+              <View style={styles.cardTopOverlayRow}>
+                <CaptureAnimatedPressable
+                  testID="capture-decorate-toggle"
+                  accessibilityLabel={t('capture.decorate', 'Decorate')}
+                  onPress={handleToggleDecorateMenu}
+                  style={[styles.textCardActionButton, styles.decorateToggleButton, animatedDecorateButtonStyle]}
+                >
+                  <Reanimated.View style={animatedDecorateIconStyle}>
+                    <Ionicons
+                      name={showDecorateControls ? 'sparkles' : 'sparkles-outline'}
+                      size={16}
+                      color={showDecorateControls ? textCardActiveIconColor : colors.captureGlassText}
+                    />
+                  </Reanimated.View>
+                </CaptureAnimatedPressable>
+              </View>
 
-              {doodleModeEnabled ? (
-                <View style={styles.textCardActionCluster}>
-                  <CaptureAnimatedPressable
-                    testID="capture-doodle-undo"
-                    onPress={handleUndoDoodle}
-                    disabled={doodleStrokes.length === 0}
-                    style={[
-                      styles.textCardActionPill,
-                      {
-                        backgroundColor: colors.captureGlassFill,
-                        borderColor: colors.captureGlassBorder,
-                        opacity: doodleStrokes.length === 0 ? 0.45 : 1,
-                      },
-                    ]}
-                  >
-                    <Ionicons name="arrow-undo-outline" size={14} color={colors.captureGlassText} />
-                  </CaptureAnimatedPressable>
-                  <CaptureAnimatedPressable
-                    testID="capture-doodle-clear"
-                    onPress={handleClearDoodle}
-                    disabled={doodleStrokes.length === 0}
-                    style={[
-                      styles.textCardActionPill,
-                      {
-                        backgroundColor: colors.captureGlassFill,
-                        borderColor: colors.captureGlassBorder,
-                        opacity: doodleStrokes.length === 0 ? 0.45 : 1,
-                      },
-                    ]}
-                  >
-                    <Ionicons name="close-outline" size={14} color={colors.captureGlassText} />
-                  </CaptureAnimatedPressable>
+              <Reanimated.View
+                pointerEvents={showDecorateControls ? 'auto' : 'none'}
+                style={[styles.decorateControlsWrap, animatedDecorateControlsStyle]}
+              >
+                <View style={[styles.cardTopOverlayRow, styles.cardTopOverlayRowWrap]}>
+                  <View style={styles.textCardActionCluster}>
+                    <CaptureAnimatedPressable
+                      testID="capture-doodle-toggle"
+                      onPress={handleToggleDoodleMode}
+                      style={[
+                        styles.textCardActionButton,
+                        {
+                          backgroundColor: doodleModeEnabled ? colors.captureButtonBg : colors.captureGlassFill,
+                          borderColor: doodleModeEnabled ? 'rgba(255,255,255,0.18)' : colors.captureGlassBorder,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={doodleModeEnabled ? 'create' : 'create-outline'}
+                        size={16}
+                        color={doodleModeEnabled ? textCardActiveIconColor : colors.captureGlassText}
+                      />
+                    </CaptureAnimatedPressable>
+                    {ENABLE_PHOTO_STICKERS ? (
+                      <CaptureAnimatedPressable
+                        testID="capture-sticker-toggle"
+                        onPress={handleToggleStickerMode}
+                        style={[
+                          styles.textCardActionButton,
+                          {
+                            backgroundColor: stickerModeEnabled ? colors.captureButtonBg : colors.captureGlassFill,
+                            borderColor: stickerModeEnabled ? 'rgba(255,255,255,0.18)' : colors.captureGlassBorder,
+                          },
+                        ]}
+                      >
+                        <Ionicons
+                          name={stickerModeEnabled ? 'sparkles' : 'sparkles-outline'}
+                          size={16}
+                          color={stickerModeEnabled ? textCardActiveIconColor : colors.captureGlassText}
+                        />
+                      </CaptureAnimatedPressable>
+                    ) : null}
+                  </View>
+
+                  {doodleModeEnabled ? (
+                    <View style={styles.textCardActionCluster}>
+                      <CaptureAnimatedPressable
+                        testID="capture-doodle-undo"
+                        onPress={handleUndoDoodle}
+                        disabled={doodleStrokes.length === 0}
+                        style={[
+                          styles.textCardActionPill,
+                          {
+                            backgroundColor: colors.captureGlassFill,
+                            borderColor: colors.captureGlassBorder,
+                            opacity: doodleStrokes.length === 0 ? 0.45 : 1,
+                          },
+                        ]}
+                      >
+                        <Ionicons name="arrow-undo-outline" size={14} color={colors.captureGlassText} />
+                      </CaptureAnimatedPressable>
+                      <CaptureAnimatedPressable
+                        testID="capture-doodle-clear"
+                        onPress={handleClearDoodle}
+                        disabled={doodleStrokes.length === 0}
+                        style={[
+                          styles.textCardActionPill,
+                          {
+                            backgroundColor: colors.captureGlassFill,
+                            borderColor: colors.captureGlassBorder,
+                            opacity: doodleStrokes.length === 0 ? 0.45 : 1,
+                          },
+                        ]}
+                      >
+                        <Ionicons name="close-outline" size={14} color={colors.captureGlassText} />
+                      </CaptureAnimatedPressable>
+                    </View>
+                  ) : stickerModeEnabled ? (
+                    <View style={styles.textCardActionCluster}>
+                      <CaptureAnimatedPressable
+                        testID="capture-sticker-import"
+                        onPress={handleImportSticker}
+                        disabled={importingSticker}
+                        style={[
+                          styles.textCardActionPill,
+                          {
+                            backgroundColor: colors.captureGlassFill,
+                            borderColor: colors.captureGlassBorder,
+                            opacity: importingSticker ? 0.45 : 1,
+                          },
+                        ]}
+                      >
+                        <Ionicons name="add-outline" size={14} color={colors.captureGlassText} />
+                      </CaptureAnimatedPressable>
+                      <CaptureAnimatedPressable
+                        testID="capture-sticker-remove"
+                        onPress={() => handleSelectedStickerAction('remove')}
+                        disabled={!selectedStickerId}
+                        style={[
+                          styles.textCardActionPill,
+                          {
+                            backgroundColor: colors.captureGlassFill,
+                            borderColor: colors.captureGlassBorder,
+                            opacity: selectedStickerId ? 1 : 0.45,
+                          },
+                        ]}
+                      >
+                        <Ionicons name="trash-outline" size={14} color={colors.captureGlassText} />
+                      </CaptureAnimatedPressable>
+                    </View>
+                  ) : null}
                 </View>
-              ) : null}
+              </Reanimated.View>
             </View>
 
+            {ENABLE_PHOTO_STICKERS && stickerPlacements.length > 0 ? (
+              <View
+                pointerEvents={stickerModeEnabled ? 'box-none' : 'none'}
+                style={[
+                  styles.textStickerCanvasLayer,
+                  stickerModeEnabled ? styles.textStickerCanvasLayerActive : null,
+                ]}
+              >
+                <NoteStickerCanvas
+                  placements={stickerPlacements}
+                  editable={stickerModeEnabled}
+                  onChangePlacements={handleChangeStickerPlacements}
+                  selectedPlacementId={selectedStickerId}
+                  onChangeSelectedPlacementId={handleSelectSticker}
+                />
+              </View>
+            ) : null}
             <View pointerEvents={doodleModeEnabled ? 'auto' : 'none'} style={styles.doodleCanvasLayer}>
               <NoteDoodleCanvas
                 strokes={doodleStrokes}
@@ -614,7 +885,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               />
             </View>
 
-            <View style={styles.cardTextCenter}>
+            <View
+              pointerEvents={stickerModeEnabled ? 'none' : 'auto'}
+              style={[
+                styles.cardTextCenter,
+                stickerModeEnabled ? styles.cardTextCenterInactive : null,
+              ]}
+            >
               <TextInput
                 testID="capture-note-input"
                 key={`note-text-${isSearching}`}
@@ -628,112 +905,174 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 placeholderTextColor={colors.captureCardPlaceholder}
                 multiline
                 value={noteText}
-                editable={!doodleModeEnabled}
+                editable={!doodleModeEnabled && !stickerModeEnabled}
                 onChangeText={handleChangeNoteText}
                 maxLength={300}
                 selectionColor={colors.captureCardText}
               />
             </View>
-
-            <View style={[styles.cardRestaurantPill, { borderColor: colors.captureGlassBorder }]}>
-              {isOlderIOS ? (
-                <View
-                  style={[
-                    StyleSheet.absoluteFillObject,
-                    {
-                      backgroundColor: colors.captureGlassFill,
-                      borderRadius: 20,
-                    },
-                  ]}
-                />
-              ) : null}
-              {/* Keep interactive content outside the native glass host to avoid intermittent child layout misses. */}
-              <GlassView
-                pointerEvents="none"
-                style={StyleSheet.absoluteFillObject}
-                glassEffectStyle="regular"
-                colorScheme={colors.captureGlassColorScheme}
-              />
-              <Ionicons
-                name="restaurant-outline"
-                size={14}
-                color={colors.captureGlassIcon}
-              />
-              <TextInput
-                key={`restaurant-${isSearching}`}
-                style={[styles.cardRestaurantInput, { color: colors.captureGlassText }]}
-                placeholder={t('capture.restaurantPlaceholder', 'Restaurant name (e.g. Phở Hòa)')}
-                placeholderTextColor={colors.captureGlassPlaceholder}
-                value={restaurantName}
-                onChangeText={onChangeRestaurantName}
-                maxLength={100}
-                selectionColor={colors.captureGlassText}
-              />
-            </View>
-            </LinearGradient>
+          </LinearGradient>
         ) : capturedPhoto ? (
           <View style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}>
             <Image source={{ uri: capturedPhoto }} style={styles.cameraPreview} contentFit="cover" />
-            <View pointerEvents="box-none" style={styles.photoDoodleToolbar}>
-              <CaptureAnimatedPressable
-                testID="capture-doodle-toggle"
-                accessibilityLabel={
-                  doodleModeEnabled ? t('capture.doneDrawing', 'Done') : t('capture.draw', 'Draw')
-                }
-                onPress={handleToggleDoodleMode}
-                style={[
-                  styles.cameraOverlayButton,
-                  styles.photoDoodleIconButton,
-                  {
-                    backgroundColor: doodleModeEnabled ? photoPreviewActiveFill : photoPreviewControlFill,
-                    borderColor: doodleModeEnabled ? photoPreviewActiveFill : photoPreviewControlBorder,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={doodleModeEnabled ? 'create' : 'create-outline'}
-                  size={16}
-                  color={doodleModeEnabled ? photoPreviewActiveText : photoPreviewControlText}
-                />
-              </CaptureAnimatedPressable>
+            <View pointerEvents="box-none" style={styles.cardTopOverlay}>
+              <View style={styles.cardTopOverlayRow}>
+                <CaptureAnimatedPressable
+                  testID="capture-decorate-toggle"
+                  accessibilityLabel={t('capture.decorate', 'Decorate')}
+                  onPress={handleToggleDecorateMenu}
+                  style={[
+                    styles.cameraOverlayButton,
+                    styles.textCardActionButton,
+                    styles.decorateToggleButton,
+                    animatedDecorateButtonStyle,
+                  ]}
+                >
+                  <Reanimated.View style={animatedDecorateIconStyle}>
+                    <Ionicons
+                      name={showDecorateControls ? 'sparkles' : 'sparkles-outline'}
+                      size={16}
+                      color={showDecorateControls ? photoPreviewActiveText : photoPreviewControlText}
+                    />
+                  </Reanimated.View>
+                </CaptureAnimatedPressable>
+              </View>
 
-              {doodleModeEnabled ? (
-                <View pointerEvents="box-none" style={styles.photoDoodleActionsCluster}>
-                  <CaptureAnimatedPressable
-                    testID="capture-doodle-undo"
-                    onPress={handleUndoDoodle}
-                    disabled={doodleStrokes.length === 0}
-                    style={[
-                      styles.cameraOverlayButton,
-                      styles.textCardActionPill,
-                      {
-                        backgroundColor: photoPreviewControlFill,
-                        borderColor: photoPreviewControlBorder,
-                        opacity: doodleStrokes.length === 0 ? 0.45 : 1,
-                      },
-                    ]}
-                  >
-                    <Ionicons name="arrow-undo-outline" size={14} color={photoPreviewControlText} />
-                  </CaptureAnimatedPressable>
-                  <CaptureAnimatedPressable
-                    testID="capture-doodle-clear"
-                    onPress={handleClearDoodle}
-                    disabled={doodleStrokes.length === 0}
-                    style={[
-                      styles.cameraOverlayButton,
-                      styles.textCardActionPill,
-                      {
-                        backgroundColor: photoPreviewControlFill,
-                        borderColor: photoPreviewControlBorder,
-                        opacity: doodleStrokes.length === 0 ? 0.45 : 1,
-                      },
-                    ]}
-                  >
-                    <Ionicons name="close-outline" size={14} color={photoPreviewControlText} />
-                  </CaptureAnimatedPressable>
+              <Reanimated.View
+                pointerEvents={showDecorateControls ? 'auto' : 'none'}
+                style={[styles.decorateControlsWrap, animatedDecorateControlsStyle]}
+              >
+                <View pointerEvents="box-none" style={[styles.cardTopOverlayRow, styles.cardTopOverlayRowWrap]}>
+                  <View style={styles.textCardActionCluster}>
+                    <CaptureAnimatedPressable
+                      testID="capture-doodle-toggle"
+                      accessibilityLabel={
+                        doodleModeEnabled ? t('capture.doneDrawing', 'Done') : t('capture.draw', 'Draw')
+                      }
+                      onPress={handleToggleDoodleMode}
+                      style={[
+                        styles.cameraOverlayButton,
+                        styles.photoDoodleIconButton,
+                        {
+                          backgroundColor: doodleModeEnabled ? photoPreviewActiveFill : photoPreviewControlFill,
+                          borderColor: doodleModeEnabled ? photoPreviewActiveFill : photoPreviewControlBorder,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={doodleModeEnabled ? 'create' : 'create-outline'}
+                        size={16}
+                        color={doodleModeEnabled ? photoPreviewActiveText : photoPreviewControlText}
+                      />
+                    </CaptureAnimatedPressable>
+                    {ENABLE_PHOTO_STICKERS ? (
+                      <CaptureAnimatedPressable
+                        testID="capture-sticker-toggle"
+                        accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
+                        onPress={handleToggleStickerMode}
+                        style={[
+                          styles.cameraOverlayButton,
+                          styles.photoDoodleIconButton,
+                          {
+                            backgroundColor: stickerModeEnabled ? photoPreviewActiveFill : photoPreviewControlFill,
+                            borderColor: stickerModeEnabled ? photoPreviewActiveFill : photoPreviewControlBorder,
+                          },
+                        ]}
+                      >
+                        <Ionicons
+                          name={stickerModeEnabled ? 'sparkles' : 'sparkles-outline'}
+                          size={16}
+                          color={stickerModeEnabled ? photoPreviewActiveText : photoPreviewControlText}
+                        />
+                      </CaptureAnimatedPressable>
+                    ) : null}
+                  </View>
+
+                  {doodleModeEnabled ? (
+                    <View pointerEvents="box-none" style={styles.photoDoodleActionsCluster}>
+                      <CaptureAnimatedPressable
+                        testID="capture-doodle-undo"
+                        onPress={handleUndoDoodle}
+                        disabled={doodleStrokes.length === 0}
+                        style={[
+                          styles.cameraOverlayButton,
+                          styles.textCardActionPill,
+                          {
+                            backgroundColor: photoPreviewControlFill,
+                            borderColor: photoPreviewControlBorder,
+                            opacity: doodleStrokes.length === 0 ? 0.45 : 1,
+                          },
+                        ]}
+                      >
+                        <Ionicons name="arrow-undo-outline" size={14} color={photoPreviewControlText} />
+                      </CaptureAnimatedPressable>
+                      <CaptureAnimatedPressable
+                        testID="capture-doodle-clear"
+                        onPress={handleClearDoodle}
+                        disabled={doodleStrokes.length === 0}
+                        style={[
+                          styles.cameraOverlayButton,
+                          styles.textCardActionPill,
+                          {
+                            backgroundColor: photoPreviewControlFill,
+                            borderColor: photoPreviewControlBorder,
+                            opacity: doodleStrokes.length === 0 ? 0.45 : 1,
+                          },
+                        ]}
+                      >
+                        <Ionicons name="close-outline" size={14} color={photoPreviewControlText} />
+                      </CaptureAnimatedPressable>
+                    </View>
+                  ) : stickerModeEnabled ? (
+                    <View pointerEvents="box-none" style={styles.photoDoodleActionsCluster}>
+                      <CaptureAnimatedPressable
+                        testID="capture-sticker-import"
+                        onPress={handleImportSticker}
+                        disabled={importingSticker}
+                        style={[
+                          styles.cameraOverlayButton,
+                          styles.textCardActionPill,
+                          {
+                            backgroundColor: photoPreviewControlFill,
+                            borderColor: photoPreviewControlBorder,
+                            opacity: importingSticker ? 0.45 : 1,
+                          },
+                        ]}
+                      >
+                        <Ionicons name="add-outline" size={14} color={photoPreviewControlText} />
+                      </CaptureAnimatedPressable>
+                      <CaptureAnimatedPressable
+                        testID="capture-sticker-remove"
+                        onPress={() => handleSelectedStickerAction('remove')}
+                        disabled={!selectedStickerId}
+                        style={[
+                          styles.cameraOverlayButton,
+                          styles.textCardActionPill,
+                          {
+                            backgroundColor: photoPreviewControlFill,
+                            borderColor: photoPreviewControlBorder,
+                            opacity: selectedStickerId ? 1 : 0.45,
+                          },
+                        ]}
+                      >
+                        <Ionicons name="trash-outline" size={14} color={photoPreviewControlText} />
+                      </CaptureAnimatedPressable>
+                    </View>
+                  ) : null}
                 </View>
-              ) : null}
+              </Reanimated.View>
             </View>
+            {ENABLE_PHOTO_STICKERS && stickerPlacements.length > 0 ? (
+              <View pointerEvents={stickerModeEnabled ? 'box-none' : 'none'} style={styles.doodleCanvasLayer}>
+                <NoteStickerCanvas
+                  placements={stickerPlacements}
+                  editable={stickerModeEnabled}
+                  onChangePlacements={handleChangeStickerPlacements}
+                  selectedPlacementId={selectedStickerId}
+                  onChangeSelectedPlacementId={handleSelectSticker}
+                />
+              </View>
+            ) : null}
             <View pointerEvents={doodleModeEnabled ? 'auto' : 'none'} style={styles.doodleCanvasLayer}>
               <NoteDoodleCanvas
                 strokes={doodleStrokes}
@@ -861,74 +1200,80 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             ) : null}
           </View>
         )}
-        <View
-          pointerEvents="box-none"
-          style={styles.cardAudienceBadgeHost}
-        >
-          <Pressable
-            testID="capture-share-target-toggle"
-            accessibilityRole="button"
-            accessibilityState={{ selected: isSharedTarget }}
-            onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
-            onPressIn={() => {
-              audiencePressScale.value = withTiming(0.97, CAPTURE_BUTTON_PRESS_IN);
-            }}
-            onPressOut={() => {
-              audiencePressScale.value = withTiming(1, CAPTURE_BUTTON_PRESS_OUT);
-            }}
-          >
-            <Reanimated.View
-              style={[
-                styles.cardAudienceBadge,
-                isSharedTarget ? styles.cardAudienceBadgeSelected : null,
-                animatedAudienceBadgeStyle,
-              ]}
-            >
-              <View pointerEvents="none" style={styles.cardAudienceBadgeSizer}>
-                <Ionicons name="lock-closed-outline" size={16} color="transparent" />
-                <Text style={[styles.cardAudienceBadgeText, styles.cardAudienceBadgeSizerText]}>
-                  {audienceSizerLabel}
-                </Text>
-              </View>
-              <Reanimated.View style={styles.cardAudienceBadgeVisibleContent}>
-                <AnimatedIonicons
-                  name={shareTarget === 'shared' ? 'people-outline' : 'lock-closed-outline'}
-                  size={16}
-                  color={audienceIconColor}
-                  style={animatedAudienceIconStyle}
-                />
-                <Reanimated.Text
-                  style={[
-                    styles.cardAudienceBadgeText,
-                    animatedAudienceTextStyle,
-                  ]}
-                >
-                  {audienceLabel}
-                </Reanimated.Text>
-              </Reanimated.View>
-            </Reanimated.View>
-          </Pressable>
-        </View>
       </Animated.View>
 
       <Animated.View
         style={[
           styles.belowCardSection,
           {
-            opacity: saveTransitionOpacity,
             transform: [
-              { translateY: Animated.add(captureTranslateY, saveTransitionTranslateY) },
-              { scale: Animated.multiply(captureScale, saveTransitionScale) },
+              { translateY: captureTranslateY },
+              { scale: captureScale },
             ],
           },
         ]}
+        pointerEvents={interactionsDisabled ? 'none' : 'auto'}
       >
+        {captureMode === 'text' ? (
+          <View style={[styles.cardRestaurantPill, styles.cardRestaurantPillBelow, styles.captureMetaComposite, { borderColor: colors.captureGlassBorder }]}>
+            {isOlderIOS ? (
+              <View
+                style={[
+                  StyleSheet.absoluteFillObject,
+                  {
+                    backgroundColor: colors.captureGlassFill,
+                    borderRadius: 20,
+                  },
+                ]}
+              />
+            ) : null}
+            {/* Keep interactive content outside the native glass host to avoid intermittent child layout misses. */}
+            <GlassView
+              pointerEvents="none"
+              style={StyleSheet.absoluteFillObject}
+              glassEffectStyle="regular"
+              colorScheme={colors.captureGlassColorScheme}
+            />
+            <View style={styles.captureMetaInputWrap}>
+              <Ionicons
+                name="restaurant-outline"
+                size={14}
+                color={colors.captureGlassIcon}
+              />
+              <TextInput
+                testID="capture-restaurant-input"
+                key={`restaurant-${isSearching}`}
+                style={[styles.cardRestaurantInput, styles.cardRestaurantInputCompact, { color: colors.captureGlassText }]}
+                placeholder={t('capture.restaurantPlaceholder', 'Restaurant name (e.g. Phở Hòa)')}
+                placeholderTextColor={colors.captureGlassPlaceholder}
+                value={restaurantName}
+                onChangeText={onChangeRestaurantName}
+                maxLength={100}
+                selectionColor={colors.captureGlassText}
+              />
+            </View>
+            <View style={[styles.captureMetaDivider, { backgroundColor: colors.captureGlassBorder }]} />
+            <CaptureAnimatedPressable
+              testID="capture-share-target-toggle"
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSharedTarget }}
+              accessibilityLabel={isSharedTarget ? t('shared.captureShared', 'Friends') : t('shared.capturePrivate', 'Just me')}
+              onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
+              style={styles.captureInlineShareButton}
+            >
+              <Ionicons
+                name={shareTarget === 'shared' ? 'people-outline' : 'lock-closed-outline'}
+                size={16}
+                color={isSharedTarget ? colors.primary : colors.captureGlassIcon}
+              />
+            </CaptureAnimatedPressable>
+          </View>
+        ) : null}
         {cameraStatusText ? (
           <Text style={[styles.cameraStatusText, { color: colors.secondaryText }]}>{cameraStatusText}</Text>
         ) : null}
         {captureMode === 'camera' && !capturedPhoto ? (
           <View style={styles.belowCardShutterRow}>
-            {showLeadingAccessory ? <View style={styles.shutterLeadingAccessory}>{leadingAccessory}</View> : null}
             {permissionGranted ? (
               <CaptureAnimatedPressable
                 onPressIn={onShutterPressIn}
@@ -955,8 +1300,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           </View>
         ) : capturedPhoto ? (
           <View style={[styles.belowCardShutterRow, styles.belowCardCapturedPhotoActions]}>
-            {showLeadingAccessory ? <View style={styles.shutterLeadingAccessory}>{leadingAccessory}</View> : null}
-
             <CaptureAnimatedPressable
               testID="capture-save-button"
               onPress={onSaveNote}
@@ -1022,7 +1365,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           </View>
         ) : (
           <View style={styles.belowCardShutterRow}>
-            {showLeadingAccessory ? <View style={styles.shutterLeadingAccessory}>{leadingAccessory}</View> : null}
             <CaptureAnimatedPressable
               testID="capture-save-button"
               onPress={onSaveNote}
@@ -1119,26 +1461,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
+    zIndex: 1,
   },
-  textCardTopRow: {
+  cardTextCenterInactive: {
+    zIndex: 0,
+  },
+  cardTopOverlay: {
     position: 'absolute',
     top: TOP_CONTROL_INSET,
     left: 18,
     right: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    zIndex: 3,
-  },
-  photoDoodleToolbar: {
-    position: 'absolute',
-    top: TOP_CONTROL_INSET,
-    left: 18,
-    right: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
     zIndex: 11,
+  },
+  cardTopOverlayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 8,
+  },
+  cardTopOverlayRowWrap: {
+    flexWrap: 'wrap',
   },
   photoDoodleActionsCluster: {
     flexDirection: 'row',
@@ -1163,6 +1506,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  decorateToggleButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  decorateControlsWrap: {
+    overflow: 'hidden',
+    paddingTop: 2,
+  },
   textCardActionPill: {
     width: TOP_CONTROL_HEIGHT,
     height: TOP_CONTROL_HEIGHT,
@@ -1176,19 +1533,44 @@ const styles = StyleSheet.create({
     ...DOODLE_ARTBOARD_FRAME,
     zIndex: 2,
   },
+  textStickerCanvasLayer: {
+    ...StyleSheet.absoluteFillObject,
+    ...DOODLE_ARTBOARD_FRAME,
+    zIndex: 0,
+  },
+  textStickerCanvasLayerActive: {
+    zIndex: 2,
+  },
   cardRestaurantPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
+    gap: 6,
+    minHeight: 40,
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+    borderRadius: Layout.pillRadius,
     borderWidth: StyleSheet.hairlineWidth,
     width: '100%',
     marginTop: 8,
     overflow: 'hidden',
     position: 'relative',
     zIndex: 3,
+  },
+  cardRestaurantPillBelow: {
+    marginTop: 0,
+  },
+  captureMetaComposite: {
+    width: '92%',
+    alignSelf: 'center',
+    paddingHorizontal: 14,
+    gap: 0,
+  },
+  captureMetaInputWrap: {
+    flex: 1,
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   cardRestaurantInput: {
     flex: 1,
@@ -1198,6 +1580,21 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: 0,
     paddingRight: 48,
+  },
+  cardRestaurantInputCompact: {
+    paddingRight: 0,
+  },
+  captureMetaDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: 'stretch',
+    marginHorizontal: 6,
+    opacity: 0.65,
+  },
+  captureInlineShareButton: {
+    width: 34,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cameraContainer: {
     width: CARD_SIZE,
@@ -1313,51 +1710,6 @@ const styles = StyleSheet.create({
     ...Typography.pill,
     textAlign: 'center',
   },
-  cardAudienceBadgeHost: {
-    position: 'absolute',
-    top: TOP_CONTROL_INSET,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  cardAudienceBadge: {
-    minHeight: TOP_CONTROL_HEIGHT,
-    borderRadius: TOP_CONTROL_RADIUS,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cardAudienceBadgeSizer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  cardAudienceBadgeVisibleContent: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  cardAudienceBadgeText: {
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '700',
-  },
-  cardAudienceBadgeSizerText: {
-    color: 'transparent',
-  },
-  cardAudienceBadgeSelected: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3,
-  },
   belowCardShutterRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1368,15 +1720,6 @@ const styles = StyleSheet.create({
   },
   belowCardCapturedPhotoActions: {
     minHeight: 68,
-  },
-  shutterLeadingAccessory: {
-    position: 'absolute',
-    left: '50%',
-    marginLeft: -SHUTTER_SIDE_ACTION_OFFSET,
-    width: SIDE_ACTION_SIZE,
-    height: SIDE_ACTION_SIZE,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   secondaryActionButton: {
     width: SIDE_ACTION_SIZE,

@@ -21,6 +21,7 @@ interface SharedPostRow {
   photo_path: string | null;
   photo_local_uri: string | null;
   doodle_strokes_json: string | null;
+  sticker_placements_json: string | null;
   place_name: string | null;
   source_note_id: string | null;
   created_at: string;
@@ -79,6 +80,8 @@ function rowToSharedPost(row: SharedPostRow): SharedPost {
     photoPath: row.photo_path,
     photoLocalUri: row.photo_local_uri,
     doodleStrokesJson: row.doodle_strokes_json,
+    hasStickers: Boolean(row.sticker_placements_json),
+    stickerPlacementsJson: row.sticker_placements_json,
     placeName: row.place_name,
     sourceNoteId: row.source_note_id,
     createdAt: row.created_at,
@@ -183,12 +186,13 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
           photo_path,
           photo_local_uri,
           doodle_strokes_json,
+          sticker_placements_json,
           place_name,
           source_note_id,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         userUid,
         post.id,
         post.authorUid,
@@ -200,6 +204,7 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
         post.photoPath,
         post.photoLocalUri,
         post.doodleStrokesJson ?? null,
+        post.stickerPlacementsJson ?? null,
         post.placeName,
         post.sourceNoteId,
         post.createdAt,

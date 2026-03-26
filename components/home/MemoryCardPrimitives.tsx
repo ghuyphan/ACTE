@@ -56,13 +56,18 @@ export function NoteMemoryCard({
       <View style={[styles.noteCardWrapper, { width: cardSize, height: cardSize }]}>
         <View style={styles.cardFill}>
           {note.type === 'photo' ? (
-            <ImageMemoryCard imageUrl={getNotePhotoUri(note)} doodleStrokesJson={note.doodleStrokesJson} />
+            <ImageMemoryCard
+              imageUrl={getNotePhotoUri(note)}
+              doodleStrokesJson={note.doodleStrokesJson}
+              stickerPlacementsJson={note.stickerPlacementsJson}
+            />
           ) : (
             <TextMemoryCard
               text={note.content}
               noteId={note.id}
               emoji={note.moodEmoji}
               doodleStrokesJson={note.doodleStrokesJson}
+              stickerPlacementsJson={note.stickerPlacementsJson}
             />
           )}
         </View>

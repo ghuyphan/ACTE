@@ -5,20 +5,32 @@ import { DOODLE_ARTBOARD_FRAME } from '../constants/doodleLayout';
 import { Layout, Shadows } from '../constants/theme';
 import { getTextNoteCardGradient } from '../services/noteAppearance';
 import { parseNoteDoodleStrokes } from '../services/noteDoodles';
+import { parseNoteStickerPlacements } from '../services/noteStickers';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import NoteDoodleCanvas from './NoteDoodleCanvas';
+import NoteStickerCanvas from './NoteStickerCanvas';
 
 interface TextMemoryCardProps {
     text: string;
     noteId?: string;
     emoji?: string | null;
     doodleStrokesJson?: string | null;
+    stickerPlacementsJson?: string | null;
+    remoteBucket?: string;
 }
 
-export default function TextMemoryCard({ text, noteId, emoji = null, doodleStrokesJson = null }: TextMemoryCardProps) {
+export default function TextMemoryCard({
+    text,
+    noteId,
+    emoji = null,
+    doodleStrokesJson = null,
+    stickerPlacementsJson = null,
+    remoteBucket,
+}: TextMemoryCardProps) {
     const gradient = getTextNoteCardGradient({ text, noteId, emoji });
     const displayText = formatNoteTextWithEmoji(text, emoji);
     const doodleStrokes = parseNoteDoodleStrokes(doodleStrokesJson);
+    const stickerPlacements = parseNoteStickerPlacements(stickerPlacementsJson);
 
     return (
         <View style={styles.card}>
@@ -28,6 +40,11 @@ export default function TextMemoryCard({ text, noteId, emoji = null, doodleStrok
                 end={{ x: 1, y: 1 }}
                 style={styles.gradient}
             >
+                {stickerPlacements.length > 0 ? (
+                    <View pointerEvents="none" style={styles.stickerOverlay}>
+                        <NoteStickerCanvas placements={stickerPlacements} remoteBucket={remoteBucket} />
+                    </View>
+                ) : null}
                 {doodleStrokes.length > 0 ? (
                     <View pointerEvents="none" style={styles.doodleOverlay}>
                         <NoteDoodleCanvas strokes={doodleStrokes} />
@@ -67,6 +84,12 @@ const styles = StyleSheet.create({
         position: 'absolute',
         ...DOODLE_ARTBOARD_FRAME,
         opacity: 0.5,
+    },
+    stickerOverlay: {
+        position: 'absolute',
+        ...DOODLE_ARTBOARD_FRAME,
+        opacity: 0.5,
+        zIndex: 0,
     },
     memoryText: {
         color: '#FFFFFF',

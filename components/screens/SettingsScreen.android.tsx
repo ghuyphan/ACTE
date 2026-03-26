@@ -5,7 +5,7 @@ import AppSheetAlert from '../AppSheetAlert';
 import SettingsSyncSheetAndroid from '../SettingsSyncSheet.android';
 import PrimaryButton from '../ui/PrimaryButton';
 import type { ThemeColors } from '../../hooks/useTheme';
-import { Layout, Typography } from '../../constants/theme';
+import { Layout } from '../../constants/theme';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
 import { setAppLanguage } from '../../constants/i18n';
 
@@ -171,6 +171,7 @@ export default function SettingsScreenAndroid() {
   const [sheet, setSheet] = React.useState<SheetKey>(null);
   const languageCode = i18n.resolvedLanguage?.startsWith('vi') ? 'vi' : 'en';
   const languageLabel = languageCode === 'vi' ? 'Tiếng Việt' : 'English';
+  const contentTopInset = insets.top + 72;
 
   let sheetContent: React.ReactNode = null;
 
@@ -223,11 +224,9 @@ export default function SettingsScreenAndroid() {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 32 },
+          { paddingTop: contentTopInset, paddingBottom: insets.bottom + 32 },
         ]}
       >
-        <Text style={[styles.title, { color: colors.text }]}>{t('settings.title', 'Settings')}</Text>
-
         <View style={styles.section}>
           <SectionTitle colors={colors} title={t('settings.preferences', 'Preferences')} />
           <SettingsCard colors={colors}>
@@ -381,9 +380,6 @@ const styles = StyleSheet.create({
   },
   section: {
     marginTop: 24,
-  },
-  title: {
-    ...Typography.screenTitle,
   },
   sectionTitle: {
     fontSize: 13,

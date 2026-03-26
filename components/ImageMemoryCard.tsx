@@ -6,15 +6,25 @@ import { Layout, Shadows } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import NoteDoodleCanvas from './NoteDoodleCanvas';
 import { parseNoteDoodleStrokes } from '../services/noteDoodles';
+import NoteStickerCanvas from './NoteStickerCanvas';
+import { parseNoteStickerPlacements } from '../services/noteStickers';
 
 interface ImageMemoryCardProps {
     imageUrl: string;
     doodleStrokesJson?: string | null;
+    stickerPlacementsJson?: string | null;
+    remoteBucket?: string;
 }
 
-export default function ImageMemoryCard({ imageUrl, doodleStrokesJson = null }: ImageMemoryCardProps) {
+export default function ImageMemoryCard({
+    imageUrl,
+    doodleStrokesJson = null,
+    stickerPlacementsJson = null,
+    remoteBucket,
+}: ImageMemoryCardProps) {
     const { colors } = useTheme();
     const doodleStrokes = parseNoteDoodleStrokes(doodleStrokesJson);
+    const stickerPlacements = parseNoteStickerPlacements(stickerPlacementsJson);
 
     return (
         <View style={[styles.card, { backgroundColor: colors.card }]}>
@@ -24,6 +34,11 @@ export default function ImageMemoryCard({ imageUrl, doodleStrokesJson = null }: 
                 contentFit="cover"
                 transition={200}
             />
+            {stickerPlacements.length > 0 ? (
+                <View pointerEvents="none" style={styles.doodleOverlay}>
+                    <NoteStickerCanvas placements={stickerPlacements} remoteBucket={remoteBucket} />
+                </View>
+            ) : null}
             {doodleStrokes.length > 0 ? (
                 <View pointerEvents="none" style={styles.doodleOverlay}>
                     <NoteDoodleCanvas strokes={doodleStrokes} />

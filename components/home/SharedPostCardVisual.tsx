@@ -45,7 +45,14 @@ export default function SharedPostCardVisual({
 
   if (post.type === 'photo') {
     if (photoUri) {
-      return <ImageMemoryCard imageUrl={photoUri} doodleStrokesJson={post.doodleStrokesJson} />;
+      return (
+        <ImageMemoryCard
+          imageUrl={photoUri}
+          doodleStrokesJson={post.doodleStrokesJson}
+          stickerPlacementsJson={post.stickerPlacementsJson}
+          remoteBucket={SHARED_POST_MEDIA_BUCKET}
+        />
+      );
     }
 
     return (
@@ -72,7 +79,15 @@ export default function SharedPostCardVisual({
     );
   }
 
-  return <TextMemoryCard text={post.text || fallbackText} noteId={post.id} doodleStrokesJson={post.doodleStrokesJson} />;
+  return (
+    <TextMemoryCard
+      text={post.text || fallbackText}
+      noteId={post.id}
+      doodleStrokesJson={post.doodleStrokesJson}
+      stickerPlacementsJson={post.stickerPlacementsJson}
+      remoteBucket={SHARED_POST_MEDIA_BUCKET}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

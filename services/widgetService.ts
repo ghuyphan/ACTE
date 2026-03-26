@@ -7,6 +7,7 @@ import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 import { getSupabaseUser } from '../utils/supabase';
 import { formatDate } from '../utils/dateUtils';
 import { getAllNotes, Note } from './database';
+import { parseNoteStickerPlacements } from './noteStickers';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getNotePhotoUri, resolveStoredPhotoUri } from './photoStorage';
 import { downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET } from './remoteMedia';
@@ -28,6 +29,8 @@ export interface WidgetProps {
     backgroundImageBase64?: string;
     hasDoodle: boolean;
     doodleStrokesJson?: string | null;
+    hasStickers: boolean;
+    stickerPlacementsJson?: string | null;
     isIdleState: boolean;
     idleText: string;
     savedCountText: string;
@@ -108,6 +111,8 @@ interface WidgetCandidate {
     isFavorite: boolean;
     hasDoodle: boolean;
     doodleStrokesJson: string | null;
+    hasStickers: boolean;
+    stickerPlacementsJson: string | null;
     moodEmoji?: string | null;
     authorDisplayName: string | null;
     authorPhotoURLSnapshot: string | null;
@@ -148,6 +153,7 @@ const WIDGET_HISTORY_RETENTION_MS = 48 * 60 * 60 * 1000;
 const WIDGET_HISTORY_STORAGE_KEY = 'widget.timeline.history.v2';
 const MAX_WIDGET_HISTORY_ENTRIES = 32;
 const WIDGET_AVATAR_DIRECTORY_NAME = 'widget-avatars';
+const WIDGET_STICKER_DIRECTORY_NAME = 'widget-stickers';
 let widgetUpdateInFlight: Promise<void> | null = null;
 let pendingWidgetUpdateOptions: UpdateWidgetDataOptions | null = null;
 
@@ -389,6 +395,8 @@ function buildIdleWidgetProps(noteCount: number, selectionMode: WidgetSelectionM
         nearbyPlacesCount: 0,
         hasDoodle: false,
         doodleStrokesJson: null,
+        hasStickers: false,
+        stickerPlacementsJson: null,
         isIdleState: true,
         isSharedContent: false,
         authorDisplayName: '',
@@ -625,6 +633,8 @@ function createPersonalWidgetCandidate(note: Note): WidgetCandidate {
         isFavorite: note.isFavorite,
         hasDoodle: Boolean(note.hasDoodle && note.doodleStrokesJson),
         doodleStrokesJson: note.doodleStrokesJson ?? null,
+        hasStickers: Boolean(note.hasStickers && note.stickerPlacementsJson),
+        stickerPlacementsJson: note.stickerPlacementsJson ?? null,
         moodEmoji: note.moodEmoji ?? null,
         authorDisplayName: null,
         authorPhotoURLSnapshot: null,
@@ -649,6 +659,8 @@ function createSharedWidgetCandidate(post: SharedPost): WidgetCandidate {
         isFavorite: false,
         hasDoodle: Boolean(post.doodleStrokesJson),
         doodleStrokesJson: post.doodleStrokesJson ?? null,
+        hasStickers: Boolean(post.hasStickers && post.stickerPlacementsJson),
+        stickerPlacementsJson: post.stickerPlacementsJson ?? null,
         authorDisplayName: post.authorDisplayName ?? null,
         authorPhotoURLSnapshot: post.authorPhotoURLSnapshot ?? null,
     };
@@ -784,6 +796,42 @@ function getWidgetSharedContainerUri(): string | null {
 }
 
 async function copyPhotoForWidget(photoUri: string, destinationToken: string): Promise<string | undefined> {
+    return copyFileForWidgetContainer(photoUri, WIDGET_IMAGE_DIRECTORY_NAME, destinationToken, 'jpg');
+}
+
+function sanitizeWidgetFileExtension(value: string | null | undefined) {
+    const normalizedValue = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    if (!normalizedValue) {
+        return null;
+    }
+
+    const withoutDot = normalizedValue.startsWith('.') ? normalizedValue.slice(1) : normalizedValue;
+    return /^[a-z0-9]{1,5}$/.test(withoutDot) ? withoutDot : null;
+}
+
+function getWidgetFileExtensionFromUri(uri: string) {
+    const normalizedUri = uri.split(/[?#]/, 1)[0] ?? '';
+    const match = normalizedUri.match(/\.([a-zA-Z0-9]{1,5})$/);
+    return sanitizeWidgetFileExtension(match?.[1] ?? null);
+}
+
+function getStickerFileExtension(mimeType: string | null | undefined) {
+    switch ((mimeType ?? '').trim().toLowerCase()) {
+        case 'image/webp':
+            return 'webp';
+        case 'image/png':
+            return 'png';
+        default:
+            return null;
+    }
+}
+
+async function copyFileForWidgetContainer(
+    fileUri: string,
+    destinationDirectoryName: string,
+    destinationToken: string,
+    extensionHint?: string | null
+): Promise<string | undefined> {
     if (Platform.OS !== 'ios') {
         return undefined;
     }
@@ -793,28 +841,90 @@ async function copyPhotoForWidget(photoUri: string, destinationToken: string): P
         return undefined;
     }
 
-    const normalizedPhotoUri = typeof photoUri === 'string' ? photoUri.trim() : '';
-    if (!normalizedPhotoUri) {
+    const normalizedFileUri = typeof fileUri === 'string' ? fileUri.trim() : '';
+    if (!normalizedFileUri) {
         return undefined;
     }
 
-    if (normalizedPhotoUri.startsWith(sharedContainerUri)) {
-        return normalizedPhotoUri;
+    if (normalizedFileUri.startsWith(sharedContainerUri)) {
+        return normalizedFileUri;
     }
 
     const safeToken = destinationToken.replace(/[^a-zA-Z0-9_-]/g, '');
-    const destinationDirectory = `${sharedContainerUri}${WIDGET_IMAGE_DIRECTORY_NAME}/`;
-    const destinationPath = `${destinationDirectory}${safeToken}-${hashString(normalizedPhotoUri)}.jpg`;
+    const destinationDirectory = `${sharedContainerUri}${destinationDirectoryName}/`;
+    const resolvedExtension =
+        sanitizeWidgetFileExtension(extensionHint) ??
+        getWidgetFileExtensionFromUri(normalizedFileUri) ??
+        'jpg';
+    const destinationPath =
+        `${destinationDirectory}${safeToken}-${hashString(normalizedFileUri)}.${resolvedExtension}`;
 
     try {
         await FileSystem.makeDirectoryAsync(destinationDirectory, { intermediates: true });
         await FileSystem.deleteAsync(destinationPath, { idempotent: true });
-        await FileSystem.copyAsync({ from: normalizedPhotoUri, to: destinationPath });
+        await FileSystem.copyAsync({ from: normalizedFileUri, to: destinationPath });
         return destinationPath;
     } catch (error) {
         console.warn('[widgetService] Failed to prepare widget photo:', error);
         return undefined;
     }
+}
+
+async function resolveWidgetStickerPlacementsJson(candidate: WidgetCandidate) {
+    const parsedPlacements = parseNoteStickerPlacements(candidate.stickerPlacementsJson);
+    if (parsedPlacements.length === 0) {
+        return null;
+    }
+
+    if (Platform.OS !== 'ios') {
+        return JSON.stringify(parsedPlacements);
+    }
+
+    const widgetPlacements = await Promise.all(
+        parsedPlacements.map(async (placement) => {
+            const readableStickerUri = await getReadablePhotoUri(placement.asset.localUri);
+            if (!readableStickerUri) {
+                return placement;
+            }
+
+            if (/^https?:\/\//i.test(readableStickerUri)) {
+                const downloadedStickerUri = await downloadRemoteImageToWidgetContainer(
+                    readableStickerUri,
+                    WIDGET_STICKER_DIRECTORY_NAME,
+                    `sticker-${candidate.id}-${placement.asset.id}`
+                );
+
+                return downloadedStickerUri
+                    ? {
+                        ...placement,
+                        asset: {
+                            ...placement.asset,
+                            localUri: downloadedStickerUri,
+                        },
+                    }
+                    : placement;
+            }
+
+            const copiedStickerUri = await copyFileForWidgetContainer(
+                readableStickerUri,
+                WIDGET_STICKER_DIRECTORY_NAME,
+                `sticker-${candidate.id}-${placement.asset.id}`,
+                getStickerFileExtension(placement.asset.mimeType)
+            );
+
+            return copiedStickerUri
+                ? {
+                    ...placement,
+                    asset: {
+                        ...placement.asset,
+                        localUri: copiedStickerUri,
+                    },
+                }
+                : placement;
+        })
+    );
+
+    return JSON.stringify(widgetPlacements);
 }
 
 async function getReadablePhotoUri(photoUri: string): Promise<string | undefined> {
@@ -1151,6 +1261,8 @@ async function buildWidgetPropsFromSelection(
         nearbyPlacesCount: resolvedNearbyPlacesCount,
         hasDoodle: selectedNote.hasDoodle,
         doodleStrokesJson: selectedNote.doodleStrokesJson ?? null,
+        hasStickers: selectedNote.hasStickers,
+        stickerPlacementsJson: null,
         isIdleState: false,
         isSharedContent: selectedNote.source === 'shared',
         authorDisplayName: selectedNote.authorDisplayName ?? '',
@@ -1167,6 +1279,11 @@ async function buildWidgetPropsFromSelection(
                 `slot-${getSlotKey(referenceDate)}-note-${selectedNote.candidateKey}`
             )
         );
+    }
+
+    if (selectedNote.hasStickers && selectedNote.stickerPlacementsJson) {
+        props.stickerPlacementsJson = await resolveWidgetStickerPlacementsJson(selectedNote);
+        props.hasStickers = Boolean(props.stickerPlacementsJson);
     }
 
     Object.assign(props, await resolveWidgetAuthorAvatarProps(selectedNote));

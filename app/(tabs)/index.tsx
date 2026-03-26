@@ -29,7 +29,6 @@ import CaptureCard, { type CaptureCardHandle } from '../../components/home/Captu
 import HomeHeaderSearch from '../../components/home/HomeHeaderSearch';
 import NotesFeed from '../../components/home/NotesFeed';
 import SharedManageSheet from '../../components/home/SharedManageSheet';
-import TransientStatusChip from '../../components/ui/TransientStatusChip';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useAuth } from '../../hooks/useAuth';
 import { useCaptureFlow } from '../../hooks/useCaptureFlow';
@@ -48,8 +47,9 @@ import {
 } from '../../constants/subscription';
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { saveNoteDoodle } from '../../services/noteDoodles';
+import { saveNoteStickerPlacementsWithAssets } from '../../services/noteStickers';
 import { filterNotesByQuery } from '../../services/noteSearch';
-import { Note } from '../../services/database';
+import { generateNoteId, type Note } from '../../services/database';
 import { getSharedFeedErrorMessage, SharedPost } from '../../services/sharedFeedService';
 import { isIOS26OrNewer } from '../../utils/platform';
 
@@ -60,7 +60,6 @@ type FeedFocusItem =
   | { id: string; kind: 'shared-post'; createdAt: string; post: SharedPost };
 
 type SaveButtonState = 'idle' | 'saving' | 'success';
-type InlineSaveFeedbackVariant = 'saved' | 'shared';
 
 export default function HomeScreen() {
   const { t } = useTranslation();
@@ -112,10 +111,7 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveButtonState, setSaveButtonState] = useState<SaveButtonState>('idle');
-  const [inlineSaveFeedback, setInlineSaveFeedback] = useState<{
-    token: number;
-    variant: InlineSaveFeedbackVariant;
-  } | null>(null);
+  const [suppressedHomeNoteIds, setSuppressedHomeNoteIds] = useState<string[]>([]);
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [appState, setAppState] = useState(AppState.currentState);
   const [cameraPreviewReady, setCameraPreviewReady] = useState(Platform.OS !== 'android');
@@ -127,12 +123,11 @@ export default function HomeScreen() {
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const searchAnim = useRef(new Animated.Value(0)).current;
-  const saveTransitionProgress = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<any>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clearInlineFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveInFlightRef = useRef(false);
   useScrollToTop(flatListRef);
 
   const dismissSharedManageSheet = useCallback(() => {
@@ -238,7 +233,15 @@ export default function HomeScreen() {
     return null;
   }, [remainingPhotoSlots, t, tier]);
 
-  const displayedNotes = useInlineHeaderSearch && isSearching ? filteredNotes : notes;
+  const displayedNotes = useMemo(() => {
+    const baseNotes = useInlineHeaderSearch && isSearching ? filteredNotes : notes;
+
+    if (suppressedHomeNoteIds.length === 0) {
+      return baseNotes;
+    }
+
+    return baseNotes.filter((note) => !suppressedHomeNoteIds.includes(note.id));
+  }, [filteredNotes, isSearching, notes, suppressedHomeNoteIds, useInlineHeaderSearch]);
   const shouldRenderCameraPreview =
     captureMode === 'camera' &&
     isScreenFocused &&
@@ -253,6 +256,7 @@ export default function HomeScreen() {
   const resetCaptureDraft = useCallback(() => {
     resetCapture();
     captureCardRef.current?.resetDoodle();
+    captureCardRef.current?.resetStickers();
   }, [resetCapture]);
 
   const finalizeSavedCapture = useCallback(() => {
@@ -271,11 +275,6 @@ export default function HomeScreen() {
       clearTimeout(resetSaveStateTimeoutRef.current);
       resetSaveStateTimeoutRef.current = null;
     }
-
-    if (clearInlineFeedbackTimeoutRef.current) {
-      clearTimeout(clearInlineFeedbackTimeoutRef.current);
-      clearInlineFeedbackTimeoutRef.current = null;
-    }
   }, []);
 
   useEffect(() => {
@@ -285,22 +284,13 @@ export default function HomeScreen() {
   }, [clearInlineSaveTimers]);
 
   const completeInlineSaveFlow = useCallback(
-    (variant: InlineSaveFeedbackVariant) => {
-      const token = Date.now();
-      const finalizeDelay = reduceMotionEnabled ? 120 : 260;
-      const resetStateDelay = reduceMotionEnabled ? 240 : 980;
-      const clearFeedbackDelay = reduceMotionEnabled ? 1200 : 2200;
+    (noteId: string) => {
+      const finalizeDelay = reduceMotionEnabled ? 120 : 220;
+      const resetStateDelay = reduceMotionEnabled ? 240 : 900;
 
       clearInlineSaveTimers();
+      setSuppressedHomeNoteIds((current) => (current.includes(noteId) ? current : [...current, noteId]));
       setSaveButtonState('success');
-      setInlineSaveFeedback({ token, variant });
-      saveTransitionProgress.stopAnimation();
-      saveTransitionProgress.setValue(0);
-      Animated.timing(saveTransitionProgress, {
-        toValue: 1,
-        duration: reduceMotionEnabled ? 90 : 220,
-        useNativeDriver: true,
-      }).start();
 
       finalizeInlineSaveTimeoutRef.current = setTimeout(() => {
         finalizeSavedCapture();
@@ -309,17 +299,10 @@ export default function HomeScreen() {
 
       resetSaveStateTimeoutRef.current = setTimeout(() => {
         setSaveButtonState('idle');
-        saveTransitionProgress.stopAnimation();
-        saveTransitionProgress.setValue(0);
         resetSaveStateTimeoutRef.current = null;
       }, resetStateDelay);
-
-      clearInlineFeedbackTimeoutRef.current = setTimeout(() => {
-        setInlineSaveFeedback((current) => (current?.token === token ? null : current));
-        clearInlineFeedbackTimeoutRef.current = null;
-      }, clearFeedbackDelay);
     },
-    [clearInlineSaveTimers, finalizeSavedCapture, reduceMotionEnabled, saveTransitionProgress]
+    [clearInlineSaveTimers, finalizeSavedCapture, reduceMotionEnabled]
   );
 
   useEffect(() => {
@@ -445,6 +428,7 @@ export default function HomeScreen() {
     setRefreshing(true);
     try {
       await refreshNotes(false);
+      setSuppressedHomeNoteIds([]);
 
       if (user && sharedEnabled) {
         try {
@@ -782,156 +766,188 @@ export default function HomeScreen() {
   );
 
   const saveNote = useCallback(async () => {
+    if (saveInFlightRef.current) {
+      return;
+    }
+
+    saveInFlightRef.current = true;
     let currentLocation = location;
     let requiresSettings = false;
 
-    if (!currentLocation) {
-      const locationResult = await requestForegroundLocation();
-      currentLocation = locationResult.location;
-      requiresSettings = locationResult.requiresSettings;
-    }
-
-    if (!currentLocation) {
-      showDoneSheet(
-        'error',
-        t('capture.error', 'Error'),
-        t('capture.noLocation', 'Could not get your location'),
-        requiresSettings
-      );
-      return;
-    }
-
-    const doodleSnapshot = captureCardRef.current?.getDoodleSnapshot() ?? {
-      enabled: false,
-      strokes: [],
-    };
-
-    if (captureMode === 'text' && !noteText.trim() && doodleSnapshot.strokes.length === 0) {
-      showDoneSheet(
-        'warning',
-        t('capture.error', 'Error'),
-        t('capture.noText', 'Please write a note or add a doodle')
-      );
-      return;
-    }
-
-    if (captureMode === 'camera' && !capturedPhoto) {
-      showDoneSheet(
-        'warning',
-        t('capture.error', 'Error'),
-        t('capture.noPhoto', 'Please take a photo first')
-      );
-      return;
-    }
-
-    if (captureMode === 'camera' && !canSaveAnotherPhotoNote) {
-      showPlusSheet('limit');
-      return;
-    }
-
-    clearInlineSaveTimers();
-    setInlineSaveFeedback(null);
-    setSaveButtonState('saving');
-    setSaving(true);
-    let destinationPath: string | null = null;
-
     try {
-      const doodleStrokesJson =
-        doodleSnapshot.strokes.length > 0
-          ? JSON.stringify(doodleSnapshot.strokes)
-          : null;
-      const lat = currentLocation.coords.latitude;
-      const lon = currentLocation.coords.longitude;
-      const geocodedName = await reverseGeocode(lat, lon);
-      const locationName = restaurantName.trim() || geocodedName;
-
-      let content = noteText.trim();
-
-      if (captureMode === 'camera' && capturedPhoto) {
-        const directory = `${FileSystem.documentDirectory}photos/`;
-        await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
-        const filename = `note-${Date.now()}.jpg`;
-        destinationPath = `${directory}${filename}`;
-        await FileSystem.copyAsync({ from: capturedPhoto, to: destinationPath });
-        content = destinationPath;
+      if (!currentLocation) {
+        const locationResult = await requestForegroundLocation();
+        currentLocation = locationResult.location;
+        requiresSettings = locationResult.requiresSettings;
       }
 
-      const autoEmoji = resolveAutoNoteEmoji({
-        type: captureMode === 'camera' ? 'photo' : 'text',
-        content: captureMode === 'camera' ? locationName : content,
-        locationName,
-      });
-
-      const createdNote = await createNote({
-        type: captureMode === 'camera' ? 'photo' : 'text',
-        content,
-        photoLocalUri: captureMode === 'camera' ? content : null,
-        locationName,
-        promptId: null,
-        promptTextSnapshot: null,
-        promptAnswer: null,
-        moodEmoji: autoEmoji,
-        latitude: lat,
-        longitude: lon,
-        radius,
-        hasDoodle: Boolean(doodleStrokesJson),
-        doodleStrokesJson,
-      });
-
-      if (doodleStrokesJson) {
-        await saveNoteDoodle(createdNote.id, doodleStrokesJson);
+      if (!currentLocation) {
+        showDoneSheet(
+          'error',
+          t('capture.error', 'Error'),
+          t('capture.noLocation', 'Could not get your location'),
+          requiresSettings
+        );
+        return;
       }
 
-      let shareOutcome: 'default' | 'shared' | 'no-friends' | 'share-failed' = 'default';
-      let shareFailureMessage: string | null = null;
+      const doodleSnapshot = captureCardRef.current?.getDoodleSnapshot() ?? {
+        enabled: false,
+        strokes: [],
+      };
+      const stickerSnapshot = captureCardRef.current?.getStickerSnapshot() ?? {
+        enabled: false,
+        placements: [],
+      };
 
-      if (captureTarget === 'shared' && sharedEnabled && user) {
-        if (friends.length === 0) {
-          shareOutcome = 'no-friends';
-        } else {
-          try {
-            await createSharedPost(createdNote);
-            shareOutcome = 'shared';
-          } catch (shareError) {
-            shareFailureMessage = getSharedFeedErrorMessage(shareError);
-            console.warn('Shared publish failed:', shareFailureMessage);
-            shareOutcome = 'share-failed';
+      if (
+        captureMode === 'text' &&
+        !noteText.trim() &&
+        doodleSnapshot.strokes.length === 0 &&
+        stickerSnapshot.placements.length === 0
+      ) {
+        showDoneSheet(
+          'warning',
+          t('capture.error', 'Error'),
+          t('capture.noText', 'Please write a note or add a doodle')
+        );
+        return;
+      }
+
+      if (captureMode === 'camera' && !capturedPhoto) {
+        showDoneSheet(
+          'warning',
+          t('capture.error', 'Error'),
+          t('capture.noPhoto', 'Please take a photo first')
+        );
+        return;
+      }
+
+      if (captureMode === 'camera' && !canSaveAnotherPhotoNote) {
+        showPlusSheet('limit');
+        return;
+      }
+
+      clearInlineSaveTimers();
+      setSaveButtonState('saving');
+      setSaving(true);
+      let destinationPath: string | null = null;
+      const pendingNoteId = generateNoteId();
+      setSuppressedHomeNoteIds((current) =>
+        current.includes(pendingNoteId) ? current : [...current, pendingNoteId]
+      );
+
+      try {
+        const doodleStrokesJson =
+          doodleSnapshot.strokes.length > 0
+            ? JSON.stringify(doodleSnapshot.strokes)
+            : null;
+        const stickerPlacementsJson =
+          stickerSnapshot.placements.length > 0
+            ? JSON.stringify(stickerSnapshot.placements)
+            : null;
+        const lat = currentLocation.coords.latitude;
+        const lon = currentLocation.coords.longitude;
+        const geocodedName = await reverseGeocode(lat, lon);
+        const locationName = restaurantName.trim() || geocodedName;
+
+        let content = noteText.trim();
+
+        if (captureMode === 'camera' && capturedPhoto) {
+          const directory = `${FileSystem.documentDirectory}photos/`;
+          await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
+          const filename = `note-${Date.now()}.jpg`;
+          destinationPath = `${directory}${filename}`;
+          await FileSystem.copyAsync({ from: capturedPhoto, to: destinationPath });
+          content = destinationPath;
+        }
+
+        const autoEmoji = resolveAutoNoteEmoji({
+          type: captureMode === 'camera' ? 'photo' : 'text',
+          content: captureMode === 'camera' ? locationName : content,
+          locationName,
+        });
+
+        const createdNote = await createNote({
+          id: pendingNoteId,
+          type: captureMode === 'camera' ? 'photo' : 'text',
+          content,
+          photoLocalUri: captureMode === 'camera' ? content : null,
+          locationName,
+          promptId: null,
+          promptTextSnapshot: null,
+          promptAnswer: null,
+          moodEmoji: autoEmoji,
+          latitude: lat,
+          longitude: lon,
+          radius,
+          hasDoodle: Boolean(doodleStrokesJson),
+          doodleStrokesJson,
+          hasStickers: Boolean(stickerPlacementsJson),
+          stickerPlacementsJson,
+        });
+
+        if (doodleStrokesJson) {
+          await saveNoteDoodle(createdNote.id, doodleStrokesJson);
+        }
+        if (stickerSnapshot.placements.length > 0) {
+          await saveNoteStickerPlacementsWithAssets(createdNote.id, stickerSnapshot.placements);
+        }
+
+        let shareOutcome: 'default' | 'shared' | 'no-friends' | 'share-failed' = 'default';
+        let shareFailureMessage: string | null = null;
+
+        if (captureTarget === 'shared' && sharedEnabled && user) {
+          if (friends.length === 0) {
+            shareOutcome = 'no-friends';
+          } else {
+            try {
+              await createSharedPost(createdNote);
+              shareOutcome = 'shared';
+            } catch (shareError) {
+              shareFailureMessage = getSharedFeedErrorMessage(shareError);
+              console.warn('Shared publish failed:', shareFailureMessage);
+              shareOutcome = 'share-failed';
+            }
           }
         }
-      }
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      if (shareOutcome === 'default' && remindersEnabled) {
-        completeInlineSaveFlow('saved');
-      } else if (shareOutcome === 'shared') {
-        completeInlineSaveFlow('shared');
-      } else if (shareOutcome === 'default') {
-        setSaveButtonState('idle');
-        finalizeSavedCapture();
-        showSavedSheet();
-      } else {
-        setSaveButtonState('idle');
-        finalizeSavedCapture();
-        showSharedSaveSheet(shareOutcome, shareFailureMessage);
-      }
-    } catch (error) {
-      console.error('Save failed:', error);
-      setSaveButtonState('idle');
-      if (destinationPath) {
-        try {
-          await FileSystem.deleteAsync(destinationPath, { idempotent: true });
-        } catch (cleanupError) {
-          console.warn('Failed to clean up orphaned photo file:', cleanupError);
+        if (shareOutcome === 'default' && remindersEnabled) {
+          completeInlineSaveFlow(createdNote.id);
+        } else if (shareOutcome === 'shared') {
+          completeInlineSaveFlow(createdNote.id);
+        } else if (shareOutcome === 'default') {
+          setSaveButtonState('idle');
+          finalizeSavedCapture();
+          showSavedSheet();
+        } else {
+          setSaveButtonState('idle');
+          finalizeSavedCapture();
+          showSharedSaveSheet(shareOutcome, shareFailureMessage);
         }
+      } catch (error) {
+        console.error('Save failed:', error);
+        setSaveButtonState('idle');
+        setSuppressedHomeNoteIds((current) => current.filter((id) => id !== pendingNoteId));
+        if (destinationPath) {
+          try {
+            await FileSystem.deleteAsync(destinationPath, { idempotent: true });
+          } catch (cleanupError) {
+            console.warn('Failed to clean up orphaned photo file:', cleanupError);
+          }
+        }
+        showDoneSheet(
+          'error',
+          t('capture.error', 'Error'),
+          t('capture.saveFailed', 'Something went wrong')
+        );
+      } finally {
+        setSaving(false);
       }
-      showDoneSheet(
-        'error',
-        t('capture.error', 'Error'),
-        t('capture.saveFailed', 'Something went wrong')
-      );
     } finally {
-      setSaving(false);
+      saveInFlightRef.current = false;
     }
   }, [
     location,
@@ -1038,11 +1054,6 @@ export default function HomeScreen() {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     toggleCaptureMode();
   }, [toggleCaptureMode]);
-
-  const handleOpenNotes = useCallback(() => {
-    Keyboard.dismiss();
-    router.push('/notes');
-  }, [router]);
 
   const openNote = useCallback(
     (noteId: string) => {
@@ -1236,7 +1247,6 @@ export default function HomeScreen() {
         cameraSessionKey={cameraSessionKey}
         captureScale={captureScale}
         captureTranslateY={captureTranslateY}
-        saveTransitionProgress={saveTransitionProgress}
         colors={colors}
         t={t}
         noteText={noteText}
@@ -1267,23 +1277,6 @@ export default function HomeScreen() {
         saving={saving}
         saveState={saveButtonState}
         shutterScale={shutterScale}
-        leadingAccessory={
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
-            onPress={handleOpenNotes}
-            style={({ pressed }) => [
-              styles.captureIconAction,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                opacity: pressed ? 0.84 : 1,
-              },
-            ]}
-          >
-            <Ionicons name="grid-outline" size={18} color={colors.text} />
-          </Pressable>
-        }
         cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
         remainingPhotoSlots={captureMode === 'camera' ? remainingPhotoSlots : null}
         libraryImportLocked={!canImportFromLibrary}
@@ -1291,19 +1284,6 @@ export default function HomeScreen() {
         shareTarget={captureTarget}
         onChangeShareTarget={handleCaptureTargetChange}
         onDoodleModeChange={setCaptureScrollLocked}
-        footerContent={
-          inlineSaveFeedback ? (
-            <TransientStatusChip
-              key={inlineSaveFeedback.token}
-              icon={inlineSaveFeedback.variant === 'shared' ? 'people' : 'checkmark-circle'}
-              label={
-                inlineSaveFeedback.variant === 'shared'
-                  ? t('shared.savedSharedQuick', 'Saved and shared')
-                  : t('capture.savedQuick', 'Saved to your journal')
-              }
-            />
-          ) : null
-        }
       />
     </View>
   );
@@ -1421,13 +1401,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     fontFamily: 'System',
-  },
-  captureIconAction: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

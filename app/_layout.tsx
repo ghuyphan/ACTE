@@ -216,7 +216,7 @@ function AppContent() {
             options={{
               headerShown: true,
               headerTransparent: true,
-              headerTitle: '',
+              headerTitle: t('profile.title', 'Profile'),
               headerBackTitle: t('settings.title', 'Settings'),
               headerTintColor: colors.text,
               headerBackButtonDisplayMode: 'minimal',

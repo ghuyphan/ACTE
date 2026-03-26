@@ -14,6 +14,7 @@ interface NoteDoodleCanvasProps {
   activeColor?: string;
   onChangeStrokes?: (nextStrokes: DoodleStroke[]) => void;
   style?: StyleProp<ViewStyle>;
+  strokeWidth?: number;
 }
 
 interface DoodlePoint {
@@ -49,17 +50,20 @@ interface SkiaLayerProps {
   draftVisible: SharedValue<number>;
   draftColor: string;
   showDraft: boolean;
+  strokeWidth: number;
 }
 
 interface FallbackLayerProps {
   renderedStrokes: RenderedStroke[];
   layout: CanvasLayout;
+  strokeWidth: number;
 }
 
 interface DraftFallbackLayerProps {
   draftFallbackPoints: DoodlePoint[];
   draftColor: string;
   layout: CanvasLayout;
+  strokeWidth: number;
 }
 
 function strokesMatch(first: DoodleStroke | null | undefined, second: DoodleStroke | null | undefined) {
@@ -74,8 +78,8 @@ function strokesMatch(first: DoodleStroke | null | undefined, second: DoodleStro
   );
 }
 
-const STROKE_WIDTH = 6;
-const SINGLE_POINT_RADIUS = STROKE_WIDTH / 2;
+const DEFAULT_STROKE_WIDTH = 6;
+const DEFAULT_SINGLE_POINT_RADIUS = DEFAULT_STROKE_WIDTH / 2;
 const MIN_POINT_DISTANCE = 0.0035;
 const MIN_STAMP_SPACING = 0.008;
 const MAX_SEGMENT_SUBDIVISIONS = 12;
@@ -146,7 +150,7 @@ function appendSmoothSkiaPath(path: SkiaPathLike, points: number[], width: numbe
     const centerY = points[1] * height;
 
     if (path.addCircle) {
-      path.addCircle(centerX, centerY, SINGLE_POINT_RADIUS);
+      path.addCircle(centerX, centerY, DEFAULT_SINGLE_POINT_RADIUS);
     } else {
       path.moveTo(centerX, centerY);
       path.lineTo(centerX, centerY);
@@ -351,10 +355,12 @@ const SkiaLayer = memo(function SkiaLayer({
   draftVisible,
   draftColor,
   showDraft,
+  strokeWidth,
 }: SkiaLayerProps) {
   const SkiaCanvas = (skiaRendererModule?.Canvas ?? null) as ComponentType<any> | null;
   const SkiaPath = (skiaRendererModule?.Path ?? null) as ComponentType<any> | null;
   const SkiaCircle = (skiaRendererModule?.Circle ?? null) as ComponentType<any> | null;
+  const singlePointRadius = strokeWidth / 2;
 
   if (!SkiaCanvas || !SkiaPath || !SkiaCircle) {
     return null;
@@ -369,7 +375,7 @@ const SkiaLayer = memo(function SkiaLayer({
             path={stroke.path}
             color={stroke.color}
             style="stroke"
-            strokeWidth={STROKE_WIDTH}
+            strokeWidth={strokeWidth}
             strokeCap="round"
             strokeJoin="round"
           />
@@ -381,7 +387,7 @@ const SkiaLayer = memo(function SkiaLayer({
             key={`dot-${index}`}
             cx={stroke.dot.x}
             cy={stroke.dot.y}
-            r={SINGLE_POINT_RADIUS}
+            r={singlePointRadius}
             color={stroke.color}
           />
         ) : null
@@ -392,7 +398,7 @@ const SkiaLayer = memo(function SkiaLayer({
         color={draftColor}
         opacity={showDraft ? draftVisible : 0}
         style="stroke"
-        strokeWidth={STROKE_WIDTH}
+        strokeWidth={strokeWidth}
         strokeCap="round"
         strokeJoin="round"
       />
@@ -400,7 +406,11 @@ const SkiaLayer = memo(function SkiaLayer({
   );
 });
 
-const CommittedFallbackLayer = memo(function CommittedFallbackLayer({ renderedStrokes, layout }: FallbackLayerProps) {
+const CommittedFallbackLayer = memo(function CommittedFallbackLayer({
+  renderedStrokes,
+  layout,
+  strokeWidth,
+}: FallbackLayerProps) {
   return (
     <View pointerEvents="none" style={styles.fallbackCanvas}>
       {renderedStrokes.map((stroke, strokeIndex) =>
@@ -408,7 +418,7 @@ const CommittedFallbackLayer = memo(function CommittedFallbackLayer({ renderedSt
           <View
             key={`${strokeIndex}:dot:${pointIndex}`}
             style={[
-              styles.dot,
+              getDotStyle(strokeWidth),
               {
                 backgroundColor: stroke.color,
                 left: `${point.x * 100}%`,
@@ -445,6 +455,7 @@ const CommittedFallbackLayer = memo(function CommittedFallbackLayer({ renderedSt
               key={`${strokeIndex}:segment:${pointIndex}`}
               style={[
                 styles.segment,
+                getSegmentStyle(strokeWidth),
                 {
                   backgroundColor: stroke.color,
                   width: length,
@@ -452,7 +463,7 @@ const CommittedFallbackLayer = memo(function CommittedFallbackLayer({ renderedSt
                   top: (startY + endY) / 2,
                   transform: [
                     { translateX: -length / 2 },
-                    { translateY: -STROKE_WIDTH / 2 },
+                    { translateY: -strokeWidth / 2 },
                     { rotate: `${angle}rad` },
                   ],
                 },
@@ -469,6 +480,7 @@ const DraftFallbackLayer = memo(function DraftFallbackLayer({
   draftFallbackPoints,
   draftColor,
   layout,
+  strokeWidth,
 }: DraftFallbackLayerProps) {
   if (draftFallbackPoints.length === 0) {
     return null;
@@ -480,7 +492,7 @@ const DraftFallbackLayer = memo(function DraftFallbackLayer({
         <View
           key={`draft-dot:${pointIndex}`}
           style={[
-            styles.dot,
+            getDotStyle(strokeWidth),
             {
               backgroundColor: draftColor,
               left: `${point.x * 100}%`,
@@ -515,6 +527,7 @@ const DraftFallbackLayer = memo(function DraftFallbackLayer({
             key={`draft-segment:${pointIndex}`}
             style={[
               styles.segment,
+              getSegmentStyle(strokeWidth),
               {
                 backgroundColor: draftColor,
                 width: length,
@@ -522,7 +535,7 @@ const DraftFallbackLayer = memo(function DraftFallbackLayer({
                 top: (startY + endY) / 2,
                 transform: [
                   { translateX: -length / 2 },
-                  { translateY: -STROKE_WIDTH / 2 },
+                  { translateY: -strokeWidth / 2 },
                   { rotate: `${angle}rad` },
                 ],
               },
@@ -540,6 +553,7 @@ export default function NoteDoodleCanvas({
   activeColor = '#1C1C1E',
   onChangeStrokes,
   style,
+  strokeWidth = DEFAULT_STROKE_WIDTH,
 }: NoteDoodleCanvasProps) {
   const [layout, setLayout] = useState<CanvasLayout>({ width: 1, height: 1 });
   const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
@@ -928,12 +942,18 @@ export default function NoteDoodleCanvas({
         draftVisible={draftVisibleValue}
         draftColor={activeColor}
         showDraft={editable}
+        strokeWidth={strokeWidth}
       />
     </>
   ) : (
     <>
-      <CommittedFallbackLayer renderedStrokes={renderedStrokes} layout={layout} />
-      <DraftFallbackLayer draftFallbackPoints={draftFallbackPoints} draftColor={draftColor} layout={layout} />
+      <CommittedFallbackLayer renderedStrokes={renderedStrokes} layout={layout} strokeWidth={strokeWidth} />
+      <DraftFallbackLayer
+        draftFallbackPoints={draftFallbackPoints}
+        draftColor={draftColor}
+        layout={layout}
+        strokeWidth={strokeWidth}
+      />
     </>
   );
 
@@ -960,17 +980,25 @@ const styles = StyleSheet.create({
   fallbackCanvas: {
     ...StyleSheet.absoluteFillObject,
   },
-  dot: {
-    position: 'absolute',
-    width: STROKE_WIDTH,
-    height: STROKE_WIDTH,
-    borderRadius: STROKE_WIDTH / 2,
-    marginLeft: -(STROKE_WIDTH / 2),
-    marginTop: -(STROKE_WIDTH / 2),
-  },
   segment: {
     position: 'absolute',
-    height: STROKE_WIDTH,
-    borderRadius: STROKE_WIDTH / 2,
   },
 });
+
+function getDotStyle(strokeWidth: number) {
+  return {
+    position: 'absolute' as const,
+    width: strokeWidth,
+    height: strokeWidth,
+    borderRadius: strokeWidth / 2,
+    marginLeft: -(strokeWidth / 2),
+    marginTop: -(strokeWidth / 2),
+  };
+}
+
+function getSegmentStyle(strokeWidth: number) {
+  return {
+    height: strokeWidth,
+    borderRadius: strokeWidth / 2,
+  };
+}

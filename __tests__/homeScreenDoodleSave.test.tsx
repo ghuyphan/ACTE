@@ -1,8 +1,8 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
-const mockCreateNote = jest.fn(async () => ({
-  id: 'note-1',
+const mockCreateNote = jest.fn(async (input?: any) => ({
+  id: input?.id ?? 'note-1',
   type: 'text',
   content: 'A doodled note',
   locationName: 'Mock Place',
@@ -18,6 +18,7 @@ const mockRefreshNotes = jest.fn(async () => undefined);
 const mockResetCapture = jest.fn();
 const mockSaveNoteDoodle = jest.fn<Promise<void>, [string, string]>(async () => undefined);
 const mockResetDoodle = jest.fn();
+const mockResetStickers = jest.fn();
 const mockShowAlert = jest.fn();
 const mockScrollToOffset = jest.fn();
 let mockRemindersEnabled = false;
@@ -258,7 +259,9 @@ jest.mock('../components/home/CaptureCard', () => {
         ref,
         () => ({
           getDoodleSnapshot: () => mockGetDoodleSnapshot(),
+          getStickerSnapshot: () => ({ enabled: false, placements: [] }),
           resetDoodle: () => mockResetDoodle(),
+          resetStickers: () => mockResetStickers(),
         }),
         []
       );
@@ -334,8 +337,9 @@ describe('HomeScreen doodle save flow', () => {
     });
 
     expect(mockGetDoodleSnapshot).toHaveBeenCalled();
+    const createdInput = mockCreateNote.mock.calls[0]?.[0];
     expect(mockSaveNoteDoodle).toHaveBeenCalledWith(
-      'note-1',
+      createdInput.id,
       JSON.stringify([{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }])
     );
     expect(mockRefreshNotes).not.toHaveBeenCalled();
@@ -344,6 +348,7 @@ describe('HomeScreen doodle save flow', () => {
     }));
     expect(mockResetCapture).toHaveBeenCalled();
     expect(mockResetDoodle).toHaveBeenCalled();
+    expect(mockResetStickers).toHaveBeenCalled();
     expect(mockScrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: false });
   });
 
@@ -366,8 +371,9 @@ describe('HomeScreen doodle save flow', () => {
       );
     });
 
+    const doodleOnlyCreatedInput = mockCreateNote.mock.calls[0]?.[0];
     expect(mockSaveNoteDoodle).toHaveBeenCalledWith(
-      'note-1',
+      doodleOnlyCreatedInput.id,
       JSON.stringify([{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }])
     );
   });
@@ -392,8 +398,53 @@ describe('HomeScreen doodle save flow', () => {
       expect(mockScrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: false });
       expect(mockResetCapture).toHaveBeenCalled();
       expect(mockResetDoodle).toHaveBeenCalled();
+      expect(mockResetStickers).toHaveBeenCalled();
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('ignores a second save tap while the first save is still in flight', async () => {
+    let resolveCreateNote: ((value: any) => void) | null = null;
+    mockCreateNote.mockImplementationOnce(
+      () =>
+        new Promise<any>((resolve: (value: any) => void) => {
+          resolveCreateNote = resolve;
+        })
+    );
+
+    const { getByTestId } = render(<HomeScreen />);
+
+    fireEvent.press(getByTestId('capture-save-button'));
+    fireEvent.press(getByTestId('capture-save-button'));
+
+    await waitFor(() => {
+      expect(mockCreateNote).toHaveBeenCalledTimes(1);
+    });
+
+    if (!resolveCreateNote) {
+      throw new Error('Expected the first save to start');
+    }
+    const resolvePendingCreateNote = resolveCreateNote as (value: any) => void;
+
+    await act(async () => {
+      resolvePendingCreateNote({
+        id: 'note-1',
+        type: 'text',
+        content: 'A doodled note',
+        locationName: 'Mock Place',
+        latitude: 10.77,
+        longitude: 106.69,
+        radius: 150,
+        isFavorite: false,
+        hasDoodle: false,
+        createdAt: '2026-03-20T00:00:00.000Z',
+        updatedAt: null,
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockSaveNoteDoodle).toHaveBeenCalledTimes(1);
+    });
   });
 });

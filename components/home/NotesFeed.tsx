@@ -176,6 +176,8 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   prevProps.item.moodEmoji === nextProps.item.moodEmoji &&
   prevProps.item.hasDoodle === nextProps.item.hasDoodle &&
   prevProps.item.doodleStrokesJson === nextProps.item.doodleStrokesJson &&
+  prevProps.item.hasStickers === nextProps.item.hasStickers &&
+  prevProps.item.stickerPlacementsJson === nextProps.item.stickerPlacementsJson &&
   prevProps.shouldReveal === nextProps.shouldReveal &&
   prevProps.revealToken === nextProps.revealToken
 ));
@@ -244,6 +246,8 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   prevProps.item.photoLocalUri === nextProps.item.photoLocalUri &&
   prevProps.item.photoPath === nextProps.item.photoPath &&
   prevProps.item.doodleStrokesJson === nextProps.item.doodleStrokesJson &&
+  prevProps.item.hasStickers === nextProps.item.hasStickers &&
+  prevProps.item.stickerPlacementsJson === nextProps.item.stickerPlacementsJson &&
   prevProps.item.placeName === nextProps.item.placeName &&
   prevProps.item.createdAt === nextProps.item.createdAt &&
   prevProps.item.authorDisplayName === nextProps.item.authorDisplayName &&

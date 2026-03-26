@@ -1,6 +1,7 @@
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
 import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,6 +26,7 @@ import {
     View,
 } from 'react-native';
 import { DOODLE_ARTBOARD_FRAME } from '../constants/doodleLayout';
+import { ENABLE_PHOTO_STICKERS } from '../constants/experiments';
 import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../constants/noteRadius';
 import { Layout, Typography } from '../constants/theme';
 import { useAuth } from '../hooks/useAuth';
@@ -35,12 +37,24 @@ import { useTheme } from '../hooks/useTheme';
 import { Note } from '../services/database';
 import { getTextNoteCardGradient } from '../services/noteAppearance';
 import { clearNoteDoodle, parseNoteDoodleStrokes, saveNoteDoodle } from '../services/noteDoodles';
+import {
+    bringStickerPlacementToFront,
+    createStickerPlacement,
+    duplicateStickerPlacement,
+    importStickerAsset,
+    parseNoteStickerPlacements,
+    saveNoteStickerPlacementsWithAssets,
+    clearNoteStickers,
+    type NoteStickerPlacement,
+    updateStickerPlacementTransform,
+} from '../services/noteStickers';
 import { getNotePhotoUri } from '../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import { formatDate } from '../utils/dateUtils';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
 import { isOlderIOS } from '../utils/platform';
 import AppBottomSheet from './AppBottomSheet';
+import NoteStickerCanvas from './NoteStickerCanvas';
 import NoteDoodleCanvas, { DoodleStroke } from './NoteDoodleCanvas';
 import TransientStatusChip from './ui/TransientStatusChip';
 
@@ -196,7 +210,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [editLocation, setEditLocation] = useState('');
     const [editRadius, setEditRadius] = useState(150);
     const [editDoodleStrokes, setEditDoodleStrokes] = useState<DoodleStroke[]>([]);
+    const [editStickerPlacements, setEditStickerPlacements] = useState<NoteStickerPlacement[]>([]);
     const [doodleModeEnabled, setDoodleModeEnabled] = useState(false);
+    const [stickerModeEnabled, setStickerModeEnabled] = useState(false);
+    const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
+    const [importingSticker, setImportingSticker] = useState(false);
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
 
     const cardScale = useRef(new Animated.Value(0.92)).current;
@@ -242,7 +260,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setEditLocation('');
         setEditRadius(150);
         setEditDoodleStrokes([]);
+        setEditStickerPlacements([]);
         setDoodleModeEnabled(false);
+        setStickerModeEnabled(false);
+        setSelectedStickerId(null);
         favoriteFillProgress.setValue(0);
         cardScale.setValue(0.97);
         cardOpacity.setValue(0);
@@ -264,7 +285,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     setEditLocation(nextNote.locationName || '');
                     setEditRadius(nextNote.radius);
                     setEditDoodleStrokes(parseNoteDoodleStrokes(nextNote.doodleStrokesJson));
+                    setEditStickerPlacements(parseNoteStickerPlacements(nextNote.stickerPlacementsJson));
                     setDoodleModeEnabled(false);
+                    setStickerModeEnabled(false);
+                    setSelectedStickerId(null);
                 }
                 setLoading(false);
 
@@ -339,6 +363,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     useEffect(() => {
         if (!isEditing) {
             setDoodleModeEnabled(false);
+            setStickerModeEnabled(false);
             return;
         }
 
@@ -357,6 +382,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         () => parseNoteDoodleStrokes(note?.doodleStrokesJson),
         [note?.doodleStrokesJson]
     );
+    const parsedNoteStickerPlacements = useMemo(
+        () => parseNoteStickerPlacements(note?.stickerPlacementsJson),
+        [note?.stickerPlacementsJson]
+    );
 
     const handleToggleDoodleMode = useCallback(() => {
         if (!isEditing || !note) {
@@ -364,6 +393,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
 
         Keyboard.dismiss();
+        setStickerModeEnabled(false);
         setDoodleModeEnabled((current) => !current);
     }, [isEditing, note]);
 
@@ -374,6 +404,99 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const handleClearDoodle = useCallback(() => {
         setEditDoodleStrokes([]);
     }, []);
+    const handleImportSticker = useCallback(async () => {
+        if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
+            return;
+        }
+
+        Keyboard.dismiss();
+        setImportingSticker(true);
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                multiple: false,
+                copyToCacheDirectory: true,
+                type: ['image/png', 'image/webp'],
+            });
+
+            if (result.canceled || !result.assets?.[0]) {
+                return;
+            }
+
+            const importedAsset = await importStickerAsset({
+                uri: result.assets[0].uri,
+                mimeType: result.assets[0].mimeType,
+                name: result.assets[0].name,
+            });
+
+            const nextPlacement = createStickerPlacement(importedAsset, editStickerPlacements);
+            setEditStickerPlacements((current) => [...current, nextPlacement]);
+            setSelectedStickerId(nextPlacement.id);
+            setStickerModeEnabled(true);
+            setDoodleModeEnabled(false);
+        } catch (error) {
+            console.warn('Sticker import failed:', error);
+        } finally {
+            setImportingSticker(false);
+        }
+    }, [editStickerPlacements, importingSticker, isEditing, note]);
+    const handleToggleStickerMode = useCallback(() => {
+        if (!ENABLE_PHOTO_STICKERS || !isEditing || !note) {
+            return;
+        }
+
+        if (!stickerModeEnabled && editStickerPlacements.length === 0 && !importingSticker) {
+            void handleImportSticker();
+            return;
+        }
+
+        Keyboard.dismiss();
+        setDoodleModeEnabled(false);
+        setStickerModeEnabled((current) => !current);
+    }, [editStickerPlacements.length, handleImportSticker, importingSticker, isEditing, note, stickerModeEnabled]);
+    const handleStickerAction = useCallback(
+        (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove') => {
+            if (!selectedStickerId) {
+                return;
+            }
+
+            let nextPlacements = editStickerPlacements;
+
+            if (action === 'duplicate') {
+                nextPlacements = duplicateStickerPlacement(editStickerPlacements, selectedStickerId);
+            } else if (action === 'front') {
+                nextPlacements = bringStickerPlacementToFront(editStickerPlacements, selectedStickerId);
+            } else if (action === 'remove') {
+                nextPlacements = editStickerPlacements.filter((placement) => placement.id !== selectedStickerId);
+                setSelectedStickerId(null);
+            } else {
+                const selectedPlacement = editStickerPlacements.find((placement) => placement.id === selectedStickerId);
+                if (!selectedPlacement) {
+                    return;
+                }
+
+                if (action === 'rotate-left') {
+                    nextPlacements = updateStickerPlacementTransform(editStickerPlacements, selectedStickerId, {
+                        rotation: selectedPlacement.rotation - 15,
+                    });
+                } else if (action === 'rotate-right') {
+                    nextPlacements = updateStickerPlacementTransform(editStickerPlacements, selectedStickerId, {
+                        rotation: selectedPlacement.rotation + 15,
+                    });
+                } else if (action === 'smaller') {
+                    nextPlacements = updateStickerPlacementTransform(editStickerPlacements, selectedStickerId, {
+                        scale: selectedPlacement.scale - 0.12,
+                    });
+                } else if (action === 'larger') {
+                    nextPlacements = updateStickerPlacementTransform(editStickerPlacements, selectedStickerId, {
+                        scale: selectedPlacement.scale + 0.12,
+                    });
+                }
+            }
+
+            setEditStickerPlacements(nextPlacements);
+        },
+        [editStickerPlacements, selectedStickerId]
+    );
 
     useEffect(() => () => {
         if (feedbackTimeoutRef.current) {
@@ -585,6 +708,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             editDoodleStrokes.length > 0 ? JSON.stringify(editDoodleStrokes) : null;
         const nextHasDoodle = Boolean(nextDoodleStrokesJson);
         const doodleChanged = nextDoodleStrokesJson !== (note.doodleStrokesJson ?? null);
+        const nextStickerPlacementsJson =
+            editStickerPlacements.length > 0 ? JSON.stringify(editStickerPlacements) : null;
+        const nextHasStickers = Boolean(nextStickerPlacementsJson);
+        const stickersChanged = nextStickerPlacementsJson !== (note.stickerPlacementsJson ?? null);
 
         if (note.type === 'text' && editContent.trim() !== note.content) {
             updates.content = editContent.trim();
@@ -596,21 +723,31 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             updates.radius = editRadius;
         }
 
-        if (Object.keys(updates).length > 0 || doodleChanged) {
+        if (Object.keys(updates).length > 0 || doodleChanged || stickersChanged) {
             const nextUpdatedAt = new Date().toISOString();
-            const storeUpdates = doodleChanged
-                ? {
-                    ...updates,
-                    hasDoodle: nextHasDoodle,
-                    doodleStrokesJson: nextDoodleStrokesJson,
-                }
-                : updates;
+            const storeUpdates = {
+                ...updates,
+                ...(doodleChanged
+                    ? {
+                        hasDoodle: nextHasDoodle,
+                        doodleStrokesJson: nextDoodleStrokesJson,
+                    }
+                    : {}),
+                ...(stickersChanged
+                    ? {
+                        hasStickers: nextHasStickers,
+                        stickerPlacementsJson: nextStickerPlacementsJson,
+                    }
+                    : {}),
+            };
             const nextNote = {
                 ...note,
                 ...storeUpdates,
                 content: updates.content ?? note.content,
                 hasDoodle: doodleChanged ? nextHasDoodle : note.hasDoodle,
                 doodleStrokesJson: doodleChanged ? nextDoodleStrokesJson : note.doodleStrokesJson ?? null,
+                hasStickers: stickersChanged ? nextHasStickers : note.hasStickers,
+                stickerPlacementsJson: stickersChanged ? nextStickerPlacementsJson : note.stickerPlacementsJson ?? null,
                 updatedAt: nextUpdatedAt,
             };
 
@@ -622,14 +759,25 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 }
             }
 
+            if (stickersChanged) {
+                if (nextStickerPlacementsJson) {
+                    await saveNoteStickerPlacementsWithAssets(note.id, editStickerPlacements);
+                } else {
+                    await clearNoteStickers(note.id);
+                }
+            }
+
             await updateNote(note.id, storeUpdates);
             await refreshNotes(false);
             setNote(nextNote);
             setEditDoodleStrokes(parseNoteDoodleStrokes(nextDoodleStrokesJson));
+            setEditStickerPlacements(parseNoteStickerPlacements(nextStickerPlacementsJson));
             setEditContent(nextNote.content);
             setEditLocation(nextNote.locationName || '');
             setEditRadius(nextNote.radius);
             setDoodleModeEnabled(false);
+            setStickerModeEnabled(false);
+            setSelectedStickerId(null);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setIsEditing(false);
 
@@ -648,6 +796,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             return;
         }
         setDoodleModeEnabled(false);
+        setStickerModeEnabled(false);
         setIsEditing(false);
     };
 
@@ -711,6 +860,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             emoji: note.moodEmoji,
         });
         const displayedDoodleStrokes = isEditing ? editDoodleStrokes : parsedNoteDoodleStrokes;
+        const displayedStickerPlacements = isEditing ? editStickerPlacements : parsedNoteStickerPlacements;
         const editIconStyle = {
             opacity: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
             transform: [{ scale: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.72] }) }],
@@ -741,6 +891,25 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                 <View style={styles.photo}>
                                     <Image source={{ uri: getNotePhotoUri(note) }} style={styles.photo} contentFit="cover" transition={300} />
                                 </View>
+                                {displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled) ? (
+                                    <View
+                                        pointerEvents={isEditing && stickerModeEnabled ? 'box-none' : 'none'}
+                                        style={[
+                                            styles.doodleOverlay,
+                                            styles.photoDoodleOverlay,
+                                            isEditing ? styles.doodleOverlayEditing : null,
+                                            isEditing && stickerModeEnabled ? styles.doodleOverlayActive : null,
+                                        ]}
+                                    >
+                                        <NoteStickerCanvas
+                                            placements={displayedStickerPlacements}
+                                            editable={isEditing && stickerModeEnabled}
+                                            onChangePlacements={setEditStickerPlacements}
+                                            selectedPlacementId={selectedStickerId}
+                                            onChangeSelectedPlacementId={setSelectedStickerId}
+                                        />
+                                    </View>
+                                ) : null}
                                 {displayedDoodleStrokes.length > 0 || isEditing ? (
                                     <View
                                         pointerEvents={isEditing && doodleModeEnabled ? 'auto' : 'none'}
@@ -779,6 +948,22 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                     color="#FFFFFF"
                                                 />
                                             </Pressable>
+                                            {ENABLE_PHOTO_STICKERS ? (
+                                                <Pressable
+                                                    testID="note-detail-sticker-toggle"
+                                                    onPress={handleToggleStickerMode}
+                                                    style={[
+                                                        styles.textCardActionButton,
+                                                        stickerModeEnabled ? styles.textCardActionButtonActive : null,
+                                                    ]}
+                                                >
+                                                    <Ionicons
+                                                        name={stickerModeEnabled ? 'sparkles' : 'sparkles-outline'}
+                                                        size={16}
+                                                        color="#FFFFFF"
+                                                    />
+                                                </Pressable>
+                                            ) : null}
                                             {doodleModeEnabled ? (
                                                 <View style={styles.textCardActionCluster}>
                                                     <Pressable
@@ -808,6 +993,31 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                         <Ionicons name="close-outline" size={14} color="#FFFFFF" />
                                                     </Pressable>
                                                 </View>
+                                            ) : stickerModeEnabled ? (
+                                                <View style={styles.textCardActionCluster}>
+                                                    <Pressable
+                                                        testID="note-detail-sticker-import"
+                                                        onPress={handleImportSticker}
+                                                        disabled={importingSticker}
+                                                        style={[
+                                                            styles.textCardActionPill,
+                                                            importingSticker ? styles.textCardActionDisabled : null,
+                                                        ]}
+                                                    >
+                                                        <Ionicons name="add-outline" size={14} color="#FFFFFF" />
+                                                    </Pressable>
+                                                    <Pressable
+                                                        testID="note-detail-sticker-remove"
+                                                        onPress={() => handleStickerAction('remove')}
+                                                        disabled={!selectedStickerId}
+                                                        style={[
+                                                            styles.textCardActionPill,
+                                                            !selectedStickerId ? styles.textCardActionDisabled : null,
+                                                        ]}
+                                                    >
+                                                        <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
+                                                    </Pressable>
+                                                </View>
                                             ) : null}
                                         </View>
                                     </View>
@@ -822,6 +1032,26 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                     end={{ x: 1, y: 1 }}
                                     style={styles.textGradient}
                                 >
+                                    {displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled) ? (
+                                        <View
+                                            pointerEvents={isEditing && stickerModeEnabled ? 'box-none' : 'none'}
+                                            style={[
+                                                styles.doodleOverlay,
+                                                styles.textStickerOverlay,
+                                                isEditing && stickerModeEnabled ? styles.textStickerOverlayActive : null,
+                                                isEditing ? styles.doodleOverlayEditing : null,
+                                                isEditing && stickerModeEnabled ? styles.doodleOverlayActive : null,
+                                            ]}
+                                        >
+                                            <NoteStickerCanvas
+                                                placements={displayedStickerPlacements}
+                                                editable={isEditing && stickerModeEnabled}
+                                                onChangePlacements={setEditStickerPlacements}
+                                                selectedPlacementId={selectedStickerId}
+                                                onChangeSelectedPlacementId={setSelectedStickerId}
+                                            />
+                                        </View>
+                                    ) : null}
                                     {displayedDoodleStrokes.length > 0 || isEditing ? (
                                         <View
                                             pointerEvents={isEditing && doodleModeEnabled ? 'auto' : 'none'}
@@ -859,6 +1089,22 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                         color="#FFFFFF"
                                                     />
                                                 </Pressable>
+                                                {ENABLE_PHOTO_STICKERS ? (
+                                                    <Pressable
+                                                        testID="note-detail-sticker-toggle"
+                                                        onPress={handleToggleStickerMode}
+                                                        style={[
+                                                            styles.textCardActionButton,
+                                                            stickerModeEnabled ? styles.textCardActionButtonActive : null,
+                                                        ]}
+                                                    >
+                                                        <Ionicons
+                                                            name={stickerModeEnabled ? 'sparkles' : 'sparkles-outline'}
+                                                            size={16}
+                                                            color="#FFFFFF"
+                                                        />
+                                                    </Pressable>
+                                                ) : null}
                                                 {doodleModeEnabled ? (
                                                     <View style={styles.textCardActionCluster}>
                                                         <Pressable
@@ -888,31 +1134,62 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                             <Ionicons name="close-outline" size={14} color="#FFFFFF" />
                                                         </Pressable>
                                                     </View>
+                                                ) : stickerModeEnabled ? (
+                                                    <View style={styles.textCardActionCluster}>
+                                                        <Pressable
+                                                            testID="note-detail-sticker-import"
+                                                            onPress={handleImportSticker}
+                                                            disabled={importingSticker}
+                                                            style={[
+                                                                styles.textCardActionPill,
+                                                                importingSticker ? styles.textCardActionDisabled : null,
+                                                            ]}
+                                                        >
+                                                            <Ionicons name="add-outline" size={14} color="#FFFFFF" />
+                                                        </Pressable>
+                                                        <Pressable
+                                                            testID="note-detail-sticker-remove"
+                                                            onPress={() => handleStickerAction('remove')}
+                                                            disabled={!selectedStickerId}
+                                                            style={[
+                                                                styles.textCardActionPill,
+                                                                !selectedStickerId ? styles.textCardActionDisabled : null,
+                                                            ]}
+                                                        >
+                                                            <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
+                                                        </Pressable>
+                                                    </View>
                                                 ) : null}
                                             </View>
                                         </View>
                                     ) : (
                                         renderFavoriteBadge('#FFFFFF33', '#FFFFFFDD')
                                     )}
-                                    <TextInput
-                                        ref={contentInputRef}
-                                        testID="note-detail-content-input"
-                                        style={[
-                                            styles.editTextInput, 
-                                            isEditing ? styles.editTextInputActive : null,
-                                            editContent.length > 200 ? { fontSize: 16, lineHeight: 22 } :
-                                            editContent.length > 100 ? { fontSize: 18, lineHeight: 26 } : null
-                                        ]}
-                                        value={isEditing ? editContent : formatNoteTextWithEmoji(note.content, note.moodEmoji)}
-                                        onChangeText={isEditing ? setEditContent : undefined}
-                                        editable={isEditing && !doodleModeEnabled}
-                                        multiline
-                                        scrollEnabled={false}
-                                        placeholder={isEditing ? t('noteDetail.editContent', 'Edit note content...') : undefined}
-                                        placeholderTextColor="rgba(255,255,255,0.5)"
-                                        maxLength={300}
-                                        selectionColor="#FFFFFF"
-                                    />
+                                    <View
+                                        pointerEvents={stickerModeEnabled ? 'none' : 'auto'}
+                                        style={stickerModeEnabled ? styles.editTextInputWrapInactive : null}
+                                    >
+                                        <TextInput
+                                            ref={contentInputRef}
+                                            testID="note-detail-content-input"
+                                            style={[
+                                                styles.editTextInput, 
+                                                isEditing ? styles.editTextInputActive : null,
+                                                stickerModeEnabled ? styles.editTextInputInactive : null,
+                                                editContent.length > 200 ? { fontSize: 16, lineHeight: 22 } :
+                                                editContent.length > 100 ? { fontSize: 18, lineHeight: 26 } : null
+                                            ]}
+                                            value={isEditing ? editContent : formatNoteTextWithEmoji(note.content, note.moodEmoji)}
+                                            onChangeText={isEditing ? setEditContent : undefined}
+                                            editable={isEditing && !doodleModeEnabled && !stickerModeEnabled}
+                                            multiline
+                                            scrollEnabled={false}
+                                            placeholder={isEditing ? t('noteDetail.editContent', 'Edit note content...') : undefined}
+                                            placeholderTextColor="rgba(255,255,255,0.5)"
+                                            maxLength={300}
+                                            selectionColor="#FFFFFF"
+                                        />
+                                    </View>
                                 </LinearGradient>
                             </View>
                         )}
@@ -1163,6 +1440,12 @@ const styles = StyleSheet.create({
         ...DOODLE_ARTBOARD_FRAME,
         opacity: 0.5,
     },
+    textStickerOverlay: {
+        zIndex: 0,
+    },
+    textStickerOverlayActive: {
+        zIndex: 1,
+    },
     doodleOverlayEditing: {
         opacity: 0.72,
     },
@@ -1238,6 +1521,13 @@ const styles = StyleSheet.create({
         textShadowColor: 'rgba(0,0,0,0.2)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 4,
+        zIndex: 1,
+    },
+    editTextInputWrapInactive: {
+        zIndex: 0,
+    },
+    editTextInputInactive: {
+        zIndex: 0,
     },
     editTextInputActive: {
         width: '100%',

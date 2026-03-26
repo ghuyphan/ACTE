@@ -25,11 +25,14 @@ export interface Note {
     isFavorite: boolean;
     hasDoodle?: boolean;
     doodleStrokesJson?: string | null;
+    hasStickers?: boolean;
+    stickerPlacementsJson?: string | null;
     createdAt: string;        // ISO timestamp
     updatedAt: string | null;
 }
 
 export interface CreateNoteInput {
+    id?: string;
     type: NoteType;
     content: string;
     photoLocalUri?: string | null;
@@ -44,6 +47,8 @@ export interface CreateNoteInput {
     radius?: number;
     hasDoodle?: boolean;
     doodleStrokesJson?: string | null;
+    hasStickers?: boolean;
+    stickerPlacementsJson?: string | null;
 }
 
 export type NoteUpdates = Partial<
@@ -60,6 +65,8 @@ export type NoteUpdates = Partial<
         | 'radius'
         | 'hasDoodle'
         | 'doodleStrokesJson'
+        | 'hasStickers'
+        | 'stickerPlacementsJson'
     >
 >;
 
@@ -85,18 +92,22 @@ interface NoteRow {
     search_text: string | null;
     has_doodle?: number;
     doodle_strokes_json?: string | null;
+    has_stickers?: number;
+    sticker_placements_json?: string | null;
 }
 
 // ─── Database ───────────────────────────────────────────────────────
 let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-const APP_SCHEMA_VERSION = 7;
+const APP_SCHEMA_VERSION = 8;
 export const LOCAL_NOTES_SCOPE = '__local__';
 let activeNotesScope = LOCAL_NOTES_SCOPE;
 const SQLITE_LOCK_RETRY_DELAYS_MS = [30, 80, 160];
 const NOTES_SELECT_FIELDS = `notes.*,
       EXISTS(SELECT 1 FROM note_doodles doodles WHERE doodles.note_id = notes.id) AS has_doodle,
-      (SELECT doodles.strokes_json FROM note_doodles doodles WHERE doodles.note_id = notes.id LIMIT 1) AS doodle_strokes_json`;
+      (SELECT doodles.strokes_json FROM note_doodles doodles WHERE doodles.note_id = notes.id LIMIT 1) AS doodle_strokes_json,
+      EXISTS(SELECT 1 FROM note_stickers stickers WHERE stickers.note_id = notes.id) AS has_stickers,
+      (SELECT stickers.placements_json FROM note_stickers stickers WHERE stickers.note_id = notes.id LIMIT 1) AS sticker_placements_json`;
 
 async function safelyCloseDatabase(database: SQLite.SQLiteDatabase | null) {
     if (!database) {
@@ -193,6 +204,25 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         updated_at TEXT NOT NULL,
         FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
       );
+      CREATE TABLE IF NOT EXISTS sticker_assets (
+        id TEXT PRIMARY KEY NOT NULL,
+        owner_uid TEXT NOT NULL DEFAULT '__local__',
+        local_uri TEXT NOT NULL,
+        remote_path TEXT,
+        mime_type TEXT NOT NULL,
+        width REAL NOT NULL,
+        height REAL NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        source TEXT NOT NULL DEFAULT 'import'
+      );
+      CREATE INDEX IF NOT EXISTS idx_sticker_assets_owner_created ON sticker_assets(owner_uid, created_at DESC);
+      CREATE TABLE IF NOT EXISTS note_stickers (
+        note_id TEXT PRIMARY KEY NOT NULL,
+        placements_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
+      );
       CREATE TABLE IF NOT EXISTS sync_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         owner_uid TEXT NOT NULL DEFAULT '__local__',
@@ -232,6 +262,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         photo_path TEXT,
         photo_local_uri TEXT,
         doodle_strokes_json TEXT,
+        sticker_placements_json TEXT,
         place_name TEXT,
         source_note_id TEXT,
         created_at TEXT NOT NULL,
@@ -307,6 +338,31 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     `CREATE TABLE IF NOT EXISTS note_doodles (
                         note_id TEXT PRIMARY KEY NOT NULL,
                         strokes_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
+                    )`
+                );
+                await database.execAsync(
+                    `CREATE TABLE IF NOT EXISTS sticker_assets (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        owner_uid TEXT NOT NULL DEFAULT '${LOCAL_NOTES_SCOPE}',
+                        local_uri TEXT NOT NULL,
+                        remote_path TEXT,
+                        mime_type TEXT NOT NULL,
+                        width REAL NOT NULL,
+                        height REAL NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT,
+                        source TEXT NOT NULL DEFAULT 'import'
+                    )`
+                );
+                await database.execAsync(
+                    `CREATE INDEX IF NOT EXISTS idx_sticker_assets_owner_created ON sticker_assets(owner_uid, created_at DESC)`
+                );
+                await database.execAsync(
+                    `CREATE TABLE IF NOT EXISTS note_stickers (
+                        note_id TEXT PRIMARY KEY NOT NULL,
+                        placements_json TEXT NOT NULL,
                         updated_at TEXT NOT NULL,
                         FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
                     )`
@@ -422,6 +478,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                         photo_path TEXT,
                         photo_local_uri TEXT,
                         doodle_strokes_json TEXT,
+                        sticker_placements_json TEXT,
                         place_name TEXT,
                         source_note_id TEXT,
                         created_at TEXT NOT NULL,
@@ -507,9 +564,13 @@ export async function withDatabaseTransaction<T>(
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
-function generateId(): string {
-    // Replaced Math.random with cryptographically secure UUID
-    return `note-${Date.now()}-${Crypto.randomUUID().substring(0, 8)}`;
+export function generateNoteId(): string {
+    const secureUuid = typeof Crypto.randomUUID === 'function' ? Crypto.randomUUID() : null;
+    const randomId =
+        typeof secureUuid === 'string' && secureUuid.length > 0
+            ? secureUuid.substring(0, 8)
+            : Math.random().toString(36).slice(2, 10);
+    return `note-${Date.now()}-${randomId}`;
 }
 
 function getResolvedPhotoLocalUri(row: Pick<NoteRow, 'type' | 'content' | 'photo_local_uri'>) {
@@ -555,6 +616,8 @@ function rowToNote(row: NoteRow): Note {
         isFavorite: row.is_favorite === 1,
         hasDoodle: row.has_doodle === 1,
         doodleStrokesJson: row.doodle_strokes_json ?? null,
+        hasStickers: row.has_stickers === 1,
+        stickerPlacementsJson: row.sticker_placements_json ?? null,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     };
@@ -568,7 +631,7 @@ function getCurrentScope() {
 export async function createNote(input: CreateNoteInput): Promise<Note> {
     const database = await getDB();
     const scope = getCurrentScope();
-    const id = generateId();
+    const id = input.id ?? generateNoteId();
     const now = new Date().toISOString();
     const photoLocalUri =
         input.type === 'photo' ? resolveStoredPhotoUri(input.photoLocalUri ?? input.content) : null;
@@ -637,6 +700,8 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         isFavorite: false,
         hasDoodle: input.hasDoodle ?? false,
         doodleStrokesJson: input.doodleStrokesJson ?? null,
+        hasStickers: input.hasStickers ?? false,
+        stickerPlacementsJson: input.stickerPlacementsJson ?? null,
         createdAt: now,
         updatedAt: null,
     };
@@ -808,6 +873,11 @@ export async function deleteNote(id: string): Promise<void> {
         id,
         scope
     );
+    await database.runAsync(
+        'DELETE FROM note_stickers WHERE note_id IN (SELECT id FROM notes WHERE id = ? AND owner_uid = ?)',
+        id,
+        scope
+    );
     await database.runAsync('DELETE FROM notes WHERE id = ? AND owner_uid = ?', id, scope);
 }
 
@@ -820,6 +890,10 @@ export async function deleteAllNotesForScope(scope: string): Promise<void> {
     const database = await getDB();
     await database.runAsync(
         'DELETE FROM note_doodles WHERE note_id IN (SELECT id FROM notes WHERE owner_uid = ?)',
+        scope
+    );
+    await database.runAsync(
+        'DELETE FROM note_stickers WHERE note_id IN (SELECT id FROM notes WHERE owner_uid = ?)',
         scope
     );
     await database.runAsync('DELETE FROM notes WHERE owner_uid = ?', scope);
@@ -926,6 +1000,21 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         await database.runAsync('DELETE FROM note_doodles WHERE note_id = ?', input.id);
     }
 
+    if (input.hasStickers && input.stickerPlacementsJson) {
+        await database.runAsync(
+            `INSERT INTO note_stickers (note_id, placements_json, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(note_id) DO UPDATE SET
+                placements_json = excluded.placements_json,
+                updated_at = excluded.updated_at`,
+            input.id,
+            input.stickerPlacementsJson,
+            input.updatedAt ?? input.createdAt
+        );
+    } else {
+        await database.runAsync('DELETE FROM note_stickers WHERE note_id = ?', input.id);
+    }
+
     return {
         id: input.id,
         type: input.type,
@@ -943,6 +1032,8 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         isFavorite: Boolean(input.isFavorite),
         hasDoodle: input.hasDoodle ?? false,
         doodleStrokesJson: input.doodleStrokesJson ?? null,
+        hasStickers: input.hasStickers ?? false,
+        stickerPlacementsJson: input.stickerPlacementsJson ?? null,
         createdAt: input.createdAt,
         updatedAt: input.updatedAt ?? null,
     };

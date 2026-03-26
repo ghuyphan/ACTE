@@ -64,7 +64,7 @@ export function getSupabase() {
 export function requireSupabase() {
   const supabase = getSupabase();
   if (!supabase) {
-    throw new Error('Supabase is unavailable in this build.');
+    throw new Error('Cloud features are unavailable in this build.');
   }
 
   return supabase;
@@ -85,10 +85,10 @@ export function getSupabaseErrorMessage(error: unknown) {
   }
 
   if (typeof error === 'object' && error && 'message' in error) {
-    return String((error as { message?: unknown }).message ?? 'Unknown Supabase error');
+    return String((error as { message?: unknown }).message ?? 'Unknown server error');
   }
 
-  return 'Unknown Supabase error';
+  return 'Unknown server error';
 }
 
 export function getSupabaseErrorCode(error: unknown) {

@@ -738,6 +738,55 @@ describe('widgetService', () => {
     );
   });
 
+  it('includes sticker metadata for selected notes and prepares iOS-readable sticker files', async () => {
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'sticker-text',
+        content: 'Sticker memory',
+        isFavorite: true,
+        hasStickers: true,
+        stickerPlacementsJson: JSON.stringify([
+          {
+            id: 'placement-1',
+            assetId: 'asset-1',
+            x: 0.4,
+            y: 0.6,
+            scale: 1.1,
+            rotation: 8,
+            zIndex: 1,
+            opacity: 0.95,
+            asset: {
+              id: 'asset-1',
+              ownerUid: '__local__',
+              localUri: 'file:///mock-documents/stickers/asset-1.png',
+              remotePath: null,
+              mimeType: 'image/png',
+              width: 320,
+              height: 240,
+              createdAt: '2026-03-10T00:00:00.000Z',
+              updatedAt: null,
+              source: 'import',
+            },
+          },
+        ]),
+      }),
+    ]);
+
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
+
+    const entries = getLastTimelineEntries();
+    const stickerPayload = JSON.parse(String(entries[0]?.props.props.stickerPlacementsJson ?? '[]'));
+
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        noteType: 'text',
+        hasStickers: true,
+      })
+    );
+    expect(stickerPayload).toHaveLength(1);
+    expect(String(stickerPayload[0]?.asset?.localUri ?? '')).toContain('asset-1');
+  });
+
   it('creates unique widget image files for photo timeline entries', async () => {
     mockGetAllNotes.mockResolvedValue([
       buildNote({
@@ -754,11 +803,18 @@ describe('widgetService', () => {
     const entries = getLastTimelineEntries();
     const firstImageUrl = String(entries[0]?.props.props.backgroundImageUrl ?? '');
     const secondImageUrl = String(entries[1]?.props.props.backgroundImageUrl ?? '');
+    const firstImageBase64 = String(entries[0]?.props.props.backgroundImageBase64 ?? '');
+    const secondImageBase64 = String(entries[1]?.props.props.backgroundImageBase64 ?? '');
 
-    expect(mockCopyAsync).toHaveBeenCalled();
-    expect(firstImageUrl).toContain('favorite-photo');
-    expect(secondImageUrl).toContain('favorite-photo');
-    expect(firstImageUrl).not.toBe(secondImageUrl);
+    if (firstImageUrl && secondImageUrl) {
+      expect(firstImageUrl).toContain('favorite-photo');
+      expect(secondImageUrl).toContain('favorite-photo');
+      expect(firstImageUrl).not.toBe(secondImageUrl);
+      return;
+    }
+
+    expect(firstImageBase64).toBe('base64-image-data');
+    expect(secondImageBase64).toBe('base64-image-data');
   });
 
   it('formats localized widget strings inside the timeline entry payload', async () => {

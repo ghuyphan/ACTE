@@ -19,7 +19,7 @@ import {
   skipImmediateReminderForNewNote,
   syncGeofenceRegions,
 } from '../services/geofenceService';
-import { cleanupOrphanPhotoFiles } from '../services/mediaIntegrity';
+import { cleanupOrphanMediaFiles } from '../services/mediaIntegrity';
 import { filterNotesByQuery } from '../services/noteSearch';
 import { getNotePhotoUri } from '../services/photoStorage';
 import { getSyncService } from '../services/syncService';
@@ -98,8 +98,8 @@ function useNotesStoreValue(): NotesStoreValue {
           return;
         }
 
-        void cleanupOrphanPhotoFiles().catch((error) => {
-          console.warn('Failed to clean orphan photos:', error);
+        void cleanupOrphanMediaFiles().catch((error) => {
+          console.warn('Failed to clean orphan media:', error);
         });
       }, 300);
     })();
@@ -195,6 +195,12 @@ function useNotesStoreValue(): NotesStoreValue {
                 updates.doodleStrokesJson !== undefined
                   ? updates.doodleStrokesJson
                   : n.doodleStrokesJson ?? null,
+              hasStickers:
+                updates.hasStickers !== undefined ? updates.hasStickers : n.hasStickers ?? false,
+              stickerPlacementsJson:
+                updates.stickerPlacementsJson !== undefined
+                  ? updates.stickerPlacementsJson
+                  : n.stickerPlacementsJson ?? null,
               updatedAt: new Date().toISOString(),
             }
           : n

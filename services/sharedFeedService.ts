@@ -10,6 +10,7 @@ import {
 } from '../utils/supabase';
 import { Note, NoteType } from './database';
 import { deletePhotoFromStorage, SHARED_POST_MEDIA_BUCKET, uploadPhotoToStorage } from './remoteMedia';
+import { parseNoteStickerPlacements, serializeStickerPlacementsForStorage } from './noteStickers';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getPublicUserProfile, upsertPublicUserProfile } from './publicProfileService';
 import { cacheSharedFeedSnapshot } from './sharedFeedCache';
@@ -48,6 +49,8 @@ export interface SharedPost {
   photoPath: string | null;
   photoLocalUri: string | null;
   doodleStrokesJson?: string | null;
+  hasStickers?: boolean;
+  stickerPlacementsJson?: string | null;
   placeName: string | null;
   sourceNoteId: string | null;
   createdAt: string;
@@ -98,6 +101,7 @@ interface SharedPostRow {
   text: string;
   photo_path: string | null;
   doodle_strokes_json?: string | null;
+  sticker_placements_json?: string | null;
   place_name: string | null;
   source_note_id: string | null;
   created_at: string;
@@ -105,9 +109,9 @@ interface SharedPostRow {
 }
 
 const ACTIVE_FRIEND_INVITE_QUERY_LIMIT = 50;
-const EXPIRED_SHARED_FEED_SESSION_ERROR = 'Supabase session unavailable. Sign in again to use shared moments.';
+const EXPIRED_SHARED_FEED_SESSION_ERROR = 'Server session unavailable. Sign in again to use shared moments.';
 const MISMATCHED_SHARED_FEED_SESSION_ERROR =
-  'Signed-in Supabase session does not match this account. Sign out and sign in again.';
+  'Signed-in session does not match this account. Sign out and sign in again.';
 
 function requireSupabase() {
   const supabase = getSupabase();
@@ -227,6 +231,8 @@ function mapSharedPost(record: SharedPostRow): SharedPost {
     photoPath: record.photo_path ?? null,
     photoLocalUri: null,
     doodleStrokesJson: record.doodle_strokes_json ?? null,
+    hasStickers: Boolean(record.sticker_placements_json),
+    stickerPlacementsJson: record.sticker_placements_json ?? null,
     placeName: record.place_name ?? null,
     sourceNoteId: record.source_note_id ?? null,
     createdAt: record.created_at,
@@ -265,11 +271,11 @@ export function getSharedFeedErrorMessage(error: unknown) {
   }
 
   if (isSupabasePolicyError(error)) {
-    return 'Shared moments need the latest Supabase policies before this action can work.';
+    return 'Shared moments are not available for this account right now. Please sign in again and try once more.';
   }
 
   if (isSupabaseNetworkError(error)) {
-    return 'Supabase is unavailable right now. Check your connection and try again.';
+    return 'The server is unavailable right now. Check your connection and try again.';
   }
 
   return message || 'Shared moments are unavailable right now.';
@@ -305,7 +311,7 @@ export async function refreshSharedFeed(user: AppUser): Promise<SharedFeedSnapsh
     requireSupabase()
       .from('shared_posts')
       .select(
-        'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, place_name, source_note_id, created_at, updated_at'
+        'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, sticker_placements_json, place_name, source_note_id, created_at, updated_at'
       )
       .contains('audience_user_ids', [user.id])
       .in('author_user_id', authorWhitelist)
@@ -542,6 +548,16 @@ export async function createSharedPost(
           note.photoLocalUri ?? note.content
         )
       : null;
+  const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
+  const stickerPlacementsJson =
+    stickerPlacements.length > 0
+      ? await serializeStickerPlacementsForStorage(
+          stickerPlacements,
+          SHARED_POST_MEDIA_BUCKET,
+          `${user.id}/${postId}`,
+          { persistAssets: false }
+        )
+      : null;
 
   const record: SharedPostRow = {
     id: postId,
@@ -553,6 +569,7 @@ export async function createSharedPost(
     text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
     photo_path: photoPath ?? null,
     doodle_strokes_json: note.doodleStrokesJson ?? null,
+    sticker_placements_json: stickerPlacementsJson,
     place_name: note.locationName ?? null,
     source_note_id: note.id,
     created_at: now,
@@ -576,6 +593,8 @@ export async function createSharedPost(
   return {
     ...mapSharedPost(record),
     photoLocalUri: note.type === 'photo' ? note.photoLocalUri ?? note.content : null,
+    hasStickers: Boolean(note.hasStickers && note.stickerPlacementsJson),
+    stickerPlacementsJson: note.stickerPlacementsJson ?? null,
   };
 }
 
@@ -588,7 +607,7 @@ export async function updateSharedPost(
   const { data: existing, error: fetchError } = await supabase
     .from('shared_posts')
     .select(
-      'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, place_name, source_note_id, created_at, updated_at'
+      'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, sticker_placements_json, place_name, source_note_id, created_at, updated_at'
     )
     .eq('id', postId)
     .eq('author_user_id', user.id)
@@ -616,6 +635,16 @@ export async function updateSharedPost(
           { allowOverwrite: true }
         )
       : null;
+  const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
+  const nextStickerPlacementsJson =
+    stickerPlacements.length > 0
+      ? await serializeStickerPlacementsForStorage(
+          stickerPlacements,
+          SHARED_POST_MEDIA_BUCKET,
+          `${user.id}/${postId}`,
+          { persistAssets: false }
+        )
+      : null;
 
   const { error } = await supabase
     .from('shared_posts')
@@ -623,6 +652,7 @@ export async function updateSharedPost(
       text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
       photo_path: nextPhotoPath ?? null,
       doodle_strokes_json: note.doodleStrokesJson ?? null,
+      sticker_placements_json: nextStickerPlacementsJson,
       place_name: note.locationName ?? null,
       updated_at: getNowIso(),
       type: note.type,

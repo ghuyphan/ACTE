@@ -475,6 +475,8 @@ export default function MapScreenIOS() {
 
   return (
     <View style={styles.container}>
+      {/* Prevent native tabs from auto-adjusting MapKit's internal scroll view on iOS. */}
+      <View pointerEvents="none" style={styles.scrollInsetGuard} />
       <MapCanvas
         mapRef={mapRef}
         initialRegion={initialRegion}
@@ -741,6 +743,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  scrollInsetGuard: {
+    ...StyleSheet.absoluteFillObject,
   },
   fabContainer: {
     position: 'absolute',

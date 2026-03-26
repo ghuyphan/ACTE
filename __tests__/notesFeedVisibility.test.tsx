@@ -4,10 +4,19 @@ import { FlatList, Platform, Text, View } from 'react-native';
 import NotesFeed from '../components/home/NotesFeed';
 
 const mockTextMemoryCard = jest.fn(
-  ({ text, doodleStrokesJson }: { text: string; doodleStrokesJson?: string | null }) => (
+  ({
+    text,
+    doodleStrokesJson,
+    stickerPlacementsJson,
+  }: {
+    text: string;
+    doodleStrokesJson?: string | null;
+    stickerPlacementsJson?: string | null;
+  }) => (
     <View>
       <Text testID="mock-text-memory-card-text">{text}</Text>
       <Text testID="mock-text-memory-card-doodle">{doodleStrokesJson ?? 'null'}</Text>
+      <Text testID="mock-text-memory-card-stickers">{stickerPlacementsJson ?? 'null'}</Text>
     </View>
   )
 );
@@ -117,6 +126,92 @@ describe('NotesFeed capture visibility', () => {
 
     expect(view.getByTestId('mock-text-memory-card-doodle')).toHaveTextContent(
       JSON.stringify([{ color: '#FFF', points: [0.3, 0.3, 0.4, 0.4] }])
+    );
+  });
+
+  it('re-renders a note card when only sticker placements change', () => {
+    const baseNote = {
+      id: 'note-1',
+      type: 'text',
+      content: 'hello',
+      locationName: 'Cafe',
+      latitude: 0,
+      longitude: 0,
+      radius: 150,
+      isFavorite: false,
+      hasStickers: true,
+      stickerPlacementsJson: JSON.stringify([
+        { id: 'sticker-1', assetId: 'asset-1', center: { x: 0.3, y: 0.3 }, scale: 1, rotation: 0, zIndex: 1 },
+      ]),
+      createdAt: '2026-03-19T00:00:00.000Z',
+      updatedAt: null,
+    };
+
+    const view = render(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="camera"
+        notes={[baseNote] as any}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    expect(view.getByTestId('mock-text-memory-card-stickers')).toHaveTextContent(
+      JSON.stringify([
+        { id: 'sticker-1', assetId: 'asset-1', center: { x: 0.3, y: 0.3 }, scale: 1, rotation: 0, zIndex: 1 },
+      ])
+    );
+
+    view.rerender(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="camera"
+        notes={[
+          {
+            ...baseNote,
+            stickerPlacementsJson: JSON.stringify([
+              { id: 'sticker-1', assetId: 'asset-1', center: { x: 0.5, y: 0.5 }, scale: 1.2, rotation: 12, zIndex: 1 },
+            ]),
+          },
+        ] as any}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    expect(view.getByTestId('mock-text-memory-card-stickers')).toHaveTextContent(
+      JSON.stringify([
+        { id: 'sticker-1', assetId: 'asset-1', center: { x: 0.5, y: 0.5 }, scale: 1.2, rotation: 12, zIndex: 1 },
+      ])
     );
   });
 

@@ -24,12 +24,12 @@ import {
   scrollContentBackground,
 } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import AppSheetAlert from '../AppSheetAlert';
 import SettingsLanguageSheet from '../SettingsLanguageSheet';
 import SettingsSyncSheet from '../SettingsSyncSheet';
 import SettingsThemeSheet from '../SettingsThemeSheet';
-import { Layout, Typography } from '../../constants/theme';
+import { Layout } from '../../constants/theme';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
 
 export default function SettingsScreenIOS() {
@@ -39,7 +39,6 @@ export default function SettingsScreenIOS() {
     alertProps,
     colors,
     i18n,
-    insets,
     isAuthAvailable,
     isDark,
     isPurchaseAvailable,
@@ -68,9 +67,6 @@ export default function SettingsScreenIOS() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={{ paddingTop: insets.top + 16 }}>
-        <Text style={[styles.title, { color: colors.text }]}>{t('settings.title', 'Settings')}</Text>
-      </View>
       <Host style={styles.container} colorScheme={isDark ? 'dark' : 'light'}>
         <List modifiers={[scrollContentBackground('hidden')]}>
           <Section title={t('settings.preferences', 'Style & Language')}>
@@ -390,10 +386,5 @@ export default function SettingsScreenIOS() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  title: {
-    ...Typography.screenTitle,
-    paddingHorizontal: Layout.screenPadding,
-    marginBottom: 20,
   },
 });

@@ -10,6 +10,12 @@ import {
   isSupabasePolicyError,
 } from '../utils/supabase';
 import { getActiveNotesScope, Note, getAllNotes, getDB, getNoteById, upsertNote } from './database';
+import {
+  hydrateStickerPlacements,
+  parseNoteStickerPlacements,
+  serializeStickerPlacementsForStorage,
+  syncStickerAssetsFromPlacements,
+} from './noteStickers';
 import { deletePhotoFromStorage, downloadPhotoFromStorage, NOTE_MEDIA_BUCKET, uploadPhotoToStorage } from './remoteMedia';
 import { upsertPublicUserProfile } from './publicProfileService';
 
@@ -94,6 +100,8 @@ interface NoteRow {
   photo_path: string | null;
   has_doodle: boolean;
   doodle_strokes_json: string | null;
+  has_stickers: boolean;
+  sticker_placements_json: string | null;
   location_name: string | null;
   prompt_id: string | null;
   prompt_text_snapshot: string | null;
@@ -153,9 +161,9 @@ const RETRY_DELAYS_MS = [
   24 * 60 * 60 * 1000,
 ];
 const REMOTE_SYNC_CURSOR_KEY_PREFIX = 'sync.lastRemoteCursor.';
-const EXPIRED_SESSION_SYNC_ERROR = 'Supabase session unavailable. Sign in again to resume sync.';
+const EXPIRED_SESSION_SYNC_ERROR = 'Server session unavailable. Sign in again to resume sync.';
 const MISMATCHED_SESSION_SYNC_ERROR =
-  'Signed-in Supabase session does not match this account. Sign out and sign in again.';
+  'Signed-in session does not match this account. Sign out and sign in again.';
 
 function rowToQueueItem(row: QueueRow): SyncQueueItem {
   return {
@@ -207,7 +215,7 @@ function getBlockedSyncReason(error: unknown) {
   if (isSupabasePolicyError(error)) {
     return i18n.t(
       'settings.syncPolicyDeniedMsg',
-      'Supabase denied access to sync notes. Apply the latest Supabase migrations or sign in again.'
+      'The server denied access to sync your notes. Sign in again and try once more.'
     );
   }
 
@@ -232,20 +240,20 @@ function getSyncFailureMessage(error: unknown) {
   if (isSupabasePolicyError(error)) {
     return i18n.t(
       'settings.syncPolicyDeniedMsg',
-      'Supabase denied access to sync notes. Apply the latest Supabase migrations or sign in again.'
+      'The server denied access to sync your notes. Sign in again and try once more.'
     );
   }
 
   if (isSupabaseNetworkError(error)) {
     return i18n.t(
       'settings.syncNetworkMsg',
-      'Unable to reach Supabase right now. Check your connection and try again.'
+      'Unable to reach the server right now. Check your connection and try again.'
     );
   }
 
   return i18n.t(
     'settings.syncFailedMsg',
-    'Unable to sync with Supabase right now. Please try again later.'
+    'Unable to sync with the server right now. Please try again later.'
   );
 }
 
@@ -324,6 +332,11 @@ async function serializeNoteForSupabase(
           { allowOverwrite: true }
         )
       : null;
+  const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
+  const stickerPlacementsJson =
+    stickerPlacements.length > 0
+      ? await serializeStickerPlacementsForStorage(stickerPlacements, NOTE_MEDIA_BUCKET, userId)
+      : null;
 
   return {
     id: note.id,
@@ -333,6 +346,8 @@ async function serializeNoteForSupabase(
     photo_path: photoPath,
     has_doodle: Boolean(note.hasDoodle && note.doodleStrokesJson),
     doodle_strokes_json: note.doodleStrokesJson ?? null,
+    has_stickers: Boolean(stickerPlacementsJson),
+    sticker_placements_json: stickerPlacementsJson,
     location_name: note.locationName,
     prompt_id: note.promptId ?? null,
     prompt_text_snapshot: note.promptTextSnapshot ?? null,
@@ -381,6 +396,16 @@ async function deserializeRemoteNote(
     return existingLocalNote?.type === 'photo' ? existingLocalNote : null;
   }
 
+  const hydratedStickerPlacements = await hydrateStickerPlacements(
+    parseNoteStickerPlacements(record.sticker_placements_json),
+    NOTE_MEDIA_BUCKET
+  );
+  const stickerPlacementsJson =
+    hydratedStickerPlacements.length > 0 ? JSON.stringify(hydratedStickerPlacements) : null;
+  if (hydratedStickerPlacements.length > 0) {
+    await syncStickerAssetsFromPlacements(hydratedStickerPlacements);
+  }
+
   return {
     id: record.id,
     type: record.type,
@@ -398,6 +423,8 @@ async function deserializeRemoteNote(
     isFavorite: Boolean(record.is_favorite),
     hasDoodle: Boolean(record.has_doodle && record.doodle_strokes_json),
     doodleStrokesJson: record.doodle_strokes_json ?? null,
+    hasStickers: Boolean(record.has_stickers && stickerPlacementsJson),
+    stickerPlacementsJson,
     createdAt: record.created_at,
     updatedAt: record.updated_at ?? null,
   };
@@ -421,7 +448,7 @@ async function markItemFailed(
 async function deleteRemoteNote(userId: string, noteId: string) {
   const supabase = getSupabase();
   if (!supabase) {
-    throw new Error('Supabase sync is unavailable in this build.');
+    throw new Error('Cloud sync is unavailable in this build.');
   }
 
   await deletePhotoFromStorage(NOTE_MEDIA_BUCKET, `${userId}/${noteId}`).catch(() => undefined);
@@ -434,7 +461,7 @@ async function deleteRemoteNote(userId: string, noteId: string) {
 async function deleteAllRemoteNotesForUser(userId: string) {
   const supabase = getSupabase();
   if (!supabase) {
-    throw new Error('Supabase sync is unavailable in this build.');
+    throw new Error('Cloud sync is unavailable in this build.');
   }
 
   const { data, error } = await supabase
@@ -458,7 +485,7 @@ async function deleteAllRemoteNotesForUser(userId: string) {
 async function upsertRemoteNote(userId: string, note: Note, syncMarker: string) {
   const supabase = getSupabase();
   if (!supabase) {
-    throw new Error('Supabase sync is unavailable in this build.');
+    throw new Error('Cloud sync is unavailable in this build.');
   }
 
   const serializedNote = await serializeNoteForSupabase(userId, note, syncMarker);
@@ -550,13 +577,13 @@ async function mergeRemoteNotesFromSupabase(
 ): Promise<RemoteMergeResult> {
   const supabase = getSupabase();
   if (!supabase) {
-    throw new Error('Supabase sync is unavailable in this build.');
+    throw new Error('Cloud sync is unavailable in this build.');
   }
 
   let request = supabase
     .from('notes')
     .select(
-      'id, user_id, type, content, photo_path, has_doodle, doodle_strokes_json, location_name, prompt_id, prompt_text_snapshot, prompt_answer, mood_emoji, latitude, longitude, radius, is_favorite, created_at, updated_at, synced_at'
+      'id, user_id, type, content, photo_path, has_doodle, doodle_strokes_json, has_stickers, sticker_placements_json, location_name, prompt_id, prompt_text_snapshot, prompt_answer, mood_emoji, latitude, longitude, radius, is_favorite, created_at, updated_at, synced_at'
     )
     .eq('user_id', userId)
     .order('synced_at', { ascending: true });
@@ -750,7 +777,7 @@ export async function syncNotes(
   if (!supabase) {
     return {
       status: 'unavailable',
-      message: 'Supabase sync is unavailable in this build.',
+      message: 'Cloud sync is unavailable in this build.',
     };
   }
 
@@ -849,8 +876,8 @@ export async function syncNotes(
       failedCount: 0,
       message:
         syncedCount === 1
-          ? 'Synced 1 note with Supabase.'
-          : `Synced ${syncedCount} notes with Supabase.`,
+          ? 'Synced 1 note with the server.'
+          : `Synced ${syncedCount} notes with the server.`,
     };
   } catch (error) {
     if (shouldLogSyncWarning(error)) {

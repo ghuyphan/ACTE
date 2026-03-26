@@ -25,6 +25,8 @@ interface WidgetProps {
     backgroundImageBase64?: string;
     hasDoodle: boolean;
     doodleStrokesJson?: string | null;
+    hasStickers: boolean;
+    stickerPlacementsJson?: string | null;
     isIdleState: boolean;
     idleText: string;
     savedCountText: string;

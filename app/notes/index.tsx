@@ -22,8 +22,10 @@ import { useNotesStore } from '../../hooks/useNotes';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
 import NoteDoodleCanvas from '../../components/NoteDoodleCanvas';
+import NoteStickerCanvas from '../../components/NoteStickerCanvas';
 import { getTextNoteCardGradient } from '../../services/noteAppearance';
 import { parseNoteDoodleStrokes } from '../../services/noteDoodles';
+import { parseNoteStickerPlacements } from '../../services/noteStickers';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET } from '../../services/remoteMedia';
 import { Note } from '../../services/database';
@@ -32,6 +34,10 @@ import { SharedPost } from '../../services/sharedFeedService';
 type NoteGridItem =
   | { id: string; kind: 'note'; createdAt: string; note: Note }
   | { id: string; kind: 'shared-post'; createdAt: string; post: SharedPost };
+
+const GRID_DOODLE_STROKE_WIDTH = 4.5;
+const GRID_STICKER_SIZE_MULTIPLIER = 0.82;
+const GRID_STICKER_MIN_SIZE = 52;
 
 function GridTile({
   item,
@@ -111,6 +117,14 @@ function GridTile({
     () => parseNoteDoodleStrokes(doodleStrokesJson),
     [doodleStrokesJson]
   );
+  const stickerPlacementsJson =
+    item.kind === 'note'
+      ? item.note.stickerPlacementsJson ?? null
+      : item.post.stickerPlacementsJson ?? null;
+  const stickerPlacements = useMemo(
+    () => parseNoteStickerPlacements(stickerPlacementsJson),
+    [stickerPlacementsJson]
+  );
   const text =
     item.kind === 'note'
       ? item.note.content.trim()
@@ -120,9 +134,7 @@ function GridTile({
     noteId: item.kind === 'note' ? item.note.id : item.post.id,
     emoji: item.kind === 'note' ? item.note.moodEmoji : null,
   });
-  const tileText =
-    text ||
-    (isPhotoTile ? photoFallbackLabel : '...');
+  const tileText = text || (isPhotoTile ? photoFallbackLabel : '');
   const showPhotoPlaceholder = item.kind === 'shared-post' && item.post.type === 'photo' && !imageUri;
   const sharedTransitionTag = item.kind === 'note' ? `feed-note-card-${item.note.id}` : undefined;
 
@@ -151,9 +163,20 @@ function GridTile({
               contentFit="cover"
               transition={120}
             />
+            {stickerPlacements.length > 0 ? (
+              <View pointerEvents="none" style={styles.tileDoodleOverlay}>
+                <NoteStickerCanvas
+                  placements={stickerPlacements}
+                  remoteBucket={item.kind === 'shared-post' ? SHARED_POST_MEDIA_BUCKET : undefined}
+                  sharedCache={item.kind === 'shared-post'}
+                  sizeMultiplier={GRID_STICKER_SIZE_MULTIPLIER}
+                  minimumBaseSize={GRID_STICKER_MIN_SIZE}
+                />
+              </View>
+            ) : null}
             {doodleStrokes.length > 0 ? (
               <View pointerEvents="none" style={styles.tileDoodleOverlay}>
-                <NoteDoodleCanvas strokes={doodleStrokes} />
+                <NoteDoodleCanvas strokes={doodleStrokes} strokeWidth={GRID_DOODLE_STROKE_WIDTH} />
               </View>
             ) : null}
           </View>
@@ -182,14 +205,27 @@ function GridTile({
           </View>
         ) : (
           <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.tileTextFill}>
-            {doodleStrokes.length > 0 ? (
-              <View pointerEvents="none" style={[styles.tileDoodleOverlay, styles.tileTextDoodleOverlay]}>
-                <NoteDoodleCanvas strokes={doodleStrokes} />
+            {stickerPlacements.length > 0 ? (
+              <View pointerEvents="none" style={[styles.tileDoodleOverlay, styles.tileTextStickerOverlay]}>
+                <NoteStickerCanvas
+                  placements={stickerPlacements}
+                  remoteBucket={item.kind === 'shared-post' ? SHARED_POST_MEDIA_BUCKET : undefined}
+                  sharedCache={item.kind === 'shared-post'}
+                  sizeMultiplier={GRID_STICKER_SIZE_MULTIPLIER}
+                  minimumBaseSize={GRID_STICKER_MIN_SIZE}
+                />
               </View>
             ) : null}
-            <Text style={styles.tileText} numberOfLines={4}>
-              {tileText}
-            </Text>
+            {doodleStrokes.length > 0 ? (
+              <View pointerEvents="none" style={[styles.tileDoodleOverlay, styles.tileTextDoodleOverlay]}>
+                <NoteDoodleCanvas strokes={doodleStrokes} strokeWidth={GRID_DOODLE_STROKE_WIDTH} />
+              </View>
+            ) : null}
+            {tileText ? (
+              <Text style={styles.tileText} numberOfLines={4}>
+                {tileText}
+              </Text>
+            ) : null}
           </LinearGradient>
         )}
       </Reanimated.View>
@@ -338,7 +374,11 @@ const styles = StyleSheet.create({
     ...DOODLE_ARTBOARD_FRAME,
   },
   tileTextDoodleOverlay: {
-    opacity: 0.58,
+    opacity: 0.48,
+  },
+  tileTextStickerOverlay: {
+    opacity: 0.48,
+    zIndex: 0,
   },
   photoPlaceholder: {
     flex: 1,
@@ -374,6 +414,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     fontFamily: 'System',
+    zIndex: 1,
   },
   emptyState: {
     paddingTop: 72,

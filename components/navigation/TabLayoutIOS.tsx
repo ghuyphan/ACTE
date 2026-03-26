@@ -50,7 +50,20 @@ export default function TabLayoutIOS() {
         <NativeTabs.Trigger.Label>{t('tabs.home', 'Home')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="map" disableTransparentOnScrollEdge>
+      <NativeTabs.Trigger
+        name="map"
+        disableAutomaticContentInsets
+        disableTransparentOnScrollEdge
+        unstable_nativeProps={{
+          overrideScrollViewContentInsetAdjustmentBehavior: false,
+          scrollEdgeEffects: {
+            top: 'hidden',
+            right: 'hidden',
+            bottom: 'hidden',
+            left: 'hidden',
+          },
+        }}
+      >
         <NativeTabs.Trigger.Icon sf={{ default: 'map', selected: 'map.fill' }} />
         <NativeTabs.Trigger.Label>{t('tabs.map', 'Map')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>

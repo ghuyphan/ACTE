@@ -13,6 +13,8 @@ private struct LocketWidgetPayload {
     let backgroundImageBase64: String?
     let hasDoodle: Bool
     let doodleStrokesJson: String?
+    let hasStickers: Bool
+    let stickerPlacementsJson: String?
     let isIdleState: Bool
     let idleText: String
     let savedCountText: String
@@ -42,6 +44,8 @@ private struct LocketWidgetPayload {
         backgroundImageBase64: nil,
         hasDoodle: false,
         doodleStrokesJson: nil,
+        hasStickers: false,
+        stickerPlacementsJson: nil,
         isIdleState: true,
         idleText: "The right note will appear when you're nearby.",
         savedCountText: "",
@@ -72,6 +76,8 @@ private struct LocketWidgetPayload {
         backgroundImageBase64: String?,
         hasDoodle: Bool,
         doodleStrokesJson: String?,
+        hasStickers: Bool,
+        stickerPlacementsJson: String?,
         isIdleState: Bool,
         idleText: String,
         savedCountText: String,
@@ -100,6 +106,8 @@ private struct LocketWidgetPayload {
         self.backgroundImageBase64 = backgroundImageBase64
         self.hasDoodle = hasDoodle
         self.doodleStrokesJson = doodleStrokesJson
+        self.hasStickers = hasStickers
+        self.stickerPlacementsJson = stickerPlacementsJson
         self.isIdleState = isIdleState
         self.idleText = idleText
         self.savedCountText = savedCountText
@@ -132,6 +140,8 @@ private struct LocketWidgetPayload {
         backgroundImageBase64 = LocketWidgetPayload.optionalStringValue(payload["backgroundImageBase64"])
         hasDoodle = LocketWidgetPayload.boolValue(payload["hasDoodle"])
         doodleStrokesJson = LocketWidgetPayload.optionalStringValue(payload["doodleStrokesJson"])
+        hasStickers = LocketWidgetPayload.boolValue(payload["hasStickers"])
+        stickerPlacementsJson = LocketWidgetPayload.optionalStringValue(payload["stickerPlacementsJson"])
         isIdleState = LocketWidgetPayload.boolValue(payload["isIdleState"])
         idleText = LocketWidgetPayload.stringValue(payload["idleText"])
         savedCountText = LocketWidgetPayload.stringValue(payload["savedCountText"])
@@ -200,6 +210,19 @@ private struct LocketWidgetPayload {
 private struct LocketWidgetDoodleStroke {
     let colorHex: String
     let points: [CGPoint]
+}
+
+private struct LocketWidgetStickerPlacement: Identifiable {
+    let id: String
+    let x: CGFloat
+    let y: CGFloat
+    let scale: CGFloat
+    let rotation: Double
+    let zIndex: Int
+    let opacity: Double
+    let assetWidth: CGFloat
+    let assetHeight: CGFloat
+    let assetLocalUri: String
 }
 
 private struct LocketWidgetDoodleOverlay: View {
@@ -297,6 +320,98 @@ private func parseDoodleStrokes(from doodleStrokesJson: String?) -> [LocketWidge
     }
 }
 
+private func parseStickerPlacements(from stickerPlacementsJson: String?) -> [LocketWidgetStickerPlacement] {
+    guard
+        let stickerPlacementsJson,
+        let data = stickerPlacementsJson.data(using: .utf8),
+        let parsed = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+    else {
+        return []
+    }
+
+    return parsed.compactMap { item in
+        guard
+            let id = item["id"] as? String,
+            let asset = item["asset"] as? [String: Any],
+            let assetLocalUri = (asset["localUri"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !assetLocalUri.isEmpty
+        else {
+            return nil
+        }
+
+        let assetWidth = CGFloat((asset["width"] as? NSNumber)?.doubleValue ?? 0)
+        let assetHeight = CGFloat((asset["height"] as? NSNumber)?.doubleValue ?? 0)
+        guard assetWidth > 0, assetHeight > 0 else {
+            return nil
+        }
+
+        let x = CGFloat((item["x"] as? NSNumber)?.doubleValue ?? 0.5)
+        let y = CGFloat((item["y"] as? NSNumber)?.doubleValue ?? 0.5)
+        let scale = CGFloat((item["scale"] as? NSNumber)?.doubleValue ?? 1)
+        let rotation = (item["rotation"] as? NSNumber)?.doubleValue ?? 0
+        let zIndex = (item["zIndex"] as? NSNumber)?.intValue ?? 0
+        let opacity = (item["opacity"] as? NSNumber)?.doubleValue ?? 1
+
+        return LocketWidgetStickerPlacement(
+            id: id,
+            x: min(max(0, x), 1),
+            y: min(max(0, y), 1),
+            scale: min(max(0.35, scale), 3),
+            rotation: rotation,
+            zIndex: zIndex,
+            opacity: min(max(0, opacity), 1),
+            assetWidth: assetWidth,
+            assetHeight: assetHeight,
+            assetLocalUri: assetLocalUri
+        )
+    }
+}
+
+private struct LocketWidgetStickerOverlay: View {
+    let placements: [LocketWidgetStickerPlacement]
+
+    private let artboardInset: CGFloat = 18
+    private let minimumBaseSize: CGFloat = 68
+
+    var body: some View {
+        GeometryReader { proxy in
+            let artboardWidth = max(1, proxy.size.width - (artboardInset * 2))
+            let artboardHeight = max(1, proxy.size.height - (artboardInset * 2))
+            let baseSize = max(minimumBaseSize, min(artboardWidth, artboardHeight) * 0.30)
+
+            ZStack {
+                ForEach(placements.sorted(by: { left, right in
+                    if left.zIndex == right.zIndex {
+                        return left.id < right.id
+                    }
+                    return left.zIndex < right.zIndex
+                })) { placement in
+                    if let image = loadWidgetImageFromPath(placement.assetLocalUri) {
+                        let longestEdge = max(max(placement.assetWidth, placement.assetHeight), 1)
+                        let baseScale = baseSize / longestEdge
+                        let stickerWidth = placement.assetWidth * baseScale * placement.scale
+                        let stickerHeight = placement.assetHeight * baseScale * placement.scale
+
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: stickerWidth, height: stickerHeight)
+                            .rotationEffect(.degrees(placement.rotation))
+                            .opacity(placement.opacity)
+                            .position(
+                                x: artboardInset + (placement.x * artboardWidth),
+                                y: artboardInset + (placement.y * artboardHeight)
+                            )
+                            .zIndex(Double(placement.zIndex))
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 private func colorFromHex(_ value: String) -> Color {
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     let hex = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
@@ -321,6 +436,19 @@ private func colorFromHex(_ value: String) -> Color {
     default:
         return Color.black
     }
+}
+
+private func loadWidgetImageFromPath(_ path: String) -> UIImage? {
+    let normalizedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedPath.isEmpty else {
+        return nil
+    }
+
+    if normalizedPath.hasPrefix("file://"), let url = URL(string: normalizedPath) {
+        return UIImage(contentsOfFile: url.path)
+    }
+
+    return UIImage(contentsOfFile: normalizedPath)
 }
 
 private struct LocketWidgetEntry: TimelineEntry {
@@ -466,12 +594,23 @@ private struct LocketWidgetEntryView: View {
         parseDoodleStrokes(from: payload.doodleStrokesJson)
     }
 
+    private var stickerPlacements: [LocketWidgetStickerPlacement] {
+        parseStickerPlacements(from: payload.stickerPlacementsJson)
+    }
+
     private var shouldShowDoodleOverlay: Bool {
         !isAccessoryFamily &&
         !payload.isIdleState &&
         payload.hasDoodle &&
         (payload.noteType == "photo" || !payload.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) &&
         !doodleStrokes.isEmpty
+    }
+
+    private var shouldShowStickerOverlay: Bool {
+        !isAccessoryFamily &&
+        !payload.isIdleState &&
+        payload.hasStickers &&
+        !stickerPlacements.isEmpty
     }
 
     private var shouldShowAuthorChip: Bool {
@@ -758,6 +897,10 @@ private struct LocketWidgetEntryView: View {
 
     private var smallLayout: some View {
         ZStack(alignment: .bottom) {
+            if shouldShowStickerOverlay {
+                LocketWidgetStickerOverlay(placements: stickerPlacements)
+            }
+
             if shouldShowDoodleOverlay {
                 LocketWidgetDoodleOverlay(strokes: doodleStrokes, isLarge: false)
                     .padding(locketWidgetDoodleArtboardInset)
@@ -813,6 +956,10 @@ private struct LocketWidgetEntryView: View {
 
     private var largeLayout: some View {
         ZStack {
+            if shouldShowStickerOverlay {
+                LocketWidgetStickerOverlay(placements: stickerPlacements)
+            }
+
             if shouldShowDoodleOverlay {
                 LocketWidgetDoodleOverlay(strokes: doodleStrokes, isLarge: true)
                     .padding(locketWidgetDoodleArtboardInset)

@@ -50,7 +50,7 @@ jest.mock('../services/database', () => ({
   getNoteById: jest.fn(async (id: string) => mockNotesDb.find((note) => note.id === id) ?? null),
   createNote: jest.fn(async (input: any) => {
     const nextNote: Note = {
-      id: `note-${mockIdCounter++}`,
+      id: input.id ?? `note-${mockIdCounter++}`,
       type: input.type,
       content: input.content,
       locationName: input.locationName ?? null,
