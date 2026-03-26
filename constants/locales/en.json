@@ -100,7 +100,10 @@
         "androidUnavailableTitle": "Map is temporarily unavailable on Android",
         "androidUnavailableSubtitle": "This build skips Google Maps on Android until the API key is configured.",
         "emptyTitle": "No notes on the map yet",
-        "emptySubtitle": "Your saved notes will appear as pins here"
+        "emptySubtitle": "Your saved notes will appear as pins here",
+        "friendsChip": "Friends",
+        "friendFrom": "From {{name}}",
+        "openShared": "Open shared"
     },
     "noteDetail": {
         "deleteTitle": "Delete Note",

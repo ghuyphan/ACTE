@@ -170,6 +170,7 @@ jest.mock('expo-file-system/legacy', () => ({
 }));
 
 import type { Note } from '../services/database';
+import type { SharedPost } from '../services/sharedFeedService';
 import { selectWidgetNote, updateWidgetData } from '../services/widgetService';
 import i18n from '../constants/i18n';
 
@@ -186,6 +187,26 @@ function buildNote(overrides: Partial<Note> = {}): Note {
     radius: 150,
     isFavorite: false,
     createdAt: '2026-03-10T10:00:00.000Z',
+    updatedAt: null,
+    ...overrides,
+  };
+}
+
+function buildSharedPost(overrides: Partial<SharedPost> = {}): SharedPost {
+  return {
+    id: 'shared-1',
+    authorUid: 'friend-1',
+    authorDisplayName: 'Friend One',
+    authorPhotoURLSnapshot: null,
+    audienceUserIds: ['me'],
+    type: 'text',
+    text: 'Shared memory',
+    photoPath: null,
+    photoLocalUri: null,
+    doodleStrokesJson: null,
+    placeName: 'Friend Place',
+    sourceNoteId: null,
+    createdAt: '2026-03-10T11:00:00.000Z',
     updatedAt: null,
     ...overrides,
   };
@@ -279,6 +300,35 @@ describe('widgetService', () => {
 
     expect(result.selectedNote?.id).toBe('near-note');
     expect(result.selectionMode).toBe('nearest_memory');
+  });
+
+  it('keeps personal content ahead of friend posts when personal notes are eligible', () => {
+    const result = selectWidgetNote({
+      notes: [
+        buildNote({
+          id: 'personal-favorite',
+          content: 'Keep coming back here',
+          isFavorite: true,
+          createdAt: '2026-03-09T10:00:00.000Z',
+        }),
+      ],
+      sharedPosts: [
+        buildSharedPost({
+          id: 'shared-photo',
+          type: 'photo',
+          text: '',
+          photoPath: 'friend-1/shared-photo',
+          photoLocalUri: 'file:///mock-documents/photos/shared.jpg',
+          createdAt: '2026-03-10T11:00:00.000Z',
+        }),
+      ],
+      currentLocation: { latitude: 0.0, longitude: 0.0 },
+      referenceDate: new Date('2026-03-10T12:00:00'),
+    });
+
+    expect(result.selectedNote?.id).toBe('personal-favorite');
+    expect(result.selectedNote?.source).toBe('personal');
+    expect(result.selectionMode).toBe('favorite_memory');
   });
 
   it('prefers favorite photos over non-favorite text when nothing is nearby', () => {
@@ -380,27 +430,22 @@ describe('widgetService', () => {
     expect(result.selectionMode).toBe('latest_memory');
   });
 
-  it('can use shared friend content as a fallback with author attribution', async () => {
+  it('uses shared friend content only when there are no eligible personal notes', async () => {
     mockCurrentUser = { id: 'me', uid: 'me' };
+    mockGetAllNotes.mockResolvedValue([]);
     mockGetCachedSharedFeedSnapshot.mockResolvedValue({
       friends: [],
       sharedPosts: [
-        {
+        buildSharedPost({
           id: 'shared-photo-1',
-          authorUid: 'friend-1',
           authorDisplayName: 'Annie Case',
           authorPhotoURLSnapshot: 'https://example.com/annie.jpg',
-          audienceUserIds: ['me'],
           type: 'photo',
           text: '',
           photoPath: 'friend-1/shared-photo-1',
           photoLocalUri: null,
-          doodleStrokesJson: null,
           placeName: 'Shared Place',
-          sourceNoteId: null,
-          createdAt: '2026-03-10T11:00:00.000Z',
-          updatedAt: null,
-        },
+        }),
       ],
       activeInvite: null,
       lastUpdatedAt: '2026-03-10T11:05:00.000Z',
@@ -432,27 +477,38 @@ describe('widgetService', () => {
     );
   });
 
+  it('never uses nearby-memory mode for friend-only widget content', () => {
+    const result = selectWidgetNote({
+      notes: [],
+      sharedPosts: [
+        buildSharedPost({
+          id: 'shared-text-1',
+          text: 'Shared hello',
+        }),
+      ],
+      currentLocation: { latitude: 10.0, longitude: 106.0 },
+      referenceDate: new Date('2026-03-10T12:00:00'),
+    });
+
+    expect(result.selectedNote?.id).toBe('shared-text-1');
+    expect(result.selectedNote?.source).toBe('shared');
+    expect(result.selectionMode).toBe('shared_memory');
+  });
+
   it('refreshes shared widget content from the network when asked', async () => {
     mockCurrentUser = { id: 'me', uid: 'me' };
+    mockGetAllNotes.mockResolvedValue([]);
     mockRefreshSharedFeed.mockResolvedValue({
       friends: [],
       sharedPosts: [
-        {
+        buildSharedPost({
           id: 'shared-text-1',
           authorUid: 'friend-2',
           authorDisplayName: 'Bao',
-          authorPhotoURLSnapshot: null,
-          audienceUserIds: ['me'],
-          type: 'text',
           text: 'Shared hello',
-          photoPath: null,
-          photoLocalUri: null,
-          doodleStrokesJson: null,
           placeName: 'Friend Cafe',
-          sourceNoteId: null,
           createdAt: '2026-03-10T12:00:00.000Z',
-          updatedAt: null,
-        },
+        }),
       ],
       activeInvite: null,
     });
@@ -469,6 +525,95 @@ describe('widgetService', () => {
         isSharedContent: true,
         authorDisplayName: 'Bao',
         text: 'Shared hello',
+      })
+    );
+  });
+
+  it('falls back to a friend post when personal photos are unreadable and no other personal memory is eligible', async () => {
+    mockCurrentUser = { id: 'me', uid: 'me' };
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'broken-photo',
+        type: 'photo',
+        content: 'file:///mock-documents/photos/missing.jpg',
+        locationName: 'Broken Photo',
+      }),
+    ]);
+    mockGetCachedSharedFeedSnapshot.mockResolvedValue({
+      friends: [],
+      sharedPosts: [
+        buildSharedPost({
+          id: 'shared-text-fallback',
+          authorDisplayName: 'Minh',
+          text: 'Friend fallback memory',
+          placeName: 'Shared Cafe',
+        }),
+      ],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-10T11:05:00.000Z',
+    });
+    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
+      exists: uri !== 'file:///mock-documents/photos/missing.jpg',
+      isDirectory: false,
+      uri,
+      size: 1024,
+      modificationTime: 0,
+    }));
+
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
+
+    const entries = getLastTimelineEntries();
+
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        isSharedContent: true,
+        authorDisplayName: 'Minh',
+        text: 'Friend fallback memory',
+        locationName: 'Shared Cafe',
+      })
+    );
+  });
+
+  it('stays idle when neither personal nor friend content is eligible', async () => {
+    mockCurrentUser = { id: 'me', uid: 'me' };
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'broken-photo',
+        type: 'photo',
+        content: 'file:///mock-documents/photos/missing.jpg',
+      }),
+    ]);
+    mockGetCachedSharedFeedSnapshot.mockResolvedValue({
+      friends: [],
+      sharedPosts: [
+        buildSharedPost({
+          id: 'shared-broken-photo',
+          type: 'photo',
+          text: '',
+          photoPath: 'friend-1/missing-shared-photo',
+          photoLocalUri: null,
+        }),
+      ],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-10T11:05:00.000Z',
+    });
+    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
+      exists: false,
+      isDirectory: false,
+      uri,
+      size: 0,
+      modificationTime: 0,
+    }));
+    mockDownloadPhotoFromStorage.mockResolvedValue(null);
+
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
+
+    const entries = getLastTimelineEntries();
+
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        isIdleState: true,
+        noteCount: 1,
       })
     );
   });

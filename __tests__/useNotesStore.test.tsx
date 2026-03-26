@@ -64,7 +64,7 @@ jest.mock('../services/database', () => ({
     mockNotesDb = [nextNote, ...mockNotesDb];
     return nextNote;
   }),
-  updateNote: jest.fn(async (id: string, updates: Partial<Pick<Note, 'content' | 'locationName'>>) => {
+  updateNote: jest.fn(async (id: string, updates: Partial<Note>) => {
     mockNotesDb = mockNotesDb.map((note) =>
       note.id === id
         ? {
@@ -208,6 +208,8 @@ describe('useNotesStore', () => {
         longitude: 106,
         radius: 150,
         isFavorite: false,
+        hasDoodle: false,
+        doodleStrokesJson: null,
         createdAt: new Date().toISOString(),
         updatedAt: null,
       },
@@ -225,6 +227,19 @@ describe('useNotesStore', () => {
 
     expect(result.current.notes[0].content).toBe('Updated note');
     expect(result.current.notes[0].locationName).toBe('New place');
+
+    await act(async () => {
+      await result.current.updateNote('note-42', {
+        hasDoodle: true,
+        doodleStrokesJson: JSON.stringify([{ color: '#FFFFFF', points: [0.1, 0.1, 0.2, 0.2] }]),
+      });
+    });
+
+    expect(result.current.notes[0].content).toBe('Updated note');
+    expect(result.current.notes[0].hasDoodle).toBe(true);
+    expect(result.current.notes[0].doodleStrokesJson).toBe(
+      JSON.stringify([{ color: '#FFFFFF', points: [0.1, 0.1, 0.2, 0.2] }])
+    );
 
     await act(async () => {
       const nextFavorite = await result.current.toggleFavorite('note-42');

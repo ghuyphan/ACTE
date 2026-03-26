@@ -81,7 +81,8 @@ interface WidgetHistoryEntry {
 }
 
 interface EligibleWidgetCandidates {
-    candidates: WidgetCandidate[];
+    personalCandidates: WidgetCandidate[];
+    sharedCandidates: WidgetCandidate[];
     readablePhotoUrisByCandidateKey: Map<string, string>;
 }
 
@@ -500,27 +501,27 @@ function isCandidateAllowed(
     return !hasShownRecently(note.candidateKey, history, referenceDate);
 }
 
-function getFallbackBuckets(notes: WidgetCandidate[], referenceDate: Date): FallbackBucket[] {
+function getPersonalFallbackBuckets(notes: WidgetCandidate[], referenceDate: Date): FallbackBucket[] {
     const referenceTime = referenceDate.getTime();
 
     return [
         {
             mode: 'favorite_photo',
-            notes: notes.filter((note) => note.source === 'personal' && isPhotoWidgetNote(note) && note.isFavorite).sort(compareRecentWidgetNotes),
+            notes: notes.filter((note) => isPhotoWidgetNote(note) && note.isFavorite).sort(compareRecentWidgetNotes),
         },
         {
             mode: 'photo_memory',
-            notes: notes.filter((note) => note.source === 'personal' && isPhotoWidgetNote(note) && !note.isFavorite).sort(compareRecentWidgetNotes),
+            notes: notes.filter((note) => isPhotoWidgetNote(note) && !note.isFavorite).sort(compareRecentWidgetNotes),
         },
         {
             mode: 'favorite_memory',
-            notes: notes.filter((note) => note.source === 'personal' && isTextWidgetNote(note) && note.isFavorite).sort(compareRecentWidgetNotes),
+            notes: notes.filter((note) => isTextWidgetNote(note) && note.isFavorite).sort(compareRecentWidgetNotes),
         },
         {
             mode: 'resurfaced_memory',
             notes: notes
                 .filter((note) => {
-                    if (note.source !== 'personal' || !isTextWidgetNote(note) || note.isFavorite) {
+                    if (!isTextWidgetNote(note) || note.isFavorite) {
                         return false;
                     }
 
@@ -529,26 +530,30 @@ function getFallbackBuckets(notes: WidgetCandidate[], referenceDate: Date): Fall
                 .sort(compareOldestWidgetNotes),
         },
         {
-            mode: 'shared_photo_memory',
-            notes: notes.filter((note) => note.source === 'shared' && isPhotoWidgetNote(note)).sort(compareRecentWidgetNotes),
-        },
-        {
-            mode: 'shared_memory',
-            notes: notes.filter((note) => note.source === 'shared' && isTextWidgetNote(note)).sort(compareRecentWidgetNotes),
-        },
-        {
             mode: 'latest_memory',
-            notes: notes.filter((note) => note.source === 'personal').sort(compareRecentWidgetNotes),
+            notes: notes.sort(compareRecentWidgetNotes),
         },
     ];
 }
 
-function pickFallbackCandidate(
-    notes: WidgetCandidate[],
+function getSharedFallbackBuckets(notes: WidgetCandidate[]): FallbackBucket[] {
+    return [
+        {
+            mode: 'shared_photo_memory',
+            notes: notes.filter((note) => isPhotoWidgetNote(note)).sort(compareRecentWidgetNotes),
+        },
+        {
+            mode: 'shared_memory',
+            notes: notes.filter((note) => isTextWidgetNote(note)).sort(compareRecentWidgetNotes),
+        },
+    ];
+}
+
+function pickFallbackCandidateFromBuckets(
+    buckets: FallbackBucket[],
     referenceDate: Date,
     recentHistory: WidgetHistoryEntry[]
 ): { note: WidgetCandidate; mode: WidgetSelectionMode } | null {
-    const buckets = getFallbackBuckets(notes, referenceDate);
     const repeatPolicies: CandidateRepeatPolicy[] = ['strict', 'avoid_consecutive', 'allow_repeat'];
 
     for (const repeatPolicy of repeatPolicies) {
@@ -567,6 +572,22 @@ function pickFallbackCandidate(
     }
 
     return null;
+}
+
+function pickPersonalFallbackCandidate(
+    notes: WidgetCandidate[],
+    referenceDate: Date,
+    recentHistory: WidgetHistoryEntry[]
+): { note: WidgetCandidate; mode: WidgetSelectionMode } | null {
+    return pickFallbackCandidateFromBuckets(getPersonalFallbackBuckets(notes, referenceDate), referenceDate, recentHistory);
+}
+
+function pickSharedFallbackCandidate(
+    notes: WidgetCandidate[],
+    referenceDate: Date,
+    recentHistory: WidgetHistoryEntry[]
+): { note: WidgetCandidate; mode: WidgetSelectionMode } | null {
+    return pickFallbackCandidateFromBuckets(getSharedFallbackBuckets(notes), referenceDate, recentHistory);
 }
 
 function getAuthorInitials(displayName: string | null | undefined) {
@@ -677,13 +698,14 @@ export function selectWidgetNote(options: {
         };
     }
 
-    const personalCandidates = normalizePersonalCandidates(notes);
-    const sharedCandidates = normalizeSharedCandidates(sharedPosts);
-    const selectableNotes = [...personalCandidates, ...sharedCandidates].filter(
+    const personalCandidates = normalizePersonalCandidates(notes).filter(
+        (note) => isPhotoWidgetNote(note) || isTextWidgetNote(note)
+    );
+    const sharedCandidates = normalizeSharedCandidates(sharedPosts).filter(
         (note) => isPhotoWidgetNote(note) || isTextWidgetNote(note)
     );
 
-    if (selectableNotes.length === 0) {
+    if (personalCandidates.length === 0 && sharedCandidates.length === 0) {
         return {
             selectedNote: null,
             selectedCandidate: null,
@@ -695,7 +717,7 @@ export function selectWidgetNote(options: {
     }
 
     const nearestCandidates = currentLocation
-        ? selectableNotes
+        ? personalCandidates
             .map((note) => ({
                 note,
                 distanceMeters: getDistanceMeters(currentLocation, {
@@ -703,7 +725,7 @@ export function selectWidgetNote(options: {
                     longitude: note.longitude ?? 0,
                 }),
             }))
-            .filter((entry) => entry.note.source === 'personal' && entry.distanceMeters <= Math.max(1, entry.note.radius ?? 0))
+            .filter((entry) => entry.distanceMeters <= Math.max(1, entry.note.radius ?? 0))
             .sort(compareNearbyWidgetNotes)
         : [];
 
@@ -718,7 +740,10 @@ export function selectWidgetNote(options: {
         };
     }
 
-    const fallbackCandidate = pickFallbackCandidate(selectableNotes, referenceDate, recentHistory);
+    const fallbackCandidate =
+        personalCandidates.length > 0
+            ? pickPersonalFallbackCandidate(personalCandidates, referenceDate, recentHistory)
+            : pickSharedFallbackCandidate(sharedCandidates, referenceDate, recentHistory);
 
     if (!fallbackCandidate) {
         return {
@@ -973,13 +998,14 @@ async function getEligibleWidgetCandidates(
     notes: Note[],
     sharedPosts: SharedPost[]
 ): Promise<EligibleWidgetCandidates> {
-    const eligibleCandidates: WidgetCandidate[] = [];
+    const personalCandidates: WidgetCandidate[] = [];
+    const sharedCandidates: WidgetCandidate[] = [];
     const readablePhotoUrisByCandidateKey = new Map<string, string>();
 
     for (const note of notes) {
         const candidate = createPersonalWidgetCandidate(note);
         if (isTextWidgetNote(candidate)) {
-            eligibleCandidates.push(candidate);
+            personalCandidates.push(candidate);
             continue;
         }
 
@@ -997,14 +1023,14 @@ async function getEligibleWidgetCandidates(
             continue;
         }
 
-        eligibleCandidates.push(candidate);
+        personalCandidates.push(candidate);
         readablePhotoUrisByCandidateKey.set(candidate.candidateKey, readablePhotoUri);
     }
 
     for (const sharedPost of sharedPosts) {
         const candidate = createSharedWidgetCandidate(sharedPost);
         if (isTextWidgetNote(candidate)) {
-            eligibleCandidates.push(candidate);
+            sharedCandidates.push(candidate);
             continue;
         }
 
@@ -1032,12 +1058,13 @@ async function getEligibleWidgetCandidates(
         }
 
         candidate.photoLocalUri = readablePhotoUri;
-        eligibleCandidates.push(candidate);
+        sharedCandidates.push(candidate);
         readablePhotoUrisByCandidateKey.set(candidate.candidateKey, readablePhotoUri);
     }
 
     return {
-        candidates: eligibleCandidates,
+        personalCandidates,
+        sharedCandidates,
         readablePhotoUrisByCandidateKey,
     };
 }
@@ -1154,13 +1181,17 @@ async function buildWidgetTimeline(options: {
     referenceDate: Date;
 }) {
     const { notes, sharedPosts = [], currentLocation = null, referenceDate } = options;
-    const { candidates: eligibleNotes, readablePhotoUrisByCandidateKey } = await getEligibleWidgetCandidates(notes, sharedPosts);
+    const {
+        personalCandidates,
+        sharedCandidates,
+        readablePhotoUrisByCandidateKey,
+    } = await getEligibleWidgetCandidates(notes, sharedPosts);
     const history = await loadWidgetHistory(referenceDate);
     const timelineDates = buildTimelineDates(referenceDate);
     const nextHistory = [...history];
     const entries: WidgetTimelineEntry[] = [];
 
-    if ((notes.length === 0 && sharedPosts.length === 0) || eligibleNotes.length === 0) {
+    if ((notes.length === 0 && sharedPosts.length === 0) || (personalCandidates.length === 0 && sharedCandidates.length === 0)) {
         const idleProps = buildIdleWidgetProps(notes.length);
         for (const date of timelineDates) {
             entries.push({
@@ -1177,8 +1208,8 @@ async function buildWidgetTimeline(options: {
 
     for (const date of timelineDates) {
         const selection = selectWidgetNote({
-            notes: eligibleNotes,
-            sharedPosts: [],
+            notes: personalCandidates,
+            sharedPosts: sharedCandidates,
             currentLocation,
             referenceDate: date,
             recentHistory: nextHistory,

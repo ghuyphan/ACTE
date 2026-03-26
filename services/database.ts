@@ -58,6 +58,8 @@ export type NoteUpdates = Partial<
         | 'promptAnswer'
         | 'moodEmoji'
         | 'radius'
+        | 'hasDoodle'
+        | 'doodleStrokesJson'
     >
 >;
 

@@ -190,6 +190,11 @@ function useNotesStoreValue(): NotesStoreValue {
               promptAnswer:
                 updates.promptAnswer !== undefined ? updates.promptAnswer : n.promptAnswer ?? null,
               moodEmoji: updates.moodEmoji !== undefined ? updates.moodEmoji : n.moodEmoji ?? null,
+              hasDoodle: updates.hasDoodle !== undefined ? updates.hasDoodle : n.hasDoodle ?? false,
+              doodleStrokesJson:
+                updates.doodleStrokesJson !== undefined
+                  ? updates.doodleStrokesJson
+                  : n.doodleStrokesJson ?? null,
               updatedAt: new Date().toISOString(),
             }
           : n

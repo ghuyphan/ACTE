@@ -583,6 +583,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         const updates: Partial<Pick<Note, 'content' | 'locationName' | 'moodEmoji' | 'radius'>> = {};
         const nextDoodleStrokesJson =
             editDoodleStrokes.length > 0 ? JSON.stringify(editDoodleStrokes) : null;
+        const nextHasDoodle = Boolean(nextDoodleStrokesJson);
         const doodleChanged = nextDoodleStrokesJson !== (note.doodleStrokesJson ?? null);
 
         if (note.type === 'text' && editContent.trim() !== note.content) {
@@ -597,17 +598,21 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         if (Object.keys(updates).length > 0 || doodleChanged) {
             const nextUpdatedAt = new Date().toISOString();
+            const storeUpdates = doodleChanged
+                ? {
+                    ...updates,
+                    hasDoodle: nextHasDoodle,
+                    doodleStrokesJson: nextDoodleStrokesJson,
+                }
+                : updates;
             const nextNote = {
                 ...note,
-                ...updates,
-                hasDoodle: Boolean(nextDoodleStrokesJson),
-                doodleStrokesJson: nextDoodleStrokesJson,
+                ...storeUpdates,
+                content: updates.content ?? note.content,
+                hasDoodle: doodleChanged ? nextHasDoodle : note.hasDoodle,
+                doodleStrokesJson: doodleChanged ? nextDoodleStrokesJson : note.doodleStrokesJson ?? null,
                 updatedAt: nextUpdatedAt,
             };
-
-            if (Object.keys(updates).length > 0) {
-                await updateNote(note.id, updates);
-            }
 
             if (doodleChanged) {
                 if (nextDoodleStrokesJson) {
@@ -617,9 +622,13 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 }
             }
 
+            await updateNote(note.id, storeUpdates);
             await refreshNotes(false);
             setNote(nextNote);
             setEditDoodleStrokes(parseNoteDoodleStrokes(nextDoodleStrokesJson));
+            setEditContent(nextNote.content);
+            setEditLocation(nextNote.locationName || '');
+            setEditRadius(nextNote.radius);
             setDoodleModeEnabled(false);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setIsEditing(false);

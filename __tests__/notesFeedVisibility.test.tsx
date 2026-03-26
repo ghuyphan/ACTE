@@ -1,7 +1,16 @@
 import React from 'react';
 import { act, render } from '@testing-library/react-native';
-import { FlatList, Platform, View } from 'react-native';
+import { FlatList, Platform, Text, View } from 'react-native';
 import NotesFeed from '../components/home/NotesFeed';
+
+const mockTextMemoryCard = jest.fn(
+  ({ text, doodleStrokesJson }: { text: string; doodleStrokesJson?: string | null }) => (
+    <View>
+      <Text testID="mock-text-memory-card-text">{text}</Text>
+      <Text testID="mock-text-memory-card-doodle">{doodleStrokesJson ?? 'null'}</Text>
+    </View>
+  )
+);
 
 jest.mock('../hooks/useTheme', () => ({
   useTheme: () => ({
@@ -15,9 +24,8 @@ jest.mock('../hooks/useTheme', () => ({
 
 jest.mock('../components/TextMemoryCard', () => {
   const React = require('react');
-  const { View } = require('react-native');
-  return function MockTextMemoryCard() {
-    return <View />;
+  return function MockTextMemoryCard(props: any) {
+    return mockTextMemoryCard(props);
   };
 });
 
@@ -29,7 +37,89 @@ jest.mock('../components/ImageMemoryCard', () => {
   };
 });
 
+beforeEach(() => {
+  mockTextMemoryCard.mockClear();
+});
+
 describe('NotesFeed capture visibility', () => {
+  it('re-renders a note card when only doodle strokes change', () => {
+    const baseNote = {
+      id: 'note-1',
+      type: 'text',
+      content: 'hello',
+      locationName: 'Cafe',
+      latitude: 0,
+      longitude: 0,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: true,
+      doodleStrokesJson: JSON.stringify([{ color: '#FFF', points: [0.1, 0.1, 0.2, 0.2] }]),
+      createdAt: '2026-03-19T00:00:00.000Z',
+      updatedAt: null,
+    };
+
+    const view = render(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="camera"
+        notes={[baseNote] as any}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    expect(view.getByTestId('mock-text-memory-card-doodle')).toHaveTextContent(
+      JSON.stringify([{ color: '#FFF', points: [0.1, 0.1, 0.2, 0.2] }])
+    );
+
+    view.rerender(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="camera"
+        notes={[
+          {
+            ...baseNote,
+            doodleStrokesJson: JSON.stringify([{ color: '#FFF', points: [0.3, 0.3, 0.4, 0.4] }]),
+          },
+        ] as any}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    expect(view.getByTestId('mock-text-memory-card-doodle')).toHaveTextContent(
+      JSON.stringify([{ color: '#FFF', points: [0.3, 0.3, 0.4, 0.4] }])
+    );
+  });
+
   it('reports visibility continuously during scroll and settles on drag end and momentum end', () => {
     const onCaptureVisibilityChange = jest.fn();
 

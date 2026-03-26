@@ -100,7 +100,10 @@
         "androidUnavailableTitle": "Bản đồ tạm thời chưa khả dụng trên Android",
         "androidUnavailableSubtitle": "Bản dựng này sẽ bỏ qua Google Maps trên Android cho tới khi cấu hình xong API key.",
         "emptyTitle": "Chưa có ghi chú nào trên bản đồ",
-        "emptySubtitle": "Các ghi chú đã lưu sẽ hiện dưới dạng ghim ở đây"
+        "emptySubtitle": "Các ghi chú đã lưu sẽ hiện dưới dạng ghim ở đây",
+        "friendsChip": "Bạn bè",
+        "friendFrom": "Từ {{name}}",
+        "openShared": "Mở chia sẻ"
     },
     "noteDetail": {
         "deleteTitle": "Xóa ghi chú",

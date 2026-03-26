@@ -11,6 +11,40 @@ const mockRequestForegroundLocation = jest.fn();
 const mockOpenAppSettings = jest.fn();
 const mockImpactAsync = jest.fn();
 let mockReduceMotionEnabled = false;
+const defaultSharedPosts = [
+  {
+    id: 'shared-friend-1',
+    authorUid: 'friend-1',
+    authorDisplayName: 'Lan',
+    authorPhotoURLSnapshot: null,
+    audienceUserIds: ['me'],
+    type: 'text' as const,
+    text: 'Shared coffee memory',
+    photoPath: null,
+    photoLocalUri: null,
+    doodleStrokesJson: null,
+    placeName: 'District 3',
+    sourceNoteId: null,
+    createdAt: '2026-03-12T00:00:00.000Z',
+    updatedAt: null,
+  },
+  {
+    id: 'shared-owned-1',
+    authorUid: 'me',
+    authorDisplayName: 'Me',
+    authorPhotoURLSnapshot: null,
+    audienceUserIds: ['friend-1'],
+    type: 'text' as const,
+    text: 'My own shared copy',
+    photoPath: null,
+    photoLocalUri: null,
+    doodleStrokesJson: null,
+    placeName: 'District 1',
+    sourceNoteId: null,
+    createdAt: '2026-03-11T00:00:00.000Z',
+    updatedAt: null,
+  },
+];
 
 jest.mock('expo-glass-effect', () => {
   const React = require('react');
@@ -124,9 +158,14 @@ const defaultNotes = [
 ];
 
 const mockNotes = defaultNotes.map((note) => ({ ...note }));
+const mockSharedPosts = defaultSharedPosts.map((post) => ({ ...post }));
 
 function resetMockNotes() {
   mockNotes.splice(0, mockNotes.length, ...defaultNotes.map((note) => ({ ...note })));
+}
+
+function resetMockSharedPosts() {
+  mockSharedPosts.splice(0, mockSharedPosts.length, ...defaultSharedPosts.map((post) => ({ ...post })));
 }
 
 function replaceMockNotes(nextNotes: typeof defaultNotes) {
@@ -144,6 +183,19 @@ jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
     notes: mockNotes,
+  }),
+}));
+
+jest.mock('../hooks/useAuth', () => ({
+  useAuth: () => ({
+    user: { uid: 'me' },
+  }),
+}));
+
+jest.mock('../hooks/useSharedFeed', () => ({
+  useSharedFeedStore: () => ({
+    enabled: true,
+    sharedPosts: mockSharedPosts,
   }),
 }));
 
@@ -225,6 +277,7 @@ describe('MapScreen', () => {
     mockReduceMotionEnabled = false;
     setPlatformOS('ios');
     resetMockNotes();
+    resetMockSharedPosts();
   });
 
   afterAll(() => {
@@ -240,6 +293,7 @@ describe('MapScreen', () => {
     expect(within(topHeader).getByTestId('map-filter-all')).toBeTruthy();
     expect(queryByTestId('map-count-badge')).toBeNull();
     expect(overlayHost).toBeTruthy();
+    expect(getByTestId('map-friends-chip')).toBeTruthy();
 
     expect(getByText('2 notes')).toBeTruthy();
 
@@ -588,6 +642,26 @@ describe('MapScreen', () => {
     await waitFor(() => {
       const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
       expect(lastCall?.[1]).toBe(0);
+    });
+  });
+
+  it('shows friend memories in the preview container after the scan and opens shared detail', async () => {
+    const { getByTestId, getByText, queryByTestId } = render(<MapScreen />);
+
+    fireEvent.press(getByTestId('map-friends-chip'));
+
+    expect(getByTestId('map-friends-preview-shell')).toBeTruthy();
+    expect(getByTestId('map-friends-scan')).toBeTruthy();
+    const friendPreview = getByTestId('map-friends-preview-item-shared-friend-1');
+    expect(within(friendPreview).getByText('District 3')).toBeTruthy();
+    expect(within(friendPreview).getByText('Shared coffee memory')).toBeTruthy();
+    expect(queryByTestId('map-friends-preview-item-shared-owned-1')).toBeNull();
+    expect(getByText('Open shared')).toBeTruthy();
+
+    fireEvent.press(getByTestId('map-friends-preview-open'));
+
+    await waitFor(() => {
+      expect(mockRouterPush).toHaveBeenCalledWith('/shared/shared-friend-1');
     });
   });
 });

@@ -328,6 +328,13 @@ describe('NoteDetailSheet', () => {
       fireEvent.press(getByTestId('note-detail-edit'));
     });
 
+    expect(mockUpdateNote).toHaveBeenCalledWith('note-1', {
+      hasDoodle: true,
+      doodleStrokesJson: JSON.stringify([
+        { color: '#FFFFFF', points: [0.1, 0.1, 0.2, 0.2] },
+        { color: '#FFFFFF', points: [0.3, 0.3, 0.4, 0.4] },
+      ]),
+    });
     expect(mockSaveNoteDoodle).toHaveBeenCalledWith(
       'note-1',
       JSON.stringify([

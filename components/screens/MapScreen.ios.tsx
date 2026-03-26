@@ -4,16 +4,23 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type MapView from 'react-native-maps';
-import Reanimated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Reanimated, {
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapCanvas from '../map/MapCanvas';
 import MapFilterBar from '../map/MapFilterBar';
+import MapFriendsPreviewCard from '../map/MapFriendsPreviewCard';
 import { getMapLayoutTransition, mapMotionPressTiming } from '../map/mapMotion';
 import MapPreviewCard from '../map/MapPreviewCard';
 import MapStatusCard from '../map/MapStatusCard';
 import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from '../map/overlayTokens';
+import { useAuth } from '../../hooks/useAuth';
 import type { MapClusterNode } from '../../hooks/map/mapDomain';
 import { regionToZoom } from '../../hooks/map/mapDomain';
 import { useMapScreenState } from '../../hooks/map/useMapScreenState';
@@ -21,6 +28,7 @@ import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
 
@@ -33,7 +41,9 @@ export default function MapScreenIOS() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const reduceMotionEnabled = useReducedMotion();
+  const { user } = useAuth();
   const { notes, loading } = useNotesStore();
+  const { enabled: sharedEnabled, sharedPosts } = useSharedFeedStore();
   const { location, requestForegroundLocation, openAppSettings } = useGeofence();
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
@@ -42,9 +52,14 @@ export default function MapScreenIOS() {
   const [activeNearbyNoteId, setActiveNearbyNoteId] = useState<string | null>(null);
   const [markerPulseId, setMarkerPulseId] = useState<string | null>(null);
   const [markerPulseKey, setMarkerPulseKey] = useState(0);
+  const [showFriendsPreview, setShowFriendsPreview] = useState(false);
+  const [activeFriendPostId, setActiveFriendPostId] = useState<string | null>(null);
+  const [showFriendsScan, setShowFriendsScan] = useState(false);
   const hasCenteredRef = useRef(false);
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const friendsScanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fabScale = useSharedValue(1);
+  const friendsScanProgress = useSharedValue(0);
 
   const {
     filterState,
@@ -74,11 +89,23 @@ export default function MapScreenIOS() {
     notes.length === 0 ? 'no-notes' : filteredCount === 0 ? 'no-filter-results' : 'content';
   const previewVisible = overlayState === 'content' && nearbyItems.length > 0;
   const noteById = useMemo(() => new Map(notes.map((note) => [note.id, note] as const)), [notes]);
+  const friendPosts = useMemo(
+    () =>
+      sharedPosts
+        .filter((post) => post.authorUid !== user?.uid)
+        .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
+    [sharedPosts, user?.uid]
+  );
+  const friendsPreviewVisible = showFriendsPreview && friendPosts.length > 0;
+  const hasFriendLayer = sharedEnabled && friendPosts.length > 0;
 
   useEffect(() => {
     return () => {
       if (markerPulseTimerRef.current) {
         clearTimeout(markerPulseTimerRef.current);
+      }
+      if (friendsScanTimeoutRef.current) {
+        clearTimeout(friendsScanTimeoutRef.current);
       }
     };
   }, []);
@@ -142,6 +169,24 @@ export default function MapScreenIOS() {
     setActiveNearbyNoteId(nearbyItems[0].note.id);
   }, [activeNearbyNoteId, nearbyItems]);
 
+  useEffect(() => {
+    if (!friendPosts.length) {
+      if (showFriendsPreview) {
+        setShowFriendsPreview(false);
+      }
+      if (activeFriendPostId !== null) {
+        setActiveFriendPostId(null);
+      }
+      return;
+    }
+
+    if (activeFriendPostId && friendPosts.some((post) => post.id === activeFriendPostId)) {
+      return;
+    }
+
+    setActiveFriendPostId(friendPosts[0].id);
+  }, [activeFriendPostId, friendPosts, showFriendsPreview]);
+
   const handleOpenPreview = useCallback(() => {
     if (selectedNote) {
       openNote(selectedNote.id);
@@ -152,6 +197,30 @@ export default function MapScreenIOS() {
       openNote(activeNearbyItem.note.id);
     }
   }, [activeNearbyItem, openNote, selectedNote]);
+
+  const handleMapCanvasPress = useCallback(() => {
+    if (showFriendsPreview) {
+      setShowFriendsPreview(false);
+    }
+    handleMapPress();
+  }, [handleMapPress, showFriendsPreview]);
+
+  const handleChangeFilterType = useCallback(
+    (nextType: Parameters<typeof setFilterType>[0]) => {
+      if (showFriendsPreview) {
+        setShowFriendsPreview(false);
+      }
+      setFilterType(nextType);
+    },
+    [setFilterType, showFriendsPreview]
+  );
+
+  const handleToggleFavorites = useCallback(() => {
+    if (showFriendsPreview) {
+      setShowFriendsPreview(false);
+    }
+    toggleFavoritesOnly();
+  }, [showFriendsPreview, toggleFavoritesOnly]);
 
   const goToMyLocation = useCallback(async () => {
     let target = location;
@@ -187,6 +256,9 @@ export default function MapScreenIOS() {
 
   const handleClusterPress = useCallback(
     (node: MapClusterNode) => {
+      if (showFriendsPreview) {
+        setShowFriendsPreview(false);
+      }
       handleClusterMarkerPress();
       emitLightHaptic();
       triggerMarkerPulse(node.id);
@@ -217,6 +289,7 @@ export default function MapScreenIOS() {
       initialRegion,
       reduceMotionEnabled,
       setVisibleRegion,
+      showFriendsPreview,
       triggerMarkerPulse,
       visibleRegion,
     ]
@@ -224,15 +297,21 @@ export default function MapScreenIOS() {
 
   const handleLeafPress = useCallback(
     (groupId: string) => {
+      if (showFriendsPreview) {
+        setShowFriendsPreview(false);
+      }
       triggerMarkerPulse(groupId);
       handleLeafMarkerPress(groupId);
       emitLightHaptic();
     },
-    [emitLightHaptic, handleLeafMarkerPress, triggerMarkerPulse]
+    [emitLightHaptic, handleLeafMarkerPress, showFriendsPreview, triggerMarkerPulse]
   );
 
   const handleFocusNearbyNote = useCallback(
     (noteId: string) => {
+      if (showFriendsPreview) {
+        setShowFriendsPreview(false);
+      }
       const nearbyItem = nearbyItems.find((item) => item.note.id === noteId);
       if (!nearbyItem) {
         return;
@@ -255,7 +334,50 @@ export default function MapScreenIOS() {
       mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
       setVisibleRegion(nextRegion);
     },
-    [initialRegion, nearbyItems, reduceMotionEnabled, setVisibleRegion, visibleRegion]
+    [initialRegion, nearbyItems, reduceMotionEnabled, setVisibleRegion, showFriendsPreview, visibleRegion]
+  );
+
+  const triggerFriendsScan = useCallback(() => {
+    if (friendsScanTimeoutRef.current) {
+      clearTimeout(friendsScanTimeoutRef.current);
+    }
+
+    if (reduceMotionEnabled) {
+      return;
+    }
+
+    setShowFriendsScan(true);
+    friendsScanProgress.value = 0;
+    friendsScanProgress.value = withTiming(1, { duration: 860 });
+
+    friendsScanTimeoutRef.current = setTimeout(() => {
+      setShowFriendsScan(false);
+      friendsScanProgress.value = 0;
+      friendsScanTimeoutRef.current = null;
+    }, 900);
+  }, [friendsScanProgress, reduceMotionEnabled]);
+
+  const handleOpenFriendsLayer = useCallback(() => {
+    if (!hasFriendLayer) {
+      return;
+    }
+
+    emitLightHaptic();
+    triggerFriendsScan();
+    setShowFriendsPreview((current) => !current);
+    setActiveFriendPostId((current) => current ?? friendPosts[0]?.id ?? null);
+  }, [emitLightHaptic, friendPosts, hasFriendLayer, triggerFriendsScan]);
+
+  const handleOpenSharedPost = useCallback(
+    (postId?: string) => {
+      const nextPostId = postId ?? activeFriendPostId;
+      if (!nextPostId) {
+        return;
+      }
+
+      router.push(`/shared/${nextPostId}` as any);
+    },
+    [activeFriendPostId, router]
   );
 
   useEffect(() => {
@@ -298,6 +420,17 @@ export default function MapScreenIOS() {
   const fabAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: fabScale.value }],
   }));
+  const friendsScanBackdropStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(friendsScanProgress.value, [0, 0.08, 1], [0, 0.22, 0]),
+  }));
+  const friendsScanRingStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(friendsScanProgress.value, [0, 0.16, 1], [0, 0.24, 0]),
+    transform: [{ scale: interpolate(friendsScanProgress.value, [0, 1], [0.7, 2.8]) }],
+  }));
+  const friendsScanCoreStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(friendsScanProgress.value, [0, 0.2, 1], [0, 0.18, 0]),
+    transform: [{ scale: interpolate(friendsScanProgress.value, [0, 1], [0.82, 1.7]) }],
+  }));
 
   if (loading) {
     return (
@@ -320,7 +453,7 @@ export default function MapScreenIOS() {
         markerPulseId={markerPulseId}
         markerPulseKey={markerPulseKey}
         reduceMotionEnabled={reduceMotionEnabled}
-        onMapPress={handleMapPress}
+        onMapPress={handleMapCanvasPress}
         onMapReady={() => {
           setIsMapReady(true);
           setVisibleRegion(initialRegion);
@@ -339,11 +472,54 @@ export default function MapScreenIOS() {
         <MapFilterBar
           filterState={filterState}
           countLabel={countLabel}
-          onChangeType={setFilterType}
-          onToggleFavorites={toggleFavoritesOnly}
+          onChangeType={handleChangeFilterType}
+          onToggleFavorites={handleToggleFavorites}
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
         />
+
+        {hasFriendLayer ? (
+          <Pressable
+            testID="map-friends-chip"
+            onPress={handleOpenFriendsLayer}
+            style={({ pressed }) => [
+              styles.friendsChipPressable,
+              {
+                opacity: pressed ? 0.94 : 1,
+                transform: [{ scale: pressed ? 0.99 : 1 }],
+              },
+            ]}
+          >
+            <View style={[styles.friendsChip, { borderColor: getOverlayBorderColor(isDark) }]}>
+              <GlassView
+                pointerEvents="none"
+                style={StyleSheet.absoluteFillObject}
+                glassEffectStyle="regular"
+                colorScheme={isDark ? 'dark' : 'light'}
+              />
+              {isOlderIOS ? (
+                <View
+                  style={[
+                    StyleSheet.absoluteFillObject,
+                    {
+                      borderRadius: 18,
+                      backgroundColor: getOverlayFallbackColor(isDark),
+                    },
+                  ]}
+                />
+              ) : null}
+
+              <View style={styles.friendsChipInner}>
+                <View style={[styles.friendsChipIconWrap, { backgroundColor: `${colors.primary}20` }]}>
+                  <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
+                </View>
+                <Text style={[styles.friendsChipLabel, { color: colors.text }]}>
+                  {t('map.friendsChip', 'Friends')}
+                </Text>
+              </View>
+            </View>
+          </Pressable>
+        ) : null}
       </Reanimated.View>
 
       <Reanimated.View
@@ -384,7 +560,7 @@ export default function MapScreenIOS() {
         </Pressable>
       </Reanimated.View>
 
-      {notes.length > 0 ? (
+      {notes.length > 0 && !friendsPreviewVisible ? (
         <MapPreviewCard
           previewMode={previewMode}
           visible={previewVisible}
@@ -401,13 +577,26 @@ export default function MapScreenIOS() {
         />
       ) : null}
 
+      {friendsPreviewVisible ? (
+        <MapFriendsPreviewCard
+          visible={friendsPreviewVisible}
+          posts={friendPosts}
+          activePostId={activeFriendPostId}
+          bottomOffset={previewBottomOffset}
+          onOpen={() => handleOpenSharedPost()}
+          onFocusPost={setActiveFriendPostId}
+          onInteraction={emitLightHaptic}
+          reduceMotionEnabled={reduceMotionEnabled}
+        />
+      ) : null}
+
       <Reanimated.View
         testID="map-overlay-host"
         style={styles.emptyOverlay}
-        pointerEvents={overlayState === 'content' ? 'none' : 'box-none'}
+        pointerEvents={overlayState === 'content' || friendsPreviewVisible ? 'none' : 'box-none'}
         layout={getMapLayoutTransition(reduceMotionEnabled)}
       >
-        {overlayState === 'no-notes' ? (
+        {overlayState === 'no-notes' && !friendsPreviewVisible ? (
           <MapStatusCard
             overlayState="no-notes"
             isDark={isDark}
@@ -422,7 +611,7 @@ export default function MapScreenIOS() {
           />
         ) : null}
 
-        {overlayState === 'no-filter-results' ? (
+        {overlayState === 'no-filter-results' && !friendsPreviewVisible ? (
           <MapStatusCard
             overlayState="no-filter-results"
             isDark={isDark}
@@ -443,6 +632,33 @@ export default function MapScreenIOS() {
           />
         ) : null}
       </Reanimated.View>
+
+      {showFriendsScan ? (
+        <View testID="map-friends-scan" pointerEvents="none" style={styles.scanOverlay}>
+          <Reanimated.View
+            style={[
+              styles.scanBackdrop,
+              { backgroundColor: isDark ? 'rgba(10,12,18,0.14)' : 'rgba(255,248,230,0.18)' },
+              friendsScanBackdropStyle,
+            ]}
+          />
+          <Reanimated.View
+            style={[
+              styles.scanRing,
+              { borderColor: `${colors.primary}66` },
+              friendsScanRingStyle,
+            ]}
+          />
+          <Reanimated.View
+            style={[
+              styles.scanCore,
+              { backgroundColor: `${colors.primary}24` },
+              friendsScanCoreStyle,
+            ]}
+          />
+        </View>
+      ) : null}
+
     </View>
   );
 }
@@ -476,6 +692,36 @@ const styles = StyleSheet.create({
     left: 14,
     right: 72,
     zIndex: 12,
+    gap: 10,
+  },
+  friendsChipPressable: {
+    alignSelf: 'flex-start',
+  },
+  friendsChip: {
+    minHeight: 38,
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    ...mapOverlayTokens.overlayShadow,
+  },
+  friendsChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  friendsChipIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  friendsChipLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'System',
   },
   emptyOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -483,5 +729,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     zIndex: 9,
+  },
+  scanOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  scanBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  scanRing: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    borderWidth: 2,
+  },
+  scanCore: {
+    position: 'absolute',
+    width: 132,
+    height: 132,
+    borderRadius: 66,
   },
 });

@@ -175,6 +175,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   prevProps.item.isFavorite === nextProps.item.isFavorite &&
   prevProps.item.moodEmoji === nextProps.item.moodEmoji &&
   prevProps.item.hasDoodle === nextProps.item.hasDoodle &&
+  prevProps.item.doodleStrokesJson === nextProps.item.doodleStrokesJson &&
   prevProps.shouldReveal === nextProps.shouldReveal &&
   prevProps.revealToken === nextProps.revealToken
 ));
