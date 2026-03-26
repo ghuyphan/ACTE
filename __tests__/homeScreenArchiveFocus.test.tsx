@@ -5,6 +5,29 @@ import HomeScreen from '../app/(tabs)/index';
 
 const mockConsumeFeedFocus = jest.fn();
 const mockScrollToOffset = jest.fn();
+const mockSharedFeedState = {
+  sharedPosts: [
+    {
+      id: 'shared-friend',
+      authorUid: 'friend-1',
+      authorDisplayName: 'Lan',
+      type: 'text',
+      text: 'Friend memory',
+      placeName: 'District 5',
+      createdAt: '2026-03-12T00:00:00.000Z',
+    },
+    {
+      id: 'shared-owned',
+      authorUid: 'me',
+      authorDisplayName: 'You',
+      type: 'text',
+      text: 'Owned shared memory',
+      placeName: 'District 4',
+      createdAt: '2026-03-13T00:00:00.000Z',
+    },
+  ],
+};
+let latestNotesFeedProps: any = null;
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -204,26 +227,7 @@ jest.mock('../hooks/useSharedFeed', () => ({
     loading: false,
     ready: true,
     friends: [],
-    sharedPosts: [
-      {
-        id: 'shared-friend',
-        authorUid: 'friend-1',
-        authorDisplayName: 'Lan',
-        type: 'text',
-        text: 'Friend memory',
-        placeName: 'District 5',
-        createdAt: '2026-03-12T00:00:00.000Z',
-      },
-      {
-        id: 'shared-owned',
-        authorUid: 'me',
-        authorDisplayName: 'You',
-        type: 'text',
-        text: 'Owned shared memory',
-        placeName: 'District 4',
-        createdAt: '2026-03-13T00:00:00.000Z',
-      },
-    ],
+    sharedPosts: mockSharedFeedState.sharedPosts,
     activeInvite: null,
     refreshSharedFeed: jest.fn(async () => undefined),
     createFriendInvite: jest.fn(async () => undefined),
@@ -265,7 +269,10 @@ jest.mock('../components/home/HomeHeaderSearch', () => {
 jest.mock('../components/home/NotesFeed', () => {
   const React = require('react');
   const { View } = require('react-native');
-  return function MockNotesFeed({ flatListRef }: { flatListRef: React.MutableRefObject<any> }) {
+  return function MockNotesFeed(props: any) {
+    const { flatListRef } = props;
+    latestNotesFeedProps = props;
+
     React.useEffect(() => {
       flatListRef.current = {
         scrollToOffset: (...args: unknown[]) => mockScrollToOffset(...args),
@@ -299,6 +306,27 @@ describe('HomeScreen archive focus', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
+    latestNotesFeedProps = null;
+    mockSharedFeedState.sharedPosts = [
+      {
+        id: 'shared-friend',
+        authorUid: 'friend-1',
+        authorDisplayName: 'Lan',
+        type: 'text',
+        text: 'Friend memory',
+        placeName: 'District 5',
+        createdAt: '2026-03-12T00:00:00.000Z',
+      },
+      {
+        id: 'shared-owned',
+        authorUid: 'me',
+        authorDisplayName: 'You',
+        type: 'text',
+        text: 'Owned shared memory',
+        placeName: 'District 4',
+        createdAt: '2026-03-13T00:00:00.000Z',
+      },
+    ];
     runAfterInteractionsSpy.mockImplementation((task: any) => {
       task?.();
       return { cancel: jest.fn() } as any;
@@ -361,5 +389,39 @@ describe('HomeScreen archive focus', () => {
       expect(mockConsumeFeedFocus).toHaveBeenCalled();
     });
     expect(mockScrollToOffset).not.toHaveBeenCalled();
+  });
+
+  it('keeps the currently viewed card anchored when a friend shared post is inserted above it', async () => {
+    const { rerender } = render(<HomeScreen />);
+
+    act(() => {
+      latestNotesFeedProps?.onSettledArchiveItemChange?.({ kind: 'note', id: 'note-old' });
+    });
+
+    mockSharedFeedState.sharedPosts = [
+      {
+        id: 'shared-new',
+        authorUid: 'friend-2',
+        authorDisplayName: 'Minh',
+        type: 'text',
+        text: 'Newest friend memory',
+        placeName: 'District 7',
+        createdAt: '2026-03-14T00:00:00.000Z',
+      },
+      ...mockSharedFeedState.sharedPosts,
+    ];
+
+    rerender(<HomeScreen />);
+
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    await waitFor(() => {
+      expect(mockScrollToOffset).toHaveBeenCalledWith({
+        offset: snapHeight * 4,
+        animated: false,
+      });
+    });
   });
 });

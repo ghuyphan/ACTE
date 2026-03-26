@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
 import { Dimensions, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { Layout } from '../../constants/theme';
+import { Layout, Typography } from '../../constants/theme';
 import { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { SharedPost } from '../../services/sharedFeedService';
@@ -121,7 +121,7 @@ export function SharedPostMemoryCard({
           <View style={styles.cardFill}>
             <SharedPostCardVisual
               post={post}
-              fallbackText={t('shared.photoMemory', 'Photo memory')}
+              fallbackText={t('shared.noteFallback', 'Shared note')}
             />
           </View>
         </View>
@@ -222,10 +222,8 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   metadataPillText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...Typography.pill,
     flexShrink: 1,
-    fontFamily: 'System',
   },
   metadataPillDate: {
     fontSize: 13,

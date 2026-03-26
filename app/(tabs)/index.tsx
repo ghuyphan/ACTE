@@ -129,6 +129,8 @@ export default function HomeScreen() {
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveInFlightRef = useRef(false);
+  const settledArchiveItemRef = useRef<{ id: string; kind: 'note' | 'shared-post' } | null>(null);
+  const previousVisibleSharedPostIdsRef = useRef<string[]>([]);
   useScrollToTop(flatListRef);
 
   const dismissSharedManageSheet = useCallback(() => {
@@ -319,6 +321,13 @@ export default function HomeScreen() {
     setPendingSavedNoteScrollTargetId(noteId);
   }, []);
 
+  const handleSettledArchiveItemChange = useCallback(
+    (item: { id: string; kind: 'note' | 'shared-post' } | null) => {
+      settledArchiveItemRef.current = item;
+    },
+    []
+  );
+
   useEffect(() => {
     if (!pendingSavedNoteScrollTargetId || suppressedHomeNoteIds.includes(pendingSavedNoteScrollTargetId)) {
       return;
@@ -344,6 +353,43 @@ export default function HomeScreen() {
       setPendingSavedNoteScrollTargetId((current) => (current === scheduledTargetId ? null : current));
     });
   }, [archiveFeedItems, pendingSavedNoteScrollTargetId, snapHeight, suppressedHomeNoteIds]);
+
+  useEffect(() => {
+    const nextSharedPostIds = visibleSharedPosts.map((post) => post.id);
+    const previousSharedPostIds = previousVisibleSharedPostIdsRef.current;
+    const sharedFeedOrderChanged =
+      previousSharedPostIds.length !== nextSharedPostIds.length ||
+      previousSharedPostIds.some((postId, index) => nextSharedPostIds[index] !== postId);
+
+    previousVisibleSharedPostIdsRef.current = nextSharedPostIds;
+
+    if (!sharedFeedOrderChanged) {
+      return;
+    }
+
+    if (pendingSavedNoteScrollTargetId) {
+      return;
+    }
+
+    const anchor = settledArchiveItemRef.current;
+    if (!anchor) {
+      return;
+    }
+
+    const targetIndex = archiveFeedItems.findIndex(
+      (item) => item.kind === anchor.kind && item.id === anchor.id
+    );
+    if (targetIndex < 0) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      flatListRef.current?.scrollToOffset({
+        offset: (targetIndex + 1) * snapHeight,
+        animated: false,
+      });
+    });
+  }, [archiveFeedItems, pendingSavedNoteScrollTargetId, snapHeight, visibleSharedPosts]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -1424,6 +1470,7 @@ export default function HomeScreen() {
         t={t}
         revealedNoteId={null}
         revealToken={0}
+        onSettledArchiveItemChange={handleSettledArchiveItemChange}
         scrollEnabled={!captureScrollLocked}
       />
 

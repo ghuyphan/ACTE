@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { Image } from 'react-native';
 import { decode } from 'base64-arraybuffer';
 import {
@@ -78,6 +79,13 @@ export const SHARED_STICKER_CACHE_DIRECTORY = FileSystem.cacheDirectory
 const NOTE_STICKER_MEDIA_PREFIX = 'stickers';
 const STICKER_UPLOAD_RETRY_DELAYS_MS = [250];
 const SUPPORTED_STICKER_MIME_TYPES = new Set(['image/png', 'image/webp']);
+const MAX_STICKER_FILE_SIZE_BYTES = 450 * 1024;
+const MAX_STICKER_DIMENSION_PX = 1024;
+const STICKER_IMPORT_OPTIMIZATION_PRESETS = [
+  { maxDimension: 1024, compress: 0.9 },
+  { maxDimension: 768, compress: 0.82 },
+  { maxDimension: 512, compress: 0.72 },
+];
 
 function normalizeMimeType(value: string | null | undefined) {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -239,6 +247,131 @@ function getImageSize(uri: string) {
       (error) => reject(error)
     );
   });
+}
+
+async function getStickerFileInfo(uri: string) {
+  const fileInfo = await FileSystem.getInfoAsync(uri);
+  if (!fileInfo.exists || fileInfo.isDirectory) {
+    return null;
+  }
+
+  const { width, height } = await getImageSize(uri);
+  return {
+    uri,
+    size: typeof fileInfo.size === 'number' ? fileInfo.size : null,
+    width,
+    height,
+  };
+}
+
+function needsStickerOptimization(
+  info: Awaited<ReturnType<typeof getStickerFileInfo>>
+): info is NonNullable<Awaited<ReturnType<typeof getStickerFileInfo>>> {
+  if (!info) {
+    return false;
+  }
+
+  return (
+    (typeof info.size === 'number' && info.size > MAX_STICKER_FILE_SIZE_BYTES) ||
+    info.width > MAX_STICKER_DIMENSION_PX ||
+    info.height > MAX_STICKER_DIMENSION_PX
+  );
+}
+
+function isStickerWithinLimits(info: NonNullable<Awaited<ReturnType<typeof getStickerFileInfo>>>) {
+  return (
+    (typeof info.size !== 'number' || info.size <= MAX_STICKER_FILE_SIZE_BYTES) &&
+    info.width <= MAX_STICKER_DIMENSION_PX &&
+    info.height <= MAX_STICKER_DIMENSION_PX
+  );
+}
+
+function buildStickerResizeActions(
+  info: NonNullable<Awaited<ReturnType<typeof getStickerFileInfo>>>,
+  maxDimension: number
+) {
+  if (info.width <= maxDimension && info.height <= maxDimension) {
+    return [];
+  }
+
+  return info.width >= info.height
+    ? [{ resize: { width: maxDimension } }]
+    : [{ resize: { height: maxDimension } }];
+}
+
+async function optimizeStickerForImport(uri: string, mimeType: string) {
+  const originalInfo = await getStickerFileInfo(uri);
+  if (!needsStickerOptimization(originalInfo)) {
+    return {
+      uri,
+      mimeType,
+      cleanupUris: [] as string[],
+    };
+  }
+
+  let currentInfo = originalInfo;
+  let bestUri: string | null = null;
+  let bestSize: number | null = null;
+  const cleanupUris: string[] = [];
+
+  for (const preset of STICKER_IMPORT_OPTIMIZATION_PRESETS) {
+    const result = await manipulateAsync(
+      currentInfo.uri,
+      buildStickerResizeActions(currentInfo, preset.maxDimension),
+      {
+        compress: preset.compress,
+        format: SaveFormat.WEBP,
+      }
+    );
+
+    if (result.uri !== uri) {
+      cleanupUris.push(result.uri);
+    }
+
+    const optimizedInfo = await getStickerFileInfo(result.uri);
+    if (!optimizedInfo) {
+      continue;
+    }
+
+    currentInfo = optimizedInfo;
+
+    if (
+      typeof optimizedInfo.size === 'number' &&
+      (bestSize === null || optimizedInfo.size < bestSize)
+    ) {
+      bestUri = result.uri;
+      bestSize = optimizedInfo.size;
+    }
+
+    if (isStickerWithinLimits(optimizedInfo)) {
+      return {
+        uri: result.uri,
+        mimeType: 'image/webp',
+        cleanupUris,
+      };
+    }
+  }
+
+  if (
+    bestUri &&
+    (typeof originalInfo.size !== 'number' ||
+      bestSize === null ||
+      bestSize < originalInfo.size ||
+      originalInfo.width > MAX_STICKER_DIMENSION_PX ||
+      originalInfo.height > MAX_STICKER_DIMENSION_PX)
+  ) {
+    return {
+      uri: bestUri,
+      mimeType: 'image/webp',
+      cleanupUris,
+    };
+  }
+
+  return {
+    uri,
+    mimeType,
+    cleanupUris,
+  };
 }
 
 async function ensureStickerDirectory() {
@@ -507,35 +640,42 @@ export async function importStickerAsset(source: StickerImportSource): Promise<S
 
   const mimeType = normalizeMimeType(source.mimeType) || getMimeTypeFromName(source.name);
   await validateStickerFile(sourceUri, mimeType);
+  const preparedSticker = await optimizeStickerForImport(sourceUri, mimeType);
 
-  const directory = await ensureStickerDirectory();
-  if (!directory) {
-    throw new Error('Sticker storage is unavailable on this device.');
+  try {
+    const directory = await ensureStickerDirectory();
+    if (!directory) {
+      throw new Error('Sticker storage is unavailable on this device.');
+    }
+
+    const assetId = generateStickerAssetId();
+    const extension = getStickerFileExtension(preparedSticker.mimeType);
+    const destinationPath = `${directory}${assetId}.${extension}`;
+
+    await FileSystem.copyAsync({ from: preparedSticker.uri, to: destinationPath });
+
+    const { width, height } = await getImageSize(destinationPath);
+    const now = new Date().toISOString();
+    const asset: StickerAsset = {
+      id: assetId,
+      ownerUid: getActiveNotesScope(),
+      localUri: destinationPath,
+      remotePath: null,
+      mimeType: preparedSticker.mimeType,
+      width,
+      height,
+      createdAt: now,
+      updatedAt: null,
+      source: 'import',
+    };
+
+    await upsertStickerAsset(asset);
+    return asset;
+  } finally {
+    for (const cleanupUri of new Set(preparedSticker.cleanupUris)) {
+      await FileSystem.deleteAsync(cleanupUri, { idempotent: true }).catch(() => undefined);
+    }
   }
-
-  const assetId = generateStickerAssetId();
-  const extension = getStickerFileExtension(mimeType);
-  const destinationPath = `${directory}${assetId}.${extension}`;
-
-  await FileSystem.copyAsync({ from: sourceUri, to: destinationPath });
-
-  const { width, height } = await getImageSize(destinationPath);
-  const now = new Date().toISOString();
-  const asset: StickerAsset = {
-    id: assetId,
-    ownerUid: getActiveNotesScope(),
-    localUri: destinationPath,
-    remotePath: null,
-    mimeType,
-    width,
-    height,
-    createdAt: now,
-    updatedAt: null,
-    source: 'import',
-  };
-
-  await upsertStickerAsset(asset);
-  return asset;
 }
 
 export async function getNoteStickers(noteId: string): Promise<NoteStickerRow | null> {

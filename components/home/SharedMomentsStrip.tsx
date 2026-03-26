@@ -30,7 +30,7 @@ function PostCard({ post }: { post: SharedPost }) {
         <View style={styles.postVisual}>
           <SharedPostCardVisual
             post={post}
-            fallbackText={t('shared.photoMemory', 'Photo memory')}
+            fallbackText={t('shared.noteFallback', 'Shared note')}
           />
         </View>
 

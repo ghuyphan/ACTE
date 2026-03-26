@@ -283,6 +283,7 @@ interface NotesFeedProps {
   scrollEnabled?: boolean;
   revealedNoteId?: string | null;
   revealToken?: number;
+  onSettledArchiveItemChange?: (item: { id: string; kind: 'note' | 'shared-post' } | null) => void;
 }
 
 export default function NotesFeed({
@@ -303,6 +304,7 @@ export default function NotesFeed({
   scrollEnabled = true,
   revealedNoteId = null,
   revealToken = 0,
+  onSettledArchiveItemChange,
 }: NotesFeedProps) {
   const captureVisibilityRef = useRef(true);
   const isAdjustingSnapRef = useRef(false);
@@ -377,6 +379,30 @@ export default function NotesFeed({
     [flatListRef, listData.length, snapHeight]
   );
 
+  const reportSettledArchiveItem = useCallback(
+    (offsetY: number) => {
+      const settledOffset =
+        Platform.OS === 'android'
+          ? Math.min(
+              listData.length * snapHeight,
+              Math.max(0, Math.round(offsetY / snapHeight) * snapHeight)
+            )
+          : offsetY;
+      const rawIndex = Math.round(settledOffset / snapHeight) - 1;
+      const nextItem = rawIndex >= 0 ? listData[rawIndex] ?? null : null;
+
+      onSettledArchiveItemChange?.(
+        nextItem
+          ? {
+              id: nextItem.id,
+              kind: nextItem.kind,
+            }
+          : null
+      );
+    },
+    [listData, onSettledArchiveItemChange, snapHeight]
+  );
+
   const renderItem = useCallback(
     ({ item, index }: { item: NotesFeedListItem; index: number }) => {
       if (item.kind === 'shared-post') {
@@ -443,13 +469,16 @@ export default function NotesFeed({
       onScrollEndDrag={(event) => {
         const velocityY = event.nativeEvent.velocity?.y ?? 0;
         if (Math.abs(velocityY) < 0.05) {
-          settleCaptureVisibility(event.nativeEvent.contentOffset.y);
+          const offsetY = event.nativeEvent.contentOffset.y;
+          settleCaptureVisibility(offsetY);
+          reportSettledArchiveItem(offsetY);
         }
       }}
       onMomentumScrollEnd={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
         settleCaptureVisibility(offsetY);
         settleAndroidSnap(offsetY);
+        reportSettledArchiveItem(offsetY);
       }}
       contentContainerStyle={{ paddingBottom: height - snapHeight }}
       refreshControl={

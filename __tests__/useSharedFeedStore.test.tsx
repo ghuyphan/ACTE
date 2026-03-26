@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ReactNode } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 
 const mockAuthState = {
   isReady: true,
@@ -59,6 +60,7 @@ let latestSharedFeedSubscriptionHandlers:
       onError?: (error: unknown) => void;
     }
   | null = null;
+let appStateListener: ((state: AppStateStatus) => void) | null = null;
 
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => mockAuthState,
@@ -98,6 +100,7 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 describe('useSharedFeedStore', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    appStateListener = null;
     mockAuthState.isReady = true;
     mockAuthState.isAuthAvailable = true;
     mockAuthState.user = {
@@ -156,6 +159,16 @@ describe('useSharedFeedStore', () => {
     mockUpdateSharedPost.mockResolvedValue(undefined);
     mockClearSharedFeedCache.mockResolvedValue(undefined);
     mockReplaceCachedActiveInvite.mockResolvedValue(undefined);
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener: (state: AppStateStatus) => void) => {
+      appStateListener = listener;
+      return {
+        remove: jest.fn(() => {
+          if (appStateListener === listener) {
+            appStateListener = null;
+          }
+        }),
+      } as any;
+    });
   });
 
   it('hydrates the active invite from cache', async () => {
@@ -402,5 +415,29 @@ describe('useSharedFeedStore', () => {
         authorUid: 'me',
       }),
     ]);
+  });
+
+  it('refreshes the shared feed when the app becomes active again', async () => {
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+    });
+
+    expect(mockRefreshSharedFeed).not.toHaveBeenCalled();
+
+    await act(async () => {
+      appStateListener?.('background');
+    });
+
+    expect(mockRefreshSharedFeed).not.toHaveBeenCalled();
+
+    await act(async () => {
+      appStateListener?.('active');
+    });
+
+    await waitFor(() => {
+      expect(mockRefreshSharedFeed).toHaveBeenCalledTimes(1);
+    });
   });
 });

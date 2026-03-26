@@ -228,14 +228,7 @@ private struct LocketWidgetStickerPlacement: Identifiable {
 private struct LocketWidgetDoodleOverlay: View {
     let strokes: [LocketWidgetDoodleStroke]
     let isLarge: Bool
-
-    private var strokeOpacity: Double {
-        isLarge ? 0.34 : 0.28
-    }
-
-    private var pointOpacity: Double {
-        isLarge ? 0.40 : 0.34
-    }
+    let overlayOpacity: Double
 
     var body: some View {
         Canvas { context, size in
@@ -246,8 +239,8 @@ private struct LocketWidgetDoodleOverlay: View {
                     continue
                 }
 
-                let strokeColor = colorFromHex(stroke.colorHex).opacity(strokeOpacity)
-                let dotColor = colorFromHex(stroke.colorHex).opacity(pointOpacity)
+                let strokeColor = colorFromHex(stroke.colorHex).opacity(overlayOpacity)
+                let dotColor = colorFromHex(stroke.colorHex).opacity(overlayOpacity)
                 let resolvedPoints = stroke.points.map { point in
                     CGPoint(x: point.x * size.width, y: point.y * size.height)
                 }
@@ -266,8 +259,25 @@ private struct LocketWidgetDoodleOverlay: View {
                 var path = Path()
                 path.move(to: resolvedPoints[0])
 
-                for point in resolvedPoints.dropFirst() {
-                    path.addLine(to: point)
+                if resolvedPoints.count == 2 {
+                    path.addLine(to: resolvedPoints[1])
+                } else {
+                    if resolvedPoints.count > 3 {
+                        for index in 1..<(resolvedPoints.count - 2) {
+                            let current = resolvedPoints[index]
+                            let next = resolvedPoints[index + 1]
+                            let midpoint = CGPoint(
+                                x: (current.x + next.x) / 2,
+                                y: (current.y + next.y) / 2
+                            )
+                            path.addQuadCurve(to: midpoint, control: current)
+                        }
+                    }
+
+                    path.addQuadCurve(
+                        to: resolvedPoints[resolvedPoints.count - 1],
+                        control: resolvedPoints[resolvedPoints.count - 2]
+                    )
                 }
 
                 context.stroke(
@@ -369,10 +379,10 @@ private func parseStickerPlacements(from stickerPlacementsJson: String?) -> [Loc
 
 private struct LocketWidgetStickerOverlay: View {
     let placements: [LocketWidgetStickerPlacement]
+    let overlayOpacity: Double
 
     private let artboardInset: CGFloat = 18
     private let minimumBaseSize: CGFloat = 68
-    private let opacityMultiplier = 0.72
 
     var body: some View {
         GeometryReader { proxy in
@@ -398,7 +408,7 @@ private struct LocketWidgetStickerOverlay: View {
                             .scaledToFit()
                             .frame(width: stickerWidth, height: stickerHeight)
                             .rotationEffect(.degrees(placement.rotation))
-                            .opacity(placement.opacity * opacityMultiplier)
+                            .opacity(placement.opacity * overlayOpacity)
                             .position(
                                 x: artboardInset + (placement.x * artboardWidth),
                                 y: artboardInset + (placement.y * artboardHeight)
@@ -622,6 +632,10 @@ private struct LocketWidgetEntryView: View {
         !payload.isIdleState &&
         payload.isSharedContent &&
         (!payload.authorDisplayName.isEmpty || !payload.authorInitials.isEmpty || resolvedAuthorAvatar != nil)
+    }
+
+    private var noteOverlayOpacity: Double {
+        payload.noteType == "photo" ? 0.92 : 0.5
     }
 
     private var shouldPinLocationChip: Bool {
@@ -912,11 +926,18 @@ private struct LocketWidgetEntryView: View {
     private var smallLayout: some View {
         ZStack(alignment: .bottom) {
             if shouldShowStickerOverlay {
-                LocketWidgetStickerOverlay(placements: stickerPlacements)
+                LocketWidgetStickerOverlay(
+                    placements: stickerPlacements,
+                    overlayOpacity: noteOverlayOpacity
+                )
             }
 
             if shouldShowDoodleOverlay {
-                LocketWidgetDoodleOverlay(strokes: doodleStrokes, isLarge: false)
+                LocketWidgetDoodleOverlay(
+                    strokes: doodleStrokes,
+                    isLarge: false,
+                    overlayOpacity: noteOverlayOpacity
+                )
                     .padding(locketWidgetDoodleArtboardInset)
                     .allowsHitTesting(false)
             }
@@ -947,14 +968,15 @@ private struct LocketWidgetEntryView: View {
                 smallTextContent
                 Spacer(minLength: 0)
             }
-            .padding(.bottom, shouldShowCountBadge ? smallBadgeReservedSpace : 0)
+            .padding(.horizontal, smallLayoutPadding)
+            .padding(.top, smallLayoutPadding)
+            .padding(.bottom, smallLayoutPadding + (shouldShowCountBadge ? smallBadgeReservedSpace : 0))
 
             if shouldShowCountBadge {
                 countBadge
-                    .padding(.bottom, smallBadgeBottomPadding)
+                    .padding(.bottom, smallLayoutPadding + smallBadgeBottomPadding)
             }
         }
-        .padding(smallLayoutPadding)
     }
 
     @ViewBuilder
@@ -986,11 +1008,18 @@ private struct LocketWidgetEntryView: View {
     private var largeLayout: some View {
         ZStack {
             if shouldShowStickerOverlay {
-                LocketWidgetStickerOverlay(placements: stickerPlacements)
+                LocketWidgetStickerOverlay(
+                    placements: stickerPlacements,
+                    overlayOpacity: noteOverlayOpacity
+                )
             }
 
             if shouldShowDoodleOverlay {
-                LocketWidgetDoodleOverlay(strokes: doodleStrokes, isLarge: true)
+                LocketWidgetDoodleOverlay(
+                    strokes: doodleStrokes,
+                    isLarge: true,
+                    overlayOpacity: noteOverlayOpacity
+                )
                     .padding(locketWidgetDoodleArtboardInset)
                     .allowsHitTesting(false)
             }
@@ -1027,9 +1056,9 @@ private struct LocketWidgetEntryView: View {
                     }
                 }
             }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 22)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 22)
     }
 
     private var fontSize: CGFloat {

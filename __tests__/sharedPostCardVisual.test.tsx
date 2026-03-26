@@ -83,4 +83,70 @@ describe('SharedPostCardVisual', () => {
       expect(getByTestId('shared-post-image-card')).toBeTruthy();
     });
   });
+
+  it('does not inject the photo fallback label into sticker-only text posts', () => {
+    const { queryByText } = render(
+      <SharedPostCardVisual
+        post={{
+          id: 'shared-sticker-1',
+          authorUid: 'friend-1',
+          authorDisplayName: 'Lan',
+          authorPhotoURLSnapshot: null,
+          audienceUserIds: [],
+          type: 'text',
+          text: '',
+          photoPath: null,
+          photoLocalUri: null,
+          doodleStrokesJson: null,
+          hasStickers: true,
+          stickerPlacementsJson: JSON.stringify([
+            {
+              id: 'sticker-1',
+              assetId: 'asset-1',
+              center: { x: 0.5, y: 0.5 },
+              scale: 1,
+              rotation: 0,
+              zIndex: 1,
+            },
+          ]),
+          placeName: 'District 1',
+          sourceNoteId: null,
+          createdAt: '2026-03-22T00:00:00.000Z',
+          updatedAt: null,
+        }}
+        fallbackText="Photo memory"
+      />
+    );
+
+    expect(queryByText('Photo memory')).toBeNull();
+  });
+
+  it('uses a generic fallback for empty non-photo shared notes', () => {
+    const { getByText, queryByText } = render(
+      <SharedPostCardVisual
+        post={{
+          id: 'shared-empty-1',
+          authorUid: 'friend-1',
+          authorDisplayName: 'Lan',
+          authorPhotoURLSnapshot: null,
+          audienceUserIds: [],
+          type: 'text',
+          text: '',
+          photoPath: null,
+          photoLocalUri: null,
+          doodleStrokesJson: null,
+          hasStickers: false,
+          stickerPlacementsJson: null,
+          placeName: 'District 1',
+          sourceNoteId: null,
+          createdAt: '2026-03-22T00:00:00.000Z',
+          updatedAt: null,
+        }}
+        fallbackText="Shared note"
+      />
+    );
+
+    expect(getByText('Shared note')).toBeTruthy();
+    expect(queryByText('Photo memory')).toBeNull();
+  });
 });

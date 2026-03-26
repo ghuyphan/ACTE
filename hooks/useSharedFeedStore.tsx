@@ -1,4 +1,5 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { Note } from '../services/database';
 import {
   acceptFriendInvite as acceptInvite,
@@ -210,6 +211,24 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
     return unsubscribe;
   }, [applySnapshot, enabled, hydrateFromCache, isOnline, isReady, user]);
+
+  useEffect(() => {
+    if (!enabled || !user || !isReady) {
+      return;
+    }
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active' || !isOnline) {
+        return;
+      }
+
+      void refreshAll().catch(() => undefined);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [enabled, isOnline, isReady, refreshAll, user]);
 
   const requireUser = useCallback(() => {
     if (!enabled || !user) {

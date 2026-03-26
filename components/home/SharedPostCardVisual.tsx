@@ -16,6 +16,12 @@ export default function SharedPostCardVisual({
   fallbackText: string;
 }) {
   const { colors } = useTheme();
+  const normalizedText = post.text.trim();
+  const shouldShowFallbackText =
+    normalizedText.length === 0 &&
+    !post.doodleStrokesJson &&
+    !post.stickerPlacementsJson &&
+    !post.hasStickers;
   
   const [photoUri, setPhotoUri] = useState<string | null>(
     post.type === 'photo' ? post.photoLocalUri ?? null : null
@@ -81,7 +87,7 @@ export default function SharedPostCardVisual({
 
   return (
     <TextMemoryCard
-      text={post.text || fallbackText}
+      text={shouldShowFallbackText ? fallbackText : post.text}
       noteId={post.id}
       doodleStrokesJson={post.doodleStrokesJson}
       stickerPlacementsJson={post.stickerPlacementsJson}
