@@ -57,7 +57,7 @@ const TOP_CONTROL_HEIGHT = 38;
 const TOP_CONTROL_RADIUS = 19;
 const SHUTTER_OUTER_SIZE = 68;
 const SIDE_ACTION_SIZE = 46;
-const SHUTTER_SIDE_ACTION_GAP = 22;
+const SHUTTER_SIDE_ACTION_OFFSET = SHUTTER_OUTER_SIZE / 2 + 12 + SIDE_ACTION_SIZE;
 const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad) };
 const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
 const CAPTURE_BUTTON_STATE_IN = { duration: 160, easing: Easing.out(Easing.cubic) };
@@ -351,6 +351,7 @@ interface CaptureCardProps {
   onShutterPressOut: () => void;
   onTakePicture: () => void;
   onSaveNote: () => void;
+  onOpenNotes: () => void;
   saving: boolean;
   saveState?: 'idle' | 'saving' | 'success';
   shutterScale: Animated.Value;
@@ -393,6 +394,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onShutterPressOut,
   onTakePicture,
   onSaveNote,
+  onOpenNotes,
   saving,
   saveState = 'idle',
   shutterScale,
@@ -898,10 +900,23 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   <Reanimated.View style={animatedDecorateIconStyle}>
                     <Ionicons
                       name={showDecorateControls ? 'sparkles' : 'sparkles-outline'}
-                      size={16}
+                      size={15}
                       color={showDecorateControls ? textCardActiveIconColor : colors.captureGlassText}
                     />
                   </Reanimated.View>
+                  <Text
+                    style={[
+                      styles.decorateToggleLabel,
+                      { color: showDecorateControls ? textCardActiveIconColor : colors.captureGlassText },
+                    ]}
+                  >
+                    {t('capture.decorate', 'Decorate')}
+                  </Text>
+                  <Ionicons
+                    name={showDecorateControls ? 'chevron-up' : 'chevron-down'}
+                    size={12}
+                    color={showDecorateControls ? textCardActiveIconColor : colors.captureGlassIcon}
+                  />
                 </CaptureAnimatedPressable>
               </View>
 
@@ -1094,10 +1109,23 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   <Reanimated.View style={animatedDecorateIconStyle}>
                     <Ionicons
                       name={showDecorateControls ? 'sparkles' : 'sparkles-outline'}
-                      size={16}
+                      size={15}
                       color={showDecorateControls ? photoPreviewActiveText : photoPreviewControlText}
                     />
                   </Reanimated.View>
+                  <Text
+                    style={[
+                      styles.decorateToggleLabel,
+                      { color: showDecorateControls ? photoPreviewActiveText : photoPreviewControlText },
+                    ]}
+                  >
+                    {t('capture.decorate', 'Decorate')}
+                  </Text>
+                  <Ionicons
+                    name={showDecorateControls ? 'chevron-up' : 'chevron-down'}
+                    size={12}
+                    color={showDecorateControls ? photoPreviewActiveText : photoPreviewControlText}
+                  />
                 </CaptureAnimatedPressable>
               </View>
 
@@ -1348,26 +1376,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 </>
               )}
             </CaptureAnimatedPressable>
-            {!showCameraUnavailableState ? (
-              <CaptureToggleIconButton
-                style={[
-                  styles.cameraOverlayButton,
-                  styles.flipBtn,
-                ]}
-                active={facing === 'front'}
-                activeIconName="camera-reverse"
-                inactiveIconName="camera-reverse"
-                activeBackgroundColor={colors.primary}
-                inactiveBackgroundColor={colors.captureCameraOverlay}
-                activeBorderColor={colors.primary}
-                inactiveBorderColor={colors.captureCameraOverlayBorder}
-                activeIconColor={colors.captureCardText}
-                inactiveIconColor={colors.captureCameraOverlayText}
-                onPress={onToggleFacing}
-                iconSize={20}
-                iconRotate={10}
-              />
-            ) : null}
           </View>
         )}
       </Animated.View>
@@ -1384,69 +1392,89 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         ]}
         pointerEvents={interactionsDisabled ? 'none' : 'auto'}
       >
-        {captureMode === 'text' ? (
-          <View style={[styles.cardRestaurantPill, styles.cardRestaurantPillBelow, styles.captureMetaComposite, { borderColor: colors.captureGlassBorder }]}>
-            {isOlderIOS ? (
-              <View
-                style={[
-                  StyleSheet.absoluteFillObject,
-                  {
-                    backgroundColor: colors.captureGlassFill,
-                    borderRadius: 20,
-                  },
-                ]}
-              />
-            ) : null}
-            {/* Keep interactive content outside the native glass host to avoid intermittent child layout misses. */}
-            <GlassView
-              pointerEvents="none"
-              style={StyleSheet.absoluteFillObject}
-              glassEffectStyle="regular"
-              colorScheme={colors.captureGlassColorScheme}
-            />
-            <View style={styles.captureMetaInputWrap}>
-              <Ionicons
-                name="restaurant-outline"
-                size={14}
-                color={colors.captureGlassIcon}
-              />
-              <TextInput
-                testID="capture-restaurant-input"
-                key={`restaurant-${isSearching}`}
-                style={[styles.cardRestaurantInput, styles.cardRestaurantInputCompact, { color: colors.captureGlassText }]}
-                placeholder={t('capture.restaurantPlaceholder', 'Restaurant name (e.g. Phở Hòa)')}
-                placeholderTextColor={colors.captureGlassPlaceholder}
-                value={restaurantName}
-                onChangeText={onChangeRestaurantName}
-                maxLength={100}
-                selectionColor={colors.captureGlassText}
-              />
-            </View>
-            <View style={[styles.captureMetaDivider, { backgroundColor: colors.captureGlassBorder }]} />
-            <CaptureToggleIconButton
-              testID="capture-share-target-toggle"
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSharedTarget }}
-              accessibilityLabel={isSharedTarget ? t('shared.captureShared', 'Friends') : t('shared.capturePrivate', 'Just me')}
-              onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
-              active={isSharedTarget}
-              activeIconName="people-outline"
-              inactiveIconName="lock-closed-outline"
-              activeBackgroundColor={colors.primary}
-              inactiveBackgroundColor="rgba(255,255,255,0)"
-              activeBorderColor={colors.primary}
-              inactiveBorderColor="rgba(255,255,255,0)"
-              activeIconColor={colors.captureCardText}
-              inactiveIconColor={colors.captureGlassIcon}
-              style={styles.captureInlineShareButton}
-            />
-          </View>
-        ) : null}
         {cameraStatusText ? (
           <Text style={[styles.cameraStatusText, { color: colors.secondaryText }]}>{cameraStatusText}</Text>
         ) : null}
+        <View style={styles.belowCardMetaRow}>
+          {captureMode === 'text' ? (
+            <View style={[styles.cardRestaurantPill, styles.captureMetaComposite, { borderColor: colors.captureGlassBorder }]}>
+              {isOlderIOS ? (
+                <View
+                  style={[
+                    StyleSheet.absoluteFillObject,
+                    {
+                      backgroundColor: colors.captureGlassFill,
+                      borderRadius: Layout.pillRadius,
+                    },
+                  ]}
+                />
+              ) : null}
+              <GlassView
+                pointerEvents="none"
+                style={StyleSheet.absoluteFillObject}
+                glassEffectStyle="regular"
+                colorScheme={colors.captureGlassColorScheme}
+              />
+              <View style={styles.captureMetaInputWrap}>
+                <Ionicons
+                  name="restaurant-outline"
+                  size={13}
+                  color={colors.captureGlassIcon}
+                />
+                <TextInput
+                  testID="capture-restaurant-input"
+                  key={`restaurant-${isSearching}`}
+                  style={[styles.cardRestaurantInput, styles.cardRestaurantInputCompact, { color: colors.captureGlassText }]}
+                  placeholder={t('capture.restaurantPlaceholder', 'Restaurant name (e.g. Phở Hòa)')}
+                  placeholderTextColor={colors.captureGlassPlaceholder}
+                  value={restaurantName}
+                  onChangeText={onChangeRestaurantName}
+                  maxLength={100}
+                  selectionColor={colors.captureGlassText}
+                />
+              </View>
+              <View style={[styles.captureMetaDivider, { backgroundColor: colors.captureGlassBorder }]} />
+              <CaptureToggleIconButton
+                testID="capture-share-target-toggle"
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSharedTarget }}
+                accessibilityLabel={isSharedTarget ? t('shared.captureShared', 'Friends') : t('shared.capturePrivate', 'Just me')}
+                onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
+                active={isSharedTarget}
+                activeIconName="people-outline"
+                inactiveIconName="lock-closed-outline"
+                activeBackgroundColor="rgba(255,255,255,0)"
+                inactiveBackgroundColor="rgba(255,255,255,0)"
+                activeBorderColor="rgba(255,255,255,0)"
+                inactiveBorderColor="rgba(255,255,255,0)"
+                activeIconColor={colors.captureGlassText}
+                inactiveIconColor={colors.captureGlassIcon}
+                iconSize={15}
+                activeScale={1.015}
+                contentActiveScale={1.03}
+                style={styles.captureInlineShareButton}
+              />
+            </View>
+          ) : (
+            <View style={styles.belowCardMetaSpacer} />
+          )}
+        </View>
         {captureMode === 'camera' && !capturedPhoto ? (
           <View style={styles.belowCardShutterRow}>
+            <CaptureAnimatedPressable
+              accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
+              onPress={onOpenNotes}
+              style={[
+                styles.secondaryActionButton,
+                styles.belowCardLeadingAction,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                },
+              ]}
+            >
+              <Ionicons name="grid-outline" size={18} color={colors.text} />
+            </CaptureAnimatedPressable>
             {permissionGranted ? (
               <CaptureAnimatedPressable
                 onPressIn={onShutterPressIn}
@@ -1470,9 +1498,41 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 </Animated.View>
               </CaptureAnimatedPressable>
             ) : null}
+            {!showCameraUnavailableState && permissionGranted ? (
+              <CaptureAnimatedPressable
+                accessibilityLabel={t('capture.switchCamera', 'Switch camera')}
+                onPress={onToggleFacing}
+                style={[
+                  styles.secondaryActionButton,
+                  styles.belowCardTrailingAction,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: colors.card,
+                  },
+                ]}
+              >
+                <Ionicons name="camera-reverse" size={18} color={colors.text} />
+              </CaptureAnimatedPressable>
+            ) : (
+              <View style={[styles.belowCardSideActionSpacer, styles.belowCardTrailingAction]} />
+            )}
           </View>
         ) : capturedPhoto ? (
           <View style={[styles.belowCardShutterRow, styles.belowCardCapturedPhotoActions]}>
+            <CaptureAnimatedPressable
+              accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
+              onPress={onOpenNotes}
+              style={[
+                styles.secondaryActionButton,
+                styles.belowCardLeadingAction,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                },
+              ]}
+            >
+              <Ionicons name="grid-outline" size={18} color={colors.text} />
+            </CaptureAnimatedPressable>
             <CaptureAnimatedPressable
               testID="capture-save-button"
               onPress={onSaveNote}
@@ -1526,7 +1586,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               disabledOpacity={0.55}
               style={[
                 styles.secondaryActionButton,
-                styles.shutterTrailingAccessory,
+                styles.belowCardTrailingAction,
                 {
                   borderColor: colors.border,
                   backgroundColor: colors.card,
@@ -1538,6 +1598,20 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           </View>
         ) : (
           <View style={styles.belowCardShutterRow}>
+            <CaptureAnimatedPressable
+              accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
+              onPress={onOpenNotes}
+              style={[
+                styles.secondaryActionButton,
+                styles.belowCardLeadingAction,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                },
+              ]}
+            >
+              <Ionicons name="grid-outline" size={18} color={colors.text} />
+            </CaptureAnimatedPressable>
             <CaptureAnimatedPressable
               testID="capture-save-button"
               onPress={onSaveNote}
@@ -1582,6 +1656,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 )}
               </Reanimated.View>
             </CaptureAnimatedPressable>
+            <View style={[styles.belowCardSideActionSpacer, styles.belowCardTrailingAction]} />
           </View>
         )}
         {footerContent ? <View style={styles.footerSlot}>{footerContent}</View> : null}
@@ -1697,14 +1772,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   decorateToggleButton: {
-    width: 36,
+    width: 'auto',
+    minWidth: 0,
     height: 36,
+    paddingHorizontal: 12,
     borderRadius: 18,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 3,
+  },
+  decorateToggleLabel: {
+    ...Typography.pill,
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '700',
   },
   decorateControlsWrap: {
     overflow: 'hidden',
@@ -1735,13 +1818,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    minHeight: 40,
-    paddingHorizontal: 12,
+    minHeight: 38,
+    paddingHorizontal: 11,
     paddingVertical: 0,
     borderRadius: Layout.pillRadius,
     borderWidth: StyleSheet.hairlineWidth,
     width: '100%',
-    marginTop: 8,
     overflow: 'hidden',
     position: 'relative',
     zIndex: 3,
@@ -1750,23 +1832,24 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   captureMetaComposite: {
-    width: '92%',
+    width: '86%',
+    maxWidth: 312,
     alignSelf: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     gap: 0,
   },
   captureMetaInputWrap: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 38,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   cardRestaurantInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    lineHeight: 18,
+    lineHeight: 17,
     paddingTop: 0,
     paddingBottom: 0,
     paddingRight: 48,
@@ -1777,15 +1860,15 @@ const styles = StyleSheet.create({
   captureMetaDivider: {
     width: StyleSheet.hairlineWidth,
     alignSelf: 'stretch',
-    marginHorizontal: 6,
-    opacity: 0.65,
+    marginHorizontal: 4,
+    opacity: 0.45,
   },
   captureInlineShareButton: {
-    width: 36,
-    height: 32,
-    marginLeft: 4,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
+    width: 30,
+    height: 30,
+    marginLeft: 2,
+    borderRadius: 15,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1842,18 +1925,6 @@ const styles = StyleSheet.create({
     minWidth: 150,
     marginTop: 4,
   },
-  flipBtn: {
-    position: 'absolute',
-    top: TOP_CONTROL_INSET,
-    right: 16,
-    width: TOP_CONTROL_HEIGHT,
-    height: TOP_CONTROL_HEIGHT,
-    borderRadius: TOP_CONTROL_RADIUS,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
   libraryBtn: {
     position: 'absolute',
     top: TOP_CONTROL_INSET,
@@ -1871,18 +1942,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
-  retakeBtn: {
-    position: 'absolute',
-    top: TOP_CONTROL_INSET,
-    right: 16,
-    width: TOP_CONTROL_HEIGHT,
-    height: TOP_CONTROL_HEIGHT,
-    borderRadius: TOP_CONTROL_RADIUS,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
   permissionText: {
     ...Typography.body,
     textAlign: 'center',
@@ -1893,11 +1952,22 @@ const styles = StyleSheet.create({
   },
   belowCardSection: {
     paddingHorizontal: HORIZONTAL_PADDING + 4,
-    paddingTop: 16,
+    paddingTop: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 90,
-    gap: 12,
+    minHeight: 78,
+    gap: 10,
+  },
+  belowCardMetaRow: {
+    width: '100%',
+    alignItems: 'center',
+    minHeight: 38,
+    justifyContent: 'center',
+  },
+  belowCardMetaSpacer: {
+    width: '86%',
+    maxWidth: 312,
+    height: 38,
   },
   cameraStatusText: {
     ...Typography.pill,
@@ -1914,6 +1984,20 @@ const styles = StyleSheet.create({
   belowCardCapturedPhotoActions: {
     minHeight: 68,
   },
+  belowCardLeadingAction: {
+    position: 'absolute',
+    left: '50%',
+    marginLeft: -SHUTTER_SIDE_ACTION_OFFSET,
+  },
+  belowCardTrailingAction: {
+    position: 'absolute',
+    left: '50%',
+    marginLeft: SHUTTER_OUTER_SIZE / 2 + 12,
+  },
+  belowCardSideActionSpacer: {
+    width: SIDE_ACTION_SIZE,
+    height: SIDE_ACTION_SIZE,
+  },
   secondaryActionButton: {
     width: SIDE_ACTION_SIZE,
     height: SIDE_ACTION_SIZE,
@@ -1921,11 +2005,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  shutterTrailingAccessory: {
-    position: 'absolute',
-    left: '50%',
-    marginLeft: SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP,
   },
   shutterOuter: {
     width: SHUTTER_OUTER_SIZE,

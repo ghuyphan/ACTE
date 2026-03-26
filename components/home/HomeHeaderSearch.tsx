@@ -32,7 +32,9 @@ interface HomeHeaderSearchProps {
   onCloseSearch: () => void;
   showSearchButton?: boolean;
   showSharedButton?: boolean;
+  showNotesButton?: boolean;
   onOpenShared?: () => void;
+  onOpenNotes?: () => void;
   onToggleCaptureMode: () => void;
   captureMode: 'text' | 'camera';
   radius: number;
@@ -58,7 +60,9 @@ export default function HomeHeaderSearch({
   onCloseSearch,
   showSearchButton = true,
   showSharedButton = false,
+  showNotesButton = false,
   onOpenShared,
+  onOpenNotes,
   onToggleCaptureMode,
   captureMode,
   radius,
@@ -310,6 +314,37 @@ export default function HomeHeaderSearch({
     );
   };
 
+  const renderNotesButton = (size: 'regular' | 'large' = 'regular') => {
+    if (!showNotesButton || !onOpenNotes) {
+      return null;
+    }
+
+    const notesLabel = t('notes.viewAllButton', 'View all notes');
+
+    if (Platform.OS === 'ios') {
+      return (
+        <Host
+          matchContents
+          colorScheme={isDark ? 'dark' : 'light'}
+          style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
+        >
+          <Button onPress={onOpenNotes} modifiers={getHeaderControlModifiers(notesLabel)}>
+            {renderHeaderControlLabel('square.grid.2x2', notesLabel, size)}
+          </Button>
+        </Host>
+      );
+    }
+
+    return (
+      <Pressable
+        onPress={onOpenNotes}
+        style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
+      >
+        <Ionicons name="grid-outline" size={20} color={colors.primary} />
+      </Pressable>
+    );
+  };
+
   const renderDetachedNativeControls = () => {
     const modeLabel =
       captureMode === 'text'
@@ -326,6 +361,14 @@ export default function HomeHeaderSearch({
               label={t('shared.manageTitle', 'Friends')}
               systemImage="person.2"
               onPress={onOpenShared}
+              modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
+            />
+          ) : null}
+          {showNotesButton && onOpenNotes ? (
+            <Button
+              label={t('notes.viewAllButton', 'View all notes')}
+              systemImage="square.grid.2x2"
+              onPress={onOpenNotes}
               modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
             />
           ) : null}
@@ -412,6 +455,7 @@ export default function HomeHeaderSearch({
         <View style={styles.headerActions}>
           {Platform.OS === 'ios' ? renderSearchButton() : null}
           {renderSharedButton()}
+          {renderNotesButton()}
 
           {renderRadiusMenu()}
           {renderAndroidRadiusButton()}

@@ -305,6 +305,51 @@ describe('widgetService', () => {
     expect(result.selectionMode).toBe('nearest_memory');
   });
 
+  it('prefers nearby visual notes over plain text notes when they share the same place', () => {
+    const result = selectWidgetNote({
+      notes: [
+        buildNote({
+          id: 'recent-plain',
+          content: 'Newest plain memory',
+          latitude: 10.0,
+          longitude: 106.0,
+          createdAt: '2026-03-10T11:00:00.000Z',
+        }),
+        buildNote({
+          id: 'sticker-memory',
+          content: '',
+          hasStickers: true,
+          stickerPlacementsJson: JSON.stringify([
+            {
+              id: 'placement-1',
+              x: 0.5,
+              y: 0.5,
+              scale: 1,
+              rotation: 0,
+              zIndex: 1,
+              opacity: 1,
+              asset: {
+                id: 'asset-1',
+                localUri: 'file:///mock-documents/stickers/asset-1.png',
+                mimeType: 'image/png',
+                width: 120,
+                height: 120,
+              },
+            },
+          ]),
+          latitude: 10.0,
+          longitude: 106.0,
+          createdAt: '2026-03-10T10:00:00.000Z',
+        }),
+      ],
+      currentLocation: { latitude: 10.0, longitude: 106.0 },
+      referenceDate: new Date('2026-03-10T12:00:00'),
+    });
+
+    expect(result.selectedNote?.id).toBe('sticker-memory');
+    expect(result.selectionMode).toBe('nearest_memory');
+  });
+
   it('keeps personal content ahead of friend posts when personal notes are eligible', () => {
     const result = selectWidgetNote({
       notes: [

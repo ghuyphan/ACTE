@@ -119,6 +119,7 @@ export default function HomeScreen() {
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [sharedManageSheetVersion, setSharedManageSheetVersion] = useState(0);
+  const [pendingSavedNoteScrollTargetId, setPendingSavedNoteScrollTargetId] = useState<string | null>(null);
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -310,6 +311,40 @@ export default function HomeScreen() {
     [clearInlineSaveTimers, finalizeSavedCapture, reduceMotionEnabled, releaseSuppressedHomeNoteId]
   );
 
+  const queueScrollToSavedNote = useCallback((noteId?: string | null) => {
+    if (!noteId) {
+      return;
+    }
+
+    setPendingSavedNoteScrollTargetId(noteId);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingSavedNoteScrollTargetId || suppressedHomeNoteIds.includes(pendingSavedNoteScrollTargetId)) {
+      return;
+    }
+
+    const targetIndex = archiveFeedItems.findIndex(
+      (item) => item.kind === 'note' && item.id === pendingSavedNoteScrollTargetId
+    );
+    if (targetIndex < 0) {
+      return;
+    }
+
+    const scheduledTargetId = pendingSavedNoteScrollTargetId;
+    requestAnimationFrame(() => {
+      if (pendingSavedNoteScrollTargetId !== scheduledTargetId) {
+        return;
+      }
+
+      flatListRef.current?.scrollToOffset({
+        offset: (targetIndex + 1) * snapHeight,
+        animated: true,
+      });
+      setPendingSavedNoteScrollTargetId((current) => (current === scheduledTargetId ? null : current));
+    });
+  }, [archiveFeedItems, pendingSavedNoteScrollTargetId, snapHeight, suppressedHomeNoteIds]);
+
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       setAppState(nextState);
@@ -493,7 +528,13 @@ export default function HomeScreen() {
     });
   }, [showAlert, t]);
 
-  const showSavedSheet = useCallback(() => {
+  const showSavedSheet = useCallback((noteId?: string | null) => {
+    const releaseSavedNote = () => {
+      if (noteId) {
+        releaseSuppressedHomeNoteId(noteId);
+      }
+    };
+
     if (remindersEnabled) {
       showAlert({
         variant: 'success',
@@ -570,6 +611,7 @@ export default function HomeScreen() {
         'capture.savedLocalMsg',
         'Your note is saved on this device. Enable reminders to get notified when you revisit this place.'
       ),
+      onClose: releaseSavedNote,
       primaryAction: {
         label: t('capture.enableReminders', 'Enable reminders'),
         onPress: promptReminderPermissionsFromDisclosure,
@@ -577,12 +619,21 @@ export default function HomeScreen() {
       secondaryAction: {
         label: t('common.done', 'Done'),
         variant: 'secondary',
+        onPress: () => {
+          queueScrollToSavedNote(noteId);
+        },
       },
     });
-  }, [remindersEnabled, requestReminderPermissions, showAlert, showDoneSheet, t]);
+  }, [queueScrollToSavedNote, releaseSuppressedHomeNoteId, remindersEnabled, requestReminderPermissions, showAlert, showDoneSheet, t]);
 
   const showSharedSaveSheet = useCallback(
-    (status: 'shared' | 'no-friends' | 'share-failed', failureMessage?: string | null) => {
+    (status: 'shared' | 'no-friends' | 'share-failed', failureMessage?: string | null, noteId?: string | null) => {
+      const releaseSavedNote = () => {
+        if (noteId) {
+          releaseSuppressedHomeNoteId(noteId);
+        }
+      };
+
       if (status === 'shared') {
         showAlert({
           variant: 'success',
@@ -606,6 +657,7 @@ export default function HomeScreen() {
             'shared.savedLocalOnlyBody',
             'Your note is saved locally. Invite a friend to start sharing moments from Home.'
           ),
+          onClose: releaseSavedNote,
           primaryAction: {
             label: t('shared.inviteFriendButton', 'Invite friend'),
             onPress: () => {
@@ -615,6 +667,9 @@ export default function HomeScreen() {
           secondaryAction: {
             label: t('common.done', 'Done'),
             variant: 'secondary',
+            onPress: () => {
+              queueScrollToSavedNote(noteId);
+            },
           },
         });
         return;
@@ -632,12 +687,16 @@ export default function HomeScreen() {
         ]
           .filter(Boolean)
           .join('\n\n'),
+        onClose: releaseSavedNote,
         primaryAction: {
           label: t('common.done', 'Done'),
+          onPress: () => {
+            queueScrollToSavedNote(noteId);
+          },
         },
       });
     },
-    [presentSharedManageSheet, showAlert, t]
+    [presentSharedManageSheet, queueScrollToSavedNote, releaseSuppressedHomeNoteId, showAlert, t]
   );
 
   const showPlusSheet = useCallback(
@@ -924,15 +983,13 @@ export default function HomeScreen() {
         } else if (shareOutcome === 'shared') {
           completeInlineSaveFlow(createdNote.id);
         } else if (shareOutcome === 'default') {
-          releaseSuppressedHomeNoteId(createdNote.id);
           setSaveButtonState('idle');
           finalizeSavedCapture();
-          showSavedSheet();
+          showSavedSheet(createdNote.id);
         } else {
-          releaseSuppressedHomeNoteId(createdNote.id);
           setSaveButtonState('idle');
           finalizeSavedCapture();
-          showSharedSaveSheet(shareOutcome, shareFailureMessage);
+          showSharedSaveSheet(shareOutcome, shareFailureMessage, createdNote.id);
         }
       } catch (error) {
         console.error('Save failed:', error);
@@ -1062,6 +1119,11 @@ export default function HomeScreen() {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     toggleCaptureMode();
   }, [toggleCaptureMode]);
+
+  const handleOpenNotes = useCallback(() => {
+    Keyboard.dismiss();
+    router.push('/notes');
+  }, [router]);
 
   const openNote = useCallback(
     (noteId: string) => {
@@ -1282,6 +1344,7 @@ export default function HomeScreen() {
         onSaveNote={() => {
           void saveNote();
         }}
+        onOpenNotes={handleOpenNotes}
         saving={saving}
         saveState={saveButtonState}
         shutterScale={shutterScale}

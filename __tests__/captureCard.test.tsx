@@ -145,6 +145,7 @@ function createCaptureCardProps(
     onShutterPressOut: () => undefined,
     onTakePicture: () => undefined,
     onSaveNote: () => undefined,
+    onOpenNotes: () => undefined,
     saving: false,
     shutterScale: animatedValue,
     cameraStatusText: null,
@@ -349,6 +350,7 @@ describe('CaptureCard doodle handle', () => {
         onShutterPressOut={() => undefined}
         onTakePicture={() => undefined}
         onSaveNote={() => undefined}
+        onOpenNotes={() => undefined}
         saving={false}
         shutterScale={new Animated.Value(1)}
         cameraStatusText={null}

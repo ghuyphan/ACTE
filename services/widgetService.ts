@@ -313,8 +313,17 @@ function hasRenderableWidgetText(note: Pick<WidgetCandidate, 'noteType' | 'text'
     return note.noteType === 'text' && typeof note.text === 'string' && note.text.trim().length > 0;
 }
 
+function hasRenderableWidgetVisuals(
+    note: Pick<WidgetCandidate, 'hasDoodle' | 'doodleStrokesJson' | 'hasStickers' | 'stickerPlacementsJson'>
+) {
+    return Boolean(
+        (note.hasDoodle && note.doodleStrokesJson) ||
+        (note.hasStickers && note.stickerPlacementsJson)
+    );
+}
+
 function isTextWidgetNote(note: WidgetCandidate) {
-    return hasRenderableWidgetText(note);
+    return note.noteType === 'text' && (hasRenderableWidgetText(note) || hasRenderableWidgetVisuals(note));
 }
 
 function isPhotoWidgetNote(note: WidgetCandidate) {
@@ -353,7 +362,28 @@ function compareNearbyWidgetNotes(
         return distanceDelta;
     }
 
+    const visualPriorityDelta = getWidgetVisualPriority(right.note) - getWidgetVisualPriority(left.note);
+    if (visualPriorityDelta !== 0) {
+        return visualPriorityDelta;
+    }
+
     return compareRecentWidgetNotes(left.note, right.note);
+}
+
+function getWidgetVisualPriority(note: Pick<WidgetCandidate, 'noteType' | 'hasDoodle' | 'hasStickers'>) {
+    if (note.noteType === 'photo') {
+        return 3;
+    }
+
+    if (note.hasStickers) {
+        return 2;
+    }
+
+    if (note.hasDoodle) {
+        return 1;
+    }
+
+    return 0;
 }
 
 function getTranslatedWidgetStrings(

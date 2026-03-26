@@ -540,6 +540,10 @@ private struct LocketWidgetEntryView: View {
             return payload.text
         }
 
+        if hasVisualOnlyTextContent {
+            return ""
+        }
+
         if !payload.memoryReminderText.isEmpty {
             return payload.memoryReminderText
         }
@@ -603,7 +607,6 @@ private struct LocketWidgetEntryView: View {
         !isAccessoryFamily &&
         !payload.isIdleState &&
         payload.hasDoodle &&
-        (payload.noteType == "photo" || !payload.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) &&
         !doodleStrokes.isEmpty
     }
 
@@ -619,6 +622,16 @@ private struct LocketWidgetEntryView: View {
         !payload.isIdleState &&
         payload.isSharedContent &&
         (!payload.authorDisplayName.isEmpty || !payload.authorInitials.isEmpty || resolvedAuthorAvatar != nil)
+    }
+
+    private var shouldPinLocationChip: Bool {
+        hasLocationEyebrow && displayText.isEmpty
+    }
+
+    private var hasVisualOnlyTextContent: Bool {
+        payload.noteType == "text" &&
+        payload.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        (shouldShowStickerOverlay || shouldShowDoodleOverlay)
     }
 
     private var textSurfaceColors: [Color] {
@@ -909,12 +922,25 @@ private struct LocketWidgetEntryView: View {
             }
 
             VStack(spacing: 0) {
-                if shouldShowAuthorChip {
-                    HStack {
-                        authorChip
-                        Spacer(minLength: 0)
+                if shouldShowAuthorChip || shouldPinLocationChip {
+                    VStack(spacing: 0) {
+                        if shouldShowAuthorChip {
+                            HStack {
+                                authorChip
+                                Spacer(minLength: 0)
+                            }
+                        }
+
+                        if shouldPinLocationChip {
+                            HStack {
+                                Spacer(minLength: 0)
+                                floatingLocationChip
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.top, shouldShowAuthorChip ? 6 : 0)
+                        }
                     }
-                    .padding(.bottom, 6)
+                    .padding(.bottom, shouldPinLocationChip ? 10 : 6)
                 }
 
                 Spacer(minLength: 0)
@@ -934,7 +960,7 @@ private struct LocketWidgetEntryView: View {
     @ViewBuilder
     private var smallTextContent: some View {
         VStack(spacing: 0) {
-            if hasLocationEyebrow {
+            if hasLocationEyebrow && !shouldPinLocationChip {
                 Text(payload.locationName)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(eyebrowTextColor)
@@ -943,15 +969,17 @@ private struct LocketWidgetEntryView: View {
                     .padding(.bottom, 8)
             }
 
-            Text(displayText)
-                .font(.system(size: fontSize, weight: .regular, design: .serif))
-                .foregroundStyle(primaryTextColor)
-                .multilineTextAlignment(.center)
-                .lineLimit(smallTextLineLimit)
-                .minimumScaleFactor(smallTextMinimumScaleFactor)
-                .allowsTightening(usesCompactSmallTextLayout)
-                .padding(.horizontal, smallTextHorizontalPadding)
-                .padding(.top, hasLocationEyebrow ? 2 : 10)
+            if !displayText.isEmpty {
+                Text(displayText)
+                    .font(.system(size: fontSize, weight: .regular, design: .serif))
+                    .foregroundStyle(primaryTextColor)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(smallTextLineLimit)
+                    .minimumScaleFactor(smallTextMinimumScaleFactor)
+                    .allowsTightening(usesCompactSmallTextLayout)
+                    .padding(.horizontal, smallTextHorizontalPadding)
+                    .padding(.top, hasLocationEyebrow ? 2 : 10)
+            }
         }
     }
 
@@ -981,12 +1009,14 @@ private struct LocketWidgetEntryView: View {
                         .padding(.bottom, 12)
                 }
 
-                Text(displayText)
-                    .font(.system(size: fontSize, weight: .regular, design: .serif))
-                    .foregroundStyle(primaryTextColor)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if !displayText.isEmpty {
+                    Text(displayText)
+                        .font(.system(size: fontSize, weight: .regular, design: .serif))
+                        .foregroundStyle(primaryTextColor)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 Spacer(minLength: 18)
 
@@ -1058,6 +1088,12 @@ private struct LocketWidgetEntryView: View {
             : Color(red: 0.44, green: 0.36, blue: 0.30)
     }
 
+    private var floatingLocationChipBackgroundColor: Color {
+        hasPhotoBackground
+            ? Color.black.opacity(0.28)
+            : Color.white.opacity(0.72)
+    }
+
     private var badgeBackgroundColor: Color {
         hasPhotoBackground
             ? Color.white.opacity(0.18)
@@ -1077,6 +1113,17 @@ private struct LocketWidgetEntryView: View {
             .padding(.horizontal, isLarge ? 12 : 10)
             .padding(.vertical, isLarge ? 6 : 5)
             .background(badgeBackgroundColor)
+            .clipShape(Capsule())
+    }
+
+    private var floatingLocationChip: some View {
+        Text(payload.locationName)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(eyebrowTextColor)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(floatingLocationChipBackgroundColor)
             .clipShape(Capsule())
     }
 

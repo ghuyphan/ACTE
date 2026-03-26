@@ -332,8 +332,8 @@ describe('HomeScreen doodle save flow', () => {
     }));
   });
 
-  it('clears the capture card before showing the local save sheet', async () => {
-    const { getByTestId } = render(<HomeScreen />);
+  it('keeps Home anchored on the capture card while the local save sheet is open', async () => {
+    const { getByTestId, queryByText } = render(<HomeScreen />);
 
     fireEvent.press(getByTestId('capture-save-button'));
 
@@ -351,6 +351,7 @@ describe('HomeScreen doodle save flow', () => {
 
     expect(mockGetDoodleSnapshot).toHaveBeenCalled();
     const createdInput = mockCreateNote.mock.calls[0]?.[0];
+    expect(queryByText(createdInput.id)).toBeNull();
     expect(mockSaveNoteDoodle).toHaveBeenCalledWith(
       createdInput.id,
       JSON.stringify([{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }])
@@ -363,6 +364,42 @@ describe('HomeScreen doodle save flow', () => {
     expect(mockResetDoodle).toHaveBeenCalled();
     expect(mockResetStickers).toHaveBeenCalled();
     expect(mockScrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: false });
+
+    act(() => {
+      mockShowAlert.mock.calls[0]?.[0]?.onClose?.();
+    });
+
+    await waitFor(() => {
+      expect(queryByText(createdInput.id)).not.toBeNull();
+    });
+  });
+
+  it('scrolls to the newly saved note after dismissing the local save sheet with Done', async () => {
+    const { getByTestId } = render(<HomeScreen />);
+
+    fireEvent.press(getByTestId('capture-save-button'));
+
+    await waitFor(() => {
+      expect(mockCreateNote).toHaveBeenCalledTimes(1);
+    });
+
+    const savedAlert = mockShowAlert.mock.calls[0]?.[0];
+
+    act(() => {
+      savedAlert?.onClose?.();
+    });
+
+    act(() => {
+      savedAlert?.secondaryAction?.onPress?.();
+    });
+
+    await waitFor(() => {
+      expect(mockScrollToOffset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          animated: true,
+        })
+      );
+    });
   });
 
   it('allows saving a doodle-only text note', async () => {
