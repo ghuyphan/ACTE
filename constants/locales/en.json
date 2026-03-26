@@ -75,7 +75,15 @@
         "photoLibraryPermissionTitle": "Photo access needed",
         "photoLibraryPermissionMsg": "Allow photo library access so you can import an image into this note.",
         "photoLibraryPermissionSettingsMsg": "Photo library access is blocked for Noto. Open Settings to import from your library.",
-        "photoImportFailed": "We could not import that photo right now."
+        "photoImportFailed": "We could not import that photo right now.",
+        "stickerPasteHint": "Long press to paste a sticker from your clipboard.",
+        "clipboardStickerRequiresUpdateTitle": "Update required",
+        "clipboardStickerRequiresUpdateMsg": "Clipboard sticker paste needs the latest app build. Restart the iOS app after rebuilding to use this.",
+        "clipboardStickerUnavailableTitle": "No sticker to paste",
+        "clipboardStickerUnavailableMsg": "Copy a transparent sticker image first, then long press again to paste it.",
+        "clipboardStickerUnsupported": "We could not read that clipboard image right now.",
+        "clipboardStickerStorageUnavailable": "Sticker storage is unavailable on this device.",
+        "clipboardStickerFailed": "We could not paste that sticker right now."
     },
     "map": {
         "photoNote": "Photo Note",

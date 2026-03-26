@@ -1,5 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView } from 'expo-camera';
+import {
+  cacheDirectory as fileSystemCacheDirectory,
+  deleteAsync as deleteFileAsync,
+  EncodingType,
+  writeAsStringAsync,
+} from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassView } from '../ui/GlassView';
@@ -63,6 +69,8 @@ const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad)
 const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
 const CAPTURE_BUTTON_STATE_IN = { duration: 160, easing: Easing.out(Easing.cubic) };
 const CAPTURE_BUTTON_STATE_OUT = { duration: 210, easing: Easing.out(Easing.cubic) };
+const CLIPBOARD_STICKER_PREFIX = 'data:image/png;base64,';
+const STICKER_LONG_PRESS_SUPPRESSION_WINDOW_MS = 900;
 const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
 const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Note about this place...',
@@ -82,6 +90,33 @@ function getCaptureTextPlaceholderVariants(t: TFunction) {
   return Array.isArray(translated) && translated.every((item) => typeof item === 'string')
     ? translated
     : DEFAULT_CAPTURE_TEXT_PLACEHOLDERS;
+}
+
+function getClipboardStickerBase64(data: string) {
+  return data.startsWith(CLIPBOARD_STICKER_PREFIX)
+    ? data.slice(CLIPBOARD_STICKER_PREFIX.length)
+    : null;
+}
+
+type ClipboardModule = {
+  getImageAsync: (options: { format: 'png' | 'jpeg'; jpegQuality?: number }) => Promise<{
+    data: string;
+    size: {
+      width: number;
+      height: number;
+    };
+  } | null>;
+  hasImageAsync: () => Promise<boolean>;
+};
+
+async function loadClipboardModule() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('expo-clipboard') as ClipboardModule;
+  } catch (error) {
+    console.warn('Clipboard module unavailable in this build:', error);
+    return null;
+  }
 }
 
 export interface CaptureCardHandle {
@@ -459,6 +494,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const saveSuccessProgress = useSharedValue(saveState === 'success' ? 1 : 0);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
+  const stickerLongPressTimestampRef = useRef(0);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
   const activeTextPlaceholder =
     placeholderVariants[textPlaceholderIndex % placeholderVariants.length] ??
@@ -732,6 +768,22 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
     setTextDoodleStrokes([]);
   }, [isPhotoDoodleSurface]);
+  const applyImportedSticker = useCallback((nextPlacement: NoteStickerPlacement) => {
+    if (isPhotoDoodleSurface) {
+      setPhotoStickerPlacements((current) => [...current, nextPlacement]);
+      setPhotoSelectedStickerId(nextPlacement.id);
+      setPhotoStickerModeEnabled(true);
+      setPhotoDoodleModeEnabled(false);
+      setPhotoDecorateMenuExpanded(true);
+      return;
+    }
+
+    setTextStickerPlacements((current) => [...current, nextPlacement]);
+    setTextSelectedStickerId(nextPlacement.id);
+    setTextStickerModeEnabled(true);
+    setTextDoodleModeEnabled(false);
+    setTextDecorateMenuExpanded(true);
+  }, [isPhotoDoodleSurface]);
   const handleImportSticker = useCallback(async () => {
     if (!ENABLE_PHOTO_STICKERS || importingSticker) {
       return;
@@ -777,18 +829,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         name: result.assets[0].fileName,
       });
       const nextPlacement = createStickerPlacement(importedAsset, stickerPlacements);
-      if (isPhotoDoodleSurface) {
-        setPhotoStickerPlacements((current) => [...current, nextPlacement]);
-        setPhotoSelectedStickerId(nextPlacement.id);
-        setPhotoStickerModeEnabled(true);
-        setPhotoDoodleModeEnabled(false);
-        return;
-      }
-
-      setTextStickerPlacements((current) => [...current, nextPlacement]);
-      setTextSelectedStickerId(nextPlacement.id);
-      setTextStickerModeEnabled(true);
-      setTextDoodleModeEnabled(false);
+      applyImportedSticker(nextPlacement);
     } catch (error) {
       console.warn('Sticker import failed:', error);
       Alert.alert(
@@ -800,9 +841,86 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     } finally {
       setImportingSticker(false);
     }
-  }, [importingSticker, isPhotoDoodleSurface, stickerPlacements, t]);
+  }, [applyImportedSticker, importingSticker, stickerPlacements, t]);
+  const handlePasteStickerFromClipboard = useCallback(async () => {
+    if (!ENABLE_PHOTO_STICKERS || importingSticker) {
+      return;
+    }
+
+    stickerLongPressTimestampRef.current = Date.now();
+    setImportingSticker(true);
+    let clipboardTempUri: string | null = null;
+
+    try {
+      const clipboardModule = await loadClipboardModule();
+      if (!clipboardModule?.hasImageAsync || !clipboardModule?.getImageAsync) {
+        Alert.alert(
+          t('capture.clipboardStickerRequiresUpdateTitle', 'Update required'),
+          t(
+            'capture.clipboardStickerRequiresUpdateMsg',
+            'Clipboard sticker paste needs the latest app build. Restart the iOS app after rebuilding to use this.'
+          )
+        );
+        return;
+      }
+
+      const hasImage = await clipboardModule.hasImageAsync();
+      if (!hasImage) {
+        Alert.alert(
+          t('capture.clipboardStickerUnavailableTitle', 'No sticker to paste'),
+          t(
+            'capture.clipboardStickerUnavailableMsg',
+            'Copy a transparent sticker image first, then long press again to paste it.'
+          )
+        );
+        return;
+      }
+
+      const clipboardImage = await clipboardModule.getImageAsync({ format: 'png' });
+      const base64 = clipboardImage?.data ? getClipboardStickerBase64(clipboardImage.data) : null;
+      if (!base64) {
+        throw new Error(
+          t('capture.clipboardStickerUnsupported', 'We could not read that clipboard image right now.')
+        );
+      }
+
+      if (!fileSystemCacheDirectory) {
+        throw new Error(t('capture.clipboardStickerStorageUnavailable', 'Sticker storage is unavailable on this device.'));
+      }
+
+      clipboardTempUri = `${fileSystemCacheDirectory}clipboard-sticker-${Date.now()}.png`;
+      await writeAsStringAsync(clipboardTempUri, base64, {
+        encoding: EncodingType.Base64,
+      });
+
+      const importedAsset = await importStickerAsset({
+        uri: clipboardTempUri,
+        mimeType: 'image/png',
+        name: 'clipboard-sticker.png',
+      });
+      const nextPlacement = createStickerPlacement(importedAsset, stickerPlacements);
+      applyImportedSticker(nextPlacement);
+    } catch (error) {
+      console.warn('Sticker paste failed:', error);
+      Alert.alert(
+        t('capture.error', 'Error'),
+        error instanceof Error
+          ? error.message
+          : t('capture.clipboardStickerFailed', 'We could not paste that sticker right now.')
+      );
+    } finally {
+      if (clipboardTempUri) {
+        await deleteFileAsync(clipboardTempUri, { idempotent: true }).catch(() => undefined);
+      }
+      setImportingSticker(false);
+    }
+  }, [applyImportedSticker, importingSticker, stickerPlacements, t]);
   const handleToggleStickerMode = useCallback(() => {
     if (!ENABLE_PHOTO_STICKERS) {
+      return;
+    }
+
+    if (Date.now() - stickerLongPressTimestampRef.current < STICKER_LONG_PRESS_SUPPRESSION_WINDOW_MS) {
       return;
     }
 
@@ -1017,7 +1135,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       <View style={styles.textCardActionCluster}>
                         <CaptureToggleIconButton
                           testID="capture-sticker-toggle"
+                          accessibilityHint={t('capture.stickerPasteHint', 'Long press to paste a sticker from your clipboard.')}
                           onPress={handleToggleStickerMode}
+                          onLongPress={() => {
+                            void handlePasteStickerFromClipboard();
+                          }}
+                          delayLongPress={250}
                           active={stickerModeEnabled}
                           activeIconName="pricetags"
                           inactiveIconName="pricetags-outline"
@@ -1032,6 +1155,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         <CaptureAnimatedPressable
                           testID="capture-sticker-import"
                           onPress={handleImportSticker}
+                          onLongPress={() => {
+                            void handlePasteStickerFromClipboard();
+                          }}
+                          delayLongPress={250}
                           disabled={importingSticker}
                           disabledOpacity={0.45}
                           style={[
@@ -1079,7 +1206,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         {ENABLE_PHOTO_STICKERS ? (
                           <CaptureToggleIconButton
                             testID="capture-sticker-toggle"
+                            accessibilityHint={t('capture.stickerPasteHint', 'Long press to paste a sticker from your clipboard.')}
                             onPress={handleToggleStickerMode}
+                            onLongPress={() => {
+                              void handlePasteStickerFromClipboard();
+                            }}
+                            delayLongPress={250}
                             active={stickerModeEnabled}
                             activeIconName="pricetags"
                             inactiveIconName="pricetags-outline"
@@ -1258,7 +1390,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         <CaptureToggleIconButton
                           testID="capture-sticker-toggle"
                           accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
+                          accessibilityHint={t('capture.stickerPasteHint', 'Long press to paste a sticker from your clipboard.')}
                           onPress={handleToggleStickerMode}
+                          onLongPress={() => {
+                            void handlePasteStickerFromClipboard();
+                          }}
+                          delayLongPress={250}
                           active={stickerModeEnabled}
                           activeIconName="pricetags"
                           inactiveIconName="pricetags-outline"
@@ -1276,6 +1413,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         <CaptureAnimatedPressable
                           testID="capture-sticker-import"
                           onPress={handleImportSticker}
+                          onLongPress={() => {
+                            void handlePasteStickerFromClipboard();
+                          }}
+                          delayLongPress={250}
                           disabled={importingSticker}
                           disabledOpacity={0.45}
                           style={[
@@ -1332,7 +1473,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                           <CaptureToggleIconButton
                             testID="capture-sticker-toggle"
                             accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
+                            accessibilityHint={t('capture.stickerPasteHint', 'Long press to paste a sticker from your clipboard.')}
                             onPress={handleToggleStickerMode}
+                            onLongPress={() => {
+                              void handlePasteStickerFromClipboard();
+                            }}
+                            delayLongPress={250}
                             active={stickerModeEnabled}
                             activeIconName="pricetags"
                             inactiveIconName="pricetags-outline"

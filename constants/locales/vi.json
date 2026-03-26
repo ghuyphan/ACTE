@@ -75,7 +75,15 @@
         "photoLibraryPermissionTitle": "Cần quyền truy cập ảnh",
         "photoLibraryPermissionMsg": "Hãy cho phép truy cập thư viện ảnh để nhập ảnh vào ghi chú này.",
         "photoLibraryPermissionSettingsMsg": "Quyền truy cập thư viện ảnh của Noto đang bị chặn. Mở Cài đặt để nhập từ thư viện.",
-        "photoImportFailed": "Hiện chưa thể nhập ảnh đó."
+        "photoImportFailed": "Hiện chưa thể nhập ảnh đó.",
+        "stickerPasteHint": "Nhấn giữ để dán sticker từ khay nhớ tạm.",
+        "clipboardStickerRequiresUpdateTitle": "Cần cập nhật",
+        "clipboardStickerRequiresUpdateMsg": "Tính năng dán sticker từ khay nhớ tạm cần bản dựng ứng dụng mới nhất. Hãy build lại rồi mở lại ứng dụng iOS để dùng.",
+        "clipboardStickerUnavailableTitle": "Không có sticker để dán",
+        "clipboardStickerUnavailableMsg": "Hãy sao chép một ảnh sticker trong suốt trước, rồi nhấn giữ lại để dán.",
+        "clipboardStickerUnsupported": "Hiện chưa thể đọc ảnh đó từ khay nhớ tạm.",
+        "clipboardStickerStorageUnavailable": "Bộ nhớ sticker hiện không khả dụng trên thiết bị này.",
+        "clipboardStickerFailed": "Hiện chưa thể dán sticker đó."
     },
     "map": {
         "photoNote": "Ghi chú ảnh",

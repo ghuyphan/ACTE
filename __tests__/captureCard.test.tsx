@@ -1,6 +1,9 @@
 import React from 'react';
-import { Animated, View } from 'react-native';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { Alert, Animated, View } from 'react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { getImageAsync, hasImageAsync } from 'expo-clipboard';
+import { deleteAsync, writeAsStringAsync } from 'expo-file-system/legacy';
+import { importStickerAsset } from '../services/noteStickers';
 import CaptureCard, { type CaptureCardHandle } from '../components/home/CaptureCard';
 
 jest.mock('@expo/vector-icons', () => {
@@ -13,6 +16,22 @@ jest.mock('@expo/vector-icons', () => {
 
 jest.mock('expo-camera', () => ({
   CameraView: () => null,
+}));
+
+jest.mock('expo-clipboard', () => ({
+  __esModule: true,
+  hasImageAsync: jest.fn(),
+  getImageAsync: jest.fn(),
+}));
+
+jest.mock('expo-file-system/legacy', () => ({
+  __esModule: true,
+  cacheDirectory: 'file:///cache/',
+  EncodingType: {
+    Base64: 'base64',
+  },
+  writeAsStringAsync: jest.fn(),
+  deleteAsync: jest.fn(),
 }));
 
 jest.mock('expo-image', () => ({
@@ -87,6 +106,30 @@ jest.mock('../components/NoteStickerCanvas', () => {
     },
   };
 });
+
+jest.mock('../services/noteStickers', () => ({
+  bringStickerPlacementToFront: jest.fn((placements: any[]) => placements),
+  createStickerPlacement: jest.fn((asset: any, existingPlacements: any[] = []) => ({
+    id: `placement-${existingPlacements.length + 1}`,
+    assetId: asset.id,
+    x: 0.5,
+    y: 0.5,
+    scale: 1,
+    rotation: 0,
+    zIndex: existingPlacements.length + 1,
+    opacity: 1,
+    asset,
+  })),
+  duplicateStickerPlacement: jest.fn((placements: any[]) => placements),
+  importStickerAsset: jest.fn(),
+  updateStickerPlacementTransform: jest.fn((placements: any[]) => placements),
+}));
+
+const mockClipboardHasImageAsync = hasImageAsync as jest.MockedFunction<typeof hasImageAsync>;
+const mockClipboardGetImageAsync = getImageAsync as jest.MockedFunction<typeof getImageAsync>;
+const mockWriteAsStringAsync = writeAsStringAsync as jest.MockedFunction<typeof writeAsStringAsync>;
+const mockDeleteAsync = deleteAsync as jest.MockedFunction<typeof deleteAsync>;
+const mockImportStickerAsset = importStickerAsset as jest.MockedFunction<typeof importStickerAsset>;
 
 function createCaptureCardProps(
   ref: React.RefObject<CaptureCardHandle | null>,
@@ -167,6 +210,24 @@ function renderCaptureCard(
 }
 
 describe('CaptureCard doodle handle', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockWriteAsStringAsync.mockResolvedValue(undefined);
+    mockDeleteAsync.mockResolvedValue(undefined);
+    mockImportStickerAsset.mockResolvedValue({
+      id: 'sticker-asset-1',
+      ownerUid: '__local__',
+      localUri: 'file:///documents/stickers/sticker-asset-1.png',
+      remotePath: null,
+      mimeType: 'image/png',
+      width: 120,
+      height: 120,
+      createdAt: '2026-03-26T00:00:00.000Z',
+      updatedAt: null,
+      source: 'import',
+    });
+  });
+
   it('shows the restaurant field by default in text mode', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const { getByTestId } = renderCaptureCard(ref, {
@@ -380,5 +441,78 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(handleChangeShareTarget).toHaveBeenCalledWith('shared');
+  });
+
+  it('pastes a sticker from the clipboard on long press in text mode', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardGetImageAsync.mockResolvedValue({
+      data: 'data:image/png;base64,ZmFrZS1zdGlja2Vy',
+      size: { width: 120, height: 120 },
+    });
+
+    const { getByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    await act(async () => {
+      fireEvent(getByTestId('capture-sticker-toggle'), 'longPress');
+    });
+
+    await waitFor(() => {
+      expect(mockWriteAsStringAsync).toHaveBeenCalledWith(
+        expect.stringContaining('file:///cache/clipboard-sticker-'),
+        'ZmFrZS1zdGlja2Vy',
+        { encoding: 'base64' }
+      );
+    });
+
+    expect(mockImportStickerAsset).toHaveBeenCalledWith({
+      uri: expect.stringContaining('file:///cache/clipboard-sticker-'),
+      mimeType: 'image/png',
+      name: 'clipboard-sticker.png',
+    });
+    expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+  });
+
+  it('pastes a sticker from the clipboard on long press in photo mode', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardGetImageAsync.mockResolvedValue({
+      data: 'data:image/png;base64,cGhvdG8tc3RpY2tlcg==',
+      size: { width: 140, height: 140 },
+    });
+
+    const { getByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///photo.jpg',
+    });
+
+    await act(async () => {
+      fireEvent(getByTestId('capture-sticker-toggle'), 'longPress');
+    });
+
+    await waitFor(() => {
+      expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+    });
+  });
+
+  it('shows a friendly alert when there is no clipboard image to paste', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    mockClipboardHasImageAsync.mockResolvedValue(false);
+
+    const { getByTestId } = renderCaptureCard(ref);
+
+    await act(async () => {
+      fireEvent(getByTestId('capture-sticker-toggle'), 'longPress');
+    });
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'No sticker to paste',
+        'Copy a transparent sticker image first, then long press again to paste it.'
+      );
+    });
   });
 });
