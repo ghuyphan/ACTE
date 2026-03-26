@@ -245,8 +245,8 @@ export default function MapPreviewCard({
   );
 
   const wrapperAnimatedStyle = useAnimatedStyle(() => {
-    const liftedOffset = interpolate(modeProgress.value, [0, 1], [0, -8]);
-    const hiddenOffset = interpolate(visibilityProgress.value, [0, 1], [20, 0]);
+    const liftedOffset = interpolate(modeProgress.value, [0, 1], [0, -5]);
+    const hiddenOffset = interpolate(visibilityProgress.value, [0, 1], [16, 0]);
     return {
       transform: [
         {
@@ -260,7 +260,7 @@ export default function MapPreviewCard({
   });
 
   const highlightAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(modeProgress.value, [0, 1], [0.02, 0.09]),
+    opacity: interpolate(modeProgress.value, [0, 1], [0.015, 0.055]),
   }));
 
   const contentAnimatedStyle = useAnimatedStyle(() => ({
@@ -395,7 +395,7 @@ export default function MapPreviewCard({
                           <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
                             {item.note.locationName || t('map.unknownLocation', 'Unknown')}
                           </Text>
-                          <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={2}>
+                          <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={1}>
                             {cardPreview}
                           </Text>
                           <View style={styles.metaRow}>
@@ -486,82 +486,82 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     paddingHorizontal: mapOverlayTokens.overlayPadding,
-    paddingTop: mapOverlayTokens.overlayPadding,
+    paddingTop: mapOverlayTokens.overlayPadding + 1,
     paddingBottom: mapOverlayTokens.overlayPadding,
   },
   modeHighlight: {
     borderRadius: mapOverlayTokens.overlayRadius,
   },
   previewList: {
-    marginBottom: 8,
+    marginBottom: 6,
   },
   previewListContent: {
     gap: 0,
   },
   previewPage: {
-    minHeight: 68,
+    minHeight: 64,
   },
   previewPageInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: mapOverlayTokens.overlayGap,
-    minHeight: 68,
+    minHeight: 64,
   },
   copyWrap: {
     flex: 1,
     minWidth: 0,
   },
   photoThumb: {
-    width: 60,
-    height: 60,
-    borderRadius: 12,
+    width: 54,
+    height: 54,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   metaRow: {
-    marginTop: 6,
+    marginTop: 5,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
   metaText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
     fontFamily: 'System',
   },
   title: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
-    marginBottom: 2,
+    marginBottom: 3,
     fontFamily: 'System',
   },
   content: {
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 17,
     fontFamily: 'System',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   indexLabelWrap: {
     minWidth: 34,
   },
   indexText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     fontFamily: 'System',
   },
   actionButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
   },
   actionText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     fontFamily: 'System',
   },

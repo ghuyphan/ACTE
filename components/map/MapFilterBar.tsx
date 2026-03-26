@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../ui/GlassView';
-import { useEffect, useMemo } from 'react';
+import { ReactNode, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Reanimated, {
@@ -29,6 +29,7 @@ interface MapFilterBarProps {
   top?: number;
   countLabel: string;
   reduceMotionEnabled: boolean;
+  headerAccessory?: ReactNode;
 }
 
 interface FilterChipProps {
@@ -46,7 +47,7 @@ function FilterChip({ label, active, onPress, icon, testID, reduceMotionEnabled 
   const { colors, isDark } = useTheme();
   const activeProgress = useSharedValue(active ? 1 : 0);
   const pressScale = useSharedValue(1);
-  const inactiveChipBackground = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.72)';
+  const inactiveChipBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.62)';
   const inactiveChipBorderColor = getOverlayBorderColor(isDark);
 
   useEffect(() => {
@@ -123,6 +124,7 @@ export default function MapFilterBar({
   top = 0,
   countLabel,
   reduceMotionEnabled,
+  headerAccessory,
 }: MapFilterBarProps) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -200,19 +202,27 @@ export default function MapFilterBar({
         ) : null}
 
         <View style={styles.content}>
-          <View style={styles.countRow}>
-          <Ionicons name="pin" size={14} color={colors.primary} />
-          <View style={styles.countLabelWrap}>
-            <Reanimated.Text
-              key={countLabel}
-              testID="map-inline-count"
-              entering={getMapOverlayEnter(reduceMotionEnabled)}
-              exiting={getMapOverlayExit(reduceMotionEnabled)}
-              style={[styles.countText, { color: colors.text }]}
-            >
-              {countLabel}
-            </Reanimated.Text>
-          </View>
+          <View style={styles.headerRow}>
+            <View style={styles.countRow}>
+              <View style={[styles.countDot, { backgroundColor: colors.primary }]} />
+              <View style={styles.countLabelWrap}>
+                <Reanimated.Text
+                  key={countLabel}
+                  testID="map-inline-count"
+                  entering={getMapOverlayEnter(reduceMotionEnabled)}
+                  exiting={getMapOverlayExit(reduceMotionEnabled)}
+                  style={[styles.countText, { color: colors.text }]}
+                >
+                  {countLabel}
+                </Reanimated.Text>
+              </View>
+            </View>
+
+            {headerAccessory ? (
+              <View style={styles.headerAccessoryWrap}>
+                {headerAccessory}
+              </View>
+            ) : null}
           </View>
 
           <ScrollView
@@ -253,39 +263,55 @@ const styles = StyleSheet.create({
     padding: mapOverlayTokens.overlayPadding,
     gap: mapOverlayTokens.overlayGap,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
   countRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
+    minWidth: 0,
+  },
+  headerAccessoryWrap: {
+    flexShrink: 0,
+  },
+  countDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
   },
   countLabelWrap: {
     minHeight: 18,
     justifyContent: 'center',
   },
   countText: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '600',
     fontFamily: 'System',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     paddingRight: 2,
   },
   chipOuter: {
-    minHeight: 34,
+    minHeight: 32,
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 999,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     borderWidth: 1,
   },
   chipIcon: {
-    marginRight: 6,
+    marginRight: 5,
   },
   chipText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     fontFamily: 'System',
   },

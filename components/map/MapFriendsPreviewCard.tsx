@@ -220,7 +220,7 @@ export default function MapFriendsPreviewCard({
                       <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
                         {item.placeName || t('shared.sharedNow', 'Shared now')}
                       </Text>
-                      <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={2}>
+                      <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={1}>
                         {previewText}
                       </Text>
                       <View style={styles.metaRow}>
@@ -305,33 +305,33 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     paddingHorizontal: mapOverlayTokens.overlayPadding,
-    paddingTop: mapOverlayTokens.overlayPadding,
+    paddingTop: mapOverlayTokens.overlayPadding + 1,
     paddingBottom: mapOverlayTokens.overlayPadding,
   },
   previewList: {
-    marginBottom: 8,
+    marginBottom: 6,
   },
   previewListContent: {
     gap: 0,
   },
   previewPage: {
-    minHeight: 68,
+    minHeight: 64,
   },
   previewPageInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: mapOverlayTokens.overlayGap,
-    minHeight: 68,
+    minHeight: 64,
   },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarLabel: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
   },
   copyWrap: {
@@ -339,25 +339,25 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   metaRow: {
-    marginTop: 6,
+    marginTop: 5,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
   },
   metaText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '500',
     fontFamily: 'System',
   },
   title: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
-    marginBottom: 2,
+    marginBottom: 3,
     fontFamily: 'System',
   },
   content: {
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 17,
     fontFamily: 'System',
   },
   footer: {
@@ -370,18 +370,18 @@ const styles = StyleSheet.create({
     minWidth: 34,
   },
   indexText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     fontFamily: 'System',
   },
   actionButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
   },
   actionText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     fontFamily: 'System',
   },

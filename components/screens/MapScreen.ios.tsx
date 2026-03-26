@@ -16,7 +16,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapCanvas from '../map/MapCanvas';
 import MapFilterBar from '../map/MapFilterBar';
 import MapFriendsPreviewCard from '../map/MapFriendsPreviewCard';
-import { getMapLayoutTransition, mapMotionPressTiming } from '../map/mapMotion';
+import {
+  getMapLayoutTransition,
+  mapMotionDurations,
+  mapMotionEasing,
+  mapMotionPressTiming,
+} from '../map/mapMotion';
 import MapPreviewCard from '../map/MapPreviewCard';
 import MapStatusCard from '../map/MapStatusCard';
 import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from '../map/overlayTokens';
@@ -59,6 +64,7 @@ export default function MapScreenIOS() {
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const friendsScanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fabScale = useSharedValue(1);
+  const friendsChipActiveProgress = useSharedValue(0);
   const friendsScanProgress = useSharedValue(0);
 
   const {
@@ -186,6 +192,13 @@ export default function MapScreenIOS() {
 
     setActiveFriendPostId(friendPosts[0].id);
   }, [activeFriendPostId, friendPosts, showFriendsPreview]);
+
+  useEffect(() => {
+    friendsChipActiveProgress.value = withTiming(friendsPreviewVisible ? 1 : 0, {
+      duration: reduceMotionEnabled ? mapMotionDurations.fast : mapMotionDurations.standard,
+      easing: mapMotionEasing.standard,
+    });
+  }, [friendsChipActiveProgress, friendsPreviewVisible, reduceMotionEnabled]);
 
   const handleOpenPreview = useCallback(() => {
     if (selectedNote) {
@@ -420,16 +433,36 @@ export default function MapScreenIOS() {
   const fabAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: fabScale.value }],
   }));
+  const friendsChipAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: 1 + interpolate(friendsChipActiveProgress.value, [0, 1], [0, 0.018]) },
+      { translateY: interpolate(friendsChipActiveProgress.value, [0, 1], [0, -1]) },
+    ],
+  }));
+  const friendsChipTintStyle = useAnimatedStyle(() => ({
+    opacity: friendsChipActiveProgress.value,
+  }));
+  const friendsChipContentAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + interpolate(friendsChipActiveProgress.value, [0, 1], [0, 0.02]) }],
+  }));
+  const friendsChipIconAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: 0.92 + friendsChipActiveProgress.value * 0.08,
+    transform: [{ scale: 1 + interpolate(friendsChipActiveProgress.value, [0, 1], [0, 0.08]) }],
+  }));
+  const friendsChipDotAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: friendsChipActiveProgress.value,
+    transform: [{ scale: interpolate(friendsChipActiveProgress.value, [0, 1], [0.55, 1]) }],
+  }));
   const friendsScanBackdropStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(friendsScanProgress.value, [0, 0.08, 1], [0, 0.22, 0]),
+    opacity: interpolate(friendsScanProgress.value, [0, 0.08, 1], [0, 0.12, 0]),
   }));
   const friendsScanRingStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(friendsScanProgress.value, [0, 0.16, 1], [0, 0.24, 0]),
-    transform: [{ scale: interpolate(friendsScanProgress.value, [0, 1], [0.7, 2.8]) }],
+    opacity: interpolate(friendsScanProgress.value, [0, 0.16, 1], [0, 0.16, 0]),
+    transform: [{ scale: interpolate(friendsScanProgress.value, [0, 1], [0.82, 2.35]) }],
   }));
   const friendsScanCoreStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(friendsScanProgress.value, [0, 0.2, 1], [0, 0.18, 0]),
-    transform: [{ scale: interpolate(friendsScanProgress.value, [0, 1], [0.82, 1.7]) }],
+    opacity: interpolate(friendsScanProgress.value, [0, 0.2, 1], [0, 0.1, 0]),
+    transform: [{ scale: interpolate(friendsScanProgress.value, [0, 1], [0.88, 1.45]) }],
   }));
 
   if (loading) {
@@ -476,50 +509,87 @@ export default function MapScreenIOS() {
           onToggleFavorites={handleToggleFavorites}
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
-        />
-
-        {hasFriendLayer ? (
-          <Pressable
-            testID="map-friends-chip"
-            onPress={handleOpenFriendsLayer}
-            style={({ pressed }) => [
-              styles.friendsChipPressable,
-              {
-                opacity: pressed ? 0.94 : 1,
-                transform: [{ scale: pressed ? 0.99 : 1 }],
-              },
-            ]}
-          >
-            <View style={[styles.friendsChip, { borderColor: getOverlayBorderColor(isDark) }]}>
-              <GlassView
-                pointerEvents="none"
-                style={StyleSheet.absoluteFillObject}
-                glassEffectStyle="regular"
-                colorScheme={isDark ? 'dark' : 'light'}
-              />
-              {isOlderIOS ? (
-                <View
+          headerAccessory={
+            hasFriendLayer ? (
+              <Pressable
+                testID="map-friends-chip"
+                onPress={handleOpenFriendsLayer}
+                style={({ pressed }) => [
+                  styles.friendsChipPressable,
+                  {
+                    opacity: pressed ? 0.94 : 1,
+                    transform: [{ scale: pressed ? 0.98 : 1 }],
+                  },
+                ]}
+              >
+                <Reanimated.View
                   style={[
-                    StyleSheet.absoluteFillObject,
+                    styles.friendsChip,
+                    friendsChipAnimatedStyle,
                     {
-                      borderRadius: 18,
-                      backgroundColor: getOverlayFallbackColor(isDark),
+                      borderColor: friendsPreviewVisible ? `${colors.primary}55` : getOverlayBorderColor(isDark),
                     },
                   ]}
-                />
-              ) : null}
+                >
+                  <Reanimated.View
+                    pointerEvents="none"
+                    style={[
+                      StyleSheet.absoluteFillObject,
+                      {
+                        backgroundColor: isDark ? 'rgba(255,193,7,0.16)' : 'rgba(255,193,7,0.14)',
+                      },
+                      friendsChipTintStyle,
+                    ]}
+                  />
+                  <GlassView
+                    pointerEvents="none"
+                    style={StyleSheet.absoluteFillObject}
+                    glassEffectStyle="regular"
+                    colorScheme={isDark ? 'dark' : 'light'}
+                  />
+                  {isOlderIOS ? (
+                    <View
+                      style={[
+                        StyleSheet.absoluteFillObject,
+                        {
+                          borderRadius: 16,
+                          backgroundColor: friendsPreviewVisible
+                            ? (isDark ? 'rgba(48,38,12,0.72)' : 'rgba(255,247,214,0.92)')
+                            : getOverlayFallbackColor(isDark),
+                        },
+                      ]}
+                    />
+                  ) : null}
 
-              <View style={styles.friendsChipInner}>
-                <View style={[styles.friendsChipIconWrap, { backgroundColor: `${colors.primary}20` }]}>
-                  <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
-                </View>
-                <Text style={[styles.friendsChipLabel, { color: colors.text }]}>
-                  {t('map.friendsChip', 'Friends')}
-                </Text>
-              </View>
-            </View>
-          </Pressable>
-        ) : null}
+                  <Reanimated.View style={[styles.friendsChipInner, friendsChipContentAnimatedStyle]}>
+                    <Reanimated.View style={friendsChipIconAnimatedStyle}>
+                      <Ionicons
+                        name={friendsPreviewVisible ? 'sparkles' : 'sparkles-outline'}
+                        size={13}
+                        color={colors.primary}
+                      />
+                    </Reanimated.View>
+                    <Text
+                      style={[
+                        styles.friendsChipLabel,
+                        { color: friendsPreviewVisible ? colors.primary : colors.text },
+                      ]}
+                    >
+                      {t('map.friendsChip', 'Friends')}
+                    </Text>
+                    <Reanimated.View
+                      style={[
+                        styles.friendsChipActiveDot,
+                        { backgroundColor: colors.primary },
+                        friendsChipDotAnimatedStyle,
+                      ]}
+                    />
+                  </Reanimated.View>
+                </Reanimated.View>
+              </Pressable>
+            ) : null
+          }
+        />
       </Reanimated.View>
 
       <Reanimated.View
@@ -692,36 +762,32 @@ const styles = StyleSheet.create({
     left: 14,
     right: 72,
     zIndex: 12,
-    gap: 10,
   },
   friendsChipPressable: {
     alignSelf: 'flex-start',
   },
   friendsChip: {
-    minHeight: 38,
-    borderRadius: 18,
+    minHeight: 32,
+    borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    ...mapOverlayTokens.overlayShadow,
   },
   friendsChipInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  friendsChipIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   friendsChipLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     fontFamily: 'System',
+  },
+  friendsChipActiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
   },
   emptyOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -741,15 +807,15 @@ const styles = StyleSheet.create({
   },
   scanRing: {
     position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    borderWidth: 2,
+    width: 154,
+    height: 154,
+    borderRadius: 77,
+    borderWidth: 1.5,
   },
   scanCore: {
     position: 'absolute',
-    width: 132,
-    height: 132,
-    borderRadius: 66,
+    width: 116,
+    height: 116,
+    borderRadius: 58,
   },
 });
