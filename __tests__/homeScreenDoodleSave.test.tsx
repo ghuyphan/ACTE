@@ -1,19 +1,23 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
-const mockCreateNote = jest.fn(async (input?: any) => ({
-  id: input?.id ?? 'note-1',
-  type: 'text',
-  content: 'A doodled note',
-  locationName: 'Mock Place',
-  latitude: 10.77,
-  longitude: 106.69,
-  radius: 150,
-  isFavorite: false,
-  hasDoodle: false,
-  createdAt: '2026-03-20T00:00:00.000Z',
-  updatedAt: null,
-}));
+const mockCreateNote = jest.fn(async (input?: any) => {
+  const createdNote = {
+    id: input?.id ?? 'note-1',
+    type: input?.type ?? 'text',
+    content: input?.content ?? 'A doodled note',
+    locationName: input?.locationName ?? 'Mock Place',
+    latitude: input?.latitude ?? 10.77,
+    longitude: input?.longitude ?? 106.69,
+    radius: input?.radius ?? 150,
+    isFavorite: false,
+    hasDoodle: input?.hasDoodle ?? false,
+    createdAt: '2026-03-20T00:00:00.000Z',
+    updatedAt: null,
+  };
+  mockNotes = [createdNote, ...mockNotes];
+  return createdNote;
+});
 const mockRefreshNotes = jest.fn(async () => undefined);
 const mockResetCapture = jest.fn();
 const mockSaveNoteDoodle = jest.fn<Promise<void>, [string, string]>(async () => undefined);
@@ -23,6 +27,7 @@ const mockShowAlert = jest.fn();
 const mockScrollToOffset = jest.fn();
 let mockRemindersEnabled = false;
 let mockNoteText = 'A doodled note';
+let mockNotes: any[] = [];
 const mockGetDoodleSnapshot = jest.fn(() => ({
   enabled: true,
   strokes: [{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }],
@@ -197,7 +202,7 @@ jest.mock('../hooks/useCaptureFlow', () => ({
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
-    notes: [],
+    notes: mockNotes,
     refreshNotes: mockRefreshNotes,
     createNote: mockCreateNote,
   }),
@@ -285,12 +290,19 @@ jest.mock('../components/home/HomeHeaderSearch', () => {
 
 jest.mock('../components/home/NotesFeed', () => {
   const React = require('react');
-  const { View } = require('react-native');
+  const { Text, View } = require('react-native');
   return function MockNotesFeed(props: any) {
     props.flatListRef.current = {
       scrollToOffset: (...args: unknown[]) => mockScrollToOffset(...args),
     };
-    return <View>{props.captureHeader}</View>;
+    return (
+      <View>
+        {props.captureHeader}
+        {props.notes.map((note: { id: string }) => (
+          <Text key={note.id}>{note.id}</Text>
+        ))}
+      </View>
+    );
   };
 });
 
@@ -313,6 +325,7 @@ describe('HomeScreen doodle save flow', () => {
     jest.clearAllMocks();
     mockRemindersEnabled = false;
     mockNoteText = 'A doodled note';
+    mockNotes = [];
     mockGetDoodleSnapshot.mockImplementation(() => ({
       enabled: true,
       strokes: [{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }],
@@ -399,6 +412,34 @@ describe('HomeScreen doodle save flow', () => {
       expect(mockResetCapture).toHaveBeenCalled();
       expect(mockResetDoodle).toHaveBeenCalled();
       expect(mockResetStickers).toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('shows the saved note in the feed again after inline save completes', async () => {
+    jest.useFakeTimers();
+    mockRemindersEnabled = true;
+
+    try {
+      const { getByTestId, queryByText } = render(<HomeScreen />);
+
+      fireEvent.press(getByTestId('capture-save-button'));
+
+      await waitFor(() => {
+        expect(mockCreateNote).toHaveBeenCalledTimes(1);
+      });
+
+      const createdInput = mockCreateNote.mock.calls[0]?.[0];
+      expect(queryByText(createdInput.id)).toBeNull();
+
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      await waitFor(() => {
+        expect(queryByText(createdInput.id)).not.toBeNull();
+      });
     } finally {
       jest.useRealTimers();
     }

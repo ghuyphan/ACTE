@@ -277,6 +277,10 @@ export default function HomeScreen() {
     }
   }, []);
 
+  const releaseSuppressedHomeNoteId = useCallback((noteId: string) => {
+    setSuppressedHomeNoteIds((current) => current.filter((id) => id !== noteId));
+  }, []);
+
   useEffect(() => {
     return () => {
       clearInlineSaveTimers();
@@ -293,6 +297,7 @@ export default function HomeScreen() {
       setSaveButtonState('success');
 
       finalizeInlineSaveTimeoutRef.current = setTimeout(() => {
+        releaseSuppressedHomeNoteId(noteId);
         finalizeSavedCapture();
         finalizeInlineSaveTimeoutRef.current = null;
       }, finalizeDelay);
@@ -302,7 +307,7 @@ export default function HomeScreen() {
         resetSaveStateTimeoutRef.current = null;
       }, resetStateDelay);
     },
-    [clearInlineSaveTimers, finalizeSavedCapture, reduceMotionEnabled]
+    [clearInlineSaveTimers, finalizeSavedCapture, reduceMotionEnabled, releaseSuppressedHomeNoteId]
   );
 
   useEffect(() => {
@@ -919,10 +924,12 @@ export default function HomeScreen() {
         } else if (shareOutcome === 'shared') {
           completeInlineSaveFlow(createdNote.id);
         } else if (shareOutcome === 'default') {
+          releaseSuppressedHomeNoteId(createdNote.id);
           setSaveButtonState('idle');
           finalizeSavedCapture();
           showSavedSheet();
         } else {
+          releaseSuppressedHomeNoteId(createdNote.id);
           setSaveButtonState('idle');
           finalizeSavedCapture();
           showSharedSaveSheet(shareOutcome, shareFailureMessage);
@@ -954,6 +961,7 @@ export default function HomeScreen() {
     requestForegroundLocation,
     clearInlineSaveTimers,
     completeInlineSaveFlow,
+    releaseSuppressedHomeNoteId,
     showDoneSheet,
     t,
     captureMode,
