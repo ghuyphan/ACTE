@@ -112,6 +112,19 @@ export function isSupabasePolicyError(error: unknown) {
   );
 }
 
+export function isSupabaseSchemaMismatchError(error: unknown) {
+  const code = getSupabaseErrorCode(error);
+  const message = getSupabaseErrorMessage(error).toLowerCase();
+
+  return (
+    code === 'PGRST204' ||
+    code === '42703' ||
+    message.includes('schema cache') ||
+    (message.includes('could not find the') && message.includes('column')) ||
+    (message.includes('column') && message.includes('does not exist'))
+  );
+}
+
 export function isSupabaseNetworkError(error: unknown) {
   const message = getSupabaseErrorMessage(error).toLowerCase();
   return (

@@ -6,6 +6,10 @@ describe('supabase migration hardening', () => {
     resolve(__dirname, '../supabase/migrations/20260321113000_noto_initial.sql'),
     'utf8'
   );
+  const stickerMigration = readFileSync(
+    resolve(__dirname, '../supabase/migrations/20260326113000_add_sticker_sync_columns.sql'),
+    'utf8'
+  );
 
   it('creates profiles and user_usage rows for each auth user', () => {
     expect(migration).toContain('create or replace function public.handle_new_user()');
@@ -28,5 +32,12 @@ describe('supabase migration hardening', () => {
     expect(migration).toContain('create or replace function public.join_room_by_invite');
     expect(migration).toContain('create or replace function public.remove_room_member');
     expect(migration).toContain('create or replace function public.remove_friend');
+  });
+
+  it('backfills remote sticker sync columns for notes and shared posts', () => {
+    expect(stickerMigration).toContain('alter table public.notes');
+    expect(stickerMigration).toContain('add column if not exists has_stickers boolean not null default false');
+    expect(stickerMigration).toContain('add column if not exists sticker_placements_json text');
+    expect(stickerMigration).toContain('alter table public.shared_posts');
   });
 });

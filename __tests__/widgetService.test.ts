@@ -11,6 +11,7 @@ const mockCopyAsync = jest.fn();
 const mockDownloadAsync = jest.fn();
 const mockReadAsStringAsync = jest.fn();
 const mockGetInfoAsync = jest.fn();
+const mockReadDirectoryAsync = jest.fn();
 const mockGetCachedSharedFeedSnapshot = jest.fn();
 const mockRefreshSharedFeed = jest.fn();
 const mockDownloadPhotoFromStorage = jest.fn();
@@ -164,6 +165,7 @@ jest.mock('expo-file-system/legacy', () => ({
   downloadAsync: (...args: unknown[]) => mockDownloadAsync(...args),
   readAsStringAsync: (...args: unknown[]) => mockReadAsStringAsync(...args),
   getInfoAsync: (...args: unknown[]) => mockGetInfoAsync(...args),
+  readDirectoryAsync: (...args: unknown[]) => mockReadDirectoryAsync(...args),
   EncodingType: {
     Base64: 'base64',
   },
@@ -229,6 +231,7 @@ beforeEach(async () => {
   mockCopyAsync.mockResolvedValue(undefined);
   mockDownloadAsync.mockResolvedValue(undefined);
   mockReadAsStringAsync.mockResolvedValue('base64-image-data');
+  mockReadDirectoryAsync.mockResolvedValue([]);
   mockCurrentUser = null;
   mockGetCachedSharedFeedSnapshot.mockResolvedValue({
     friends: [],
@@ -739,6 +742,17 @@ describe('widgetService', () => {
   });
 
   it('includes sticker metadata for selected notes and prepares iOS-readable sticker files', async () => {
+    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
+      exists: uri !== 'file:///mock-documents/stickers/asset-1.png',
+      isDirectory: false,
+      uri,
+      size: 1024,
+      modificationTime: 0,
+    }));
+    mockReadDirectoryAsync.mockResolvedValue([
+      'sticker-sticker-text-asset-1-123.png',
+    ]);
+
     mockGetAllNotes.mockResolvedValue([
       buildNote({
         id: 'sticker-text',
@@ -784,7 +798,7 @@ describe('widgetService', () => {
       })
     );
     expect(stickerPayload).toHaveLength(1);
-    expect(String(stickerPayload[0]?.asset?.localUri ?? '')).toContain('asset-1');
+    expect(String(stickerPayload[0]?.asset?.localUri ?? '')).toContain('file:///mock-group/widget-stickers/');
   });
 
   it('creates unique widget image files for photo timeline entries', async () => {

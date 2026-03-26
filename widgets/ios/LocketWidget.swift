@@ -372,6 +372,7 @@ private struct LocketWidgetStickerOverlay: View {
 
     private let artboardInset: CGFloat = 18
     private let minimumBaseSize: CGFloat = 68
+    private let opacityMultiplier = 0.72
 
     var body: some View {
         GeometryReader { proxy in
@@ -397,7 +398,7 @@ private struct LocketWidgetStickerOverlay: View {
                             .scaledToFit()
                             .frame(width: stickerWidth, height: stickerHeight)
                             .rotationEffect(.degrees(placement.rotation))
-                            .opacity(placement.opacity)
+                            .opacity(placement.opacity * opacityMultiplier)
                             .position(
                                 x: artboardInset + (placement.x * artboardWidth),
                                 y: artboardInset + (placement.y * artboardHeight)

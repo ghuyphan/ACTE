@@ -8,6 +8,7 @@ import {
   getSupabaseErrorMessage,
   isSupabaseNetworkError,
   isSupabasePolicyError,
+  isSupabaseSchemaMismatchError,
 } from '../utils/supabase';
 import { getActiveNotesScope, Note, getAllNotes, getDB, getNoteById, upsertNote } from './database';
 import {
@@ -200,7 +201,8 @@ function isTerminalSyncError(error: unknown) {
   return (
     message.includes('too large to sync safely') ||
     isSessionSyncError(error) ||
-    isSupabasePolicyError(error)
+    isSupabasePolicyError(error) ||
+    isSupabaseSchemaMismatchError(error)
   );
 }
 
@@ -216,6 +218,13 @@ function getBlockedSyncReason(error: unknown) {
     return i18n.t(
       'settings.syncPolicyDeniedMsg',
       'The server denied access to sync your notes. Sign in again and try once more.'
+    );
+  }
+
+  if (isSupabaseSchemaMismatchError(error)) {
+    return i18n.t(
+      'settings.syncSchemaOutdatedMsg',
+      'Cloud sync needs the latest server migrations. Apply the latest Supabase migrations, then try again.'
     );
   }
 
@@ -244,6 +253,13 @@ function getSyncFailureMessage(error: unknown) {
     );
   }
 
+  if (isSupabaseSchemaMismatchError(error)) {
+    return i18n.t(
+      'settings.syncSchemaOutdatedMsg',
+      'Cloud sync needs the latest server migrations. Apply the latest Supabase migrations, then try again.'
+    );
+  }
+
   if (isSupabaseNetworkError(error)) {
     return i18n.t(
       'settings.syncNetworkMsg',
@@ -258,7 +274,12 @@ function getSyncFailureMessage(error: unknown) {
 }
 
 function shouldLogSyncWarning(error: unknown) {
-  return !isSessionSyncError(error) && !isSupabasePolicyError(error) && !isSupabaseNetworkError(error);
+  return (
+    !isSessionSyncError(error) &&
+    !isSupabasePolicyError(error) &&
+    !isSupabaseSchemaMismatchError(error) &&
+    !isSupabaseNetworkError(error)
+  );
 }
 
 function getRetryDelayMs(attemptCount: number) {

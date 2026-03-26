@@ -277,6 +277,14 @@ jest.mock('../utils/supabase', () => ({
         ? (error as { code?: unknown }).code ?? ''
         : ''
     ) === '42501',
+  isSupabaseSchemaMismatchError: (error: unknown) =>
+    ['PGRST204', '42703'].includes(
+      String(
+        typeof error === 'object' && error && 'code' in error
+          ? (error as { code?: unknown }).code ?? ''
+          : ''
+      )
+    ),
   getSupabase: () => ({
     from: (table: string) => {
       if (table === 'notes') {
@@ -528,6 +536,24 @@ describe('syncService', () => {
         status: 'error',
         message:
           'Supabase denied access to sync notes. Apply the latest Supabase migrations or sign in again.',
+      })
+    );
+  });
+
+  it('returns an actionable message when Supabase schema is missing sticker sync columns', async () => {
+    localNotesStore = [createTextNote('note-1')];
+    mockNotesUpsertError = {
+      code: 'PGRST204',
+      message: "Could not find the 'has_stickers' column of 'notes' in the schema cache",
+    };
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'full' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'error',
+        message:
+          'Cloud sync needs the latest server migrations. Apply the latest Supabase migrations, then try again.',
       })
     );
   });

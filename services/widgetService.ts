@@ -884,7 +884,20 @@ async function resolveWidgetStickerPlacementsJson(candidate: WidgetCandidate) {
         parsedPlacements.map(async (placement) => {
             const readableStickerUri = await getReadablePhotoUri(placement.asset.localUri);
             if (!readableStickerUri) {
-                return placement;
+                const existingSharedStickerUri = await findExistingWidgetFileInSharedContainer(
+                    WIDGET_STICKER_DIRECTORY_NAME,
+                    `sticker-${candidate.id}-${placement.asset.id}-`
+                );
+
+                return existingSharedStickerUri
+                    ? {
+                        ...placement,
+                        asset: {
+                            ...placement.asset,
+                            localUri: existingSharedStickerUri,
+                        },
+                    }
+                    : placement;
             }
 
             if (/^https?:\/\//i.test(readableStickerUri)) {
@@ -1015,6 +1028,26 @@ async function downloadRemoteImageToWidgetContainer(
         }
 
         console.warn('[widgetService] Failed to download remote widget image:', error);
+        return undefined;
+    }
+}
+
+async function findExistingWidgetFileInSharedContainer(
+    directoryName: string,
+    filenamePrefix: string
+) {
+    const sharedContainerUri = getWidgetSharedContainerUri();
+    if (!sharedContainerUri) {
+        return undefined;
+    }
+
+    const directoryUri = `${sharedContainerUri}${directoryName}/`;
+
+    try {
+        const entries = await FileSystem.readDirectoryAsync(directoryUri);
+        const matchingEntry = entries.find((entry) => entry.startsWith(filenamePrefix));
+        return matchingEntry ? `${directoryUri}${matchingEntry}` : undefined;
+    } catch {
         return undefined;
     }
 }
