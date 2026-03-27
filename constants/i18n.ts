@@ -71,6 +71,7 @@ export const i18nReady = i18n
         compatibilityJSON: 'v4',
         fallbackLng: DEFAULT_LANGUAGE,
         supportedLngs: [...SUPPORTED_LANGUAGE_CODES],
+        showSupportNotice: false,
         load: 'languageOnly',
         nonExplicitSupportedLngs: true,
         interpolation: {

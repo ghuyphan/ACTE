@@ -6,7 +6,7 @@ import { SplashScreen, Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation, I18nextProvider } from 'react-i18next';
-import { AppState, InteractionManager, View } from 'react-native';
+import { AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import i18n, { i18nReady } from '../constants/i18n';
@@ -26,6 +26,7 @@ import { updateWidgetData } from '../services/widgetService';
 import { runMediaCacheEviction } from '../services/mediaCacheManager';
 import { getPersistentItem, getPersistentItemSync } from '../utils/appStorage';
 import '../utils/backgroundGeofence';
+import { scheduleOnIdle } from '../utils/scheduleOnIdle';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -59,14 +60,14 @@ function AppContent() {
   const startupRedirectPending = segments[0] === undefined && Boolean(startupTarget);
 
   useEffect(() => {
-    let startupInteractionHandle: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
+    let startupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
     let startupTimeout: ReturnType<typeof setTimeout> | null = null;
 
     void configureNotificationChannels();
 
     getDB()
       .then(() => {
-        startupInteractionHandle = InteractionManager.runAfterInteractions(() => {
+        startupIdleHandle = scheduleOnIdle(() => {
           startupTimeout = setTimeout(() => {
             updateWidgetData().catch((err) => console.warn('Widget init failed:', err));
             syncGeofenceRegions().catch((err) => console.warn('Geofence sync failed:', err));
@@ -79,7 +80,7 @@ function AppContent() {
       });
 
     return () => {
-      startupInteractionHandle?.cancel();
+      startupIdleHandle?.cancel();
       if (startupTimeout) {
         clearTimeout(startupTimeout);
       }

@@ -1,8 +1,9 @@
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
-import { InteractionManager, Linking } from 'react-native';
+import { Linking } from 'react-native';
 import { getReminderPermissionState, syncGeofenceRegions } from '../services/geofenceService';
+import { scheduleOnIdle } from '../utils/scheduleOnIdle';
 
 export interface ForegroundLocationRequestResult {
     location: Location.LocationObject | null;
@@ -44,7 +45,7 @@ export function useGeofence() {
 
     useEffect(() => {
         let cancelled = false;
-        const interactionHandle = InteractionManager.runAfterInteractions(() => {
+        const idleHandle = scheduleOnIdle(() => {
             void (async () => {
                 const foregroundStatus = await Location.getForegroundPermissionsAsync();
                 if (cancelled) {
@@ -58,7 +59,7 @@ export function useGeofence() {
 
         return () => {
             cancelled = true;
-            interactionHandle.cancel();
+            idleHandle.cancel();
         };
     }, [refreshPermissions]);
 

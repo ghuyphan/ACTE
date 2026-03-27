@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
-import { Dimensions, InteractionManager } from 'react-native';
+import { Dimensions } from 'react-native';
 import HomeScreen from '../app/(tabs)/index';
 
 const mockConsumeFeedFocus = jest.fn();
@@ -300,8 +300,9 @@ jest.mock('../utils/platform', () => ({
 }));
 
 describe('HomeScreen archive focus', () => {
-  const runAfterInteractionsSpy = jest.spyOn(InteractionManager, 'runAfterInteractions');
   const snapHeight = Dimensions.get('window').height - 90;
+  const originalRequestIdleCallback = (global as any).requestIdleCallback;
+  const originalCancelIdleCallback = (global as any).cancelIdleCallback;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -327,19 +328,18 @@ describe('HomeScreen archive focus', () => {
         createdAt: '2026-03-13T00:00:00.000Z',
       },
     ];
-    runAfterInteractionsSpy.mockImplementation((task: any) => {
-      task?.();
-      return { cancel: jest.fn() } as any;
+    (global as any).requestIdleCallback = jest.fn((callback: any) => {
+      callback({ didTimeout: false, timeRemaining: () => 50 });
+      return 1;
     });
+    (global as any).cancelIdleCallback = jest.fn();
   });
 
   afterEach(() => {
     jest.runOnlyPendingTimers();
     jest.useRealTimers();
-  });
-
-  afterAll(() => {
-    runAfterInteractionsSpy.mockRestore();
+    (global as any).requestIdleCallback = originalRequestIdleCallback;
+    (global as any).cancelIdleCallback = originalCancelIdleCallback;
   });
 
   it('scrolls to the matching note card when a pending note focus exists', async () => {

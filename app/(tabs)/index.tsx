@@ -13,7 +13,6 @@ import {
   Animated,
   AppState,
   Dimensions,
-  InteractionManager,
   Keyboard,
   Platform,
   Share,
@@ -52,8 +51,14 @@ import { filterNotesByQuery } from '../../services/noteSearch';
 import { generateNoteId, type Note } from '../../services/database';
 import { getSharedFeedErrorMessage, SharedPost } from '../../services/sharedFeedService';
 import { isIOS26OrNewer } from '../../utils/platform';
+import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
 const { height } = Dimensions.get('window');
+const SHARED_MANAGE_SHEET_SHARE_DELAY_MS = Platform.OS === 'ios' ? 220 : 0;
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 type FeedFocusItem =
   | { id: string; kind: 'note'; createdAt: string; note: Note }
@@ -187,7 +192,6 @@ export default function HomeScreen() {
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [noteColor, setNoteColor] = useState<string | null>(DEFAULT_NOTE_COLOR_ID);
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
-  const [sharedManageSheetVersion, setSharedManageSheetVersion] = useState(0);
   const [homeContentReady, setHomeContentReady] = useState(false);
   const lockedPremiumNoteColorIds = useMemo(
     () => (tier === 'plus' ? [] : PREMIUM_NOTE_COLOR_IDS),
@@ -212,7 +216,6 @@ export default function HomeScreen() {
   }, []);
 
   const presentSharedManageSheet = useCallback(() => {
-    setSharedManageSheetVersion((current) => current + 1);
     setShowSharedManageSheet(true);
   }, []);
 
@@ -381,7 +384,7 @@ export default function HomeScreen() {
   useEffect(() => {
     let cancelled = false;
 
-    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+    const idleHandle = scheduleOnIdle(() => {
       requestAnimationFrame(() => {
         if (!cancelled) {
           setHomeContentReady(true);
@@ -391,7 +394,7 @@ export default function HomeScreen() {
 
     return () => {
       cancelled = true;
-      interactionHandle.cancel();
+      idleHandle.cancel();
     };
   }, []);
 
@@ -518,22 +521,22 @@ export default function HomeScreen() {
     }
 
     let cancelled = false;
-    const interactionHandle = InteractionManager.runAfterInteractions(() => {
-      const timeout = setTimeout(() => {
+    let previewTimeout: ReturnType<typeof setTimeout> | null = null;
+    const idleHandle = scheduleOnIdle(() => {
+      previewTimeout = setTimeout(() => {
         if (!cancelled) {
           setCameraPreviewReady(true);
         }
       }, 180);
-
-      return () => {
-        clearTimeout(timeout);
-      };
     });
 
     return () => {
       cancelled = true;
       setCameraPreviewReady(false);
-      interactionHandle.cancel();
+      idleHandle.cancel();
+      if (previewTimeout) {
+        clearTimeout(previewTimeout);
+      }
     };
   }, [appState, captureMode, isScreenFocused]);
 
@@ -586,21 +589,21 @@ export default function HomeScreen() {
         return undefined;
       }
 
-      const interactionHandle = InteractionManager.runAfterInteractions(() => {
-        const timeout = setTimeout(() => {
+      let focusTimeout: ReturnType<typeof setTimeout> | null = null;
+      const idleHandle = scheduleOnIdle(() => {
+        focusTimeout = setTimeout(() => {
           flatListRef.current?.scrollToOffset({
             offset: (targetIndex + 1) * snapHeight,
             animated: true,
           });
         }, 0);
-
-        return () => {
-          clearTimeout(timeout);
-        };
       });
 
       return () => {
-        interactionHandle.cancel();
+        idleHandle.cancel();
+        if (focusTimeout) {
+          clearTimeout(focusTimeout);
+        }
       };
     }, [
       archiveFeedItems,
@@ -1373,6 +1376,7 @@ export default function HomeScreen() {
 
     try {
       dismissSharedManageSheet();
+      await wait(SHARED_MANAGE_SHEET_SHARE_DELAY_MS);
       const invite = activeInvite ?? (await createFriendInvite());
       await Share.share({
         message: t('shared.inviteShareMessage', 'Join my Noto shared feed: {{url}}', {
@@ -1585,23 +1589,20 @@ export default function HomeScreen() {
         scrollEnabled={!captureScrollLocked}
       />
 
-      {showSharedManageSheet ? (
-        <SharedManageSheet
-          key={`shared-manage-${sharedManageSheetVersion}`}
-          visible={showSharedManageSheet}
-          friends={friends}
-          activeInvite={activeInvite}
-          loading={sharedLoading}
-          onClose={dismissSharedManageSheet}
-          onShareInvite={() => {
-            void handleShareInvite();
-          }}
-          onRevokeInvite={() => {
-            void handleRevokeInvite();
-          }}
-          onRemoveFriend={handleRemoveFriend}
-        />
-      ) : null}
+      <SharedManageSheet
+        visible={showSharedManageSheet}
+        friends={friends}
+        activeInvite={activeInvite}
+        loading={sharedLoading}
+        onClose={dismissSharedManageSheet}
+        onShareInvite={() => {
+          void handleShareInvite();
+        }}
+        onRevokeInvite={() => {
+          void handleRevokeInvite();
+        }}
+        onRemoveFriend={handleRemoveFriend}
+      />
 
       <AppSheetAlert {...alertProps} />
     </View>

@@ -1,6 +1,5 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { InteractionManager } from 'react-native';
 
 const mockCreateNote = jest.fn(async (input?: any) => {
   const createdNote = {
@@ -34,6 +33,8 @@ const mockGetDoodleSnapshot = jest.fn(() => ({
   strokes: [{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }],
 }));
 const originalRequestAnimationFrame = global.requestAnimationFrame;
+const originalRequestIdleCallback = (global as any).requestIdleCallback;
+const originalCancelIdleCallback = (global as any).cancelIdleCallback;
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -324,10 +325,11 @@ import HomeScreen from '../app/(tabs)/index';
 
 describe('HomeScreen doodle save flow', () => {
   beforeEach(() => {
-    jest.spyOn(InteractionManager, 'runAfterInteractions').mockImplementation((task: any) => {
-      task?.();
-      return { cancel: jest.fn() } as any;
+    (global as any).requestIdleCallback = jest.fn((callback: any) => {
+      callback({ didTimeout: false, timeRemaining: () => 50 });
+      return 1;
     });
+    (global as any).cancelIdleCallback = jest.fn();
     global.requestAnimationFrame = ((callback: any) => {
       callback(0);
       return 0;
@@ -345,6 +347,8 @@ describe('HomeScreen doodle save flow', () => {
   afterEach(() => {
     jest.restoreAllMocks();
     global.requestAnimationFrame = originalRequestAnimationFrame;
+    (global as any).requestIdleCallback = originalRequestIdleCallback;
+    (global as any).cancelIdleCallback = originalCancelIdleCallback;
   });
 
   it('keeps Home anchored on the capture card while the local save sheet is open', async () => {

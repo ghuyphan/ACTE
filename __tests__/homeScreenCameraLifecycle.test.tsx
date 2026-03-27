@@ -1,11 +1,13 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { AppState, InteractionManager } from 'react-native';
+import { AppState } from 'react-native';
 let mockCaptureCardProps: any = null;
 const mockOpenAppSettings = jest.fn(async () => undefined);
 const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
 const mockUseCaptureFlow = jest.fn();
 const originalRequestAnimationFrame = global.requestAnimationFrame;
+const originalRequestIdleCallback = (global as any).requestIdleCallback;
+const originalCancelIdleCallback = (global as any).cancelIdleCallback;
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -218,10 +220,11 @@ import HomeScreen from '../app/(tabs)/index';
 
 describe('HomeScreen camera lifecycle', () => {
   beforeEach(() => {
-    jest.spyOn(InteractionManager, 'runAfterInteractions').mockImplementation((task: any) => {
-      task?.();
-      return { cancel: jest.fn() } as any;
+    (global as any).requestIdleCallback = jest.fn((callback: any) => {
+      callback({ didTimeout: false, timeRemaining: () => 50 });
+      return 1;
     });
+    (global as any).cancelIdleCallback = jest.fn();
     global.requestAnimationFrame = ((callback: any) => {
       callback(0);
       return 0;
@@ -280,6 +283,8 @@ describe('HomeScreen camera lifecycle', () => {
   afterEach(() => {
     jest.restoreAllMocks();
     global.requestAnimationFrame = originalRequestAnimationFrame;
+    (global as any).requestIdleCallback = originalRequestIdleCallback;
+    (global as any).cancelIdleCallback = originalCancelIdleCallback;
   });
 
   it('keeps the camera preview mounted while capture visibility changes', async () => {
