@@ -162,7 +162,7 @@ export default function PlusScreen() {
           </View>
           <Text style={[styles.brandAccent, { color: colors.secondaryText }]}>ノート</Text>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-            {t('plus.subtitle', 'Elevate your memory journal')}
+            {t('plus.subtitle', 'More room for your photo memories.')}
           </Text>
         </View>
 
@@ -175,23 +175,19 @@ export default function PlusScreen() {
           ) : null}
           <FeatureRow
             icon="infinite"
-            title={t('plus.features.unlimitedTitle', 'Unlimited Memories')}
-            description={t('plus.features.unlimitedDesc', 'Save every photo memory without limits.')}
+            title={t('plus.features.unlimitedTitle', 'Unlimited photo memories')}
+            description={t(
+              'plus.features.unlimitedDesc',
+              'Free includes 10 photo notes. Plus removes the cap so your visual journal can keep growing.'
+            )}
           />
           <FeatureRow
             icon="images"
-            title={t('plus.features.libraryTitle', 'Photos Import')}
-            description={t('plus.features.libraryDesc', 'Import existing photos from your gallery.')}
-          />
-          <FeatureRow
-            icon="cloud-upload"
-            title={t('plus.features.syncTitle', 'Cloud Backup')}
-            description={t('plus.features.syncDesc', 'Sync across all your devices automatically.')}
-          />
-          <FeatureRow
-            icon="options"
-            title={t('plus.features.radiusTitle', 'Custom Radius')}
-            description={t('plus.features.radiusDesc', 'Fine-tune your reminder geofences.')}
+            title={t('plus.features.libraryTitle', 'Import from your library')}
+            description={t(
+              'plus.features.libraryDesc',
+              'Turn older camera roll moments into place-linked memories inside Noto.'
+            )}
           />
         </View>
 

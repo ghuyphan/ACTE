@@ -23,6 +23,8 @@ interface WidgetProps {
     nearbyPlacesCount: number;
     backgroundImageUrl?: string; // Currently not supported natively by expo-widgets JS side
     backgroundImageBase64?: string;
+    backgroundGradientStartColor?: string;
+    backgroundGradientEndColor?: string;
     hasDoodle: boolean;
     doodleStrokesJson?: string | null;
     hasStickers: boolean;
@@ -44,6 +46,8 @@ interface WidgetProps {
     authorInitials: string;
     authorAvatarImageUrl?: string;
     authorAvatarImageBase64?: string;
+    primaryActionUrl: string;
+    badgeActionUrl?: string;
     family?: string;
 }
 
@@ -97,6 +101,8 @@ const LocketWidget = (props: { props: WidgetProps }) => {
         nearbyPlacesCount,
         backgroundImageUrl,
         backgroundImageBase64,
+        backgroundGradientStartColor,
+        backgroundGradientEndColor,
         noteCount,
         savedCountText,
         isIdleState,
@@ -117,7 +123,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
     } = props.props ?? {};
 
     const familyName = asString(family);
-    const isLarge = familyName === 'systemLarge';
+    const isLarge = familyName === 'systemLarge' || familyName === 'systemMedium';
     const isAccessoryInline = familyName === 'accessoryInline';
     const isAccessoryCircular = familyName === 'accessoryCircular';
     const isAccessoryRectangular = familyName === 'accessoryRectangular';
@@ -135,7 +141,10 @@ const LocketWidget = (props: { props: WidgetProps }) => {
         : safeText || asString(memoryReminderText) || 'A quiet reminder from here.';
     const eyebrowText = !showIdle ? asString(locationName) : '';
     const backgroundColors = isTextNote || showIdle
-        ? ['#F5EFE8', '#ECE5DC']
+        ? [
+            asString(backgroundGradientStartColor) || '#F5EFE8',
+            asString(backgroundGradientEndColor) || '#ECE5DC'
+        ]
         : ['#5A4D42', '#2F2926'];
     const usesTextSurface = isTextNote || showIdle || !hasImage;
     const compactPad = isLarge ? 18 : usesTextSurface ? 12 : 14;

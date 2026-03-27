@@ -8,7 +8,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    ActionSheetIOS,
     Alert,
     Animated,
     Dimensions,
@@ -27,6 +26,7 @@ import {
     UIManager,
     View,
 } from 'react-native';
+import { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { DOODLE_ARTBOARD_FRAME } from '../constants/doodleLayout';
 import { ENABLE_PHOTO_STICKERS } from '../constants/experiments';
 import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../constants/noteRadius';
@@ -35,9 +35,14 @@ import { useAuth } from '../hooks/useAuth';
 import { useNotes } from '../hooks/useNotes';
 import { useSharedFeedStore } from '../hooks/useSharedFeed';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useSubscription } from '../hooks/useSubscription';
 import { useTheme } from '../hooks/useTheme';
 import { Note } from '../services/database';
-import { getTextNoteCardGradient, normalizeSavedTextNoteColor } from '../services/noteAppearance';
+import {
+    getTextNoteCardGradient,
+    normalizeSavedTextNoteColor,
+    PREMIUM_NOTE_COLOR_IDS,
+} from '../services/noteAppearance';
 import { clearNoteDoodle, parseNoteDoodleStrokes, saveNoteDoodle } from '../services/noteDoodles';
 import {
     bringStickerPlacementToFront,
@@ -63,7 +68,9 @@ import {
 import AppBottomSheet from './AppBottomSheet';
 import NoteStickerCanvas from './NoteStickerCanvas';
 import NoteDoodleCanvas, { DoodleStroke } from './NoteDoodleCanvas';
+import StickerSourceSheet from './StickerSourceSheet';
 import NoteColorPicker from './ui/NoteColorPicker';
+import PremiumNoteFinishOverlay from './ui/PremiumNoteFinishOverlay';
 import StickerPastePopover from './ui/StickerPastePopover';
 import TransientStatusChip from './ui/TransientStatusChip';
 
@@ -216,6 +223,13 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const { deleteSharedNote, updateSharedNote } = useSharedFeedStore();
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
+    const {
+        tier,
+        isPurchaseAvailable,
+        plusPriceLabel,
+        presentPaywallIfNeeded,
+        restorePurchases,
+    } = useSubscription();
     const reduceMotionEnabled = useReducedMotion();
     const [note, setNote] = useState<Note | null>(null);
     const [loading, setLoading] = useState(true);
@@ -231,6 +245,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [stickerModeEnabled, setStickerModeEnabled] = useState(false);
     const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
     const [importingSticker, setImportingSticker] = useState(false);
+    const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
+    const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
     const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
 
@@ -248,6 +264,85 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingDeleteNoteIdRef = useRef<string | null>(null);
     const closeCompletionHandledRef = useRef(false);
+    const lockedPremiumNoteColorIds = useMemo(
+        () => (tier === 'plus' ? [] : PREMIUM_NOTE_COLOR_IDS),
+        [tier]
+    );
+
+    const showPremiumColorAlert = useCallback(() => {
+        const buttons: Array<{
+            text: string;
+            style?: 'default' | 'cancel' | 'destructive';
+            onPress?: () => void;
+        }> = [
+            {
+                text: t('common.cancel', 'Cancel'),
+                style: 'cancel',
+            },
+        ];
+
+        buttons.push({
+            text: t('plus.restorePurchases', 'Restore purchases'),
+            onPress: () => {
+                void (async () => {
+                    const result = await restorePurchases();
+                    Alert.alert(
+                        result.status === 'success'
+                            ? t('plus.restoreSuccessTitle', 'Purchases restored')
+                            : t('plus.restoreFailedTitle', 'Could not restore purchases'),
+                        result.status === 'success'
+                            ? t(
+                                'plus.restoreSuccessMessage',
+                                'Your Noto Plus access has been refreshed for this device.'
+                            )
+                            : (
+                                result.message ??
+                                t(
+                                    'plus.restoreFailedMessage',
+                                    'We could not refresh your purchases right now. Please try again later.'
+                                )
+                            )
+                    );
+                })();
+            },
+        });
+
+        if (isPurchaseAvailable) {
+            buttons.push({
+                text: plusPriceLabel
+                    ? t('plus.upgradeCtaWithPrice', 'Upgrade to Plus · {{price}}', {
+                        price: plusPriceLabel,
+                    })
+                    : t('plus.upgradeCta', 'Upgrade to Plus'),
+                onPress: () => {
+                    void (async () => {
+                        const result = await presentPaywallIfNeeded();
+                        if (
+                            result === PAYWALL_RESULT.PURCHASED ||
+                            result === PAYWALL_RESULT.RESTORED
+                        ) {
+                            Alert.alert(
+                                t('plus.upgradeSuccessTitle', 'Noto Plus is ready'),
+                                t(
+                                    'plus.upgradeSuccessMessage',
+                                    'You can now save more photo notes and import images from your library.'
+                                )
+                            );
+                        }
+                    })();
+                },
+            });
+        }
+
+        Alert.alert(
+            t('plus.colorTitle', 'Premium card finishes'),
+            t(
+                'plus.colorMessage',
+                'Holographic, RGB, and foil-inspired card finishes are part of Noto Plus.'
+            ),
+            buttons
+        );
+    }, [isPurchaseAvailable, plusPriceLabel, presentPaywallIfNeeded, restorePurchases, t]);
 
     const showInteractionFeedback = useCallback((type: InteractionFeedbackType) => {
         if (feedbackTimeoutRef.current) {
@@ -303,6 +398,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setDoodleModeEnabled(false);
         setStickerModeEnabled(false);
         setSelectedStickerId(null);
+        setShowStickerSourceSheet(false);
         favoriteFillProgress.setValue(0);
         cardScale.setValue(0.97);
         cardOpacity.setValue(0);
@@ -385,6 +481,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             cancelled = true;
         };
     }, [actionsOpacity, cardOpacity, cardScale, editModeAnim, favoriteFillProgress, getNoteById, infoOpacity, infoTranslateY, noteId, reduceMotionEnabled, visible]);
+
+    useEffect(() => {
+        if (!isEditing || !note || importingSticker) {
+            setShowStickerSourceSheet(false);
+        }
+    }, [importingSticker, isEditing, note]);
 
     useEffect(() => {
         favoriteFillProgress.stopAnimation();
@@ -597,6 +699,17 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         dismissPastePrompt();
         void handlePasteStickerFromClipboard();
     }, [dismissPastePrompt, handlePasteStickerFromClipboard]);
+    const handleCloseStickerSourceSheet = useCallback(() => {
+        setShowStickerSourceSheet(false);
+    }, []);
+    const handleSelectStickerSourceClipboard = useCallback(() => {
+        setShowStickerSourceSheet(false);
+        void handlePasteStickerFromClipboard();
+    }, [handlePasteStickerFromClipboard]);
+    const handleSelectStickerSourcePhotos = useCallback(() => {
+        setShowStickerSourceSheet(false);
+        void handleImportSticker();
+    }, [handleImportSticker]);
     const handleShowStickerSourceOptions = useCallback(async () => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
             return;
@@ -605,49 +718,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         dismissPastePrompt();
         Keyboard.dismiss();
         const canPasteFromClipboard = await hasClipboardStickerImage();
-        const pasteLabel = t('capture.pasteStickerFromClipboard', 'Paste from Clipboard');
-        const photoLabel = t('capture.chooseStickerFromPhotos', 'Choose from Photos');
-        const cancelLabel = t('common.cancel', 'Cancel');
-        const options = canPasteFromClipboard
-            ? [pasteLabel, photoLabel, cancelLabel]
-            : [photoLabel, cancelLabel];
-        const cancelButtonIndex = options.length - 1;
-
-        const handleSelection = (selectedIndex?: number) => {
-            if (selectedIndex === undefined || selectedIndex === cancelButtonIndex) {
-                return;
-            }
-
-            if (canPasteFromClipboard && selectedIndex === 0) {
-                void handlePasteStickerFromClipboard();
-                return;
-            }
-
-            void handleImportSticker();
-        };
-
-        if (Platform.OS === 'ios') {
-            ActionSheetIOS.showActionSheetWithOptions(
-                {
-                    title: t('capture.addStickerTitle', 'Add sticker'),
-                    options,
-                    cancelButtonIndex,
-                },
-                handleSelection
-            );
-            return;
-        }
-
-        Alert.alert(
-            t('capture.addStickerTitle', 'Add sticker'),
-            undefined,
-            options.map((label, index) => ({
-                text: label,
-                style: index === cancelButtonIndex ? 'cancel' : 'default',
-                onPress: () => handleSelection(index),
-            }))
-        );
-    }, [dismissPastePrompt, handleImportSticker, handlePasteStickerFromClipboard, importingSticker, isEditing, note, t]);
+        setStickerSourceCanPasteFromClipboard(canPasteFromClipboard);
+        setShowStickerSourceSheet(true);
+    }, [dismissPastePrompt, importingSticker, isEditing, note]);
     const handleToggleStickerMode = useCallback(() => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note) {
             return;
@@ -1277,6 +1350,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                     end={{ x: 1, y: 1 }}
                                     style={styles.textGradient}
                                 >
+                                    <PremiumNoteFinishOverlay
+                                        noteColor={isEditing ? editNoteColor : note.noteColor}
+                                        animated
+                                    />
                                     {isEditing && ENABLE_PHOTO_STICKERS ? (
                                         <Pressable
                                             testID="note-detail-card-paste-surface"
@@ -1541,6 +1618,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                     label={t('noteDetail.colorField', 'Color')}
                                     selectedColor={editNoteColor}
                                     onSelectColor={setEditNoteColor}
+                                    lockedColorIds={lockedPremiumNoteColorIds}
+                                    onLockedColorPress={showPremiumColorAlert}
                                     testIDPrefix="note-detail-color"
                                     compact
                                 />
@@ -1639,24 +1718,50 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     if (Platform.OS === 'android') {
         return (
-            <AppBottomSheet visible={visible} onClose={handleSheetDismiss} detached={false}>
-                {renderBody()}
-            </AppBottomSheet>
+            <>
+                <AppBottomSheet visible={visible} onClose={handleSheetDismiss} detached={false}>
+                    {renderBody()}
+                </AppBottomSheet>
+                <StickerSourceSheet
+                    visible={showStickerSourceSheet}
+                    canPasteFromClipboard={stickerSourceCanPasteFromClipboard}
+                    title={t('capture.addStickerTitle', 'Add sticker')}
+                    pasteLabel={t('capture.pasteStickerFromClipboard', 'Paste from Clipboard')}
+                    photoLabel={t('capture.chooseStickerFromPhotos', 'Choose from Photos')}
+                    cancelLabel={t('common.cancel', 'Cancel')}
+                    onSelectClipboard={handleSelectStickerSourceClipboard}
+                    onSelectPhotos={handleSelectStickerSourcePhotos}
+                    onClose={handleCloseStickerSourceSheet}
+                />
+            </>
         );
     }
 
     return (
-        <View pointerEvents={visible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
-            <Host style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'}>
-                <BottomSheet isPresented={visible} onIsPresentedChange={handleSheetVisibility} fitToContents>
-                    <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
-                        <RNHostView matchContents>
-                            {renderBody()}
-                        </RNHostView>
-                    </Group>
-                </BottomSheet>
-            </Host>
-        </View>
+        <>
+            <View pointerEvents={visible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
+                <Host style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'}>
+                    <BottomSheet isPresented={visible} onIsPresentedChange={handleSheetVisibility} fitToContents>
+                        <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
+                            <RNHostView matchContents>
+                                {renderBody()}
+                            </RNHostView>
+                        </Group>
+                    </BottomSheet>
+                </Host>
+            </View>
+            <StickerSourceSheet
+                visible={showStickerSourceSheet}
+                canPasteFromClipboard={stickerSourceCanPasteFromClipboard}
+                title={t('capture.addStickerTitle', 'Add sticker')}
+                pasteLabel={t('capture.pasteStickerFromClipboard', 'Paste from Clipboard')}
+                photoLabel={t('capture.chooseStickerFromPhotos', 'Choose from Photos')}
+                cancelLabel={t('common.cancel', 'Cancel')}
+                onSelectClipboard={handleSelectStickerSourceClipboard}
+                onSelectPhotos={handleSelectStickerSourcePhotos}
+                onClose={handleCloseStickerSourceSheet}
+            />
+        </>
     );
 }
 

@@ -1,7 +1,12 @@
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
-import { NOTE_COLOR_PRESETS, getNoteColorCardGradient } from '../../services/noteAppearance';
+import {
+  NOTE_COLOR_PRESETS,
+  getNoteColorCardGradient,
+  isPremiumNoteColor,
+} from '../../services/noteAppearance';
 
 interface NoteColorPickerProps {
   label?: string;
@@ -11,6 +16,8 @@ interface NoteColorPickerProps {
   includeAutoOption?: boolean;
   testIDPrefix?: string;
   compact?: boolean;
+  lockedColorIds?: string[];
+  onLockedColorPress?: (colorId: string) => void;
 }
 
 export default function NoteColorPicker({
@@ -21,8 +28,11 @@ export default function NoteColorPicker({
   includeAutoOption = false,
   testIDPrefix,
   compact = false,
+  lockedColorIds = [],
+  onLockedColorPress,
 }: NoteColorPickerProps) {
   const { colors, isDark } = useTheme();
+  const lockedColorSet = new Set(lockedColorIds);
 
   return (
     <View style={[styles.section, compact ? styles.sectionCompact : null]}>
@@ -60,19 +70,29 @@ export default function NoteColorPicker({
         {NOTE_COLOR_PRESETS.map((preset, index) => {
           const gradient = getNoteColorCardGradient(preset.id) ?? preset.card;
           const selected = preset.id === selectedColor;
+          const locked = lockedColorSet.has(preset.id) && !selected;
+          const premium = isPremiumNoteColor(preset.id);
 
           return (
             <Pressable
               key={preset.id}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              accessibilityLabel={`${label ?? autoLabel} ${index + 1}`}
-              onPress={() => onSelectColor(preset.id)}
+              accessibilityLabel={`${label ?? autoLabel} ${index + 1}${premium ? ' Plus' : ''}`}
+              onPress={() => {
+                if (locked) {
+                  onLockedColorPress?.(preset.id);
+                  return;
+                }
+
+                onSelectColor(preset.id);
+              }}
               style={[
                 styles.swatchButton,
                 {
-                  borderColor: selected ? colors.primary : colors.border,
+                  borderColor: selected ? colors.primary : locked ? colors.primary + '55' : colors.border,
                   transform: [{ scale: selected ? 1.06 : 1 }],
+                  opacity: locked ? 0.84 : 1,
                 },
               ]}
               testID={testIDPrefix ? `${testIDPrefix}-${preset.id}` : undefined}
@@ -83,6 +103,21 @@ export default function NoteColorPicker({
                 end={{ x: 1, y: 1 }}
                 style={styles.swatchFill}
               />
+              {premium ? (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.premiumBadge,
+                    { backgroundColor: locked ? 'rgba(28,28,30,0.72)' : 'rgba(255,255,255,0.84)' },
+                  ]}
+                >
+                  <Ionicons
+                    name={locked ? 'lock-closed' : 'sparkles'}
+                    size={10}
+                    color={locked ? '#FFFFFF' : colors.primary}
+                  />
+                </View>
+              ) : null}
               {selected ? (
                 <View
                   pointerEvents="none"
@@ -152,5 +187,15 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
+  },
+  premiumBadge: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 15,
+    height: 15,
+    borderRadius: 7.5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

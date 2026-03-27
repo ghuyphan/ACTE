@@ -2,7 +2,9 @@ import {
   DEFAULT_NOTE_COLOR_ID,
   NOTE_CARD_GRADIENTS,
   NOTE_COLOR_PRESETS,
+  PREMIUM_NOTE_COLOR_IDS,
   NoteColorId,
+  NoteColorFinish,
   NoteColorPreset,
 } from '../constants/noteColors';
 
@@ -215,7 +217,8 @@ function getBaseGradientSeed(text: string, noteId?: string) {
 }
 
 export { DEFAULT_NOTE_COLOR_ID, NOTE_COLOR_PRESETS };
-export type { NoteColorId, NoteColorPreset };
+export { PREMIUM_NOTE_COLOR_IDS };
+export type { NoteColorFinish, NoteColorId, NoteColorPreset };
 
 export function getNoteColorPreset(noteColor?: string | null) {
   if (!noteColor) {
@@ -223,6 +226,14 @@ export function getNoteColorPreset(noteColor?: string | null) {
   }
 
   return NOTE_COLOR_PRESET_MAP.get(noteColor as NoteColorId) ?? null;
+}
+
+export function getNoteColorFinish(noteColor?: string | null): NoteColorFinish {
+  return getNoteColorPreset(noteColor)?.finish ?? 'standard';
+}
+
+export function isPremiumNoteColor(noteColor?: string | null) {
+  return getNoteColorPreset(noteColor)?.tier === 'plus';
 }
 
 export function getNoteColorCardGradient(noteColor?: string | null): GradientPair | null {

@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { Href, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -40,6 +41,7 @@ export function useSettingsScreenModel() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { alertProps, showAlert } = useAppSheetAlert();
+  const appVersion = Constants.expoConfig?.version?.trim() || '1.0.0';
 
   const [showTheme, setShowTheme] = useState(false);
   const [showLanguage, setShowLanguage] = useState(false);
@@ -114,22 +116,22 @@ export function useSettingsScreenModel() {
     if (tier === 'plus') {
       return t(
         'settings.plusActiveHint',
-        'Noto Plus is active. Photo notes are expanded and library import is unlocked.'
+        'Noto Plus is active. Unlimited photo notes, premium card finishes, and library import are unlocked.'
       );
     }
 
     if (photoNoteLimit === null) {
-      return t(
-        'settings.plusHint',
-        'Upgrade to Noto Plus to save more photo notes and create notes from your photo library.'
-      );
-    }
-
     return t(
-      'settings.plusHintWithLimit',
-      'Free plan includes up to {{count}} photo notes. Upgrade to Noto Plus for more image notes and library import.',
-      { count: photoNoteLimit }
+      'settings.plusHint',
+      'Upgrade to Noto Plus to unlock unlimited photo notes, premium card finishes, and import from your photo library.'
     );
+  }
+
+  return t(
+    'settings.plusHintWithLimit',
+    'Free plan includes up to {{count}} photo notes. Upgrade to Noto Plus for unlimited photo notes, premium card finishes, and library import.',
+    { count: photoNoteLimit }
+  );
   }, [photoNoteLimit, t, tier]);
 
   const accountHint = useMemo(() => {
@@ -140,7 +142,14 @@ export function useSettingsScreenModel() {
       );
     }
 
-    if (!user || !syncEnabled) {
+    if (!user) {
+      return t(
+        'settings.accountSignedOutMsg',
+        'Sign in to back up your notes and keep them synced across your devices.'
+      );
+    }
+
+    if (!syncEnabled) {
       return null;
     }
 
@@ -232,6 +241,7 @@ export function useSettingsScreenModel() {
   return {
     accountHint,
     accountValue,
+    appVersion,
     alertProps,
     colors,
     i18n,

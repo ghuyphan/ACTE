@@ -9,6 +9,7 @@ import { parseNoteStickerPlacements } from '../services/noteStickers';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import NoteDoodleCanvas from './NoteDoodleCanvas';
 import NoteStickerCanvas from './NoteStickerCanvas';
+import PremiumNoteFinishOverlay from './ui/PremiumNoteFinishOverlay';
 
 interface TextMemoryCardProps {
     text: string;
@@ -42,6 +43,7 @@ export default function TextMemoryCard({
                 end={{ x: 1, y: 1 }}
                 style={styles.gradient}
             >
+                <PremiumNoteFinishOverlay noteColor={noteColor} />
                 {stickerPlacements.length > 0 ? (
                     <View pointerEvents="none" style={styles.stickerOverlay}>
                         <NoteStickerCanvas placements={stickerPlacements} remoteBucket={remoteBucket} />

@@ -212,6 +212,7 @@ function createCaptureCardProps(
     capturedPhoto: null,
     onRetakePhoto: () => undefined,
     needsCameraPermission: false,
+    cameraPermissionRequiresSettings: false,
     onRequestCameraPermission: () => undefined,
     facing: 'back' as const,
     onToggleFacing: () => undefined,
@@ -461,6 +462,32 @@ describe('CaptureCard doodle handle', () => {
     );
 
     expect(ref.current?.getDoodleSnapshot()).toEqual({ enabled: false, strokes: [] });
+  });
+
+  it('hides the view-all action while camera permission is required', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByText, queryByText } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      needsCameraPermission: true,
+      permissionGranted: false,
+    });
+
+    expect(getByText('Grant Access')).toBeTruthy();
+    expect(queryByText('grid-outline')).toBeNull();
+  });
+
+  it('switches the camera permission CTA to settings when the prompt is blocked', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByText, queryByText } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      needsCameraPermission: true,
+      cameraPermissionRequiresSettings: true,
+      permissionGranted: false,
+    });
+
+    expect(getByText('Camera access is blocked for Noto. Open Settings to take photos.')).toBeTruthy();
+    expect(getByText('Open Settings')).toBeTruthy();
+    expect(queryByText('Grant Access')).toBeNull();
   });
 
   it('keeps the share toggle visible beside the restaurant field', () => {

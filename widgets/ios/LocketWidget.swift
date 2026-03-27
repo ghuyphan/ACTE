@@ -34,6 +34,8 @@ private struct LocketWidgetPayload {
     let authorInitials: String
     let authorAvatarImageUrl: String?
     let authorAvatarImageBase64: String?
+    let primaryActionUrl: String
+    let badgeActionUrl: String?
 
     static let placeholder = LocketWidgetPayload(
         noteType: "text",
@@ -66,7 +68,9 @@ private struct LocketWidgetPayload {
         authorDisplayName: "",
         authorInitials: "",
         authorAvatarImageUrl: nil,
-        authorAvatarImageBase64: nil
+        authorAvatarImageBase64: nil,
+        primaryActionUrl: "noto:///",
+        badgeActionUrl: nil
     )
 
     init(
@@ -100,7 +104,9 @@ private struct LocketWidgetPayload {
         authorDisplayName: String,
         authorInitials: String,
         authorAvatarImageUrl: String?,
-        authorAvatarImageBase64: String?
+        authorAvatarImageBase64: String?,
+        primaryActionUrl: String,
+        badgeActionUrl: String?
     ) {
         self.noteType = noteType
         self.text = text
@@ -133,6 +139,8 @@ private struct LocketWidgetPayload {
         self.authorInitials = authorInitials
         self.authorAvatarImageUrl = authorAvatarImageUrl
         self.authorAvatarImageBase64 = authorAvatarImageBase64
+        self.primaryActionUrl = primaryActionUrl
+        self.badgeActionUrl = badgeActionUrl
     }
 
     init(rawProps: [String: Any]) {
@@ -169,6 +177,8 @@ private struct LocketWidgetPayload {
         authorInitials = LocketWidgetPayload.stringValue(payload["authorInitials"])
         authorAvatarImageUrl = LocketWidgetPayload.optionalStringValue(payload["authorAvatarImageUrl"])
         authorAvatarImageBase64 = LocketWidgetPayload.optionalStringValue(payload["authorAvatarImageBase64"])
+        primaryActionUrl = LocketWidgetPayload.stringValue(payload["primaryActionUrl"])
+        badgeActionUrl = LocketWidgetPayload.optionalStringValue(payload["badgeActionUrl"])
     }
 
     private static func unwrapPayload(from rawProps: [String: Any]) -> [String: Any] {
@@ -239,6 +249,19 @@ private struct LocketWidgetDoodleOverlay: View {
     let strokes: [LocketWidgetDoodleStroke]
     let isLarge: Bool
     let overlayOpacity: Double
+    let contentInset: CGFloat
+
+    init(
+        strokes: [LocketWidgetDoodleStroke],
+        isLarge: Bool,
+        overlayOpacity: Double,
+        contentInset: CGFloat = 0
+    ) {
+        self.strokes = strokes
+        self.isLarge = isLarge
+        self.overlayOpacity = overlayOpacity
+        self.contentInset = contentInset
+    }
 
     var body: some View {
         Canvas { context, size in
@@ -301,6 +324,7 @@ private struct LocketWidgetDoodleOverlay: View {
                 )
             }
         }
+        .padding(contentInset)
     }
 }
 
@@ -390,15 +414,29 @@ private func parseStickerPlacements(from stickerPlacementsJson: String?) -> [Loc
 private struct LocketWidgetStickerOverlay: View {
     let placements: [LocketWidgetStickerPlacement]
     let overlayOpacity: Double
+    let artboardInset: CGFloat
+    let minimumBaseSize: CGFloat
+    let baseSizeRatio: CGFloat
 
-    private let artboardInset: CGFloat = 18
-    private let minimumBaseSize: CGFloat = 68
+    init(
+        placements: [LocketWidgetStickerPlacement],
+        overlayOpacity: Double,
+        artboardInset: CGFloat = 18,
+        minimumBaseSize: CGFloat = 68,
+        baseSizeRatio: CGFloat = 0.30
+    ) {
+        self.placements = placements
+        self.overlayOpacity = overlayOpacity
+        self.artboardInset = artboardInset
+        self.minimumBaseSize = minimumBaseSize
+        self.baseSizeRatio = baseSizeRatio
+    }
 
     var body: some View {
         GeometryReader { proxy in
             let artboardWidth = max(1, proxy.size.width - (artboardInset * 2))
             let artboardHeight = max(1, proxy.size.height - (artboardInset * 2))
-            let baseSize = max(minimumBaseSize, min(artboardWidth, artboardHeight) * 0.30)
+            let baseSize = max(minimumBaseSize, min(artboardWidth, artboardHeight) * baseSizeRatio)
 
             ZStack {
                 ForEach(placements.sorted(by: { left, right in
@@ -532,6 +570,10 @@ private struct LocketWidgetEntryView: View {
         family == .systemLarge
     }
 
+    private var isMedium: Bool {
+        family == .systemMedium
+    }
+
     private var isAccessoryInline: Bool {
         family == .accessoryInline
     }
@@ -546,6 +588,15 @@ private struct LocketWidgetEntryView: View {
 
     private var isAccessoryFamily: Bool {
         isAccessoryInline || isAccessoryCircular || isAccessoryRectangular
+    }
+
+    private var primaryActionURL: URL? {
+        let normalized = payload.primaryActionUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return nil
+        }
+
+        return URL(string: normalized)
     }
 
     private var displayText: String {
@@ -659,6 +710,15 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var textSurfaceColors: [Color] {
+        if
+            let start = payload.backgroundGradientStartColor,
+            let end = payload.backgroundGradientEndColor,
+            !start.isEmpty,
+            !end.isEmpty
+        {
+            return [colorFromHex(start), colorFromHex(end)]
+        }
+
         [Color(red: 0.96, green: 0.94, blue: 0.91), Color(red: 0.93, green: 0.90, blue: 0.86)]
     }
 
@@ -831,6 +891,7 @@ private struct LocketWidgetEntryView: View {
                 legacyBody
             }
         }
+        .widgetURL(primaryActionURL)
     }
 
     private var legacyBody: some View {
@@ -871,6 +932,8 @@ private struct LocketWidgetEntryView: View {
     private var contentLayer: some View {
         if isLarge {
             largeLayout
+        } else if isMedium {
+            mediumLayout
         } else {
             smallLayout
         }
@@ -943,7 +1006,10 @@ private struct LocketWidgetEntryView: View {
             if shouldShowStickerOverlay {
                 LocketWidgetStickerOverlay(
                     placements: stickerPlacements,
-                    overlayOpacity: noteOverlayOpacity
+                    overlayOpacity: noteOverlayOpacity,
+                    artboardInset: 0,
+                    minimumBaseSize: 48,
+                    baseSizeRatio: 0.24
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -952,10 +1018,10 @@ private struct LocketWidgetEntryView: View {
                 LocketWidgetDoodleOverlay(
                     strokes: doodleStrokes,
                     isLarge: false,
-                    overlayOpacity: noteOverlayOpacity
+                    overlayOpacity: noteOverlayOpacity,
+                    contentInset: 0
                 )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(locketWidgetDoodleArtboardInset)
                     .allowsHitTesting(false)
             }
 
@@ -988,6 +1054,73 @@ private struct LocketWidgetEntryView: View {
             .padding(.horizontal, smallLayoutPadding)
             .padding(.top, smallLayoutPadding)
             .padding(.bottom, smallLayoutPadding + (shouldShowCountBadge ? smallBadgeReservedSpace : 0))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var mediumLayout: some View {
+        ZStack {
+            if shouldShowStickerOverlay {
+                LocketWidgetStickerOverlay(
+                    placements: stickerPlacements,
+                    overlayOpacity: noteOverlayOpacity
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            if shouldShowDoodleOverlay {
+                LocketWidgetDoodleOverlay(
+                    strokes: doodleStrokes,
+                    isLarge: true,
+                    overlayOpacity: noteOverlayOpacity,
+                    contentInset: locketWidgetDoodleArtboardInset
+                )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top, spacing: 8) {
+                    if shouldShowAuthorChip {
+                        authorChip
+                    }
+
+                    Spacer(minLength: 0)
+
+                    if shouldPinLocationChip {
+                        floatingLocationChip
+                    }
+                }
+                .padding(.bottom, (shouldShowAuthorChip || shouldPinLocationChip) ? 10 : 0)
+
+                if hasLocationEyebrow && !shouldPinLocationChip {
+                    Text(payload.locationName)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(eyebrowTextColor)
+                        .lineLimit(1)
+                        .padding(.bottom, 10)
+                }
+
+                if !displayText.isEmpty {
+                    Text(displayText)
+                        .font(.system(size: mediumFontSize, weight: .regular, design: .serif))
+                        .foregroundStyle(primaryTextColor)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(hasPhotoBackground ? 3 : 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Spacer(minLength: 14)
+
+                if shouldShowCountBadge {
+                    HStack {
+                        countBadge
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -1032,10 +1165,10 @@ private struct LocketWidgetEntryView: View {
                 LocketWidgetDoodleOverlay(
                     strokes: doodleStrokes,
                     isLarge: true,
-                    overlayOpacity: noteOverlayOpacity
+                    overlayOpacity: noteOverlayOpacity,
+                    contentInset: locketWidgetDoodleArtboardInset
                 )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(locketWidgetDoodleArtboardInset)
                     .allowsHitTesting(false)
             }
 
@@ -1089,6 +1222,14 @@ private struct LocketWidgetEntryView: View {
         if count <= 28 { return 17 }
         if count <= 64 { return 15.5 }
         return 14.5
+    }
+
+    private var mediumFontSize: CGFloat {
+        let count = displayText.trimmingCharacters(in: .whitespacesAndNewlines).count
+
+        if count <= 60 { return 21 }
+        if count <= 120 { return 18.5 }
+        return 16.5
     }
 
     private var usesCompactSmallTextLayout: Bool {
@@ -1246,6 +1387,6 @@ struct LocketWidget: Widget {
         }
         .configurationDisplayName("Nearby reminders")
         .description("See the right note when you return somewhere familiar.")
-        .supportedFamilies([.systemSmall, .systemLarge, .accessoryInline, .accessoryCircular, .accessoryRectangular])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryInline, .accessoryCircular, .accessoryRectangular])
     }
 }

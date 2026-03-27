@@ -142,6 +142,7 @@ export default function SettingsScreenAndroid() {
   const {
     accountHint,
     accountValue,
+    appVersion,
     alertProps,
     colors,
     i18n,
@@ -165,7 +166,6 @@ export default function SettingsScreenAndroid() {
     t,
     theme,
     themeLabel,
-    tier,
     user,
   } = useSettingsScreenModel();
   const [sheet, setSheet] = React.useState<SheetKey>(null);
@@ -228,7 +228,45 @@ export default function SettingsScreenAndroid() {
         ]}
       >
         <View style={styles.section}>
-          <SectionTitle colors={colors} title={t('settings.preferences', 'Preferences')} />
+          <SectionTitle colors={colors} title={t('settings.account', 'Account')} />
+          <SettingsCard colors={colors}>
+            <SettingRow
+              colors={colors}
+              title={t('settings.accountEntry', 'Account')}
+              value={accountValue}
+              onPress={isAuthAvailable ? openAccountScreen : undefined}
+            />
+            <CardDivider colors={colors} />
+            <SettingRow
+              colors={colors}
+              title={t('settings.autoSync', 'Auto sync')}
+              subtitle={accountHint ?? t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')}
+              value={syncValue}
+              onPress={() => setSheet('sync')}
+            />
+            <CardDivider colors={colors} />
+            <SettingRow
+              colors={colors}
+              title={t('settings.plusTitle', 'Noto Plus')}
+              subtitle={plusHint}
+              value={plusValue}
+              onPress={openPlusScreen}
+            />
+            {isAuthAvailable ? (
+              <View style={styles.cardAction}>
+                <PrimaryButton
+                  label={user ? t('settings.manageAccount', 'Manage account') : t('settings.login', 'Sign In')}
+                  variant={user ? 'secondary' : 'primary'}
+                  onPress={openAccountScreen}
+                  style={styles.fullWidthButton}
+                />
+              </View>
+            ) : null}
+          </SettingsCard>
+        </View>
+
+        <View style={styles.section}>
+          <SectionTitle colors={colors} title={t('settings.appearance', 'Appearance')} />
           <SettingsCard colors={colors}>
             <SettingRow
               colors={colors}
@@ -247,7 +285,7 @@ export default function SettingsScreenAndroid() {
         </View>
 
         <View style={styles.section}>
-          <SectionTitle colors={colors} title={t('settings.data', 'Data')} />
+          <SectionTitle colors={colors} title={t('settings.notes', 'Notes')} />
           <SettingsCard colors={colors}>
             <SettingRow
               colors={colors}
@@ -268,35 +306,9 @@ export default function SettingsScreenAndroid() {
           </SettingsCard>
         </View>
 
-        <View style={styles.section}>
-          <SectionTitle colors={colors} title={t('settings.plusTitle', 'Noto Plus')} />
-          <SettingsCard colors={colors}>
-            <SettingRow
-              colors={colors}
-              title={t('settings.plusPlan', 'Plan')}
-              subtitle={plusHint}
-              value={plusValue}
-              onPress={openPlusScreen}
-            />
-            <View style={styles.cardAction}>
-              <PrimaryButton
-                label={tier === 'plus' ? t('settings.plusTitle', 'Noto Plus') : t('plus.cta', 'Upgrade to Plus')}
-                variant={tier === 'plus' ? 'secondary' : 'primary'}
-                onPress={openPlusScreen}
-                style={styles.fullWidthButton}
-              />
-            </View>
-            {!isPurchaseAvailable ? (
-              <Text style={[styles.cardFootnote, { color: colors.secondaryText }]}>
-                {t('settings.plusUnavailable', 'Plus is coming soon to this build.')}
-              </Text>
-            ) : null}
-          </SettingsCard>
-        </View>
-
         {(showPrivacyPolicyLink || showSupportLink || showAccountDeletionLink) ? (
           <View style={styles.section}>
-            <SectionTitle colors={colors} title={t('settings.legal', 'Legal & Support')} />
+            <SectionTitle colors={colors} title={t('settings.supportTitle', 'Support')} />
             <SettingsCard colors={colors}>
               {showPrivacyPolicyLink ? (
                 <SettingRow
@@ -331,32 +343,30 @@ export default function SettingsScreenAndroid() {
         ) : null}
 
         <View style={styles.section}>
-          <SectionTitle colors={colors} title={t('settings.account', 'Account')} />
+          <SectionTitle colors={colors} title={t('settings.aboutTitle', 'About')} />
           <SettingsCard colors={colors}>
             <SettingRow
               colors={colors}
-              title={t('settings.accountEntry', 'Account')}
-              subtitle={accountHint ?? accountValue}
-              value={accountValue}
-              onPress={isAuthAvailable ? openAccountScreen : undefined}
+              title={t('settings.version', 'Version')}
+              value={appVersion}
             />
             <CardDivider colors={colors} />
             <SettingRow
               colors={colors}
-              title={t('settings.autoSync', 'Auto sync')}
-              subtitle={accountHint ?? t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')}
-              value={syncValue}
-              onPress={() => setSheet('sync')}
+              title="Noto"
+              subtitle={t('settings.about', 'So you never forget what she likes 💛')}
+              value={null}
             />
-            {isAuthAvailable ? (
-              <View style={styles.cardAction}>
-                <PrimaryButton
-                  label={user ? t('settings.manageAccount', 'Manage account') : t('settings.login', 'Sign In')}
-                  variant={user ? 'secondary' : 'primary'}
-                  onPress={openAccountScreen}
-                  style={styles.fullWidthButton}
+            {!isPurchaseAvailable ? (
+              <>
+                <CardDivider colors={colors} />
+                <SettingRow
+                  colors={colors}
+                  title={t('settings.plusTitle', 'Noto Plus')}
+                  subtitle={t('settings.plusUnavailable', 'Plus is coming soon to this build.')}
+                  value={null}
                 />
-              </View>
+              </>
             ) : null}
           </SettingsCard>
         </View>

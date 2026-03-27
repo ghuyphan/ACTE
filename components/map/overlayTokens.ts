@@ -24,5 +24,5 @@ export function getOverlayBorderColor(isDark: boolean) {
 }
 
 export function getOverlayFallbackColor(isDark: boolean) {
-  return isDark ? 'rgba(16,18,24,0.68)' : 'rgba(255,255,255,0.88)';
+  return isDark ? 'rgba(16,18,24,0.68)' : 'rgba(255,255,255,0.72)';
 }

@@ -36,6 +36,7 @@ export default function SettingsScreenIOS() {
   const {
     accountHint,
     accountValue,
+    appVersion,
     alertProps,
     colors,
     i18n,
@@ -48,7 +49,6 @@ export default function SettingsScreenIOS() {
     openPlusScreen,
     openPrivacyPolicyLink,
     openSupportLink,
-    plusHint,
     plusValue,
     promptClearAll,
     setShowLanguage,
@@ -60,6 +60,7 @@ export default function SettingsScreenIOS() {
     showSupportLink,
     showSync,
     showTheme,
+    tier,
     syncValue,
     t,
     themeLabel,
@@ -69,7 +70,98 @@ export default function SettingsScreenIOS() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Host style={styles.container} colorScheme={isDark ? 'dark' : 'light'}>
         <List modifiers={[scrollContentBackground('hidden')]}>
-          <Section title={t('settings.preferences', 'Style & Language')}>
+          <Section title={t('settings.account', 'Backup & Sync')}>
+            {isAuthAvailable ? (
+              <Button onPress={openAccountScreen}>
+                <HStack>
+                  <HStack
+                    modifiers={[
+                      frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                      backgroundOverlay({ color: colors.primary + '18' }),
+                      cornerRadius(7),
+                      padding({ trailing: 12 }),
+                    ]}
+                  >
+                    <SwiftUIImage systemName="person" color={colors.primary} size={18} />
+                  </HStack>
+                  <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                    {t('settings.accountEntry', 'Account')}
+                  </SwiftUIText>
+                  <Spacer />
+                  <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{accountValue}</SwiftUIText>
+                </HStack>
+              </Button>
+            ) : (
+              <HStack>
+                <HStack
+                  modifiers={[
+                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                    backgroundOverlay({ color: colors.primary + '18' }),
+                    cornerRadius(7),
+                    padding({ trailing: 12 }),
+                  ]}
+                >
+                  <SwiftUIImage
+                    systemName="person.crop.circle.badge.exclamationmark"
+                    color={colors.primary}
+                    size={18}
+                  />
+                </HStack>
+                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                  {t('settings.accountEntry', 'Account')}
+                </SwiftUIText>
+                <Spacer />
+                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{accountValue}</SwiftUIText>
+              </HStack>
+            )}
+            <Button onPress={() => setShowSync(true)}>
+              <HStack>
+                <HStack
+                  modifiers={[
+                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                    backgroundOverlay({ color: colors.primary + '18' }),
+                    cornerRadius(7),
+                    padding({ trailing: 12 }),
+                  ]}
+                >
+                  <SwiftUIImage
+                    systemName="arrow.triangle.2.circlepath"
+                    color={colors.primary}
+                    size={18}
+                  />
+                </HStack>
+                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                  {t('settings.autoSync', 'Auto sync')}
+                </SwiftUIText>
+                <Spacer />
+                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{syncValue}</SwiftUIText>
+              </HStack>
+            </Button>
+            <Button onPress={openPlusScreen}>
+              <HStack>
+                <HStack
+                  modifiers={[
+                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                    backgroundOverlay({ color: colors.primary + '18' }),
+                    cornerRadius(7),
+                    padding({ trailing: 12 }),
+                  ]}
+                >
+                  <SwiftUIImage systemName="sparkles" color={colors.primary} size={18} />
+                </HStack>
+                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                  {t('settings.plusTitle', 'Noto Plus')}
+                </SwiftUIText>
+                <Spacer />
+                <SwiftUIText modifiers={[foregroundStyle(colors.primary), padding({ trailing: 4 })]}>
+                  {tier === 'plus' ? t('settings.plusActive', 'Plus') : plusValue}
+                </SwiftUIText>
+                <SwiftUIImage systemName="chevron.right" color={colors.secondaryText} size={14} />
+              </HStack>
+            </Button>
+          </Section>
+
+          <Section title={t('settings.appearance', 'Appearance')}>
             <Button onPress={() => setShowLanguage(true)}>
               <HStack>
                 <HStack
@@ -116,7 +208,7 @@ export default function SettingsScreenIOS() {
             </Button>
           </Section>
 
-          <Section title={t('settings.data', 'Memory Data')}>
+          <Section title={t('settings.notes', 'Notes')}>
             <HStack>
               <HStack
                 modifiers={[
@@ -153,47 +245,8 @@ export default function SettingsScreenIOS() {
             </Button>
           </Section>
 
-          <Section
-            title={t('settings.plusTitle', 'Noto Plus')}
-            footer={
-              <SwiftUIText
-                modifiers={[
-                  foregroundStyle(colors.secondaryText),
-                  font({ size: 13 }),
-                  multilineTextAlignment('leading'),
-                  padding({ top: 8 }),
-                ]}
-              >
-                {plusHint} {!isPurchaseAvailable && `\n${t('settings.plusUnavailable', 'Plus is coming soon.')}`}
-              </SwiftUIText>
-            }
-          >
-            <Button onPress={openPlusScreen}>
-              <HStack>
-                <HStack
-                  modifiers={[
-                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                    backgroundOverlay({ color: colors.primary + '18' }),
-                    cornerRadius(7),
-                    padding({ trailing: 12 }),
-                  ]}
-                >
-                  <SwiftUIImage systemName="sparkles" color={colors.primary} size={18} />
-                </HStack>
-                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                  {t('settings.plusPlan', 'Edition')}
-                </SwiftUIText>
-                <Spacer />
-                <SwiftUIText modifiers={[foregroundStyle(colors.primary), padding({ trailing: 4 })]}>
-                  {plusValue}
-                </SwiftUIText>
-                <SwiftUIImage systemName="chevron.right" color={colors.secondaryText} size={14} />
-              </HStack>
-            </Button>
-          </Section>
-
           {(showPrivacyPolicyLink || showSupportLink || showAccountDeletionLink) ? (
-            <Section title={t('settings.legal', 'Legal & Support')}>
+            <Section title={t('settings.supportTitle', 'Support')}>
               {showPrivacyPolicyLink ? (
                 <Button onPress={openPrivacyPolicyLink}>
                   <HStack>
@@ -231,11 +284,11 @@ export default function SettingsScreenIOS() {
           ) : null}
 
           <Section
-            title={t('settings.account', 'Backup & Sync')}
+            title={t('settings.aboutTitle', 'About')}
             footer={
               <HStack>
                 <Spacer />
-                <VStack alignment="center" modifiers={[padding({ top: 44, bottom: 44 })]}>
+                <VStack alignment="center" modifiers={[padding({ top: 20, bottom: 20 })]}>
                   <SwiftUIText
                     modifiers={[
                       foregroundStyle(colors.text),
@@ -246,102 +299,49 @@ export default function SettingsScreenIOS() {
                   >
                     {t('settings.about', 'So you never forget what she likes 💛')}
                   </SwiftUIText>
-                  <HStack modifiers={[padding({ top: 4 })]}>
-                    <SwiftUIText
-                      modifiers={[
-                        foregroundStyle(colors.secondaryText + '99'),
-                        font({ size: 11, weight: 'semibold' }),
-                        multilineTextAlignment('center'),
-                      ]}
-                    >
-                      Noto v1.0.0 · ノート
-                    </SwiftUIText>
-                  </HStack>
-                  {accountHint ? (
-                    <SwiftUIText
-                      modifiers={[
-                        foregroundStyle(colors.secondaryText + '88'),
-                        font({ size: 11 }),
-                        multilineTextAlignment('center'),
-                        padding({ top: 12 }),
-                      ]}
-                    >
-                      {accountHint}
-                    </SwiftUIText>
-                  ) : null}
                 </VStack>
                 <Spacer />
               </HStack>
             }
           >
-            {isAuthAvailable ? (
-              <>
-                <Button onPress={openAccountScreen}>
-                  <HStack>
-                    <HStack
-                      modifiers={[
-                        frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                        backgroundOverlay({ color: colors.primary + '18' }),
-                        cornerRadius(7),
-                        padding({ trailing: 12 }),
-                      ]}
-                    >
-                      <SwiftUIImage systemName="person" color={colors.primary} size={18} />
-                    </HStack>
-                    <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                      {t('settings.accountEntry', 'Account')}
-                    </SwiftUIText>
-                    <Spacer />
-                    <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{accountValue}</SwiftUIText>
-                  </HStack>
-                </Button>
-                <Button onPress={() => setShowSync(true)}>
-                  <HStack>
-                    <HStack
-                      modifiers={[
-                        frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                        backgroundOverlay({ color: colors.primary + '18' }),
-                        cornerRadius(7),
-                        padding({ trailing: 12 }),
-                      ]}
-                    >
-                      <SwiftUIImage
-                        systemName="arrow.triangle.2.circlepath"
-                        color={colors.primary}
-                        size={18}
-                      />
-                    </HStack>
-                    <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                      {t('settings.autoSync', 'Auto sync')}
-                    </SwiftUIText>
-                    <Spacer />
-                    <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{syncValue}</SwiftUIText>
-                  </HStack>
-                </Button>
-              </>
-            ) : (
+            <HStack>
+              <HStack
+                modifiers={[
+                  frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                  backgroundOverlay({ color: colors.primary + '18' }),
+                  cornerRadius(7),
+                  padding({ trailing: 12 }),
+                ]}
+              >
+                <SwiftUIImage systemName="app.badge" color={colors.primary} size={18} />
+              </HStack>
+              <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                {t('settings.version', 'Version')}
+              </SwiftUIText>
+              <Spacer />
+              <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{appVersion}</SwiftUIText>
+            </HStack>
+            {!isPurchaseAvailable ? (
               <HStack>
                 <HStack
                   modifiers={[
                     frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                    backgroundOverlay({ color: colors.primary + '18' }),
+                    backgroundOverlay({ color: colors.secondaryText + '14' }),
                     cornerRadius(7),
                     padding({ trailing: 12 }),
                   ]}
                 >
                   <SwiftUIImage
-                    systemName="person.crop.circle.badge.exclamationmark"
-                    color={colors.primary}
+                    systemName="sparkles"
+                    color={colors.secondaryText}
                     size={18}
                   />
                 </HStack>
-                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                  {t('settings.accountEntry', 'Account')}
+                <SwiftUIText modifiers={[foregroundStyle(colors.secondaryText)]}>
+                  {t('settings.plusUnavailable', 'Plus is coming soon to this build.')}
                 </SwiftUIText>
-                <Spacer />
-                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{accountValue}</SwiftUIText>
               </HStack>
-            )}
+            ) : null}
           </Section>
         </List>
 

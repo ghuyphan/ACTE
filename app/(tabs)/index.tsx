@@ -43,7 +43,7 @@ import {
   countPhotoNotes,
   getRemainingPhotoSlots,
 } from '../../constants/subscription';
-import { DEFAULT_NOTE_COLOR_ID } from '../../services/noteAppearance';
+import { DEFAULT_NOTE_COLOR_ID, PREMIUM_NOTE_COLOR_IDS } from '../../services/noteAppearance';
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { saveNoteDoodle } from '../../services/noteDoodles';
 import { saveNoteStickerPlacementsWithAssets } from '../../services/noteStickers';
@@ -119,6 +119,10 @@ export default function HomeScreen() {
   const [noteColor, setNoteColor] = useState<string | null>(DEFAULT_NOTE_COLOR_ID);
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [sharedManageSheetVersion, setSharedManageSheetVersion] = useState(0);
+  const lockedPremiumNoteColorIds = useMemo(
+    () => (tier === 'plus' ? [] : PREMIUM_NOTE_COLOR_IDS),
+    [tier]
+  );
   const [pendingSavedNoteScrollTargetId, setPendingSavedNoteScrollTargetId] = useState<string | null>(null);
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -250,11 +254,24 @@ export default function HomeScreen() {
     isScreenFocused &&
     appState === 'active' &&
     cameraPreviewReady;
+  const cameraPermissionRequiresSettings =
+    captureMode === 'camera' &&
+    permission?.granted === false &&
+    permission.canAskAgain === false;
   const visibleSharedPosts = useMemo(
     () =>
       useInlineHeaderSearch && isSearching ? [] : friendPosts,
     [friendPosts, isSearching, useInlineHeaderSearch]
   );
+
+  const handleRequestCameraPermission = useCallback(async () => {
+    if (cameraPermissionRequiresSettings) {
+      await openAppSettings();
+      return;
+    }
+
+    await requestPermission();
+  }, [cameraPermissionRequiresSettings, openAppSettings, requestPermission]);
 
   const resetCaptureDraft = useCallback(() => {
     resetCapture();
@@ -747,18 +764,25 @@ export default function HomeScreen() {
   );
 
   const showPlusSheet = useCallback(
-    (reason: 'limit' | 'library') => {
+    (reason: 'limit' | 'library' | 'color') => {
       const title =
         reason === 'library'
           ? t('plus.libraryTitle', 'Noto Plus unlock')
-          : t('plus.limitTitle', 'Photo limit reached');
+          : reason === 'color'
+            ? t('plus.colorTitle', 'Premium card finishes')
+            : t('plus.limitTitle', 'Photo limit reached');
       const message =
         reason === 'library'
           ? t(
               'plus.libraryMessage',
               'Upgrade to Noto Plus to create notes from photos already in your library.'
             )
-          : t(
+          : reason === 'color'
+            ? t(
+                'plus.colorMessage',
+                'Holographic, RGB, and foil-inspired card finishes are part of Noto Plus.'
+              )
+            : t(
               'plus.limitMessage',
               'Free plan includes up to 10 photo notes. Upgrade to Noto Plus to save more image notes and import from your library.'
             );
@@ -1354,12 +1378,17 @@ export default function HomeScreen() {
         onChangeNoteText={setNoteText}
         noteColor={noteColor}
         onChangeNoteColor={setNoteColor}
+        lockedNoteColorIds={lockedPremiumNoteColorIds}
+        onPressLockedNoteColor={() => showPlusSheet('color')}
         restaurantName={restaurantName}
         onChangeRestaurantName={setRestaurantName}
         capturedPhoto={capturedPhoto}
         onRetakePhoto={() => setCapturedPhoto(null)}
         needsCameraPermission={needsCameraPermission}
-        onRequestCameraPermission={requestPermission}
+        cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
+        onRequestCameraPermission={() => {
+          void handleRequestCameraPermission();
+        }}
         facing={facing}
         onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
         onOpenPhotoLibrary={() => {

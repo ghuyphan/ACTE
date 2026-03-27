@@ -18,6 +18,7 @@ const config = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.acte.app',
+    icon: './Untitled.icon',
   },
   android: {
     package: 'com.acte.app',
@@ -59,7 +60,7 @@ const config = {
     [
       'expo-splash-screen',
       {
-        image: './assets/images/splash-icon.png',
+        image: './assets/images/ios-splash-icon.png',
         imageWidth: 200,
         resizeMode: 'contain',
         backgroundColor: '#F7F2EB',
@@ -97,6 +98,7 @@ const config = {
             description: 'See your nearby memory from your Home Screen or Lock Screen.',
             supportedFamilies: [
               'systemSmall',
+              'systemMedium',
               'systemLarge',
               'accessoryInline',
               'accessoryCircular',

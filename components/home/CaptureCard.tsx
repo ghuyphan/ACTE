@@ -7,11 +7,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AppBottomSheet from '../AppBottomSheet';
 import { GlassView } from '../ui/GlassView';
 import NoteColorPicker from '../ui/NoteColorPicker';
+import PremiumNoteFinishOverlay from '../ui/PremiumNoteFinishOverlay';
 import { Image } from 'expo-image';
 import { TFunction } from 'i18next';
 import { forwardRef, ReactNode, RefObject, useCallback, useEffect, useRef, useState, useMemo, useImperativeHandle, type ComponentProps } from 'react';
 import {
-  ActionSheetIOS,
   ActivityIndicator,
   Alert,
   Animated,
@@ -58,6 +58,7 @@ import {
   updateStickerPlacementTransform,
 } from '../../services/noteStickers';
 import PrimaryButton from '../ui/PrimaryButton';
+import StickerSourceSheet from '../StickerSourceSheet';
 import StickerPastePopover from '../ui/StickerPastePopover';
 import { isOlderIOS } from '../../utils/platform';
 import {
@@ -72,6 +73,8 @@ const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
 const TOP_CONTROL_INSET = 24;
 const TOP_CONTROL_HEIGHT = 38;
 const TOP_CONTROL_RADIUS = 19;
+const DECORATE_OPTION_ACTIVE_SCALE = 1.015;
+const DECORATE_OPTION_CONTENT_SCALE = 1.035;
 const SHUTTER_OUTER_SIZE = 68;
 const SIDE_ACTION_SIZE = 46;
 const SHUTTER_SIDE_ACTION_OFFSET = SHUTTER_OUTER_SIZE / 2 + 12 + SIDE_ACTION_SIZE;
@@ -360,11 +363,14 @@ interface CaptureCardProps {
   onChangeNoteText: (nextText: string) => void;
   noteColor?: string | null;
   onChangeNoteColor?: (nextColor: string | null) => void;
+  lockedNoteColorIds?: string[];
+  onPressLockedNoteColor?: (colorId: string) => void;
   restaurantName: string;
   onChangeRestaurantName: (nextName: string) => void;
   capturedPhoto: string | null;
   onRetakePhoto: () => void;
   needsCameraPermission: boolean;
+  cameraPermissionRequiresSettings?: boolean;
   onRequestCameraPermission: () => void;
   facing: 'back' | 'front';
   onToggleFacing: () => void;
@@ -405,11 +411,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onChangeNoteText,
   noteColor = null,
   onChangeNoteColor,
+  lockedNoteColorIds = [],
+  onPressLockedNoteColor,
   restaurantName,
   onChangeRestaurantName,
   capturedPhoto,
   onRetakePhoto,
   needsCameraPermission,
+  cameraPermissionRequiresSettings = false,
   onRequestCameraPermission,
   facing,
   onToggleFacing,
@@ -454,6 +463,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [textSelectedStickerId, setTextSelectedStickerId] = useState<string | null>(null);
   const [photoSelectedStickerId, setPhotoSelectedStickerId] = useState<string | null>(null);
   const [importingSticker, setImportingSticker] = useState(false);
+  const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
+  const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
   const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
   const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
   const isPhotoDoodleSurface = captureMode === 'camera' && Boolean(capturedPhoto);
@@ -587,6 +598,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       setPhotoStickerModeEnabled(false);
       setPhotoDecorateMenuExpanded(false);
     }
+
+    setShowStickerSourceSheet(false);
   }, [captureMode, capturedPhoto]);
 
   useEffect(() => {
@@ -637,6 +650,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       dismissPastePrompt();
     }
   }, [dismissPastePrompt, doodleModeEnabled, importingSticker, interactionsDisabled, stickerModeEnabled]);
+
+  useEffect(() => {
+    if (importingSticker || interactionsDisabled) {
+      setShowStickerSourceSheet(false);
+    }
+  }, [importingSticker, interactionsDisabled]);
 
   const resetDoodle = useCallback(() => {
     setTextDoodleModeEnabled(false);
@@ -702,6 +721,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     transform: [
       { scale: 1 + decorateProgress.value * 0.08 },
     ],
+  }));
+  const animatedDecorateChevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${decorateProgress.value * 180}deg` }],
   }));
   const decorateControlsTargetWidth =
     doodleModeEnabled || stickerModeEnabled
@@ -938,6 +960,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     dismissPastePrompt();
     void handlePasteStickerFromClipboard();
   }, [dismissPastePrompt, handlePasteStickerFromClipboard]);
+  const handleCloseStickerSourceSheet = useCallback(() => {
+    setShowStickerSourceSheet(false);
+  }, []);
+  const handleSelectStickerSourceClipboard = useCallback(() => {
+    setShowStickerSourceSheet(false);
+    void handlePasteStickerFromClipboard();
+  }, [handlePasteStickerFromClipboard]);
+  const handleSelectStickerSourcePhotos = useCallback(() => {
+    setShowStickerSourceSheet(false);
+    void handleImportSticker();
+  }, [handleImportSticker]);
   const handleShowStickerSourceOptions = useCallback(async () => {
     if (!ENABLE_PHOTO_STICKERS || importingSticker) {
       return;
@@ -945,49 +978,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
     dismissPastePrompt();
     const canPasteFromClipboard = await hasClipboardStickerImage();
-    const pasteLabel = t('capture.pasteStickerFromClipboard', 'Paste from Clipboard');
-    const photoLabel = t('capture.chooseStickerFromPhotos', 'Choose from Photos');
-    const cancelLabel = t('common.cancel', 'Cancel');
-    const options = canPasteFromClipboard
-      ? [pasteLabel, photoLabel, cancelLabel]
-      : [photoLabel, cancelLabel];
-    const cancelButtonIndex = options.length - 1;
-
-    const handleSelection = (selectedIndex?: number) => {
-      if (selectedIndex === undefined || selectedIndex === cancelButtonIndex) {
-        return;
-      }
-
-      if (canPasteFromClipboard && selectedIndex === 0) {
-        void handlePasteStickerFromClipboard();
-        return;
-      }
-
-      void handleImportSticker();
-    };
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title: t('capture.addStickerTitle', 'Add sticker'),
-          options,
-          cancelButtonIndex,
-        },
-        handleSelection
-      );
-      return;
-    }
-
-    Alert.alert(
-      t('capture.addStickerTitle', 'Add sticker'),
-      undefined,
-      options.map((label, index) => ({
-        text: label,
-        style: index === cancelButtonIndex ? 'cancel' : 'default',
-        onPress: () => handleSelection(index),
-      }))
-    );
-  }, [dismissPastePrompt, handleImportSticker, handlePasteStickerFromClipboard, importingSticker, t]);
+    setStickerSourceCanPasteFromClipboard(canPasteFromClipboard);
+    setShowStickerSourceSheet(true);
+  }, [dismissPastePrompt, importingSticker]);
   const handleToggleStickerMode = useCallback(() => {
     if (!ENABLE_PHOTO_STICKERS) {
       return;
@@ -1137,6 +1130,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         <NoteColorPicker
           selectedColor={noteColor ?? DEFAULT_NOTE_COLOR_ID}
           onSelectColor={handleSelectNoteColor}
+          lockedColorIds={lockedNoteColorIds}
+          onLockedColorPress={onPressLockedNoteColor}
           testIDPrefix="capture-note-color"
           compact
         />
@@ -1171,6 +1166,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             start={{ x: 0.08, y: 0.06 }}
             end={{ x: 0.94, y: 0.94 }}
           >
+            <PremiumNoteFinishOverlay noteColor={noteColor} animated />
             {ENABLE_PHOTO_STICKERS ? (
               <Pressable
                 testID="capture-card-paste-surface"
@@ -1206,11 +1202,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   >
                     {t('capture.decorate', 'Decorate')}
                   </Text>
-                  <Ionicons
-                    name={showDecorateControls ? 'chevron-up' : 'chevron-down'}
-                    size={12}
-                    color={showDecorateControls ? textCardActiveIconColor : colors.captureGlassIcon}
-                  />
+                  <Reanimated.View style={[styles.decorateChevronWrap, animatedDecorateChevronStyle]}>
+                    <Ionicons
+                      name="chevron-down"
+                      size={12}
+                      color={showDecorateControls ? textCardActiveIconColor : colors.captureGlassIcon}
+                    />
+                  </Reanimated.View>
                 </CaptureAnimatedPressable>
                 <Reanimated.View
                   pointerEvents={showDecorateControls ? 'auto' : 'none'}
@@ -1231,6 +1229,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                           inactiveBorderColor={colors.captureGlassBorder}
                           activeIconColor={textCardActiveIconColor}
                           inactiveIconColor={colors.captureGlassText}
+                          activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+                          activeTranslateY={0}
+                          contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+                          contentActiveTranslateY={0}
                           style={styles.textCardActionButton}
                         />
                         <CaptureAnimatedPressable
@@ -1282,6 +1284,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                           inactiveBorderColor={colors.captureGlassBorder}
                           activeIconColor={textCardActiveIconColor}
                           inactiveIconColor={colors.captureGlassText}
+                          activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+                          activeTranslateY={0}
+                          contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+                          contentActiveTranslateY={0}
                           style={styles.textCardActionButton}
                         />
                         <CaptureAnimatedPressable
@@ -1331,16 +1337,20 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                           inactiveBorderColor={colors.captureGlassBorder}
                           activeIconColor={textCardActiveIconColor}
                           inactiveIconColor={colors.captureGlassText}
+                          activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+                          activeTranslateY={0}
+                          contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+                          contentActiveTranslateY={0}
                           style={styles.textCardActionButton}
                         />
                         {ENABLE_PHOTO_STICKERS ? (
-                            <CaptureToggleIconButton
-                              testID="capture-sticker-toggle"
-                              accessibilityHint={t(
-                                'capture.stickerPasteHint',
-                                'Tap to edit stickers. Long press the card to paste from your clipboard.'
-                              )}
-                              onPress={handleToggleStickerMode}
+                          <CaptureToggleIconButton
+                            testID="capture-sticker-toggle"
+                            accessibilityHint={t(
+                              'capture.stickerPasteHint',
+                              'Tap to edit stickers. Long press the card to paste from your clipboard.'
+                            )}
+                            onPress={handleToggleStickerMode}
                             active={stickerModeEnabled}
                             activeIconName="pricetags"
                             inactiveIconName="pricetags-outline"
@@ -1350,8 +1360,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                             inactiveBorderColor={colors.captureGlassBorder}
                             activeIconColor={textCardActiveIconColor}
                             inactiveIconColor={colors.captureGlassText}
+                            activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+                            activeTranslateY={0}
+                            contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+                            contentActiveTranslateY={0}
                             style={styles.textCardActionButton}
-                          />
+                            />
                         ) : null}
                       </View>
                     )}
@@ -1474,11 +1488,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   >
                     {t('capture.decorate', 'Decorate')}
                   </Text>
-                  <Ionicons
-                    name={showDecorateControls ? 'chevron-up' : 'chevron-down'}
-                    size={12}
-                    color={showDecorateControls ? photoPreviewActiveText : photoPreviewControlText}
-                  />
+                  <Reanimated.View style={[styles.decorateChevronWrap, animatedDecorateChevronStyle]}>
+                    <Ionicons
+                      name="chevron-down"
+                      size={12}
+                      color={showDecorateControls ? photoPreviewActiveText : photoPreviewControlText}
+                    />
+                  </Reanimated.View>
                 </CaptureAnimatedPressable>
                 <Reanimated.View
                   pointerEvents={showDecorateControls ? 'auto' : 'none'}
@@ -1502,6 +1518,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                           inactiveBorderColor={photoPreviewControlBorder}
                           activeIconColor={photoPreviewActiveText}
                           inactiveIconColor={photoPreviewControlText}
+                          activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+                          activeTranslateY={0}
+                          contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+                          contentActiveTranslateY={0}
                           style={[
                             styles.cameraOverlayButton,
                             styles.photoDoodleIconButton,
@@ -1559,6 +1579,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                           inactiveBorderColor={photoPreviewControlBorder}
                           activeIconColor={photoPreviewActiveText}
                           inactiveIconColor={photoPreviewControlText}
+                          activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+                          activeTranslateY={0}
+                          contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+                          contentActiveTranslateY={0}
                           style={[
                             styles.cameraOverlayButton,
                             styles.photoDoodleIconButton,
@@ -1616,20 +1640,24 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                           inactiveBorderColor={photoPreviewControlBorder}
                           activeIconColor={photoPreviewActiveText}
                           inactiveIconColor={photoPreviewControlText}
+                          activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+                          activeTranslateY={0}
+                          contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+                          contentActiveTranslateY={0}
                           style={[
                             styles.cameraOverlayButton,
                             styles.photoDoodleIconButton,
                           ]}
                         />
                         {ENABLE_PHOTO_STICKERS ? (
-                            <CaptureToggleIconButton
-                              testID="capture-sticker-toggle"
-                              accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
-                              accessibilityHint={t(
-                                'capture.stickerPasteHint',
-                                'Tap to edit stickers. Long press the card to paste from your clipboard.'
-                              )}
-                              onPress={handleToggleStickerMode}
+                          <CaptureToggleIconButton
+                            testID="capture-sticker-toggle"
+                            accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
+                            accessibilityHint={t(
+                              'capture.stickerPasteHint',
+                              'Tap to edit stickers. Long press the card to paste from your clipboard.'
+                            )}
+                            onPress={handleToggleStickerMode}
                             active={stickerModeEnabled}
                             activeIconName="pricetags"
                             inactiveIconName="pricetags-outline"
@@ -1639,6 +1667,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                             inactiveBorderColor={photoPreviewControlBorder}
                             activeIconColor={photoPreviewActiveText}
                             inactiveIconColor={photoPreviewControlText}
+                            activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+                            activeTranslateY={0}
+                            contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+                            contentActiveTranslateY={0}
                             style={[
                               styles.cameraOverlayButton,
                               styles.photoDoodleIconButton,
@@ -1700,10 +1732,19 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           <View style={[styles.textCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Ionicons name="camera" size={48} color={colors.secondaryText} />
             <Text style={[styles.permissionText, { color: colors.text }]}>
-              {t('capture.cameraPermission', 'Camera access needed')}
+              {cameraPermissionRequiresSettings
+                ? t(
+                    'capture.cameraPermissionSettingsMsg',
+                    'Camera access is blocked for Noto. Open Settings to take photos.'
+                  )
+                : t('capture.cameraPermission', 'Camera access needed')}
             </Text>
             <PrimaryButton
-              label={t('capture.grantAccess', 'Grant Access')}
+              label={
+                cameraPermissionRequiresSettings
+                  ? t('common.openSettings', 'Open Settings')
+                  : t('capture.grantAccess', 'Grant Access')
+              }
               onPress={onRequestCameraPermission}
               style={styles.permissionButton}
             />
@@ -1898,20 +1939,24 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         </View>
         {captureMode === 'camera' && !capturedPhoto ? (
           <View style={styles.belowCardShutterRow}>
-            <CaptureAnimatedPressable
-              accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
-              onPress={onOpenNotes}
-              style={[
-                styles.secondaryActionButton,
-                styles.belowCardLeadingAction,
-                {
-                  borderColor: colors.border,
-                  backgroundColor: colors.card,
-                },
-              ]}
-            >
-              <Ionicons name="grid-outline" size={18} color={colors.text} />
-            </CaptureAnimatedPressable>
+            {permissionGranted ? (
+              <CaptureAnimatedPressable
+                accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
+                onPress={onOpenNotes}
+                style={[
+                  styles.secondaryActionButton,
+                  styles.belowCardLeadingAction,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: colors.card,
+                  },
+                ]}
+              >
+                <Ionicons name="grid-outline" size={18} color={colors.text} />
+              </CaptureAnimatedPressable>
+            ) : (
+              <View style={[styles.belowCardSideActionSpacer, styles.belowCardLeadingAction]} />
+            )}
             {permissionGranted ? (
               <CaptureAnimatedPressable
                 onPressIn={onShutterPressIn}
@@ -2099,6 +2144,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           {footerContent ? <View style={styles.footerSlot}>{footerContent}</View> : null}
         </Animated.View>
       </View>
+      <StickerSourceSheet
+        visible={showStickerSourceSheet}
+        canPasteFromClipboard={stickerSourceCanPasteFromClipboard}
+        title={t('capture.addStickerTitle', 'Add sticker')}
+        pasteLabel={t('capture.pasteStickerFromClipboard', 'Paste from Clipboard')}
+        photoLabel={t('capture.chooseStickerFromPhotos', 'Choose from Photos')}
+        cancelLabel={t('common.cancel', 'Cancel')}
+        onSelectClipboard={handleSelectStickerSourceClipboard}
+        onSelectPhotos={handleSelectStickerSourcePhotos}
+        onClose={handleCloseStickerSourceSheet}
+      />
       {Platform.OS === 'ios' && noteColorSheetBody ? (
         <View pointerEvents={showNoteColorSheet ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
           <Host style={StyleSheet.absoluteFill} colorScheme={colors.captureGlassColorScheme}>
@@ -2259,6 +2315,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 16,
     fontWeight: '700',
+  },
+  decorateChevronWrap: {
+    width: 12,
+    height: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   decorateControlsWrap: {
     overflow: 'hidden',

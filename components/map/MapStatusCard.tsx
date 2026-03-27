@@ -35,8 +35,8 @@ export default function MapStatusCard({
   const isFiltered = overlayState === 'no-filter-results';
   const isIOS = Platform.OS === 'ios';
   const shouldUseGlass = isIOS;
-  const fallbackFill = isDark ? 'rgba(26,26,32,0.95)' : 'rgba(250,250,252,0.96)';
-  const statusGlassScrimColor = isDark ? 'rgba(12,12,18,0.10)' : 'rgba(255,255,255,0.12)';
+  const fallbackFill = isDark ? 'rgba(26,26,32,0.95)' : 'rgba(248,247,243,0.88)';
+  const statusGlassScrimColor = isDark ? 'rgba(12,12,18,0.10)' : 'rgba(255,255,255,0.04)';
   const iconColor = isIOS ? secondaryTextColor : primaryColor;
 
   return (

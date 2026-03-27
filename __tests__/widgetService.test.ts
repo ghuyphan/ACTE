@@ -516,6 +516,7 @@ describe('widgetService', () => {
         authorDisplayName: 'Annie Case',
         authorInitials: 'AC',
         locationName: 'Shared Place',
+        primaryActionUrl: 'noto:///shared/shared-photo-1',
       })
     );
     expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
@@ -662,6 +663,8 @@ describe('widgetService', () => {
       expect.objectContaining({
         isIdleState: true,
         noteCount: 1,
+        primaryActionUrl: 'noto:///notes',
+        badgeActionUrl: 'noto:///notes',
       })
     );
   });
@@ -774,8 +777,9 @@ describe('widgetService', () => {
     expect(entries[0]?.props.props).toEqual(
       expect.objectContaining({
         noteType: 'text',
-        text: '☕️ Morning coffee again',
+        text: 'Morning coffee again',
         hasDoodle: true,
+        primaryActionUrl: 'noto:///note/favorite-text',
         doodleStrokesJson: JSON.stringify([
           {
             color: '#1C1C1E',
@@ -784,6 +788,8 @@ describe('widgetService', () => {
         ]),
       })
     );
+    expect(entries[0]?.props.props.backgroundGradientStartColor).toEqual(expect.any(String));
+    expect(entries[0]?.props.props.backgroundGradientEndColor).toEqual(expect.any(String));
   });
 
   it('includes sticker metadata for selected notes and prepares iOS-readable sticker files', async () => {

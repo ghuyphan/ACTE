@@ -2,6 +2,9 @@ import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { AppState } from 'react-native';
 let mockCaptureCardProps: any = null;
+const mockOpenAppSettings = jest.fn(async () => undefined);
+const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
+const mockUseCaptureFlow = jest.fn();
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -88,7 +91,7 @@ jest.mock('../hooks/useGeofence', () => ({
     remindersEnabled: false,
     requestForegroundLocation: jest.fn(async () => ({ location: null, requiresSettings: false })),
     requestReminderPermissions: jest.fn(async () => ({ enabled: false, requiresSettings: false })),
-    openAppSettings: jest.fn(async () => undefined),
+    openAppSettings: mockOpenAppSettings,
   }),
 }));
 
@@ -112,52 +115,7 @@ jest.mock('../hooks/useFeedFocus', () => ({
 }));
 
 jest.mock('../hooks/useCaptureFlow', () => ({
-  useCaptureFlow: () => ({
-    ...(() => {
-      const { Animated } = require('react-native');
-      return {
-        captureScale: new Animated.Value(1),
-        captureTranslateY: new Animated.Value(0),
-        flashAnim: new Animated.Value(0),
-        shutterScale: new Animated.Value(1),
-      };
-    })(),
-    captureMode: 'camera',
-    cameraSessionKey: 1,
-    setCaptureMode: jest.fn(),
-    restaurantName: '',
-    setRestaurantName: jest.fn(),
-    noteText: '',
-    setNoteText: jest.fn(),
-    capturedPhoto: null,
-    setCapturedPhoto: jest.fn(),
-    selectedPromptId: 'photo-moment',
-    setSelectedPromptId: jest.fn(),
-    selectedPromptText: 'What made this moment worth keeping?',
-    setSelectedPromptText: jest.fn(),
-    promptAnswer: '',
-    setPromptAnswer: jest.fn(),
-    moodEmoji: null,
-    setMoodEmoji: jest.fn(),
-    promptExpanded: false,
-    setPromptExpanded: jest.fn(),
-    hasShuffledPrompt: false,
-    setHasShuffledPrompt: jest.fn(),
-    radius: 150,
-    setRadius: jest.fn(),
-    facing: 'back',
-    setFacing: jest.fn(),
-    permission: { granted: true },
-    requestPermission: jest.fn(),
-    cameraRef: { current: null },
-    animateModeSwitch: jest.fn(),
-    toggleCaptureMode: jest.fn(),
-    handleShutterPressIn: jest.fn(),
-    handleShutterPressOut: jest.fn(),
-    takePicture: jest.fn(),
-    needsCameraPermission: false,
-    resetCapture: jest.fn(),
-  }),
+  useCaptureFlow: (...args: any[]) => mockUseCaptureFlow(...args),
 }));
 
 jest.mock('../hooks/useNotes', () => ({
@@ -261,6 +219,53 @@ describe('HomeScreen camera lifecycle', () => {
   beforeEach(() => {
     AppState.currentState = 'active';
     mockCaptureCardProps = null;
+    mockOpenAppSettings.mockClear();
+    mockRequestPermission.mockClear();
+    mockRequestPermission.mockResolvedValue({ granted: true, canAskAgain: true });
+    mockUseCaptureFlow.mockImplementation(() => {
+      const { Animated } = require('react-native');
+      return {
+        captureScale: new Animated.Value(1),
+        captureTranslateY: new Animated.Value(0),
+        flashAnim: new Animated.Value(0),
+        shutterScale: new Animated.Value(1),
+        captureMode: 'camera',
+        cameraSessionKey: 1,
+        setCaptureMode: jest.fn(),
+        restaurantName: '',
+        setRestaurantName: jest.fn(),
+        noteText: '',
+        setNoteText: jest.fn(),
+        capturedPhoto: null,
+        setCapturedPhoto: jest.fn(),
+        selectedPromptId: 'photo-moment',
+        setSelectedPromptId: jest.fn(),
+        selectedPromptText: 'What made this moment worth keeping?',
+        setSelectedPromptText: jest.fn(),
+        promptAnswer: '',
+        setPromptAnswer: jest.fn(),
+        moodEmoji: null,
+        setMoodEmoji: jest.fn(),
+        promptExpanded: false,
+        setPromptExpanded: jest.fn(),
+        hasShuffledPrompt: false,
+        setHasShuffledPrompt: jest.fn(),
+        radius: 150,
+        setRadius: jest.fn(),
+        facing: 'back',
+        setFacing: jest.fn(),
+        permission: { granted: true, canAskAgain: true },
+        requestPermission: mockRequestPermission,
+        cameraRef: { current: null },
+        animateModeSwitch: jest.fn(),
+        toggleCaptureMode: jest.fn(),
+        handleShutterPressIn: jest.fn(),
+        handleShutterPressOut: jest.fn(),
+        takePicture: jest.fn(),
+        needsCameraPermission: false,
+        resetCapture: jest.fn(),
+      };
+    });
   });
 
   it('keeps the camera preview mounted while capture visibility changes', async () => {
@@ -282,5 +287,61 @@ describe('HomeScreen camera lifecycle', () => {
       expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
       expect(mockCaptureCardProps?.shouldRenderCameraPreview).toBe(true);
     });
+  });
+
+  it('routes blocked camera permission requests to Settings', async () => {
+    mockUseCaptureFlow.mockImplementationOnce(() => {
+      const { Animated } = require('react-native');
+      return {
+        captureScale: new Animated.Value(1),
+        captureTranslateY: new Animated.Value(0),
+        flashAnim: new Animated.Value(0),
+        shutterScale: new Animated.Value(1),
+        captureMode: 'camera',
+        cameraSessionKey: 1,
+        setCaptureMode: jest.fn(),
+        restaurantName: '',
+        setRestaurantName: jest.fn(),
+        noteText: '',
+        setNoteText: jest.fn(),
+        capturedPhoto: null,
+        setCapturedPhoto: jest.fn(),
+        selectedPromptId: 'photo-moment',
+        setSelectedPromptId: jest.fn(),
+        selectedPromptText: 'What made this moment worth keeping?',
+        setSelectedPromptText: jest.fn(),
+        promptAnswer: '',
+        setPromptAnswer: jest.fn(),
+        moodEmoji: null,
+        setMoodEmoji: jest.fn(),
+        promptExpanded: false,
+        setPromptExpanded: jest.fn(),
+        hasShuffledPrompt: false,
+        setHasShuffledPrompt: jest.fn(),
+        radius: 150,
+        setRadius: jest.fn(),
+        facing: 'back',
+        setFacing: jest.fn(),
+        permission: { granted: false, canAskAgain: false },
+        requestPermission: mockRequestPermission,
+        cameraRef: { current: null },
+        animateModeSwitch: jest.fn(),
+        toggleCaptureMode: jest.fn(),
+        handleShutterPressIn: jest.fn(),
+        handleShutterPressOut: jest.fn(),
+        takePicture: jest.fn(),
+        needsCameraPermission: true,
+        resetCapture: jest.fn(),
+      };
+    });
+
+    render(<HomeScreen />);
+
+    expect(mockCaptureCardProps?.cameraPermissionRequiresSettings).toBe(true);
+
+    await mockCaptureCardProps.onRequestCameraPermission();
+
+    expect(mockOpenAppSettings).toHaveBeenCalledTimes(1);
+    expect(mockRequestPermission).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,6 @@
 type GradientPair = [string, string];
+export type NoteColorTier = 'free' | 'plus';
+export type NoteColorFinish = 'standard' | 'holo' | 'rgb' | 'chrome';
 
 export type NoteColorId =
   | 'sunset-coral'
@@ -10,11 +12,16 @@ export type NoteColorId =
   | 'pool-teal'
   | 'periwinkle-ink'
   | 'olive-lime'
-  | 'raspberry-dusk';
+  | 'raspberry-dusk'
+  | 'aurora-rgb'
+  | 'holo-foil'
+  | 'chrome-rare';
 
 export type NoteColorPreset = {
   id: NoteColorId;
   card: GradientPair;
+  tier?: NoteColorTier;
+  finish?: NoteColorFinish;
 };
 
 export const NOTE_COLOR_PRESETS: NoteColorPreset[] = [
@@ -29,8 +36,16 @@ export const NOTE_COLOR_PRESETS: NoteColorPreset[] = [
   { id: 'periwinkle-ink', card: ['#8EC5FC', '#E0C3FC'] },
   { id: 'olive-lime', card: ['#D4FC79', '#96E6A1'] },
   { id: 'raspberry-dusk', card: ['#FF758C', '#FF7EB3'] },
+  { id: 'aurora-rgb', card: ['#5B5FFF', '#FF4FD8'], tier: 'plus', finish: 'rgb' },
+  { id: 'holo-foil', card: ['#7B7CF6', '#71E6FF'], tier: 'plus', finish: 'holo' },
+  { id: 'chrome-rare', card: ['#5E6B88', '#D2A7FF'], tier: 'plus', finish: 'chrome' },
 ];
 
 export const DEFAULT_NOTE_COLOR_ID: NoteColorId = 'marigold-glow';
 
-export const NOTE_CARD_GRADIENTS: GradientPair[] = NOTE_COLOR_PRESETS.map((preset) => preset.card);
+export const NOTE_CARD_GRADIENTS: GradientPair[] = NOTE_COLOR_PRESETS.filter(
+  (preset) => preset.tier !== 'plus'
+).map((preset) => preset.card);
+export const PREMIUM_NOTE_COLOR_IDS: NoteColorId[] = NOTE_COLOR_PRESETS.filter(
+  (preset) => preset.tier === 'plus'
+).map((preset) => preset.id);

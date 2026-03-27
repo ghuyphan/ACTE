@@ -51,6 +51,8 @@ export interface WidgetProps {
     authorInitials: string;
     authorAvatarImageUrl?: string;
     authorAvatarImageBase64?: string;
+    primaryActionUrl: string;
+    badgeActionUrl?: string;
 }
 
 export interface UpdateWidgetDataOptions {
@@ -148,6 +150,7 @@ export type WidgetSelectionMode =
     | 'latest_memory';
 
 const IOS_WIDGET_APP_GROUP_ID = 'group.com.acte.app';
+const WIDGET_URL_SCHEME = 'noto://';
 const WIDGET_IMAGE_DIRECTORY_NAME = 'widget-images';
 const WIDGET_TIMELINE_ENTRY_COUNT = 4;
 const WIDGET_SLOT_HOURS = 6;
@@ -160,6 +163,27 @@ const WIDGET_AVATAR_DIRECTORY_NAME = 'widget-avatars';
 const WIDGET_STICKER_DIRECTORY_NAME = 'widget-stickers';
 let widgetUpdateInFlight: Promise<void> | null = null;
 let pendingWidgetUpdateOptions: UpdateWidgetDataOptions | null = null;
+
+function buildWidgetUrl(path: string) {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${WIDGET_URL_SCHEME}${normalizedPath}`;
+}
+
+function getWidgetPrimaryActionUrl(candidate: Pick<WidgetCandidate, 'id' | 'source'> | null, noteCount: number) {
+    if (!candidate) {
+        return noteCount > 0 ? buildWidgetUrl('/notes') : buildWidgetUrl('/');
+    }
+
+    if (candidate.source === 'shared') {
+        return buildWidgetUrl(`/shared/${encodeURIComponent(candidate.id)}`);
+    }
+
+    return buildWidgetUrl(`/note/${encodeURIComponent(candidate.id)}`);
+}
+
+function getWidgetBadgeActionUrl(noteCount: number) {
+    return noteCount > 0 ? buildWidgetUrl('/notes') : undefined;
+}
 
 function getWidget() {
     if (Platform.OS !== 'ios') {
@@ -437,6 +461,8 @@ function buildIdleWidgetProps(noteCount: number, selectionMode: WidgetSelectionM
         isSharedContent: false,
         authorDisplayName: '',
         authorInitials: '',
+        primaryActionUrl: getWidgetPrimaryActionUrl(null, noteCount),
+        badgeActionUrl: getWidgetBadgeActionUrl(noteCount),
         ...getTranslatedWidgetStrings(noteCount, 0, selectionMode),
     };
 }
@@ -1349,6 +1375,8 @@ async function buildWidgetPropsFromSelection(
         isSharedContent: selectedNote.source === 'shared',
         authorDisplayName: selectedNote.authorDisplayName ?? '',
         authorInitials: getAuthorInitials(selectedNote.authorDisplayName),
+        primaryActionUrl: getWidgetPrimaryActionUrl(selectedNote, noteCount),
+        badgeActionUrl: getWidgetBadgeActionUrl(noteCount),
         ...translatedStrings,
     };
 
