@@ -204,11 +204,9 @@ function AppContent() {
 
     let cancelled = false;
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (!cancelled) {
-          void SplashScreen.hideAsync();
-        }
-      });
+      if (!cancelled) {
+        void SplashScreen.hideAsync();
+      }
     });
 
     return () => {

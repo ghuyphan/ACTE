@@ -1,6 +1,6 @@
-# PROJECT_STRUCTURE.md
+# Project Structure
 
-## High-Level Tree
+## Top-Level Tree
 
 ```text
 .
@@ -8,13 +8,13 @@
 │   ├── (tabs)/
 │   ├── auth/
 │   ├── friends/
-│   └── note/
+│   ├── note/
+│   ├── notes/
+│   ├── shared/
+│   └── widget/
 ├── assets/
 │   └── images/
 ├── components/
-│   ├── home/
-│   ├── map/
-│   └── ui/
 ├── constants/
 │   └── locales/
 ├── docs/
@@ -22,65 +22,72 @@
 │   └── map/
 ├── plugins/
 ├── services/
+├── supabase/
+│   ├── functions/
+│   └── migrations/
 ├── utils/
 ├── widgets/
 │   └── ios/
 ├── __tests__/
 ├── android/
 ├── ios/
-├── package.json
 ├── app.config.ts
+├── package.json
 ├── tsconfig.json
-├── eslint.config.js
-├── jest.config.js
-├── jest.setup.ts
-├── supabase/
 └── README.md
 ```
 
+## Routes
+
+- `app/_layout.tsx`: Root providers, DB bootstrap, splash handling, notifications, widget refresh, and geofence startup sync.
+- `app/index.tsx`: First-launch redirect into onboarding or the main tabs.
+- `app/(tabs)/index.tsx`: Home feed and capture flow.
+- `app/(tabs)/map.tsx`: Map screen entry point.
+- `app/(tabs)/search/index.tsx`: Native search tab entry point.
+- `app/(tabs)/settings/index.tsx`: Settings screen entry point.
+- `app/auth/index.tsx`: Landing, sign-in, register, and password-reset flow.
+- `app/auth/onboarding.tsx`: First-run onboarding flow.
+- `app/auth/profile.tsx`: Account/profile management.
+- `app/note/[id].tsx`: Note detail route wrapper.
+- `app/notes/index.tsx`: Combined notes and shared-posts grid.
+- `app/shared/index.tsx`: Shared moments feed.
+- `app/shared/[id].tsx`: Shared post detail screen.
+- `app/friends/join.tsx`: Friend invite join surface.
+- `app/widget/[kind]/[id].tsx`: Widget deep-link routing.
+- `app/plus.tsx`: `Noto Plus` upsell and purchase UI.
+
 ## Major Directories
 
-- `app/`: Expo Router route tree and screen entry points.
-- `app/(tabs)/`: Main app tabs for home, map, settings, and search.
-- `app/auth/`: Onboarding plus account/auth flows.
-- `app/friends/`: Friend invite acceptance and sharing entry points.
-- `app/note/`: Note detail route wrapper for modal-style navigation.
-- `assets/images/`: Icons, splash assets, and image resources.
-- `components/`: Shared React Native UI components.
-- `components/home/`: Home feed, capture, and search header UI.
-- `components/map/`: Map canvas, filters, preview cards, and overlay tokens.
-- `components/screens/`: Larger screen implementations, including platform-specific screen splits.
-- `components/ui/`: Generic shared building blocks such as buttons and headers.
-- `constants/`: Theme tokens, auth constants, note defaults, and i18n setup.
-- `constants/subscription.ts`: Plus/free plan rules, RevenueCat env config, and photo-note limits.
-- `constants/locales/`: Translation JSON files for English and Vietnamese.
-- `docs/`: Short maintenance docs for widgets and release flows.
-- `hooks/`: App-wide hooks/providers for notes, auth, theme, sync, geofence, and more.
-- `hooks/useSharedFeed.tsx`: Friend graph and shared moments state for the home feed.
-- `hooks/useSubscription.tsx`: RevenueCat subscription provider and entitlement state.
-- `hooks/map/`: Map domain modeling and map screen state.
-- `plugins/`: Custom Expo config plugins used during native generation/build setup.
-- `services/`: Database, sync, geofence, photo, search, sharing, and widget business logic.
-- `services/sharedFeedService.ts`: Friends, invites, and private shared-feed operations.
-- `services/syncService.ts`: Supabase sync queue flush + snapshot upload/merge.
-- `utils/`: Background task registration and smaller cross-cutting helpers.
-- `utils/supabase.ts`: Supabase client bootstrap plus secure auth-session persistence.
-- `widgets/`: Expo widget registration and JS-side widget definition.
-- `widgets/ios/`: Source Swift widget implementation copied into the native target by a plugin.
-- `__tests__/`: Jest tests for screens, hooks, services, map logic, and widgets.
-- `android/`: Native Android project.
-- `ios/`: Native iOS project and widget target.
-- `supabase/`: SQL migrations and local project config for the hosted Supabase backend.
+- `components/home/`: Capture card, notes feed, shared strip, and feed item helpers.
+- `components/map/`: Map canvas, filters, cards, motion helpers, and overlay tokens.
+- `components/screens/`: Larger screen implementations with iOS and Android splits.
+- `components/ui/`: Generic building blocks such as buttons, headers, chips, and glass containers.
+- `hooks/`: Providers and reusable stateful logic for notes, auth, theme, connectivity, shared feed, subscriptions, and sync.
+- `hooks/map/`: Map-only domain and screen-state logic.
+- `services/database.ts`: SQLite schema, migrations, note CRUD, and cache tables.
+- `services/syncService.ts`: Supabase sync pipeline.
+- `services/sharedFeedService.ts`: Friend invites, shared posts, and social feed reads/writes.
+- `services/widgetService.ts`: Widget candidate selection, media preparation, and timeline updates.
+- `services/geofenceService.ts`: Reminder permission checks and active region selection.
+- `services/photoStorage.ts`: Local photo persistence and URI resolution.
+- `services/remoteMedia.ts`: Supabase Storage upload, signed URL, and download helpers.
+- `supabase/migrations/`: SQL history for notes, sharing, rooms, stickers, colors, and policy hardening.
+- `supabase/functions/delete-account/`: Edge function for server-side account deletion.
+- `widgets/LocketWidget.tsx`: Expo widget registration and JS fallback view.
+- `widgets/ios/LocketWidget.swift`: Source of truth for the real iOS widget UI.
 
-## Key Top-Level Files
+## Important Top-Level Files
 
-- `package.json`: Dependencies plus dev/run/lint/test scripts; app entry is `expo-router/entry`.
-- `app.config.ts`: Expo app config, plugins, permissions, widget registration, native identifiers, and env-backed Android Maps setup.
-- `README.md`: Product overview, setup, and current Plus configuration notes.
-- `supabase/config.toml`: Local Supabase project metadata for migrations and generated types.
-- `docs/release-checklist.md`: Current manual release gate, including Plus validation.
+- `package.json`: Dev/run/lint/test scripts and dependency versions.
+- `app.config.ts`: Expo config, permissions, widget registration, Maps key wiring, and native IDs.
+- `.env.example`: The supported public env var surface.
+- `eslint.config.js`: Expo flat ESLint config.
+- `jest.config.js` and `jest.setup.ts`: Jest Expo config and test mocks.
 - `tsconfig.json`: Strict TypeScript config with the `@/*` alias.
-- `eslint.config.js`: Flat ESLint config based on `eslint-config-expo`.
-- `jest.config.js`: Jest Expo preset and module mapping.
-- `jest.setup.ts`: Test setup and React Native dependency mocks.
-- `expo-env.d.ts`: Expo-generated type declarations used by the project.
+- `assets/images/icon/`: PNG app icon exports used by `app.config.ts` for shared, Android, and web icons.
+- `Untitled.icon`: iOS icon composer asset used by `app.config.ts`.
+
+## Native Working Model
+
+- `ios/` and `android/` exist locally for native/widget work but are git-ignored in this repo.
+- Changes that must survive `prebuild` should go through `app.config.ts`, `plugins/`, or the checked-in sources under `widgets/`.

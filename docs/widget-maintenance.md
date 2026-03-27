@@ -1,17 +1,13 @@
 # Widget Maintenance Guide
 
-This file is the shortcut for editing the widget without rereading the whole app.
+This is the shortest path back into the widget code.
 
 ## Read These Files First
-
-If you only have a few minutes, read these in this order:
 
 1. `services/widgetService.ts`
 2. `widgets/LocketWidget.tsx`
 3. `widgets/ios/LocketWidget.swift`
 4. `__tests__/widgetService.test.ts`
-
-Usually that is enough.
 
 ## What Each File Owns
 
@@ -21,22 +17,18 @@ This is the widget data pipeline.
 
 It owns:
 
-- picking which note the widget should show
-- getting current location if permission is already granted
-- copying photo files into the iOS shared app-group container
-- falling back from photo -> base64 -> latest valid text note
-- calling `widget.updateSnapshot({ props })`
+- loading local notes and optional shared-feed candidates
+- choosing timeline entries
+- deduping repeats across recent slots
+- preparing shared-container image assets for iOS
+- pushing the iOS timeline or Android snapshot
 
-Current selection rule:
+Current behavior at a glance:
 
-- if location permission is already granted and a note is within `500m`, show the nearest note
-- otherwise show the latest note by `createdAt`
-
-Current photo rule:
-
-- for iOS, copy the selected photo into the shared container first
-- if copy fails, try base64
-- if that also fails, fallback to the latest valid text note
+- iOS receives a `4` entry timeline
+- entries advance in `6` hour slots
+- candidates can come from nearby notes, favorites, photos, resurfaced older notes, shared posts, or latest notes
+- the service keeps short history to avoid showing the same item too often
 
 ### `widgets/LocketWidget.tsx`
 
@@ -44,206 +36,96 @@ This is the Expo widget registration file and JS fallback view.
 
 It owns:
 
-- the widget name: `createWidget('LocketWidget', ...)`
-- the JS-side prop shape
-- the default snapshot payload at the bottom of the file
-- a fallback visual implementation that should stay roughly aligned with native iOS
-
-Important:
-
-- the actual iOS runtime look is mostly controlled by Swift, not this file
-- `backgroundImageUrl` is passed through here, but the real image rendering on iOS happens in Swift
+- the widget registration name and prop contract
+- the JS-side preview/fallback rendering
+- the default sample payload used for development
 
 ### `widgets/ios/LocketWidget.swift`
 
-This is the source of truth for the real iOS widget runtime.
-
-It gets copied into `ios/ExpoWidgetsTarget/LocketWidget.swift` by `plugins/withCustomWidgetSwift.js` after `prebuild`.
+This is the source of truth for the actual iOS widget runtime.
 
 It owns:
 
-- reading the timeline written by Expo Widgets
-- parsing the nested payload shape
-- loading the shared-container photo file or base64 image
-- the real Home Screen small/large widget layout
-- the privacy-safe Lock Screen accessory layouts
-- iOS-specific background behavior like `containerBackground(for: .widget)`
+- parsing the stored timeline payload
+- loading shared-container images
+- rendering the real Home Screen and Lock Screen widget layouts
+- iOS-specific background and family behavior
 
-Important:
-
-- the payload is nested, so parsing must handle `props.props`
-- if this parser is wrong, the widget often falls back to idle text even when data exists
-- the generated copy in `ios/ExpoWidgetsTarget/LocketWidget.swift` is git-ignored
-- persistent changes belong in `widgets/ios/LocketWidget.swift`
+Persistent changes belong here, not in the generated native copy.
 
 ### `__tests__/widgetService.test.ts`
 
-This is the safety net for widget note selection and fallback behavior.
+This is the safety net for selection logic, media fallbacks, and timeline output.
 
 Update these tests when changing:
 
-- nearby vs latest selection rules
-- photo fallback behavior
-- shared-container copy behavior assumptions
+- candidate prioritization
+- repeat-avoidance rules
+- shared-content behavior
+- image copy and fallback logic
 
-## How Data Gets Into the Widget
+## Data Flow
 
-The widget does not read the database directly.
+1. `app/_layout.tsx` initializes the DB and schedules a widget refresh.
+2. Note mutations in `hooks/useNotesStore.tsx` also refresh widget data.
+3. `updateWidgetData()` builds timeline props from local notes and optional shared-feed content.
+4. Expo Widgets stores the payload.
+5. `widgets/ios/LocketWidget.swift` reads the payload and renders it.
 
-Flow:
+## Common Change Map
 
-1. App starts.
-2. `app/_layout.tsx` calls `updateWidgetData()` after DB init.
-3. Note mutations in `hooks/useNotesStore.tsx` also call `updateWidgetData()`.
-4. `updateWidgetData()` builds widget props and writes them with `widget.updateSnapshot({ props })`.
-5. Expo Widgets stores the timeline.
-6. `widgets/ios/LocketWidget.swift` reads that timeline from shared defaults and renders it.
+Change widget selection or rotation rules:
 
-Mutation triggers already wired:
+- edit `services/widgetService.ts`
+- update `__tests__/widgetService.test.ts`
 
-- create note
-- update note
-- delete note
-- delete all notes
-- app boot refresh
+Change widget visuals:
 
-If you add a new note mutation path elsewhere, make sure it also calls `updateWidgetData()`.
+- edit `widgets/ios/LocketWidget.swift`
+- keep `widgets/LocketWidget.tsx` roughly aligned for fallback/dev previews
 
-## Which File To Edit For Common Changes
+Fix image problems:
 
-### Change widget layout or typography
+1. Check `services/widgetService.ts`
+2. Check `widgets/ios/LocketWidget.swift`
+3. Verify the file was copied into the shared app-group container
 
-Edit:
+Fix deep-link behavior:
 
-- `widgets/ios/LocketWidget.swift`
-- then keep `widgets/LocketWidget.tsx` visually aligned
-
-Lock Screen reminder:
-
-- accessory families should stay glanceable and privacy-safe
-- avoid showing full note text or photos there unless that becomes an explicit product decision
-
-### Change which note gets shown
-
-Edit:
-
-- `services/widgetService.ts`
-- `__tests__/widgetService.test.ts`
-
-### Fix image not showing
-
-Check in this order:
-
-1. `services/widgetService.ts`
-2. `widgets/ios/LocketWidget.swift`
-
-Things to verify:
-
-- photo was copied into the app-group shared container
-- `backgroundImageUrl` points to the shared container, not the app sandbox photo path
-- Swift can load the file path
-- if file copy fails, base64 fallback still works
-
-### Fix blank widget
-
-Check:
-
-1. Swift parser still reads nested `props.props`
-2. `updateWidgetData()` is being called
-3. the timeline exists in shared defaults
-4. the widget was removed and re-added after a native/layout change
-
-### Change widget name / registration / families
-
-Edit:
-
-- `widgets/LocketWidget.tsx`
-- `app.config.ts`
+1. Check `services/widgetService.ts`
+2. Check `app/widget/[kind]/[id].tsx`
 
 ## Known Gotchas
 
-### 1. iOS file is git-ignored
+### Generated native copy is disposable
 
-`ios/ExpoWidgetsTarget/LocketWidget.swift` is ignored by `.gitignore`.
+`ios/ExpoWidgetsTarget/LocketWidget.swift` is generated. Durable edits must be copied back into `widgets/ios/LocketWidget.swift`.
 
-That means:
+### Payload shape can be nested
 
-- local native widget fixes can work on your machine
-- those changes will be lost on the next `prebuild` unless they are copied back into `widgets/ios/LocketWidget.swift`
+The iOS payload path still needs to tolerate the nested bridge structure used by Expo Widgets.
 
-Always mention this explicitly when reporting widget work.
+### Shared media must be made extension-safe
 
-### 2. `props.props` nesting is real
+The widget cannot rely on arbitrary app-sandbox file paths. Shared photos and avatar assets must be copied into the app-group container first.
 
-The native timeline payload is nested.
+### Android is snapshot-based
 
-If Swift reads only the top-level dictionary, the widget can look empty and fall back to idle content.
+Android currently receives the first resolved entry as a snapshot rather than the full iOS-style timeline.
 
-### 3. JS widget view is not the whole truth on iOS
+### Native caches can mislead you
 
-For iOS, the real rendering behavior is in Swift.
-
-If the JS widget looks correct but the real Home Screen widget does not, trust the Swift path first.
-
-### 4. Photo files must be moved into the shared container
-
-The widget extension cannot reliably read arbitrary photo paths from the app sandbox.
-
-Use the shared app-group container path prepared in `services/widgetService.ts`.
-
-### 5. iOS caches widget views aggressively
-
-After changing layout or native parsing:
+After changing native widget layout or parsing:
 
 - rebuild the app
-- remove the widget from the Home Screen
-- add it back
+- remove the widget
+- add it again
 
-Otherwise you can end up debugging stale UI.
-
-### 6. Expo Widgets bundle copy fix is custom
-
-`plugins/withExpoWidgetsBundleFix.js` adds a build phase to copy the Expo Widgets JS bundle correctly.
-
-If widgets suddenly stop updating after native rebuilds, check that this plugin is still configured and still applies.
-
-## Minimal Debug Checklist
-
-When the widget is wrong, go through this order:
-
-1. Confirm `updateWidgetData()` is called.
-2. Confirm the selected note is the expected one.
-3. Confirm the outgoing snapshot props look correct.
-4. For photos, confirm the copied shared-container path exists.
-5. Confirm Swift parser still reads nested props.
-6. Rebuild iOS and re-add the widget.
-
-## Recommended Commands
-
-Use these after widget changes:
+## Recommended Checks
 
 ```bash
 npm test -- --runInBand __tests__/widgetService.test.ts
 npm run lint
 npx tsc --noEmit
-npx expo run:ios
+npm run ios
 ```
-
-## Current Behavior Snapshot
-
-As of now:
-
-- widget is display-only
-- reminders and geofences stay app-owned, not widget-owned
-- widget selection is `nearby -> latest`
-- text widget style is minimal and centered
-- photo widget uses shared-container image loading on iOS
-- supported families are `systemSmall`, `systemLarge`, `accessoryInline`, `accessoryCircular`, and `accessoryRectangular`
-
-## If You Need To Make A Fast Edit
-
-Use this shortcut:
-
-- visual-only change: edit Swift first, then TSX
-- data/selection change: edit `widgetService.ts` first, then tests
-- blank/photo bug: inspect shared-container copy + Swift parsing before touching UI

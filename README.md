@@ -1,83 +1,48 @@
 # Noto
 
-Noto is an Expo SDK 55 React Native app for saving text notes and photo memories tied to real places. It is local-first, location-aware, and includes private sharing with friends, geofence reminders, Supabase sync, and widget support.
+Noto is an Expo SDK 55 / React Native app for saving place-linked text notes and photo memories. It is local-first, works offline with SQLite, and layers in optional Supabase account features, geofence reminders, friend sharing, widgets, and a native subscription flow.
 
-## What The App Does
+## Highlights
 
-- Save text notes or photo notes with your current location and place name.
-- Revisit notes from the home feed or the map.
-- Get geofence-based reminders when you return to saved places.
-- Sync notes with Supabase when signed in, while still working offline with SQLite.
-- Share moments privately with connected friends.
-- Show recent or nearby notes in the Home Screen widget flow.
-- Offer a `Noto Plus` plan that unlocks more photo notes and importing from the Photos library.
-
-## Current Product Notes
-
-- Free plan:
-  - unlimited text notes
-  - limited photo notes
-  - camera capture for photo notes
-- Plus plan:
-  - expanded photo-note capacity
-  - import from Photos library
-  - purchase and restore flow via RevenueCat on supported native builds
-- If RevenueCat is not configured, the app safely stays in free mode and shows Plus as unavailable.
+- Save text and photo memories with place names and coordinates.
+- Decorate notes with gradients, note colors, doodles, stickers, and mood emoji.
+- Browse from the home feed, notes grid, map, shared feed, and native search tab.
+- Share memories privately with friends through invite links and shared posts.
+- Surface rotating personal or shared memories in the widget pipeline.
+- Unlock unlimited photo memories and photo-library import with `Noto Plus`.
 
 ## Tech Stack
 
-- Expo + React Native + Expo Router
+- Expo SDK 55 + React Native 0.83 + React 19
+- Expo Router for file-based navigation
 - SQLite for local persistence
-- Supabase Auth + Postgres + Storage for optional account + sync
-- RevenueCat for native subscription/entitlement handling
-- Expo Camera, Image Picker, Location, Notifications, Haptics, and Widgets
-- React Native Reanimated and Expo glass-effect for UI motion and visual treatment
+- Supabase Auth + Postgres + Storage for optional account, sharing, and sync
+- RevenueCat for native billing
+- Expo Location, Notifications, Camera, Image Picker, and Widgets
 
-## Important Paths
-
-- `app/`: file-based routes and screen entry points
-- `app/(tabs)/`: home, map, settings, and search tabs
-- `app/auth/`: onboarding and auth/account flows
-- `app/friends/`: friend invite and join flows
-- `components/home/`: capture, feed, and search UI
-- `components/map/`: map canvas, filters, preview cards, and overlays
-- `components/screens/`: platform-specific screen implementations
-- `hooks/`: app providers and side-effect orchestration
-- `hooks/useSubscription.tsx`: RevenueCat entitlement state
-- `services/database.ts`: SQLite schema and note persistence
-- `services/sharedFeedService.ts`: friend graph and shared moments feed
-- `services/syncService.ts`: Supabase sync pipeline
-- `services/widgetService.ts`: widget selection and payload generation
-- `widgets/ios/LocketWidget.swift`: source of truth for the iOS widget UI
-- `app.config.ts`: Expo app config and env-backed native settings
-- `docs/release-checklist.md`: manual ship checklist
-- `docs/widget-maintenance.md`: widget maintenance shortcut
-
-See [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) for a fuller repo map.
-
-## Getting Started
-
-1. Install dependencies
+## Quick Start
 
 ```bash
 npm install
+npm run start
 ```
 
-2. Start Expo
+Useful follow-up commands:
 
 ```bash
-npx expo start
+npm run ios
+npm run android
+npm run web
+npm run lint
+npx tsc --noEmit
+npm test -- --runInBand
 ```
 
-3. Run iOS locally
+## Environment
 
-```bash
-npx expo run:ios
-```
+Copy from [`.env.example`](./.env.example) and fill only what your build needs.
 
-## Optional Configuration
-
-Supabase + Google sign-in:
+Supabase + Google auth:
 
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
@@ -85,27 +50,49 @@ Supabase + Google sign-in:
 - `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`
 - `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
 
-RevenueCat for Plus:
+Maps:
 
 - `EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY`
-- `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`
-- `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`
-- `EXPO_PUBLIC_REVENUECAT_PLUS_ENTITLEMENT_ID` optional, defaults to `plus`
-- `EXPO_PUBLIC_REVENUECAT_PLUS_OFFERING_ID` optional
 
-Store listing / legal links:
+RevenueCat:
+
+- `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`
+- `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`
+- `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`
+- `EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID`
+- `EXPO_PUBLIC_REVENUECAT_OFFERING_ID`
+
+Legal / support links:
 
 - `EXPO_PUBLIC_PRIVACY_POLICY_URL`
 - `EXPO_PUBLIC_SUPPORT_URL`
 - `EXPO_PUBLIC_ACCOUNT_DELETION_URL`
 - `EXPO_PUBLIC_SUPPORT_EMAIL`
 
-See [docs/supabase-setup.md](./docs/supabase-setup.md) for the SQL migration, bucket policies, and dashboard setup checklist.
+## Repo Guide
 
-## Quality Checks
+- `app/`: Expo Router routes, including tabs, auth, notes, shared, widget deep links, and the Plus screen.
+- `components/`: Shared UI, with most screen pieces under `home/`, `map/`, `screens/`, and `ui/`.
+- `hooks/`: Providers and app state such as notes, auth, sync, theme, connectivity, and shared feed.
+- `services/`: SQLite, sync, sharing, widget, media, search, notification, and geofence logic.
+- `constants/`: Theme, i18n, note colors, radius defaults, and subscription configuration.
+- `widgets/`: Expo widget registration plus the source Swift implementation.
+- `docs/`: Short operational docs for releases, Supabase, RevenueCat, and widgets.
+- `__tests__/`: Jest coverage for hooks, services, screens, widgets, and map logic.
 
-```bash
-npm run lint
-npx tsc --noEmit
-npm test -- --runInBand
-```
+See [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) for a fuller map.
+
+## Native Notes
+
+- `ios/` and `android/` are generated local native folders and are intentionally git-ignored here.
+- Persistent widget changes belong in [`widgets/ios/LocketWidget.swift`](./widgets/ios/LocketWidget.swift), not the generated native copy.
+- The shared app icon PNG exports live under `assets/images/icon/`, while iOS still uses `Untitled.icon`.
+
+## Docs
+
+- [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)
+- [docs/release-checklist.md](./docs/release-checklist.md)
+- [docs/android-release.md](./docs/android-release.md)
+- [docs/supabase-setup.md](./docs/supabase-setup.md)
+- [docs/revenuecat-setup.md](./docs/revenuecat-setup.md)
+- [docs/widget-maintenance.md](./docs/widget-maintenance.md)

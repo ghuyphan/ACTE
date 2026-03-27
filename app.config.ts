@@ -11,7 +11,7 @@ const config = {
   slug: 'noto',
   version: '1.0.0',
   orientation: 'portrait',
-  icon: './assets/images/icon.png',
+  icon: './assets/images/icon/icon-default.png',
   scheme: 'noto',
   userInterfaceStyle: 'automatic',
   newArchEnabled: true,
@@ -24,9 +24,8 @@ const config = {
     package: 'com.acte.app',
     adaptiveIcon: {
       backgroundColor: '#F7F2EB',
-      foregroundImage: './assets/images/android-icon-foreground.png',
-      backgroundImage: './assets/images/android-icon-background.png',
-      monochromeImage: './assets/images/android-icon-monochrome.png',
+      foregroundImage: './assets/images/icon/icon-default.png',
+      monochromeImage: './assets/images/icon/icon-tinted-light.png',
     },
     predictiveBackGestureEnabled: false,
     config: googleMapsAndroidApiKey
@@ -39,7 +38,7 @@ const config = {
   },
   web: {
     output: 'static',
-    favicon: './assets/images/favicon.ico',
+    favicon: './assets/images/icon/icon-default.png',
   },
   plugins: [
     'expo-router',
@@ -60,11 +59,12 @@ const config = {
     [
       'expo-splash-screen',
       {
-        image: './assets/images/ios-splash-icon.png',
-        imageWidth: 200,
+        image: './assets/images/icon/icon-default.png',
+        imageWidth: 120,
         resizeMode: 'contain',
         backgroundColor: '#F7F2EB',
         dark: {
+          image: './assets/images/icon/icon-default.png',
           backgroundColor: '#F7F2EB',
         },
       },

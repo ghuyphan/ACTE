@@ -1,5 +1,7 @@
 # Supabase Setup
 
+Supabase is optional for local note-taking, but required for account-based auth, shared moments, remote usage tracking, and media sync.
+
 ## 1. App Environment
 
 Add these values to `.env.local`:
@@ -14,36 +16,41 @@ Add these values to `.env.local`:
 - `EXPO_PUBLIC_ACCOUNT_DELETION_URL`
 - `EXPO_PUBLIC_SUPPORT_EMAIL`
 
-Do not add a Supabase `service_role` key to the app.
+Do not place a Supabase `service_role` key in the app bundle.
 
 ## 2. Auth Providers
 
 In the Supabase dashboard:
 
-1. Enable Email authentication.
-2. Enable Google authentication.
-3. Paste the Google Web OAuth client ID and secret into the Google auth provider settings.
-4. Add the Supabase Google callback URL from the Auth provider page into Google Cloud's authorized redirect URIs.
+1. Enable Email auth.
+2. Enable Google auth.
+3. Put the Google Web OAuth client ID and secret into the Google provider settings.
+4. Add Supabase's Google callback URL to the Google Cloud OAuth client.
 
 In Google Cloud:
 
 1. Create Web, iOS, and Android OAuth clients in the same project.
-2. Use the Web client for Supabase Auth provider setup.
+2. Use the Web client for Supabase provider setup.
 3. Use the iOS and Android client IDs in `.env.local`.
 
 ## 3. Database And Storage
 
-Apply the migration under `supabase/migrations/` to create:
+Apply every migration under `supabase/migrations/` in order.
 
-- Auth-linked profile and usage tables
-- Notes, friendships, invites, shared posts, rooms, room members, room invites, and room posts
-- RLS policies and RPC functions
-- Private storage buckets for note, shared, and room media
-- Realtime publication entries for the tables used by the app
+The migration history currently sets up:
+
+- `user_usage` and auth-linked profile metadata
+- Notes sync primitives
+- Friend invites, friendships, and shared posts
+- Room tables and policies that are already present in the backend schema
+- Storage buckets for `note-media`, `shared-post-media`, and `room-post-media`
+- Later schema hardening for note colors, stickers, shared coordinates, and policy fixes
+
+Note: the latest migration removes SQL storage-cleanup triggers because Supabase Storage now blocks that direct delete pattern.
 
 ## 4. Realtime
 
-Enable Realtime for:
+The initial migration adds these tables to the `supabase_realtime` publication:
 
 - `user_usage`
 - `friendships`
@@ -52,16 +59,18 @@ Enable Realtime for:
 
 ## 5. Native Builds
 
-The app no longer uses Firebase native config files. Google sign-in is configured with OAuth client IDs and an iOS URL scheme derived from the iOS client ID.
+- The app does not use Firebase native config files.
+- Google sign-in is driven by OAuth client IDs.
+- The iOS URL scheme is derived from `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` in `app.config.ts`.
 
-## 6. Account Deletion Function
+## 6. Delete-Account Function
 
-This repo now includes `supabase/functions/delete-account/index.ts`.
+This repo includes `supabase/functions/delete-account/index.ts`.
 
-Deploy it before shipping account-based builds:
+Deploy it before shipping account-enabled builds:
 
 1. `supabase functions deploy delete-account`
 2. Set `SUPABASE_SERVICE_ROLE_KEY` for the function environment.
 3. Keep the service-role key out of the app bundle.
 
-The app calls this function from the Profile screen, then clears local account-scoped notes on-device.
+The app calls this function from the profile flow and then clears local account-scoped data on-device.

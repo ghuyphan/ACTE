@@ -1,58 +1,66 @@
 # Noto Release Checklist
 
-## Core Flows
-- [ ] Onboarding appears on first launch and routes to app after completion.
-- [ ] Auth screen supports local mode and configured Google sign-in path.
-- [ ] Account screen includes the expected production-safe actions and copy.
-- [ ] Signed-in users can delete their account from inside the app.
-- [ ] Home capture: text note save with valid location.
-- [ ] Home capture: photo note save, retake flow, and camera permission denied handling.
-- [ ] Home capture: Photos library import works for Plus users.
-- [ ] Home capture: free plan blocks photo notes after the quota and shows the upgrade flow.
-- [ ] Home search returns expected matches and clears correctly.
-- [ ] Note detail: favorite, edit, share, and delete behavior.
-- [ ] Delete all notes from settings removes data and media.
-- [ ] Friends: create invite, accept invite, and remove friend flows work end to end.
-- [ ] Shared feed: sign-in state, empty state, post rendering, and share-from-note flow behave correctly.
-- [ ] Rooms: create room, join by invite, post to room, and open room flows behave correctly.
+## Account And Startup
+
+- [ ] Fresh install opens onboarding on first launch.
+- [ ] Returning launch skips onboarding and lands in the main tabs.
+- [ ] Auth landing can reach sign-in, register, and password reset states.
+- [ ] Google sign-in only appears when the build is configured for it.
+- [ ] Profile screen can sign out and delete the account safely.
+
+## Notes And Capture
+
+- [ ] Text note save works with a valid location and place name.
+- [ ] Photo note capture works, including retake and permission-denied states.
+- [ ] Notes grid opens both local notes and shared posts correctly.
+- [ ] Favorite, archive, delete, and edit flows still behave correctly.
+- [ ] Text notes preserve note color, doodles, stickers, and mood presentation.
+- [ ] Delete-all from settings removes note records and local media.
+
+## Search, Map, Reminders, Widget
+
+- [ ] Search returns expected local note matches and clears correctly.
+- [ ] Map first load centers on the user or a note fallback.
+- [ ] Map marker interaction opens the correct note detail on iOS and Android.
+- [ ] Reminder flow shows the background-location explanation before escalation.
+- [ ] Notification deep-link opens the related note detail.
+- [ ] Widget updates after create, edit, delete, and app relaunch flows.
+- [ ] Widget deep links open the correct local note or shared post.
+
+## Sharing
+
+- [ ] Shared feed degrades gracefully when auth is unavailable.
+- [ ] Signed-in users can create an invite, accept an invite, and remove a friend.
+- [ ] Shared posts appear in Home and `/shared` with correct author metadata.
+- [ ] Sharing a note preserves photo, doodles, stickers, and note color where expected.
+- [ ] Offline mode shows cached shared content and blocks write actions with clear messaging.
 
 ## Plus / Billing
-- [ ] RevenueCat is configured for the target build or Plus is intentionally hidden/unavailable.
-- [ ] Free tier shows the correct photo-note limit.
-- [ ] Plus purchase succeeds on the target native test environment.
-- [ ] Restore purchases reactivates Plus on a fresh install or signed-in device.
-- [ ] Plus unlocks Photos import and expanded photo-note capacity.
-- [ ] Plus copy in Settings and upgrade surfaces is short, localized, and production-ready.
 
-## Map / Reminder / Widget / Sharing
-- [ ] Map first load centers on user or notes fallback.
-- [ ] Map marker callout opens note detail on iOS and Android.
-- [ ] Reminder flow shows a clear background-location disclosure before requesting Always/background access.
-- [ ] Reminder permission flow is action-triggered and supports Open Settings escalation.
-- [ ] Notification deep-link opens the related note.
-- [ ] Widget updates deterministically from latest/nearby note.
-- [ ] Friend invites and room invites deep-link into the expected join surfaces.
+- [ ] RevenueCat is configured for the target build or purchase UI is intentionally unavailable.
+- [ ] Free plan enforces the 10 photo-note limit.
+- [ ] Plus unlocks unlimited photo notes and photo-library import.
+- [ ] Purchase succeeds on a real native test build.
+- [ ] Restore purchases reactivates the expected entitlement.
+- [ ] Sign-in and sign-out keep the expected subscription state.
 
 ## Store Metadata
-- [ ] Privacy policy URL is configured and opens from Settings/Profile.
-- [ ] Support URL or support email is configured and opens from Settings/Profile.
-- [ ] External account deletion help URL is configured for Play Console listing requirements.
-- [ ] Apple App Privacy details are filled out in App Store Connect.
-- [ ] Google Play Data safety is filled out accurately.
-- [ ] Background location declaration assets are ready for Google Play review.
 
-## iOS Release Focus
-- [ ] iOS: theme + language changes apply immediately.
-- [ ] iOS: Plus state, Settings copy, and purchase UI fit in compact and large devices.
-- [ ] iOS: empty/loading/error states remain readable in light and dark mode.
-- [ ] iOS widget still renders correctly after photo-note, text-note, and delete flows.
+- [ ] Privacy policy link is configured and opens.
+- [ ] Support URL or support email is configured and opens.
+- [ ] Account deletion help link or support email is configured.
+- [ ] App Store Connect privacy details are current.
+- [ ] Google Play data safety and background-location disclosures are current.
 
-## Android Follow-Up
-- [ ] Android: theme + language changes apply immediately.
-- [ ] Android: room, friend, and shared feed surfaces remain readable and tappable.
-- [ ] Android: empty/loading/error states remain readable in light and dark mode.
+## Platform QA
+
+- [ ] iOS: widget render still matches the latest checked-in Swift implementation.
+- [ ] iOS: compact and large devices keep auth, settings, and Plus screens readable.
+- [ ] Android: capture, map, shared feed, and settings remain readable in both themes.
+- [ ] Android: background location and notification permission recovery flows still work.
 
 ## Quality Gates
-- [ ] `npm run lint` passes.
-- [ ] `npx tsc --noEmit` passes.
-- [ ] `npm test -- --runInBand` passes.
+
+- [ ] `npm run lint`
+- [ ] `npx tsc --noEmit`
+- [ ] `npm test -- --runInBand`
