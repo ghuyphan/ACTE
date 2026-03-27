@@ -1,11 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../ui/GlassView';
-import Reanimated from 'react-native-reanimated';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { getMapLayoutTransition } from './mapMotion';
 import { getOverlayBorderColor, mapOverlayTokens } from './overlayTokens';
 
-type OverlayState = 'no-filter-results' | 'no-notes';
+type OverlayState = 'no-filter-results' | 'no-notes' | 'no-area-results';
 
 interface MapStatusCardProps {
   overlayState: OverlayState;
@@ -13,11 +11,12 @@ interface MapStatusCardProps {
   primaryColor: string;
   textColor: string;
   secondaryTextColor: string;
-  onClearFilters: () => void;
   reduceMotionEnabled: boolean;
   title: string;
   subtitle: string;
-  clearLabel: string;
+  actionLabel?: string;
+  actionTestID?: string;
+  onAction?: () => void;
 }
 
 export default function MapStatusCard({
@@ -26,27 +25,22 @@ export default function MapStatusCard({
   primaryColor,
   textColor,
   secondaryTextColor,
-  onClearFilters,
   reduceMotionEnabled,
   title,
   subtitle,
-  clearLabel,
+  actionLabel,
+  actionTestID,
+  onAction,
 }: MapStatusCardProps) {
   const isFiltered = overlayState === 'no-filter-results';
   const isIOS = Platform.OS === 'ios';
   const shouldUseGlass = isIOS;
   const fallbackFill = isDark ? 'rgba(26,26,32,0.95)' : 'rgba(250,250,252,0.96)';
-  const statusGlassTintColor = isDark ? 'rgba(28,28,34,0.26)' : 'rgba(255,255,255,0.34)';
   const statusGlassScrimColor = isDark ? 'rgba(12,12,18,0.10)' : 'rgba(255,255,255,0.12)';
   const iconColor = isIOS ? secondaryTextColor : primaryColor;
 
   return (
-    <Reanimated.View
-      key={overlayState}
-      testID="map-status-card"
-      layout={getMapLayoutTransition(reduceMotionEnabled)}
-      style={styles.wrap}
-    >
+    <View key={overlayState} testID="map-status-card" style={styles.wrap}>
       <View
         style={[
           styles.card,
@@ -63,7 +57,6 @@ export default function MapStatusCard({
             style={StyleSheet.absoluteFillObject}
             glassEffectStyle="regular"
             colorScheme={isDark ? 'dark' : 'light'}
-            tintColor={statusGlassTintColor}
           />
         ) : null}
         <View
@@ -96,15 +89,15 @@ export default function MapStatusCard({
           >
             {subtitle}
           </Text>
-          {isFiltered ? (
+          {actionLabel && onAction ? (
             <Pressable
-              testID="map-clear-filters"
+              testID={actionTestID}
               style={[
                 styles.clearFiltersBtn,
                 isIOS ? styles.clearFiltersBtnIOS : styles.clearFiltersBtnAndroid,
                 isIOS ? null : { backgroundColor: `${primaryColor}14` },
               ]}
-              onPress={onClearFilters}
+              onPress={onAction}
             >
               <Text
                 style={[
@@ -113,13 +106,13 @@ export default function MapStatusCard({
                   { color: primaryColor },
                 ]}
               >
-                {clearLabel}
+                {actionLabel}
               </Text>
             </Pressable>
           ) : null}
         </View>
       </View>
-    </Reanimated.View>
+    </View>
   );
 }
 

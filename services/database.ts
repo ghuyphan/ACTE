@@ -3,6 +3,7 @@ import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
 import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
 import { buildNoteSearchText } from './noteSearch';
+import { normalizeSavedTextNoteColor } from './noteAppearance';
 import { resolveStoredPhotoUri } from './photoStorage';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -19,6 +20,7 @@ export interface Note {
     promptTextSnapshot?: string | null;
     promptAnswer?: string | null;
     moodEmoji?: string | null;
+    noteColor?: string | null;
     latitude: number;
     longitude: number;
     radius: number;           // geofence radius in meters
@@ -42,6 +44,7 @@ export interface CreateNoteInput {
     promptTextSnapshot?: string | null;
     promptAnswer?: string | null;
     moodEmoji?: string | null;
+    noteColor?: string | null;
     latitude: number;
     longitude: number;
     radius?: number;
@@ -62,6 +65,7 @@ export type NoteUpdates = Partial<
         | 'promptTextSnapshot'
         | 'promptAnswer'
         | 'moodEmoji'
+        | 'noteColor'
         | 'radius'
         | 'hasDoodle'
         | 'doodleStrokesJson'
@@ -83,6 +87,7 @@ interface NoteRow {
     prompt_text_snapshot: string | null;
     prompt_answer: string | null;
     mood_emoji: string | null;
+    note_color: string | null;
     latitude: number;
     longitude: number;
     radius: number;
@@ -99,7 +104,7 @@ interface NoteRow {
 // ─── Database ───────────────────────────────────────────────────────
 let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-const APP_SCHEMA_VERSION = 8;
+const APP_SCHEMA_VERSION = 9;
 export const LOCAL_NOTES_SCOPE = '__local__';
 let activeNotesScope = LOCAL_NOTES_SCOPE;
 const SQLITE_LOCK_RETRY_DELAYS_MS = [30, 80, 160];
@@ -189,6 +194,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         prompt_text_snapshot TEXT,
         prompt_answer TEXT,
         mood_emoji TEXT,
+        note_color TEXT,
         search_text TEXT NOT NULL DEFAULT '',
         latitude REAL NOT NULL,
         longitude REAL NOT NULL,
@@ -263,6 +269,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         photo_local_uri TEXT,
         doodle_strokes_json TEXT,
         sticker_placements_json TEXT,
+        note_color TEXT,
         place_name TEXT,
         source_note_id TEXT,
         created_at TEXT NOT NULL,
@@ -330,6 +337,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 }
                 if (!columns.includes('mood_emoji')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN mood_emoji TEXT`);
+                }
+                if (!columns.includes('note_color')) {
+                    await database.execAsync(`ALTER TABLE notes ADD COLUMN note_color TEXT`);
                 }
 
                 await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_search_text ON notes(search_text)`);
@@ -479,6 +489,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                         photo_local_uri TEXT,
                         doodle_strokes_json TEXT,
                         sticker_placements_json TEXT,
+                        note_color TEXT,
                         place_name TEXT,
                         source_note_id TEXT,
                         created_at TEXT NOT NULL,
@@ -486,6 +497,13 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                         PRIMARY KEY (user_uid, id)
                     )`
                 );
+                const sharedPostsCacheInfo = await database.getAllAsync<{ name: string }>(
+                    `PRAGMA table_info(shared_posts_cache)`
+                );
+                const sharedPostsCacheColumns = sharedPostsCacheInfo.map((col) => col.name);
+                if (!sharedPostsCacheColumns.includes('note_color')) {
+                    await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN note_color TEXT`);
+                }
                 await database.execAsync(
                     `CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_created ON shared_posts_cache(user_uid, created_at DESC)`
                 );
@@ -610,6 +628,7 @@ function rowToNote(row: NoteRow): Note {
         promptTextSnapshot: row.prompt_text_snapshot,
         promptAnswer: row.prompt_answer,
         moodEmoji: row.mood_emoji,
+        noteColor: row.note_color ?? null,
         latitude: row.latitude,
         longitude: row.longitude,
         radius: row.radius,
@@ -636,6 +655,8 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
     const photoLocalUri =
         input.type === 'photo' ? resolveStoredPhotoUri(input.photoLocalUri ?? input.content) : null;
     const normalizedContent = input.type === 'photo' ? photoLocalUri ?? '' : input.content;
+    const normalizedNoteColor =
+        input.type === 'text' ? normalizeSavedTextNoteColor(input.noteColor) : null;
     const searchText = buildSearchText({
         type: input.type,
         content: normalizedContent,
@@ -657,6 +678,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
             prompt_text_snapshot,
             prompt_answer,
             mood_emoji,
+            note_color,
             search_text,
             latitude,
             longitude,
@@ -664,7 +686,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
             is_favorite,
             created_at
         )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
         id,
         scope,
         input.type,
@@ -676,6 +698,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         input.promptTextSnapshot ?? null,
         input.promptAnswer ?? null,
         input.moodEmoji ?? null,
+        normalizedNoteColor,
         searchText,
         input.latitude,
         input.longitude,
@@ -694,6 +717,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         promptTextSnapshot: input.promptTextSnapshot ?? null,
         promptAnswer: input.promptAnswer ?? null,
         moodEmoji: input.moodEmoji ?? null,
+        noteColor: normalizedNoteColor,
         latitude: input.latitude,
         longitude: input.longitude,
         radius: input.radius ?? DEFAULT_NOTE_RADIUS,
@@ -770,6 +794,12 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         updates.promptAnswer !== undefined ? updates.promptAnswer : existing.promptAnswer ?? null;
     const nextMoodEmoji =
         updates.moodEmoji !== undefined ? updates.moodEmoji : existing.moodEmoji ?? null;
+    const nextNoteColor =
+        nextType === 'text'
+            ? normalizeSavedTextNoteColor(
+                updates.noteColor !== undefined ? updates.noteColor : existing.noteColor ?? null
+            )
+            : null;
     const nextRadius = updates.radius ?? existing.radius;
     const nextPhotoRemoteBase64 =
         updates.photoRemoteBase64 !== undefined
@@ -794,6 +824,7 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
              prompt_text_snapshot = ?,
              prompt_answer = ?,
              mood_emoji = ?,
+             note_color = ?,
              search_text = ?,
              radius = ?,
              updated_at = ?
@@ -806,6 +837,7 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         nextPromptTextSnapshot,
         nextPromptAnswer,
         nextMoodEmoji,
+        nextNoteColor,
         searchText,
         nextRadius,
         now,
@@ -938,6 +970,7 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
             prompt_text_snapshot,
             prompt_answer,
             mood_emoji,
+            note_color,
             search_text,
             latitude,
             longitude,
@@ -946,7 +979,7 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
             created_at,
             updated_at
         )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
             owner_uid = excluded.owner_uid,
             type = excluded.type,
@@ -958,6 +991,7 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
             prompt_text_snapshot = excluded.prompt_text_snapshot,
             prompt_answer = excluded.prompt_answer,
             mood_emoji = excluded.mood_emoji,
+            note_color = excluded.note_color,
             search_text = excluded.search_text,
             latitude = excluded.latitude,
             longitude = excluded.longitude,
@@ -976,6 +1010,7 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         input.promptTextSnapshot ?? null,
         input.promptAnswer ?? null,
         input.moodEmoji ?? null,
+        input.noteColor ?? null,
         searchText,
         input.latitude,
         input.longitude,
@@ -1026,6 +1061,7 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         promptTextSnapshot: input.promptTextSnapshot ?? null,
         promptAnswer: input.promptAnswer ?? null,
         moodEmoji: input.moodEmoji ?? null,
+        noteColor: input.noteColor ?? null,
         latitude: input.latitude,
         longitude: input.longitude,
         radius: input.radius ?? DEFAULT_NOTE_RADIUS,

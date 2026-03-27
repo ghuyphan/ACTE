@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import PrimaryButton from '../ui/PrimaryButton';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { Layout, Typography } from '../../constants/theme';
+import ProfileAvatar from './ProfileAvatar';
 import { useProfileScreenModel } from './useProfileScreenModel';
 
 function SectionTitle({
@@ -80,6 +81,32 @@ function LinkRow({
   );
 }
 
+function MembershipBadge({
+  colors,
+  isPlus,
+  label,
+}: {
+  colors: ThemeColors;
+  isPlus: boolean;
+  label: string;
+}) {
+  return (
+    <View
+      style={[
+        styles.membershipBadge,
+        {
+          backgroundColor: isPlus ? colors.primarySoft : colors.surface,
+          borderColor: isPlus ? colors.primary + '33' : colors.border,
+        },
+      ]}
+    >
+      <Text style={[styles.membershipBadgeText, { color: isPlus ? colors.primary : colors.secondaryText }]}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 export default function ProfileScreenAndroid() {
   const {
     avatarLabel,
@@ -94,12 +121,9 @@ export default function ProfileScreenAndroid() {
     openSignIn,
     openSupportLink,
     profileName,
-    providerLabel,
     showAccountDeletionLink,
     showPrivacyPolicyLink,
     showSupportLink,
-    syncSummary,
-    syncValue,
     t,
     tier,
     user,
@@ -122,42 +146,25 @@ export default function ProfileScreenAndroid() {
           <>
             <Card colors={colors}>
               <View style={styles.heroRow}>
-                {user.photoURL ? (
-                  <Image source={{ uri: user.photoURL }} style={styles.avatarImage} />
-                ) : (
-                  <View style={[styles.avatarFallback, { backgroundColor: colors.primarySoft }]}>
-                    <Text style={[styles.avatarLabel, { color: colors.primary }]}>{avatarLabel}</Text>
-                  </View>
-                )}
+                <ProfileAvatar
+                  avatarLabel={avatarLabel}
+                  avatarUrl={user.photoURL}
+                  colors={colors}
+                  size={72}
+                  labelFontSize={28}
+                />
                 <View style={styles.heroCopy}>
                   <View style={styles.nameRow}>
                     <Text style={[styles.name, { color: colors.text }]} numberOfLines={2}>
                       {profileName}
                     </Text>
-                    {tier === 'plus' ? (
-                      <View
-                        style={[
-                          styles.plusBadge,
-                          {
-                            backgroundColor: colors.primarySoft,
-                            borderColor: colors.primary + '33',
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.plusBadgeText, { color: colors.primary }]}>
-                          {t('profile.plusBadge', 'Noto Plus')}
-                        </Text>
-                      </View>
-                    ) : null}
+                    <MembershipBadge colors={colors} isPlus={tier === 'plus'} label={membershipLabel} />
                   </View>
                   {user.email ? (
                     <Text style={[styles.email, { color: colors.secondaryText }]} numberOfLines={1}>
                       {user.email}
                     </Text>
                   ) : null}
-                  <Text style={[styles.heroMeta, { color: colors.secondaryText }]}>
-                    {providerLabel}
-                  </Text>
                 </View>
               </View>
             </Card>
@@ -166,22 +173,10 @@ export default function ProfileScreenAndroid() {
               <SectionTitle colors={colors} title={t('profile.accountTitle', 'Connected account')} />
               <Card colors={colors}>
                 <DetailRow colors={colors} label={t('profile.name', 'Name')} value={user.displayName || t('profile.noName', 'Noto account')} />
-                <CardDivider colors={colors} />
-                <DetailRow colors={colors} label={t('profile.membership', 'Membership')} value={membershipLabel} />
                 {user.email ? (
                   <>
                     <CardDivider colors={colors} />
                     <DetailRow colors={colors} label={t('profile.email', 'Email')} value={user.email} />
-                  </>
-                ) : null}
-                <CardDivider colors={colors} />
-                <DetailRow colors={colors} label={t('profile.provider', 'Sign-in method')} value={providerLabel} />
-                <CardDivider colors={colors} />
-                <DetailRow colors={colors} label={t('profile.sync', 'Sync')} value={syncValue} />
-                {syncSummary ? (
-                  <>
-                    <CardDivider colors={colors} />
-                    <Text style={[styles.hint, { color: colors.secondaryText }]}>{syncSummary}</Text>
                   </>
                 ) : null}
               </Card>
@@ -310,11 +305,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
-  avatarImage: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-  },
   avatarFallback: {
     width: 72,
     height: 72,
@@ -336,16 +326,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     flexShrink: 1,
   },
-  heroMeta: {
-    ...Typography.pill,
-  },
-  plusBadge: {
+  membershipBadge: {
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  plusBadgeText: {
+  membershipBadgeText: {
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.2,

@@ -55,6 +55,16 @@ export async function getPersistentItem(key: string): Promise<string | null> {
   return migrateLegacyValue(key, storage);
 }
 
+export function getPersistentItemSync(key: string): string | null | undefined {
+  const storage = getStorageInstance();
+  if (!storage) {
+    return undefined;
+  }
+
+  const storedValue = storage.getString(key);
+  return storedValue ?? null;
+}
+
 export async function setPersistentItem(key: string, value: string): Promise<void> {
   const storage = getStorageInstance();
   if (!storage) {

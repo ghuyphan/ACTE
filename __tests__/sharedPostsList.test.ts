@@ -10,6 +10,10 @@ describe('supabase migration hardening', () => {
     resolve(__dirname, '../supabase/migrations/20260326113000_add_sticker_sync_columns.sql'),
     'utf8'
   );
+  const noteColorMigration = readFileSync(
+    resolve(__dirname, '../supabase/migrations/20260327103000_add_note_color_columns.sql'),
+    'utf8'
+  );
 
   it('creates profiles and user_usage rows for each auth user', () => {
     expect(migration).toContain('create or replace function public.handle_new_user()');
@@ -39,5 +43,11 @@ describe('supabase migration hardening', () => {
     expect(stickerMigration).toContain('add column if not exists has_stickers boolean not null default false');
     expect(stickerMigration).toContain('add column if not exists sticker_placements_json text');
     expect(stickerMigration).toContain('alter table public.shared_posts');
+  });
+
+  it('adds note color columns for synced notes and shared posts', () => {
+    expect(noteColorMigration).toContain('alter table public.notes');
+    expect(noteColorMigration).toContain('add column if not exists note_color text');
+    expect(noteColorMigration).toContain('alter table public.shared_posts');
   });
 });

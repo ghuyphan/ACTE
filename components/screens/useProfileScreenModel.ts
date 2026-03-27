@@ -6,10 +6,8 @@ import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
-import { useConnectivity } from '../../hooks/useConnectivity';
 import { useNotes } from '../../hooks/useNotes';
 import { useSubscription } from '../../hooks/useSubscription';
-import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { useTheme } from '../../hooks/useTheme';
 import { deleteAllNotesForScope, getAllNotesForScope } from '../../services/database';
 import { clearGeofenceRegions } from '../../services/geofenceService';
@@ -23,26 +21,12 @@ import {
 } from '../../services/legalLinks';
 import { getNotePhotoUri } from '../../services/photoStorage';
 
-function getProviderLabel(providerId: string, fallback: string) {
-  switch (providerId) {
-    case 'google.com':
-    case 'google':
-      return 'Google';
-    case 'password':
-      return fallback;
-    default:
-      return providerId;
-  }
-}
-
 export function useProfileScreenModel() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const { user, isAuthAvailable, deleteAccount, signOut } = useAuth();
-  const { isOnline } = useConnectivity();
   const { refreshNotes } = useNotes();
   const { tier } = useSubscription();
-  const { blockedCount, failedCount, pendingCount, status: syncStatus, lastSyncedAt, lastMessage } = useSyncStatus();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -54,83 +38,8 @@ export function useProfileScreenModel() {
     return base.trim().charAt(0).toUpperCase();
   }, [user?.displayName, user?.email]);
 
-  const providerLabel = useMemo(() => {
-    if (!user) {
-      return t('profile.providerEmail', 'Email');
-    }
-
-    const labels = user.providerData
-      .map((provider) => provider.providerId)
-      .filter(Boolean)
-      .map((providerId) => getProviderLabel(providerId, t('profile.providerEmail', 'Email')));
-
-    if (labels.length === 0) {
-      return t('profile.providerEmail', 'Email');
-    }
-
-    return Array.from(new Set(labels)).join(', ');
-  }, [t, user]);
-
   const membershipLabel =
     tier === 'plus' ? t('settings.plusTitle', 'Noto Plus') : t('settings.plusInactive', 'Standard');
-
-  const syncValue = useMemo(() => {
-    if (!user) {
-      return t('settings.autoSyncOff', 'Off');
-    }
-
-    if (syncStatus === 'syncing') {
-      return t('settings.autoSyncingShort', 'Syncing');
-    }
-
-    if (!isOnline && pendingCount > 0) {
-      return t('settings.syncPendingShort', 'Pending');
-    }
-
-    return t('settings.autoSyncOnShort', 'On');
-  }, [isOnline, pendingCount, syncStatus, t, user]);
-
-  const syncSummary = useMemo(() => {
-    if (!user) {
-      return null;
-    }
-
-    if (syncStatus === 'syncing') {
-      return t('profile.syncingNow', 'Syncing your notes now.');
-    }
-
-    if (!isOnline && pendingCount > 0) {
-      return t('profile.syncPendingOffline', 'Your notes are saved locally and will sync when you are back online.');
-    }
-
-    if (syncStatus === 'success' && lastSyncedAt) {
-      return t('profile.lastSynced', 'Last synced {{date}}', {
-        date: new Date(lastSyncedAt).toLocaleString(i18n.language, {
-          day: 'numeric',
-          month: 'short',
-          hour: 'numeric',
-          minute: '2-digit',
-        }),
-      });
-    }
-
-    if (syncStatus === 'error') {
-      return (
-        lastMessage ??
-        t('profile.syncRetryHint', 'We could not sync right now. We will try again when the app is active.')
-      );
-    }
-
-    if (blockedCount > 0) {
-      return t('profile.syncBlockedHint', 'Some notes need attention before sync can finish.');
-    }
-
-    if (failedCount > 0) {
-      return t('profile.syncRetryHint', 'We could not sync right now. We will try again when the app is active.');
-    }
-
-    return t('profile.autoSyncOn', 'Your notes sync automatically while you are signed in.');
-  }, [blockedCount, failedCount, i18n.language, isOnline, lastMessage, lastSyncedAt, pendingCount, syncStatus, t, user]);
 
   const openPrivacyPolicyLink = () => {
     void openPrivacyPolicy();
@@ -284,12 +193,9 @@ export function useProfileScreenModel() {
     openSignIn,
     openSupportLink,
     profileName,
-    providerLabel,
     showAccountDeletionLink: hasAccountDeletionLink(),
     showPrivacyPolicyLink: hasPrivacyPolicyLink(),
     showSupportLink: hasSupportLink(),
-    syncSummary,
-    syncValue,
     t,
     tier,
     user,

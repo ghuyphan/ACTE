@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Share, Text, TextInput, View } from 'react-native';
+import { Alert, Share } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockGetNoteById = jest.fn<Promise<unknown>, [string]>();
@@ -8,6 +8,19 @@ const mockUpdateNote = jest.fn<Promise<void>, [string, unknown]>(async () => und
 const mockToggleFavorite = jest.fn<Promise<boolean>, [string]>(async () => true);
 const mockSaveNoteDoodle = jest.fn<Promise<void>, [string, string]>(async () => undefined);
 const mockClearNoteDoodle = jest.fn<Promise<void>, [string]>(async () => undefined);
+const mockHasClipboardStickerImage = jest.fn<Promise<boolean>, []>(async () => false);
+const mockImportStickerAssetFromClipboard = jest.fn<Promise<unknown>, [unknown]>(async () => ({
+  id: 'detail-sticker-asset-1',
+  ownerUid: '__local__',
+  localUri: 'file:///documents/stickers/detail-sticker-asset-1.png',
+  remotePath: null,
+  mimeType: 'image/png',
+  width: 120,
+  height: 120,
+  createdAt: '2026-03-27T00:00:00.000Z',
+  updatedAt: null,
+  source: 'clipboard',
+}));
 const mockRouterPush = jest.fn();
 const mockImpactAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockNotificationAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
@@ -164,6 +177,46 @@ jest.mock('../services/noteDoodles', () => ({
   clearNoteDoodle: (noteId: string) => mockClearNoteDoodle(noteId),
 }));
 
+jest.mock('../services/noteStickers', () => ({
+  bringStickerPlacementToFront: jest.fn((placements: any[]) => placements),
+  createStickerPlacement: jest.fn((asset: any, existingPlacements: any[] = []) => ({
+    id: `detail-placement-${existingPlacements.length + 1}`,
+    assetId: asset.id,
+    x: 0.5,
+    y: 0.5,
+    scale: 1,
+    rotation: 0,
+    zIndex: existingPlacements.length + 1,
+    opacity: 1,
+    asset,
+  })),
+  duplicateStickerPlacement: jest.fn((placements: any[]) => placements),
+  importStickerAsset: jest.fn(),
+  parseNoteStickerPlacements: jest.fn((placementsJson: string | null | undefined) => {
+    if (!placementsJson) {
+      return [];
+    }
+
+    return JSON.parse(placementsJson);
+  }),
+  saveNoteStickerPlacementsWithAssets: jest.fn(async () => undefined),
+  clearNoteStickers: jest.fn(async () => undefined),
+  updateStickerPlacementTransform: jest.fn((placements: any[]) => placements),
+}));
+
+jest.mock('../utils/stickerClipboard', () => ({
+  ClipboardStickerError: class ClipboardStickerError extends Error {
+    code: string;
+
+    constructor(code: string, message: string) {
+      super(message);
+      this.code = code;
+    }
+  },
+  hasClipboardStickerImage: () => mockHasClipboardStickerImage(),
+  importStickerAssetFromClipboard: (messages: unknown) => mockImportStickerAssetFromClipboard(messages),
+}));
+
 jest.mock('../utils/interactionFeedback', () => ({
   emitInteractionFeedback: jest.fn(),
 }));
@@ -218,10 +271,28 @@ jest.mock('../components/NoteDoodleCanvas', () => {
   };
 });
 
+jest.mock('../components/NoteStickerCanvas', () => {
+  const React = require('react');
+  const { Text, View } = require('react-native');
+
+  return {
+    __esModule: true,
+    default: function MockNoteStickerCanvas(props: any) {
+      return (
+        <View testID="mock-note-sticker-canvas">
+          <Text testID="mock-note-sticker-count">{String(props.placements?.length ?? 0)}</Text>
+          <Text testID="mock-note-sticker-editable">{String(props.editable)}</Text>
+        </View>
+      );
+    },
+  };
+});
+
 import NoteDetailSheet from '../components/NoteDetailSheet';
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockHasClipboardStickerImage.mockResolvedValue(false);
   mockGetNoteById.mockResolvedValue({
     id: 'note-1',
     type: 'text',
@@ -290,6 +361,60 @@ describe('NoteDetailSheet', () => {
       locationName: 'New place',
       radius: 250,
     });
+  });
+
+  it('shows a paste popover on card long press in edit mode and pastes a sticker', async () => {
+    mockHasClipboardStickerImage.mockResolvedValue(true);
+
+    const { getByTestId, queryByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+
+    await act(async () => {
+      fireEvent(getByTestId('note-detail-card-paste-surface'), 'longPress', {
+        nativeEvent: { locationX: 150, locationY: 210 },
+      });
+    });
+
+    expect(getByTestId('note-detail-card-paste-popover')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-card-paste-action'));
+    });
+
+    await waitFor(() => {
+      expect(mockImportStickerAssetFromClipboard).toHaveBeenCalled();
+      expect(getByTestId('mock-note-sticker-count')).toHaveTextContent('1');
+    });
+
+    expect(queryByTestId('note-detail-card-paste-popover')).toBeNull();
+  });
+
+  it('does not hijack text-input long press in the note editor', async () => {
+    mockHasClipboardStickerImage.mockResolvedValue(true);
+
+    const { getByTestId, queryByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+
+    await act(async () => {
+      fireEvent(getByTestId('note-detail-content-input'), 'longPress');
+    });
+
+    expect(queryByTestId('note-detail-card-paste-popover')).toBeNull();
+    expect(mockHasClipboardStickerImage).not.toHaveBeenCalled();
   });
 
   it('shows saved doodles and lets you edit them', async () => {
@@ -440,7 +565,7 @@ describe('NoteDetailSheet', () => {
     expect(Alert.alert).toHaveBeenCalled();
 
     const alertArgs = (Alert.alert as jest.Mock).mock.calls[0];
-    const buttons = alertArgs[2] as Array<{ text?: string; onPress?: () => void }>;
+    const buttons = alertArgs[2] as { text?: string; onPress?: () => void }[];
     const destructiveButton = buttons.find((button) => button.text === 'Delete');
     expect(destructiveButton?.onPress).toBeTruthy();
 

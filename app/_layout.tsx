@@ -2,11 +2,11 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
 import * as SystemUI from 'expo-system-ui';
-import { SplashScreen, Stack } from 'expo-router';
+import { SplashScreen, Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation, I18nextProvider } from 'react-i18next';
-import { ActivityIndicator, AppState, View } from 'react-native';
+import { AppState, InteractionManager, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import i18n, { i18nReady } from '../constants/i18n';
@@ -24,6 +24,7 @@ import { syncGeofenceRegions } from '../services/geofenceService';
 import { configureNotificationChannels } from '../services/notificationService';
 import { updateWidgetData } from '../services/widgetService';
 import { runMediaCacheEviction } from '../services/mediaCacheManager';
+import { getPersistentItem, getPersistentItemSync } from '../utils/appStorage';
 import '../utils/backgroundGeofence';
 
 export { ErrorBoundary } from 'expo-router';
@@ -31,37 +32,54 @@ export { ErrorBoundary } from 'expo-router';
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
+const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
+
+function resolveStartupTarget(hasLaunched: string | null) {
+  return hasLaunched === 'true' ? '/(tabs)' : '/auth/onboarding';
+}
+
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
   const { t } = useTranslation();
   const { user } = useAuth();
   const { isOnline } = useConnectivity();
   const { openNoteDetail } = useNoteDetailSheet();
-  const [dbReady, setDbReady] = useState(false);
-  const [localeReady, setLocaleReady] = useState(i18n.isInitialized);
+  const router = useRouter();
+  const segments = useSegments();
   const notificationResponseListener = useRef<Notifications.EventSubscription | null>(null);
   const lastHandledNotificationIdRef = useRef<string | null>(null);
+  const [startupTarget, setStartupTarget] = useState<string | null>(() => {
+    const hasLaunched = getPersistentItemSync(HAS_LAUNCHED_KEY);
+    if (hasLaunched === undefined) {
+      return null;
+    }
+
+    return resolveStartupTarget(hasLaunched);
+  });
+  const startupRedirectPending = segments[0] === undefined && Boolean(startupTarget);
 
   useEffect(() => {
+    let startupInteractionHandle: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
     let startupTimeout: ReturnType<typeof setTimeout> | null = null;
 
     void configureNotificationChannels();
 
     getDB()
       .then(() => {
-        setDbReady(true);
-        startupTimeout = setTimeout(() => {
-          updateWidgetData().catch((err) => console.warn('Widget init failed:', err));
-          syncGeofenceRegions().catch((err) => console.warn('Geofence sync failed:', err));
-          runMediaCacheEviction().catch((err) => console.warn('Cache eviction failed:', err));
-        }, 250);
+        startupInteractionHandle = InteractionManager.runAfterInteractions(() => {
+          startupTimeout = setTimeout(() => {
+            updateWidgetData().catch((err) => console.warn('Widget init failed:', err));
+            syncGeofenceRegions().catch((err) => console.warn('Geofence sync failed:', err));
+            runMediaCacheEviction().catch((err) => console.warn('Cache eviction failed:', err));
+          }, 400);
+        });
       })
       .catch((err) => {
         console.error('Database init failed:', err);
-        setDbReady(true); // continue anyway so app isn't stuck
       });
 
     return () => {
+      startupInteractionHandle?.cancel();
       if (startupTimeout) {
         clearTimeout(startupTimeout);
       }
@@ -69,10 +87,38 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (!dbReady || !localeReady) {
+    if (startupTarget) {
       return;
     }
 
+    let cancelled = false;
+
+    void getPersistentItem(HAS_LAUNCHED_KEY)
+      .then((hasLaunched) => {
+        if (!cancelled) {
+          setStartupTarget(resolveStartupTarget(hasLaunched));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStartupTarget('/(tabs)');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [startupTarget]);
+
+  useEffect(() => {
+    if (!startupRedirectPending || !startupTarget) {
+      return;
+    }
+
+    router.replace(startupTarget as '/(tabs)' | '/auth/onboarding');
+  }, [router, startupRedirectPending, startupTarget]);
+
+  useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState !== 'active') {
         return;
@@ -87,10 +133,10 @@ function AppContent() {
     return () => {
       subscription.remove();
     };
-  }, [dbReady, isOnline, localeReady, user]);
+  }, [isOnline, user]);
 
   useEffect(() => {
-    if (!dbReady || !localeReady || !user) {
+    if (!user) {
       return;
     }
 
@@ -98,24 +144,13 @@ function AppContent() {
       includeLocationLookup: true,
       includeSharedRefresh: isOnline,
     }).catch((err) => console.warn('Widget data update failed:', err));
-  }, [dbReady, isOnline, localeReady, user]);
+  }, [isOnline, user]);
 
   useEffect(() => {
-    let cancelled = false;
-
     void i18nReady
       .catch((error) => {
         console.error('i18n init failed:', error);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLocaleReady(true);
-        }
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   // Handle splash screen
@@ -124,10 +159,23 @@ function AppContent() {
   }, [colors.background]);
 
   useEffect(() => {
-    if (themeReady && dbReady && localeReady) {
-      SplashScreen.hideAsync();
+    if (!themeReady || !startupTarget || startupRedirectPending) {
+      return;
     }
-  }, [themeReady, dbReady, localeReady]);
+
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!cancelled) {
+          void SplashScreen.hideAsync();
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [startupRedirectPending, startupTarget, themeReady]);
 
   const handleNotificationResponse = useCallback(
     async (response: Notifications.NotificationResponse | null) => {
@@ -175,15 +223,6 @@ function AppContent() {
       notificationResponseListener.current?.remove();
     };
   }, [handleNotificationResponse]);
-
-  if (!dbReady || !localeReady) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
 
   const navTheme = isDark ? DarkTheme : DefaultTheme;
   // Override background colors to match our exact theme

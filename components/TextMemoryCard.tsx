@@ -14,6 +14,7 @@ interface TextMemoryCardProps {
     text: string;
     noteId?: string;
     emoji?: string | null;
+    noteColor?: string | null;
     doodleStrokesJson?: string | null;
     stickerPlacementsJson?: string | null;
     remoteBucket?: string;
@@ -23,11 +24,12 @@ export default function TextMemoryCard({
     text,
     noteId,
     emoji = null,
+    noteColor = null,
     doodleStrokesJson = null,
     stickerPlacementsJson = null,
     remoteBucket,
 }: TextMemoryCardProps) {
-    const gradient = getTextNoteCardGradient({ text, noteId, emoji });
+    const gradient = getTextNoteCardGradient({ text, noteId, emoji, noteColor });
     const displayText = formatNoteTextWithEmoji(text, emoji);
     const doodleStrokes = parseNoteDoodleStrokes(doodleStrokesJson);
     const stickerPlacements = parseNoteStickerPlacements(stickerPlacementsJson);

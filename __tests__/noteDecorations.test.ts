@@ -98,4 +98,38 @@ describe('noteDecorations', () => {
       })
     ).toBe('☕️');
   });
+
+  it('matches Vietnamese text that includes the letter d-stroke once normalized', () => {
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Đi bộ một vòng hồ',
+        locationName: 'Đà Lạt',
+      })
+    ).toBe('🚶');
+  });
+
+  it('covers common brand and category keywords for saved note emoji detection', () => {
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Highlands catch-up before work',
+        locationName: 'District 3',
+      })
+    ).toBe('☕️');
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Late hojicha and waffle stop',
+        locationName: 'Phu Nhuan',
+      })
+    ).toBe('🧋');
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Aeon run for a few gifts',
+        locationName: 'Tan Phu',
+      })
+    ).toBe('🛍️');
+  });
 });

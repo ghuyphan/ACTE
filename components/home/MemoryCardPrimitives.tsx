@@ -66,6 +66,7 @@ export function NoteMemoryCard({
               text={note.content}
               noteId={note.id}
               emoji={note.moodEmoji}
+              noteColor={note.noteColor}
               doodleStrokesJson={note.doodleStrokesJson}
               stickerPlacementsJson={note.stickerPlacementsJson}
             />

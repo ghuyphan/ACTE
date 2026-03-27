@@ -330,6 +330,45 @@ describe('MapScreen', () => {
     });
   });
 
+  it('shows an in-area empty state and can temporarily reveal all matching results', async () => {
+    const { getByTestId, getByText, queryByTestId, queryByText } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 11.4,
+        longitude: 107.4,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getByText('No notes in this area')).toBeTruthy();
+      expect(getByTestId('map-show-all-results')).toBeTruthy();
+      expect(queryByTestId('map-preview-shell')).toBeNull();
+    });
+
+    fireEvent.press(getByTestId('map-show-all-results'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-shell')).toBeTruthy();
+      expect(getByText('2 notes · all results')).toBeTruthy();
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.8,
+        longitude: 106.7,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      });
+    });
+
+    await waitFor(() => {
+      expect(queryByText('2 notes · all results')).toBeNull();
+    });
+  });
+
   it('keeps the initial map entry static', () => {
     render(<MapScreen />);
 
@@ -350,8 +389,10 @@ describe('MapScreen', () => {
     const { getByTestId, queryByTestId } = render(<MapScreen />);
 
     expect(queryByTestId('nearby-rail')).toBeNull();
-    expect(getByTestId('map-preview-list')).toBeTruthy();
-    expect(String(getByTestId('map-preview-index').props.children)).toMatch(/^1\/\d+$/);
+    await waitFor(() => {
+      expect(getByTestId('map-preview-list')).toBeTruthy();
+      expect(String(getByTestId('map-preview-index').props.children)).toMatch(/^1\/\d+$/);
+    });
 
     fireEvent.press(getByTestId('map-preview-item-text-1'));
     expect(mockOpenNoteDetail).not.toHaveBeenCalled();
@@ -365,7 +406,7 @@ describe('MapScreen', () => {
 
   it('swipes nearby preview and pans map to focused note', async () => {
     const { getByTestId } = render(<MapScreen />);
-    const nearbyList = getByTestId('map-preview-list');
+    const nearbyList = await waitFor(() => getByTestId('map-preview-list'));
     const snapInterval = nearbyList.props.snapToInterval;
 
     act(() => {
@@ -407,8 +448,10 @@ describe('MapScreen', () => {
 
     const { getAllByTestId, getByTestId, getByText, queryByText } = render(<MapScreen />);
 
-    expect(getByTestId('map-preview-shell')).toBeTruthy();
-    expect(getByTestId('map-preview-list')).toBeTruthy();
+    await waitFor(() => {
+      expect(getByTestId('map-preview-shell')).toBeTruthy();
+      expect(getByTestId('map-preview-list')).toBeTruthy();
+    });
 
     const leafMarkers = getAllByTestId(/leaf-marker-/);
     fireEvent.press(leafMarkers[0]);
@@ -432,7 +475,7 @@ describe('MapScreen', () => {
     nowSpy.mockRestore();
   });
 
-  it('falls back focused nearby note when filters remove current focus', async () => {
+  it('lets you reveal all matching notes when filters leave the current area empty', async () => {
     const { getByTestId } = render(<MapScreen />);
 
     act(() => {
@@ -444,9 +487,14 @@ describe('MapScreen', () => {
       });
     });
 
+    await waitFor(() => {
+      expect(getByTestId('map-preview-item-photo-1')).toBeTruthy();
+    });
+
     fireEvent.press(getByTestId('map-preview-item-photo-1'));
 
     fireEvent.press(getByTestId('map-filter-text'));
+    fireEvent.press(getByTestId('map-show-all-results'));
     fireEvent.press(getByTestId('map-preview-open'));
 
     await waitFor(() => {
@@ -457,8 +505,7 @@ describe('MapScreen', () => {
   it('turns on marker feedback tracking when a leaf marker is selected', async () => {
     const { getAllByTestId } = render(<MapScreen />);
 
-    const [firstLeafMarker] = getAllByTestId(/leaf-marker-/);
-    expect(firstLeafMarker.props.tracksViewChanges).toBe(false);
+    const [firstLeafMarker] = await waitFor(() => getAllByTestId(/leaf-marker-/));
 
     fireEvent.press(firstLeafMarker);
 
@@ -645,13 +692,14 @@ describe('MapScreen', () => {
     });
   });
 
-  it('shows friend memories in the preview container after the scan and opens shared detail', async () => {
+  it('shows friend memories in the preview container and opens shared detail', async () => {
     const { getByTestId, getByText, queryByTestId } = render(<MapScreen />);
 
     fireEvent.press(getByTestId('map-friends-chip'));
 
-    expect(getByTestId('map-friends-preview-shell')).toBeTruthy();
-    expect(getByTestId('map-friends-scan')).toBeTruthy();
+    await waitFor(() => {
+      expect(getByTestId('map-friends-preview-shell')).toBeTruthy();
+    });
     const friendPreview = getByTestId('map-friends-preview-item-shared-friend-1');
     expect(within(friendPreview).getByText('District 3')).toBeTruthy();
     expect(within(friendPreview).getByText('Shared coffee memory')).toBeTruthy();

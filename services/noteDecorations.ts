@@ -3,6 +3,7 @@ import type { NoteType } from './database';
 function normalize(value: string | null | undefined) {
   return (value ?? '')
     .normalize('NFD')
+    .replace(/[đĐ]/g, 'd')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
@@ -67,21 +68,58 @@ const EMOJI_RULES: EmojiRule[] = [
       'espresso',
       'latte',
       'americano',
+      'cappuccino',
+      'flat white',
+      'mocha',
       'cold brew',
       'brew',
+      'coffee shop',
       'roastery',
       'brunch',
+      'highlands',
+      'starbucks',
+      'phuc long',
     ],
     score: 3,
   },
   {
     emoji: '🧋',
-    keywords: ['milk tea', 'tra sua', 'boba', 'bubble tea', 'matcha', 'tea', 'hong tra'],
+    keywords: [
+      'milk tea',
+      'tra sua',
+      'boba',
+      'bubble tea',
+      'matcha',
+      'hojicha',
+      'tea',
+      'hong tra',
+      'tra dao',
+      'tra chanh',
+      'tra tac',
+    ],
     score: 3,
   },
   {
     emoji: '🍜',
-    keywords: ['pho', 'bun bo', 'bun', 'hu tieu', 'mi cay', 'my cay', 'ramen', 'noodle', 'noodles', 'soup', 'lau', 'hotpot'],
+    keywords: [
+      'pho',
+      'bun bo',
+      'bun cha',
+      'bun rieu',
+      'bun',
+      'hu tieu',
+      'mi cay',
+      'my cay',
+      'mi quang',
+      'cao lau',
+      'udon',
+      'ramen',
+      'noodle',
+      'noodles',
+      'soup',
+      'lau',
+      'hotpot',
+    ],
     score: 3,
   },
   {
@@ -110,7 +148,11 @@ const EMOJI_RULES: EmojiRule[] = [
       'breakfast',
       'meal',
       'banh mi',
+      'banh xeo',
+      'banh cuon',
       'quan an',
+      'com nieu',
+      'steak',
       'grill',
       'bbq',
       'buffet',
@@ -120,7 +162,22 @@ const EMOJI_RULES: EmojiRule[] = [
   },
   {
     emoji: '🍰',
-    keywords: ['cake', 'bakery', 'dessert', 'sweet', 'croissant', 'pastry', 'cookie', 'ice cream', 'kem', 'tiramisu'],
+    keywords: [
+      'cake',
+      'bakery',
+      'dessert',
+      'sweet',
+      'croissant',
+      'pastry',
+      'cookie',
+      'ice cream',
+      'kem',
+      'che',
+      'flan',
+      'pudding',
+      'waffle',
+      'tiramisu',
+    ],
     score: 3,
   },
   {
@@ -154,22 +211,22 @@ const EMOJI_RULES: EmojiRule[] = [
   },
   {
     emoji: '🍸',
-    keywords: ['bar', 'cocktail', 'beer', 'pub', 'wine', 'drinks', 'nightcap', 'speakeasy', 'club'],
+    keywords: ['bar', 'cocktail', 'beer', 'pub', 'wine', 'drinks', 'nightcap', 'speakeasy', 'club', 'brewery', 'taproom'],
     score: 3,
   },
   {
     emoji: '🌿',
-    keywords: ['park', 'garden', 'green', 'tree', 'nature', 'plant', 'lake', 'river', 'picnic', 'botanical'],
+    keywords: ['park', 'garden', 'green', 'tree', 'nature', 'plant', 'lake', 'river', 'picnic', 'botanical', 'camp', 'camping', 'waterfall'],
     score: 3,
   },
   {
     emoji: '🚶',
-    keywords: ['walk', 'walking', 'stroll', 'wander', 'walking date'],
+    keywords: ['walk', 'walking', 'stroll', 'wander', 'walking date', 'di bo', 'dao bo'],
     score: 2,
   },
   {
     emoji: '🏃',
-    keywords: ['run', 'running', 'jog', 'jogging', 'trail', 'hike', 'hiking'],
+    keywords: ['run', 'running', 'jog', 'jogging', 'trail', 'hike', 'hiking', 'trek', 'trekking'],
     score: 3,
   },
   {
@@ -184,12 +241,12 @@ const EMOJI_RULES: EmojiRule[] = [
   },
   {
     emoji: '🏙️',
-    keywords: ['city', 'district', 'downtown', 'center', 'centre', 'saigon', 'hcm', 'ha noi', 'dalat', 'da nang'],
+    keywords: ['city', 'district', 'downtown', 'center', 'centre', 'saigon', 'hcm', 'ha noi', 'dalat', 'da lat', 'da nang', 'hoi an'],
     score: 2,
   },
   {
     emoji: '💻',
-    keywords: ['work', 'office', 'meeting', 'laptop', 'cowork', 'coworking', 'study', 'deadline', 'project', 'coding', 'code'],
+    keywords: ['work', 'office', 'meeting', 'laptop', 'cowork', 'coworking', 'workspace', 'study', 'deadline', 'project', 'coding', 'code', 'remote work'],
     score: 3,
   },
   {
@@ -204,27 +261,27 @@ const EMOJI_RULES: EmojiRule[] = [
   },
   {
     emoji: '🎵',
-    keywords: ['music', 'song', 'concert', 'band', 'jazz', 'lofi', 'vinyl', 'playlist', 'piano'],
+    keywords: ['music', 'song', 'concert', 'band', 'jazz', 'lofi', 'vinyl', 'playlist', 'piano', 'karaoke'],
     score: 3,
   },
   {
     emoji: '🎬',
-    keywords: ['movie', 'cinema', 'film', 'screening', 'theater', 'theatre'],
+    keywords: ['movie', 'cinema', 'film', 'screening', 'theater', 'theatre', 'imax'],
     score: 3,
   },
   {
     emoji: '🛍️',
-    keywords: ['mall', 'shopping', 'market', 'store', 'shop', 'boutique'],
+    keywords: ['mall', 'shopping', 'market', 'store', 'shop', 'boutique', 'supermarket', 'vincom', 'aeon', 'lotte'],
     score: 3,
   },
   {
     emoji: '🏠',
-    keywords: ['home', 'house', 'apartment', 'my place', 'at home'],
+    keywords: ['home', 'house', 'apartment', 'my place', 'at home', 'homestay'],
     score: 3,
   },
   {
     emoji: '🛏️',
-    keywords: ['hotel', 'staycation', 'stay', 'resort room'],
+    keywords: ['hotel', 'staycation', 'stay', 'resort room', 'airbnb', 'check in'],
     score: 3,
   },
   {
@@ -422,15 +479,24 @@ export function resolveAutoNoteEmoji(options: {
   locationName?: string | null;
   createdAt?: Date;
 }) {
-  const searchableText = normalize(`${options.content} ${options.locationName ?? ''}`);
-  const paddedText = padNormalized(searchableText);
+  const paddedContent = padNormalized(normalize(options.content));
+  const paddedLocation = padNormalized(normalize(options.locationName ?? ''));
   let bestEmoji: string | null = null;
   let bestScore = 0;
   let bestMatchedKeywordCount = 0;
   let bestKeywordSpecificity = 0;
 
   for (const rule of NORMALIZED_EMOJI_RULES) {
-    const ruleScore = getRuleScore(paddedText, rule);
+    const contentScore = getRuleScore(paddedContent, rule);
+    const locationScore = getRuleScore(paddedLocation, rule);
+    const ruleScore = {
+      score: contentScore.score * 2 + locationScore.score,
+      matchedKeywordCount: contentScore.matchedKeywordCount + locationScore.matchedKeywordCount,
+      strongestKeywordSpecificity: Math.max(
+        contentScore.strongestKeywordSpecificity,
+        locationScore.strongestKeywordSpecificity
+      ),
+    };
     if (
       ruleScore.score > bestScore ||
       (ruleScore.score === bestScore && ruleScore.strongestKeywordSpecificity > bestKeywordSpecificity) ||

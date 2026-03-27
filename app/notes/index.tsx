@@ -133,6 +133,7 @@ function GridTile({
     text,
     noteId: item.kind === 'note' ? item.note.id : item.post.id,
     emoji: item.kind === 'note' ? item.note.moodEmoji : null,
+    noteColor: item.kind === 'note' ? item.note.noteColor : item.post.noteColor,
   });
   const tileText = text || (isPhotoTile ? photoFallbackLabel : '');
   const showPhotoPlaceholder = item.kind === 'shared-post' && item.post.type === 'photo' && !imageUri;

@@ -1,4 +1,10 @@
-import { CardGradients } from '../hooks/useTheme';
+import {
+  DEFAULT_NOTE_COLOR_ID,
+  NOTE_CARD_GRADIENTS,
+  NOTE_COLOR_PRESETS,
+  NoteColorId,
+  NoteColorPreset,
+} from '../constants/noteColors';
 
 type GradientPair = [string, string];
 
@@ -7,88 +13,92 @@ type NotePalette = {
   card: GradientPair;
 };
 
-const DEFAULT_CAPTURE_GRADIENT: GradientPair = ['#E9C97E', '#D7A24D'];
+const DEFAULT_CAPTURE_GRADIENT: GradientPair = ['#D8C9B5', '#BCA48A'];
+
+const NOTE_COLOR_PRESET_MAP = new Map<NoteColorId, NoteColorPreset>(
+  NOTE_COLOR_PRESETS.map((preset) => [preset.id, preset])
+);
 
 const EMOJI_NOTE_PALETTES: Record<string, NotePalette> = {
   '☕️': {
-    capture: ['#F1CF9A', '#D59659'],
-    card: ['#7A402A', '#CC6E4C'],
+    capture: ['#D6C6B5', '#B79A7F'],
+    card: ['#6B4F44', '#8A6A5F'],
   },
   '🧋': {
-    capture: ['#F0D3B4', '#D49A74'],
-    card: ['#84523A', '#D08A66'],
+    capture: ['#D9CDBE', '#BEA08A'],
+    card: ['#70574B', '#8E7263'],
   },
   '🍜': {
-    capture: ['#F5C89A', '#E9864E'],
-    card: ['#8B3D24', '#E1653B'],
+    capture: ['#D8C0AE', '#B98A6C'],
+    card: ['#755144', '#966A59'],
   },
   '🍣': {
-    capture: ['#F5CCD4', '#E792A5'],
-    card: ['#7A3655', '#D86A93'],
+    capture: ['#DDC5CB', '#BF969F'],
+    card: ['#70525E', '#916E79'],
   },
   '🍕': {
-    capture: ['#F6CB80', '#E88A46'],
-    card: ['#8A3B22', '#DA6333'],
+    capture: ['#D8C0A3', '#BC8F6C'],
+    card: ['#734E42', '#956755'],
   },
   '🍔': {
-    capture: ['#EFCA8E', '#D58B51'],
-    card: ['#70512D', '#BF7A38'],
+    capture: ['#D8C5A8', '#B79A76'],
+    card: ['#6B5741', '#89715B'],
   },
   '🍚': {
-    capture: ['#EFDCAC', '#DDB46A'],
-    card: ['#6E5930', '#C49C45'],
+    capture: ['#DDD1B0', '#C1AA7E'],
+    card: ['#675741', '#837056'],
   },
   '🍰': {
-    capture: ['#F7D6DF', '#EB9EB8'],
-    card: ['#854766', '#D87EA9'],
+    capture: ['#E1CDD1', '#C09AA3'],
+    card: ['#71555F', '#90707B'],
   },
   '🧄': {
-    capture: ['#F3E7BE', '#E0BF73'],
-    card: ['#72583A', '#BD9348'],
+    capture: ['#E0D7BE', '#BEAA82'],
+    card: ['#6B5946', '#88735D'],
   },
   '🧅': {
-    capture: ['#EEDBE0', '#D4A0B2'],
-    card: ['#744666', '#B773A0'],
+    capture: ['#DED1D5', '#BA9CA6'],
+    card: ['#6A5560', '#86717B'],
   },
   '🌶️': {
-    capture: ['#F7B09E', '#EE6251'],
-    card: ['#84292D', '#E1444D'],
+    capture: ['#DABAB1', '#B98379'],
+    card: ['#704C49', '#915F5C'],
   },
   '🍸': {
-    capture: ['#E1D0E4', '#B693C2'],
-    card: ['#5E477C', '#A273D3'],
+    capture: ['#D7CCD9', '#B29EB8'],
+    card: ['#5E566A', '#7C718B'],
   },
   '🌿': {
-    capture: ['#D9E8C7', '#9CC680'],
-    card: ['#2D6A51', '#5BB586'],
+    capture: ['#D4D9C8', '#AAB69A'],
+    card: ['#4F5F52', '#6E836F'],
   },
   '🏃': {
-    capture: ['#DCE7BF', '#A7C567'],
-    card: ['#556229', '#95B83F'],
+    capture: ['#D6D8C0', '#B0B58A'],
+    card: ['#5B6048', '#79805F'],
   },
   '🏖️': {
-    capture: ['#D8EEF2', '#7CC9D4'],
-    card: ['#23687A', '#4DBED0'],
+    capture: ['#D1DADF', '#9EB0B7'],
+    card: ['#4F6268', '#70868E'],
   },
   '🏙️': {
-    capture: ['#D7DDF3', '#98AEDB'],
-    card: ['#355C88', '#6694E8'],
+    capture: ['#D1D5E0', '#A2AEBD'],
+    card: ['#54616F', '#748395'],
   },
   '📚': {
-    capture: ['#E1D8F0', '#B39FD8'],
-    card: ['#514D82', '#887EE0'],
+    capture: ['#D5D1DE', '#AAA1BC'],
+    card: ['#5A5967', '#78768A'],
   },
   '🎨': {
-    capture: ['#F0D0C7', '#DE9577'],
-    card: ['#8B4A37', '#DA7B56'],
+    capture: ['#DCC8C1', '#BC9687'],
+    card: ['#70564D', '#8F7367'],
   },
   '🤍': {
-    capture: ['#F6DCDB', '#E6A2AF'],
-    card: ['#8A4A6A', '#DB86AB'],
+    capture: ['#E0D2D1', '#BDA3A7'],
+    card: ['#6E5960', '#8E767E'],
   },
   '✨': {
-    capture: ['#F2DEB0', '#E1B95E'],
-    card: ['#7A5725', '#D9A63E'],
+    capture: ['#DED2B6', '#BCA37A'],
+    card: ['#6D5841', '#89705A'],
   },
 };
 
@@ -175,22 +185,22 @@ function blendGradients(base: GradientPair, accent: GradientPair, amount: number
 }
 
 const GRADIENT_VARIANT_ACCENTS: string[] = [
-  '#E8C27B',
-  '#F0A98D',
-  '#7FD0B6',
-  '#80B3F2',
-  '#B6A0E6',
-  '#D4D97C',
-  '#F1B6D2',
-  '#9ED8E0',
+  '#CFC1AE',
+  '#C5B2A6',
+  '#A9B7AC',
+  '#AAB6C3',
+  '#B6AEBE',
+  '#B5B89B',
+  '#C2AEB5',
+  '#AAB8B9',
 ];
 
 function createGradientVariation(base: GradientPair, seed: string): GradientPair {
   const accentIndex = hashToIndex(`${seed}:accent`, GRADIENT_VARIANT_ACCENTS.length);
   const accentColor = GRADIENT_VARIANT_ACCENTS[accentIndex] ?? GRADIENT_VARIANT_ACCENTS[0];
-  const blendAmount = 0.08 + hashToUnit(`${seed}:amount`) * 0.14;
-  const softenedStart = softenGradientColor(base[0], 0.03 + hashToUnit(`${seed}:soft-start`) * 0.08);
-  const softenedEnd = softenGradientColor(base[1], 0.01 + hashToUnit(`${seed}:soft-end`) * 0.05);
+  const blendAmount = 0.03 + hashToUnit(`${seed}:amount`) * 0.06;
+  const softenedStart = softenGradientColor(base[0], 0.02 + hashToUnit(`${seed}:soft-start`) * 0.04);
+  const softenedEnd = softenGradientColor(base[1], 0.01 + hashToUnit(`${seed}:soft-end`) * 0.03);
   const variedGradient = blendGradients([softenedStart, softenedEnd], [accentColor, accentColor], blendAmount);
 
   return hashToUnit(`${seed}:reverse`) > 0.56
@@ -200,22 +210,39 @@ function createGradientVariation(base: GradientPair, seed: string): GradientPair
 
 function getBaseGradientSeed(text: string, noteId?: string) {
   const safeSeed = (typeof noteId === 'string' && noteId.trim()) || (typeof text === 'string' ? text.trim() : '');
-  const gradientIndex = hashToIndex(safeSeed || 'noto', CardGradients.length);
-  return CardGradients[gradientIndex] ?? DEFAULT_CAPTURE_GRADIENT;
+  const gradientIndex = hashToIndex(safeSeed || 'noto', NOTE_CARD_GRADIENTS.length);
+  return NOTE_CARD_GRADIENTS[gradientIndex] ?? DEFAULT_CAPTURE_GRADIENT;
 }
 
-function deriveCaptureGradientFromCard(gradient: GradientPair): GradientPair {
-  return [
-    softenGradientColor(gradient[0], 0.66),
-    softenGradientColor(gradient[1], 0.4),
-  ];
+export { DEFAULT_NOTE_COLOR_ID, NOTE_COLOR_PRESETS };
+export type { NoteColorId, NoteColorPreset };
+
+export function getNoteColorPreset(noteColor?: string | null) {
+  if (!noteColor) {
+    return null;
+  }
+
+  return NOTE_COLOR_PRESET_MAP.get(noteColor as NoteColorId) ?? null;
+}
+
+export function getNoteColorCardGradient(noteColor?: string | null): GradientPair | null {
+  return getNoteColorPreset(noteColor)?.card ?? null;
+}
+
+export function normalizeSavedTextNoteColor(noteColor?: string | null): NoteColorId {
+  return getNoteColorPreset(noteColor)?.id ?? DEFAULT_NOTE_COLOR_ID;
 }
 
 export function getCaptureNoteGradient(options?: {
   emoji?: string | null;
   text?: string;
+  noteColor?: string | null;
 }): GradientPair {
-  void options;
+  const selectedGradient = getNoteColorCardGradient(options?.noteColor);
+  if (selectedGradient) {
+    return selectedGradient;
+  }
+
   return DEFAULT_CAPTURE_GRADIENT;
 }
 
@@ -223,11 +250,17 @@ export function getTextNoteCardGradient(options: {
   text: string;
   noteId?: string;
   emoji?: string | null;
+  noteColor?: string | null;
 }): GradientPair {
+  const selectedGradient = getNoteColorCardGradient(options.noteColor);
+  if (selectedGradient) {
+    return selectedGradient;
+  }
+
   const baseGradient = getBaseGradientSeed(options.text, options.noteId);
   const paletteEmoji = resolvePaletteEmoji(options.text, options.emoji);
   const blendedGradient = paletteEmoji
-    ? blendGradients(baseGradient, EMOJI_NOTE_PALETTES[paletteEmoji].card, 0.42)
+    ? blendGradients(baseGradient, EMOJI_NOTE_PALETTES[paletteEmoji].card, 0.24)
     : baseGradient;
 
   return createGradientVariation(

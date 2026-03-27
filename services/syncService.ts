@@ -17,7 +17,13 @@ import {
   serializeStickerPlacementsForStorage,
   syncStickerAssetsFromPlacements,
 } from './noteStickers';
-import { deletePhotoFromStorage, downloadPhotoFromStorage, NOTE_MEDIA_BUCKET, uploadPhotoToStorage } from './remoteMedia';
+import {
+  deletePhotoFromStorage,
+  downloadPhotoFromStorage,
+  NOTE_MEDIA_BUCKET,
+  SHARED_POST_MEDIA_BUCKET,
+  uploadPhotoToStorage,
+} from './remoteMedia';
 import { upsertPublicUserProfile } from './publicProfileService';
 
 export type SyncChangeType = 'create' | 'update' | 'delete' | 'deleteAll';
@@ -108,6 +114,7 @@ interface NoteRow {
   prompt_text_snapshot: string | null;
   prompt_answer: string | null;
   mood_emoji: string | null;
+  note_color: string | null;
   latitude: number;
   longitude: number;
   radius: number;
@@ -374,6 +381,7 @@ async function serializeNoteForSupabase(
     prompt_text_snapshot: note.promptTextSnapshot ?? null,
     prompt_answer: note.promptAnswer ?? null,
     mood_emoji: note.moodEmoji ?? null,
+    note_color: note.noteColor ?? null,
     latitude: note.latitude,
     longitude: note.longitude,
     radius: note.radius,
@@ -438,6 +446,7 @@ async function deserializeRemoteNote(
     promptTextSnapshot: record.prompt_text_snapshot ?? null,
     promptAnswer: record.prompt_answer ?? null,
     moodEmoji: record.mood_emoji ?? null,
+    noteColor: record.note_color ?? null,
     latitude: record.latitude,
     longitude: record.longitude,
     radius: typeof record.radius === 'number' ? record.radius : 150,
@@ -472,6 +481,32 @@ async function deleteRemoteNote(userId: string, noteId: string) {
     throw new Error('Cloud sync is unavailable in this build.');
   }
 
+  const { data: sharedPosts, error: sharedPostsError } = await supabase
+    .from('shared_posts')
+    .select('id, photo_path')
+    .eq('author_user_id', userId)
+    .eq('source_note_id', noteId);
+  if (sharedPostsError) {
+    throw sharedPostsError;
+  }
+
+  await Promise.all(
+    ((sharedPosts ?? []) as Array<{ photo_path?: string | null }>).map((row) =>
+      deletePhotoFromStorage(SHARED_POST_MEDIA_BUCKET, row.photo_path ?? null).catch(() => undefined)
+    )
+  );
+  const sharedPostIds = ((sharedPosts ?? []) as Array<{ id: string }>).map((row) => row.id).filter(Boolean);
+  if (sharedPostIds.length > 0) {
+    const { error: sharedDeleteError } = await supabase
+      .from('shared_posts')
+      .delete()
+      .eq('author_user_id', userId)
+      .in('id', sharedPostIds);
+    if (sharedDeleteError) {
+      throw sharedDeleteError;
+    }
+  }
+
   await deletePhotoFromStorage(NOTE_MEDIA_BUCKET, `${userId}/${noteId}`).catch(() => undefined);
   const { error } = await supabase.from('notes').delete().eq('id', noteId).eq('user_id', userId);
   if (error) {
@@ -485,19 +520,41 @@ async function deleteAllRemoteNotesForUser(userId: string) {
     throw new Error('Cloud sync is unavailable in this build.');
   }
 
-  const { data, error } = await supabase
-    .from('notes')
-    .select('id, photo_path')
-    .eq('user_id', userId);
+  const [{ data, error }, { data: sharedPosts, error: sharedPostsError }] = await Promise.all([
+    supabase
+      .from('notes')
+      .select('id, photo_path')
+      .eq('user_id', userId),
+    supabase
+      .from('shared_posts')
+      .select('id, photo_path')
+      .eq('author_user_id', userId),
+  ]);
   if (error) {
     throw error;
+  }
+  if (sharedPostsError) {
+    throw sharedPostsError;
   }
 
   for (const row of data ?? []) {
     await deletePhotoFromStorage(NOTE_MEDIA_BUCKET, row.photo_path as string | null).catch(() => undefined);
   }
 
-  const { error: deleteError } = await supabase.from('notes').delete().eq('user_id', userId);
+  for (const row of sharedPosts ?? []) {
+    await deletePhotoFromStorage(
+      SHARED_POST_MEDIA_BUCKET,
+      (row as { photo_path?: string | null }).photo_path ?? null
+    ).catch(() => undefined);
+  }
+
+  const [{ error: deleteSharedPostsError }, { error: deleteError }] = await Promise.all([
+    supabase.from('shared_posts').delete().eq('author_user_id', userId),
+    supabase.from('notes').delete().eq('user_id', userId),
+  ]);
+  if (deleteSharedPostsError) {
+    throw deleteSharedPostsError;
+  }
   if (deleteError) {
     throw deleteError;
   }
@@ -604,7 +661,7 @@ async function mergeRemoteNotesFromSupabase(
   let request = supabase
     .from('notes')
     .select(
-      'id, user_id, type, content, photo_path, has_doodle, doodle_strokes_json, has_stickers, sticker_placements_json, location_name, prompt_id, prompt_text_snapshot, prompt_answer, mood_emoji, latitude, longitude, radius, is_favorite, created_at, updated_at, synced_at'
+      'id, user_id, type, content, photo_path, has_doodle, doodle_strokes_json, has_stickers, sticker_placements_json, location_name, prompt_id, prompt_text_snapshot, prompt_answer, mood_emoji, note_color, latitude, longitude, radius, is_favorite, created_at, updated_at, synced_at'
     )
     .eq('user_id', userId)
     .order('synced_at', { ascending: true });

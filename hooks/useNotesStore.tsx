@@ -85,10 +85,6 @@ function useNotesStoreValue(): NotesStoreValue {
   }, []);
 
   useEffect(() => {
-    if (!authReady) {
-      return;
-    }
-
     let cancelled = false;
     let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
     (async () => {
@@ -110,7 +106,7 @@ function useNotesStoreValue(): NotesStoreValue {
         clearTimeout(cleanupTimeout);
       }
     };
-  }, [authReady, refreshNotes]);
+  }, [refreshNotes]);
 
   useEffect(() => {
     if (!authReady) {
@@ -190,6 +186,7 @@ function useNotesStoreValue(): NotesStoreValue {
               promptAnswer:
                 updates.promptAnswer !== undefined ? updates.promptAnswer : n.promptAnswer ?? null,
               moodEmoji: updates.moodEmoji !== undefined ? updates.moodEmoji : n.moodEmoji ?? null,
+              noteColor: updates.noteColor !== undefined ? updates.noteColor : n.noteColor ?? null,
               hasDoodle: updates.hasDoodle !== undefined ? updates.hasDoodle : n.hasDoodle ?? false,
               doodleStrokesJson:
                 updates.doodleStrokesJson !== undefined

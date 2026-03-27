@@ -13,20 +13,9 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import Reanimated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
 import { SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
-import {
-  getMapCardEnter,
-  getMapCardExit,
-  getMapLayoutTransition,
-  mapMotionDurations,
-} from './mapMotion';
 import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
 
 const PREVIEW_HORIZONTAL_INSET = 14;
@@ -70,7 +59,6 @@ export default function MapFriendsPreviewCard({
   const { width: windowWidth } = useWindowDimensions();
   const previewListRef = useRef<FlatList<SharedPost>>(null);
   const previewDraggingRef = useRef(false);
-  const visibilityProgress = useSharedValue(visible ? 1 : 0);
   const pageWidth = useMemo(
     () => Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2 - mapOverlayTokens.overlayPadding * 2),
     [windowWidth]
@@ -88,12 +76,6 @@ export default function MapFriendsPreviewCard({
   const activePost = activeIndex >= 0 ? posts[activeIndex] ?? posts[0] : null;
 
   useEffect(() => {
-    visibilityProgress.value = withTiming(visible ? 1 : 0, {
-      duration: reduceMotionEnabled ? mapMotionDurations.fast : mapMotionDurations.standard,
-    });
-  }, [reduceMotionEnabled, visibilityProgress, visible]);
-
-  useEffect(() => {
     if (!previewListRef.current || activeIndex < 0) {
       return;
     }
@@ -103,18 +85,6 @@ export default function MapFriendsPreviewCard({
       animated: !reduceMotionEnabled,
     });
   }, [activeIndex, pageWidth, reduceMotionEnabled]);
-
-  const wrapperAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: visibilityProgress.value,
-    transform: [
-      {
-        translateY: (1 - visibilityProgress.value) * 18,
-      },
-      {
-        scale: 0.98 + visibilityProgress.value * 0.02,
-      },
-    ],
-  }));
 
   const handleMomentumEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -140,19 +110,16 @@ export default function MapFriendsPreviewCard({
     return null;
   }
 
-  const pointerEvents = visible && activePost ? 'auto' : 'none';
   const previewCountLabel = `${Math.max(activeIndex, 0) + 1}/${posts.length}`;
 
   return (
-    <Reanimated.View
+    <View
       testID="map-friends-preview-shell"
       style={[
         styles.wrapper,
         { bottom: bottomOffset },
-        wrapperAnimatedStyle,
       ]}
-      pointerEvents={pointerEvents}
-      layout={getMapLayoutTransition(reduceMotionEnabled)}
+      pointerEvents="auto"
     >
       <View
         style={[
@@ -225,14 +192,9 @@ export default function MapFriendsPreviewCard({
                       </Text>
                       <View style={styles.metaRow}>
                         <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
-                        <Reanimated.Text
-                          key={`friends-${item.id}-${authorLabel}`}
-                          entering={getMapCardEnter(reduceMotionEnabled)}
-                          exiting={getMapCardExit(reduceMotionEnabled)}
-                          style={[styles.metaText, { color: colors.primary }]}
-                        >
+                        <Text style={[styles.metaText, { color: colors.primary }]}>
                           {t('map.friendFrom', 'From {{name}}', { name: authorLabel })}
-                        </Reanimated.Text>
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -257,15 +219,9 @@ export default function MapFriendsPreviewCard({
 
           <View style={styles.footer}>
             <View style={styles.indexWrap}>
-              <Reanimated.Text
-                key={previewCountLabel}
-                testID="map-friends-preview-index"
-                entering={getMapCardEnter(reduceMotionEnabled)}
-                exiting={getMapCardExit(reduceMotionEnabled)}
-                style={[styles.indexText, { color: colors.secondaryText }]}
-              >
+              <Text testID="map-friends-preview-index" style={[styles.indexText, { color: colors.secondaryText }]}>
                 {previewCountLabel}
-              </Reanimated.Text>
+              </Text>
             </View>
 
             <Pressable
@@ -286,7 +242,7 @@ export default function MapFriendsPreviewCard({
           </View>
         </View>
       </View>
-    </Reanimated.View>
+    </View>
   );
 }
 

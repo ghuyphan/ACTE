@@ -11,6 +11,8 @@ private struct LocketWidgetPayload {
     let nearbyPlacesCount: Int
     let backgroundImageUrl: String?
     let backgroundImageBase64: String?
+    let backgroundGradientStartColor: String?
+    let backgroundGradientEndColor: String?
     let hasDoodle: Bool
     let doodleStrokesJson: String?
     let hasStickers: Bool
@@ -42,6 +44,8 @@ private struct LocketWidgetPayload {
         nearbyPlacesCount: 0,
         backgroundImageUrl: nil,
         backgroundImageBase64: nil,
+        backgroundGradientStartColor: nil,
+        backgroundGradientEndColor: nil,
         hasDoodle: false,
         doodleStrokesJson: nil,
         hasStickers: false,
@@ -74,6 +78,8 @@ private struct LocketWidgetPayload {
         nearbyPlacesCount: Int,
         backgroundImageUrl: String?,
         backgroundImageBase64: String?,
+        backgroundGradientStartColor: String?,
+        backgroundGradientEndColor: String?,
         hasDoodle: Bool,
         doodleStrokesJson: String?,
         hasStickers: Bool,
@@ -104,6 +110,8 @@ private struct LocketWidgetPayload {
         self.nearbyPlacesCount = nearbyPlacesCount
         self.backgroundImageUrl = backgroundImageUrl
         self.backgroundImageBase64 = backgroundImageBase64
+        self.backgroundGradientStartColor = backgroundGradientStartColor
+        self.backgroundGradientEndColor = backgroundGradientEndColor
         self.hasDoodle = hasDoodle
         self.doodleStrokesJson = doodleStrokesJson
         self.hasStickers = hasStickers
@@ -138,6 +146,8 @@ private struct LocketWidgetPayload {
         nearbyPlacesCount = LocketWidgetPayload.intValue(payload["nearbyPlacesCount"])
         backgroundImageUrl = LocketWidgetPayload.optionalStringValue(payload["backgroundImageUrl"])
         backgroundImageBase64 = LocketWidgetPayload.optionalStringValue(payload["backgroundImageBase64"])
+        backgroundGradientStartColor = LocketWidgetPayload.optionalStringValue(payload["backgroundGradientStartColor"])
+        backgroundGradientEndColor = LocketWidgetPayload.optionalStringValue(payload["backgroundGradientEndColor"])
         hasDoodle = LocketWidgetPayload.boolValue(payload["hasDoodle"])
         doodleStrokesJson = LocketWidgetPayload.optionalStringValue(payload["doodleStrokesJson"])
         hasStickers = LocketWidgetPayload.boolValue(payload["hasStickers"])
@@ -925,11 +935,17 @@ private struct LocketWidgetEntryView: View {
 
     private var smallLayout: some View {
         ZStack(alignment: .bottom) {
+            if shouldShowCountBadge {
+                countBadge
+                    .padding(.bottom, smallLayoutPadding + smallBadgeBottomPadding)
+            }
+
             if shouldShowStickerOverlay {
                 LocketWidgetStickerOverlay(
                     placements: stickerPlacements,
                     overlayOpacity: noteOverlayOpacity
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             if shouldShowDoodleOverlay {
@@ -938,6 +954,7 @@ private struct LocketWidgetEntryView: View {
                     isLarge: false,
                     overlayOpacity: noteOverlayOpacity
                 )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(locketWidgetDoodleArtboardInset)
                     .allowsHitTesting(false)
             }
@@ -971,12 +988,8 @@ private struct LocketWidgetEntryView: View {
             .padding(.horizontal, smallLayoutPadding)
             .padding(.top, smallLayoutPadding)
             .padding(.bottom, smallLayoutPadding + (shouldShowCountBadge ? smallBadgeReservedSpace : 0))
-
-            if shouldShowCountBadge {
-                countBadge
-                    .padding(.bottom, smallLayoutPadding + smallBadgeBottomPadding)
-            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -1012,6 +1025,7 @@ private struct LocketWidgetEntryView: View {
                     placements: stickerPlacements,
                     overlayOpacity: noteOverlayOpacity
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             if shouldShowDoodleOverlay {
@@ -1020,6 +1034,7 @@ private struct LocketWidgetEntryView: View {
                     isLarge: true,
                     overlayOpacity: noteOverlayOpacity
                 )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(locketWidgetDoodleArtboardInset)
                     .allowsHitTesting(false)
             }
@@ -1059,6 +1074,7 @@ private struct LocketWidgetEntryView: View {
             .padding(.horizontal, 24)
             .padding(.vertical, 22)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var fontSize: CGFloat {
@@ -1108,7 +1124,9 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var primaryTextColor: Color {
-        hasPhotoBackground ? Color.white : Color(red: 0.17, green: 0.10, blue: 0.07)
+        hasPhotoBackground
+            ? Color.white
+            : Color(red: 0.17, green: 0.10, blue: 0.07)
     }
 
     private var eyebrowTextColor: Color {

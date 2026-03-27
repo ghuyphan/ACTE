@@ -21,7 +21,8 @@ import {
   scrollContentBackground,
 } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import ProfileAvatar from './ProfileAvatar';
 import { useProfileScreenModel } from './useProfileScreenModel';
 
 function KeyValueRow({
@@ -44,6 +45,30 @@ function KeyValueRow({
   );
 }
 
+function MembershipBadge({
+  colors,
+  isPlus,
+  label,
+}: {
+  colors: ReturnType<typeof useProfileScreenModel>['colors'];
+  isPlus: boolean;
+  label: string;
+}) {
+  return (
+    <SwiftUIText
+      modifiers={[
+        foregroundStyle(isPlus ? colors.primary : colors.secondaryText),
+        backgroundOverlay({ color: isPlus ? colors.primary + '14' : colors.border + '99' }),
+        cornerRadius(999),
+        font({ size: 12, weight: 'semibold' }),
+        padding({ top: 6, bottom: 6, leading: 10, trailing: 10 }),
+      ]}
+    >
+      {label}
+    </SwiftUIText>
+  );
+}
+
 export default function ProfileScreenIOS() {
   const {
     avatarLabel,
@@ -59,12 +84,9 @@ export default function ProfileScreenIOS() {
     openSignIn,
     openSupportLink,
     profileName,
-    providerLabel,
     showAccountDeletionLink,
     showPrivacyPolicyLink,
     showSupportLink,
-    syncSummary,
-    syncValue,
     t,
     tier,
     user,
@@ -82,13 +104,13 @@ export default function ProfileScreenIOS() {
                 <HStack modifiers={[padding({ top: 4, bottom: 4 })]}>
                   <RNHostView matchContents>
                     <View style={styles.avatarHost}>
-                      {avatarUrl ? (
-                        <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-                      ) : (
-                        <View style={[styles.avatarFallback, { backgroundColor: colors.primarySoft }]}>
-                          <Text style={[styles.avatarLabel, { color: colors.primary }]}>{avatarLabel}</Text>
-                        </View>
-                      )}
+                      <ProfileAvatar
+                        avatarLabel={avatarLabel}
+                        avatarUrl={avatarUrl}
+                        colors={colors}
+                        size={48}
+                        labelFontSize={20}
+                      />
                     </View>
                   </RNHostView>
                   <VStack alignment="leading" modifiers={[padding({ leading: 12 })]}>
@@ -102,46 +124,17 @@ export default function ProfileScreenIOS() {
                     ) : null}
                   </VStack>
                   <Spacer />
-                  {tier === 'plus' ? (
-                    <SwiftUIText
-                      modifiers={[
-                        foregroundStyle(colors.primary),
-                        backgroundOverlay({ color: colors.primary + '14' }),
-                        cornerRadius(999),
-                        font({ size: 12, weight: 'semibold' }),
-                        padding({ top: 6, bottom: 6, leading: 10, trailing: 10 }),
-                      ]}
-                    >
-                      {t('profile.plusBadge', 'Noto Plus')}
-                    </SwiftUIText>
-                  ) : null}
+                  <MembershipBadge colors={colors} isPlus={tier === 'plus'} label={membershipLabel} />
                 </HStack>
               </Section>
 
               <Section
                 title={t('profile.accountTitle', 'Connected account')}
-                footer={
-                  syncSummary ? (
-                    <SwiftUIText
-                      modifiers={[
-                        foregroundStyle(colors.secondaryText),
-                        font({ size: 13 }),
-                        multilineTextAlignment('leading'),
-                        padding({ top: 8 }),
-                      ]}
-                    >
-                      {syncSummary}
-                    </SwiftUIText>
-                  ) : undefined
-                }
               >
                 <KeyValueRow colors={colors} label={t('profile.name', 'Name')} value={user.displayName || t('profile.noName', 'Noto account')} />
                 {user.email ? (
                   <KeyValueRow colors={colors} label={t('profile.email', 'Email')} value={user.email} />
                 ) : null}
-                <KeyValueRow colors={colors} label={t('profile.membership', 'Membership')} value={membershipLabel} />
-                <KeyValueRow colors={colors} label={t('profile.provider', 'Sign-in method')} value={providerLabel} />
-                <KeyValueRow colors={colors} label={t('profile.sync', 'Sync')} value={syncValue} />
               </Section>
 
               {(showPrivacyPolicyLink || showSupportLink || showAccountDeletionLink) ? (
@@ -267,23 +260,5 @@ const styles = StyleSheet.create({
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    overflow: 'hidden',
-  },
-  avatarFallback: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarLabel: {
-    fontSize: 20,
-    fontWeight: '700',
-    fontFamily: 'System',
   },
 });

@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
-import { Linking } from 'react-native';
+import { InteractionManager, Linking } from 'react-native';
 import { getReminderPermissionState, syncGeofenceRegions } from '../services/geofenceService';
 
 export interface ForegroundLocationRequestResult {
@@ -43,17 +43,24 @@ export function useGeofence() {
     }, []);
 
     useEffect(() => {
-        (async () => {
-            const foregroundStatus = await Location.getForegroundPermissionsAsync();
-            const granted = foregroundStatus.status === 'granted';
-            setHasLocationPermission(granted);
-            if (granted) {
-                await refreshLocation();
-            }
+        let cancelled = false;
+        const interactionHandle = InteractionManager.runAfterInteractions(() => {
+            void (async () => {
+                const foregroundStatus = await Location.getForegroundPermissionsAsync();
+                if (cancelled) {
+                    return;
+                }
 
-            await refreshPermissions();
-        })();
-    }, [refreshLocation, refreshPermissions]);
+                setHasLocationPermission(foregroundStatus.status === 'granted');
+                await refreshPermissions();
+            })();
+        });
+
+        return () => {
+            cancelled = true;
+            interactionHandle.cancel();
+        };
+    }, [refreshPermissions]);
 
     const requestForegroundLocation = useCallback(async (): Promise<ForegroundLocationRequestResult> => {
         let foregroundStatus = await Location.getForegroundPermissionsAsync();

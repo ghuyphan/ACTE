@@ -1,5 +1,12 @@
 const mockExecAsync = jest.fn<Promise<void>, [string]>(async () => undefined);
 const mockRunAsync = jest.fn<Promise<void>, [string, ...unknown[]]>(async () => undefined);
+const mockGetFirstAsync = jest.fn<Promise<unknown | null>, [string, ...unknown[]]>(async (sql: string) => {
+  if (sql.includes('PRAGMA user_version')) {
+    return { user_version: 0 };
+  }
+
+  return null;
+});
 const mockGetAllAsync = jest.fn<Promise<unknown[]>, [string, ...unknown[]]>(async (sql: string) => {
   if (sql.includes('PRAGMA table_info(notes)')) {
     return [
@@ -37,13 +44,7 @@ jest.mock('expo-sqlite', () => ({
     execAsync: (sql: string) => mockExecAsync(sql),
     runAsync: (sql: string, ...args: unknown[]) => mockRunAsync(sql, ...args),
     getAllAsync: (sql: string, ...args: unknown[]) => mockGetAllAsync(sql, ...args),
-    getFirstAsync: async (sql: string) => {
-      if (sql.includes('PRAGMA user_version')) {
-        return { user_version: 0 };
-      }
-
-      return null;
-    },
+    getFirstAsync: (sql: string, ...args: unknown[]) => mockGetFirstAsync(sql, ...args),
   }),
 }));
 
@@ -79,6 +80,104 @@ describe('database migrations', () => {
       'file:///mock-documents/photos/legacy-photo.jpg',
       'district 3',
       'photo-1'
+    );
+  });
+
+  it('normalizes saved text note colors on create and update', async () => {
+    let getDB!: () => Promise<unknown>;
+    let createNote!: (input: Record<string, unknown>) => Promise<unknown>;
+    let updateNote!: (id: string, updates: Record<string, unknown>) => Promise<void>;
+
+    jest.isolateModules(() => {
+      ({ getDB, createNote, updateNote } = require('../services/database'));
+    });
+
+    await getDB();
+    mockRunAsync.mockClear();
+    mockGetFirstAsync.mockImplementation(async (sql: string) => {
+      if (sql.includes('PRAGMA user_version')) {
+        return { user_version: 0 };
+      }
+
+      if (sql.includes('FROM notes')) {
+        return {
+          id: 'note-1',
+          type: 'text',
+          content: 'Legacy note',
+          photo_local_uri: null,
+          photo_remote_base64: null,
+          location_name: 'District 1',
+          prompt_id: null,
+          prompt_text_snapshot: null,
+          prompt_answer: null,
+          mood_emoji: null,
+          note_color: null,
+          latitude: 10.77,
+          longitude: 106.69,
+          radius: 150,
+          is_favorite: 0,
+          has_doodle: 0,
+          doodle_strokes_json: null,
+          has_stickers: 0,
+          sticker_placements_json: null,
+          created_at: '2026-03-27T00:00:00.000Z',
+          updated_at: null,
+        };
+      }
+
+      return null;
+    });
+
+    await createNote({
+      type: 'text',
+      content: 'Fresh note',
+      locationName: 'Cafe',
+      latitude: 10.77,
+      longitude: 106.69,
+      noteColor: null,
+    });
+
+    expect(mockRunAsync).toHaveBeenLastCalledWith(
+      expect.stringContaining('INSERT INTO notes'),
+      expect.any(String),
+      '__local__',
+      'text',
+      'Fresh note',
+      null,
+      null,
+      'Cafe',
+      null,
+      null,
+      null,
+      null,
+      'marigold-glow',
+      expect.any(String),
+      10.77,
+      106.69,
+      150,
+      expect.any(String)
+    );
+
+    mockRunAsync.mockClear();
+
+    await updateNote('note-1', { content: 'Updated legacy note' });
+
+    expect(mockRunAsync).toHaveBeenLastCalledWith(
+      expect.stringContaining('UPDATE notes'),
+      'Updated legacy note',
+      null,
+      null,
+      'District 1',
+      null,
+      null,
+      null,
+      null,
+      'marigold-glow',
+      expect.any(String),
+      150,
+      expect.any(String),
+      'note-1',
+      '__local__'
     );
   });
 });

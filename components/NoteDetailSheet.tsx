@@ -8,10 +8,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+    ActionSheetIOS,
     Alert,
     Animated,
     Dimensions,
     Easing,
+    type GestureResponderEvent,
     Keyboard,
     KeyboardAvoidingView,
     LayoutAnimation,
@@ -35,7 +37,7 @@ import { useSharedFeedStore } from '../hooks/useSharedFeed';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useTheme } from '../hooks/useTheme';
 import { Note } from '../services/database';
-import { getTextNoteCardGradient } from '../services/noteAppearance';
+import { getTextNoteCardGradient, normalizeSavedTextNoteColor } from '../services/noteAppearance';
 import { clearNoteDoodle, parseNoteDoodleStrokes, saveNoteDoodle } from '../services/noteDoodles';
 import {
     bringStickerPlacementToFront,
@@ -53,9 +55,16 @@ import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import { formatDate } from '../utils/dateUtils';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
 import { isOlderIOS } from '../utils/platform';
+import {
+    ClipboardStickerError,
+    hasClipboardStickerImage,
+    importStickerAssetFromClipboard,
+} from '../utils/stickerClipboard';
 import AppBottomSheet from './AppBottomSheet';
 import NoteStickerCanvas from './NoteStickerCanvas';
 import NoteDoodleCanvas, { DoodleStroke } from './NoteDoodleCanvas';
+import NoteColorPicker from './ui/NoteColorPicker';
+import StickerPastePopover from './ui/StickerPastePopover';
 import TransientStatusChip from './ui/TransientStatusChip';
 
 const { width } = Dimensions.get('window');
@@ -64,6 +73,12 @@ const CARD_FEEDBACK_TOP_OFFSET = 34;
 const CARD_FEEDBACK_SIDE_PADDING = 34;
 const CARD_OVERLAY_TOP_INSET = 28;
 const CARD_OVERLAY_SIDE_INSET = 28;
+
+type StickerPastePromptState = {
+    visible: boolean;
+    x: number;
+    y: number;
+};
 
 function SkeletonCard({ colors }: { colors: { card: string } }) {
     const opacity = useRef(new Animated.Value(0.3)).current;
@@ -209,12 +224,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [editContent, setEditContent] = useState('');
     const [editLocation, setEditLocation] = useState('');
     const [editRadius, setEditRadius] = useState(150);
+    const [editNoteColor, setEditNoteColor] = useState<string | null>(null);
     const [editDoodleStrokes, setEditDoodleStrokes] = useState<DoodleStroke[]>([]);
     const [editStickerPlacements, setEditStickerPlacements] = useState<NoteStickerPlacement[]>([]);
     const [doodleModeEnabled, setDoodleModeEnabled] = useState(false);
     const [stickerModeEnabled, setStickerModeEnabled] = useState(false);
     const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
     const [importingSticker, setImportingSticker] = useState(false);
+    const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
 
     const cardScale = useRef(new Animated.Value(0.92)).current;
@@ -228,6 +245,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const locationInputRef = useRef<TextInput>(null);
     const sheetBackgroundStyle = isOlderIOS ? { backgroundColor: colors.card } : null;
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingDeleteNoteIdRef = useRef<string | null>(null);
     const closeCompletionHandledRef = useRef(false);
 
@@ -244,6 +262,26 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }, 1200);
     }, []);
 
+    const clearPastePromptTimeout = useCallback(() => {
+        if (pastePromptTimeoutRef.current) {
+            clearTimeout(pastePromptTimeoutRef.current);
+            pastePromptTimeoutRef.current = null;
+        }
+    }, []);
+
+    const dismissPastePrompt = useCallback(() => {
+        clearPastePromptTimeout();
+        setPastePrompt((current) => (current.visible ? { ...current, visible: false } : current));
+    }, [clearPastePromptTimeout]);
+
+    const schedulePastePromptDismiss = useCallback(() => {
+        clearPastePromptTimeout();
+        pastePromptTimeoutRef.current = setTimeout(() => {
+            setPastePrompt((current) => ({ ...current, visible: false }));
+            pastePromptTimeoutRef.current = null;
+        }, 2600);
+    }, [clearPastePromptTimeout]);
+
     useEffect(() => {
         if (!visible || !noteId) {
             return;
@@ -259,6 +297,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setEditContent('');
         setEditLocation('');
         setEditRadius(150);
+        setEditNoteColor(null);
         setEditDoodleStrokes([]);
         setEditStickerPlacements([]);
         setDoodleModeEnabled(false);
@@ -284,6 +323,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     setEditContent(nextNote.content);
                     setEditLocation(nextNote.locationName || '');
                     setEditRadius(nextNote.radius);
+                    setEditNoteColor(
+                        nextNote.type === 'text'
+                            ? normalizeSavedTextNoteColor(nextNote.noteColor)
+                            : null
+                    );
                     setEditDoodleStrokes(parseNoteDoodleStrokes(nextNote.doodleStrokesJson));
                     setEditStickerPlacements(parseNoteStickerPlacements(nextNote.stickerPlacementsJson));
                     setDoodleModeEnabled(false);
@@ -378,6 +422,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         return () => clearTimeout(focusTimer);
     }, [isEditing, note?.type]);
 
+    useEffect(() => () => clearPastePromptTimeout(), [clearPastePromptTimeout]);
+
+    useEffect(() => {
+        if (!isEditing || doodleModeEnabled || stickerModeEnabled || importingSticker || !visible) {
+            dismissPastePrompt();
+        }
+    }, [dismissPastePrompt, doodleModeEnabled, importingSticker, isEditing, stickerModeEnabled, visible]);
+
     const parsedNoteDoodleStrokes = useMemo(
         () => parseNoteDoodleStrokes(note?.doodleStrokesJson),
         [note?.doodleStrokesJson]
@@ -392,10 +444,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             return;
         }
 
+        dismissPastePrompt();
         Keyboard.dismiss();
         setStickerModeEnabled(false);
         setDoodleModeEnabled((current) => !current);
-    }, [isEditing, note]);
+    }, [dismissPastePrompt, isEditing, note]);
 
     const handleUndoDoodle = useCallback(() => {
         setEditDoodleStrokes((current) => current.slice(0, -1));
@@ -409,28 +462,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             return;
         }
 
+        dismissPastePrompt();
         Keyboard.dismiss();
-        let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
-        if (mediaPermission.status !== 'granted') {
-            mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        }
-
-        if (mediaPermission.status !== 'granted') {
-            Alert.alert(
-                t('capture.photoLibraryPermissionTitle', 'Photo access needed'),
-                mediaPermission.canAskAgain === false
-                    ? t(
-                        'capture.photoLibraryPermissionSettingsMsg',
-                        'Photo library access is blocked for Noto. Open Settings to import from your library.'
-                    )
-                    : t(
-                        'capture.photoLibraryPermissionMsg',
-                        'Allow photo library access so you can import an image into this note.'
-                    )
-            );
-            return;
-        }
-
         setImportingSticker(true);
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
@@ -466,21 +499,165 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         } finally {
             setImportingSticker(false);
         }
-    }, [editStickerPlacements, importingSticker, isEditing, note, t]);
+    }, [dismissPastePrompt, editStickerPlacements, importingSticker, isEditing, note, t]);
+    const handlePasteStickerFromClipboard = useCallback(async () => {
+        if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
+            return;
+        }
+
+        dismissPastePrompt();
+        Keyboard.dismiss();
+        setImportingSticker(true);
+        try {
+            const importedAsset = await importStickerAssetFromClipboard({
+                requiresUpdate: t(
+                    'capture.clipboardStickerRequiresUpdateMsg',
+                    'Clipboard sticker paste needs the latest app build. Restart the iOS app after rebuilding to use this.'
+                ),
+                unavailable: t(
+                    'capture.clipboardStickerUnavailableMsg',
+                    'Copy a transparent sticker image first, then long press again to paste it.'
+                ),
+                unsupported: t(
+                    'capture.clipboardStickerUnsupported',
+                    'We could not read that clipboard image right now.'
+                ),
+                storageUnavailable: t(
+                    'capture.clipboardStickerStorageUnavailable',
+                    'Sticker storage is unavailable on this device.'
+                ),
+            });
+
+            const nextPlacement = createStickerPlacement(importedAsset, editStickerPlacements);
+            setEditStickerPlacements((current) => [...current, nextPlacement]);
+            setSelectedStickerId(nextPlacement.id);
+            setStickerModeEnabled(true);
+            setDoodleModeEnabled(false);
+        } catch (error) {
+            console.warn('Sticker paste failed:', error);
+            const alertTitle =
+                error instanceof ClipboardStickerError && error.code === 'unavailable'
+                    ? t('capture.clipboardStickerUnavailableTitle', 'No sticker to paste')
+                    : error instanceof ClipboardStickerError && error.code === 'requires-update'
+                        ? t('capture.clipboardStickerRequiresUpdateTitle', 'Update required')
+                        : t('capture.error', 'Error');
+            Alert.alert(
+                alertTitle,
+                error instanceof Error
+                    ? error.message
+                    : t('capture.clipboardStickerFailed', 'We could not paste that sticker right now.')
+            );
+        } finally {
+            setImportingSticker(false);
+        }
+    }, [dismissPastePrompt, editStickerPlacements, importingSticker, isEditing, note, t]);
+    const handleShowCardPastePrompt = useCallback(
+        async (event: GestureResponderEvent) => {
+            if (
+                !ENABLE_PHOTO_STICKERS ||
+                !isEditing ||
+                !note ||
+                importingSticker ||
+                doodleModeEnabled ||
+                stickerModeEnabled ||
+                editStickerPlacements.length > 0
+            ) {
+                return;
+            }
+
+            const canPasteFromClipboard = await hasClipboardStickerImage();
+
+            if (!canPasteFromClipboard) {
+                dismissPastePrompt();
+                return;
+            }
+
+            const locationX = typeof event.nativeEvent.locationX === 'number' ? event.nativeEvent.locationX : CARD_SIZE / 2;
+            const locationY = typeof event.nativeEvent.locationY === 'number' ? event.nativeEvent.locationY : CARD_SIZE / 2;
+
+            setPastePrompt({
+                visible: true,
+                x: locationX,
+                y: locationY,
+            });
+            schedulePastePromptDismiss();
+        },
+        [
+            dismissPastePrompt,
+            doodleModeEnabled,
+            editStickerPlacements.length,
+            importingSticker,
+            isEditing,
+            note,
+            schedulePastePromptDismiss,
+            stickerModeEnabled,
+        ]
+    );
+    const handleConfirmPasteFromPrompt = useCallback(() => {
+        dismissPastePrompt();
+        void handlePasteStickerFromClipboard();
+    }, [dismissPastePrompt, handlePasteStickerFromClipboard]);
+    const handleShowStickerSourceOptions = useCallback(async () => {
+        if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
+            return;
+        }
+
+        dismissPastePrompt();
+        Keyboard.dismiss();
+        const canPasteFromClipboard = await hasClipboardStickerImage();
+        const pasteLabel = t('capture.pasteStickerFromClipboard', 'Paste from Clipboard');
+        const photoLabel = t('capture.chooseStickerFromPhotos', 'Choose from Photos');
+        const cancelLabel = t('common.cancel', 'Cancel');
+        const options = canPasteFromClipboard
+            ? [pasteLabel, photoLabel, cancelLabel]
+            : [photoLabel, cancelLabel];
+        const cancelButtonIndex = options.length - 1;
+
+        const handleSelection = (selectedIndex?: number) => {
+            if (selectedIndex === undefined || selectedIndex === cancelButtonIndex) {
+                return;
+            }
+
+            if (canPasteFromClipboard && selectedIndex === 0) {
+                void handlePasteStickerFromClipboard();
+                return;
+            }
+
+            void handleImportSticker();
+        };
+
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+                {
+                    title: t('capture.addStickerTitle', 'Add sticker'),
+                    options,
+                    cancelButtonIndex,
+                },
+                handleSelection
+            );
+            return;
+        }
+
+        Alert.alert(
+            t('capture.addStickerTitle', 'Add sticker'),
+            undefined,
+            options.map((label, index) => ({
+                text: label,
+                style: index === cancelButtonIndex ? 'cancel' : 'default',
+                onPress: () => handleSelection(index),
+            }))
+        );
+    }, [dismissPastePrompt, handleImportSticker, handlePasteStickerFromClipboard, importingSticker, isEditing, note, t]);
     const handleToggleStickerMode = useCallback(() => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note) {
             return;
         }
 
-        if (!stickerModeEnabled && editStickerPlacements.length === 0 && !importingSticker) {
-            void handleImportSticker();
-            return;
-        }
-
+        dismissPastePrompt();
         Keyboard.dismiss();
         setDoodleModeEnabled(false);
         setStickerModeEnabled((current) => !current);
-    }, [editStickerPlacements.length, handleImportSticker, importingSticker, isEditing, note, stickerModeEnabled]);
+    }, [dismissPastePrompt, isEditing, note]);
     const handleStickerAction = useCallback(
         (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove') => {
             if (!selectedStickerId) {
@@ -731,7 +908,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     const handleSaveEdit = async () => {
         if (!note || isDeleting) return;
-        const updates: Partial<Pick<Note, 'content' | 'locationName' | 'moodEmoji' | 'radius'>> = {};
+        const updates: Partial<Pick<Note, 'content' | 'locationName' | 'moodEmoji' | 'noteColor' | 'radius'>> = {};
+        const currentNoteColor =
+            note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null;
         const nextDoodleStrokesJson =
             editDoodleStrokes.length > 0 ? JSON.stringify(editDoodleStrokes) : null;
         const nextHasDoodle = Boolean(nextDoodleStrokesJson);
@@ -749,6 +928,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
         if (editRadius !== note.radius) {
             updates.radius = editRadius;
+        }
+        if (note.type === 'text' && editNoteColor !== currentNoteColor) {
+            updates.noteColor = editNoteColor ?? currentNoteColor;
         }
 
         if (Object.keys(updates).length > 0 || doodleChanged || stickersChanged) {
@@ -772,6 +954,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 ...note,
                 ...storeUpdates,
                 content: updates.content ?? note.content,
+                noteColor: updates.noteColor !== undefined ? updates.noteColor : currentNoteColor,
                 hasDoodle: doodleChanged ? nextHasDoodle : note.hasDoodle,
                 doodleStrokesJson: doodleChanged ? nextDoodleStrokesJson : note.doodleStrokesJson ?? null,
                 hasStickers: stickersChanged ? nextHasStickers : note.hasStickers,
@@ -803,6 +986,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             setEditContent(nextNote.content);
             setEditLocation(nextNote.locationName || '');
             setEditRadius(nextNote.radius);
+            setEditNoteColor(
+                nextNote.type === 'text'
+                    ? normalizeSavedTextNoteColor(nextNote.noteColor)
+                    : null
+            );
             setDoodleModeEnabled(false);
             setStickerModeEnabled(false);
             setSelectedStickerId(null);
@@ -883,9 +1071,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         const dateStr = formatDate(note.createdAt, 'long');
         const gradient = getTextNoteCardGradient({
-            text: note.content,
+            text: isEditing ? editContent : note.content,
             noteId: note.id,
             emoji: note.moodEmoji,
+            noteColor: isEditing ? editNoteColor : note.noteColor,
         });
         const displayedDoodleStrokes = isEditing ? editDoodleStrokes : parsedNoteDoodleStrokes;
         const displayedStickerPlacements = isEditing ? editStickerPlacements : parsedNoteStickerPlacements;
@@ -919,6 +1108,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                 <View style={styles.photo}>
                                     <Image source={{ uri: getNotePhotoUri(note) }} style={styles.photo} contentFit="cover" transition={300} />
                                 </View>
+                                {isEditing && ENABLE_PHOTO_STICKERS ? (
+                                    <Pressable
+                                        testID="note-detail-card-paste-surface"
+                                        style={styles.cardPasteSurface}
+                                        onLongPress={handleShowCardPastePrompt}
+                                        delayLongPress={320}
+                                    />
+                                ) : null}
                                 {displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled) ? (
                                     <View
                                         pointerEvents={isEditing && stickerModeEnabled ? 'box-none' : 'none'}
@@ -1025,7 +1222,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                 <View style={styles.textCardActionCluster}>
                                                     <Pressable
                                                         testID="note-detail-sticker-import"
-                                                        onPress={handleImportSticker}
+                                                        onPress={() => {
+                                                            void handleShowStickerSourceOptions();
+                                                        }}
                                                         disabled={importingSticker}
                                                         style={[
                                                             styles.textCardActionPill,
@@ -1048,9 +1247,27 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                 </View>
                                             ) : null}
                                         </View>
-                                    </View>
-                                ) : null}
+                                        </View>
+                                    ) : null}
                                 {renderFavoriteBadge(colors.card, colors.secondaryText)}
+                                <StickerPastePopover
+                                    visible={pastePrompt.visible}
+                                    anchor={{ x: pastePrompt.x, y: pastePrompt.y }}
+                                    containerWidth={CARD_SIZE}
+                                    containerHeight={CARD_SIZE}
+                                    label={t('capture.pasteStickerAction', 'Paste sticker')}
+                                    description={t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.')}
+                                    backgroundColor="rgba(255, 255, 255, 0.96)"
+                                    borderColor="rgba(255,255,255,0.24)"
+                                    secondaryTextColor="rgba(28,28,30,0.6)"
+                                    buttonBackgroundColor="#1C1C1E"
+                                    buttonTextColor="#FFFFFF"
+                                    onPress={handleConfirmPasteFromPrompt}
+                                    onDismiss={dismissPastePrompt}
+                                    popoverTestID="note-detail-card-paste-popover"
+                                    actionTestID="note-detail-card-paste-action"
+                                    dismissTestID="note-detail-card-paste-dismiss"
+                                />
                             </View>
                         ) : (
                             <View style={styles.textContainer}>
@@ -1060,6 +1277,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                     end={{ x: 1, y: 1 }}
                                     style={styles.textGradient}
                                 >
+                                    {isEditing && ENABLE_PHOTO_STICKERS ? (
+                                        <Pressable
+                                            testID="note-detail-card-paste-surface"
+                                            style={styles.cardPasteSurface}
+                                            onLongPress={handleShowCardPastePrompt}
+                                            delayLongPress={320}
+                                        />
+                                    ) : null}
                                     {displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled) ? (
                                         <View
                                             pointerEvents={isEditing && stickerModeEnabled ? 'box-none' : 'none'}
@@ -1166,7 +1391,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                     <View style={styles.textCardActionCluster}>
                                                         <Pressable
                                                             testID="note-detail-sticker-import"
-                                                            onPress={handleImportSticker}
+                                                            onPress={() => {
+                                                                void handleShowStickerSourceOptions();
+                                                            }}
                                                             disabled={importingSticker}
                                                             style={[
                                                                 styles.textCardActionPill,
@@ -1218,6 +1445,24 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             selectionColor="#FFFFFF"
                                         />
                                     </View>
+                                    <StickerPastePopover
+                                        visible={pastePrompt.visible}
+                                        anchor={{ x: pastePrompt.x, y: pastePrompt.y }}
+                                        containerWidth={CARD_SIZE}
+                                        containerHeight={CARD_SIZE}
+                                        label={t('capture.pasteStickerAction', 'Paste sticker')}
+                                        description={t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.')}
+                                        backgroundColor="rgba(255, 255, 255, 0.96)"
+                                        borderColor="rgba(255,255,255,0.24)"
+                                        secondaryTextColor="rgba(28,28,30,0.6)"
+                                        buttonBackgroundColor="#1C1C1E"
+                                        buttonTextColor="#FFFFFF"
+                                        onPress={handleConfirmPasteFromPrompt}
+                                        onDismiss={dismissPastePrompt}
+                                        popoverTestID="note-detail-card-paste-popover"
+                                        actionTestID="note-detail-card-paste-action"
+                                        dismissTestID="note-detail-card-paste-dismiss"
+                                    />
                                 </LinearGradient>
                             </View>
                         )}
@@ -1291,6 +1536,15 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
                     <Animated.View style={{ transform: [{ translateY: infoTranslateY }] }}>
                         <View style={styles.infoSection}>
+                            {isEditing && note.type === 'text' ? (
+                                <NoteColorPicker
+                                    label={t('noteDetail.colorField', 'Color')}
+                                    selectedColor={editNoteColor}
+                                    onSelectColor={setEditNoteColor}
+                                    testIDPrefix="note-detail-color"
+                                    compact
+                                />
+                            ) : null}
                             {isEditing ? (
                                 <Text style={[styles.editFieldLabel, { color: colors.secondaryText }]}>
                                     {t('noteDetail.locationField', 'Place')}
@@ -1462,6 +1716,10 @@ const styles = StyleSheet.create({
         padding: 24,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    cardPasteSurface: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 0,
     },
     doodleOverlay: {
         position: 'absolute',

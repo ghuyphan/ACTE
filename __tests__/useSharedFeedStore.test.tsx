@@ -44,6 +44,7 @@ let mockRefreshSnapshot: {
 const mockAcceptFriendInvite = jest.fn();
 const mockCreateFriendInvite = jest.fn();
 const mockCreateSharedPost = jest.fn();
+const mockDeleteOwnedSharedPostsForNotes = jest.fn();
 const mockDeleteSharedPost = jest.fn();
 const mockFindOwnedSharedPostIdsForNote = jest.fn();
 const mockRefreshSharedFeed = jest.fn();
@@ -80,6 +81,7 @@ jest.mock('../services/sharedFeedService', () => ({
   acceptFriendInvite: (...args: unknown[]) => mockAcceptFriendInvite(...args),
   createFriendInvite: (...args: unknown[]) => mockCreateFriendInvite(...args),
   createSharedPost: (...args: unknown[]) => mockCreateSharedPost(...args),
+  deleteOwnedSharedPostsForNotes: (...args: unknown[]) => mockDeleteOwnedSharedPostsForNotes(...args),
   deleteSharedPost: (...args: unknown[]) => mockDeleteSharedPost(...args),
   findOwnedSharedPostIdsForNote: (...args: unknown[]) => mockFindOwnedSharedPostIdsForNote(...args),
   getSharedFeedErrorMessage: (error: unknown) =>
@@ -153,6 +155,7 @@ describe('useSharedFeedStore', () => {
     });
     mockRemoveFriend.mockResolvedValue(undefined);
     mockCreateSharedPost.mockResolvedValue(null);
+    mockDeleteOwnedSharedPostsForNotes.mockResolvedValue([]);
     mockDeleteSharedPost.mockResolvedValue(undefined);
     mockFindOwnedSharedPostIdsForNote.mockResolvedValue([]);
     mockRevokeFriendInvite.mockResolvedValue(undefined);
@@ -413,6 +416,78 @@ describe('useSharedFeedStore', () => {
       expect.objectContaining({
         id: 'shared-owned',
         authorUid: 'me',
+      }),
+    ]);
+  });
+
+  it('removes owned shared posts for deleted notes from local state immediately', async () => {
+    mockCachedSnapshot = {
+      friends: [],
+      sharedPosts: [
+        {
+          id: 'shared-note-1',
+          authorUid: 'me',
+          authorDisplayName: 'Me',
+          audienceUserIds: ['me', 'friend-1'],
+          type: 'text',
+          text: 'Note 1',
+          photoPath: null,
+          photoLocalUri: null,
+          placeName: 'District 1',
+          sourceNoteId: 'note-1',
+          createdAt: '2026-03-23T00:00:00.000Z',
+          updatedAt: null,
+        },
+        {
+          id: 'shared-note-2',
+          authorUid: 'me',
+          authorDisplayName: 'Me',
+          audienceUserIds: ['me', 'friend-1'],
+          type: 'text',
+          text: 'Note 2',
+          photoPath: null,
+          photoLocalUri: null,
+          placeName: 'District 2',
+          sourceNoteId: 'note-2',
+          createdAt: '2026-03-24T00:00:00.000Z',
+          updatedAt: null,
+        },
+        {
+          id: 'shared-other',
+          authorUid: 'friend-1',
+          authorDisplayName: 'Lan',
+          audienceUserIds: ['me', 'friend-1'],
+          type: 'text',
+          text: 'Friend post',
+          photoPath: null,
+          photoLocalUri: null,
+          placeName: 'District 3',
+          sourceNoteId: 'note-9',
+          createdAt: '2026-03-25T00:00:00.000Z',
+          updatedAt: null,
+        },
+      ],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-25T00:00:00.000Z',
+    };
+    mockDeleteOwnedSharedPostsForNotes.mockResolvedValue(['shared-note-1', 'shared-note-2']);
+
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+      expect(result.current.sharedPosts).toHaveLength(3);
+    });
+
+    await act(async () => {
+      await result.current.deleteSharedNotes(['note-1', 'note-2']);
+    });
+
+    expect(mockDeleteOwnedSharedPostsForNotes).toHaveBeenCalledWith(mockAuthState.user, ['note-1', 'note-2']);
+    expect(result.current.sharedPosts).toEqual([
+      expect.objectContaining({
+        id: 'shared-other',
+        authorUid: 'friend-1',
       }),
     ]);
   });

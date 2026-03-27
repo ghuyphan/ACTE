@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../ui/GlassView';
 import { ReactNode, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Reanimated, {
   interpolateColor,
   useAnimatedStyle,
@@ -12,9 +12,6 @@ import Reanimated, {
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
 import {
-  getMapLayoutTransition,
-  getMapOverlayEnter,
-  getMapOverlayExit,
   mapMotionDurations,
   mapMotionPressTiming,
 } from './mapMotion';
@@ -177,11 +174,7 @@ export default function MapFilterBar({
   );
 
   return (
-    <Reanimated.View
-      style={[styles.wrapper, top > 0 ? { marginTop: top } : null]}
-      pointerEvents="box-none"
-      layout={getMapLayoutTransition(reduceMotionEnabled)}
-    >
+    <View style={[styles.wrapper, top > 0 ? { marginTop: top } : null]} pointerEvents="box-none">
       <View testID="map-top-header" style={[styles.container, { borderColor: getOverlayBorderColor(isDark) }]}>
         <GlassView
           pointerEvents="none"
@@ -206,15 +199,9 @@ export default function MapFilterBar({
             <View style={styles.countRow}>
               <View style={[styles.countDot, { backgroundColor: colors.primary }]} />
               <View style={styles.countLabelWrap}>
-                <Reanimated.Text
-                  key={countLabel}
-                  testID="map-inline-count"
-                  entering={getMapOverlayEnter(reduceMotionEnabled)}
-                  exiting={getMapOverlayExit(reduceMotionEnabled)}
-                  style={[styles.countText, { color: colors.text }]}
-                >
+                <Text testID="map-inline-count" style={[styles.countText, { color: colors.text }]}>
                   {countLabel}
-                </Reanimated.Text>
+                </Text>
               </View>
             </View>
 
@@ -244,7 +231,7 @@ export default function MapFilterBar({
           </ScrollView>
         </View>
       </View>
-    </Reanimated.View>
+    </View>
   );
 }
 
@@ -253,7 +240,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   container: {
-    borderWidth: 1,
+    borderWidth: 0,
     borderRadius: mapOverlayTokens.overlayRadius,
     minHeight: mapOverlayTokens.overlayMinHeight,
     overflow: 'hidden',

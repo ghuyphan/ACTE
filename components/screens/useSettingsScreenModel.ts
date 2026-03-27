@@ -6,6 +6,7 @@ import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useAuth } from '../../hooks/useAuth';
 import { useConnectivity } from '../../hooks/useConnectivity';
 import { useNotes } from '../../hooks/useNotes';
+import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { useTheme } from '../../hooks/useTheme';
@@ -23,6 +24,7 @@ export function useSettingsScreenModel() {
   const { theme, setTheme, colors, isDark } = useTheme();
   const { isOnline } = useConnectivity();
   const { notes, deleteAllNotes } = useNotes();
+  const { deleteSharedNotes } = useSharedFeedStore();
   const { user, isAuthAvailable } = useAuth();
   const {
     status: syncStatus,
@@ -197,7 +199,27 @@ export function useSettingsScreenModel() {
         label: t('common.delete', 'Delete'),
         variant: 'destructive',
         onPress: async () => {
+          const noteIdsToDelete = notes.map((note) => note.id);
           await deleteAllNotes();
+
+          if (user && isOnline && noteIdsToDelete.length > 0) {
+            try {
+              await deleteSharedNotes(noteIdsToDelete);
+            } catch (error) {
+              console.error('Shared bulk delete failed:', error);
+              showAlert({
+                variant: 'error',
+                title: t('settings.clearAllWarningTitle', 'Deleted locally'),
+                message: t(
+                  'settings.clearAllWarningMsg',
+                  'Your notes were removed from this device, but some shared posts could not be removed yet.'
+                ),
+                primaryAction: {
+                  label: t('common.done', 'Done'),
+                },
+              });
+            }
+          }
         },
       },
       secondaryAction: {

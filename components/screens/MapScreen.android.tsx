@@ -28,14 +28,12 @@ export default function MapScreenAndroid() {
           primaryColor={colors.primary}
           textColor={colors.text}
           secondaryTextColor={colors.secondaryText}
-          onClearFilters={() => undefined}
           reduceMotionEnabled={reduceMotionEnabled}
           title={t('map.androidUnavailableTitle', 'Map is temporarily unavailable on Android')}
           subtitle={t(
             'map.androidUnavailableSubtitle',
             'This build skips Google Maps on Android until the API key is configured.'
           )}
-          clearLabel={t('map.clearFilters', 'Clear filters')}
         />
       </View>
     </View>

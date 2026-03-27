@@ -7,6 +7,7 @@ import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 import { getSupabaseUser } from '../utils/supabase';
 import { formatDate } from '../utils/dateUtils';
 import { getAllNotes, Note } from './database';
+import { getTextNoteCardGradient } from './noteAppearance';
 import { parseNoteStickerPlacements } from './noteStickers';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getNotePhotoUri, resolveStoredPhotoUri } from './photoStorage';
@@ -27,6 +28,8 @@ export interface WidgetProps {
     nearbyPlacesCount: number;
     backgroundImageUrl?: string; // local file uri
     backgroundImageBase64?: string;
+    backgroundGradientStartColor?: string;
+    backgroundGradientEndColor?: string;
     hasDoodle: boolean;
     doodleStrokesJson?: string | null;
     hasStickers: boolean;
@@ -114,6 +117,7 @@ interface WidgetCandidate {
     hasStickers: boolean;
     stickerPlacementsJson: string | null;
     moodEmoji?: string | null;
+    noteColor?: string | null;
     authorDisplayName: string | null;
     authorPhotoURLSnapshot: string | null;
 }
@@ -423,6 +427,8 @@ function buildIdleWidgetProps(noteCount: number, selectionMode: WidgetSelectionM
         date: '',
         noteCount,
         nearbyPlacesCount: 0,
+        backgroundGradientStartColor: undefined,
+        backgroundGradientEndColor: undefined,
         hasDoodle: false,
         doodleStrokesJson: null,
         hasStickers: false,
@@ -666,6 +672,7 @@ function createPersonalWidgetCandidate(note: Note): WidgetCandidate {
         hasStickers: Boolean(note.hasStickers && note.stickerPlacementsJson),
         stickerPlacementsJson: note.stickerPlacementsJson ?? null,
         moodEmoji: note.moodEmoji ?? null,
+        noteColor: note.noteColor ?? null,
         authorDisplayName: null,
         authorPhotoURLSnapshot: null,
     };
@@ -691,6 +698,7 @@ function createSharedWidgetCandidate(post: SharedPost): WidgetCandidate {
         doodleStrokesJson: post.doodleStrokesJson ?? null,
         hasStickers: Boolean(post.hasStickers && post.stickerPlacementsJson),
         stickerPlacementsJson: post.stickerPlacementsJson ?? null,
+        noteColor: post.noteColor ?? null,
         authorDisplayName: post.authorDisplayName ?? null,
         authorPhotoURLSnapshot: post.authorPhotoURLSnapshot ?? null,
     };
@@ -1312,6 +1320,15 @@ async function buildWidgetPropsFromSelection(
 
     const selectedNote = selection.selectedCandidate;
     const dateStr = formatDate(selectedNote.createdAt, 'short');
+    const textNoteGradient =
+        selectedNote.noteType === 'text'
+            ? getTextNoteCardGradient({
+                text: selectedNote.text.trim(),
+                noteId: selectedNote.id,
+                emoji: selectedNote.moodEmoji,
+                noteColor: selectedNote.noteColor,
+              })
+            : null;
     const props: WidgetProps = {
         noteType: selectedNote.noteType,
         text:
@@ -1322,6 +1339,8 @@ async function buildWidgetPropsFromSelection(
         date: dateStr,
         noteCount,
         nearbyPlacesCount: resolvedNearbyPlacesCount,
+        backgroundGradientStartColor: textNoteGradient?.[0],
+        backgroundGradientEndColor: textNoteGradient?.[1],
         hasDoodle: selectedNote.hasDoodle,
         doodleStrokesJson: selectedNote.doodleStrokesJson ?? null,
         hasStickers: selectedNote.hasStickers,

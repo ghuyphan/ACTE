@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Appearance, AppState, Platform } from 'react-native';
-import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
+import { NOTE_CARD_GRADIENTS } from '../constants/noteColors';
+import { getPersistentItem, getPersistentItemSync, setPersistentItem } from '../utils/appStorage';
 
 export type ThemeType = 'light' | 'dark' | 'system';
 type ResolvedColorScheme = 'light' | 'dark';
@@ -109,20 +110,8 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
     },
 };
 
-// Curated gradient palettes for text-note card backgrounds.
-// Kept moody enough for white text, but aligned to the app's warmer stone palette.
-export const CardGradients: [string, string][] = [
-    ['#7A3C2F', '#D86B4E'],  // Sunset coral
-    ['#7A4B23', '#D89A3D'],  // Marigold glow
-    ['#245C4B', '#4EAE8C'],  // Jade pop
-    ['#2F5E8B', '#76A8F0'],  // Sky blue
-    ['#8A4A2B', '#E38852'],  // Tangerine clay
-    ['#654A8A', '#A486E6'],  // Violet bloom
-    ['#1F6070', '#56B3C5'],  // Pool teal
-    ['#4A5F91', '#8BA1E8'],  // Periwinkle ink
-    ['#58652D', '#A9C24B'],  // Olive lime
-    ['#7A3E60', '#D07AA3'],  // Raspberry dusk
-];
+// Compatibility export for existing callers that still read note gradients from the theme module.
+export const CardGradients: [string, string][] = NOTE_CARD_GRADIENTS;
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
@@ -180,11 +169,12 @@ function syncNativeColorScheme(theme: ThemeType) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-    const [theme, setThemeState] = useState<ThemeType>('system');
+    const initialSavedTheme = getPersistentItemSync(THEME_STORAGE_KEY);
+    const [theme, setThemeState] = useState<ThemeType>(() => normalizeTheme(initialSavedTheme ?? null));
     const [systemTheme, setSystemTheme] = useState<ResolvedColorScheme>(() =>
         readSystemColorScheme()
     );
-    const [themeReady, setThemeReady] = useState(false);
+    const [themeReady, setThemeReady] = useState(() => initialSavedTheme !== undefined);
 
     useEffect(() => {
         const syncSystemTheme = () => {
@@ -210,6 +200,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     useEffect(() => {
+        if (themeReady) {
+            syncNativeColorScheme(theme);
+            return;
+        }
+
         getPersistentItem(THEME_STORAGE_KEY).then((savedTheme) => {
             const nextTheme = normalizeTheme(savedTheme);
             setThemeState(nextTheme);
@@ -219,7 +214,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             syncNativeColorScheme('system');
             setThemeReady(true);
         });
-    }, []);
+    }, [theme, themeReady]);
 
     const setTheme = async (newTheme: ThemeType) => {
         setThemeState(newTheme);

@@ -5,6 +5,7 @@ import {
   acceptFriendInvite as acceptInvite,
   createFriendInvite as createInvite,
   createSharedPost as createPost,
+  deleteOwnedSharedPostsForNotes,
   deleteSharedPost as deletePost,
   findOwnedSharedPostIdsForNote,
   FriendConnection,
@@ -42,6 +43,7 @@ interface SharedFeedStoreValue {
   createSharedPost: (note: Note, audienceUserIds?: string[]) => Promise<SharedPost>;
   updateSharedNote: (note: Note) => Promise<void>;
   deleteSharedNote: (noteId: string) => Promise<void>;
+  deleteSharedNotes: (noteIds: string[]) => Promise<void>;
   deleteSharedPostById: (postId: string) => Promise<void>;
 }
 
@@ -381,6 +383,22 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         }
 
         await Promise.all(matchingPostIds.map((postId) => deletePost(activeUser, postId)));
+        setDataSource('live');
+        setLastUpdatedAt(new Date().toISOString());
+      },
+      deleteSharedNotes: async (noteIds: string[]) => {
+        requireOnline();
+        const activeUser = requireUser();
+        const deletedPostIds = await deleteOwnedSharedPostsForNotes(activeUser, noteIds);
+        if (deletedPostIds.length > 0) {
+          const deletedPostIdSet = new Set(deletedPostIds);
+          sharedPostsRef.current = sharedPostsRef.current.filter(
+            (post) => !deletedPostIdSet.has(post.id)
+          );
+          setSharedPosts((current) =>
+            current.filter((post) => !deletedPostIdSet.has(post.id))
+          );
+        }
         setDataSource('live');
         setLastUpdatedAt(new Date().toISOString());
       },

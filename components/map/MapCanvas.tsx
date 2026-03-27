@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useEffect, useMemo, type RefObject } from 'react';
+import { memo, useEffect, useMemo, type RefObject } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import Reanimated, {
@@ -60,7 +60,7 @@ function getClusterSize(pointCount: number) {
   return 46;
 }
 
-function MarkerContent({
+const MarkerContent = memo(function MarkerContent({
   isCluster,
   pointCount,
   showPhotoThumbnail,
@@ -230,7 +230,7 @@ function MarkerContent({
       </Reanimated.View>
     </>
   );
-}
+});
 
 export default function MapCanvas({
   mapRef,
@@ -250,20 +250,9 @@ export default function MapCanvas({
   onClusterPress,
   colors,
 }: MapCanvasProps) {
-  return (
-    <MapView
-      testID="map-canvas"
-      ref={mapRef}
-      style={StyleSheet.absoluteFillObject}
-      initialRegion={initialRegion}
-      onPress={onMapPress}
-      onMapReady={onMapReady}
-      onRegionChangeComplete={onRegionChangeComplete}
-      showsUserLocation
-      showsMyLocationButton={false}
-      userInterfaceStyle={isDark ? 'dark' : 'light'}
-    >
-      {markerNodes.map((node) => {
+  const markerRenderItems = useMemo(
+    () =>
+      markerNodes.map((node) => {
         const isSelected = node.groupId != null && node.groupId === selectedGroupId;
         const markerColor = node.primaryType === 'photo' ? colors.danger : colors.accent;
         const markerId = node.isCluster ? node.id : node.groupId ?? node.id;
@@ -275,8 +264,34 @@ export default function MapCanvas({
           node.noteIds.length === 1 &&
           (isSelected || currentZoom >= 16);
         const photoNote = canShowPhotoThumbnail ? noteById.get(node.noteIds[0]) ?? null : null;
-        const photoUri = photoNote ? getNotePhotoUri(photoNote) : null;
 
+        return {
+          node,
+          isSelected,
+          markerColor,
+          pulseActive,
+          photoNoteId: photoNote?.id ?? null,
+          photoUri: photoNote ? getNotePhotoUri(photoNote) : null,
+        };
+      }),
+    [colors.accent, colors.danger, currentZoom, markerNodes, markerPulseId, noteById, selectedGroupId]
+  );
+
+  return (
+    <MapView
+      testID="map-canvas"
+      ref={mapRef}
+      style={StyleSheet.absoluteFillObject}
+      initialRegion={initialRegion}
+      onPress={onMapPress}
+      onMapReady={onMapReady}
+      onRegionChangeComplete={onRegionChangeComplete}
+      showsCompass={false}
+      showsUserLocation
+      showsMyLocationButton={false}
+      userInterfaceStyle={isDark ? 'dark' : 'light'}
+    >
+      {markerRenderItems.map(({ node, isSelected, markerColor, pulseActive, photoNoteId, photoUri }) => {
         return (
           <Marker
             key={node.id}
@@ -300,7 +315,7 @@ export default function MapCanvas({
                 isCluster={node.isCluster}
                 pointCount={node.pointCount}
                 showPhotoThumbnail={Boolean(photoUri)}
-                photoNoteId={photoNote?.id ?? null}
+                photoNoteId={photoNoteId}
                 photoUri={photoUri}
                 selected={isSelected}
                 color={node.isCluster ? colors.primary : markerColor}

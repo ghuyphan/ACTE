@@ -6,15 +6,18 @@ import NotesFeed from '../components/home/NotesFeed';
 const mockTextMemoryCard = jest.fn(
   ({
     text,
+    noteColor,
     doodleStrokesJson,
     stickerPlacementsJson,
   }: {
     text: string;
+    noteColor?: string | null;
     doodleStrokesJson?: string | null;
     stickerPlacementsJson?: string | null;
   }) => (
     <View>
       <Text testID="mock-text-memory-card-text">{text}</Text>
+      <Text testID="mock-text-memory-card-color">{noteColor ?? 'null'}</Text>
       <Text testID="mock-text-memory-card-doodle">{doodleStrokesJson ?? 'null'}</Text>
       <Text testID="mock-text-memory-card-stickers">{stickerPlacementsJson ?? 'null'}</Text>
     </View>
@@ -213,6 +216,79 @@ describe('NotesFeed capture visibility', () => {
         { id: 'sticker-1', assetId: 'asset-1', center: { x: 0.5, y: 0.5 }, scale: 1.2, rotation: 12, zIndex: 1 },
       ])
     );
+  });
+
+  it('re-renders a note card when only note color changes', () => {
+    const baseNote = {
+      id: 'note-1',
+      type: 'text',
+      content: 'hello',
+      noteColor: 'marigold-glow',
+      locationName: 'Cafe',
+      latitude: 0,
+      longitude: 0,
+      radius: 150,
+      isFavorite: false,
+      createdAt: '2026-03-19T00:00:00.000Z',
+      updatedAt: null,
+    };
+
+    const view = render(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="camera"
+        notes={[baseNote] as any}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    expect(view.getByTestId('mock-text-memory-card-color')).toHaveTextContent('marigold-glow');
+
+    view.rerender(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="camera"
+        notes={[
+          {
+            ...baseNote,
+            noteColor: 'jade-pop',
+          },
+        ] as any}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    expect(view.getByTestId('mock-text-memory-card-color')).toHaveTextContent('jade-pop');
   });
 
   it('reports visibility continuously during scroll and settles on drag end and momentum end', () => {

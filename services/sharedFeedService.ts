@@ -9,6 +9,7 @@ import {
   isSupabasePolicyError,
 } from '../utils/supabase';
 import { Note, NoteType } from './database';
+import { normalizeSavedTextNoteColor } from './noteAppearance';
 import { deletePhotoFromStorage, SHARED_POST_MEDIA_BUCKET, uploadPhotoToStorage } from './remoteMedia';
 import { parseNoteStickerPlacements, serializeStickerPlacementsForStorage } from './noteStickers';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
@@ -51,6 +52,7 @@ export interface SharedPost {
   doodleStrokesJson?: string | null;
   hasStickers?: boolean;
   stickerPlacementsJson?: string | null;
+  noteColor?: string | null;
   placeName: string | null;
   sourceNoteId: string | null;
   createdAt: string;
@@ -102,6 +104,7 @@ interface SharedPostRow {
   photo_path: string | null;
   doodle_strokes_json?: string | null;
   sticker_placements_json?: string | null;
+  note_color?: string | null;
   place_name: string | null;
   source_note_id: string | null;
   created_at: string;
@@ -233,6 +236,7 @@ function mapSharedPost(record: SharedPostRow): SharedPost {
     doodleStrokesJson: record.doodle_strokes_json ?? null,
     hasStickers: Boolean(record.sticker_placements_json),
     stickerPlacementsJson: record.sticker_placements_json ?? null,
+    noteColor: record.note_color ?? null,
     placeName: record.place_name ?? null,
     sourceNoteId: record.source_note_id ?? null,
     createdAt: record.created_at,
@@ -311,7 +315,7 @@ export async function refreshSharedFeed(user: AppUser): Promise<SharedFeedSnapsh
     requireSupabase()
       .from('shared_posts')
       .select(
-        'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, sticker_placements_json, place_name, source_note_id, created_at, updated_at'
+        'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, created_at, updated_at'
       )
       .contains('audience_user_ids', [user.id])
       .in('author_user_id', authorWhitelist)
@@ -570,6 +574,7 @@ export async function createSharedPost(
     photo_path: photoPath ?? null,
     doodle_strokes_json: note.doodleStrokesJson ?? null,
     sticker_placements_json: stickerPlacementsJson,
+    note_color: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
     place_name: note.locationName ?? null,
     source_note_id: note.id,
     created_at: now,
@@ -595,6 +600,7 @@ export async function createSharedPost(
     photoLocalUri: note.type === 'photo' ? note.photoLocalUri ?? note.content : null,
     hasStickers: Boolean(note.hasStickers && note.stickerPlacementsJson),
     stickerPlacementsJson: note.stickerPlacementsJson ?? null,
+    noteColor: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
   };
 }
 
@@ -607,7 +613,7 @@ export async function updateSharedPost(
   const { data: existing, error: fetchError } = await supabase
     .from('shared_posts')
     .select(
-      'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, sticker_placements_json, place_name, source_note_id, created_at, updated_at'
+      'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, created_at, updated_at'
     )
     .eq('id', postId)
     .eq('author_user_id', user.id)
@@ -653,6 +659,7 @@ export async function updateSharedPost(
       photo_path: nextPhotoPath ?? null,
       doodle_strokes_json: note.doodleStrokesJson ?? null,
       sticker_placements_json: nextStickerPlacementsJson,
+      note_color: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
       place_name: note.locationName ?? null,
       updated_at: getNowIso(),
       type: note.type,
@@ -680,6 +687,51 @@ export async function findOwnedSharedPostIdsForNote(
   }
 
   return (data ?? []).map((item) => item.id as string);
+}
+
+export async function deleteOwnedSharedPostsForNotes(
+  user: AppUser,
+  noteIds: string[]
+): Promise<string[]> {
+  const dedupedNoteIds = Array.from(new Set(noteIds.filter((noteId) => noteId?.trim())));
+  if (dedupedNoteIds.length === 0) {
+    return [];
+  }
+
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from('shared_posts')
+    .select('id, photo_path')
+    .eq('author_user_id', user.id)
+    .in('source_note_id', dedupedNoteIds);
+
+  if (error) {
+    throw error;
+  }
+
+  const rows = (data ?? []) as Array<{ id: string; photo_path?: string | null }>;
+  if (rows.length === 0) {
+    return [];
+  }
+
+  await Promise.all(
+    rows.map((row) =>
+      deletePhotoFromStorage(SHARED_POST_MEDIA_BUCKET, row.photo_path ?? null).catch(() => undefined)
+    )
+  );
+
+  const postIds = rows.map((row) => row.id).filter(Boolean);
+  const { error: deleteError } = await supabase
+    .from('shared_posts')
+    .delete()
+    .eq('author_user_id', user.id)
+    .in('id', postIds);
+
+  if (deleteError) {
+    throw deleteError;
+  }
+
+  return postIds;
 }
 
 export async function deleteSharedPost(

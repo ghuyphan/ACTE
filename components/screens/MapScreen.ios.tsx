@@ -6,22 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type MapView from 'react-native-maps';
-import Reanimated, {
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapCanvas from '../map/MapCanvas';
 import MapFilterBar from '../map/MapFilterBar';
 import MapFriendsPreviewCard from '../map/MapFriendsPreviewCard';
-import {
-  getMapLayoutTransition,
-  mapMotionDurations,
-  mapMotionEasing,
-  mapMotionPressTiming,
-} from '../map/mapMotion';
 import MapPreviewCard from '../map/MapPreviewCard';
 import MapStatusCard from '../map/MapStatusCard';
 import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from '../map/overlayTokens';
@@ -39,7 +27,7 @@ import { isOlderIOS } from '../../utils/platform';
 
 const MIN_ZOOM_DELTA = 0.002;
 
-type OverlayState = 'content' | 'no-filter-results' | 'no-notes';
+type OverlayState = 'content' | 'no-filter-results' | 'no-notes' | 'no-area-results';
 
 export default function MapScreenIOS() {
   const { t } = useTranslation();
@@ -59,13 +47,8 @@ export default function MapScreenIOS() {
   const [markerPulseKey, setMarkerPulseKey] = useState(0);
   const [showFriendsPreview, setShowFriendsPreview] = useState(false);
   const [activeFriendPostId, setActiveFriendPostId] = useState<string | null>(null);
-  const [showFriendsScan, setShowFriendsScan] = useState(false);
   const hasCenteredRef = useRef(false);
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const friendsScanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fabScale = useSharedValue(1);
-  const friendsChipActiveProgress = useSharedValue(0);
-  const friendsScanProgress = useSharedValue(0);
 
   const {
     filterState,
@@ -86,13 +69,22 @@ export default function MapScreenIOS() {
     clusterNodes,
     nearbyItems,
     filteredCount,
+    visibleAreaCount,
+    showingAllFilteredResults,
     hasActiveFilters,
+    showAllFilteredResults,
   } = useMapScreenState({ notes, location });
 
   const previewBottomOffset = insets.bottom + 12;
   const previewMode = selectedGroup ? 'group' : 'nearby';
   const overlayState: OverlayState =
-    notes.length === 0 ? 'no-notes' : filteredCount === 0 ? 'no-filter-results' : 'content';
+    notes.length === 0
+      ? 'no-notes'
+      : filteredCount === 0
+        ? 'no-filter-results'
+        : visibleAreaCount === 0 && !showingAllFilteredResults
+          ? 'no-area-results'
+          : 'content';
   const previewVisible = overlayState === 'content' && nearbyItems.length > 0;
   const noteById = useMemo(() => new Map(notes.map((note) => [note.id, note] as const)), [notes]);
   const friendPosts = useMemo(
@@ -109,9 +101,6 @@ export default function MapScreenIOS() {
     return () => {
       if (markerPulseTimerRef.current) {
         clearTimeout(markerPulseTimerRef.current);
-      }
-      if (friendsScanTimeoutRef.current) {
-        clearTimeout(friendsScanTimeoutRef.current);
       }
     };
   }, []);
@@ -192,13 +181,6 @@ export default function MapScreenIOS() {
 
     setActiveFriendPostId(friendPosts[0].id);
   }, [activeFriendPostId, friendPosts, showFriendsPreview]);
-
-  useEffect(() => {
-    friendsChipActiveProgress.value = withTiming(friendsPreviewVisible ? 1 : 0, {
-      duration: reduceMotionEnabled ? mapMotionDurations.fast : mapMotionDurations.standard,
-      easing: mapMotionEasing.standard,
-    });
-  }, [friendsChipActiveProgress, friendsPreviewVisible, reduceMotionEnabled]);
 
   const handleOpenPreview = useCallback(() => {
     if (selectedNote) {
@@ -350,36 +332,15 @@ export default function MapScreenIOS() {
     [initialRegion, nearbyItems, reduceMotionEnabled, setVisibleRegion, showFriendsPreview, visibleRegion]
   );
 
-  const triggerFriendsScan = useCallback(() => {
-    if (friendsScanTimeoutRef.current) {
-      clearTimeout(friendsScanTimeoutRef.current);
-    }
-
-    if (reduceMotionEnabled) {
-      return;
-    }
-
-    setShowFriendsScan(true);
-    friendsScanProgress.value = 0;
-    friendsScanProgress.value = withTiming(1, { duration: 860 });
-
-    friendsScanTimeoutRef.current = setTimeout(() => {
-      setShowFriendsScan(false);
-      friendsScanProgress.value = 0;
-      friendsScanTimeoutRef.current = null;
-    }, 900);
-  }, [friendsScanProgress, reduceMotionEnabled]);
-
   const handleOpenFriendsLayer = useCallback(() => {
     if (!hasFriendLayer) {
       return;
     }
 
     emitLightHaptic();
-    triggerFriendsScan();
     setShowFriendsPreview((current) => !current);
     setActiveFriendPostId((current) => current ?? friendPosts[0]?.id ?? null);
-  }, [emitLightHaptic, friendPosts, hasFriendLayer, triggerFriendsScan]);
+  }, [emitLightHaptic, friendPosts, hasFriendLayer]);
 
   const handleOpenSharedPost = useCallback(
     (postId?: string) => {
@@ -423,47 +384,18 @@ export default function MapScreenIOS() {
 
   const countLabel = useMemo(() => {
     const base = `${filteredCount} ${filteredCount === 1 ? t('map.note', 'note') : t('map.notes', 'notes')}`;
-    if (!hasActiveFilters) {
-      return base;
+    const suffixes: string[] = [];
+
+    if (hasActiveFilters) {
+      suffixes.push(t('map.filteredLabel', 'filtered'));
     }
 
-    return `${base} · ${t('map.filteredLabel', 'filtered')}`;
-  }, [filteredCount, hasActiveFilters, t]);
+    if (showingAllFilteredResults) {
+      suffixes.push(t('map.allResultsLabel', 'all results'));
+    }
 
-  const fabAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: fabScale.value }],
-  }));
-  const friendsChipAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: 1 + interpolate(friendsChipActiveProgress.value, [0, 1], [0, 0.018]) },
-      { translateY: interpolate(friendsChipActiveProgress.value, [0, 1], [0, -1]) },
-    ],
-  }));
-  const friendsChipTintStyle = useAnimatedStyle(() => ({
-    opacity: friendsChipActiveProgress.value,
-  }));
-  const friendsChipContentAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + interpolate(friendsChipActiveProgress.value, [0, 1], [0, 0.02]) }],
-  }));
-  const friendsChipIconAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: 0.92 + friendsChipActiveProgress.value * 0.08,
-    transform: [{ scale: 1 + interpolate(friendsChipActiveProgress.value, [0, 1], [0, 0.08]) }],
-  }));
-  const friendsChipDotAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: friendsChipActiveProgress.value,
-    transform: [{ scale: interpolate(friendsChipActiveProgress.value, [0, 1], [0.55, 1]) }],
-  }));
-  const friendsScanBackdropStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(friendsScanProgress.value, [0, 0.08, 1], [0, 0.12, 0]),
-  }));
-  const friendsScanRingStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(friendsScanProgress.value, [0, 0.16, 1], [0, 0.16, 0]),
-    transform: [{ scale: interpolate(friendsScanProgress.value, [0, 1], [0.82, 2.35]) }],
-  }));
-  const friendsScanCoreStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(friendsScanProgress.value, [0, 0.2, 1], [0, 0.1, 0]),
-    transform: [{ scale: interpolate(friendsScanProgress.value, [0, 1], [0.88, 1.45]) }],
-  }));
+    return suffixes.length > 0 ? `${base} · ${suffixes.join(' · ')}` : base;
+  }, [filteredCount, hasActiveFilters, showingAllFilteredResults, t]);
 
   if (loading) {
     return (
@@ -491,7 +423,6 @@ export default function MapScreenIOS() {
         onMapPress={handleMapCanvasPress}
         onMapReady={() => {
           setIsMapReady(true);
-          setVisibleRegion(initialRegion);
         }}
         onRegionChangeComplete={setVisibleRegion}
         onLeafPress={handleLeafPress}
@@ -499,11 +430,7 @@ export default function MapScreenIOS() {
         colors={colors}
       />
 
-      <Reanimated.View
-        style={[styles.topHeader, { top: insets.top + 8 }]}
-        pointerEvents="box-none"
-        layout={getMapLayoutTransition(reduceMotionEnabled)}
-      >
+      <View style={[styles.topHeader, { top: insets.top + 8 }]} pointerEvents="box-none">
         <MapFilterBar
           filterState={filterState}
           countLabel={countLabel}
@@ -520,29 +447,28 @@ export default function MapScreenIOS() {
                   styles.friendsChipPressable,
                   {
                     opacity: pressed ? 0.94 : 1,
-                    transform: [{ scale: pressed ? 0.98 : 1 }],
                   },
                 ]}
               >
-                <Reanimated.View
+                <View
                   style={[
                     styles.friendsChip,
-                    friendsChipAnimatedStyle,
                     {
                       borderColor: friendsPreviewVisible ? `${colors.primary}55` : getOverlayBorderColor(isDark),
                     },
                   ]}
                 >
-                  <Reanimated.View
-                    pointerEvents="none"
-                    style={[
-                      StyleSheet.absoluteFillObject,
-                      {
-                        backgroundColor: isDark ? 'rgba(255,193,7,0.16)' : 'rgba(255,193,7,0.14)',
-                      },
-                      friendsChipTintStyle,
-                    ]}
-                  />
+                  {friendsPreviewVisible ? (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFillObject,
+                        {
+                          backgroundColor: isDark ? 'rgba(255,193,7,0.16)' : 'rgba(255,193,7,0.14)',
+                        },
+                      ]}
+                    />
+                  ) : null}
                   <GlassView
                     pointerEvents="none"
                     style={StyleSheet.absoluteFillObject}
@@ -563,14 +489,12 @@ export default function MapScreenIOS() {
                     />
                   ) : null}
 
-                  <Reanimated.View style={[styles.friendsChipInner, friendsChipContentAnimatedStyle]}>
-                    <Reanimated.View style={friendsChipIconAnimatedStyle}>
-                      <Ionicons
-                        name={friendsPreviewVisible ? 'sparkles' : 'sparkles-outline'}
-                        size={13}
-                        color={colors.primary}
-                      />
-                    </Reanimated.View>
+                  <View style={styles.friendsChipInner}>
+                    <Ionicons
+                      name={friendsPreviewVisible ? 'sparkles' : 'sparkles-outline'}
+                      size={13}
+                      color={colors.primary}
+                    />
                     <Text
                       style={[
                         styles.friendsChipLabel,
@@ -579,37 +503,29 @@ export default function MapScreenIOS() {
                     >
                       {t('map.friendsChip', 'Friends')}
                     </Text>
-                    <Reanimated.View
-                      style={[
-                        styles.friendsChipActiveDot,
-                        { backgroundColor: colors.primary },
-                        friendsChipDotAnimatedStyle,
-                      ]}
-                    />
-                  </Reanimated.View>
-                </Reanimated.View>
+                    {friendsPreviewVisible ? (
+                      <View
+                        style={[
+                          styles.friendsChipActiveDot,
+                          { backgroundColor: colors.primary },
+                        ]}
+                      />
+                    ) : null}
+                  </View>
+                </View>
               </Pressable>
             ) : null
           }
         />
-      </Reanimated.View>
+      </View>
 
-      <Reanimated.View
-        testID="map-recenter-wrapper"
-        style={[styles.fabContainer, { top: insets.top + 20 }, fabAnimatedStyle]}
-        layout={getMapLayoutTransition(reduceMotionEnabled)}
-      >
+      <View testID="map-recenter-wrapper" style={[styles.fabContainer, { top: insets.top + 20 }]}>
         <Pressable
           testID="map-recenter"
           onPress={goToMyLocation}
-          onPressIn={() => {
-            fabScale.value = withTiming(0.95, mapMotionPressTiming);
-          }}
-          onPressOut={() => {
-            fabScale.value = withTiming(1, mapMotionPressTiming);
-          }}
+          style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
         >
-          <View style={[styles.fab, { borderColor: getOverlayBorderColor(isDark) }]}>
+          <View style={styles.fab}>
             <GlassView
               pointerEvents="none"
               style={StyleSheet.absoluteFillObject}
@@ -630,7 +546,7 @@ export default function MapScreenIOS() {
             <Ionicons name="location" size={20} color={colors.primary} />
           </View>
         </Pressable>
-      </Reanimated.View>
+      </View>
 
       {notes.length > 0 && !friendsPreviewVisible ? (
         <MapPreviewCard
@@ -662,11 +578,10 @@ export default function MapScreenIOS() {
         />
       ) : null}
 
-      <Reanimated.View
+      <View
         testID="map-overlay-host"
         style={styles.emptyOverlay}
         pointerEvents={overlayState === 'content' || friendsPreviewVisible ? 'none' : 'box-none'}
-        layout={getMapLayoutTransition(reduceMotionEnabled)}
       >
         {overlayState === 'no-notes' && !friendsPreviewVisible ? (
           <MapStatusCard
@@ -675,11 +590,9 @@ export default function MapScreenIOS() {
             primaryColor={colors.primary}
             textColor={colors.text}
             secondaryTextColor={colors.secondaryText}
-            onClearFilters={clearFilters}
             reduceMotionEnabled={reduceMotionEnabled}
             title={t('map.emptyTitle', 'No notes on the map yet')}
             subtitle={t('map.emptySubtitle', 'Your saved notes will appear as pins here')}
-            clearLabel={t('map.clearFilters', 'Clear filters')}
           />
         ) : null}
 
@@ -690,46 +603,43 @@ export default function MapScreenIOS() {
             primaryColor={colors.primary}
             textColor={colors.text}
             secondaryTextColor={colors.secondaryText}
-            onClearFilters={() => {
-              emitLightHaptic();
-              clearFilters();
-            }}
             reduceMotionEnabled={reduceMotionEnabled}
             title={t('map.filteredEmptyTitle', 'No notes match these filters')}
             subtitle={t(
               'map.filteredEmptySubtitle',
               'Try another filter combination or reset to view all notes'
             )}
-            clearLabel={t('map.clearFilters', 'Clear filters')}
+            actionLabel={t('map.clearFilters', 'Clear filters')}
+            actionTestID="map-clear-filters"
+            onAction={() => {
+              emitLightHaptic();
+              clearFilters();
+            }}
           />
         ) : null}
-      </Reanimated.View>
 
-      {showFriendsScan ? (
-        <View testID="map-friends-scan" pointerEvents="none" style={styles.scanOverlay}>
-          <Reanimated.View
-            style={[
-              styles.scanBackdrop,
-              { backgroundColor: isDark ? 'rgba(10,12,18,0.14)' : 'rgba(255,248,230,0.18)' },
-              friendsScanBackdropStyle,
-            ]}
+        {overlayState === 'no-area-results' && !friendsPreviewVisible ? (
+          <MapStatusCard
+            overlayState="no-area-results"
+            isDark={isDark}
+            primaryColor={colors.primary}
+            textColor={colors.text}
+            secondaryTextColor={colors.secondaryText}
+            reduceMotionEnabled={reduceMotionEnabled}
+            title={t('map.areaEmptyTitle', 'No notes in this area')}
+            subtitle={t(
+              'map.areaEmptySubtitle',
+              'Move the map a bit more or show all matching notes from anywhere.'
+            )}
+            actionLabel={t('map.showAllResults', 'Show all results')}
+            actionTestID="map-show-all-results"
+            onAction={() => {
+              emitLightHaptic();
+              showAllFilteredResults();
+            }}
           />
-          <Reanimated.View
-            style={[
-              styles.scanRing,
-              { borderColor: `${colors.primary}66` },
-              friendsScanRingStyle,
-            ]}
-          />
-          <Reanimated.View
-            style={[
-              styles.scanCore,
-              { backgroundColor: `${colors.primary}24` },
-              friendsScanCoreStyle,
-            ]}
-          />
-        </View>
-      ) : null}
+        ) : null}
+      </View>
 
     </View>
   );
@@ -759,7 +669,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    borderWidth: 1,
+    borderWidth: 0,
     ...mapOverlayTokens.overlayShadow,
   },
   topHeader: {
@@ -800,27 +710,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     zIndex: 9,
-  },
-  scanOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-  },
-  scanBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  scanRing: {
-    position: 'absolute',
-    width: 154,
-    height: 154,
-    borderRadius: 77,
-    borderWidth: 1.5,
-  },
-  scanCore: {
-    position: 'absolute',
-    width: 116,
-    height: 116,
-    borderRadius: 58,
   },
 });

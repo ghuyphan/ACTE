@@ -89,6 +89,7 @@ export default function SharedPostCardVisual({
     <TextMemoryCard
       text={shouldShowFallbackText ? fallbackText : post.text}
       noteId={post.id}
+      noteColor={post.noteColor}
       doodleStrokesJson={post.doodleStrokesJson}
       stickerPlacementsJson={post.stickerPlacementsJson}
       remoteBucket={SHARED_POST_MEDIA_BUCKET}

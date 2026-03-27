@@ -1,22 +1,22 @@
+import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
+import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView } from 'expo-camera';
-import {
-  cacheDirectory as fileSystemCacheDirectory,
-  deleteAsync as deleteFileAsync,
-  EncodingType,
-  writeAsStringAsync,
-} from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
+import AppBottomSheet from '../AppBottomSheet';
 import { GlassView } from '../ui/GlassView';
+import NoteColorPicker from '../ui/NoteColorPicker';
 import { Image } from 'expo-image';
 import { TFunction } from 'i18next';
 import { forwardRef, ReactNode, RefObject, useCallback, useEffect, useRef, useState, useMemo, useImperativeHandle, type ComponentProps } from 'react';
 import {
+  ActionSheetIOS,
   ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
+  type GestureResponderEvent,
   Platform,
   Pressable,
   type PressableProps,
@@ -41,7 +41,11 @@ import { ENABLE_PHOTO_STICKERS } from '../../constants/experiments';
 import { Layout, Shadows, Typography } from '../../constants/theme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import type { ThemeColors } from '../../hooks/useTheme';
-import { getCaptureNoteGradient } from '../../services/noteAppearance';
+import {
+  DEFAULT_NOTE_COLOR_ID,
+  getCaptureNoteGradient,
+  getNoteColorCardGradient,
+} from '../../services/noteAppearance';
 import { applyCommittedInlineEmoji } from '../../services/noteDecorations';
 import NoteStickerCanvas from '../NoteStickerCanvas';
 import NoteDoodleCanvas, { DoodleStroke } from '../NoteDoodleCanvas';
@@ -54,7 +58,13 @@ import {
   updateStickerPlacementTransform,
 } from '../../services/noteStickers';
 import PrimaryButton from '../ui/PrimaryButton';
+import StickerPastePopover from '../ui/StickerPastePopover';
 import { isOlderIOS } from '../../utils/platform';
+import {
+  ClipboardStickerError,
+  hasClipboardStickerImage,
+  importStickerAssetFromClipboard,
+} from '../../utils/stickerClipboard';
 
 const { width } = Dimensions.get('window');
 const HORIZONTAL_PADDING = Layout.screenPadding - 8;
@@ -69,8 +79,6 @@ const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad)
 const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
 const CAPTURE_BUTTON_STATE_IN = { duration: 160, easing: Easing.out(Easing.cubic) };
 const CAPTURE_BUTTON_STATE_OUT = { duration: 210, easing: Easing.out(Easing.cubic) };
-const CLIPBOARD_STICKER_PREFIX = 'data:image/png;base64,';
-const STICKER_LONG_PRESS_SUPPRESSION_WINDOW_MS = 900;
 const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
 const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Note about this place...',
@@ -92,39 +100,18 @@ function getCaptureTextPlaceholderVariants(t: TFunction) {
     : DEFAULT_CAPTURE_TEXT_PLACEHOLDERS;
 }
 
-function getClipboardStickerBase64(data: string) {
-  return data.startsWith(CLIPBOARD_STICKER_PREFIX)
-    ? data.slice(CLIPBOARD_STICKER_PREFIX.length)
-    : null;
-}
-
-type ClipboardModule = {
-  getImageAsync: (options: { format: 'png' | 'jpeg'; jpegQuality?: number }) => Promise<{
-    data: string;
-    size: {
-      width: number;
-      height: number;
-    };
-  } | null>;
-  hasImageAsync: () => Promise<boolean>;
-};
-
-async function loadClipboardModule() {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('expo-clipboard') as ClipboardModule;
-  } catch (error) {
-    console.warn('Clipboard module unavailable in this build:', error);
-    return null;
-  }
-}
-
 export interface CaptureCardHandle {
   getDoodleSnapshot: () => { enabled: boolean; strokes: DoodleStroke[] };
   getStickerSnapshot: () => { enabled: boolean; placements: NoteStickerPlacement[] };
   resetDoodle: () => void;
   resetStickers: () => void;
 }
+
+type StickerPastePromptState = {
+  visible: boolean;
+  x: number;
+  y: number;
+};
 
 type CaptureAnimatedPressableProps = Omit<PressableProps, 'children' | 'style'> & {
   children?: ReactNode;
@@ -371,6 +358,8 @@ interface CaptureCardProps {
   t: TFunction;
   noteText: string;
   onChangeNoteText: (nextText: string) => void;
+  noteColor?: string | null;
+  onChangeNoteColor?: (nextColor: string | null) => void;
   restaurantName: string;
   onChangeRestaurantName: (nextName: string) => void;
   capturedPhoto: string | null;
@@ -414,6 +403,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   t,
   noteText,
   onChangeNoteText,
+  noteColor = null,
+  onChangeNoteColor,
   restaurantName,
   onChangeRestaurantName,
   capturedPhoto,
@@ -447,6 +438,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const reduceMotionEnabled = useReducedMotion();
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
+  const [showNoteColorSheet, setShowNoteColorSheet] = useState(false);
   const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
   const [cameraRetryNonce, setCameraRetryNonce] = useState(0);
   const [textDoodleModeEnabled, setTextDoodleModeEnabled] = useState(false);
@@ -462,6 +454,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [textSelectedStickerId, setTextSelectedStickerId] = useState<string | null>(null);
   const [photoSelectedStickerId, setPhotoSelectedStickerId] = useState<string | null>(null);
   const [importingSticker, setImportingSticker] = useState(false);
+  const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
   const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
   const isPhotoDoodleSurface = captureMode === 'camera' && Boolean(capturedPhoto);
   const doodleModeEnabled = isPhotoDoodleSurface ? photoDoodleModeEnabled : textDoodleModeEnabled;
@@ -494,7 +487,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const saveSuccessProgress = useSharedValue(saveState === 'success' ? 1 : 0);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
-  const stickerLongPressTimestampRef = useRef(0);
+  const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
   const activeTextPlaceholder =
     placeholderVariants[textPlaceholderIndex % placeholderVariants.length] ??
@@ -617,6 +610,34 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     onDoodleModeChange?.((captureMode === 'text' || Boolean(capturedPhoto)) && doodleModeEnabled);
   }, [captureMode, capturedPhoto, doodleModeEnabled, onDoodleModeChange]);
 
+  const clearPastePromptTimeout = useCallback(() => {
+    if (pastePromptTimeoutRef.current) {
+      clearTimeout(pastePromptTimeoutRef.current);
+      pastePromptTimeoutRef.current = null;
+    }
+  }, []);
+
+  const dismissPastePrompt = useCallback(() => {
+    clearPastePromptTimeout();
+    setPastePrompt((current) => (current.visible ? { ...current, visible: false } : current));
+  }, [clearPastePromptTimeout]);
+
+  const schedulePastePromptDismiss = useCallback(() => {
+    clearPastePromptTimeout();
+    pastePromptTimeoutRef.current = setTimeout(() => {
+      setPastePrompt((current) => ({ ...current, visible: false }));
+      pastePromptTimeoutRef.current = null;
+    }, 2600);
+  }, [clearPastePromptTimeout]);
+
+  useEffect(() => () => clearPastePromptTimeout(), [clearPastePromptTimeout]);
+
+  useEffect(() => {
+    if (doodleModeEnabled || stickerModeEnabled || importingSticker || interactionsDisabled) {
+      dismissPastePrompt();
+    }
+  }, [dismissPastePrompt, doodleModeEnabled, importingSticker, interactionsDisabled, stickerModeEnabled]);
+
   const resetDoodle = useCallback(() => {
     setTextDoodleModeEnabled(false);
     setPhotoDoodleModeEnabled(false);
@@ -719,6 +740,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       'This can happen on a simulator or when the camera session gets stuck. Try again or use a physical device.'
     );
   const handleToggleDecorateMenu = useCallback(() => {
+    dismissPastePrompt();
+
     if (doodleModeEnabled || stickerModeEnabled) {
       if (isPhotoDoodleSurface) {
         setPhotoDoodleModeEnabled(false);
@@ -739,8 +762,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     }
 
     setTextDecorateMenuExpanded((current) => !current);
-  }, [doodleModeEnabled, isPhotoDoodleSurface, stickerModeEnabled]);
+  }, [dismissPastePrompt, doodleModeEnabled, isPhotoDoodleSurface, stickerModeEnabled]);
   const handleToggleDoodleMode = useCallback(() => {
+    dismissPastePrompt();
+
     if (isPhotoDoodleSurface) {
       setPhotoDecorateMenuExpanded(true);
       setPhotoStickerModeEnabled(false);
@@ -751,7 +776,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setTextDecorateMenuExpanded(true);
     setTextStickerModeEnabled(false);
     setTextDoodleModeEnabled((current) => !current);
-  }, [isPhotoDoodleSurface]);
+  }, [dismissPastePrompt, isPhotoDoodleSurface]);
   const handleUndoDoodle = useCallback(() => {
     if (isPhotoDoodleSurface) {
       setPhotoDoodleStrokes((current) => current.slice(0, -1));
@@ -789,27 +814,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       return;
     }
 
-    let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
-    if (mediaPermission.status !== 'granted') {
-      mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    }
-
-    if (mediaPermission.status !== 'granted') {
-      Alert.alert(
-        t('capture.photoLibraryPermissionTitle', 'Photo access needed'),
-        mediaPermission.canAskAgain === false
-          ? t(
-              'capture.photoLibraryPermissionSettingsMsg',
-              'Photo library access is blocked for Noto. Open Settings to import from your library.'
-            )
-          : t(
-              'capture.photoLibraryPermissionMsg',
-              'Allow photo library access so you can import an image into this note.'
-            )
-      );
-      return;
-    }
-
+    dismissPastePrompt();
     setImportingSticker(true);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -841,93 +846,154 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     } finally {
       setImportingSticker(false);
     }
-  }, [applyImportedSticker, importingSticker, stickerPlacements, t]);
+  }, [applyImportedSticker, dismissPastePrompt, importingSticker, stickerPlacements, t]);
   const handlePasteStickerFromClipboard = useCallback(async () => {
     if (!ENABLE_PHOTO_STICKERS || importingSticker) {
       return;
     }
 
-    stickerLongPressTimestampRef.current = Date.now();
+    dismissPastePrompt();
     setImportingSticker(true);
-    let clipboardTempUri: string | null = null;
 
     try {
-      const clipboardModule = await loadClipboardModule();
-      if (!clipboardModule?.hasImageAsync || !clipboardModule?.getImageAsync) {
-        Alert.alert(
-          t('capture.clipboardStickerRequiresUpdateTitle', 'Update required'),
-          t(
-            'capture.clipboardStickerRequiresUpdateMsg',
-            'Clipboard sticker paste needs the latest app build. Restart the iOS app after rebuilding to use this.'
-          )
-        );
-        return;
-      }
-
-      const hasImage = await clipboardModule.hasImageAsync();
-      if (!hasImage) {
-        Alert.alert(
-          t('capture.clipboardStickerUnavailableTitle', 'No sticker to paste'),
-          t(
-            'capture.clipboardStickerUnavailableMsg',
-            'Copy a transparent sticker image first, then long press again to paste it.'
-          )
-        );
-        return;
-      }
-
-      const clipboardImage = await clipboardModule.getImageAsync({ format: 'png' });
-      const base64 = clipboardImage?.data ? getClipboardStickerBase64(clipboardImage.data) : null;
-      if (!base64) {
-        throw new Error(
-          t('capture.clipboardStickerUnsupported', 'We could not read that clipboard image right now.')
-        );
-      }
-
-      if (!fileSystemCacheDirectory) {
-        throw new Error(t('capture.clipboardStickerStorageUnavailable', 'Sticker storage is unavailable on this device.'));
-      }
-
-      clipboardTempUri = `${fileSystemCacheDirectory}clipboard-sticker-${Date.now()}.png`;
-      await writeAsStringAsync(clipboardTempUri, base64, {
-        encoding: EncodingType.Base64,
-      });
-
-      const importedAsset = await importStickerAsset({
-        uri: clipboardTempUri,
-        mimeType: 'image/png',
-        name: 'clipboard-sticker.png',
+      const importedAsset = await importStickerAssetFromClipboard({
+        requiresUpdate: t(
+          'capture.clipboardStickerRequiresUpdateMsg',
+          'Clipboard sticker paste needs the latest app build. Restart the iOS app after rebuilding to use this.'
+        ),
+        unavailable: t(
+          'capture.clipboardStickerUnavailableMsg',
+          'Copy a transparent sticker image first, then long press again to paste it.'
+        ),
+        unsupported: t(
+          'capture.clipboardStickerUnsupported',
+          'We could not read that clipboard image right now.'
+        ),
+        storageUnavailable: t(
+          'capture.clipboardStickerStorageUnavailable',
+          'Sticker storage is unavailable on this device.'
+        ),
       });
       const nextPlacement = createStickerPlacement(importedAsset, stickerPlacements);
       applyImportedSticker(nextPlacement);
     } catch (error) {
       console.warn('Sticker paste failed:', error);
+      const alertTitle =
+        error instanceof ClipboardStickerError && error.code === 'unavailable'
+          ? t('capture.clipboardStickerUnavailableTitle', 'No sticker to paste')
+          : error instanceof ClipboardStickerError && error.code === 'requires-update'
+            ? t('capture.clipboardStickerRequiresUpdateTitle', 'Update required')
+            : t('capture.error', 'Error');
       Alert.alert(
-        t('capture.error', 'Error'),
+        alertTitle,
         error instanceof Error
           ? error.message
           : t('capture.clipboardStickerFailed', 'We could not paste that sticker right now.')
       );
     } finally {
-      if (clipboardTempUri) {
-        await deleteFileAsync(clipboardTempUri, { idempotent: true }).catch(() => undefined);
-      }
       setImportingSticker(false);
     }
-  }, [applyImportedSticker, importingSticker, stickerPlacements, t]);
+  }, [applyImportedSticker, dismissPastePrompt, importingSticker, stickerPlacements, t]);
+  const handleShowCardPastePrompt = useCallback(
+    async (event: GestureResponderEvent) => {
+      if (
+        !ENABLE_PHOTO_STICKERS ||
+        importingSticker ||
+        doodleModeEnabled ||
+        stickerModeEnabled ||
+        stickerPlacements.length > 0 ||
+        interactionsDisabled
+      ) {
+        return;
+      }
+
+      const canPasteFromClipboard = await hasClipboardStickerImage();
+
+      if (!canPasteFromClipboard) {
+        dismissPastePrompt();
+        return;
+      }
+
+      const locationX = typeof event.nativeEvent.locationX === 'number' ? event.nativeEvent.locationX : CARD_SIZE / 2;
+      const locationY = typeof event.nativeEvent.locationY === 'number' ? event.nativeEvent.locationY : CARD_SIZE / 2;
+
+      setPastePrompt({
+        visible: true,
+        x: locationX,
+        y: locationY,
+      });
+      schedulePastePromptDismiss();
+    },
+    [
+      dismissPastePrompt,
+      doodleModeEnabled,
+      importingSticker,
+      interactionsDisabled,
+      schedulePastePromptDismiss,
+      stickerModeEnabled,
+      stickerPlacements.length,
+    ]
+  );
+  const handleConfirmPasteFromPrompt = useCallback(() => {
+    dismissPastePrompt();
+    void handlePasteStickerFromClipboard();
+  }, [dismissPastePrompt, handlePasteStickerFromClipboard]);
+  const handleShowStickerSourceOptions = useCallback(async () => {
+    if (!ENABLE_PHOTO_STICKERS || importingSticker) {
+      return;
+    }
+
+    dismissPastePrompt();
+    const canPasteFromClipboard = await hasClipboardStickerImage();
+    const pasteLabel = t('capture.pasteStickerFromClipboard', 'Paste from Clipboard');
+    const photoLabel = t('capture.chooseStickerFromPhotos', 'Choose from Photos');
+    const cancelLabel = t('common.cancel', 'Cancel');
+    const options = canPasteFromClipboard
+      ? [pasteLabel, photoLabel, cancelLabel]
+      : [photoLabel, cancelLabel];
+    const cancelButtonIndex = options.length - 1;
+
+    const handleSelection = (selectedIndex?: number) => {
+      if (selectedIndex === undefined || selectedIndex === cancelButtonIndex) {
+        return;
+      }
+
+      if (canPasteFromClipboard && selectedIndex === 0) {
+        void handlePasteStickerFromClipboard();
+        return;
+      }
+
+      void handleImportSticker();
+    };
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: t('capture.addStickerTitle', 'Add sticker'),
+          options,
+          cancelButtonIndex,
+        },
+        handleSelection
+      );
+      return;
+    }
+
+    Alert.alert(
+      t('capture.addStickerTitle', 'Add sticker'),
+      undefined,
+      options.map((label, index) => ({
+        text: label,
+        style: index === cancelButtonIndex ? 'cancel' : 'default',
+        onPress: () => handleSelection(index),
+      }))
+    );
+  }, [dismissPastePrompt, handleImportSticker, handlePasteStickerFromClipboard, importingSticker, t]);
   const handleToggleStickerMode = useCallback(() => {
     if (!ENABLE_PHOTO_STICKERS) {
       return;
     }
 
-    if (Date.now() - stickerLongPressTimestampRef.current < STICKER_LONG_PRESS_SUPPRESSION_WINDOW_MS) {
-      return;
-    }
-
-    if (!stickerModeEnabled && stickerPlacements.length === 0 && !importingSticker) {
-      void handleImportSticker();
-      return;
-    }
+    dismissPastePrompt();
 
     if (isPhotoDoodleSurface) {
       setPhotoDecorateMenuExpanded(true);
@@ -939,7 +1005,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setTextDecorateMenuExpanded(true);
     setTextDoodleModeEnabled(false);
     setTextStickerModeEnabled((current) => !current);
-  }, [handleImportSticker, importingSticker, isPhotoDoodleSurface, stickerModeEnabled, stickerPlacements.length]);
+  }, [dismissPastePrompt, isPhotoDoodleSurface]);
   const handleChangeStickerPlacements = useCallback(
     (nextPlacements: NoteStickerPlacement[]) => {
       if (isPhotoDoodleSurface) {
@@ -1018,22 +1084,81 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     },
     [noteText, onChangeNoteText]
   );
-  const captureGradient = getCaptureNoteGradient();
+  const captureGradient = getCaptureNoteGradient({ noteColor });
+  const inlineColorGradient =
+    getNoteColorCardGradient(noteColor ?? DEFAULT_NOTE_COLOR_ID) ??
+    getNoteColorCardGradient(DEFAULT_NOTE_COLOR_ID) ??
+    captureGradient;
+  const handleOpenNoteColorSheet = useCallback(() => {
+    if (!onChangeNoteColor) {
+      return;
+    }
 
-  return (
-    <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
-      <Animated.View
+    setShowNoteColorSheet(true);
+  }, [onChangeNoteColor]);
+  const handleCloseNoteColorSheet = useCallback(() => {
+    setShowNoteColorSheet(false);
+  }, []);
+  const handleSelectNoteColor = useCallback(
+    (nextColor: string | null) => {
+      if (!onChangeNoteColor) {
+        return;
+      }
+
+      onChangeNoteColor(nextColor ?? DEFAULT_NOTE_COLOR_ID);
+      setShowNoteColorSheet(false);
+    },
+    [onChangeNoteColor]
+  );
+
+  useEffect(() => {
+    if (captureMode !== 'text' || !onChangeNoteColor) {
+      setShowNoteColorSheet(false);
+    }
+  }, [captureMode, onChangeNoteColor]);
+
+  const noteColorSheetBody = onChangeNoteColor ? (
+    <View style={styles.noteColorSheet}>
+      <Text style={[styles.noteColorSheetTitle, { color: colors.text }]}>
+        {t('capture.noteColor', 'Card color')}
+      </Text>
+      <Text style={[styles.noteColorSheetHint, { color: colors.secondaryText }]}>
+        {t('capture.noteColorHint', 'Pick the gradient you want before saving this note.')}
+      </Text>
+      <View
         style={[
-          styles.captureArea,
+          styles.noteColorSheetCard,
           {
-            transform: [
-              { translateY: captureTranslateY },
-              { scale: captureScale },
-            ],
+            backgroundColor: colors.card,
+            borderColor: colors.border,
           },
         ]}
-        pointerEvents={isSearching || interactionsDisabled ? 'none' : 'auto'}
       >
+        <NoteColorPicker
+          selectedColor={noteColor ?? DEFAULT_NOTE_COLOR_ID}
+          onSelectColor={handleSelectNoteColor}
+          testIDPrefix="capture-note-color"
+          compact
+        />
+      </View>
+    </View>
+  ) : null;
+
+  return (
+    <>
+      <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
+        <Animated.View
+          style={[
+            styles.captureArea,
+            {
+              transform: [
+                { translateY: captureTranslateY },
+                { scale: captureScale },
+              ],
+            },
+          ]}
+          pointerEvents={isSearching || interactionsDisabled ? 'none' : 'auto'}
+        >
         {captureMode === 'text' ? (
           <LinearGradient
             style={[
@@ -1046,6 +1171,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             start={{ x: 0.08, y: 0.06 }}
             end={{ x: 0.94, y: 0.94 }}
           >
+            {ENABLE_PHOTO_STICKERS ? (
+              <Pressable
+                testID="capture-card-paste-surface"
+                style={styles.cardPasteSurface}
+                onLongPress={handleShowCardPastePrompt}
+                delayLongPress={320}
+              />
+            ) : null}
             <View pointerEvents="box-none" style={styles.cardTopOverlay}>
               <View style={styles.cardTopOverlayRow}>
                 <CaptureAnimatedPressable
@@ -1135,12 +1268,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       <View style={styles.textCardActionCluster}>
                         <CaptureToggleIconButton
                           testID="capture-sticker-toggle"
-                          accessibilityHint={t('capture.stickerPasteHint', 'Long press to paste a sticker from your clipboard.')}
+                          accessibilityHint={t(
+                            'capture.stickerPasteHint',
+                            'Tap to edit stickers. Long press the card to paste from your clipboard.'
+                          )}
                           onPress={handleToggleStickerMode}
-                          onLongPress={() => {
-                            void handlePasteStickerFromClipboard();
-                          }}
-                          delayLongPress={250}
                           active={stickerModeEnabled}
                           activeIconName="pricetags"
                           inactiveIconName="pricetags-outline"
@@ -1154,11 +1286,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         />
                         <CaptureAnimatedPressable
                           testID="capture-sticker-import"
-                          onPress={handleImportSticker}
-                          onLongPress={() => {
-                            void handlePasteStickerFromClipboard();
+                          onPress={() => {
+                            void handleShowStickerSourceOptions();
                           }}
-                          delayLongPress={250}
                           disabled={importingSticker}
                           disabledOpacity={0.45}
                           style={[
@@ -1204,14 +1334,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                           style={styles.textCardActionButton}
                         />
                         {ENABLE_PHOTO_STICKERS ? (
-                          <CaptureToggleIconButton
-                            testID="capture-sticker-toggle"
-                            accessibilityHint={t('capture.stickerPasteHint', 'Long press to paste a sticker from your clipboard.')}
-                            onPress={handleToggleStickerMode}
-                            onLongPress={() => {
-                              void handlePasteStickerFromClipboard();
-                            }}
-                            delayLongPress={250}
+                            <CaptureToggleIconButton
+                              testID="capture-sticker-toggle"
+                              accessibilityHint={t(
+                                'capture.stickerPasteHint',
+                                'Tap to edit stickers. Long press the card to paste from your clipboard.'
+                              )}
+                              onPress={handleToggleStickerMode}
                             active={stickerModeEnabled}
                             activeIconName="pricetags"
                             inactiveIconName="pricetags-outline"
@@ -1283,10 +1412,36 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 selectionColor={colors.captureCardText}
               />
             </View>
+            <StickerPastePopover
+              visible={pastePrompt.visible}
+              anchor={{ x: pastePrompt.x, y: pastePrompt.y }}
+              containerWidth={CARD_SIZE}
+              containerHeight={CARD_SIZE}
+              label={t('capture.pasteStickerAction', 'Paste sticker')}
+              description={t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.')}
+              backgroundColor="rgba(255, 250, 242, 0.96)"
+              borderColor={colors.captureGlassBorder}
+              secondaryTextColor={colors.captureGlassIcon}
+              buttonBackgroundColor={colors.captureButtonBg}
+              buttonTextColor="#FFFDFC"
+              onPress={handleConfirmPasteFromPrompt}
+              onDismiss={dismissPastePrompt}
+              popoverTestID="capture-card-paste-popover"
+              actionTestID="capture-card-paste-action"
+              dismissTestID="capture-card-paste-dismiss"
+            />
           </LinearGradient>
         ) : capturedPhoto ? (
           <View style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}>
             <Image source={{ uri: capturedPhoto }} style={styles.cameraPreview} contentFit="cover" />
+            {ENABLE_PHOTO_STICKERS ? (
+              <Pressable
+                testID="capture-card-paste-surface"
+                style={styles.cardPasteSurface}
+                onLongPress={handleShowCardPastePrompt}
+                delayLongPress={320}
+              />
+            ) : null}
             <View pointerEvents="box-none" style={styles.cardTopOverlay}>
               <View style={styles.cardTopOverlayRow}>
                 <CaptureAnimatedPressable
@@ -1390,12 +1545,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         <CaptureToggleIconButton
                           testID="capture-sticker-toggle"
                           accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
-                          accessibilityHint={t('capture.stickerPasteHint', 'Long press to paste a sticker from your clipboard.')}
+                          accessibilityHint={t(
+                            'capture.stickerPasteHint',
+                            'Tap to edit stickers. Long press the card to paste from your clipboard.'
+                          )}
                           onPress={handleToggleStickerMode}
-                          onLongPress={() => {
-                            void handlePasteStickerFromClipboard();
-                          }}
-                          delayLongPress={250}
                           active={stickerModeEnabled}
                           activeIconName="pricetags"
                           inactiveIconName="pricetags-outline"
@@ -1412,11 +1566,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         />
                         <CaptureAnimatedPressable
                           testID="capture-sticker-import"
-                          onPress={handleImportSticker}
-                          onLongPress={() => {
-                            void handlePasteStickerFromClipboard();
+                          onPress={() => {
+                            void handleShowStickerSourceOptions();
                           }}
-                          delayLongPress={250}
                           disabled={importingSticker}
                           disabledOpacity={0.45}
                           style={[
@@ -1470,15 +1622,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                           ]}
                         />
                         {ENABLE_PHOTO_STICKERS ? (
-                          <CaptureToggleIconButton
-                            testID="capture-sticker-toggle"
-                            accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
-                            accessibilityHint={t('capture.stickerPasteHint', 'Long press to paste a sticker from your clipboard.')}
-                            onPress={handleToggleStickerMode}
-                            onLongPress={() => {
-                              void handlePasteStickerFromClipboard();
-                            }}
-                            delayLongPress={250}
+                            <CaptureToggleIconButton
+                              testID="capture-sticker-toggle"
+                              accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
+                              accessibilityHint={t(
+                                'capture.stickerPasteHint',
+                                'Tap to edit stickers. Long press the card to paste from your clipboard.'
+                              )}
+                              onPress={handleToggleStickerMode}
                             active={stickerModeEnabled}
                             activeIconName="pricetags"
                             inactiveIconName="pricetags-outline"
@@ -1525,6 +1676,24 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 StyleSheet.absoluteFill,
                 { backgroundColor: colors.captureFlashOverlay, opacity: flashAnim, zIndex: 50 },
               ]}
+            />
+            <StickerPastePopover
+              visible={pastePrompt.visible}
+              anchor={{ x: pastePrompt.x, y: pastePrompt.y }}
+              containerWidth={CARD_SIZE}
+              containerHeight={CARD_SIZE}
+              label={t('capture.pasteStickerAction', 'Paste sticker')}
+              description={t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.')}
+              backgroundColor="rgba(255, 250, 242, 0.96)"
+              borderColor={photoPreviewControlBorder}
+              secondaryTextColor={colors.captureGlassIcon}
+              buttonBackgroundColor={colors.captureButtonBg}
+              buttonTextColor="#FFFDFC"
+              onPress={handleConfirmPasteFromPrompt}
+              onDismiss={dismissPastePrompt}
+              popoverTestID="capture-card-paste-popover"
+              actionTestID="capture-card-paste-action"
+              dismissTestID="capture-card-paste-dismiss"
             />
           </View>
         ) : needsCameraPermission ? (
@@ -1683,6 +1852,25 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 />
               </View>
               <View style={[styles.captureMetaDivider, { backgroundColor: colors.captureGlassBorder }]} />
+              {onChangeNoteColor ? (
+                <>
+                  <CaptureAnimatedPressable
+                    testID="capture-note-color-toggle"
+                    accessibilityRole="button"
+                    accessibilityLabel={t('capture.noteColor', 'Card color')}
+                    onPress={handleOpenNoteColorSheet}
+                    style={styles.captureInlineColorButton}
+                  >
+                    <LinearGradient
+                      colors={inlineColorGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.captureInlineColorPreview}
+                    />
+                  </CaptureAnimatedPressable>
+                  <View style={[styles.captureMetaDivider, { backgroundColor: colors.captureGlassBorder }]} />
+                </>
+              ) : null}
               <CaptureToggleIconButton
                 testID="capture-share-target-toggle"
                 accessibilityRole="button"
@@ -1908,9 +2096,39 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             <View style={[styles.belowCardSideActionSpacer, styles.belowCardTrailingAction]} />
           </View>
         )}
-        {footerContent ? <View style={styles.footerSlot}>{footerContent}</View> : null}
-      </Animated.View>
-    </View>
+          {footerContent ? <View style={styles.footerSlot}>{footerContent}</View> : null}
+        </Animated.View>
+      </View>
+      {Platform.OS === 'ios' && noteColorSheetBody ? (
+        <View pointerEvents={showNoteColorSheet ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
+          <Host style={StyleSheet.absoluteFill} colorScheme={colors.captureGlassColorScheme}>
+            <BottomSheet
+              isPresented={showNoteColorSheet}
+              onIsPresentedChange={(nextPresented) => (!nextPresented ? handleCloseNoteColorSheet() : null)}
+              fitToContents
+            >
+              <Group
+                modifiers={[
+                  presentationDragIndicator('visible'),
+                  environment('colorScheme', colors.captureGlassColorScheme),
+                ]}
+              >
+                <RNHostView matchContents>
+                  <View style={styles.noteColorSheetIOSContainer}>
+                    {noteColorSheetBody}
+                  </View>
+                </RNHostView>
+              </Group>
+            </BottomSheet>
+          </Host>
+        </View>
+      ) : null}
+      {Platform.OS === 'android' && noteColorSheetBody ? (
+        <AppBottomSheet visible={showNoteColorSheet} onClose={handleCloseNoteColorSheet} detached={false}>
+          {noteColorSheetBody}
+        </AppBottomSheet>
+      ) : null}
+    </>
   );
 });
 
@@ -1956,6 +2174,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     ...Shadows.card,
+  },
+  cardPasteSurface: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
   },
   textInput: {
     fontSize: 24,
@@ -2127,6 +2349,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  captureInlineColorButton: {
+    width: 30,
+    height: 30,
+    marginLeft: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  captureInlineColorPreview: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+  },
   cameraContainer: {
     width: CARD_SIZE,
     height: CARD_SIZE,
@@ -2294,5 +2528,30 @@ const styles = StyleSheet.create({
   footerSlot: {
     width: '100%',
     paddingTop: 2,
+  },
+  noteColorSheetIOSContainer: {
+    backgroundColor: 'transparent',
+  },
+  noteColorSheet: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 28,
+    gap: 12,
+  },
+  noteColorSheetTitle: {
+    ...Typography.body,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  noteColorSheetHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  noteColorSheetCard: {
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
   },
 });

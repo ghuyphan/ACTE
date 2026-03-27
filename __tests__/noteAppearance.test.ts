@@ -19,6 +19,12 @@ describe('noteAppearance', () => {
     );
   });
 
+  it('matches the capture gradient to the saved note gradient when a note color is selected', () => {
+    expect(getCaptureNoteGradient({ noteColor: 'sunset-coral' })).toEqual(
+      getTextNoteCardGradient({ text: 'Cafe note', noteId: '1', noteColor: 'sunset-coral' })
+    );
+  });
+
   it('falls back to a stable hashed gradient when no emoji palette matches', () => {
     expect(getTextNoteCardGradient({ text: 'Just a quiet note', noteId: 'note-123' })).toEqual(
       getTextNoteCardGradient({ text: 'Just a quiet note', noteId: 'note-123' })

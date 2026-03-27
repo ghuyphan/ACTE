@@ -41,6 +41,7 @@ let queueRows: QueueRow[] = [];
 let queueId = 1;
 let localNotesStore: NoteRecord[] = [];
 const mockRemoteNotes = new Map<string, any>();
+const mockRemoteSharedPosts = new Map<string, any>();
 const mockUserUsage = new Map<string, any>();
 const mockPublicProfiles = new Map<string, any>();
 let mockNotesUpsertError: unknown = null;
@@ -157,6 +158,7 @@ jest.mock('../services/database', () => ({
 
 jest.mock('../services/remoteMedia', () => ({
   NOTE_MEDIA_BUCKET: 'note-media',
+  SHARED_POST_MEDIA_BUCKET: 'shared-post-media',
   uploadPhotoToStorage: (bucket: string, path: string, localUri?: string | null) =>
     mockUploadPhotoToStorage(bucket, path, localUri),
   downloadPhotoFromStorage: (bucket: string, path: string, fileName: string) =>
@@ -188,6 +190,22 @@ function executeNotesQuery(state: any) {
       const rightValue = String(right?.[state.orderField!] ?? '');
       return state.ascending ? leftValue.localeCompare(rightValue) : rightValue.localeCompare(leftValue);
     });
+  }
+
+  return rows;
+}
+
+function executeSharedPostsQuery(state: any) {
+  let rows = Array.from(mockRemoteSharedPosts.values());
+
+  for (const filter of state.filters) {
+    if (filter.type === 'eq') {
+      rows = rows.filter((row) => row?.[filter.field] === filter.value);
+    }
+
+    if (filter.type === 'in') {
+      rows = rows.filter((row) => filter.values.includes(row?.[filter.field]));
+    }
   }
 
   return rows;
@@ -251,6 +269,53 @@ function mockCreateNotesQueryBuilder() {
   return builder;
 }
 
+function mockCreateSharedPostsQueryBuilder() {
+  const state = {
+    filters: [] as Array<
+      | { type: 'eq'; field: string; value: unknown }
+      | { type: 'in'; field: string; values: unknown[] }
+    >,
+    deleteMode: false,
+  };
+
+  const builder: any = {
+    select: () => builder,
+    eq: (field: string, value: unknown) => {
+      state.filters.push({ type: 'eq', field, value });
+      return builder;
+    },
+    in: (field: string, values: unknown[]) => {
+      state.filters.push({ type: 'in', field, values });
+      return builder;
+    },
+    delete: () => {
+      state.deleteMode = true;
+      return builder;
+    },
+    then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
+      try {
+        if (state.deleteMode) {
+          const rows = executeSharedPostsQuery(state);
+          for (const row of rows) {
+            mockRemoteSharedPosts.delete(row.id);
+          }
+          return Promise.resolve(resolve({ data: null, error: null }));
+        }
+
+        return Promise.resolve(resolve({ data: executeSharedPostsQuery(state), error: null }));
+      } catch (error) {
+        if (reject) {
+          return Promise.resolve(reject(error));
+        }
+
+        return Promise.reject(error);
+      }
+    },
+  };
+
+  return builder;
+}
+
 jest.mock('../utils/supabase', () => ({
   getCurrentSupabaseSession: async () => ({
     user: mockSessionUserId ? { id: mockSessionUserId } : null,
@@ -289,6 +354,10 @@ jest.mock('../utils/supabase', () => ({
     from: (table: string) => {
       if (table === 'notes') {
         return mockCreateNotesQueryBuilder();
+      }
+
+      if (table === 'shared_posts') {
+        return mockCreateSharedPostsQueryBuilder();
       }
 
       if (table === 'user_usage') {
@@ -350,6 +419,7 @@ beforeEach(async () => {
   mockSessionUserId = 'user-1';
   localNotesStore = [];
   mockRemoteNotes.clear();
+  mockRemoteSharedPosts.clear();
   mockUserUsage.clear();
   mockPublicProfiles.clear();
 });
@@ -507,6 +577,12 @@ describe('syncService', () => {
       content: 'stale note',
       synced_at: '2026-03-09T00:00:00.000Z',
     });
+    mockRemoteSharedPosts.set('shared-1', {
+      id: 'shared-1',
+      author_user_id: 'user-1',
+      source_note_id: 'note-1',
+      photo_path: 'user-1/shared-1',
+    });
 
     await getSyncService().recordChange({
       type: 'delete',
@@ -519,7 +595,62 @@ describe('syncService', () => {
 
     expect(result.status).toBe('success');
     expect(mockRemoteNotes.has('note-1')).toBe(false);
+    expect(mockRemoteSharedPosts.has('shared-1')).toBe(false);
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-1');
+    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('shared-post-media', 'user-1/shared-1');
+  });
+
+  it('flushes queued delete-all operations to Supabase and clears authored shared posts', async () => {
+    mockRemoteNotes.set('note-1', {
+      id: 'note-1',
+      user_id: 'user-1',
+      type: 'text',
+      content: 'stale note',
+      photo_path: null,
+      synced_at: '2026-03-09T00:00:00.000Z',
+    });
+    mockRemoteNotes.set('note-2', {
+      id: 'note-2',
+      user_id: 'user-1',
+      type: 'photo',
+      content: '',
+      photo_path: 'user-1/note-2',
+      synced_at: '2026-03-09T00:00:00.000Z',
+    });
+    mockRemoteSharedPosts.set('shared-1', {
+      id: 'shared-1',
+      author_user_id: 'user-1',
+      source_note_id: 'note-1',
+      photo_path: null,
+    });
+    mockRemoteSharedPosts.set('shared-2', {
+      id: 'shared-2',
+      author_user_id: 'user-1',
+      source_note_id: 'note-2',
+      photo_path: 'user-1/shared-2',
+    });
+    mockRemoteSharedPosts.set('shared-foreign', {
+      id: 'shared-foreign',
+      author_user_id: 'user-2',
+      source_note_id: 'note-9',
+      photo_path: 'user-2/shared-foreign',
+    });
+
+    await getSyncService().recordChange({
+      type: 'deleteAll',
+      entity: 'note',
+      timestamp: '2026-03-10T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, [], { mode: 'incremental' });
+
+    expect(result.status).toBe('success');
+    expect(mockRemoteNotes.size).toBe(0);
+    expect(mockRemoteSharedPosts.has('shared-1')).toBe(false);
+    expect(mockRemoteSharedPosts.has('shared-2')).toBe(false);
+    expect(mockRemoteSharedPosts.has('shared-foreign')).toBe(true);
+    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-2');
+    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('shared-post-media', 'user-1/shared-2');
   });
 
   it('returns an actionable message when Supabase policies reject note writes', async () => {

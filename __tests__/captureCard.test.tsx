@@ -14,6 +14,21 @@ jest.mock('@expo/vector-icons', () => {
   };
 });
 
+jest.mock('@expo/ui/swift-ui', () => {
+  const { View } = require('react-native');
+  return {
+    BottomSheet: ({ children, isPresented }: any) => (isPresented ? <View>{children}</View> : null),
+    Group: ({ children }: any) => <View>{children}</View>,
+    Host: ({ children }: any) => <View>{children}</View>,
+    RNHostView: ({ children }: any) => <View>{children}</View>,
+  };
+});
+
+jest.mock('@expo/ui/swift-ui/modifiers', () => ({
+  environment: jest.fn(),
+  presentationDragIndicator: jest.fn(),
+}));
+
 jest.mock('expo-camera', () => ({
   CameraView: () => null,
 }));
@@ -65,6 +80,26 @@ jest.mock('../components/ui/PrimaryButton', () => {
     );
   };
 });
+
+jest.mock('../components/AppBottomSheet', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return function MockAppBottomSheet({ children, visible }: any) {
+    return visible ? <View>{children}</View> : null;
+  };
+});
+
+jest.mock('../hooks/useTheme', () => ({
+  useTheme: () => ({
+    isDark: false,
+    colors: {
+      text: '#1C1C1E',
+      secondaryText: '#8E8E93',
+      primary: '#FFC107',
+      border: '#E5E5EA',
+    },
+  }),
+}));
 
 jest.mock('../utils/platform', () => ({
   isOlderIOS: false,
@@ -443,7 +478,31 @@ describe('CaptureCard doodle handle', () => {
     expect(handleChangeShareTarget).toHaveBeenCalledWith('shared');
   });
 
-  it('pastes a sticker from the clipboard on long press in text mode', async () => {
+  it('opens a note color sheet and applies the selected swatch', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const handleChangeNoteColor = jest.fn();
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
+      noteColor: 'marigold-glow',
+      onChangeNoteColor: handleChangeNoteColor,
+    });
+
+    expect(queryByTestId('capture-note-color-sunset-coral')).toBeNull();
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-note-color-toggle'));
+    });
+
+    expect(getByTestId('capture-note-color-sunset-coral')).toBeTruthy();
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-note-color-sunset-coral'));
+    });
+
+    expect(handleChangeNoteColor).toHaveBeenCalledWith('sunset-coral');
+    expect(queryByTestId('capture-note-color-sunset-coral')).toBeNull();
+  });
+
+  it('shows a paste popover on text-card long press and pastes after confirmation', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockClipboardHasImageAsync.mockResolvedValue(true);
     mockClipboardGetImageAsync.mockResolvedValue({
@@ -451,12 +510,20 @@ describe('CaptureCard doodle handle', () => {
       size: { width: 120, height: 120 },
     });
 
-    const { getByTestId } = renderCaptureCard(ref, {
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
       noteText: '',
     });
 
     await act(async () => {
-      fireEvent(getByTestId('capture-sticker-toggle'), 'longPress');
+      fireEvent(getByTestId('capture-card-paste-surface'), 'longPress', {
+        nativeEvent: { locationX: 120, locationY: 180 },
+      });
+    });
+
+    expect(getByTestId('capture-card-paste-popover')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-card-paste-action'));
     });
 
     await waitFor(() => {
@@ -473,9 +540,10 @@ describe('CaptureCard doodle handle', () => {
       name: 'clipboard-sticker.png',
     });
     expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+    expect(queryByTestId('capture-card-paste-popover')).toBeNull();
   });
 
-  it('pastes a sticker from the clipboard on long press in photo mode', async () => {
+  it('shows a paste popover on photo-card long press and pastes after confirmation', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockClipboardHasImageAsync.mockResolvedValue(true);
     mockClipboardGetImageAsync.mockResolvedValue({
@@ -489,7 +557,15 @@ describe('CaptureCard doodle handle', () => {
     });
 
     await act(async () => {
-      fireEvent(getByTestId('capture-sticker-toggle'), 'longPress');
+      fireEvent(getByTestId('capture-card-paste-surface'), 'longPress', {
+        nativeEvent: { locationX: 144, locationY: 212 },
+      });
+    });
+
+    expect(getByTestId('capture-card-paste-popover')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-card-paste-action'));
     });
 
     await waitFor(() => {
@@ -497,22 +573,35 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
-  it('shows a friendly alert when there is no clipboard image to paste', async () => {
+  it('keeps text-input long press native and does not paste a sticker', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref);
+
+    await act(async () => {
+      fireEvent(getByTestId('capture-note-input'), 'longPress');
+    });
+
+    expect(queryByTestId('capture-card-paste-popover')).toBeNull();
+    expect(mockClipboardHasImageAsync).not.toHaveBeenCalled();
+    expect(ref.current?.getStickerSnapshot().placements).toHaveLength(0);
+  });
+
+  it('does nothing on card long press when the clipboard has no sticker image', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     mockClipboardHasImageAsync.mockResolvedValue(false);
 
-    const { getByTestId } = renderCaptureCard(ref);
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref);
 
     await act(async () => {
-      fireEvent(getByTestId('capture-sticker-toggle'), 'longPress');
+      fireEvent(getByTestId('capture-card-paste-surface'), 'longPress', {
+        nativeEvent: { locationX: 150, locationY: 220 },
+      });
     });
 
-    await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith(
-        'No sticker to paste',
-        'Copy a transparent sticker image first, then long press again to paste it.'
-      );
-    });
+    expect(queryByTestId('capture-card-paste-popover')).toBeNull();
+    expect(alertSpy).not.toHaveBeenCalled();
   });
 });

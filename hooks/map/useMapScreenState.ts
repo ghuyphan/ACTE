@@ -24,6 +24,19 @@ interface UseMapScreenStateParams {
   location: Location.LocationObject | null;
 }
 
+function areRegionsEquivalent(left: Region | null, right: Region) {
+  if (!left) {
+    return false;
+  }
+
+  return (
+    Math.abs(left.latitude - right.latitude) < 0.00001 &&
+    Math.abs(left.longitude - right.longitude) < 0.00001 &&
+    Math.abs(left.latitudeDelta - right.latitudeDelta) < 0.00001 &&
+    Math.abs(left.longitudeDelta - right.longitudeDelta) < 0.00001
+  );
+}
+
 export function useMapScreenState({ notes, location }: UseMapScreenStateParams) {
   const [filterState, setFilterState] = useState<MapFilterState>({
     type: 'all',
@@ -32,7 +45,9 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [selectedNoteIndex, setSelectedNoteIndex] = useState(0);
   const [visibleRegion, setVisibleRegion] = useState<Region | null>(null);
+  const [allowOffscreenResults, setAllowOffscreenResults] = useState(false);
   const lastMarkerTapAtRef = useRef(0);
+  const visibleRegionRef = useRef<Region | null>(null);
 
   const initialRegion = useMemo(() => getInitialMapRegion(location, notes), [location, notes]);
 
@@ -75,14 +90,25 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
     return getRegionCenter(initialRegion);
   }, [initialRegion, location, visibleRegion]);
 
+  const notesInVisibleRegion = useMemo(() => {
+    if (!visibleRegion) {
+      return filteredNotes;
+    }
+
+    return getNotesInRegion(filteredNotes, visibleRegion);
+  }, [filteredNotes, visibleRegion]);
+
   const nearbyCandidates = useMemo(() => {
     if (!visibleRegion) {
       return filteredNotes;
     }
 
-    const inRegion = getNotesInRegion(filteredNotes, visibleRegion);
-    return inRegion.length > 0 ? inRegion : filteredNotes;
-  }, [filteredNotes, visibleRegion]);
+    if (notesInVisibleRegion.length > 0) {
+      return notesInVisibleRegion;
+    }
+
+    return allowOffscreenResults ? filteredNotes : [];
+  }, [allowOffscreenResults, filteredNotes, notesInVisibleRegion, visibleRegion]);
 
   const nearbyItems = useMemo(
     () => getNearbyNoteItems(nearbyCandidates, nearbyAnchor, 30),
@@ -113,18 +139,36 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
 
   const setFilterType = useCallback((nextType: MapFilterType) => {
     setFilterState((current) => ({ ...current, type: nextType }));
+    setAllowOffscreenResults(false);
     setSelectedGroupId(null);
     setSelectedNoteIndex(0);
   }, []);
 
   const toggleFavoritesOnly = useCallback(() => {
     setFilterState((current) => ({ ...current, favoritesOnly: !current.favoritesOnly }));
+    setAllowOffscreenResults(false);
     setSelectedGroupId(null);
     setSelectedNoteIndex(0);
   }, []);
 
   const clearFilters = useCallback(() => {
     setFilterState({ type: 'all', favoritesOnly: false });
+    setAllowOffscreenResults(false);
+  }, []);
+
+  const updateVisibleRegion = useCallback((region: Region) => {
+    if (areRegionsEquivalent(visibleRegionRef.current, region)) {
+      return;
+    }
+
+    setVisibleRegion(region);
+    setAllowOffscreenResults(false);
+  }, []);
+
+  const showAllFilteredResults = useCallback(() => {
+    setAllowOffscreenResults(true);
+    setSelectedGroupId(null);
+    setSelectedNoteIndex(0);
   }, []);
 
   const handleLeafMarkerPress = useCallback((groupId: string) => {
@@ -179,6 +223,10 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
   const selectedNoteId = selectedNote?.id ?? null;
   const filteredCount = filteredNotes.length;
 
+  useEffect(() => {
+    visibleRegionRef.current = visibleRegion;
+  }, [visibleRegion]);
+
   return {
     filterState,
     setFilterType,
@@ -186,7 +234,8 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
     clearFilters,
     initialRegion,
     visibleRegion,
-    setVisibleRegion,
+    setVisibleRegion: updateVisibleRegion,
+    showAllFilteredResults,
     selectedGroupId,
     selectedGroup,
     selectedNote,
@@ -203,6 +252,12 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
     nearbyItems,
     filteredNotes,
     filteredCount,
+    visibleAreaCount: notesInVisibleRegion.length,
+    showingAllFilteredResults:
+      Boolean(visibleRegion) &&
+      notesInVisibleRegion.length === 0 &&
+      filteredNotes.length > 0 &&
+      allowOffscreenResults,
     hasActiveFilters: filterState.type !== 'all' || filterState.favoritesOnly,
     currentZoom: visibleRegion ? regionToZoom(visibleRegion) : regionToZoom(initialRegion),
   };

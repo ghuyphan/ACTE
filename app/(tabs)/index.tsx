@@ -8,7 +8,6 @@ import { Href, useRouter } from 'expo-router';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   AppState,
@@ -16,7 +15,6 @@ import {
   InteractionManager,
   Keyboard,
   Platform,
-  Pressable,
   Share,
   StyleSheet,
   Text,
@@ -45,6 +43,7 @@ import {
   countPhotoNotes,
   getRemainingPhotoSlots,
 } from '../../constants/subscription';
+import { DEFAULT_NOTE_COLOR_ID } from '../../services/noteAppearance';
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { saveNoteDoodle } from '../../services/noteDoodles';
 import { saveNoteStickerPlacementsWithAssets } from '../../services/noteStickers';
@@ -117,6 +116,7 @@ export default function HomeScreen() {
   const [cameraPreviewReady, setCameraPreviewReady] = useState(Platform.OS !== 'android');
   const [captureScrollLocked, setCaptureScrollLocked] = useState(false);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
+  const [noteColor, setNoteColor] = useState<string | null>(DEFAULT_NOTE_COLOR_ID);
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [sharedManageSheetVersion, setSharedManageSheetVersion] = useState(0);
   const [pendingSavedNoteScrollTargetId, setPendingSavedNoteScrollTargetId] = useState<string | null>(null);
@@ -265,6 +265,7 @@ export default function HomeScreen() {
   const finalizeSavedCapture = useCallback(() => {
     resetCaptureDraft();
     setCaptureTarget('private');
+    setNoteColor(DEFAULT_NOTE_COLOR_ID);
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, [resetCaptureDraft]);
 
@@ -988,6 +989,7 @@ export default function HomeScreen() {
           promptTextSnapshot: null,
           promptAnswer: null,
           moodEmoji: autoEmoji,
+          noteColor: captureMode === 'text' ? noteColor : null,
           latitude: lat,
           longitude: lon,
           radius,
@@ -1064,11 +1066,11 @@ export default function HomeScreen() {
     requestForegroundLocation,
     clearInlineSaveTimers,
     completeInlineSaveFlow,
-    releaseSuppressedHomeNoteId,
     showDoneSheet,
     t,
     captureMode,
     noteText,
+    noteColor,
     capturedPhoto,
     reverseGeocode,
     restaurantName,
@@ -1335,23 +1337,6 @@ export default function HomeScreen() {
     });
   }, [startSearchTransition]);
 
-  if (loading) {
-    return (
-      <View
-        style={[
-          styles.center,
-          {
-            backgroundColor: colors.background,
-            paddingTop: insets.top,
-            paddingBottom: insets.bottom,
-          },
-        ]}
-      >
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
   const captureHeader = (
     <View style={styles.captureItemWrapper}>
       <CaptureCard
@@ -1367,6 +1352,8 @@ export default function HomeScreen() {
         t={t}
         noteText={noteText}
         onChangeNoteText={setNoteText}
+        noteColor={noteColor}
+        onChangeNoteColor={setNoteColor}
         restaurantName={restaurantName}
         onChangeRestaurantName={setRestaurantName}
         capturedPhoto={capturedPhoto}
