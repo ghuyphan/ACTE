@@ -1,5 +1,6 @@
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
+import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
 import * as SystemUI from 'expo-system-ui';
 import { SplashScreen, Stack, useRouter, useSegments } from 'expo-router';
@@ -49,6 +50,8 @@ function AppContent() {
   const segments = useSegments();
   const notificationResponseListener = useRef<Notifications.EventSubscription | null>(null);
   const lastHandledNotificationIdRef = useRef<string | null>(null);
+  const [initialUrlResolved, setInitialUrlResolved] = useState(false);
+  const [hasInitialUrl, setHasInitialUrl] = useState(false);
   const [startupTarget, setStartupTarget] = useState<string | null>(() => {
     const hasLaunched = getPersistentItemSync(HAS_LAUNCHED_KEY);
     if (hasLaunched === undefined) {
@@ -57,7 +60,42 @@ function AppContent() {
 
     return resolveStartupTarget(hasLaunched);
   });
-  const startupRedirectPending = segments[0] === undefined && Boolean(startupTarget);
+  const startupRedirectPending =
+    initialUrlResolved && !hasInitialUrl && segments[0] === undefined && Boolean(startupTarget);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Linking.getInitialURL()
+      .then((initialUrl) => {
+        if (cancelled) {
+          return;
+        }
+
+        setHasInitialUrl(Boolean(initialUrl));
+        setInitialUrlResolved(true);
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+
+        setHasInitialUrl(false);
+        setInitialUrlResolved(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (segments[0] === undefined || !hasInitialUrl) {
+      return;
+    }
+
+    setHasInitialUrl(false);
+  }, [hasInitialUrl, segments]);
 
   useEffect(() => {
     let startupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
@@ -160,7 +198,7 @@ function AppContent() {
   }, [colors.background]);
 
   useEffect(() => {
-    if (!themeReady || !startupTarget || startupRedirectPending) {
+    if (!themeReady || !startupTarget || !initialUrlResolved || startupRedirectPending) {
       return;
     }
 
@@ -176,7 +214,7 @@ function AppContent() {
     return () => {
       cancelled = true;
     };
-  }, [startupRedirectPending, startupTarget, themeReady]);
+  }, [initialUrlResolved, startupRedirectPending, startupTarget, themeReady]);
 
   const handleNotificationResponse = useCallback(
     async (response: Notifications.NotificationResponse | null) => {

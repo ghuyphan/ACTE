@@ -6,7 +6,8 @@ export type FeedFocusTarget =
 
 interface FeedFocusContextValue {
   requestFeedFocus: (target: FeedFocusTarget) => void;
-  consumeFeedFocus: () => FeedFocusTarget | null;
+  peekFeedFocus: () => FeedFocusTarget | null;
+  clearFeedFocus: () => void;
 }
 
 const FeedFocusContext = createContext<FeedFocusContextValue | undefined>(undefined);
@@ -18,18 +19,21 @@ export function FeedFocusProvider({ children }: { children: ReactNode }) {
     pendingTargetRef.current = target;
   }, []);
 
-  const consumeFeedFocus = useCallback(() => {
-    const target = pendingTargetRef.current;
+  const peekFeedFocus = useCallback(() => {
+    return pendingTargetRef.current;
+  }, []);
+
+  const clearFeedFocus = useCallback(() => {
     pendingTargetRef.current = null;
-    return target;
   }, []);
 
   const value = useMemo<FeedFocusContextValue>(
     () => ({
       requestFeedFocus,
-      consumeFeedFocus,
+      peekFeedFocus,
+      clearFeedFocus,
     }),
-    [consumeFeedFocus, requestFeedFocus]
+    [clearFeedFocus, peekFeedFocus, requestFeedFocus]
   );
 
   return <FeedFocusContext.Provider value={value}>{children}</FeedFocusContext.Provider>;

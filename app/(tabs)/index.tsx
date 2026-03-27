@@ -172,7 +172,7 @@ export default function HomeScreen() {
     openAppSettings,
   } = useGeofence();
   const { alertProps, showAlert } = useAppSheetAlert();
-  const { consumeFeedFocus } = useFeedFocus();
+  const { clearFeedFocus, peekFeedFocus } = useFeedFocus();
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
   const isScreenFocused = useIsFocused();
@@ -567,7 +567,7 @@ export default function HomeScreen() {
         return undefined;
       }
 
-      const target = consumeFeedFocus();
+      const target = peekFeedFocus();
       if (!target) {
         return undefined;
       }
@@ -592,6 +592,7 @@ export default function HomeScreen() {
       let focusTimeout: ReturnType<typeof setTimeout> | null = null;
       const idleHandle = scheduleOnIdle(() => {
         focusTimeout = setTimeout(() => {
+          clearFeedFocus();
           flatListRef.current?.scrollToOffset({
             offset: (targetIndex + 1) * snapHeight,
             animated: true,
@@ -607,9 +608,10 @@ export default function HomeScreen() {
       };
     }, [
       archiveFeedItems,
-      consumeFeedFocus,
+      clearFeedFocus,
       isSearching,
       loading,
+      peekFeedFocus,
       searchAnim,
       searchQuery.length,
       sharedLoading,

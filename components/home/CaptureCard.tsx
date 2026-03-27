@@ -78,6 +78,7 @@ const DECORATE_OPTION_CONTENT_SCALE = 1.035;
 const SHUTTER_OUTER_SIZE = 68;
 const SIDE_ACTION_SIZE = 46;
 const SHUTTER_SIDE_ACTION_OFFSET = SHUTTER_OUTER_SIZE / 2 + 12 + SIDE_ACTION_SIZE;
+const STICKER_SOURCE_SHEET_DISMISS_DELAY_MS = 250;
 const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad) };
 const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
 const CAPTURE_BUTTON_STATE_IN = { duration: 160, easing: Easing.out(Easing.cubic) };
@@ -464,6 +465,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [photoSelectedStickerId, setPhotoSelectedStickerId] = useState<string | null>(null);
   const [importingSticker, setImportingSticker] = useState(false);
   const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
+  const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<'photos' | null>(null);
   const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
   const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
   const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
@@ -837,6 +839,28 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     }
 
     dismissPastePrompt();
+
+    let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (mediaPermission.status !== 'granted') {
+      mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    }
+
+    if (mediaPermission.status !== 'granted') {
+      Alert.alert(
+        t('capture.photoLibraryPermissionTitle', 'Photo access needed'),
+        mediaPermission.canAskAgain === false
+          ? t(
+              'capture.photoLibraryPermissionSettingsMsg',
+              'Photo library access is blocked for Noto. Open Settings to import from your library.'
+            )
+          : t(
+              'capture.photoLibraryPermissionMsg',
+              'Allow photo library access so you can import an image into this note.'
+            )
+      );
+      return;
+    }
+
     setImportingSticker(true);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -869,6 +893,18 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       setImportingSticker(false);
     }
   }, [applyImportedSticker, dismissPastePrompt, importingSticker, stickerPlacements, t]);
+  useEffect(() => {
+    if (showStickerSourceSheet || pendingStickerSourceAction !== 'photos') {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setPendingStickerSourceAction(null);
+      void handleImportSticker();
+    }, STICKER_SOURCE_SHEET_DISMISS_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [handleImportSticker, pendingStickerSourceAction, showStickerSourceSheet]);
   const handlePasteStickerFromClipboard = useCallback(async () => {
     if (!ENABLE_PHOTO_STICKERS || importingSticker) {
       return;
@@ -968,9 +1004,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     void handlePasteStickerFromClipboard();
   }, [handlePasteStickerFromClipboard]);
   const handleSelectStickerSourcePhotos = useCallback(() => {
+    setPendingStickerSourceAction('photos');
     setShowStickerSourceSheet(false);
-    void handleImportSticker();
-  }, [handleImportSticker]);
+  }, []);
   const handleShowStickerSourceOptions = useCallback(async () => {
     if (!ENABLE_PHOTO_STICKERS || importingSticker) {
       return;
