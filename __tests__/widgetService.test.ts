@@ -516,7 +516,7 @@ describe('widgetService', () => {
         authorDisplayName: 'Annie Case',
         authorInitials: 'AC',
         locationName: 'Shared Place',
-        primaryActionUrl: 'noto:///shared/shared-photo-1',
+        primaryActionUrl: 'noto:///widget/shared-post/shared-photo-1',
       })
     );
     expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
@@ -540,6 +540,32 @@ describe('widgetService', () => {
     });
 
     expect(result.selectedNote?.id).toBe('shared-text-1');
+    expect(result.selectedNote?.source).toBe('shared');
+    expect(result.selectionMode).toBe('shared_memory');
+  });
+
+  it('prefers the newest friend memory when there are no personal notes', () => {
+    const result = selectWidgetNote({
+      notes: [],
+      sharedPosts: [
+        buildSharedPost({
+          id: 'older-photo',
+          type: 'photo',
+          text: '',
+          photoPath: 'friend-1/older-photo',
+          photoLocalUri: 'file:///mock-documents/older-photo.jpg',
+          createdAt: '2026-03-09T10:00:00.000Z',
+        }),
+        buildSharedPost({
+          id: 'newer-text',
+          text: 'Most recent friend note',
+          createdAt: '2026-03-10T12:00:00.000Z',
+        }),
+      ],
+      referenceDate: new Date('2026-03-10T18:00:00'),
+    });
+
+    expect(result.selectedNote?.id).toBe('newer-text');
     expect(result.selectedNote?.source).toBe('shared');
     expect(result.selectionMode).toBe('shared_memory');
   });
@@ -779,7 +805,7 @@ describe('widgetService', () => {
         noteType: 'text',
         text: 'Morning coffee again',
         hasDoodle: true,
-        primaryActionUrl: 'noto:///note/favorite-text',
+        primaryActionUrl: 'noto:///widget/note/favorite-text',
         doodleStrokesJson: JSON.stringify([
           {
             color: '#1C1C1E',

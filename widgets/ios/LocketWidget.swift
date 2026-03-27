@@ -622,6 +622,16 @@ private struct LocketWidgetEntryView: View {
         return "A quiet reminder from here."
     }
 
+    private var shouldHideSharedBodyText: Bool {
+        payload.isSharedContent &&
+        !payload.isIdleState &&
+        (hasPhotoBackground || shouldShowDoodleOverlay || shouldShowStickerOverlay)
+    }
+
+    private var contentDisplayText: String {
+        shouldHideSharedBodyText ? "" : displayText
+    }
+
     private var hasLocationEyebrow: Bool {
         !payload.isIdleState && !payload.locationName.isEmpty
     }
@@ -689,10 +699,7 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var shouldShowAuthorChip: Bool {
-        !isAccessoryFamily &&
-        !payload.isIdleState &&
-        payload.isSharedContent &&
-        (!payload.authorDisplayName.isEmpty || !payload.authorInitials.isEmpty || resolvedAuthorAvatar != nil)
+        false
     }
 
     private var noteOverlayOpacity: Double {
@@ -700,7 +707,7 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var shouldPinLocationChip: Bool {
-        hasLocationEyebrow && displayText.isEmpty
+        hasLocationEyebrow && contentDisplayText.isEmpty
     }
 
     private var hasVisualOnlyTextContent: Bool {
@@ -719,7 +726,7 @@ private struct LocketWidgetEntryView: View {
             return [colorFromHex(start), colorFromHex(end)]
         }
 
-        [Color(red: 0.96, green: 0.94, blue: 0.91), Color(red: 0.93, green: 0.90, blue: 0.86)]
+        return [Color(red: 0.96, green: 0.94, blue: 0.91), Color(red: 0.93, green: 0.90, blue: 0.86)]
     }
 
     private var photoOverlayColors: [Color] {
@@ -1101,8 +1108,8 @@ private struct LocketWidgetEntryView: View {
                         .padding(.bottom, 10)
                 }
 
-                if !displayText.isEmpty {
-                    Text(displayText)
+                if !contentDisplayText.isEmpty {
+                    Text(contentDisplayText)
                         .font(.system(size: mediumFontSize, weight: .regular, design: .serif))
                         .foregroundStyle(primaryTextColor)
                         .multilineTextAlignment(.leading)
@@ -1137,8 +1144,8 @@ private struct LocketWidgetEntryView: View {
                     .padding(.bottom, 8)
             }
 
-            if !displayText.isEmpty {
-                Text(displayText)
+            if !contentDisplayText.isEmpty {
+                Text(contentDisplayText)
                     .font(.system(size: fontSize, weight: .regular, design: .serif))
                     .foregroundStyle(primaryTextColor)
                     .multilineTextAlignment(.center)
@@ -1173,12 +1180,22 @@ private struct LocketWidgetEntryView: View {
             }
 
             VStack(alignment: .leading, spacing: 0) {
-                if shouldShowAuthorChip {
-                    authorChip
-                        .padding(.bottom, 10)
+                if shouldShowAuthorChip || shouldPinLocationChip {
+                    HStack(alignment: .top, spacing: 8) {
+                        if shouldShowAuthorChip {
+                            authorChip
+                        }
+
+                        Spacer(minLength: 0)
+
+                        if shouldPinLocationChip {
+                            floatingLocationChip
+                        }
+                    }
+                    .padding(.bottom, (shouldShowAuthorChip || shouldPinLocationChip) ? 10 : 0)
                 }
 
-                if hasLocationEyebrow {
+                if hasLocationEyebrow && !shouldPinLocationChip {
                     Text(payload.locationName)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(eyebrowTextColor)
@@ -1186,8 +1203,8 @@ private struct LocketWidgetEntryView: View {
                         .padding(.bottom, 12)
                 }
 
-                if !displayText.isEmpty {
-                    Text(displayText)
+                if !contentDisplayText.isEmpty {
+                    Text(contentDisplayText)
                         .font(.system(size: fontSize, weight: .regular, design: .serif))
                         .foregroundStyle(primaryTextColor)
                         .multilineTextAlignment(.leading)
@@ -1211,7 +1228,7 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var fontSize: CGFloat {
-        let count = displayText.trimmingCharacters(in: .whitespacesAndNewlines).count
+        let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
 
         if isLarge {
             if count <= 60 { return 26 }
@@ -1225,7 +1242,7 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var mediumFontSize: CGFloat {
-        let count = displayText.trimmingCharacters(in: .whitespacesAndNewlines).count
+        let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
 
         if count <= 60 { return 21 }
         if count <= 120 { return 18.5 }

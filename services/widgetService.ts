@@ -175,10 +175,10 @@ function getWidgetPrimaryActionUrl(candidate: Pick<WidgetCandidate, 'id' | 'sour
     }
 
     if (candidate.source === 'shared') {
-        return buildWidgetUrl(`/shared/${encodeURIComponent(candidate.id)}`);
+        return buildWidgetUrl(`/widget/shared-post/${encodeURIComponent(candidate.id)}`);
     }
 
-    return buildWidgetUrl(`/note/${encodeURIComponent(candidate.id)}`);
+    return buildWidgetUrl(`/widget/note/${encodeURIComponent(candidate.id)}`);
 }
 
 function getWidgetBadgeActionUrl(noteCount: number) {
@@ -606,19 +606,6 @@ function getPersonalFallbackBuckets(notes: WidgetCandidate[], referenceDate: Dat
     ];
 }
 
-function getSharedFallbackBuckets(notes: WidgetCandidate[]): FallbackBucket[] {
-    return [
-        {
-            mode: 'shared_photo_memory',
-            notes: notes.filter((note) => isPhotoWidgetNote(note)).sort(compareRecentWidgetNotes),
-        },
-        {
-            mode: 'shared_memory',
-            notes: notes.filter((note) => isTextWidgetNote(note)).sort(compareRecentWidgetNotes),
-        },
-    ];
-}
-
 function pickFallbackCandidateFromBuckets(
     buckets: FallbackBucket[],
     referenceDate: Date,
@@ -657,7 +644,23 @@ function pickSharedFallbackCandidate(
     referenceDate: Date,
     recentHistory: WidgetHistoryEntry[]
 ): { note: WidgetCandidate; mode: WidgetSelectionMode } | null {
-    return pickFallbackCandidateFromBuckets(getSharedFallbackBuckets(notes), referenceDate, recentHistory);
+    const sortedNotes = [...notes].sort(compareRecentWidgetNotes);
+    const repeatPolicies: CandidateRepeatPolicy[] = ['strict', 'avoid_consecutive', 'allow_repeat'];
+
+    for (const repeatPolicy of repeatPolicies) {
+        const selectedNote = sortedNotes.find((note) =>
+            isCandidateAllowed(note, recentHistory, referenceDate, repeatPolicy)
+        );
+
+        if (selectedNote) {
+            return {
+                note: selectedNote,
+                mode: selectedNote.noteType === 'photo' ? 'shared_photo_memory' : 'shared_memory',
+            };
+        }
+    }
+
+    return null;
 }
 
 function getAuthorInitials(displayName: string | null | undefined) {

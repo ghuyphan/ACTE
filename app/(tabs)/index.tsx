@@ -8,6 +8,7 @@ import { Href, useRouter } from 'expo-router';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   AppState,
@@ -59,6 +60,74 @@ type FeedFocusItem =
   | { id: string; kind: 'shared-post'; createdAt: string; post: SharedPost };
 
 type SaveButtonState = 'idle' | 'saving' | 'success';
+
+function HomeCapturePlaceholder({
+  colors,
+  snapHeight,
+  topInset,
+}: {
+  colors: {
+    background: string;
+    card: string;
+    border: string;
+    primary: string;
+    primarySoft: string;
+  };
+  snapHeight: number;
+  topInset: number;
+}) {
+  return (
+    <View style={[styles.captureItemWrapper, { height: snapHeight, paddingTop: topInset + 60 }]}>
+      <View
+        pointerEvents="none"
+        style={[
+          styles.capturePlaceholderCard,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View style={styles.capturePlaceholderHeader}>
+          <View
+            style={[
+              styles.capturePlaceholderPill,
+              { backgroundColor: colors.primarySoft },
+            ]}
+          />
+          <View
+            style={[
+              styles.capturePlaceholderIcon,
+              { backgroundColor: colors.border },
+            ]}
+          />
+        </View>
+        <View
+          style={[
+            styles.capturePlaceholderCanvas,
+            { backgroundColor: colors.background },
+          ]}
+        />
+        <View style={styles.capturePlaceholderFooter}>
+          <View
+            style={[
+              styles.capturePlaceholderLine,
+              { backgroundColor: colors.border },
+            ]}
+          />
+          <View
+            style={[
+              styles.capturePlaceholderButton,
+              { backgroundColor: colors.primary },
+            ]}
+          >
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const { t } = useTranslation();
@@ -119,6 +188,7 @@ export default function HomeScreen() {
   const [noteColor, setNoteColor] = useState<string | null>(DEFAULT_NOTE_COLOR_ID);
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [sharedManageSheetVersion, setSharedManageSheetVersion] = useState(0);
+  const [homeContentReady, setHomeContentReady] = useState(false);
   const lockedPremiumNoteColorIds = useMemo(
     () => (tier === 'plus' ? [] : PREMIUM_NOTE_COLOR_IDS),
     [tier]
@@ -307,6 +377,23 @@ export default function HomeScreen() {
       clearInlineSaveTimers();
     };
   }, [clearInlineSaveTimers]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        if (!cancelled) {
+          setHomeContentReady(true);
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      interactionHandle.cancel();
+    };
+  }, []);
 
   const completeInlineSaveFlow = useCallback(
     (noteId: string) => {
@@ -1362,63 +1449,71 @@ export default function HomeScreen() {
   }, [startSearchTransition]);
 
   const captureHeader = (
-    <View style={styles.captureItemWrapper}>
-      <CaptureCard
-        ref={captureCardRef}
+    homeContentReady ? (
+      <View style={styles.captureItemWrapper}>
+        <CaptureCard
+          ref={captureCardRef}
+          snapHeight={snapHeight}
+          topInset={insets.top}
+          isSearching={isSearching}
+          captureMode={captureMode}
+          cameraSessionKey={cameraSessionKey}
+          captureScale={captureScale}
+          captureTranslateY={captureTranslateY}
+          colors={colors}
+          t={t}
+          noteText={noteText}
+          onChangeNoteText={setNoteText}
+          noteColor={noteColor}
+          onChangeNoteColor={setNoteColor}
+          lockedNoteColorIds={lockedPremiumNoteColorIds}
+          onPressLockedNoteColor={() => showPlusSheet('color')}
+          restaurantName={restaurantName}
+          onChangeRestaurantName={setRestaurantName}
+          capturedPhoto={capturedPhoto}
+          onRetakePhoto={() => setCapturedPhoto(null)}
+          needsCameraPermission={needsCameraPermission}
+          cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
+          onRequestCameraPermission={() => {
+            void handleRequestCameraPermission();
+          }}
+          facing={facing}
+          onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
+          onOpenPhotoLibrary={() => {
+            void handleImportPhoto();
+          }}
+          cameraRef={cameraRef}
+          shouldRenderCameraPreview={shouldRenderCameraPreview}
+          flashAnim={flashAnim}
+          permissionGranted={Boolean(permission?.granted)}
+          onShutterPressIn={handleShutterPressIn}
+          onShutterPressOut={handleShutterPressOut}
+          onTakePicture={() => {
+            void takePicture();
+          }}
+          onSaveNote={() => {
+            void saveNote();
+          }}
+          onOpenNotes={handleOpenNotes}
+          saving={saving}
+          saveState={saveButtonState}
+          shutterScale={shutterScale}
+          cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
+          remainingPhotoSlots={captureMode === 'camera' ? remainingPhotoSlots : null}
+          libraryImportLocked={!canImportFromLibrary}
+          importingPhoto={importingPhoto || isPurchaseInFlight}
+          shareTarget={captureTarget}
+          onChangeShareTarget={handleCaptureTargetChange}
+          onDoodleModeChange={setCaptureScrollLocked}
+        />
+      </View>
+    ) : (
+      <HomeCapturePlaceholder
+        colors={colors}
         snapHeight={snapHeight}
         topInset={insets.top}
-        isSearching={isSearching}
-        captureMode={captureMode}
-        cameraSessionKey={cameraSessionKey}
-        captureScale={captureScale}
-        captureTranslateY={captureTranslateY}
-        colors={colors}
-        t={t}
-        noteText={noteText}
-        onChangeNoteText={setNoteText}
-        noteColor={noteColor}
-        onChangeNoteColor={setNoteColor}
-        lockedNoteColorIds={lockedPremiumNoteColorIds}
-        onPressLockedNoteColor={() => showPlusSheet('color')}
-        restaurantName={restaurantName}
-        onChangeRestaurantName={setRestaurantName}
-        capturedPhoto={capturedPhoto}
-        onRetakePhoto={() => setCapturedPhoto(null)}
-        needsCameraPermission={needsCameraPermission}
-        cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
-        onRequestCameraPermission={() => {
-          void handleRequestCameraPermission();
-        }}
-        facing={facing}
-        onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
-        onOpenPhotoLibrary={() => {
-          void handleImportPhoto();
-        }}
-        cameraRef={cameraRef}
-        shouldRenderCameraPreview={shouldRenderCameraPreview}
-        flashAnim={flashAnim}
-        permissionGranted={Boolean(permission?.granted)}
-        onShutterPressIn={handleShutterPressIn}
-        onShutterPressOut={handleShutterPressOut}
-        onTakePicture={() => {
-          void takePicture();
-        }}
-        onSaveNote={() => {
-          void saveNote();
-        }}
-        onOpenNotes={handleOpenNotes}
-        saving={saving}
-        saveState={saveButtonState}
-        shutterScale={shutterScale}
-        cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
-        remainingPhotoSlots={captureMode === 'camera' ? remainingPhotoSlots : null}
-        libraryImportLocked={!canImportFromLibrary}
-        importingPhoto={importingPhoto || isPurchaseInFlight}
-        shareTarget={captureTarget}
-        onChangeShareTarget={handleCaptureTargetChange}
-        onDoodleModeChange={setCaptureScrollLocked}
       />
-    </View>
+    )
   );
 
   return (
@@ -1490,21 +1585,23 @@ export default function HomeScreen() {
         scrollEnabled={!captureScrollLocked}
       />
 
-      <SharedManageSheet
-        key={`shared-manage-${sharedManageSheetVersion}`}
-        visible={showSharedManageSheet}
-        friends={friends}
-        activeInvite={activeInvite}
-        loading={sharedLoading}
-        onClose={dismissSharedManageSheet}
-        onShareInvite={() => {
-          void handleShareInvite();
-        }}
-        onRevokeInvite={() => {
-          void handleRevokeInvite();
-        }}
-        onRemoveFriend={handleRemoveFriend}
-      />
+      {showSharedManageSheet ? (
+        <SharedManageSheet
+          key={`shared-manage-${sharedManageSheetVersion}`}
+          visible={showSharedManageSheet}
+          friends={friends}
+          activeInvite={activeInvite}
+          loading={sharedLoading}
+          onClose={dismissSharedManageSheet}
+          onShareInvite={() => {
+            void handleShareInvite();
+          }}
+          onRevokeInvite={() => {
+            void handleRevokeInvite();
+          }}
+          onRemoveFriend={handleRemoveFriend}
+        />
+      ) : null}
 
       <AppSheetAlert {...alertProps} />
     </View>
@@ -1517,6 +1614,56 @@ const styles = StyleSheet.create({
   },
   captureItemWrapper: {
     width: '100%',
+  },
+  capturePlaceholderCard: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 360,
+    minHeight: 520,
+    borderRadius: 34,
+    borderWidth: 1,
+    padding: 20,
+    justifyContent: 'space-between',
+  },
+  capturePlaceholderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  capturePlaceholderPill: {
+    width: 112,
+    height: 34,
+    borderRadius: 17,
+    opacity: 0.95,
+  },
+  capturePlaceholderIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    opacity: 0.85,
+  },
+  capturePlaceholderCanvas: {
+    flex: 1,
+    marginVertical: 18,
+    borderRadius: 26,
+    opacity: 0.5,
+  },
+  capturePlaceholderFooter: {
+    gap: 14,
+  },
+  capturePlaceholderLine: {
+    width: '58%',
+    height: 14,
+    borderRadius: 999,
+    opacity: 0.8,
+  },
+  capturePlaceholderButton: {
+    alignSelf: 'center',
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   center: {
     flex: 1,

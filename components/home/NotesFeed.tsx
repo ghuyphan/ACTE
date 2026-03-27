@@ -18,6 +18,12 @@ import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
 
 const { width, height } = Dimensions.get('window');
+const MAX_STAGGERED_ENTRANCE_INDEX = 2;
+const ENTRANCE_DELAY_MS = 24;
+
+function getEntranceDelay(index: number) {
+  return Math.min(index, MAX_STAGGERED_ENTRANCE_INDEX) * ENTRANCE_DELAY_MS;
+}
 
 const AnimatedNoteCard = memo(function AnimatedNoteCard({
   item,
@@ -52,6 +58,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   const lastRevealTokenRef = useRef<number | null>(null);
   const mountIndex = useRef(index).current;
   const sharedTransitionTag = `feed-note-card-${item.id}`;
+  const entranceDelay = getEntranceDelay(mountIndex);
 
   useEffect(() => {
     Animated.parallel([
@@ -59,25 +66,25 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
         toValue: 1,
         duration: 260,
         easing: RNEasing.out(RNEasing.cubic),
-        delay: mountIndex * 50,
+        delay: entranceDelay,
         useNativeDriver: true,
       }),
       Animated.timing(cardTranslateY, {
         toValue: 0,
         duration: 280,
-        delay: mountIndex * 50,
+        delay: entranceDelay,
         easing: RNEasing.out(RNEasing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(metaTranslateY, {
         toValue: 0,
         duration: 240,
-        delay: mountIndex * 50,
+        delay: entranceDelay,
         easing: RNEasing.out(RNEasing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [cardTranslateY, metaTranslateY, mountIndex, scale]);
+  }, [cardTranslateY, entranceDelay, metaTranslateY, scale]);
 
   useEffect(() => {
     if (!shouldReveal || revealToken === 0 || lastRevealTokenRef.current === revealToken) {
@@ -206,6 +213,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   const scale = useRef(new Animated.Value(0.9)).current;
   const translateY = useRef(new Animated.Value(18)).current;
   const mountIndex = useRef(index).current;
+  const entranceDelay = getEntranceDelay(mountIndex);
 
   useEffect(() => {
     Animated.parallel([
@@ -213,18 +221,18 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
         toValue: 1,
         duration: 260,
         easing: RNEasing.out(RNEasing.cubic),
-        delay: mountIndex * 50,
+        delay: entranceDelay,
         useNativeDriver: true,
       }),
       Animated.timing(translateY, {
         toValue: 0,
         duration: 280,
-        delay: mountIndex * 50,
+        delay: entranceDelay,
         easing: RNEasing.out(RNEasing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [mountIndex, scale, translateY]);
+  }, [entranceDelay, scale, translateY]);
 
   return (
     <Animated.View style={{ transform: [{ translateY }, { scale }] }}>

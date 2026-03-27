@@ -26,7 +26,9 @@ export default function OnboardingScreen() {
     const [step, setStep] = useState(0);
 
     const completeOnboarding = async () => {
-        await setPersistentItem(HAS_LAUNCHED_KEY, 'true');
+        void setPersistentItem(HAS_LAUNCHED_KEY, 'true').catch((error) => {
+            console.warn('Failed to persist onboarding state:', error);
+        });
         router.replace('/(tabs)');
     };
 
