@@ -55,6 +55,8 @@ export interface SharedPost {
   noteColor?: string | null;
   placeName: string | null;
   sourceNoteId: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   createdAt: string;
   updatedAt: string | null;
 }
@@ -107,6 +109,8 @@ interface SharedPostRow {
   note_color?: string | null;
   place_name: string | null;
   source_note_id: string | null;
+  latitude: number | null;
+  longitude: number | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -199,6 +203,18 @@ function mapFriend(row: FriendshipRow): FriendConnection {
   };
 }
 
+function normalizeCoordinate(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function shouldIncludeSharedPostInFeed(post: SharedPost, viewerUid: string, friendUids: Set<string>) {
+  if (post.authorUid === viewerUid) {
+    return post.audienceUserIds.some((audienceUid) => audienceUid !== viewerUid && friendUids.has(audienceUid));
+  }
+
+  return friendUids.has(post.authorUid) && post.audienceUserIds.includes(viewerUid);
+}
+
 function parseInvitePayload(rawValue: string) {
   const trimmed = rawValue.trim();
   if (!trimmed) {
@@ -239,6 +255,8 @@ function mapSharedPost(record: SharedPostRow): SharedPost {
     noteColor: record.note_color ?? null,
     placeName: record.place_name ?? null,
     sourceNoteId: record.source_note_id ?? null,
+    latitude: normalizeCoordinate(record.latitude),
+    longitude: normalizeCoordinate(record.longitude),
     createdAt: record.created_at,
     updatedAt: record.updated_at ?? null,
   };
@@ -308,6 +326,7 @@ export async function refreshSharedFeed(user: AppUser): Promise<SharedFeedSnapsh
 
   const friends = await getFriendsForUser(user.id);
   const friendUids = friends.map((friend: FriendConnection) => friend.userId);
+  const friendUidSet = new Set(friendUids);
   const authorWhitelist = [user.id, ...friendUids].slice(0, 30);
 
   const [activeInvite, postsResponse] = await Promise.all([
@@ -315,7 +334,7 @@ export async function refreshSharedFeed(user: AppUser): Promise<SharedFeedSnapsh
     requireSupabase()
       .from('shared_posts')
       .select(
-        'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, created_at, updated_at'
+        'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, latitude, longitude, created_at, updated_at'
       )
       .contains('audience_user_ids', [user.id])
       .in('author_user_id', authorWhitelist)
@@ -327,7 +346,9 @@ export async function refreshSharedFeed(user: AppUser): Promise<SharedFeedSnapsh
     throw postsResponse.error;
   }
 
-  const sharedPosts = ((postsResponse.data ?? []) as SharedPostRow[]).map(mapSharedPost);
+  const sharedPosts = ((postsResponse.data ?? []) as SharedPostRow[])
+    .map(mapSharedPost)
+    .filter((post) => shouldIncludeSharedPostInFeed(post, user.id, friendUidSet));
 
   const snapshot = {
     friends,
@@ -536,7 +557,7 @@ export async function createSharedPost(
   await ensureSupabaseSessionMatchesUser(user.id);
 
   const supabase = requireSupabase();
-  const dedupedAudience = Array.from(new Set(audienceUserIds.filter(Boolean)));
+  const dedupedAudience = Array.from(new Set([user.id, ...audienceUserIds.filter(Boolean)]));
 
   if (dedupedAudience.length <= 1) {
     throw new Error('Connect a friend before sharing moments.');
@@ -577,6 +598,8 @@ export async function createSharedPost(
     note_color: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
     place_name: note.locationName ?? null,
     source_note_id: note.id,
+    latitude: note.latitude,
+    longitude: note.longitude,
     created_at: now,
     updated_at: null,
   };
@@ -613,7 +636,7 @@ export async function updateSharedPost(
   const { data: existing, error: fetchError } = await supabase
     .from('shared_posts')
     .select(
-      'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, created_at, updated_at'
+      'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, latitude, longitude, created_at, updated_at'
     )
     .eq('id', postId)
     .eq('author_user_id', user.id)
@@ -661,6 +684,8 @@ export async function updateSharedPost(
       sticker_placements_json: nextStickerPlacementsJson,
       note_color: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
       place_name: note.locationName ?? null,
+      latitude: note.latitude,
+      longitude: note.longitude,
       updated_at: getNowIso(),
       type: note.type,
     })

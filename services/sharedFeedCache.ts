@@ -25,6 +25,8 @@ interface SharedPostRow {
   note_color: string | null;
   place_name: string | null;
   source_note_id: string | null;
+  latitude: number | null;
+  longitude: number | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -86,6 +88,8 @@ function rowToSharedPost(row: SharedPostRow): SharedPost {
     noteColor: row.note_color,
     placeName: row.place_name,
     sourceNoteId: row.source_note_id,
+    latitude: row.latitude,
+    longitude: row.longitude,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -192,10 +196,12 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
           note_color,
           place_name,
           source_note_id,
+          latitude,
+          longitude,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         userUid,
         post.id,
         post.authorUid,
@@ -211,6 +217,8 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
         post.noteColor ?? null,
         post.placeName,
         post.sourceNoteId,
+        post.latitude ?? null,
+        post.longitude ?? null,
         post.createdAt,
         post.updatedAt
       );
@@ -368,12 +376,16 @@ export async function cacheSharedFeedSnapshot(
           photo_path,
           photo_local_uri,
           doodle_strokes_json,
+          sticker_placements_json,
+          note_color,
           place_name,
           source_note_id,
+          latitude,
+          longitude,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         userUid,
         post.id,
         post.authorUid,
@@ -385,8 +397,12 @@ export async function cacheSharedFeedSnapshot(
         post.photoPath,
         post.photoLocalUri,
         post.doodleStrokesJson ?? null,
+        post.stickerPlacementsJson ?? null,
+        post.noteColor ?? null,
         post.placeName,
         post.sourceNoteId,
+        post.latitude ?? null,
+        post.longitude ?? null,
         post.createdAt,
         post.updatedAt
       );

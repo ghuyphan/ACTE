@@ -283,6 +283,32 @@ jest.mock('../utils/supabase', () => ({
       }
 
       if (name === 'remove_friend') {
+        const currentUserId = mockSessionUserId;
+        const friendUserId = String(params.friend_user_id);
+
+        for (const [postId, post] of mockSharedPosts.entries()) {
+          if (!Array.isArray(post.audience_user_ids)) {
+            continue;
+          }
+
+          if (post.author_user_id === currentUserId) {
+            mockSharedPosts.set(postId, {
+              ...post,
+              audience_user_ids: post.audience_user_ids.filter((userId: string) => userId !== friendUserId),
+              updated_at: '2026-03-27T00:00:00.000Z',
+            });
+            continue;
+          }
+
+          if (post.author_user_id === friendUserId) {
+            mockSharedPosts.set(postId, {
+              ...post,
+              audience_user_ids: post.audience_user_ids.filter((userId: string) => userId !== currentUserId),
+              updated_at: '2026-03-27T00:00:00.000Z',
+            });
+          }
+        }
+
         for (const [userId, friends] of mockFriendships.entries()) {
           friends.delete(String(params.friend_user_id));
           if (String(params.friend_user_id) === userId) {
@@ -337,6 +363,7 @@ import {
   acceptFriendInvite,
   createFriendInvite,
   createSharedPost,
+  removeFriend,
   refreshSharedFeed,
 } from '../services/sharedFeedService';
 
@@ -358,6 +385,15 @@ const friendUser = {
   providerData: [],
 } as any;
 
+const secondFriendUser = {
+  id: 'friend-2',
+  uid: 'friend-2',
+  displayName: 'Second Friend',
+  email: 'friend-2@example.com',
+  photoURL: 'https://example.com/friend-2.jpg',
+  providerData: [],
+} as any;
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockUuidCounter = 0;
@@ -373,6 +409,10 @@ beforeEach(() => {
   mockPublicProfiles.set(friendUser.id, {
     displayNameSnapshot: friendUser.displayName,
     photoURLSnapshot: friendUser.photoURL,
+  });
+  mockPublicProfiles.set(secondFriendUser.id, {
+    displayNameSnapshot: secondFriendUser.displayName,
+    photoURLSnapshot: secondFriendUser.photoURL,
   });
 });
 
@@ -418,10 +458,12 @@ describe('sharedFeedService', () => {
       photoLocalUri: 'file:///photos/note-1.jpg',
       doodleStrokesJson: null,
       locationName: 'Saigon',
+      latitude: 10.77,
+      longitude: 106.69,
       moodEmoji: null,
     } as any;
 
-    const post = await createSharedPost(ownerUser, note, [ownerUser.id, friendUser.id]);
+    const post = await createSharedPost(ownerUser, note, [friendUser.id]);
     mockSessionUserId = friendUser.id;
     const snapshot = await refreshSharedFeed(friendUser);
 
@@ -435,11 +477,129 @@ describe('sharedFeedService', () => {
     expect(snapshot.sharedPosts[0]).toEqual(
       expect.objectContaining({
         authorUid: ownerUser.id,
+        audienceUserIds: [ownerUser.id, friendUser.id],
         type: 'photo',
         photoPath: expect.stringContaining(`${ownerUser.id}/shared-post-`),
         photoLocalUri: null,
+        latitude: 10.77,
+        longitude: 106.69,
       })
     );
     expect(mockCacheSharedFeedSnapshot).toHaveBeenCalled();
+  });
+
+  it('revokes old shared audiences and hides author-only leftovers after removing a friend', async () => {
+    mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
+      display_name_snapshot: friendUser.displayName,
+      photo_url_snapshot: friendUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+    mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
+      display_name_snapshot: ownerUser.displayName,
+      photo_url_snapshot: ownerUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+    mockEnsureFriendMap(ownerUser.id).set(secondFriendUser.id, {
+      display_name_snapshot: secondFriendUser.displayName,
+      photo_url_snapshot: secondFriendUser.photoURL,
+      friended_at: '2026-03-21T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-2',
+    });
+    mockEnsureFriendMap(secondFriendUser.id).set(ownerUser.id, {
+      display_name_snapshot: ownerUser.displayName,
+      photo_url_snapshot: ownerUser.photoURL,
+      friended_at: '2026-03-21T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-2',
+    });
+
+    mockSharedPosts.set('shared-owned-direct', {
+      id: 'shared-owned-direct',
+      author_user_id: ownerUser.id,
+      author_display_name: ownerUser.displayName,
+      author_photo_url_snapshot: ownerUser.photoURL,
+      audience_user_ids: [ownerUser.id, friendUser.id],
+      type: 'text',
+      text: 'Direct share',
+      photo_path: null,
+      doodle_strokes_json: null,
+      sticker_placements_json: null,
+      note_color: null,
+      place_name: 'District 1',
+      source_note_id: 'note-1',
+      latitude: null,
+      longitude: null,
+      created_at: '2026-03-24T00:00:00.000Z',
+      updated_at: null,
+    });
+    mockSharedPosts.set('shared-owned-group', {
+      id: 'shared-owned-group',
+      author_user_id: ownerUser.id,
+      author_display_name: ownerUser.displayName,
+      author_photo_url_snapshot: ownerUser.photoURL,
+      audience_user_ids: [ownerUser.id, friendUser.id, secondFriendUser.id],
+      type: 'text',
+      text: 'Group share',
+      photo_path: null,
+      doodle_strokes_json: null,
+      sticker_placements_json: null,
+      note_color: null,
+      place_name: 'District 2',
+      source_note_id: 'note-2',
+      latitude: null,
+      longitude: null,
+      created_at: '2026-03-25T00:00:00.000Z',
+      updated_at: null,
+    });
+    mockSharedPosts.set('shared-friend-direct', {
+      id: 'shared-friend-direct',
+      author_user_id: friendUser.id,
+      author_display_name: friendUser.displayName,
+      author_photo_url_snapshot: friendUser.photoURL,
+      audience_user_ids: [friendUser.id, ownerUser.id],
+      type: 'text',
+      text: 'Friend direct share',
+      photo_path: null,
+      doodle_strokes_json: null,
+      sticker_placements_json: null,
+      note_color: null,
+      place_name: 'District 3',
+      source_note_id: 'note-3',
+      latitude: null,
+      longitude: null,
+      created_at: '2026-03-26T00:00:00.000Z',
+      updated_at: null,
+    });
+
+    await removeFriend(ownerUser, friendUser.id);
+
+    expect(mockSharedPosts.get('shared-owned-direct')).toEqual(
+      expect.objectContaining({
+        audience_user_ids: [ownerUser.id],
+      })
+    );
+    expect(mockSharedPosts.get('shared-owned-group')).toEqual(
+      expect.objectContaining({
+        audience_user_ids: [ownerUser.id, secondFriendUser.id],
+      })
+    );
+    expect(mockSharedPosts.get('shared-friend-direct')).toEqual(
+      expect.objectContaining({
+        audience_user_ids: [friendUser.id],
+      })
+    );
+
+    mockSessionUserId = ownerUser.id;
+    const ownerSnapshot = await refreshSharedFeed(ownerUser);
+    expect(ownerSnapshot.sharedPosts.map((post) => post.id)).toEqual(['shared-owned-group']);
+
+    mockSessionUserId = friendUser.id;
+    const friendSnapshot = await refreshSharedFeed(friendUser);
+    expect(friendSnapshot.sharedPosts).toEqual([]);
   });
 });

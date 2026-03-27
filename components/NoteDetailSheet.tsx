@@ -270,11 +270,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     );
 
     const showPremiumColorAlert = useCallback(() => {
-        const buttons: Array<{
+        const buttons: {
             text: string;
             style?: 'default' | 'cancel' | 'destructive';
             onPress?: () => void;
-        }> = [
+        }[] = [
             {
                 text: t('common.cancel', 'Cancel'),
                 style: 'cancel',

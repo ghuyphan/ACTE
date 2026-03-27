@@ -604,6 +604,36 @@ describe('widgetService', () => {
     );
   });
 
+  it('reuses a recent shared widget refresh result instead of hitting the network twice', async () => {
+    mockCurrentUser = { id: 'me-cache', uid: 'me-cache' };
+    mockGetAllNotes.mockResolvedValue([]);
+    mockRefreshSharedFeed.mockResolvedValue({
+      friends: [],
+      sharedPosts: [
+        buildSharedPost({
+          id: 'shared-text-cache',
+          authorUid: 'friend-3',
+          authorDisplayName: 'Linh',
+          text: 'Cached shared hello',
+          placeName: 'Friend Corner',
+          createdAt: '2026-03-10T12:00:00.000Z',
+        }),
+      ],
+      activeInvite: null,
+    });
+
+    await updateWidgetData({
+      referenceDate: new Date('2026-03-10T12:00:00.000Z'),
+      includeSharedRefresh: true,
+    });
+    await updateWidgetData({
+      referenceDate: new Date('2026-03-10T18:00:00.000Z'),
+      includeSharedRefresh: true,
+    });
+
+    expect(mockRefreshSharedFeed).toHaveBeenCalledTimes(1);
+  });
+
   it('falls back to a friend post when personal photos are unreadable and no other personal memory is eligible', async () => {
     mockCurrentUser = { id: 'me', uid: 'me' };
     mockGetAllNotes.mockResolvedValue([

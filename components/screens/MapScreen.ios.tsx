@@ -23,6 +23,7 @@ import { useNotesStore } from '../../hooks/useNotes';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
+import type { SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
 
 const MIN_ZOOM_DELTA = 0.002;
@@ -77,15 +78,6 @@ export default function MapScreenIOS() {
 
   const previewBottomOffset = insets.bottom + 12;
   const previewMode = selectedGroup ? 'group' : 'nearby';
-  const overlayState: OverlayState =
-    notes.length === 0
-      ? 'no-notes'
-      : filteredCount === 0
-        ? 'no-filter-results'
-        : visibleAreaCount === 0 && !showingAllFilteredResults
-          ? 'no-area-results'
-          : 'content';
-  const previewVisible = overlayState === 'content' && nearbyItems.length > 0;
   const noteById = useMemo(() => new Map(notes.map((note) => [note.id, note] as const)), [notes]);
   const friendPosts = useMemo(
     () =>
@@ -94,8 +86,29 @@ export default function MapScreenIOS() {
         .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
     [sharedPosts, user?.uid]
   );
+  const friendMarkerPosts = useMemo(
+    () =>
+      friendPosts.filter(
+        (post): post is SharedPost & { latitude: number; longitude: number } =>
+          typeof post.latitude === 'number' &&
+          Number.isFinite(post.latitude) &&
+          typeof post.longitude === 'number' &&
+          Number.isFinite(post.longitude)
+      ),
+    [friendPosts]
+  );
   const friendsPreviewVisible = showFriendsPreview && friendPosts.length > 0;
   const hasFriendLayer = sharedEnabled && friendPosts.length > 0;
+  const hasMapContent = notes.length > 0 || friendMarkerPosts.length > 0;
+  const overlayState: OverlayState =
+    !hasMapContent
+      ? 'no-notes'
+      : notes.length > 0 && filteredCount === 0
+        ? 'no-filter-results'
+        : notes.length > 0 && visibleAreaCount === 0 && !showingAllFilteredResults
+          ? 'no-area-results'
+          : 'content';
+  const previewVisible = overlayState === 'content' && nearbyItems.length > 0;
 
   useEffect(() => {
     return () => {
@@ -342,6 +355,49 @@ export default function MapScreenIOS() {
     setActiveFriendPostId((current) => current ?? friendPosts[0]?.id ?? null);
   }, [emitLightHaptic, friendPosts, hasFriendLayer]);
 
+  const focusFriendPost = useCallback(
+    (postId: string, options?: { animate?: boolean; openPreview?: boolean }) => {
+      const targetPost =
+        friendMarkerPosts.find((post) => post.id === postId) ??
+        friendPosts.find((post) => post.id === postId);
+      if (!targetPost) {
+        return;
+      }
+
+      if (options?.openPreview ?? true) {
+        setShowFriendsPreview(true);
+      }
+      setActiveFriendPostId(postId);
+
+      if (
+        options?.animate !== false &&
+        typeof targetPost.latitude === 'number' &&
+        typeof targetPost.longitude === 'number' &&
+        mapRef.current
+      ) {
+        const baseRegion = visibleRegion ?? initialRegion;
+        const nextRegion = {
+          latitude: targetPost.latitude,
+          longitude: targetPost.longitude,
+          latitudeDelta: Math.max(Math.min(baseRegion.latitudeDelta, 0.025), MIN_ZOOM_DELTA),
+          longitudeDelta: Math.max(Math.min(baseRegion.longitudeDelta, 0.025), MIN_ZOOM_DELTA),
+        };
+
+        mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
+        setVisibleRegion(nextRegion);
+      }
+    },
+    [friendMarkerPosts, friendPosts, initialRegion, reduceMotionEnabled, setVisibleRegion, visibleRegion]
+  );
+
+  const handleFriendMarkerPress = useCallback(
+    (postId: string) => {
+      emitLightHaptic();
+      focusFriendPost(postId, { animate: false, openPreview: true });
+    },
+    [emitLightHaptic, focusFriendPost]
+  );
+
   const handleOpenSharedPost = useCallback(
     (postId?: string) => {
       const nextPostId = postId ?? activeFriendPostId;
@@ -364,12 +420,20 @@ export default function MapScreenIOS() {
       return;
     }
 
-    if (notes.length > 1) {
+    const fitCoordinates = [
+      ...notes.map((note) => ({
+        latitude: note.latitude,
+        longitude: note.longitude,
+      })),
+      ...friendMarkerPosts.map((post) => ({
+        latitude: post.latitude,
+        longitude: post.longitude,
+      })),
+    ];
+
+    if (fitCoordinates.length > 1) {
       mapRef.current.fitToCoordinates(
-        notes.map((note) => ({
-          latitude: note.latitude,
-          longitude: note.longitude,
-        })),
+        fitCoordinates,
         {
           edgePadding: { top: 150, right: 90, bottom: 210, left: 90 },
           animated: false,
@@ -380,7 +444,7 @@ export default function MapScreenIOS() {
     }
 
     hasCenteredRef.current = true;
-  }, [isMapReady, location, notes]);
+  }, [friendMarkerPosts, isMapReady, location, notes]);
 
   const countLabel = useMemo(() => {
     const base = `${filteredCount} ${filteredCount === 1 ? t('map.note', 'note') : t('map.notes', 'notes')}`;
@@ -415,8 +479,10 @@ export default function MapScreenIOS() {
         isDark={isDark}
         currentZoom={visibleRegion ? regionToZoom(visibleRegion) : regionToZoom(initialRegion)}
         markerNodes={clusterNodes}
+        friendMarkers={friendMarkerPosts}
         noteById={noteById}
         selectedGroupId={selectedGroupId}
+        selectedFriendPostId={activeFriendPostId}
         markerPulseId={markerPulseId}
         markerPulseKey={markerPulseKey}
         reduceMotionEnabled={reduceMotionEnabled}
@@ -427,6 +493,7 @@ export default function MapScreenIOS() {
         onRegionChangeComplete={setVisibleRegion}
         onLeafPress={handleLeafPress}
         onClusterPress={handleClusterPress}
+        onFriendPress={handleFriendMarkerPress}
         colors={colors}
       />
 
@@ -572,7 +639,7 @@ export default function MapScreenIOS() {
           activePostId={activeFriendPostId}
           bottomOffset={previewBottomOffset}
           onOpen={() => handleOpenSharedPost()}
-          onFocusPost={setActiveFriendPostId}
+          onFocusPost={(postId) => focusFriendPost(postId)}
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
         />

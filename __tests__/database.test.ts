@@ -36,6 +36,16 @@ const mockGetAllAsync = jest.fn<Promise<unknown[]>, [string, ...unknown[]]>(asyn
     ];
   }
 
+  if (sql.includes('SELECT id, owner_uid, search_text FROM notes')) {
+    return [
+      {
+        id: 'photo-1',
+        owner_uid: '__local__',
+        search_text: 'district 3',
+      },
+    ];
+  }
+
   return [];
 });
 
@@ -75,11 +85,20 @@ describe('database migrations', () => {
     expect(mockExecAsync).toHaveBeenCalledWith(expect.stringContaining('photo_local_uri TEXT'));
     expect(mockExecAsync).toHaveBeenCalledWith('ALTER TABLE notes ADD COLUMN search_text TEXT NOT NULL DEFAULT \'\'');
     expect(mockExecAsync).toHaveBeenCalledWith('CREATE INDEX IF NOT EXISTS idx_notes_search_text ON notes(search_text)');
+    expect(mockExecAsync).toHaveBeenCalledWith(
+      expect.stringContaining('CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts')
+    );
     expect(mockRunAsync).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE notes'),
       'file:///mock-documents/photos/legacy-photo.jpg',
       'district 3',
       'photo-1'
+    );
+    expect(mockRunAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO notes_fts'),
+      'photo-1',
+      '__local__',
+      'district 3'
     );
   });
 
@@ -137,7 +156,7 @@ describe('database migrations', () => {
       noteColor: null,
     });
 
-    expect(mockRunAsync).toHaveBeenLastCalledWith(
+    expect(mockRunAsync).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO notes'),
       expect.any(String),
       '__local__',
@@ -157,12 +176,18 @@ describe('database migrations', () => {
       150,
       expect.any(String)
     );
+    expect(mockRunAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO notes_fts'),
+      expect.any(String),
+      '__local__',
+      expect.any(String)
+    );
 
     mockRunAsync.mockClear();
 
     await updateNote('note-1', { content: 'Updated legacy note' });
 
-    expect(mockRunAsync).toHaveBeenLastCalledWith(
+    expect(mockRunAsync).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE notes'),
       'Updated legacy note',
       null,
@@ -178,6 +203,12 @@ describe('database migrations', () => {
       expect.any(String),
       'note-1',
       '__local__'
+    );
+    expect(mockRunAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO notes_fts'),
+      'note-1',
+      '__local__',
+      expect.any(String)
     );
   });
 });

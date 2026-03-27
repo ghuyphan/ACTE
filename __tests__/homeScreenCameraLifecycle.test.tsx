@@ -1,10 +1,11 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { AppState } from 'react-native';
+import { AppState, InteractionManager } from 'react-native';
 let mockCaptureCardProps: any = null;
 const mockOpenAppSettings = jest.fn(async () => undefined);
 const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
 const mockUseCaptureFlow = jest.fn();
+const originalRequestAnimationFrame = global.requestAnimationFrame;
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -217,6 +218,14 @@ import HomeScreen from '../app/(tabs)/index';
 
 describe('HomeScreen camera lifecycle', () => {
   beforeEach(() => {
+    jest.spyOn(InteractionManager, 'runAfterInteractions').mockImplementation((task: any) => {
+      task?.();
+      return { cancel: jest.fn() } as any;
+    });
+    global.requestAnimationFrame = ((callback: any) => {
+      callback(0);
+      return 0;
+    }) as typeof requestAnimationFrame;
     AppState.currentState = 'active';
     mockCaptureCardProps = null;
     mockOpenAppSettings.mockClear();
@@ -268,6 +277,11 @@ describe('HomeScreen camera lifecycle', () => {
     });
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+  });
+
   it('keeps the camera preview mounted while capture visibility changes', async () => {
     const { getByTestId } = render(<HomeScreen />);
 
@@ -290,7 +304,7 @@ describe('HomeScreen camera lifecycle', () => {
   });
 
   it('routes blocked camera permission requests to Settings', async () => {
-    mockUseCaptureFlow.mockImplementationOnce(() => {
+    mockUseCaptureFlow.mockImplementation(() => {
       const { Animated } = require('react-native');
       return {
         captureScale: new Animated.Value(1),

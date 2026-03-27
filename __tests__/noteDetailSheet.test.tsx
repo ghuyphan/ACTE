@@ -160,6 +160,16 @@ jest.mock('../hooks/useSharedFeed', () => ({
   }),
 }));
 
+jest.mock('../hooks/useSubscription', () => ({
+  useSubscription: () => ({
+    tier: 'free',
+    isPurchaseAvailable: false,
+    plusPriceLabel: null,
+    presentPaywallIfNeeded: jest.fn(async () => ({ status: 'unavailable' })),
+    restorePurchases: jest.fn(async () => ({ status: 'unavailable' })),
+  }),
+}));
+
 jest.mock('../hooks/useNotes', () => ({
   useNotes: () => mockNotesStore,
 }));

@@ -315,7 +315,34 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         const activeUser = requireUser();
         await deleteFriend(activeUser, friendUid);
         const nextFriends = friendsRef.current.filter((friend) => friend.userId !== friendUid);
-        const nextSharedPosts = sharedPostsRef.current.filter((post) => post.authorUid !== friendUid);
+        const nextFriendUidSet = new Set(nextFriends.map((friend) => friend.userId));
+        const nextSharedPosts = sharedPostsRef.current.flatMap((post) => {
+          if (post.authorUid === friendUid) {
+            return [];
+          }
+
+          if (post.authorUid !== activeUser.uid) {
+            return [post];
+          }
+
+          const nextAudienceUserIds = Array.from(
+            new Set([activeUser.uid, ...post.audienceUserIds.filter((audienceUid) => audienceUid !== friendUid)])
+          );
+          const hasRemainingFriendAudience = nextAudienceUserIds.some(
+            (audienceUid) => audienceUid !== activeUser.uid && nextFriendUidSet.has(audienceUid)
+          );
+
+          if (!hasRemainingFriendAudience) {
+            return [];
+          }
+
+          return [
+            {
+              ...post,
+              audienceUserIds: nextAudienceUserIds,
+            },
+          ];
+        });
         friendsRef.current = nextFriends;
         sharedPostsRef.current = nextSharedPosts;
         setFriends(nextFriends);

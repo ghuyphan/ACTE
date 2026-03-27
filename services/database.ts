@@ -2,7 +2,7 @@ import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
 import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
-import { buildNoteSearchText } from './noteSearch';
+import { buildNoteSearchText, tokenizeSearchQuery } from './noteSearch';
 import { normalizeSavedTextNoteColor } from './noteAppearance';
 import { resolveStoredPhotoUri } from './photoStorage';
 
@@ -104,10 +104,11 @@ interface NoteRow {
 // ─── Database ───────────────────────────────────────────────────────
 let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-const APP_SCHEMA_VERSION = 9;
+const APP_SCHEMA_VERSION = 10;
 export const LOCAL_NOTES_SCOPE = '__local__';
 let activeNotesScope = LOCAL_NOTES_SCOPE;
 const SQLITE_LOCK_RETRY_DELAYS_MS = [30, 80, 160];
+const NOTES_FTS_TABLE = 'notes_fts';
 const NOTES_SELECT_FIELDS = `notes.*,
       EXISTS(SELECT 1 FROM note_doodles doodles WHERE doodles.note_id = notes.id) AS has_doodle,
       (SELECT doodles.strokes_json FROM note_doodles doodles WHERE doodles.note_id = notes.id LIMIT 1) AS doodle_strokes_json,
@@ -272,6 +273,8 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         note_color TEXT,
         place_name TEXT,
         source_note_id TEXT,
+        latitude REAL,
+        longitude REAL,
         created_at TEXT NOT NULL,
         updated_at TEXT,
         PRIMARY KEY (user_uid, id)
@@ -344,6 +347,10 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
 
                 await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_search_text ON notes(search_text)`);
                 await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_owner_created ON notes(owner_uid, created_at DESC)`);
+                await database.execAsync(
+                    `CREATE VIRTUAL TABLE IF NOT EXISTS ${NOTES_FTS_TABLE}
+                     USING fts5(note_id UNINDEXED, owner_uid, search_text)`
+                );
                 await database.execAsync(
                     `CREATE TABLE IF NOT EXISTS note_doodles (
                         note_id TEXT PRIMARY KEY NOT NULL,
@@ -422,6 +429,25 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     }
                 }
 
+                if (currentUserVersion < APP_SCHEMA_VERSION) {
+                    const searchRows = await database.getAllAsync<{
+                        id: string;
+                        owner_uid: string | null;
+                        search_text: string | null;
+                    }>(`SELECT id, owner_uid, search_text FROM notes`);
+
+                    await database.runAsync(`DELETE FROM ${NOTES_FTS_TABLE}`);
+                    for (const row of searchRows) {
+                        await database.runAsync(
+                            `INSERT INTO ${NOTES_FTS_TABLE} (note_id, owner_uid, search_text)
+                             VALUES (?, ?, ?)`,
+                            row.id,
+                            row.owner_uid ?? LOCAL_NOTES_SCOPE,
+                            row.search_text ?? ''
+                        );
+                    }
+                }
+
                 const syncQueueInfo = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(sync_queue)`);
                 const syncQueueColumns = syncQueueInfo.map((col) => col.name);
 
@@ -492,6 +518,8 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                         note_color TEXT,
                         place_name TEXT,
                         source_note_id TEXT,
+                        latitude REAL,
+                        longitude REAL,
                         created_at TEXT NOT NULL,
                         updated_at TEXT,
                         PRIMARY KEY (user_uid, id)
@@ -503,6 +531,12 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 const sharedPostsCacheColumns = sharedPostsCacheInfo.map((col) => col.name);
                 if (!sharedPostsCacheColumns.includes('note_color')) {
                     await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN note_color TEXT`);
+                }
+                if (!sharedPostsCacheColumns.includes('latitude')) {
+                    await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN latitude REAL`);
+                }
+                if (!sharedPostsCacheColumns.includes('longitude')) {
+                    await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN longitude REAL`);
                 }
                 await database.execAsync(
                     `CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_created ON shared_posts_cache(user_uid, created_at DESC)`
@@ -615,6 +649,40 @@ function buildSearchText(input: {
     });
 }
 
+function buildFtsMatchExpression(query: string) {
+    const tokens = tokenizeSearchQuery(query);
+    return tokens.map((token) => `"${token.replace(/"/g, '""')}"*`).join(' AND ');
+}
+
+async function upsertNoteSearchDocument(
+    executor: Pick<SQLite.SQLiteDatabase, 'runAsync'>,
+    noteId: string,
+    ownerUid: string,
+    searchText: string
+) {
+    await executor.runAsync(`DELETE FROM ${NOTES_FTS_TABLE} WHERE note_id = ?`, noteId);
+    await executor.runAsync(
+        `INSERT INTO ${NOTES_FTS_TABLE} (note_id, owner_uid, search_text) VALUES (?, ?, ?)`,
+        noteId,
+        ownerUid,
+        searchText
+    );
+}
+
+async function deleteNoteSearchDocument(
+    executor: Pick<SQLite.SQLiteDatabase, 'runAsync'>,
+    noteId: string
+) {
+    await executor.runAsync(`DELETE FROM ${NOTES_FTS_TABLE} WHERE note_id = ?`, noteId);
+}
+
+async function deleteNoteSearchDocumentsForScope(
+    executor: Pick<SQLite.SQLiteDatabase, 'runAsync'>,
+    ownerUid: string
+) {
+    await executor.runAsync(`DELETE FROM ${NOTES_FTS_TABLE} WHERE owner_uid = ?`, ownerUid);
+}
+
 function rowToNote(row: NoteRow): Note {
     const photoLocalUri = getResolvedPhotoLocalUri(row);
     return {
@@ -705,6 +773,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         input.radius ?? DEFAULT_NOTE_RADIUS,
         now
     );
+    await upsertNoteSearchDocument(database, id, scope, searchText);
 
     return {
         id,
@@ -844,6 +913,7 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         id,
         scope
     );
+    await upsertNoteSearchDocument(database, id, scope, searchText);
 }
 
 export async function toggleFavorite(id: string): Promise<boolean> {
@@ -869,30 +939,23 @@ export async function toggleFavorite(id: string): Promise<boolean> {
 export async function searchNotes(query: string): Promise<Note[]> {
     const database = await getDB();
     const scope = getCurrentScope();
-    const normalizedTokens = buildNoteSearchText({
-        type: 'text',
-        content: query,
-        locationName: null,
-        promptTextSnapshot: null,
-        promptAnswer: null,
-    })
-        .split(' ')
-        .filter(Boolean);
+    const matchExpression = buildFtsMatchExpression(query);
 
-    if (normalizedTokens.length === 0) {
+    if (!matchExpression) {
         return getAllNotes();
     }
 
-    const whereClause = normalizedTokens.map(() => `search_text LIKE ?`).join(' AND ');
-    const params = normalizedTokens.map((token) => `%${token}%`);
     const rows = await database.getAllAsync<NoteRow>(
         `SELECT ${NOTES_SELECT_FIELDS}
          FROM notes
-         WHERE owner_uid = ?
-           AND ${whereClause}
+         INNER JOIN ${NOTES_FTS_TABLE} notes_fts ON notes_fts.note_id = notes.id
+         WHERE notes.owner_uid = ?
+           AND notes_fts.owner_uid = ?
+           AND notes_fts.search_text MATCH ?
          ORDER BY created_at DESC`,
         scope,
-        ...params
+        scope,
+        matchExpression
     );
     return rows.map(rowToNote);
 }
@@ -910,6 +973,7 @@ export async function deleteNote(id: string): Promise<void> {
         id,
         scope
     );
+    await deleteNoteSearchDocument(database, id);
     await database.runAsync('DELETE FROM notes WHERE id = ? AND owner_uid = ?', id, scope);
 }
 
@@ -928,6 +992,7 @@ export async function deleteAllNotesForScope(scope: string): Promise<void> {
         'DELETE FROM note_stickers WHERE note_id IN (SELECT id FROM notes WHERE owner_uid = ?)',
         scope
     );
+    await deleteNoteSearchDocumentsForScope(database, scope);
     await database.runAsync('DELETE FROM notes WHERE owner_uid = ?', scope);
 }
 
@@ -1019,6 +1084,7 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         input.createdAt,
         input.updatedAt ?? null
     );
+    await upsertNoteSearchDocument(database, input.id, scope, searchText);
 
     if (input.hasDoodle && input.doodleStrokesJson) {
         await database.runAsync(

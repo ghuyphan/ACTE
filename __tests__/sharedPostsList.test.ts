@@ -14,6 +14,14 @@ describe('supabase migration hardening', () => {
     resolve(__dirname, '../supabase/migrations/20260327103000_add_note_color_columns.sql'),
     'utf8'
   );
+  const sharedPostCoordinatesMigration = readFileSync(
+    resolve(__dirname, '../supabase/migrations/20260327113000_add_shared_post_coordinates.sql'),
+    'utf8'
+  );
+  const sharedFriendRevocationMigration = readFileSync(
+    resolve(__dirname, '../supabase/migrations/20260327123000_harden_shared_friend_revocation.sql'),
+    'utf8'
+  );
 
   it('creates profiles and user_usage rows for each auth user', () => {
     expect(migration).toContain('create or replace function public.handle_new_user()');
@@ -24,10 +32,10 @@ describe('supabase migration hardening', () => {
 
   it('secures shared posts and friendships with row-level policies', () => {
     expect(migration).toContain('alter table public.shared_posts enable row level security;');
-    expect(migration).toContain('create policy "shared_posts_read_visible"');
-    expect(migration).toContain('auth.uid() = author_user_id');
-    expect(migration).toContain('auth.uid() = any (audience_user_ids)');
     expect(migration).toContain('create policy "friendships_owner_read"');
+    expect(sharedFriendRevocationMigration).toContain('create policy "shared_posts_read_visible"');
+    expect(sharedFriendRevocationMigration).toContain('public.are_users_friends(author_user_id, auth.uid())');
+    expect(sharedFriendRevocationMigration).toContain('public.is_valid_shared_post_audience(author_user_id, audience_user_ids)');
   });
 
   it('adds invite and membership RPCs for atomic multi-row writes', () => {
@@ -49,5 +57,17 @@ describe('supabase migration hardening', () => {
     expect(noteColorMigration).toContain('alter table public.notes');
     expect(noteColorMigration).toContain('add column if not exists note_color text');
     expect(noteColorMigration).toContain('alter table public.shared_posts');
+  });
+
+  it('adds shared post coordinates for map rendering', () => {
+    expect(sharedPostCoordinatesMigration).toContain('alter table public.shared_posts');
+    expect(sharedPostCoordinatesMigration).toContain('add column if not exists latitude double precision');
+    expect(sharedPostCoordinatesMigration).toContain('add column if not exists longitude double precision');
+  });
+
+  it('revokes old shared access when a friendship is removed', () => {
+    expect(sharedFriendRevocationMigration).toContain('create or replace function public.remove_friend(friend_user_id uuid)');
+    expect(sharedFriendRevocationMigration).toContain('set audience_user_ids = array_remove(audience_user_ids, remove_friend.friend_user_id)');
+    expect(sharedFriendRevocationMigration).toContain('set audience_user_ids = array_remove(audience_user_ids, current_user_id)');
   });
 });

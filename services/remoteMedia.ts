@@ -78,7 +78,7 @@ async function optimizePhotoForUpload(photoUri: string) {
       [{ resize: { width: preset.width } }],
       {
         compress: preset.compress,
-        format: SaveFormat.WEBP,
+        format: SaveFormat.JPEG,
       }
     );
 

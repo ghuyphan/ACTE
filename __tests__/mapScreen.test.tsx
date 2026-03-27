@@ -25,6 +25,8 @@ const defaultSharedPosts = [
     doodleStrokesJson: null,
     placeName: 'District 3',
     sourceNoteId: null,
+    latitude: 10.803,
+    longitude: 106.701,
     createdAt: '2026-03-12T00:00:00.000Z',
     updatedAt: null,
   },
@@ -41,6 +43,8 @@ const defaultSharedPosts = [
     doodleStrokesJson: null,
     placeName: 'District 1',
     sourceNoteId: null,
+    latitude: 10.761,
+    longitude: 106.661,
     createdAt: '2026-03-11T00:00:00.000Z',
     updatedAt: null,
   },
@@ -710,6 +714,17 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(mockRouterPush).toHaveBeenCalledWith('/shared/shared-friend-1');
+    });
+  });
+
+  it('renders friend markers on the map and opens the friend preview when pressed', async () => {
+    const { getByTestId } = render(<MapScreen />);
+
+    fireEvent.press(getByTestId('friend-marker-shared-friend-1'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-friends-preview-shell')).toBeTruthy();
+      expect(getByTestId('map-friends-preview-item-shared-friend-1')).toBeTruthy();
     });
   });
 });

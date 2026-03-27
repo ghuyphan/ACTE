@@ -356,6 +356,20 @@ export default function HomeHeaderSearch({
     return (
       <Host matchContents colorScheme={isDark ? 'dark' : 'light'} style={styles.detachedSwiftControlsHost}>
         <HStack spacing={10} alignment="center">
+          <Menu
+            label={radiusAccessibilityLabel}
+            systemImage="scope"
+            modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
+          >
+            {NOTE_RADIUS_OPTIONS.map((option) => (
+              <Button
+                key={option}
+                label={formatRadiusLabel(option)}
+                systemImage={radius === option ? 'checkmark' : undefined}
+                onPress={() => onChangeRadius(option)}
+              />
+            ))}
+          </Menu>
           {showSharedButton && onOpenShared ? (
             <Button
               label={t('shared.manageTitle', 'Friends')}
@@ -372,20 +386,6 @@ export default function HomeHeaderSearch({
               modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
             />
           ) : null}
-          <Menu
-            label={radiusAccessibilityLabel}
-            systemImage="scope"
-            modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
-          >
-            {NOTE_RADIUS_OPTIONS.map((option) => (
-              <Button
-                key={option}
-                label={formatRadiusLabel(option)}
-                systemImage={radius === option ? 'checkmark' : undefined}
-                onPress={() => onChangeRadius(option)}
-              />
-            ))}
-          </Menu>
           <Button
             label={modeLabel}
             systemImage={modeSystemName}

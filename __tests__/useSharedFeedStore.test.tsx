@@ -343,6 +343,14 @@ describe('useSharedFeedStore', () => {
           lastSharedAt: null,
           createdByInviteId: 'invite-1',
         },
+        {
+          userId: 'friend-2',
+          displayNameSnapshot: 'Minh',
+          photoURLSnapshot: null,
+          friendedAt: '2026-03-22T00:00:00.000Z',
+          lastSharedAt: null,
+          createdByInviteId: 'invite-2',
+        },
       ],
       sharedPosts: [
         {
@@ -373,25 +381,48 @@ describe('useSharedFeedStore', () => {
           createdAt: '2026-03-23T00:00:00.000Z',
           updatedAt: null,
         },
+        {
+          id: 'shared-owned-group',
+          authorUid: 'me',
+          authorDisplayName: 'Me',
+          audienceUserIds: ['me', 'friend-1', 'friend-2'],
+          type: 'text',
+          text: 'My group post',
+          photoPath: null,
+          photoLocalUri: null,
+          placeName: 'District 7',
+          sourceNoteId: null,
+          createdAt: '2026-03-24T00:00:00.000Z',
+          updatedAt: null,
+        },
       ],
       activeInvite: null,
       lastUpdatedAt: '2026-03-23T00:00:00.000Z',
     };
     mockRefreshSnapshot = {
-      friends: [],
+      friends: [
+        {
+          userId: 'friend-2',
+          displayNameSnapshot: 'Minh',
+          photoURLSnapshot: null,
+          friendedAt: '2026-03-22T00:00:00.000Z',
+          lastSharedAt: null,
+          createdByInviteId: 'invite-2',
+        },
+      ],
       sharedPosts: [
         {
-          id: 'shared-owned',
+          id: 'shared-owned-group',
           authorUid: 'me',
           authorDisplayName: 'Me',
-          audienceUserIds: ['me'],
+          audienceUserIds: ['me', 'friend-2'],
           type: 'text',
-          text: 'My post',
+          text: 'My group post',
           photoPath: null,
           photoLocalUri: null,
-          placeName: 'District 1',
+          placeName: 'District 7',
           sourceNoteId: null,
-          createdAt: '2026-03-23T00:00:00.000Z',
+          createdAt: '2026-03-24T00:00:00.000Z',
           updatedAt: null,
         },
       ],
@@ -402,8 +433,8 @@ describe('useSharedFeedStore', () => {
 
     await waitFor(() => {
       expect(result.current.ready).toBe(true);
-      expect(result.current.friends).toHaveLength(1);
-      expect(result.current.sharedPosts).toHaveLength(2);
+      expect(result.current.friends).toHaveLength(2);
+      expect(result.current.sharedPosts).toHaveLength(3);
     });
 
     await act(async () => {
@@ -411,11 +442,16 @@ describe('useSharedFeedStore', () => {
     });
 
     expect(mockRemoveFriend).toHaveBeenCalledWith(mockAuthState.user, 'friend-1');
-    expect(result.current.friends).toEqual([]);
+    expect(result.current.friends).toEqual([
+      expect.objectContaining({
+        userId: 'friend-2',
+      }),
+    ]);
     expect(result.current.sharedPosts).toEqual([
       expect.objectContaining({
-        id: 'shared-owned',
+        id: 'shared-owned-group',
         authorUid: 'me',
+        audienceUserIds: ['me', 'friend-2'],
       }),
     ]);
   });

@@ -11,6 +11,7 @@ import {
   getNoteById as dbGetById,
   Note,
   NoteUpdates,
+  searchNotes as dbSearchNotes,
   toggleFavorite as dbToggleFav,
   updateNote as dbUpdate,
 } from '../services/database';
@@ -20,7 +21,6 @@ import {
   syncGeofenceRegions,
 } from '../services/geofenceService';
 import { cleanupOrphanMediaFiles } from '../services/mediaIntegrity';
-import { filterNotesByQuery } from '../services/noteSearch';
 import { getNotePhotoUri } from '../services/photoStorage';
 import { getSyncService } from '../services/syncService';
 import { updateWidgetData } from '../services/widgetService';
@@ -244,7 +244,7 @@ function useNotesStoreValue(): NotesStoreValue {
   );
 
   const searchNotes = useCallback(async (query: string) => {
-    return filterNotesByQuery(notesRef.current, query);
+    return dbSearchNotes(query);
   }, []);
 
   const deleteNote = useCallback(

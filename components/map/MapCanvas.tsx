@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo, useEffect, useMemo, type RefObject } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -13,7 +14,13 @@ import type { MapClusterNode } from '../../hooks/map/mapDomain';
 import type { ThemeColors } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
+import type { SharedPost } from '../../services/sharedFeedService';
 import { mapMotionDurations, mapMotionEasing } from './mapMotion';
+
+type SharedPostWithCoordinates = SharedPost & {
+  latitude: number;
+  longitude: number;
+};
 
 interface MapCanvasProps {
   mapRef: RefObject<MapView | null>;
@@ -21,8 +28,10 @@ interface MapCanvasProps {
   isDark: boolean;
   currentZoom: number;
   markerNodes: MapClusterNode[];
+  friendMarkers: SharedPostWithCoordinates[];
   noteById: Map<string, Note>;
   selectedGroupId: string | null;
+  selectedFriendPostId: string | null;
   markerPulseId: string | null;
   markerPulseKey: number;
   reduceMotionEnabled: boolean;
@@ -31,6 +40,7 @@ interface MapCanvasProps {
   onRegionChangeComplete: (region: Region) => void;
   onLeafPress: (groupId: string) => void;
   onClusterPress: (node: MapClusterNode) => void;
+  onFriendPress: (postId: string) => void;
   colors: ThemeColors;
 }
 
@@ -238,8 +248,10 @@ export default function MapCanvas({
   isDark,
   currentZoom,
   markerNodes,
+  friendMarkers,
   noteById,
   selectedGroupId,
+  selectedFriendPostId,
   markerPulseId,
   markerPulseKey,
   reduceMotionEnabled,
@@ -248,6 +260,7 @@ export default function MapCanvas({
   onRegionChangeComplete,
   onLeafPress,
   onClusterPress,
+  onFriendPress,
   colors,
 }: MapCanvasProps) {
   const markerRenderItems = useMemo(
@@ -324,6 +337,55 @@ export default function MapCanvas({
                 pulseKey={markerPulseKey}
                 reduceMotionEnabled={reduceMotionEnabled}
               />
+            </View>
+          </Marker>
+        );
+      })}
+      {friendMarkers.map((post) => {
+        const isSelected = selectedFriendPostId === post.id;
+        const authorLabel = post.authorDisplayName?.trim() || 'F';
+
+        return (
+          <Marker
+            key={`friend-${post.id}`}
+            testID={`friend-marker-${post.id}`}
+            coordinate={{ latitude: post.latitude, longitude: post.longitude }}
+            anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={isSelected || reduceMotionEnabled}
+            zIndex={isSelected ? 20 : 10}
+            onPress={(event) => {
+              event.stopPropagation?.();
+              onFriendPress(post.id);
+            }}
+          >
+            <View style={styles.markerWrap} collapsable={false}>
+              <View
+                style={[
+                  styles.friendMarker,
+                  {
+                    borderColor: isSelected ? colors.primary : '#FFFFFF',
+                    backgroundColor: isSelected ? `${colors.primary}22` : `${colors.primary}14`,
+                  },
+                ]}
+              >
+                {post.authorPhotoURLSnapshot ? (
+                  <Image
+                    source={{ uri: post.authorPhotoURLSnapshot }}
+                    style={styles.friendAvatar}
+                    contentFit="cover"
+                    transition={0}
+                  />
+                ) : (
+                  <View style={[styles.friendAvatar, { backgroundColor: colors.primarySoft }]}>
+                    <Text style={[styles.friendInitial, { color: colors.primary }]}>
+                      {authorLabel.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <View style={[styles.friendBadge, { backgroundColor: colors.primary }]}>
+                  <Ionicons name="sparkles" size={9} color="#FFFFFF" />
+                </View>
+              </View>
             </View>
           </Marker>
         );
@@ -410,5 +472,39 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  friendMarker: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'visible',
+  },
+  friendAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  friendInitial: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: 'System',
+  },
+  friendBadge: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

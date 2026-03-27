@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { InteractionManager } from 'react-native';
 
 const mockCreateNote = jest.fn(async (input?: any) => {
   const createdNote = {
@@ -32,6 +33,7 @@ const mockGetDoodleSnapshot = jest.fn(() => ({
   enabled: true,
   strokes: [{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }],
 }));
+const originalRequestAnimationFrame = global.requestAnimationFrame;
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -322,6 +324,14 @@ import HomeScreen from '../app/(tabs)/index';
 
 describe('HomeScreen doodle save flow', () => {
   beforeEach(() => {
+    jest.spyOn(InteractionManager, 'runAfterInteractions').mockImplementation((task: any) => {
+      task?.();
+      return { cancel: jest.fn() } as any;
+    });
+    global.requestAnimationFrame = ((callback: any) => {
+      callback(0);
+      return 0;
+    }) as typeof requestAnimationFrame;
     jest.clearAllMocks();
     mockRemindersEnabled = false;
     mockNoteText = 'A doodled note';
@@ -330,6 +340,11 @@ describe('HomeScreen doodle save flow', () => {
       enabled: true,
       strokes: [{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }],
     }));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    global.requestAnimationFrame = originalRequestAnimationFrame;
   });
 
   it('keeps Home anchored on the capture card while the local save sheet is open', async () => {

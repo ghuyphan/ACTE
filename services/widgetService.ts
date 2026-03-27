@@ -161,8 +161,26 @@ const WIDGET_HISTORY_STORAGE_KEY = 'widget.timeline.history.v2';
 const MAX_WIDGET_HISTORY_ENTRIES = 32;
 const WIDGET_AVATAR_DIRECTORY_NAME = 'widget-avatars';
 const WIDGET_STICKER_DIRECTORY_NAME = 'widget-stickers';
+const WIDGET_SHARED_REFRESH_TTL_MS = 2 * 60 * 1000;
+const WIDGET_LOCATION_CACHE_TTL_MS = 60 * 1000;
+const WIDGET_REQUEST_DEDUPE_WINDOW_MS = 3 * 1000;
 let widgetUpdateInFlight: Promise<void> | null = null;
 let pendingWidgetUpdateOptions: UpdateWidgetDataOptions | null = null;
+let lastWidgetRequestKey: string | null = null;
+let lastWidgetRequestAt = 0;
+let sharedWidgetFeedCache:
+    | {
+        userUid: string;
+        refreshedAt: number;
+        snapshot: WidgetSharedFeedSnapshot;
+    }
+    | null = null;
+let widgetLocationCache:
+    | {
+        fetchedAt: number;
+        currentLocation: LocationCoords | null;
+    }
+    | null = null;
 
 function buildWidgetUrl(path: string) {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -239,6 +257,31 @@ function getWidgetWarningMessage(error: unknown) {
     }
 
     return 'Unknown widget error';
+}
+
+function buildWidgetNotesFingerprint(notes: Note[]) {
+    return notes
+        .map((note) =>
+            [
+                note.id,
+                note.updatedAt ?? note.createdAt,
+                note.type,
+                note.locationName ?? '',
+                note.isFavorite ? '1' : '0',
+                note.hasDoodle ? '1' : '0',
+                note.hasStickers ? '1' : '0',
+            ].join(':')
+        )
+        .join('|');
+}
+
+function buildWidgetRequestKey(options: UpdateWidgetDataOptions) {
+    return JSON.stringify({
+        notes: options.notes ? buildWidgetNotesFingerprint(options.notes) : 'db',
+        includeLocationLookup: options.includeLocationLookup !== false,
+        includeSharedRefresh: options.includeSharedRefresh === true,
+        referenceDate: options.referenceDate?.toISOString() ?? 'live',
+    });
 }
 
 function updatePlatformWidgetTimeline(entries: WidgetTimelineEntry[]) {
@@ -1165,6 +1208,7 @@ async function resolveWidgetAuthorAvatarProps(candidate: WidgetCandidate) {
 async function getSharedWidgetFeedSnapshot(includeSharedRefresh = false): Promise<WidgetSharedFeedSnapshot> {
     const currentUser = await getSupabaseUser();
     if (!currentUser) {
+        sharedWidgetFeedCache = null;
         return {
             currentUserUid: null,
             sharedPosts: [],
@@ -1186,12 +1230,26 @@ async function getSharedWidgetFeedSnapshot(includeSharedRefresh = false): Promis
         };
     }
 
+    if (
+        sharedWidgetFeedCache &&
+        sharedWidgetFeedCache.userUid === currentUser.id &&
+        Date.now() - sharedWidgetFeedCache.refreshedAt < WIDGET_SHARED_REFRESH_TTL_MS
+    ) {
+        return sharedWidgetFeedCache.snapshot;
+    }
+
     try {
         const liveSnapshot = await refreshSharedFeed(currentUser);
-        return {
+        const nextSnapshot = {
             currentUserUid: currentUser.id,
             sharedPosts: liveSnapshot.sharedPosts.filter((post) => post.authorUid !== currentUser.id),
         };
+        sharedWidgetFeedCache = {
+            userUid: currentUser.id,
+            refreshedAt: Date.now(),
+            snapshot: nextSnapshot,
+        };
+        return nextSnapshot;
     } catch (error) {
         console.warn(
             '[widgetService] Failed to refresh shared widget feed, using cache:',
@@ -1201,6 +1259,46 @@ async function getSharedWidgetFeedSnapshot(includeSharedRefresh = false): Promis
             currentUserUid: currentUser.id,
             sharedPosts: cachedPosts,
         };
+    }
+}
+
+async function getWidgetCurrentLocation(includeLocationLookup = true): Promise<LocationCoords | null> {
+    if (!includeLocationLookup) {
+        return null;
+    }
+
+    if (
+        widgetLocationCache &&
+        Date.now() - widgetLocationCache.fetchedAt < WIDGET_LOCATION_CACHE_TTL_MS
+    ) {
+        return widgetLocationCache.currentLocation;
+    }
+
+    try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') {
+            widgetLocationCache = {
+                fetchedAt: Date.now(),
+                currentLocation: null,
+            };
+            return null;
+        }
+
+        const location = await Location.getLastKnownPositionAsync();
+        const currentLocation = location
+            ? {
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+            }
+            : null;
+        widgetLocationCache = {
+            fetchedAt: Date.now(),
+            currentLocation,
+        };
+        return currentLocation;
+    } catch (e) {
+        console.warn('[widgetService] Location fetch failed:', e);
+        return null;
     }
 }
 
@@ -1469,28 +1567,12 @@ async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<v
     try {
         const notes = options.notes ?? await getAllNotes();
         const sharedFeedSnapshot = await getSharedWidgetFeedSnapshot(options.includeSharedRefresh === true);
-
-        let currentLocation: Location.LocationObject | null = null;
-        if (options.includeLocationLookup !== false) {
-            try {
-                const { status } = await Location.getForegroundPermissionsAsync();
-                if (status === 'granted') {
-                    currentLocation = await Location.getLastKnownPositionAsync();
-                }
-            } catch (e) {
-                console.warn('[widgetService] Location fetch failed:', e);
-            }
-        }
+        const currentLocation = await getWidgetCurrentLocation(options.includeLocationLookup !== false);
 
         const { entries, history } = await buildWidgetTimeline({
             notes,
             sharedPosts: sharedFeedSnapshot.sharedPosts,
-            currentLocation: currentLocation
-                ? {
-                    latitude: currentLocation.coords.latitude,
-                    longitude: currentLocation.coords.longitude,
-                }
-                : null,
+            currentLocation,
             referenceDate: options.referenceDate ?? new Date(),
         });
 
@@ -1502,6 +1584,15 @@ async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<v
 }
 
 export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): Promise<void> {
+    const requestKey = buildWidgetRequestKey(options);
+    if (
+        !options.referenceDate &&
+        requestKey === lastWidgetRequestKey &&
+        Date.now() - lastWidgetRequestAt < WIDGET_REQUEST_DEDUPE_WINDOW_MS
+    ) {
+        return;
+    }
+
     if (widgetUpdateInFlight) {
         pendingWidgetUpdateOptions = {
             ...(pendingWidgetUpdateOptions ?? {}),
@@ -1510,6 +1601,9 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
         await widgetUpdateInFlight;
         return;
     }
+
+    lastWidgetRequestKey = requestKey;
+    lastWidgetRequestAt = Date.now();
 
     widgetUpdateInFlight = runWidgetUpdate(options)
         .finally(async () => {
