@@ -277,12 +277,12 @@ export default function NotesIndexScreen() {
     (item: NoteGridItem) => {
       if (item.kind === 'note') {
         requestFeedFocus({ kind: 'note', id: item.note.id });
-        router.replace('/(tabs)' as Href);
+        router.replace('/' as Href);
         return;
       }
 
       requestFeedFocus({ kind: 'shared-post', id: item.post.id });
-      router.replace('/(tabs)' as Href);
+      router.replace('/' as Href);
     },
     [requestFeedFocus, router]
   );

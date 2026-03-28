@@ -37,7 +37,7 @@ SplashScreen.preventAutoHideAsync();
 const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
 
 function resolveStartupTarget(hasLaunched: string | null) {
-  return hasLaunched === 'true' ? '/(tabs)' : '/auth/onboarding';
+  return hasLaunched === 'true' ? '/' : '/auth/onboarding';
 }
 
 function AppContent() {
@@ -140,7 +140,7 @@ function AppContent() {
       })
       .catch(() => {
         if (!cancelled) {
-          setStartupTarget('/(tabs)');
+          setStartupTarget('/');
         }
       });
 
@@ -154,7 +154,7 @@ function AppContent() {
       return;
     }
 
-    router.replace(startupTarget as '/(tabs)' | '/auth/onboarding');
+    router.replace(startupTarget as '/' | '/auth/onboarding');
   }, [router, startupRedirectPending, startupTarget]);
 
   useEffect(() => {

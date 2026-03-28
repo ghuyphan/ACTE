@@ -3,14 +3,17 @@ import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { setAppLanguage } from '../constants/i18n';
 import { useTheme } from '../hooks/useTheme';
+import AppSheetScaffold from './AppSheetScaffold';
 
 export default function SettingsLanguageSheetAndroid({ onClose }: { onClose: () => void }) {
   const { t, i18n } = useTranslation();
   const { colors } = useTheme();
 
   return (
-    <View>
-      <Text style={[styles.title, { color: colors.text }]}>{t('settings.language', 'Language')}</Text>
+    <AppSheetScaffold
+      headerVariant="standard"
+      title={t('settings.language', 'Language')}
+    >
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         {[
           { code: 'en', label: 'English' },
@@ -42,17 +45,11 @@ export default function SettingsLanguageSheetAndroid({ onClose }: { onClose: () 
           );
         })}
       </View>
-    </View>
+    </AppSheetScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 16,
-    fontFamily: 'System',
-  },
   card: {
     borderWidth: 1,
     borderRadius: 20,

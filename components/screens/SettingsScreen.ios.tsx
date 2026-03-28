@@ -1,7 +1,5 @@
 import {
-  BottomSheet,
   Button,
-  Group,
   Host,
   HStack,
   Image as SwiftUIImage,
@@ -14,17 +12,16 @@ import {
 import {
   backgroundOverlay,
   cornerRadius,
-  environment,
   font,
   foregroundStyle,
   frame,
   multilineTextAlignment,
   padding,
-  presentationDragIndicator,
   scrollContentBackground,
 } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import AppSheet from '../AppSheet';
 import AppSheetAlert from '../AppSheetAlert';
 import SettingsLanguageSheet from '../SettingsLanguageSheet';
 import SettingsSyncSheet from '../SettingsSyncSheet';
@@ -48,6 +45,7 @@ export default function SettingsScreenIOS() {
     openAccountDeletionHelpLink,
     openPlusScreen,
     openPrivacyPolicyLink,
+    openSyncScreen,
     openSupportLink,
     plusValue,
     promptClearAll,
@@ -114,7 +112,7 @@ export default function SettingsScreenIOS() {
                 <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{accountValue}</SwiftUIText>
               </HStack>
             )}
-            <Button onPress={() => setShowSync(true)}>
+            <Button onPress={openSyncScreen}>
               <HStack>
                 <HStack
                   modifiers={[
@@ -345,38 +343,29 @@ export default function SettingsScreenIOS() {
           </Section>
         </List>
 
-        <BottomSheet isPresented={showTheme} onIsPresentedChange={setShowTheme} fitToContents>
-          <Group
-            modifiers={[
-              presentationDragIndicator('visible'),
-              environment('colorScheme', isDark ? 'dark' : 'light'),
-            ]}
-          >
-            <SettingsThemeSheet onClose={() => setShowTheme(false)} />
-          </Group>
-        </BottomSheet>
+        <AppSheet
+          visible={showTheme}
+          onClose={() => setShowTheme(false)}
+          iosContentType="swift-ui"
+        >
+          <SettingsThemeSheet onClose={() => setShowTheme(false)} />
+        </AppSheet>
 
-        <BottomSheet isPresented={showLanguage} onIsPresentedChange={setShowLanguage} fitToContents>
-          <Group
-            modifiers={[
-              presentationDragIndicator('visible'),
-              environment('colorScheme', isDark ? 'dark' : 'light'),
-            ]}
-          >
-            <SettingsLanguageSheet onClose={() => setShowLanguage(false)} />
-          </Group>
-        </BottomSheet>
+        <AppSheet
+          visible={showLanguage}
+          onClose={() => setShowLanguage(false)}
+          iosContentType="swift-ui"
+        >
+          <SettingsLanguageSheet onClose={() => setShowLanguage(false)} />
+        </AppSheet>
 
-        <BottomSheet isPresented={showSync} onIsPresentedChange={setShowSync} fitToContents>
-          <Group
-            modifiers={[
-              presentationDragIndicator('visible'),
-              environment('colorScheme', isDark ? 'dark' : 'light'),
-            ]}
-          >
-            <SettingsSyncSheet accountHint={accountHint} />
-          </Group>
-        </BottomSheet>
+        <AppSheet
+          visible={showSync}
+          onClose={() => setShowSync(false)}
+          iosContentType="swift-ui"
+        >
+          <SettingsSyncSheet accountHint={accountHint} />
+        </AppSheet>
       </Host>
       <AppSheetAlert {...alertProps} />
     </View>

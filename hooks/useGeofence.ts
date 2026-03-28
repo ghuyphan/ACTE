@@ -5,6 +5,20 @@ import { Linking } from 'react-native';
 import { getReminderPermissionState, syncGeofenceRegions } from '../services/geofenceService';
 import { scheduleOnIdle } from '../utils/scheduleOnIdle';
 
+const LOCATION_FIX_TIMEOUT_MS = 8000;
+
+function getLocationErrorMessage(error: unknown) {
+    if (error instanceof Error) {
+        return error.message.toLowerCase();
+    }
+
+    if (typeof error === 'object' && error && 'message' in error) {
+        return String((error as { message?: unknown }).message ?? '').toLowerCase();
+    }
+
+    return '';
+}
+
 export interface ForegroundLocationRequestResult {
     location: Location.LocationObject | null;
     requiresSettings: boolean;
@@ -27,19 +41,50 @@ export function useGeofence() {
         return permissionState;
     }, []);
 
-    const refreshLocation = useCallback(async () => {
+    const refreshLocation = useCallback(async (): Promise<ForegroundLocationRequestResult> => {
         try {
+            const servicesEnabled = await Location.hasServicesEnabledAsync();
+            if (!servicesEnabled) {
+                return {
+                    location: null,
+                    requiresSettings: true,
+                };
+            }
+
             const known = await Location.getLastKnownPositionAsync();
             if (known) {
                 setLocation(known);
-                return known;
+                return {
+                    location: known,
+                    requiresSettings: false,
+                };
             }
 
-            const currentLocation = await Location.getCurrentPositionAsync({});
-            setLocation(currentLocation);
-            return currentLocation;
-        } catch {
-            return null;
+            const currentLocation = await Promise.race<Location.LocationObject | null>([
+                Location.getCurrentPositionAsync({
+                    accuracy: Location.LocationAccuracy.Balanced,
+                }),
+                new Promise<null>((resolve) => {
+                    setTimeout(() => resolve(null), LOCATION_FIX_TIMEOUT_MS);
+                }),
+            ]);
+
+            if (currentLocation) {
+                setLocation(currentLocation);
+            }
+
+            return {
+                location: currentLocation,
+                requiresSettings: false,
+            };
+        } catch (error) {
+            const errorMessage = getLocationErrorMessage(error);
+            return {
+                location: null,
+                requiresSettings:
+                    errorMessage.includes('location services are disabled') ||
+                    errorMessage.includes('provider is unavailable'),
+            };
         }
     }, []);
 
@@ -79,11 +124,7 @@ export function useGeofence() {
             };
         }
 
-        const nextLocation = await refreshLocation();
-        return {
-            location: nextLocation,
-            requiresSettings: false,
-        };
+        return refreshLocation();
     }, [refreshLocation]);
 
     const requestReminderPermissions = useCallback(async (): Promise<ReminderPermissionRequestResult> => {

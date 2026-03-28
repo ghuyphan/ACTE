@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { Href, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
@@ -59,6 +59,19 @@ export function useSettingsScreenModel() {
     router.push('/plus');
   };
 
+  const openSyncScreen = useCallback(() => {
+    if (!isAuthAvailable) {
+      return;
+    }
+
+    if (!user) {
+      openAccountScreen();
+      return;
+    }
+
+    setShowSync(true);
+  }, [isAuthAvailable, user]);
+
   const openPrivacyPolicyLink = () => {
     void openPrivacyPolicy();
   };
@@ -89,7 +102,15 @@ export function useSettingsScreenModel() {
   }, [isAuthAvailable, t, user]);
 
   const syncValue = useMemo(() => {
-    if (!user || !syncEnabled) {
+    if (!isAuthAvailable) {
+      return t('settings.unavailableShort', 'Unavailable');
+    }
+
+    if (!user) {
+      return t('settings.notSignedIn', 'Not signed in');
+    }
+
+    if (!syncEnabled) {
       return t('settings.autoSyncOff', 'Off');
     }
 
@@ -102,7 +123,7 @@ export function useSettingsScreenModel() {
     }
 
     return t('settings.autoSyncOnShort', 'On');
-  }, [isOnline, pendingCount, syncEnabled, syncStatus, t, user]);
+  }, [isAuthAvailable, isOnline, pendingCount, syncEnabled, syncStatus, t, user]);
 
   const plusValue = useMemo(() => {
     if (tier === 'plus') {
@@ -254,6 +275,7 @@ export function useSettingsScreenModel() {
     openAccountDeletionHelpLink,
     openPlusScreen,
     openPrivacyPolicyLink,
+    openSyncScreen,
     openSupportLink,
     plusHint,
     plusValue,

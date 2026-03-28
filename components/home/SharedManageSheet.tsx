@@ -1,5 +1,3 @@
-import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
-import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
@@ -20,46 +18,39 @@ import {
   UIManager,
   View,
 } from 'react-native';
-import AppBottomSheet from '../AppBottomSheet';
-import AppBackButton from '../ui/AppBackButton';
+import AppSheet from '../AppSheet';
+import AppSheetScaffold from '../AppSheetScaffold';
 import PrimaryButton from '../ui/PrimaryButton';
 import { Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
 import { FriendConnection, FriendInvite, getSharedFeedErrorMessage } from '../../services/sharedFeedService';
-import { isOlderIOS } from '../../utils/platform';
 
 function ManageBody({
   friends,
   activeInvite,
   loading,
-  onClose,
   onOpenJoin,
   onShareInvite,
   onRevokeInvite,
   onRemoveFriend,
-  friendsTitle,
   emptyLoadingBody,
   emptyBody,
   friendFallback,
   connectedOnLabel,
-  doneLabel,
 }: {
   friends: FriendConnection[];
   activeInvite: FriendInvite | null;
   loading: boolean;
-  onClose: () => void;
   onOpenJoin: () => void;
   onShareInvite: () => void;
   onRevokeInvite: () => void;
   onRemoveFriend: (friendUid: string) => void;
-  friendsTitle: string;
   emptyLoadingBody: string;
   emptyBody: string;
   friendFallback: string;
   connectedOnLabel: string;
-  doneLabel: string;
 }) {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
@@ -92,21 +83,7 @@ function ManageBody({
   ];
 
   return (
-    <View style={styles.sheetContent}>
-      {Platform.OS !== 'ios' ? (
-        <View style={styles.grabberWrap}>
-          <View style={[styles.grabber, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.16)' }]} />
-        </View>
-      ) : null}
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <View style={[styles.header, Platform.OS === 'ios' ? styles.headerWithNativeHandle : null]}>
-          <Text style={[styles.title, { color: colors.text }]}>{friendsTitle}</Text>
-          <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-            {t('shared.friendsCount', '{{count}} friends', { count: friends.length })}
-          </Text>
-        </View>
-
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <Pressable
           onPress={onOpenJoin}
           style={({ pressed }) => [
@@ -276,14 +253,7 @@ function ManageBody({
             </View>
           ))
         )}
-      </ScrollView>
-
-      {Platform.OS !== 'ios' ? (
-        <Pressable onPress={onClose} style={styles.closeAction}>
-          <Text style={[styles.closeText, { color: colors.secondaryText }]}>{doneLabel}</Text>
-        </Pressable>
-      ) : null}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -293,8 +263,6 @@ function JoinBody({
   inviteValue,
   joining,
   onChangeInvite,
-  onBack,
-  onClose,
   onSubmit,
   onGoToAuth,
 }: {
@@ -303,58 +271,14 @@ function JoinBody({
   inviteValue: string;
   joining: boolean;
   onChangeInvite: (value: string) => void;
-  onBack: () => void;
-  onClose: () => void;
   onSubmit: () => void;
   onGoToAuth: () => void;
 }) {
   const { t } = useTranslation();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
 
   return (
     <View style={styles.sheetContent}>
-      {Platform.OS !== 'ios' ? (
-        <View style={styles.grabberWrap}>
-          <View style={[styles.grabber, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.16)' }]} />
-        </View>
-      ) : null}
-
-      <View style={styles.joinTopRow}>
-        <AppBackButton onPress={onBack} style={styles.joinIconButton} />
-        <Pressable
-          onPress={onClose}
-          style={({ pressed }) => [
-            styles.joinIconButton,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-        >
-          <Ionicons name="close" size={18} color={colors.text} />
-        </Pressable>
-      </View>
-
-      <View style={[styles.joinBadge, { backgroundColor: colors.primarySoft }]}>
-        <Ionicons
-          name={user ? 'link-outline' : 'person-circle-outline'}
-          size={20}
-          color={colors.primary}
-        />
-      </View>
-
-      <Text style={[styles.joinTitle, { color: colors.text }]}>
-        {t('shared.joinTitle', 'Join a friend')}
-      </Text>
-      <Text style={[styles.joinSubtitle, { color: colors.secondaryText }]}>
-        {user
-          ? t('shared.joinBody', 'Paste the invite link to connect and start sharing on Home.')
-          : isAuthAvailable
-            ? t('shared.joinSignInBody', 'Sign in first so we can connect you to this friend.')
-            : t('shared.unavailableBody', 'This build does not have shared social enabled right now.')}
-      </Text>
-
       {user ? (
         <View style={styles.joinFormBlock}>
           <Text style={[styles.joinFieldLabel, { color: colors.secondaryText }]}>
@@ -433,7 +357,7 @@ export default function SharedManageSheet(props: {
   onRevokeInvite: () => void;
   onRemoveFriend: (friendUid: string) => void;
 }) {
-  const { isDark } = useTheme();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const router = useRouter();
   const { user, isAuthAvailable } = useAuth();
@@ -569,131 +493,104 @@ export default function SharedManageSheet(props: {
 
   const content = (
     <Animated.View
+      key={`shared-manage-${mode}`}
       style={{
         opacity: contentOpacity,
         transform: [{ translateY: contentTranslateY }],
       }}
     >
       {mode === 'join' ? (
-        <JoinBody
-          user={user}
-          isAuthAvailable={isAuthAvailable}
-          inviteValue={inviteValue}
-          joining={joining}
-          onChangeInvite={setInviteValue}
-          onBack={handleBackToManage}
-          onClose={onClose}
-          onSubmit={() => {
-            void handleJoinInvite();
-          }}
-          onGoToAuth={handleGoToAuth}
-        />
-      ) : (
-        <ManageBody
-          friends={friends}
-          activeInvite={activeInvite}
-          loading={loading}
-          onClose={onClose}
-          onOpenJoin={handleOpenJoin}
-          onShareInvite={onShareInvite}
-          onRevokeInvite={onRevokeInvite}
-          onRemoveFriend={onRemoveFriend}
-          friendsTitle={t('shared.manageTitle', 'Friends')}
-          emptyLoadingBody={t('shared.refreshingFriends', 'Refreshing your shared circle...')}
-          emptyBody={t(
-            'shared.emptyManageBody',
-            'Invite someone to start a simple shared feed on Home.'
+        <AppSheetScaffold
+          headerVariant="action"
+          title={t('shared.joinTitle', 'Join a friend')}
+          subtitle={
+            user
+              ? t('shared.joinBody', 'Paste the invite link to connect and start sharing on Home.')
+              : isAuthAvailable
+                ? t('shared.joinSignInBody', 'Sign in first so we can connect you to this friend.')
+                : t('shared.unavailableBody', 'This build does not have shared social enabled right now.')
+          }
+          headerTop={(
+            <View style={[styles.joinBadge, { backgroundColor: colors.primarySoft }]}>
+              <Ionicons
+                name={user ? 'link-outline' : 'person-circle-outline'}
+                size={20}
+                color={colors.primary}
+              />
+            </View>
           )}
-          friendFallback={t('shared.friendFallback', 'Friend')}
-          connectedOnLabel={t('shared.connectedOn', 'Connected')}
-          doneLabel={t('common.done', 'Done')}
-        />
+          leadingAction={{
+            icon: 'chevron-back',
+            accessibilityLabel: t('common.back', 'Back'),
+            onPress: handleBackToManage,
+          }}
+          trailingAction={{
+            icon: 'close',
+            accessibilityLabel: t('common.close', 'Close'),
+            onPress: onClose,
+          }}
+        >
+          <JoinBody
+            user={user}
+            isAuthAvailable={isAuthAvailable}
+            inviteValue={inviteValue}
+            joining={joining}
+            onChangeInvite={setInviteValue}
+            onSubmit={() => {
+              void handleJoinInvite();
+            }}
+            onGoToAuth={handleGoToAuth}
+          />
+        </AppSheetScaffold>
+      ) : (
+        <AppSheetScaffold
+          headerVariant="standard"
+          title={t('shared.manageTitle', 'Friends')}
+          subtitle={t('shared.friendsCount', '{{count}} friends', { count: friends.length })}
+          footer={
+            Platform.OS === 'android' ? (
+              <Pressable onPress={onClose} style={styles.closeAction}>
+                <Text style={[styles.closeText, { color: colors.secondaryText }]}>
+                  {t('common.done', 'Done')}
+                </Text>
+              </Pressable>
+            ) : null
+          }
+        >
+          <ManageBody
+            friends={friends}
+            activeInvite={activeInvite}
+            loading={loading}
+            onOpenJoin={handleOpenJoin}
+            onShareInvite={onShareInvite}
+            onRevokeInvite={onRevokeInvite}
+            onRemoveFriend={onRemoveFriend}
+            emptyLoadingBody={t('shared.refreshingFriends', 'Refreshing your shared circle...')}
+            emptyBody={t(
+              'shared.emptyManageBody',
+              'Invite someone to start a simple shared feed on Home.'
+            )}
+            friendFallback={t('shared.friendFallback', 'Friend')}
+            connectedOnLabel={t('shared.connectedOn', 'Connected')}
+          />
+        </AppSheetScaffold>
       )}
     </Animated.View>
   );
 
-  const iosSheetKey = `shared-manage-${mode}`;
-
-  if (Platform.OS === 'ios') {
-    return (
-      <View pointerEvents={visible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
-        <Host style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'}>
-          <BottomSheet
-            key={iosSheetKey}
-            isPresented={visible}
-            onIsPresentedChange={(next) => (!next ? onClose() : null)}
-            fitToContents
-          >
-            <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
-              <RNHostView key={iosSheetKey} matchContents>
-                <View
-                  style={[
-                    styles.iosContainer,
-                    {
-                      borderTopLeftRadius: isOlderIOS ? 12 : 24,
-                      borderTopRightRadius: isOlderIOS ? 12 : 24,
-                    },
-                  ]}
-                >
-                  {content}
-                </View>
-              </RNHostView>
-            </Group>
-          </BottomSheet>
-        </Host>
-      </View>
-    );
-  }
-
   return (
-    <AppBottomSheet visible={visible} onClose={onClose}>
+    <AppSheet visible={visible} onClose={onClose}>
       {content}
-    </AppBottomSheet>
+    </AppSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  iosContainer: {
-    overflow: 'hidden',
-  },
   sheetContent: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
     maxHeight: 680,
   },
   scrollContent: {
     paddingBottom: Platform.OS === 'ios' ? 28 : 8,
-  },
-  grabberWrap: {
-    alignItems: 'center',
-    marginBottom: 18,
-  },
-  grabber: {
-    width: 88,
-    height: 6,
-    borderRadius: 999,
-  },
-  header: {
-    marginBottom: 22,
-    alignItems: 'center',
-  },
-  headerWithNativeHandle: {
-    marginTop: 8,
-  },
-  title: {
-    fontSize: 32,
-    lineHeight: 36,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    ...Typography.body,
-    marginTop: 8,
-    fontSize: 15,
-    lineHeight: 20,
-    textAlign: 'center',
   },
   addFriendRow: {
     minHeight: 72,

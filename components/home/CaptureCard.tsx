@@ -1,10 +1,9 @@
-import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
-import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import AppBottomSheet from '../AppBottomSheet';
+import AppSheet from '../AppSheet';
+import AppSheetScaffold from '../AppSheetScaffold';
 import { GlassView } from '../ui/GlassView';
 import NoteColorPicker from '../ui/NoteColorPicker';
 import PremiumNoteFinishOverlay from '../ui/PremiumNoteFinishOverlay';
@@ -1147,13 +1146,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   }, [captureMode, onChangeNoteColor]);
 
   const noteColorSheetBody = onChangeNoteColor ? (
-    <View style={styles.noteColorSheet}>
-      <Text style={[styles.noteColorSheetTitle, { color: colors.text }]}>
-        {t('capture.noteColor', 'Card color')}
-      </Text>
-      <Text style={[styles.noteColorSheetHint, { color: colors.secondaryText }]}>
-        {t('capture.noteColorHint', 'Pick the gradient you want before saving this note.')}
-      </Text>
+    <AppSheetScaffold
+      headerVariant="standard"
+      title={t('capture.noteColor', 'Card color')}
+      subtitle={t('capture.noteColorHint', 'Pick the gradient you want before saving this note.')}
+      contentContainerStyle={styles.noteColorSheet}
+    >
       <View
         style={[
           styles.noteColorSheetCard,
@@ -1172,7 +1170,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           compact
         />
       </View>
-    </View>
+    </AppSheetScaffold>
   ) : null;
 
   return (
@@ -2191,34 +2189,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         onSelectPhotos={handleSelectStickerSourcePhotos}
         onClose={handleCloseStickerSourceSheet}
       />
-      {Platform.OS === 'ios' && noteColorSheetBody ? (
-        <View pointerEvents={showNoteColorSheet ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
-          <Host style={StyleSheet.absoluteFill} colorScheme={colors.captureGlassColorScheme}>
-            <BottomSheet
-              isPresented={showNoteColorSheet}
-              onIsPresentedChange={(nextPresented) => (!nextPresented ? handleCloseNoteColorSheet() : null)}
-              fitToContents
-            >
-              <Group
-                modifiers={[
-                  presentationDragIndicator('visible'),
-                  environment('colorScheme', colors.captureGlassColorScheme),
-                ]}
-              >
-                <RNHostView matchContents>
-                  <View style={styles.noteColorSheetIOSContainer}>
-                    {noteColorSheetBody}
-                  </View>
-                </RNHostView>
-              </Group>
-            </BottomSheet>
-          </Host>
-        </View>
-      ) : null}
-      {Platform.OS === 'android' && noteColorSheetBody ? (
-        <AppBottomSheet visible={showNoteColorSheet} onClose={handleCloseNoteColorSheet} detached={false}>
+      {noteColorSheetBody ? (
+        <AppSheet
+          visible={showNoteColorSheet}
+          onClose={handleCloseNoteColorSheet}
+          iosColorScheme={colors.captureGlassColorScheme}
+        >
           {noteColorSheetBody}
-        </AppBottomSheet>
+        </AppSheet>
       ) : null}
     </>
   );
@@ -2627,24 +2605,8 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingTop: 2,
   },
-  noteColorSheetIOSContainer: {
-    backgroundColor: 'transparent',
-  },
   noteColorSheet: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 28,
     gap: 12,
-  },
-  noteColorSheetTitle: {
-    ...Typography.body,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  noteColorSheetHint: {
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'center',
   },
   noteColorSheetCard: {
     borderRadius: 22,

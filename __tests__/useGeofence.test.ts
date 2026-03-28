@@ -5,6 +5,7 @@ const mockGetForegroundPermissionsAsync = jest.fn();
 const mockRequestForegroundPermissionsAsync = jest.fn();
 const mockGetBackgroundPermissionsAsync = jest.fn();
 const mockRequestBackgroundPermissionsAsync = jest.fn();
+const mockHasServicesEnabledAsync = jest.fn();
 const mockGetLastKnownPositionAsync = jest.fn();
 const mockGetCurrentPositionAsync = jest.fn();
 
@@ -18,6 +19,7 @@ jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: (...args: unknown[]) => mockRequestForegroundPermissionsAsync(...args),
   getBackgroundPermissionsAsync: (...args: unknown[]) => mockGetBackgroundPermissionsAsync(...args),
   requestBackgroundPermissionsAsync: (...args: unknown[]) => mockRequestBackgroundPermissionsAsync(...args),
+  hasServicesEnabledAsync: (...args: unknown[]) => mockHasServicesEnabledAsync(...args),
   getLastKnownPositionAsync: (...args: unknown[]) => mockGetLastKnownPositionAsync(...args),
   getCurrentPositionAsync: (...args: unknown[]) => mockGetCurrentPositionAsync(...args),
 }));
@@ -38,6 +40,7 @@ beforeEach(() => {
   mockRequestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
   mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
   mockRequestBackgroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+  mockHasServicesEnabledAsync.mockResolvedValue(true);
   mockGetLastKnownPositionAsync.mockResolvedValue(null);
   mockGetCurrentPositionAsync.mockResolvedValue(null);
   mockNotificationsGetPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
@@ -74,6 +77,21 @@ describe('useGeofence', () => {
     });
   });
 
+  it('returns requiresSettings when location services are disabled', async () => {
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockHasServicesEnabledAsync.mockResolvedValue(false);
+
+    const { result } = renderHook(() => useGeofence());
+
+    await act(async () => {
+      const response = await result.current.requestForegroundLocation();
+      expect(response.location).toBeNull();
+      expect(response.requiresSettings).toBe(true);
+    });
+
+    expect(mockGetCurrentPositionAsync).not.toHaveBeenCalled();
+  });
+
   it('enables reminders and syncs geofences when all permissions are granted', async () => {
     const location = {
       coords: { latitude: 10.7626, longitude: 106.6601 },
@@ -98,4 +116,3 @@ describe('useGeofence', () => {
     expect(mockSyncGeofenceRegions).toHaveBeenCalled();
   });
 });
-

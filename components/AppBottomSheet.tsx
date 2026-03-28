@@ -6,6 +6,7 @@ import {
 import { useEffect, useRef } from 'react';
 import { Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Sheet } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 
 export default function AppBottomSheet({
@@ -83,15 +84,15 @@ export default function AppBottomSheet({
 
 const styles = StyleSheet.create({
   background: {
-    borderRadius: 28,
+    borderRadius: Sheet.android.radius,
     borderWidth: 1,
   },
   detached: {
-    marginHorizontal: 12,
+    marginHorizontal: Sheet.android.floatingHorizontalInset,
   },
   handle: {
-    width: 42,
-    height: 4,
+    width: Sheet.android.handleWidth,
+    height: Sheet.android.handleHeight,
     borderRadius: 999,
   },
 });

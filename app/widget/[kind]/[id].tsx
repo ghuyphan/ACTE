@@ -9,23 +9,23 @@ export default function WidgetFocusRoute() {
 
   useEffect(() => {
     if (!id || typeof id !== 'string') {
-      router.replace('/(tabs)' as Href);
+      router.replace('/' as Href);
       return;
     }
 
     if (kind === 'note') {
       requestFeedFocus({ kind: 'note', id });
-      router.replace('/(tabs)' as Href);
+      router.replace('/' as Href);
       return;
     }
 
     if (kind === 'shared-post') {
       requestFeedFocus({ kind: 'shared-post', id });
-      router.replace('/(tabs)' as Href);
+      router.replace('/' as Href);
       return;
     }
 
-    router.replace('/(tabs)' as Href);
+    router.replace('/' as Href);
   }, [id, kind, requestFeedFocus, router]);
 
   return null;

@@ -1,11 +1,9 @@
-import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
-import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Layout, Typography } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
-import { isOlderIOS } from '../utils/platform';
-import AppBottomSheet from './AppBottomSheet';
+import AppSheet from './AppSheet';
+import AppSheetScaffold from './AppSheetScaffold';
 import PrimaryButton from './ui/PrimaryButton';
 
 interface StickerSourceSheetProps {
@@ -31,7 +29,6 @@ function StickerSourceSheetBody({
   onClose,
 }: Omit<StickerSourceSheetProps, 'visible'>) {
   const { colors } = useTheme();
-  const sheetBackground = colors.card ?? colors.surface ?? '#FFFDFC';
   const optionBackground = colors.surface ?? colors.card ?? '#FCF9F5';
   const borderColor = colors.border ?? 'rgba(0,0,0,0.08)';
   const primaryTextColor = colors.text ?? '#2B2621';
@@ -39,18 +36,11 @@ function StickerSourceSheetBody({
   const accentColor = colors.primary ?? '#E0B15B';
 
   return (
-    <View
-      style={[
-        styles.sheetCard,
-        {
-          backgroundColor: isOlderIOS ? sheetBackground : 'transparent',
-        },
-      ]}
+    <AppSheetScaffold
+      headerVariant="standard"
+      title={title}
+      subtitle={canPasteFromClipboard ? pasteLabel : photoLabel}
     >
-      <Text style={[styles.title, { color: primaryTextColor }]}>{title}</Text>
-      <Text style={[styles.subtitle, { color: secondaryTextColor }]}>
-        {canPasteFromClipboard ? pasteLabel : photoLabel}
-      </Text>
       <View
         style={[
           styles.optionCard,
@@ -97,7 +87,7 @@ function StickerSourceSheetBody({
         style={styles.cancelButton}
         testID="sticker-source-cancel"
       />
-    </View>
+    </AppSheetScaffold>
   );
 }
 
@@ -112,37 +102,8 @@ export default function StickerSourceSheet({
   onSelectPhotos,
   onClose,
 }: StickerSourceSheetProps) {
-  const { isDark } = useTheme();
-
-  if (Platform.OS === 'ios') {
-    return (
-      <View pointerEvents={visible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
-        <Host style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'}>
-          <BottomSheet isPresented={visible} onIsPresentedChange={(next) => (!next ? onClose() : null)} fitToContents>
-            <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
-              <RNHostView matchContents>
-                <View style={styles.iosContainer}>
-                  <StickerSourceSheetBody
-                    canPasteFromClipboard={canPasteFromClipboard}
-                    title={title}
-                    pasteLabel={pasteLabel}
-                    photoLabel={photoLabel}
-                    cancelLabel={cancelLabel}
-                    onSelectClipboard={onSelectClipboard}
-                    onSelectPhotos={onSelectPhotos}
-                    onClose={onClose}
-                  />
-                </View>
-              </RNHostView>
-            </Group>
-          </BottomSheet>
-        </Host>
-      </View>
-    );
-  }
-
   return (
-    <AppBottomSheet visible={visible} onClose={onClose} detached={false}>
+    <AppSheet visible={visible} onClose={onClose}>
       <StickerSourceSheetBody
         canPasteFromClipboard={canPasteFromClipboard}
         title={title}
@@ -153,31 +114,11 @@ export default function StickerSourceSheet({
         onSelectPhotos={onSelectPhotos}
         onClose={onClose}
       />
-    </AppBottomSheet>
+    </AppSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  iosContainer: {
-    backgroundColor: 'transparent',
-  },
-  sheetCard: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 28,
-  },
-  title: {
-    ...Typography.screenTitle,
-    textAlign: 'center',
-  },
-  subtitle: {
-    ...Typography.body,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 18,
-  },
   optionCard: {
     borderRadius: 24,
     borderWidth: 1,

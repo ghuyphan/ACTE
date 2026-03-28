@@ -60,7 +60,7 @@ export function useProfileScreenModel() {
   const performSignOut = async () => {
     setIsSigningOut(true);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.replace('/(tabs)/settings');
+    router.replace('/settings');
 
     setTimeout(() => {
       signOut().catch((error) => {
@@ -161,7 +161,7 @@ export function useProfileScreenModel() {
 
               await clearGeofenceRegions().catch(() => undefined);
               await refreshNotes(false).catch(() => undefined);
-              router.replace('/(tabs)/settings');
+              router.replace('/settings');
               Alert.alert(
                 t('profile.deleteAccountSuccessTitle', 'Account deleted'),
                 t(

@@ -58,6 +58,27 @@ export const Shadows = {
   },
 } as const;
 
+export const Sheet = {
+  maxHeight: 680,
+  ios: {
+    horizontalPadding: 24,
+    headerTopPadding: 24,
+    headerBottomSpacing: 16,
+    bottomPadding: 28,
+    legacyCornerRadius: 10,
+  },
+  android: {
+    horizontalPadding: 20,
+    headerTopPadding: 20,
+    headerBottomSpacing: 16,
+    bottomPadding: 24,
+    floatingHorizontalInset: 12,
+    radius: 28,
+    handleWidth: 42,
+    handleHeight: 4,
+  },
+} as const;
+
 export const Typography = {
   screenTitle: {
     fontSize: 22,

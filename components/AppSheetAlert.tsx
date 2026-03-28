@@ -1,11 +1,8 @@
-import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
-import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, StyleSheet, Text, View } from 'react-native';
-import { Typography } from '../constants/theme';
+import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
-import { isOlderIOS } from '../utils/platform';
-import AppBottomSheet from './AppBottomSheet';
+import AppSheet from './AppSheet';
+import AppSheetScaffold from './AppSheetScaffold';
 import PrimaryButton from './ui/PrimaryButton';
 
 export type AppSheetAlertVariant = 'info' | 'success' | 'warning' | 'error';
@@ -62,19 +59,16 @@ function AlertSheetBody({
   };
 
   return (
-    <View
-      style={[
-        styles.sheetCard,
-        {
-          backgroundColor: isOlderIOS ? colors.card : 'transparent',
-        },
-      ]}
+    <AppSheetScaffold
+      headerVariant="standard"
+      title={title}
+      subtitle={message}
+      headerTop={
+        <View style={[styles.iconBadge, { backgroundColor: `${meta.tint}18` }]}>
+          <Ionicons name={meta.icon} size={24} color={meta.tint} />
+        </View>
+      }
     >
-      <View style={[styles.iconBadge, { backgroundColor: `${meta.tint}18` }]}>
-        <Ionicons name={meta.icon} size={24} color={meta.tint} />
-      </View>
-      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
-      <Text style={[styles.message, { color: colors.secondaryText }]}>{message}</Text>
       <View style={styles.actions}>
         <PrimaryButton
           label={primaryAction.label}
@@ -95,7 +89,7 @@ function AlertSheetBody({
           />
         ) : null}
       </View>
-    </View>
+    </AppSheetScaffold>
   );
 }
 
@@ -109,46 +103,8 @@ export default function AppSheetAlert({
   dismissible = true,
   onClose,
 }: AppSheetAlertProps) {
-  const { colors, isDark } = useTheme();
-
-  if (Platform.OS === 'ios') {
-    return (
-      <View pointerEvents={visible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
-        <Host style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'}>
-          <BottomSheet isPresented={visible} onIsPresentedChange={(next) => (!next ? onClose() : null)} fitToContents>
-            <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
-              <RNHostView matchContents>
-                <View
-                  style={[
-                    styles.iosContainer,
-                    isOlderIOS
-                      ? {
-                        backgroundColor: colors.card,
-                        borderTopLeftRadius: 10,
-                        borderTopRightRadius: 10,
-                      }
-                      : null,
-                  ]}
-                >
-                  <AlertSheetBody
-                    variant={variant}
-                    title={title}
-                    message={message}
-                    primaryAction={primaryAction}
-                    secondaryAction={secondaryAction}
-                    onClose={onClose}
-                  />
-                </View>
-              </RNHostView>
-            </Group>
-          </BottomSheet>
-        </Host>
-      </View>
-    );
-  }
-
   return (
-    <AppBottomSheet visible={visible} onClose={onClose} detached={false} dismissible={dismissible}>
+    <AppSheet visible={visible} onClose={onClose} dismissible={dismissible}>
       <AlertSheetBody
         variant={variant}
         title={title}
@@ -157,35 +113,17 @@ export default function AppSheetAlert({
         secondaryAction={secondaryAction}
         onClose={onClose}
       />
-    </AppBottomSheet>
+    </AppSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  iosContainer: {
-    backgroundColor: 'transparent',
-  },
-  sheetCard: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 32,
-    borderRadius: 24,
-  },
   iconBadge: {
     width: 56,
     height: 56,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    ...Typography.screenTitle,
-    marginBottom: 10,
-  },
-  message: {
-    ...Typography.body,
-    marginBottom: 24,
   },
   actions: {
     gap: 12,

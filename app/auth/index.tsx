@@ -1,4 +1,3 @@
-import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
 import { environment, presentationDetents, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
 import { usePreventRemove } from '@react-navigation/native';
@@ -7,6 +6,7 @@ import { Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -24,6 +24,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AppSheet from '../../components/AppSheet';
 import AppBackButton from '../../components/ui/AppBackButton';
 import OfflineNotice from '../../components/ui/OfflineNotice';
 import PrimaryButton from '../../components/ui/PrimaryButton';
@@ -31,10 +32,10 @@ import { Layout, Shadows, Typography } from '../../constants/theme';
 import { EmailRegistrationInput, useAuth } from '../../hooks/useAuth';
 import { useConnectivity } from '../../hooks/useConnectivity';
 import { useTheme } from '../../hooks/useTheme';
-import { isOlderIOS } from '../../utils/platform';
 
 type AuthScreenMode = 'landing' | 'signIn' | 'register' | 'resetPassword';
 type AuthIntent = 'share-note';
+const APP_ICON_SOURCE = require('../../assets/images/icon/icon-default.png');
 const FORM_LAYOUT_TRANSITION = CurvedTransition.duration(220)
   .easingX(Easing.out(Easing.cubic))
   .easingY(Easing.out(Easing.cubic))
@@ -217,12 +218,12 @@ export default function LoginScreen() {
   ];
 
   const continueToApp = () => {
-    router.replace('/(tabs)' as Href);
+    router.replace('/' as Href);
   };
 
   const handleAuthSuccess = () => {
     resetMessages();
-    router.replace('/(tabs)' as Href);
+    router.replace('/' as Href);
   };
 
   const handleGoogleSignIn = async () => {
@@ -602,11 +603,10 @@ export default function LoginScreen() {
         />
 
         <View style={[styles.content, { paddingTop: insets.top }]}>
-          <View style={[styles.iconContainer, { backgroundColor: colors.primarySoft }]}>
-            <Ionicons name="heart" size={64} color={colors.primary} />
+          <View style={styles.iconContainer}>
+            <Image source={APP_ICON_SOURCE} style={styles.appIcon} />
           </View>
           <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
-          <Text style={[styles.brandAccent, { color: colors.secondaryText }]}>ノート</Text>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
             {landingSubtitle}
           </Text>
@@ -654,11 +654,10 @@ export default function LoginScreen() {
           landingAnimatedStyle,
         ]}
       >
-        <View style={[styles.iconContainer, { backgroundColor: colors.primarySoft }]}>
-          <Ionicons name="heart" size={64} color={colors.primary} />
+        <View style={styles.iconContainer}>
+          <Image source={APP_ICON_SOURCE} style={styles.appIcon} />
         </View>
         <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
-        <Text style={[styles.brandAccent, { color: colors.secondaryText }]}>ノート</Text>
         <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
           {landingSubtitle}
         </Text>
@@ -744,41 +743,18 @@ export default function LoginScreen() {
       </Animated.View>
 
       {Platform.OS === 'ios' ? (
-        <View pointerEvents={isFormVisible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
-          <Host style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'}>
-            <BottomSheet
-              isPresented={isFormVisible}
-              onIsPresentedChange={(next) => {
-                if (!next) {
-                  dismissForm();
-                }
-              }}
-              fitToContents={formContentHeight === 0}
-            >
-              <Group modifiers={nativeSheetModifiers}>
-                <RNHostView matchContents>
-                  <KeyboardAvoidingView behavior="padding">
-                    <View
-                      testID="auth-form-panel"
-                      style={[
-                        styles.nativeFormSurface,
-                        isOlderIOS
-                          ? {
-                              backgroundColor: colors.card,
-                              borderTopLeftRadius: 10,
-                              borderTopRightRadius: 10,
-                            }
-                          : null,
-                      ]}
-                    >
-                      {renderFormContent(false)}
-                    </View>
-                  </KeyboardAvoidingView>
-                </RNHostView>
-              </Group>
-            </BottomSheet>
-          </Host>
-        </View>
+        <AppSheet
+          visible={isFormVisible}
+          onClose={dismissForm}
+          fitToContents={formContentHeight === 0}
+          iosGroupModifiers={nativeSheetModifiers}
+        >
+          <KeyboardAvoidingView behavior="padding">
+            <View testID="auth-form-panel" style={styles.nativeFormSurface}>
+              {renderFormContent(false)}
+            </View>
+          </KeyboardAvoidingView>
+        </AppSheet>
       ) : (
         <KeyboardAvoidingView
           style={StyleSheet.absoluteFillObject}
@@ -828,21 +804,16 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 120,
     height: 120,
-    borderRadius: Layout.cardRadius,
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
     marginBottom: 32,
-    ...(Platform.OS === 'ios' ? Shadows.card : {}),
+  },
+  appIcon: {
+    width: '100%',
+    height: '100%',
   },
   title: {
     ...Typography.heroTitle,
-    marginBottom: 6,
-  },
-  brandAccent: {
-    ...Typography.pill,
-    letterSpacing: 4,
     marginBottom: 12,
-    opacity: 0.78,
   },
   subtitle: {
     ...Typography.heroSubtitle,

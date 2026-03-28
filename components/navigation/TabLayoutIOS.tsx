@@ -73,9 +73,13 @@ export default function TabLayoutIOS() {
         <NativeTabs.Trigger.Label>{t('tabs.settings', 'Settings')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
-      {isIOS26OrNewer ? (
-        <NativeTabs.Trigger name="search" role="search" disableAutomaticContentInsets />
-      ) : null}
+      {/* Keep the search route registered so NativeTabs rehydration sees a stable route list. */}
+      <NativeTabs.Trigger
+        name="search"
+        hidden={!isIOS26OrNewer}
+        role={isIOS26OrNewer ? 'search' : undefined}
+        disableAutomaticContentInsets
+      />
     </NativeTabs>
   );
 }

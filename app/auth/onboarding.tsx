@@ -4,7 +4,13 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import Animated, {
+    FadeInDown,
+    FadeOutDown,
+    useAnimatedStyle,
+    withSpring,
+    withTiming,
+} from 'react-native-reanimated';
 import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
@@ -19,20 +25,71 @@ const SLIDES = [
     { emoji: '💛', titleKey: 'onboarding.title3', subtitleKey: 'onboarding.subtitle3' },
 ];
 
+const DOT_SIZE = 8;
+const ACTIVE_DOT_WIDTH = 28;
+
+type PaginationDotProps = {
+    activeColor: string;
+    inactiveColor: string;
+    isActive: boolean;
+};
+
+function PaginationDot({ activeColor, inactiveColor, isActive }: PaginationDotProps) {
+    const animatedStyle = useAnimatedStyle(
+        () => ({
+            width: withSpring(isActive ? ACTIVE_DOT_WIDTH : DOT_SIZE, {
+                damping: 18,
+                mass: 0.7,
+                stiffness: 220,
+            }),
+            opacity: withTiming(isActive ? 1 : 0.7, { duration: 180 }),
+            backgroundColor: withTiming(isActive ? activeColor : inactiveColor, { duration: 220 }),
+            transform: [
+                {
+                    scale: withSpring(isActive ? 1 : 0.92, {
+                        damping: 18,
+                        mass: 0.7,
+                        stiffness: 220,
+                    }),
+                },
+            ],
+        }),
+        [activeColor, inactiveColor, isActive]
+    );
+
+    return <Animated.View style={[styles.dot, animatedStyle]} />;
+}
+
 export default function OnboardingScreen() {
     const { t } = useTranslation();
     const { colors, isDark } = useTheme();
     const router = useRouter();
     const [step, setStep] = useState(0);
+    const [isCompleting, setIsCompleting] = useState(false);
 
-    const completeOnboarding = async () => {
+    const completeOnboarding = () => {
+        if (isCompleting) {
+            return;
+        }
+
+        setIsCompleting(true);
         void setPersistentItem(HAS_LAUNCHED_KEY, 'true').catch((error) => {
             console.warn('Failed to persist onboarding state:', error);
         });
-        router.replace('/(tabs)');
+
+        // Let the pressed/loading state paint before mounting the tabs tree.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                router.replace('/');
+            });
+        });
     };
 
     const nextStep = () => {
+        if (isCompleting) {
+            return;
+        }
+
         if (step < SLIDES.length - 1) {
             setStep(step + 1);
         } else {
@@ -88,13 +145,11 @@ export default function OnboardingScreen() {
                 {/* Dots */}
                 <View style={styles.dots}>
                     {SLIDES.map((_, index) => (
-                        <View
+                        <PaginationDot
                             key={index}
-                            style={[
-                                styles.dot,
-                                { backgroundColor: colors.border },
-                                step === index && [styles.activeDot, { backgroundColor: colors.primary }],
-                            ]}
+                            activeColor={colors.primary}
+                            inactiveColor={colors.border}
+                            isActive={step === index}
                         />
                     ))}
                 </View>
@@ -106,15 +161,18 @@ export default function OnboardingScreen() {
                             ? t('onboarding.getStarted', 'Get Started')
                             : t('onboarding.next', 'Next')
                     }
+                    disabled={isCompleting}
+                    loading={isCompleting}
                     onPress={nextStep}
                 />
 
                 {/* Skip */}
                 <View style={styles.skipContainer}>
                     {step < SLIDES.length - 1 ? (
-                        <Pressable onPress={completeOnboarding} style={({ pressed }) => [
+                        <Pressable disabled={isCompleting} onPress={completeOnboarding} style={({ pressed }) => [
                             styles.skipButton,
-                            pressed && { opacity: 0.7 }
+                            isCompleting && { opacity: 0.5 },
+                            pressed && !isCompleting && { opacity: 0.7 }
                         ]}>
                             <Text style={[styles.skipText, { color: colors.secondaryText }]}>
                                 {t('onboarding.skip', 'Skip')}
@@ -175,14 +233,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         marginBottom: 36,
         gap: 8,
+        alignItems: 'center',
     },
     dot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-    },
-    activeDot: {
-        width: 28,
+        width: DOT_SIZE,
+        height: DOT_SIZE,
         borderRadius: 4,
     },
     skipContainer: {

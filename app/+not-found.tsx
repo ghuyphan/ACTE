@@ -14,7 +14,7 @@ export default function NotFoundScreen() {
         <Text style={[styles.title, { color: colors.text }]}>
           {t('not_found.message', 'This screen doesn\'t exist.')}
         </Text>
-        <Link href="/(tabs)" style={styles.link}>
+        <Link href="/" style={styles.link}>
           <Text style={[styles.linkText, { color: colors.primary }]}>
             {t('not_found.go_home', 'Go to home screen!')}
           </Text>

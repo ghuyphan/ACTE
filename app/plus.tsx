@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import {
   Alert,
-  Platform,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +18,8 @@ import { Layout, Shadows, Typography } from '../constants/theme';
 import { useConnectivity } from '../hooks/useConnectivity';
 import { useSubscription } from '../hooks/useSubscription';
 import { useTheme } from '../hooks/useTheme';
+
+const APP_ICON_SOURCE = require('../assets/images/icon/icon-default.png');
 
 function FeatureRow({
   icon,
@@ -151,8 +153,8 @@ export default function PlusScreen() {
         contentContainerStyle={styles.contentContainer}
       >
         <View style={styles.heroSection}>
-          <View style={[styles.iconContainer, { backgroundColor: colors.primarySoft }]}>
-            <Ionicons name="heart" size={64} color={colors.primary} />
+          <View style={styles.iconContainer}>
+            <Image source={APP_ICON_SOURCE} style={styles.appIcon} />
           </View>
           <View style={styles.titleRow}>
             <Text style={[styles.title, { color: colors.text }]}>
@@ -160,7 +162,6 @@ export default function PlusScreen() {
             </Text>
             <Text style={[styles.plusBadge, { color: colors.primary }]}>Plus</Text>
           </View>
-          <Text style={[styles.brandAccent, { color: colors.secondaryText }]}>ノート</Text>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
             {t('plus.subtitle', 'More room for your photo memories.')}
           </Text>
@@ -304,17 +305,18 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 120,
     height: 120,
-    borderRadius: Layout.cardRadius,
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
     marginBottom: 32,
-    ...(Platform.OS === 'ios' ? Shadows.card : {}),
+  },
+  appIcon: {
+    width: '100%',
+    height: '100%',
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
+    marginBottom: 12,
   },
   title: {
     ...Typography.heroTitle,
@@ -327,12 +329,6 @@ const styles = StyleSheet.create({
     fontFamily: Typography.screenTitle.fontFamily,
     textTransform: 'uppercase',
     letterSpacing: -1,
-  },
-  brandAccent: {
-    ...Typography.pill,
-    letterSpacing: 4,
-    marginBottom: 12,
-    opacity: 0.78,
   },
   subtitle: {
     ...Typography.heroSubtitle,

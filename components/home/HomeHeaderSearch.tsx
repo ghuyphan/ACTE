@@ -13,7 +13,8 @@ import {
   padding,
   tint,
 } from '@expo/ui/swift-ui/modifiers';
-import AppBottomSheet from '../AppBottomSheet';
+import AppSheet from '../AppSheet';
+import AppSheetScaffold from '../AppSheetScaffold';
 import { GlassView } from '../ui/GlassView';
 import { TFunction } from 'i18next';
 import { ComponentProps, useEffect, useRef, useState } from 'react';
@@ -497,11 +498,17 @@ export default function HomeHeaderSearch({
       </GlassHeader>
 
       {Platform.OS === 'android' ? (
-        <AppBottomSheet visible={showAndroidRadiusSheet} onClose={() => setShowAndroidRadiusSheet(false)}>
-          <View style={styles.radiusSheet}>
-            <Text style={[styles.radiusSheetTitle, { color: colors.text }]}>
-              {t('capture.radius', 'Radius')}
-            </Text>
+        <AppSheet
+          visible={showAndroidRadiusSheet}
+          onClose={() => setShowAndroidRadiusSheet(false)}
+          androidPresentation="floating"
+          topInset={topInset}
+        >
+          <AppSheetScaffold
+            headerVariant="standard"
+            title={t('capture.radius', 'Radius')}
+            contentContainerStyle={styles.radiusSheet}
+          >
             <View style={[styles.radiusSheetCard, { backgroundColor: colors.card }]}>
               {NOTE_RADIUS_OPTIONS.map((option, index) => {
                 const isSelected = radius === option;
@@ -539,8 +546,8 @@ export default function HomeHeaderSearch({
                 );
               })}
             </View>
-          </View>
-        </AppBottomSheet>
+          </AppSheetScaffold>
+        </AppSheet>
       ) : null}
     </>
   );

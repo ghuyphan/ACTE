@@ -1,8 +1,10 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { useAuth } from '../hooks/useAuth';
 import { useSyncStatus } from '../hooks/useSyncStatus';
 import { useTheme } from '../hooks/useTheme';
+import AppSheetScaffold from './AppSheetScaffold';
 
 export default function SettingsSyncSheetAndroid({
   accountHint,
@@ -13,30 +15,50 @@ export default function SettingsSyncSheetAndroid({
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { user, isAuthAvailable } = useAuth();
   const { blockedCount, failedCount, isEnabled, pendingCount, setSyncEnabled } = useSyncStatus();
+  const canManageSync = Boolean(user && isAuthAvailable);
+  const description =
+    canManageSync
+      ? t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')
+      : accountHint ??
+        (isAuthAvailable
+          ? t('settings.accountSignedOutMsg', 'Sign in to back up your notes and keep them synced across your devices.')
+          : t('settings.accountUnavailableMsg', 'Account sign-in is unavailable right now. Your notes stay safely on this device.'));
 
   return (
-    <View style={styles.container}>
-      <Text style={[styles.title, { color: colors.text }]}>{t('settings.autoSync', 'Auto sync')}</Text>
-      <Text style={[styles.description, { color: colors.secondaryText }]}>
-        {t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')}
-      </Text>
-
+    <AppSheetScaffold
+      headerVariant="standard"
+      title={t('settings.autoSync', 'Auto sync')}
+      subtitle={description}
+      footer={(
+        <Pressable
+          onPress={onClose}
+          style={[styles.doneButton, { backgroundColor: colors.primary }]}
+        >
+          <Text style={[styles.doneButtonText, { color: colors.text }]}>{t('common.done', 'Done')}</Text>
+        </Pressable>
+      )}
+    >
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.row}>
           <View style={styles.copy}>
             <Text style={[styles.label, { color: colors.text }]}>{t('settings.autoSync', 'Auto sync')}</Text>
             <Text style={[styles.hint, { color: colors.secondaryText }]}>
-              {isEnabled
-                ? t('settings.autoSyncOnShort', 'On')
-                : t('settings.autoSyncOff', 'Off')}
+              {canManageSync
+                ? (isEnabled
+                  ? t('settings.autoSyncOnShort', 'On')
+                  : t('settings.autoSyncOff', 'Off'))
+                : isAuthAvailable
+                  ? t('settings.notSignedIn', 'Not signed in')
+                  : t('settings.unavailableShort', 'Unavailable')}
             </Text>
           </View>
-          <Switch value={isEnabled} onValueChange={setSyncEnabled} />
+          {canManageSync ? <Switch value={isEnabled} onValueChange={setSyncEnabled} /> : null}
         </View>
       </View>
 
-      {accountHint ? (
+      {canManageSync && accountHint ? (
         <Text style={[styles.footnote, { color: colors.secondaryText }]}>{accountHint}</Text>
       ) : null}
 
@@ -47,35 +69,11 @@ export default function SettingsSyncSheetAndroid({
           blocked: blockedCount,
         })}
       </Text>
-
-      <Pressable
-        onPress={onClose}
-        style={[styles.doneButton, { backgroundColor: colors.primary }]}
-      >
-        <Text style={[styles.doneButtonText, { color: colors.text }]}>{t('common.done', 'Done')}</Text>
-      </Pressable>
-    </View>
+    </AppSheetScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 10,
-    fontFamily: 'System',
-  },
-  description: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 16,
-    fontFamily: 'System',
-  },
   card: {
     borderWidth: 1,
     borderRadius: 24,

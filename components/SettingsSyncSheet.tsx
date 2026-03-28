@@ -2,6 +2,7 @@ import { Group, HStack, Text as SwiftUIText, Toggle, VStack } from '@expo/ui/swi
 import { backgroundOverlay, cornerRadius, font, foregroundStyle, padding } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../hooks/useAuth';
 import { useSyncStatus } from '../hooks/useSyncStatus';
 import { useTheme } from '../hooks/useTheme';
 import { isOlderIOS } from '../utils/platform';
@@ -13,7 +14,16 @@ export default function SettingsSyncSheet({
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { user, isAuthAvailable } = useAuth();
   const { blockedCount, failedCount, isEnabled, pendingCount, setSyncEnabled } = useSyncStatus();
+  const canManageSync = Boolean(user && isAuthAvailable);
+  const description =
+    canManageSync
+      ? t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')
+      : accountHint ??
+        (isAuthAvailable
+          ? t('settings.accountSignedOutMsg', 'Sign in to back up your notes and keep them synced across your devices.')
+          : t('settings.accountUnavailableMsg', 'Account sign-in is unavailable right now. Your notes stay safely on this device.'));
 
   const containerModifiers = [
     padding({ top: 24, leading: 24, trailing: 24, bottom: 40 }),
@@ -36,7 +46,7 @@ export default function SettingsSyncSheet({
             padding({ bottom: 24 }),
           ]}
         >
-          {t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')}
+          {description}
         </SwiftUIText>
 
         <VStack
@@ -46,7 +56,13 @@ export default function SettingsSyncSheet({
             padding({ all: 16 }),
           ]}
         >
-          <Toggle isOn={isEnabled} onIsOnChange={setSyncEnabled} label={t('settings.autoSync', 'Auto sync')} />
+          {canManageSync ? (
+            <Toggle isOn={isEnabled} onIsOnChange={setSyncEnabled} label={t('settings.autoSync', 'Auto sync')} />
+          ) : (
+            <SwiftUIText modifiers={[foregroundStyle(colors.text), font({ size: 17, weight: 'semibold' })]}>
+              {t('settings.autoSync', 'Auto sync')}
+            </SwiftUIText>
+          )}
         </VStack>
 
         <SwiftUIText
@@ -63,7 +79,7 @@ export default function SettingsSyncSheet({
           })}
         </SwiftUIText>
 
-        {accountHint && (
+        {canManageSync && accountHint && (
           <SwiftUIText
             modifiers={[
               foregroundStyle(colors.secondaryText + '99'),

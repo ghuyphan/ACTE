@@ -172,7 +172,9 @@ export default function HomeScreen() {
     openAppSettings,
   } = useGeofence();
   const { alertProps, showAlert } = useAppSheetAlert();
-  const { clearFeedFocus, peekFeedFocus } = useFeedFocus();
+  const feedFocus = useFeedFocus();
+  const clearFeedFocus = feedFocus.clearFeedFocus ?? (() => {});
+  const peekFeedFocus = feedFocus.peekFeedFocus ?? feedFocus.consumeFeedFocus ?? (() => null);
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
   const isScreenFocused = useIsFocused();

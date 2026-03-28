@@ -1,9 +1,7 @@
-import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
-import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SharedPostMemoryCard } from './home/MemoryCardPrimitives';
 import { Layout } from '../constants/theme';
@@ -11,7 +9,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useSharedFeedStore } from '../hooks/useSharedFeed';
 import { useTheme } from '../hooks/useTheme';
 import { formatDate } from '../utils/dateUtils';
-import AppBottomSheet from './AppBottomSheet';
+import AppSheet from './AppSheet';
 
 interface SharedPostDetailSheetProps {
   postId: string;
@@ -163,30 +161,10 @@ export default function SharedPostDetailSheet({
     );
   };
 
-  if (Platform.OS === 'android') {
-    return (
-      <AppBottomSheet visible={visible} onClose={handleDismiss} detached={false}>
-        {renderBody()}
-      </AppBottomSheet>
-    );
-  }
-
   return (
-    <View pointerEvents={visible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
-      <Host style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'}>
-        <BottomSheet isPresented={visible} onIsPresentedChange={(nextVisible) => {
-          if (!nextVisible) {
-            handleDismiss();
-          }
-        }} fitToContents>
-          <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
-            <RNHostView matchContents>
-              {renderBody()}
-            </RNHostView>
-          </Group>
-        </BottomSheet>
-      </Host>
-    </View>
+    <AppSheet visible={visible} onClose={handleDismiss}>
+      {renderBody()}
+    </AppSheet>
   );
 }
 

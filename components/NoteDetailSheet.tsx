@@ -1,5 +1,3 @@
-import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
-import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
@@ -59,13 +57,12 @@ import { getNotePhotoUri } from '../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import { formatDate } from '../utils/dateUtils';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
-import { isOlderIOS } from '../utils/platform';
 import {
     ClipboardStickerError,
     hasClipboardStickerImage,
     importStickerAssetFromClipboard,
 } from '../utils/stickerClipboard';
-import AppBottomSheet from './AppBottomSheet';
+import AppSheet from './AppSheet';
 import NoteStickerCanvas from './NoteStickerCanvas';
 import NoteDoodleCanvas, { DoodleStroke } from './NoteDoodleCanvas';
 import StickerSourceSheet from './StickerSourceSheet';
@@ -261,7 +258,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const editModeAnim = useRef(new Animated.Value(0)).current;
     const contentInputRef = useRef<TextInput>(null);
     const locationInputRef = useRef<TextInput>(null);
-    const sheetBackgroundStyle = isOlderIOS ? { backgroundColor: colors.card } : null;
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingDeleteNoteIdRef = useRef<string | null>(null);
@@ -1148,16 +1144,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
     };
 
-    const handleSheetVisibility = (nextVisible: boolean) => {
-        if (!nextVisible) {
-            handleSheetDismiss();
-        }
-    };
-
     const renderBody = () => {
         if (loading) {
             return (
-                <View style={[styles.sheetSurface, sheetBackgroundStyle]}>
+                <View style={styles.sheetSurface}>
                     <SkeletonCard colors={{ card: colors.card }} />
                 </View>
             );
@@ -1165,7 +1155,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         if (!note) {
             return (
-                <View style={[styles.center, styles.sheetSurface, sheetBackgroundStyle, { minHeight: 200 }]}>
+                <View style={[styles.center, styles.sheetSurface, { minHeight: 200 }]}>
                     <Text style={{ color: colors.secondaryText, fontSize: 17 }}>
                         {t('noteDetail.notFound', 'Note not found')}
                     </Text>
@@ -1198,7 +1188,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         return (
             <KeyboardAvoidingView
-                style={[styles.sheetSurface, sheetBackgroundStyle]}
+                style={styles.sheetSurface}
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
                 {interactionFeedback ? (
@@ -1755,9 +1745,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     if (Platform.OS === 'android') {
         return (
             <>
-                <AppBottomSheet visible={visible} onClose={handleSheetDismiss} detached={false}>
+                <AppSheet visible={visible} onClose={handleSheetDismiss}>
                     {renderBody()}
-                </AppBottomSheet>
+                </AppSheet>
                 <StickerSourceSheet
                     visible={showStickerSourceSheet}
                     canPasteFromClipboard={stickerSourceCanPasteFromClipboard}
@@ -1775,17 +1765,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     return (
         <>
-            <View pointerEvents={visible ? 'auto' : 'none'} style={StyleSheet.absoluteFill}>
-                <Host style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'}>
-                    <BottomSheet isPresented={visible} onIsPresentedChange={handleSheetVisibility} fitToContents>
-                        <Group modifiers={[presentationDragIndicator('visible'), environment('colorScheme', isDark ? 'dark' : 'light')]}>
-                            <RNHostView matchContents>
-                                {renderBody()}
-                            </RNHostView>
-                        </Group>
-                    </BottomSheet>
-                </Host>
-            </View>
+            <AppSheet visible={visible} onClose={handleSheetDismiss}>
+                {renderBody()}
+            </AppSheet>
             <StickerSourceSheet
                 visible={showStickerSourceSheet}
                 canPasteFromClipboard={stickerSourceCanPasteFromClipboard}

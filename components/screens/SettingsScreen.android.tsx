@@ -1,13 +1,14 @@
-import React, { Fragment } from 'react';
+import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import AppBottomSheet from '../AppBottomSheet';
+import AppSheet from '../AppSheet';
 import AppSheetAlert from '../AppSheetAlert';
+import SettingsLanguageSheetAndroid from '../SettingsLanguageSheet.android';
 import SettingsSyncSheetAndroid from '../SettingsSyncSheet.android';
+import SettingsThemeSheetAndroid from '../SettingsThemeSheet.android';
 import PrimaryButton from '../ui/PrimaryButton';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { Layout } from '../../constants/theme';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
-import { setAppLanguage } from '../../constants/i18n';
 
 type SheetKey = 'language' | 'theme' | 'sync' | null;
 
@@ -87,53 +88,6 @@ function SettingRow({
   );
 }
 
-function SelectionSheet({
-  colors,
-  onSelect,
-  options,
-  selectedKey,
-  selectedLabel,
-  title,
-}: {
-  colors: ThemeColors;
-  onSelect: (key: string) => void;
-  options: { key: string; label: string }[];
-  selectedKey: string;
-  selectedLabel: string;
-  title: string;
-}) {
-  return (
-    <View style={styles.selectionSheet}>
-      <Text style={[styles.selectionTitle, { color: colors.text }]}>{title}</Text>
-      <View style={[styles.selectionCard, { backgroundColor: colors.surface }]}>
-        {options.map((option, index) => {
-          const selected = selectedKey === option.key;
-
-          return (
-            <Fragment key={option.key}>
-              <Pressable
-                onPress={() => onSelect(option.key)}
-                style={({ pressed }) => [
-                  styles.selectionRow,
-                  pressed ? { opacity: 0.8 } : null,
-                ]}
-              >
-                <Text style={[styles.selectionLabel, { color: colors.text }]}>{option.label}</Text>
-                {selected ? (
-                  <Text style={[styles.selectionValue, { color: colors.primary }]}>{selectedLabel}</Text>
-                ) : null}
-              </Pressable>
-              {index < options.length - 1 ? (
-                <View style={[styles.selectionDivider, { backgroundColor: colors.border }]} />
-              ) : null}
-            </Fragment>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
 function CardDivider({ colors }: { colors: ThemeColors }) {
   return <View style={[styles.cardDivider, { backgroundColor: colors.border }]} />;
 }
@@ -154,17 +108,16 @@ export default function SettingsScreenAndroid() {
     openAccountDeletionHelpLink,
     openPlusScreen,
     openPrivacyPolicyLink,
+    openSyncScreen,
     openSupportLink,
     plusHint,
     plusValue,
     promptClearAll,
-    setTheme,
     showAccountDeletionLink,
     showPrivacyPolicyLink,
     showSupportLink,
     syncValue,
     t,
-    theme,
     themeLabel,
     user,
   } = useSettingsScreenModel();
@@ -174,41 +127,15 @@ export default function SettingsScreenAndroid() {
   const contentTopInset = insets.top + 72;
 
   let sheetContent: React.ReactNode = null;
+  const sheetPresentation = sheet === 'theme' || sheet === 'language' ? 'floating' : 'edge';
 
   if (sheet === 'theme') {
     sheetContent = (
-      <SelectionSheet
-        colors={colors}
-        onSelect={(value) => {
-          void setTheme(value as 'system' | 'light' | 'dark');
-          setSheet(null);
-        }}
-        options={[
-          { key: 'system', label: t('settings.system', 'System') },
-          { key: 'light', label: t('settings.light', 'Light') },
-          { key: 'dark', label: t('settings.dark', 'Dark') },
-        ]}
-        selectedKey={theme}
-        selectedLabel={t('common.done', 'Done')}
-        title={t('settings.theme', 'Theme')}
-      />
+      <SettingsThemeSheetAndroid onClose={() => setSheet(null)} />
     );
   } else if (sheet === 'language') {
     sheetContent = (
-      <SelectionSheet
-        colors={colors}
-        onSelect={(value) => {
-          void setAppLanguage(value);
-          setSheet(null);
-        }}
-        options={[
-          { key: 'en', label: 'English' },
-          { key: 'vi', label: 'Tiếng Việt' },
-        ]}
-        selectedKey={languageCode}
-        selectedLabel={t('common.done', 'Done')}
-        title={t('settings.language', 'Language')}
-      />
+      <SettingsLanguageSheetAndroid onClose={() => setSheet(null)} />
     );
   } else if (sheet === 'sync') {
     sheetContent = (
@@ -242,7 +169,7 @@ export default function SettingsScreenAndroid() {
               title={t('settings.autoSync', 'Auto sync')}
               subtitle={accountHint ?? t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')}
               value={syncValue}
-              onPress={() => setSheet('sync')}
+              onPress={openSyncScreen}
             />
             <CardDivider colors={colors} />
             <SettingRow
@@ -372,9 +299,13 @@ export default function SettingsScreenAndroid() {
         </View>
       </ScrollView>
 
-      <AppBottomSheet visible={sheet !== null} onClose={() => setSheet(null)}>
+      <AppSheet
+        visible={sheet !== null}
+        onClose={() => setSheet(null)}
+        androidPresentation={sheetPresentation}
+      >
         {sheetContent}
-      </AppBottomSheet>
+      </AppSheet>
 
       <AppSheetAlert {...alertProps} />
     </View>
@@ -454,42 +385,6 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     paddingHorizontal: 20,
     paddingBottom: 20,
-    fontFamily: 'System',
-  },
-  selectionCard: {
-    borderRadius: 24,
-    overflow: 'hidden',
-  },
-  selectionDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginHorizontal: 20,
-  },
-  selectionLabel: {
-    fontSize: 17,
-    fontWeight: '500',
-    fontFamily: 'System',
-  },
-  selectionRow: {
-    minHeight: 56,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  selectionSheet: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  selectionTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 16,
-    fontFamily: 'System',
-  },
-  selectionValue: {
-    fontSize: 15,
-    fontWeight: '700',
     fontFamily: 'System',
   },
 });
