@@ -45,6 +45,7 @@ import {
   getCaptureNoteGradient,
   getNoteColorCardGradient,
 } from '../../services/noteAppearance';
+import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadius';
 import { applyCommittedInlineEmoji } from '../../services/noteDecorations';
 import NoteStickerCanvas from '../NoteStickerCanvas';
 import NoteDoodleCanvas, { DoodleStroke } from '../NoteDoodleCanvas';
@@ -497,6 +498,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   remainingPhotoSlots,
   libraryImportLocked = false,
   importingPhoto = false,
+  radius,
+  onChangeRadius,
   shareTarget,
   onChangeShareTarget,
   onDoodleModeChange,
@@ -506,6 +509,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
   const [showNoteColorSheet, setShowNoteColorSheet] = useState(false);
+  const [showRadiusSheet, setShowRadiusSheet] = useState(false);
   const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
   const [cameraRetryNonce, setCameraRetryNonce] = useState(0);
   const [textDoodleModeEnabled, setTextDoodleModeEnabled] = useState(false);
@@ -1185,6 +1189,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const handleCloseNoteColorSheet = useCallback(() => {
     setShowNoteColorSheet(false);
   }, []);
+  const handleOpenRadiusSheet = useCallback(() => {
+    setShowRadiusSheet(true);
+  }, []);
+  const handleCloseRadiusSheet = useCallback(() => {
+    setShowRadiusSheet(false);
+  }, []);
   const handleSelectNoteColor = useCallback(
     (nextColor: string | null) => {
       if (!onChangeNoteColor) {
@@ -1196,12 +1206,24 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     },
     [onChangeNoteColor]
   );
+  const handleSelectRadius = useCallback(
+    (nextRadius: number) => {
+      onChangeRadius(nextRadius);
+      setShowRadiusSheet(false);
+    },
+    [onChangeRadius]
+  );
 
   useEffect(() => {
     if (captureMode !== 'text' || !onChangeNoteColor) {
       setShowNoteColorSheet(false);
     }
   }, [captureMode, onChangeNoteColor]);
+  useEffect(() => {
+    if (isSearching) {
+      setShowRadiusSheet(false);
+    }
+  }, [isSearching]);
 
   const noteColorSheetBody = onChangeNoteColor ? (
     <AppSheetScaffold
@@ -1239,6 +1261,60 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       </View>
     </AppSheetScaffold>
   ) : null;
+  const radiusSheetBody = (
+    <AppSheetScaffold
+      headerVariant="standard"
+      title={t('capture.radius', 'Radius')}
+      subtitle={t(
+        'capture.radiusPickerHint',
+        'Choose how close you need to be before Noto reminds you about this place.'
+      )}
+      contentContainerStyle={styles.radiusSheet}
+    >
+      <View
+        style={[
+          styles.radiusSheetCard,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        {NOTE_RADIUS_OPTIONS.map((option, index) => {
+          const isSelected = radius === option;
+
+          return (
+            <View key={option}>
+              <Pressable
+                testID={`capture-radius-${option}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                onPress={() => handleSelectRadius(option)}
+                style={({ pressed }) => [
+                  styles.radiusSheetRow,
+                  isSelected ? { backgroundColor: `${colors.primary}12` } : null,
+                  pressed ? styles.radiusSheetRowPressed : null,
+                ]}
+              >
+                <View style={styles.radiusSheetCopy}>
+                  <Text style={[styles.radiusSheetLabel, { color: colors.text }]}>
+                    {formatRadiusLabel(option)}
+                  </Text>
+                  <Text style={[styles.radiusSheetHint, { color: colors.secondaryText }]}>
+                    {t('capture.reminderRadiusLabel', 'Reminder trigger distance')}
+                  </Text>
+                </View>
+                {isSelected ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
+              </Pressable>
+              {index < NOTE_RADIUS_OPTIONS.length - 1 ? (
+                <View style={[styles.radiusSheetDivider, { backgroundColor: colors.border }]} />
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    </AppSheetScaffold>
+  );
   return (
     <>
       <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
@@ -1999,8 +2075,37 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   />
                 </View>
                 <View style={[styles.captureMetaDivider, { backgroundColor: colors.captureGlassBorder }]} />
-                {onChangeNoteColor ? (
-                  <>
+                <View style={styles.captureMetaActions}>
+                  <CaptureToggleIconButton
+                    testID="capture-share-target-toggle"
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSharedTarget }}
+                    accessibilityLabel={isSharedTarget ? t('shared.captureShared', 'Friends') : t('shared.capturePrivate', 'Just me')}
+                    onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
+                    active={isSharedTarget}
+                    activeIconName="people-outline"
+                    inactiveIconName="lock-closed-outline"
+                    activeBackgroundColor={sharedTargetHighlightBackground}
+                    inactiveBackgroundColor="rgba(255,255,255,0)"
+                    activeBorderColor={sharedTargetHighlightBorder}
+                    inactiveBorderColor="rgba(255,255,255,0)"
+                    activeIconColor={sharedTargetHighlightIcon}
+                    inactiveIconColor={colors.captureGlassIcon}
+                    iconSize={14}
+                    activeScale={1.015}
+                    contentActiveScale={1.03}
+                    style={styles.captureInlineShareButton}
+                  />
+                  <CaptureAnimatedPressable
+                    testID="capture-radius-toggle"
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t('capture.radiusLabel', 'Reminder radius')}: ${formatRadiusLabel(radius)}`}
+                    onPress={handleOpenRadiusSheet}
+                    style={styles.captureInlineRadiusButton}
+                  >
+                    <Ionicons name="radio-outline" size={14} color={colors.captureGlassIcon} />
+                  </CaptureAnimatedPressable>
+                  {onChangeNoteColor ? (
                     <CaptureAnimatedPressable
                       testID="capture-note-color-toggle"
                       accessibilityRole="button"
@@ -2015,31 +2120,35 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         style={styles.captureInlineColorPreview}
                       />
                     </CaptureAnimatedPressable>
-                    <View style={[styles.captureMetaDivider, { backgroundColor: colors.captureGlassBorder }]} />
-                  </>
-                ) : null}
-                <CaptureToggleIconButton
-                  testID="capture-share-target-toggle"
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSharedTarget }}
-                  accessibilityLabel={isSharedTarget ? t('shared.captureShared', 'Friends') : t('shared.capturePrivate', 'Just me')}
-                  onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
-                  active={isSharedTarget}
-                  activeIconName="people-outline"
-                  inactiveIconName="lock-closed-outline"
-                  activeBackgroundColor={sharedTargetHighlightBackground}
-                  inactiveBackgroundColor="rgba(255,255,255,0)"
-                  activeBorderColor={sharedTargetHighlightBorder}
-                  inactiveBorderColor="rgba(255,255,255,0)"
-                  activeIconColor={sharedTargetHighlightIcon}
-                  inactiveIconColor={colors.captureGlassIcon}
-                  iconSize={15}
-                  activeScale={1.015}
-                  contentActiveScale={1.03}
-                  style={styles.captureInlineShareButton}
-                />
+                  ) : null}
+                </View>
               </View>
-            ) : null}
+            ) : (
+              <CaptureAnimatedPressable
+                testID="capture-radius-toggle"
+                accessibilityRole="button"
+                accessibilityLabel={`${t('capture.radiusLabel', 'Reminder radius')}: ${formatRadiusLabel(radius)}`}
+                onPress={handleOpenRadiusSheet}
+                childrenContainerStyle={styles.captureStandaloneRadiusButtonContent}
+                style={[
+                  styles.captureStandaloneRadiusButton,
+                  {
+                    borderColor: colors.captureGlassBorder,
+                    backgroundColor: isOlderIOS ? colors.captureGlassFill : 'transparent',
+                  },
+                ]}
+              >
+                {!isOlderIOS ? (
+                  <GlassView
+                    pointerEvents="none"
+                    style={StyleSheet.absoluteFillObject}
+                    glassEffectStyle="regular"
+                    colorScheme={colors.captureGlassColorScheme}
+                  />
+                ) : null}
+                <Ionicons name="radio-outline" size={15} color={colors.captureGlassIcon} />
+              </CaptureAnimatedPressable>
+            )}
           </View>
         </View>
         {captureMode === 'camera' && !capturedPhoto ? (
@@ -2259,6 +2368,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           {noteColorSheetBody}
         </AppSheet>
       ) : null}
+      <AppSheet
+        visible={showRadiusSheet}
+        onClose={handleCloseRadiusSheet}
+        iosColorScheme={colors.captureGlassColorScheme}
+        topInset={topInset}
+      >
+        {radiusSheetBody}
+      </AppSheet>
     </>
   );
 });
@@ -2449,7 +2566,7 @@ const styles = StyleSheet.create({
     width: '86%',
     maxWidth: 312,
     alignSelf: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     gap: 0,
   },
   captureMetaStack: {
@@ -2462,7 +2579,12 @@ const styles = StyleSheet.create({
     minHeight: 38,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
+  },
+  captureMetaActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
   cardRestaurantInput: {
     flex: 1,
@@ -2479,29 +2601,34 @@ const styles = StyleSheet.create({
   captureMetaDivider: {
     width: StyleSheet.hairlineWidth,
     alignSelf: 'stretch',
-    marginHorizontal: 4,
+    marginHorizontal: 5,
     opacity: 0.45,
   },
   captureInlineShareButton: {
-    width: 30,
-    height: 30,
-    marginLeft: 2,
-    borderRadius: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  captureInlineRadiusButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   captureInlineColorButton: {
-    width: 30,
-    height: 30,
-    marginLeft: 2,
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
   captureInlineColorPreview: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
   },
   cameraContainer: {
     width: CARD_SIZE,
@@ -2595,6 +2722,21 @@ const styles = StyleSheet.create({
     minHeight: 52,
     justifyContent: 'center',
   },
+  captureStandaloneRadiusButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  captureStandaloneRadiusButtonContent: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   cameraStatusText: {
     ...Typography.pill,
     textAlign: 'center',
@@ -2686,5 +2828,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '600',
+  },
+  radiusSheet: {
+    gap: 12,
+  },
+  radiusSheetCard: {
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  radiusSheetRow: {
+    minHeight: 64,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  radiusSheetRowPressed: {
+    opacity: 0.9,
+  },
+  radiusSheetCopy: {
+    flexShrink: 1,
+    paddingRight: 12,
+  },
+  radiusSheetLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    fontFamily: 'System',
+  },
+  radiusSheetHint: {
+    marginTop: 3,
+    fontSize: 13,
+    fontWeight: '500',
+    fontFamily: 'System',
+  },
+  radiusSheetDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 18,
   },
 });

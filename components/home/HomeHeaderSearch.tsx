@@ -193,6 +193,23 @@ export default function HomeHeaderSearch({
     );
   };
 
+  const renderDetachedGlassIconButton = ({
+    label,
+    systemImage,
+    onPress,
+  }: {
+    label: string;
+    systemImage: ComponentProps<typeof SwiftUIImage>['systemName'];
+    onPress: () => void;
+  }) => (
+    <Button
+      label={label}
+      systemImage={systemImage}
+      onPress={onPress}
+      modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
+    />
+  );
+
   const renderSearchButton = () => {
     if (!showSearchButton) {
       return null;
@@ -495,28 +512,25 @@ export default function HomeHeaderSearch({
                 />
               </Menu>
             ) : (
-              <Button
-                label={t('shared.manageTitle', 'Friends')}
-                systemImage="person.2"
-                onPress={onOpenShared}
-                modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
-              />
+              renderDetachedGlassIconButton({
+                label: t('shared.manageTitle', 'Friends'),
+                systemImage: 'person.2',
+                onPress: onOpenShared,
+              })
             )
           ) : null}
           {showNotesButton && onOpenNotes ? (
-            <Button
-              label={t('notes.viewAllButton', 'View all notes')}
-              systemImage="square.grid.2x2"
-              onPress={onOpenNotes}
-              modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
-            />
+            renderDetachedGlassIconButton({
+              label: t('notes.viewAllButton', 'View all notes'),
+              systemImage: 'square.grid.2x2',
+              onPress: onOpenNotes,
+            })
           ) : null}
-          <Button
-            label={modeLabel}
-            systemImage={modeSystemName}
-            onPress={onToggleCaptureMode}
-            modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
-          />
+          {renderDetachedGlassIconButton({
+            label: modeLabel,
+            systemImage: modeSystemName,
+            onPress: onToggleCaptureMode,
+          })}
         </HStack>
       </Host>
     );

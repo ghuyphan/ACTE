@@ -541,12 +541,28 @@ describe('CaptureCard doodle handle', () => {
     expect(queryByTestId('capture-note-color-sunset-coral')).toBeNull();
   });
 
-  it('keeps radius controls out of the capture card chrome', () => {
+  it('opens the compact radius picker and applies the selection', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const { queryByTestId } = renderCaptureCard(ref);
+    const handleChangeRadius = jest.fn();
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
+      onChangeRadius: handleChangeRadius,
+    });
 
-    expect(queryByTestId('capture-radius-toggle')).toBeNull();
+    expect(getByTestId('capture-radius-toggle')).toBeTruthy();
     expect(queryByTestId('capture-radius-150')).toBeNull();
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-radius-toggle'));
+    });
+
+    expect(getByTestId('capture-radius-250')).toBeTruthy();
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-radius-250'));
+    });
+
+    expect(handleChangeRadius).toHaveBeenCalledWith(250);
+    expect(queryByTestId('capture-radius-250')).toBeNull();
   });
 
   it('shows a paste popover on text-card long press and pastes after confirmation', async () => {
