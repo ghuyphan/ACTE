@@ -190,6 +190,14 @@ export default function PlusScreen() {
               'Turn older camera roll moments into place-linked memories inside Noto.'
             )}
           />
+          <FeatureRow
+            icon="sparkles"
+            title={t('plus.features.colorTitle', 'Premium card styles')}
+            description={t(
+              'plus.features.colorDesc',
+              'Unlock interactive hologram cards plus RGB and foil-inspired finishes for a more expressive journal.'
+            )}
+          />
         </View>
 
         <View style={styles.footerActions}>

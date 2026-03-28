@@ -666,7 +666,7 @@ describe('syncService', () => {
       expect.objectContaining({
         status: 'error',
         message:
-          'Supabase denied access to sync notes. Apply the latest Supabase migrations or sign in again.',
+          'Supabase denied access to sync your notes. Apply the latest Supabase migrations or sign in again.',
       })
     );
   });

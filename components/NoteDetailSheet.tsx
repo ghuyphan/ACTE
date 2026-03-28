@@ -54,6 +54,13 @@ import {
     updateStickerPlacementTransform,
 } from '../services/noteStickers';
 import { getNotePhotoUri } from '../services/photoStorage';
+import {
+    getFallbackFreeNoteColor,
+    getPremiumNoteSaveDecision,
+    isHologramNoteColor,
+    isPreviewablePremiumNoteColor,
+    PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
+} from '../services/premiumNoteFinish';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import { formatDate } from '../utils/dateUtils';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../utils/interactionFeedback';
@@ -262,10 +269,22 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingDeleteNoteIdRef = useRef<string | null>(null);
     const closeCompletionHandledRef = useRef(false);
+    const lastFreeEditNoteColorRef = useRef('marigold-glow');
     const lockedPremiumNoteColorIds = useMemo(
         () => (tier === 'plus' ? [] : PREMIUM_NOTE_COLOR_IDS),
         [tier]
     );
+    const previewOnlyNoteColorIds = useMemo(() => {
+        if (tier === 'plus' || note?.type !== 'text') {
+            return [];
+        }
+
+        if (note && isHologramNoteColor(note.noteColor) && editNoteColor === note.noteColor) {
+            return [];
+        }
+
+        return PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS;
+    }, [editNoteColor, note, tier]);
 
     const showPremiumColorAlert = useCallback(() => {
         const buttons: {
@@ -341,6 +360,87 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             buttons
         );
     }, [isPurchaseAvailable, plusPriceLabel, presentPaywallIfNeeded, restorePurchases, t]);
+
+    const promptHologramSaveChoice = useCallback(() => {
+        return new Promise<'upgrade-success' | 'switch' | 'cancel'>((resolve) => {
+            let settled = false;
+            const settle = (value: 'upgrade-success' | 'switch' | 'cancel') => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                resolve(value);
+            };
+
+            Alert.alert(
+                t('plus.hologramSaveTitle', 'Save this hologram card with Plus'),
+                t(
+                    'plus.hologramSaveMessage',
+                    'The hologram finish is ready to preview. Upgrade to Plus to save it, or switch back to a standard finish.'
+                ),
+                [
+                    {
+                        text: t('common.cancel', 'Cancel'),
+                        style: 'cancel',
+                        onPress: () => settle('cancel'),
+                    },
+                    {
+                        text: t('plus.useStandardFinish', 'Use standard finish'),
+                        onPress: () => settle('switch'),
+                    },
+                    {
+                        text: plusPriceLabel
+                            ? t('plus.upgradeCtaWithPrice', 'Upgrade to Plus · {{price}}', {
+                                price: plusPriceLabel,
+                            })
+                            : t('plus.upgradeCta', 'Upgrade to Plus'),
+                        onPress: () => {
+                            void (async () => {
+                                if (!isPurchaseAvailable) {
+                                    Alert.alert(
+                                        t('plus.upgradeUnavailableTitle', 'Plus unavailable'),
+                                        t(
+                                            'plus.upgradeUnavailableMessage',
+                                            'We could not complete the purchase right now. Please try again in a moment.'
+                                        )
+                                    );
+                                    settle('cancel');
+                                    return;
+                                }
+
+                                const result = await presentPaywallIfNeeded();
+                                if (
+                                    result === PAYWALL_RESULT.PURCHASED ||
+                                    result === PAYWALL_RESULT.RESTORED
+                                ) {
+                                    settle('upgrade-success');
+                                    return;
+                                }
+
+                                if (
+                                    result === PAYWALL_RESULT.CANCELLED ||
+                                    result === PAYWALL_RESULT.NOT_PRESENTED
+                                ) {
+                                    settle('cancel');
+                                    return;
+                                }
+
+                                Alert.alert(
+                                    t('plus.upgradeUnavailableTitle', 'Plus unavailable'),
+                                    t(
+                                        'plus.upgradeUnavailableMessage',
+                                        'We could not complete the purchase right now. Please try again in a moment.'
+                                    )
+                                );
+                                settle('cancel');
+                            })();
+                        },
+                    },
+                ]
+            );
+        });
+    }, [isPurchaseAvailable, plusPriceLabel, presentPaywallIfNeeded, t]);
 
     const showInteractionFeedback = useCallback((type: InteractionFeedbackType) => {
         if (feedbackTimeoutRef.current) {
@@ -422,6 +522,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                             ? normalizeSavedTextNoteColor(nextNote.noteColor)
                             : null
                     );
+                    if (nextNote.type === 'text' && !isPreviewablePremiumNoteColor(nextNote.noteColor)) {
+                        lastFreeEditNoteColorRef.current = normalizeSavedTextNoteColor(nextNote.noteColor);
+                    }
                     setEditDoodleStrokes(parseNoteDoodleStrokes(nextNote.doodleStrokesJson));
                     setEditStickerPlacements(parseNoteStickerPlacements(nextNote.stickerPlacementsJson));
                     setDoodleModeEnabled(false);
@@ -529,6 +632,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             dismissPastePrompt();
         }
     }, [dismissPastePrompt, doodleModeEnabled, importingSticker, isEditing, stickerModeEnabled, visible]);
+
+    useEffect(() => {
+        if (!editNoteColor || isPreviewablePremiumNoteColor(editNoteColor)) {
+            return;
+        }
+
+        lastFreeEditNoteColorRef.current = normalizeSavedTextNoteColor(editNoteColor);
+    }, [editNoteColor]);
 
     const parsedNoteDoodleStrokes = useMemo(
         () => parseNoteDoodleStrokes(note?.doodleStrokesJson),
@@ -1016,6 +1127,25 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         const updates: Partial<Pick<Note, 'content' | 'locationName' | 'moodEmoji' | 'noteColor' | 'radius'>> = {};
         const currentNoteColor =
             note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null;
+        if (note.type === 'text') {
+            const saveDecision = getPremiumNoteSaveDecision({
+                tier,
+                selectedNoteColor: editNoteColor,
+                existingNoteColor: currentNoteColor,
+            });
+
+            if (saveDecision === 'upsell_required') {
+                const choice = await promptHologramSaveChoice();
+                if (choice === 'switch') {
+                    setEditNoteColor(
+                        getFallbackFreeNoteColor(lastFreeEditNoteColorRef.current, currentNoteColor)
+                    );
+                }
+                if (choice !== 'upgrade-success') {
+                    return;
+                }
+            }
+        }
         const nextDoodleStrokesJson =
             editDoodleStrokes.length > 0 ? JSON.stringify(editDoodleStrokes) : null;
         const nextHasDoodle = Boolean(nextDoodleStrokesJson);
@@ -1379,6 +1509,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                     <PremiumNoteFinishOverlay
                                         noteColor={isEditing ? editNoteColor : note.noteColor}
                                         animated
+                                        interactive
+                                        previewMode={isEditing ? 'editor' : 'saved'}
+                                        strength={isEditing ? 1 : 0.55}
                                     />
                                     {isEditing && ENABLE_PHOTO_STICKERS ? (
                                         <Pressable
@@ -1640,15 +1773,26 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     <Animated.View style={{ transform: [{ translateY: infoTranslateY }] }}>
                         <View style={styles.infoSection}>
                             {isEditing && note.type === 'text' ? (
-                                <NoteColorPicker
-                                    label={t('noteDetail.colorField', 'Color')}
-                                    selectedColor={editNoteColor}
-                                    onSelectColor={setEditNoteColor}
-                                    lockedColorIds={lockedPremiumNoteColorIds}
-                                    onLockedColorPress={showPremiumColorAlert}
-                                    testIDPrefix="note-detail-color"
-                                    compact
-                                />
+                                <>
+                                    <NoteColorPicker
+                                        label={t('noteDetail.colorField', 'Color')}
+                                        selectedColor={editNoteColor}
+                                        onSelectColor={setEditNoteColor}
+                                        lockedColorIds={lockedPremiumNoteColorIds}
+                                        previewOnlyColorIds={previewOnlyNoteColorIds}
+                                        onLockedColorPress={showPremiumColorAlert}
+                                        testIDPrefix="note-detail-color"
+                                        compact
+                                    />
+                                    {editNoteColor && previewOnlyNoteColorIds.includes(editNoteColor) ? (
+                                        <Text style={[styles.previewOnlyHint, { color: colors.secondaryText }]}>
+                                            {t(
+                                                'plus.hologramPreviewHint',
+                                                'Interactive hologram preview is ready now. Upgrade to Plus to save it.'
+                                            )}
+                                        </Text>
+                                    ) : null}
+                                </>
                             ) : null}
                             {isEditing ? (
                                 <Text style={[styles.editFieldLabel, { color: colors.secondaryText }]}>
@@ -2017,6 +2161,11 @@ const styles = StyleSheet.create({
     infoSection: {
         gap: 16,
         marginBottom: 32,
+    },
+    previewOnlyHint: {
+        ...Typography.body,
+        marginTop: -8,
+        fontSize: 12,
     },
     editFieldLabel: {
         fontSize: 12,

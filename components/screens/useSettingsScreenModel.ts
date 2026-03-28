@@ -137,20 +137,20 @@ export function useSettingsScreenModel() {
     if (tier === 'plus') {
       return t(
         'settings.plusActiveHint',
-        'Noto Plus is active. Unlimited photo notes, premium card finishes, and library import are unlocked.'
+        'Noto Plus is active. Unlimited photo notes, interactive hologram cards, premium finishes, and library import are unlocked.'
       );
     }
 
     if (photoNoteLimit === null) {
     return t(
       'settings.plusHint',
-      'Upgrade to Noto Plus to unlock unlimited photo notes, premium card finishes, and import from your photo library.'
+      'Upgrade to Noto Plus to unlock unlimited photo notes, interactive hologram cards, premium finishes, and import from your photo library.'
     );
   }
 
   return t(
     'settings.plusHintWithLimit',
-    'Free plan includes up to {{count}} photo notes. Upgrade to Noto Plus for unlimited photo notes, premium card finishes, and library import.',
+    'Free plan includes up to {{count}} photo notes. Upgrade to Noto Plus for unlimited photo notes, interactive hologram cards, premium finishes, and library import.',
     { count: photoNoteLimit }
   );
   }, [photoNoteLimit, t, tier]);
@@ -284,6 +284,7 @@ export function useSettingsScreenModel() {
     setShowSync,
     setShowTheme,
     showLanguage,
+    showSyncEntry: Boolean(user),
     showSync,
     showTheme,
     showAccountDeletionLink: hasAccountDeletionLink(),

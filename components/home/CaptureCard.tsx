@@ -364,6 +364,7 @@ interface CaptureCardProps {
   noteColor?: string | null;
   onChangeNoteColor?: (nextColor: string | null) => void;
   lockedNoteColorIds?: string[];
+  previewOnlyNoteColorIds?: string[];
   onPressLockedNoteColor?: (colorId: string) => void;
   restaurantName: string;
   onChangeRestaurantName: (nextName: string) => void;
@@ -412,6 +413,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   noteColor = null,
   onChangeNoteColor,
   lockedNoteColorIds = [],
+  previewOnlyNoteColorIds = [],
   onPressLockedNoteColor,
   restaurantName,
   onChangeRestaurantName,
@@ -1165,10 +1167,19 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           selectedColor={noteColor ?? DEFAULT_NOTE_COLOR_ID}
           onSelectColor={handleSelectNoteColor}
           lockedColorIds={lockedNoteColorIds}
+          previewOnlyColorIds={previewOnlyNoteColorIds}
           onLockedColorPress={onPressLockedNoteColor}
           testIDPrefix="capture-note-color"
           compact
         />
+        {noteColor && previewOnlyNoteColorIds.includes(noteColor) ? (
+          <Text style={[styles.noteColorPreviewHint, { color: colors.secondaryText }]}>
+            {t(
+              'plus.hologramPreviewHint',
+              'Interactive hologram preview is ready now. Upgrade to Plus to save it.'
+            )}
+          </Text>
+        ) : null}
       </View>
     </AppSheetScaffold>
   ) : null;
@@ -1200,7 +1211,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             start={{ x: 0.08, y: 0.06 }}
             end={{ x: 0.94, y: 0.94 }}
           >
-            <PremiumNoteFinishOverlay noteColor={noteColor} animated />
+            <PremiumNoteFinishOverlay
+              noteColor={noteColor}
+              animated
+              interactive
+              previewMode="editor"
+            />
             {ENABLE_PHOTO_STICKERS ? (
               <Pressable
                 testID="capture-card-paste-surface"
@@ -2613,5 +2629,12 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 16,
     paddingVertical: 18,
+  },
+  noteColorPreviewHint: {
+    marginTop: 12,
+    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
   },
 });

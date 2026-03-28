@@ -158,7 +158,7 @@ describe('NotesIndexScreen', () => {
     fireEvent.press(getByText('Newest note'));
 
     expect(mockRequestFeedFocus).toHaveBeenCalledWith({ kind: 'note', id: 'note-1' });
-    expect(mockRouterReplace).toHaveBeenCalledWith('/(tabs)');
+    expect(mockRouterReplace).toHaveBeenCalledWith('/');
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
@@ -168,7 +168,7 @@ describe('NotesIndexScreen', () => {
     fireEvent.press(getByText('Shared memory'));
 
     expect(mockRequestFeedFocus).toHaveBeenCalledWith({ kind: 'shared-post', id: 'shared-1' });
-    expect(mockRouterReplace).toHaveBeenCalledWith('/(tabs)');
+    expect(mockRouterReplace).toHaveBeenCalledWith('/');
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 

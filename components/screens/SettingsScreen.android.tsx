@@ -115,6 +115,7 @@ export default function SettingsScreenAndroid() {
     promptClearAll,
     showAccountDeletionLink,
     showPrivacyPolicyLink,
+    showSyncEntry,
     showSupportLink,
     syncValue,
     t,
@@ -163,15 +164,21 @@ export default function SettingsScreenAndroid() {
               value={accountValue}
               onPress={isAuthAvailable ? openAccountScreen : undefined}
             />
-            <CardDivider colors={colors} />
-            <SettingRow
-              colors={colors}
-              title={t('settings.autoSync', 'Auto sync')}
-              subtitle={accountHint ?? t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')}
-              value={syncValue}
-              onPress={openSyncScreen}
-            />
-            <CardDivider colors={colors} />
+            {showSyncEntry ? (
+              <>
+                <CardDivider colors={colors} />
+                <SettingRow
+                  colors={colors}
+                  title={t('settings.autoSync', 'Auto sync')}
+                  subtitle={accountHint ?? t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')}
+                  value={syncValue}
+                  onPress={openSyncScreen}
+                />
+                <CardDivider colors={colors} />
+              </>
+            ) : (
+              <CardDivider colors={colors} />
+            )}
             <SettingRow
               colors={colors}
               title={t('settings.plusTitle', 'Noto Plus')}

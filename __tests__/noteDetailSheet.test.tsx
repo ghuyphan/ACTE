@@ -72,6 +72,14 @@ jest.mock('expo-linear-gradient', () => {
   };
 });
 
+jest.mock('expo-sensors', () => ({
+  DeviceMotion: {
+    isAvailableAsync: jest.fn(async () => false),
+    setUpdateInterval: jest.fn(),
+    addListener: jest.fn(() => ({ remove: jest.fn() })),
+  },
+}));
+
 jest.mock('expo-haptics', () => ({
   impactAsync: (type: unknown) => mockImpactAsync(type),
   notificationAsync: (type: unknown) => mockNotificationAsync(type),

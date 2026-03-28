@@ -55,6 +55,7 @@ export default function SettingsScreenIOS() {
     showAccountDeletionLink,
     showLanguage,
     showPrivacyPolicyLink,
+    showSyncEntry,
     showSupportLink,
     showSync,
     showTheme,
@@ -112,29 +113,31 @@ export default function SettingsScreenIOS() {
                 <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{accountValue}</SwiftUIText>
               </HStack>
             )}
-            <Button onPress={openSyncScreen}>
-              <HStack>
-                <HStack
-                  modifiers={[
-                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                    backgroundOverlay({ color: colors.primary + '18' }),
-                    cornerRadius(7),
-                    padding({ trailing: 12 }),
-                  ]}
-                >
-                  <SwiftUIImage
-                    systemName="arrow.triangle.2.circlepath"
-                    color={colors.primary}
-                    size={18}
-                  />
+            {showSyncEntry ? (
+              <Button onPress={openSyncScreen}>
+                <HStack>
+                  <HStack
+                    modifiers={[
+                      frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                      backgroundOverlay({ color: colors.primary + '18' }),
+                      cornerRadius(7),
+                      padding({ trailing: 12 }),
+                    ]}
+                  >
+                    <SwiftUIImage
+                      systemName="arrow.triangle.2.circlepath"
+                      color={colors.primary}
+                      size={18}
+                    />
+                  </HStack>
+                  <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                    {t('settings.autoSync', 'Auto sync')}
+                  </SwiftUIText>
+                  <Spacer />
+                  <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{syncValue}</SwiftUIText>
                 </HStack>
-                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                  {t('settings.autoSync', 'Auto sync')}
-                </SwiftUIText>
-                <Spacer />
-                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{syncValue}</SwiftUIText>
-              </HStack>
-            </Button>
+              </Button>
+            ) : null}
             <Button onPress={openPlusScreen}>
               <HStack>
                 <HStack

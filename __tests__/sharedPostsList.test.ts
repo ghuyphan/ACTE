@@ -26,6 +26,8 @@ describe('supabase migration hardening', () => {
     resolve(__dirname, '../supabase/migrations/20260327133000_remove_storage_cleanup_triggers.sql'),
     'utf8'
   );
+  const normalizedRemoveStorageCleanupTriggersMigration =
+    removeStorageCleanupTriggersMigration.toLowerCase();
 
   it('creates profiles and user_usage rows for each auth user', () => {
     expect(migration).toContain('create or replace function public.handle_new_user()');
@@ -76,9 +78,17 @@ describe('supabase migration hardening', () => {
   });
 
   it('removes unsupported storage cleanup triggers that delete from storage.objects directly', () => {
-    expect(removeStorageCleanupTriggersMigration).toContain('drop trigger if exists tr_delete_note_media on public.notes;');
-    expect(removeStorageCleanupTriggersMigration).toContain('drop trigger if exists tr_delete_shared_post_media on public.shared_posts;');
-    expect(removeStorageCleanupTriggersMigration).toContain('drop trigger if exists tr_delete_room_post_media on public.room_posts;');
-    expect(removeStorageCleanupTriggersMigration).not.toContain('delete from storage.objects');
+    expect(normalizedRemoveStorageCleanupTriggersMigration).toContain(
+      'drop trigger if exists tr_delete_note_media on public.notes;'
+    );
+    expect(normalizedRemoveStorageCleanupTriggersMigration).toContain(
+      'drop trigger if exists tr_delete_shared_post_media on public.shared_posts;'
+    );
+    expect(normalizedRemoveStorageCleanupTriggersMigration).toContain(
+      'drop trigger if exists tr_delete_room_post_media on public.room_posts;'
+    );
+    expect(normalizedRemoveStorageCleanupTriggersMigration).not.toContain(
+      'delete from storage.objects'
+    );
   });
 });

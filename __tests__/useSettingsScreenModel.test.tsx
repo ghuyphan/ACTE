@@ -3,6 +3,9 @@ import { useSettingsScreenModel } from '../components/screens/useSettingsScreenM
 
 const mockRouterPush = jest.fn();
 const mockShowAlert = jest.fn();
+const mockConnectivityState = {
+  isOnline: true,
+};
 
 const mockThemeState = {
   theme: 'system' as 'system' | 'light' | 'dark',
@@ -114,7 +117,7 @@ jest.mock('../hooks/useTheme', () => ({
 
 jest.mock('../hooks/useConnectivity', () => ({
   useConnectivity: () => ({
-    isOnline: true,
+    isOnline: mockConnectivityState.isOnline,
   }),
 }));
 
@@ -150,6 +153,7 @@ jest.mock('../services/legalLinks', () => ({
 describe('useSettingsScreenModel', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockConnectivityState.isOnline = true;
     mockAuthState.user = null;
     mockAuthState.isAuthAvailable = true;
     mockSyncState.status = 'idle';
@@ -164,6 +168,7 @@ describe('useSettingsScreenModel', () => {
   it('shows not signed in for cloud sync when there is no signed-in user', () => {
     const { result } = renderHook(() => useSettingsScreenModel());
 
+    expect(result.current.showSyncEntry).toBe(false);
     expect(result.current.syncValue).toBe('Not signed in');
   });
 
@@ -189,6 +194,7 @@ describe('useSettingsScreenModel', () => {
 
     const { result } = renderHook(() => useSettingsScreenModel());
 
+    expect(result.current.showSyncEntry).toBe(true);
     expect(result.current.syncValue).toBe('Off');
   });
 
@@ -216,5 +222,93 @@ describe('useSettingsScreenModel', () => {
     const { result } = renderHook(() => useSettingsScreenModel());
 
     expect(result.current.syncValue).toBe('Unavailable');
+  });
+
+  it('falls back to the signed-in email when there is no display name', () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: null,
+      email: 'huy@example.com',
+    };
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    expect(result.current.accountValue).toBe('huy@example.com');
+    expect(result.current.showSyncEntry).toBe(true);
+  });
+
+  it('shows pending sync while offline with queued changes', () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+    };
+    mockConnectivityState.isOnline = false;
+    mockSyncState.pendingCount = 3;
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    expect(result.current.syncValue).toBe('Pending');
+    expect(result.current.accountHint).toBe(
+      'Your notes are saved locally and will sync when you are back online.'
+    );
+  });
+
+  it('surfaces the latest sync error message when sync fails', () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+    };
+    mockSyncState.status = 'error';
+    mockSyncState.lastMessage = 'Token expired. Sign in again.';
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    expect(result.current.accountHint).toBe('Token expired. Sign in again.');
+  });
+
+  it('describes blocked and retrying sync states when there is no success or error banner', () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+    };
+    mockSyncState.blockedCount = 1;
+
+    const blockedResult = renderHook(() => useSettingsScreenModel());
+    expect(blockedResult.result.current.accountHint).toBe(
+      'Some notes need your attention before they can finish syncing.'
+    );
+
+    blockedResult.unmount();
+    mockSyncState.blockedCount = 0;
+    mockSyncState.failedCount = 2;
+
+    const retryResult = renderHook(() => useSettingsScreenModel());
+    expect(retryResult.result.current.accountHint).toBe(
+      'Some notes are queued to retry syncing automatically.'
+    );
+  });
+
+  it('updates the plus hint for unlimited and capped free plans', () => {
+    mockSubscriptionState.photoNoteLimit = null;
+
+    const unlimitedResult = renderHook(() => useSettingsScreenModel());
+    expect(unlimitedResult.result.current.plusHint).toBe(
+      'Upgrade to Noto Plus to unlock unlimited photo notes, interactive hologram cards, premium finishes, and import from your photo library.'
+    );
+
+    unlimitedResult.unmount();
+    mockSubscriptionState.photoNoteLimit = 10;
+
+    const cappedResult = renderHook(() => useSettingsScreenModel());
+    expect(cappedResult.result.current.plusHint).toBe(
+      'Free plan includes up to 10 photo notes. Upgrade to Noto Plus for unlimited photo notes, interactive hologram cards, premium finishes, and library import.'
+    );
   });
 });

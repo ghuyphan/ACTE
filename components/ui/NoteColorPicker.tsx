@@ -17,6 +17,7 @@ interface NoteColorPickerProps {
   testIDPrefix?: string;
   compact?: boolean;
   lockedColorIds?: string[];
+  previewOnlyColorIds?: string[];
   onLockedColorPress?: (colorId: string) => void;
 }
 
@@ -29,10 +30,12 @@ export default function NoteColorPicker({
   testIDPrefix,
   compact = false,
   lockedColorIds = [],
+  previewOnlyColorIds = [],
   onLockedColorPress,
 }: NoteColorPickerProps) {
   const { colors, isDark } = useTheme();
   const lockedColorSet = new Set(lockedColorIds);
+  const previewOnlyColorSet = new Set(previewOnlyColorIds);
 
   return (
     <View style={[styles.section, compact ? styles.sectionCompact : null]}>
@@ -70,7 +73,8 @@ export default function NoteColorPicker({
         {NOTE_COLOR_PRESETS.map((preset, index) => {
           const gradient = getNoteColorCardGradient(preset.id) ?? preset.card;
           const selected = preset.id === selectedColor;
-          const locked = lockedColorSet.has(preset.id) && !selected;
+          const previewOnly = previewOnlyColorSet.has(preset.id);
+          const locked = lockedColorSet.has(preset.id) && !selected && !previewOnly;
           const premium = isPremiumNoteColor(preset.id);
 
           return (
@@ -90,7 +94,11 @@ export default function NoteColorPicker({
               style={[
                 styles.swatchButton,
                 {
-                  borderColor: selected ? colors.primary : locked ? colors.primary + '55' : colors.border,
+                  borderColor: selected
+                    ? colors.primary
+                    : locked || previewOnly
+                      ? colors.primary + '66'
+                      : colors.border,
                   transform: [{ scale: selected ? 1.06 : 1 }],
                   opacity: locked ? 0.84 : 1,
                 },
@@ -108,13 +116,19 @@ export default function NoteColorPicker({
                   pointerEvents="none"
                   style={[
                     styles.premiumBadge,
-                    { backgroundColor: locked ? 'rgba(28,28,30,0.72)' : 'rgba(255,255,255,0.84)' },
+                    {
+                      backgroundColor: locked
+                        ? 'rgba(28,28,30,0.72)'
+                        : previewOnly
+                          ? 'rgba(28,28,30,0.82)'
+                          : 'rgba(255,255,255,0.84)',
+                    },
                   ]}
                 >
                   <Ionicons
-                    name={locked ? 'lock-closed' : 'sparkles'}
+                    name={locked ? 'lock-closed' : previewOnly ? 'eye-outline' : 'sparkles'}
                     size={10}
-                    color={locked ? '#FFFFFF' : colors.primary}
+                    color={locked || previewOnly ? '#FFFFFF' : colors.primary}
                   />
                 </View>
               ) : null}

@@ -48,6 +48,12 @@ import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { saveNoteDoodle } from '../../services/noteDoodles';
 import { saveNoteStickerPlacementsWithAssets } from '../../services/noteStickers';
 import { filterNotesByQuery } from '../../services/noteSearch';
+import {
+  getFallbackFreeNoteColor,
+  getPremiumNoteSaveDecision,
+  isPreviewablePremiumNoteColor,
+  PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
+} from '../../services/premiumNoteFinish';
 import { generateNoteId, type Note } from '../../services/database';
 import { getSharedFeedErrorMessage, SharedPost } from '../../services/sharedFeedService';
 import { isIOS26OrNewer } from '../../utils/platform';
@@ -199,6 +205,10 @@ export default function HomeScreen() {
     () => (tier === 'plus' ? [] : PREMIUM_NOTE_COLOR_IDS),
     [tier]
   );
+  const previewOnlyNoteColorIds = useMemo(
+    () => (tier === 'plus' ? [] : PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS),
+    [tier]
+  );
   const [pendingSavedNoteScrollTargetId, setPendingSavedNoteScrollTargetId] = useState<string | null>(null);
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -206,6 +216,7 @@ export default function HomeScreen() {
   const searchAnim = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<any>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
+  const lastFreeNoteColorRef = useRef<string>(DEFAULT_NOTE_COLOR_ID);
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveInFlightRef = useRef(false);
@@ -358,8 +369,17 @@ export default function HomeScreen() {
     resetCaptureDraft();
     setCaptureTarget('private');
     setNoteColor(DEFAULT_NOTE_COLOR_ID);
+    lastFreeNoteColorRef.current = DEFAULT_NOTE_COLOR_ID;
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, [resetCaptureDraft]);
+
+  const handleChangeNoteColor = useCallback((nextColor: string | null) => {
+    const resolvedColor = nextColor ?? DEFAULT_NOTE_COLOR_ID;
+    setNoteColor(resolvedColor);
+    if (!isPreviewablePremiumNoteColor(resolvedColor)) {
+      lastFreeNoteColorRef.current = resolvedColor;
+    }
+  }, []);
 
   const clearInlineSaveTimers = useCallback(() => {
     if (finalizeInlineSaveTimeoutRef.current) {
@@ -977,6 +997,81 @@ export default function HomeScreen() {
     ]
   );
 
+  const promptHologramSaveChoice = useCallback(() => {
+    return new Promise<'upgrade-success' | 'switch' | 'cancel'>((resolve) => {
+      let settled = false;
+      const settle = (value: 'upgrade-success' | 'switch' | 'cancel') => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        resolve(value);
+      };
+
+      Alert.alert(
+        t('plus.hologramSaveTitle', 'Save this hologram card with Plus'),
+        t(
+          'plus.hologramSaveMessage',
+          'The hologram finish is ready to preview. Upgrade to Plus to save it, or switch back to a standard finish.'
+        ),
+        [
+          {
+            text: t('common.cancel', 'Cancel'),
+            style: 'cancel',
+            onPress: () => settle('cancel'),
+          },
+          {
+            text: t('plus.useStandardFinish', 'Use standard finish'),
+            onPress: () => settle('switch'),
+          },
+          {
+            text: plusPriceLabel
+              ? t('plus.upgradeCtaWithPrice', 'Upgrade to Plus · {{price}}', {
+                  price: plusPriceLabel,
+                })
+              : t('plus.upgradeCta', 'Upgrade to Plus'),
+            onPress: () => {
+              void (async () => {
+                if (!isPurchaseAvailable) {
+                  Alert.alert(
+                    t('plus.upgradeUnavailableTitle', 'Plus unavailable'),
+                    t(
+                      'plus.upgradeUnavailableMessage',
+                      'We could not complete the purchase right now. Please try again in a moment.'
+                    )
+                  );
+                  settle('cancel');
+                  return;
+                }
+
+                const result = await presentPaywallIfNeeded();
+                if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
+                  settle('upgrade-success');
+                  return;
+                }
+
+                if (result === PAYWALL_RESULT.CANCELLED || result === PAYWALL_RESULT.NOT_PRESENTED) {
+                  settle('cancel');
+                  return;
+                }
+
+                Alert.alert(
+                  t('plus.upgradeUnavailableTitle', 'Plus unavailable'),
+                  t(
+                    'plus.upgradeUnavailableMessage',
+                    'We could not complete the purchase right now. Please try again in a moment.'
+                  )
+                );
+                settle('cancel');
+              })();
+            },
+          },
+        ]
+      );
+    });
+  }, [isPurchaseAvailable, plusPriceLabel, presentPaywallIfNeeded, t]);
+
   const reverseGeocode = useCallback(
     async (lat: number, lon: number): Promise<string> => {
       try {
@@ -1055,6 +1150,23 @@ export default function HomeScreen() {
       if (captureMode === 'camera' && !canSaveAnotherPhotoNote) {
         showPlusSheet('limit');
         return;
+      }
+
+      if (captureMode === 'text') {
+        const saveDecision = getPremiumNoteSaveDecision({
+          tier,
+          selectedNoteColor: noteColor,
+        });
+
+        if (saveDecision === 'upsell_required') {
+          const choice = await promptHologramSaveChoice();
+          if (choice === 'switch') {
+            setNoteColor(getFallbackFreeNoteColor(lastFreeNoteColorRef.current, noteColor));
+          }
+          if (choice !== 'upgrade-success') {
+            return;
+          }
+        }
       }
 
       clearInlineSaveTimers();
@@ -1197,9 +1309,11 @@ export default function HomeScreen() {
     finalizeSavedCapture,
     showSavedSheet,
     canSaveAnotherPhotoNote,
+    promptHologramSaveChoice,
     captureTarget,
     createSharedPost,
     friends.length,
+    tier,
     remindersEnabled,
     sharedEnabled,
     showPlusSheet,
@@ -1473,8 +1587,9 @@ export default function HomeScreen() {
           noteText={noteText}
           onChangeNoteText={setNoteText}
           noteColor={noteColor}
-          onChangeNoteColor={setNoteColor}
+          onChangeNoteColor={handleChangeNoteColor}
           lockedNoteColorIds={lockedPremiumNoteColorIds}
+          previewOnlyNoteColorIds={previewOnlyNoteColorIds}
           onPressLockedNoteColor={() => showPlusSheet('color')}
           restaurantName={restaurantName}
           onChangeRestaurantName={setRestaurantName}
