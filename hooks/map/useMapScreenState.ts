@@ -191,6 +191,11 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
     setSelectedNoteIndex(0);
   }, []);
 
+  const clearSelection = useCallback(() => {
+    setSelectedGroupId(null);
+    setSelectedNoteIndex(0);
+  }, []);
+
   const openPrevInGroup = useCallback(() => {
     if (!selectedGroup) {
       return;
@@ -246,6 +251,7 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
     handleLeafMarkerPress,
     handleClusterMarkerPress,
     handleMapPress,
+    clearSelection,
     selectNoteById,
     clusterNodes,
     pointGroupMap,

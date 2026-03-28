@@ -479,6 +479,26 @@ describe('MapScreen', () => {
     nowSpy.mockRestore();
   });
 
+  it('lets you dismiss the note preview until you focus a marker again', async () => {
+    const { getAllByTestId, getByTestId, queryByTestId } = render(<MapScreen />);
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-shell')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('map-preview-dismiss'));
+
+    await waitFor(() => {
+      expect(queryByTestId('map-preview-shell')).toBeNull();
+    });
+
+    fireEvent.press(getAllByTestId(/leaf-marker-/)[0]);
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-shell')).toBeTruthy();
+    });
+  });
+
   it('lets you reveal all matching notes when filters leave the current area empty', async () => {
     const { getByTestId } = render(<MapScreen />);
 
@@ -540,6 +560,88 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByTestId('photo-marker-photo-1')).toBeTruthy();
+    });
+  });
+
+  it('shows a richer selected marker card for a single text note', async () => {
+    const { getByTestId } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    });
+  });
+
+  it('keeps same-place notes compact on the map even when focused', async () => {
+    replaceMockNotes([
+      {
+        id: 'same-1',
+        type: 'photo',
+        content: 'file:///same-1.jpg',
+        locationName: 'Phu Nhuan',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-12T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'same-2',
+        type: 'text',
+        content: 'Coffee note',
+        locationName: 'Phu Nhuan',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: true,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'same-3',
+        type: 'text',
+        content: 'Dinner note',
+        locationName: 'Phu Nhuan',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-10T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ]);
+
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.8,
+        longitude: 106.7,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    expect(queryByTestId('stack-marker-same-1')).toBeNull();
+    expect(queryByTestId('note-marker-same-1')).toBeNull();
+
+    fireEvent.press(getByTestId('leaf-marker-10.80000:106.70000'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-shell')).toBeTruthy();
+      expect(queryByTestId('stack-marker-same-1')).toBeNull();
+      expect(queryByTestId('note-marker-same-1')).toBeNull();
     });
   });
 

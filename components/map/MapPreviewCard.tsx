@@ -19,7 +19,8 @@ import type { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
 import { isOlderIOS } from '../../utils/platform';
-import { getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
+import MapPreviewSheet from './MapPreviewSheet';
+import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
 
 const PREVIEW_HORIZONTAL_INSET = 14;
 
@@ -34,6 +35,7 @@ interface MapPreviewCardProps {
   activeNearbyNoteId: string | null;
   bottomOffset: number;
   onOpen: () => void;
+  onDismiss: () => void;
   onFocusNearbyNote: (noteId: string) => void;
   onFocusGroupNote: (noteId: string) => void;
   onInteraction?: () => void;
@@ -77,6 +79,7 @@ export default function MapPreviewCard({
   activeNearbyNoteId,
   bottomOffset,
   onOpen,
+  onDismiss,
   onFocusNearbyNote,
   onFocusGroupNote,
   onInteraction,
@@ -188,17 +191,21 @@ export default function MapPreviewCard({
   const pointerEvents = 'auto';
 
   return (
-    <View
-      testID="map-preview-shell"
-      style={[
-        styles.wrapper,
-        {
-          bottom: bottomOffset,
-        },
-      ]}
-      pointerEvents={pointerEvents}
+    <MapPreviewSheet
+      shellTestID="map-preview-shell"
+      dismissTestID="map-preview-dismiss"
+      bottomOffset={bottomOffset}
+      handleColor={isDark ? 'rgba(255,255,255,0.34)' : 'rgba(60,60,67,0.22)'}
+      onDismiss={onDismiss}
+      reduceMotionEnabled={reduceMotionEnabled}
     >
-      <View style={styles.inner}>
+      <View
+        style={[
+          styles.inner,
+          { borderColor: getOverlayBorderColor(isDark) },
+        ]}
+        pointerEvents={pointerEvents}
+      >
         <GlassView
           pointerEvents="none"
           glassEffectStyle="regular"
@@ -350,26 +357,20 @@ export default function MapPreviewCard({
           </View>
         </View>
       </View>
-    </View>
+    </MapPreviewSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    position: 'absolute',
-    left: PREVIEW_HORIZONTAL_INSET,
-    right: PREVIEW_HORIZONTAL_INSET,
-    zIndex: 12,
-  },
   inner: {
-    borderWidth: 0,
+    borderWidth: 1,
     borderRadius: mapOverlayTokens.overlayRadius,
     ...mapOverlayTokens.overlayShadow,
     overflow: 'hidden',
   },
   cardContent: {
     paddingHorizontal: mapOverlayTokens.overlayPadding,
-    paddingTop: mapOverlayTokens.overlayPadding + 1,
+    paddingTop: mapOverlayTokens.overlayPadding + 14,
     paddingBottom: mapOverlayTokens.overlayPadding,
   },
   modeHighlight: {

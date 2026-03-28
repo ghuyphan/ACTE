@@ -16,6 +16,7 @@ import {
 import { useTheme } from '../../hooks/useTheme';
 import { SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
+import MapPreviewSheet from './MapPreviewSheet';
 import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
 
 const PREVIEW_HORIZONTAL_INSET = 14;
@@ -39,6 +40,7 @@ interface MapFriendsPreviewCardProps {
   activePostId: string | null;
   bottomOffset: number;
   onOpen: () => void;
+  onDismiss: () => void;
   onFocusPost: (postId: string) => void;
   onInteraction?: () => void;
   reduceMotionEnabled: boolean;
@@ -50,6 +52,7 @@ export default function MapFriendsPreviewCard({
   activePostId,
   bottomOffset,
   onOpen,
+  onDismiss,
   onFocusPost,
   onInteraction,
   reduceMotionEnabled,
@@ -113,13 +116,13 @@ export default function MapFriendsPreviewCard({
   const previewCountLabel = `${Math.max(activeIndex, 0) + 1}/${posts.length}`;
 
   return (
-    <View
-      testID="map-friends-preview-shell"
-      style={[
-        styles.wrapper,
-        { bottom: bottomOffset },
-      ]}
-      pointerEvents="auto"
+    <MapPreviewSheet
+      shellTestID="map-friends-preview-shell"
+      dismissTestID="map-friends-preview-dismiss"
+      bottomOffset={bottomOffset}
+      handleColor={isDark ? 'rgba(255,255,255,0.34)' : 'rgba(60,60,67,0.22)'}
+      onDismiss={onDismiss}
+      reduceMotionEnabled={reduceMotionEnabled}
     >
       <View
         style={[
@@ -242,17 +245,11 @@ export default function MapFriendsPreviewCard({
           </View>
         </View>
       </View>
-    </View>
+    </MapPreviewSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    position: 'absolute',
-    left: PREVIEW_HORIZONTAL_INSET,
-    right: PREVIEW_HORIZONTAL_INSET,
-    zIndex: 12,
-  },
   inner: {
     borderWidth: 1,
     borderRadius: mapOverlayTokens.overlayRadius,
@@ -261,7 +258,7 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     paddingHorizontal: mapOverlayTokens.overlayPadding,
-    paddingTop: mapOverlayTokens.overlayPadding + 1,
+    paddingTop: mapOverlayTokens.overlayPadding + 14,
     paddingBottom: mapOverlayTokens.overlayPadding,
   },
   previewList: {

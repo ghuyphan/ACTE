@@ -44,6 +44,7 @@ export default function MapScreenIOS() {
   const mapRef = useRef<MapView>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [activeNearbyNoteId, setActiveNearbyNoteId] = useState<string | null>(null);
+  const [notesPreviewDismissed, setNotesPreviewDismissed] = useState(false);
   const [markerPulseId, setMarkerPulseId] = useState<string | null>(null);
   const [markerPulseKey, setMarkerPulseKey] = useState(0);
   const [showFriendsPreview, setShowFriendsPreview] = useState(false);
@@ -66,6 +67,7 @@ export default function MapScreenIOS() {
     handleLeafMarkerPress,
     handleClusterMarkerPress,
     handleMapPress,
+    clearSelection,
     selectNoteById,
     clusterNodes,
     nearbyItems,
@@ -108,7 +110,7 @@ export default function MapScreenIOS() {
         : notes.length > 0 && visibleAreaCount === 0 && !showingAllFilteredResults
           ? 'no-area-results'
           : 'content';
-  const previewVisible = overlayState === 'content' && nearbyItems.length > 0;
+  const previewVisible = overlayState === 'content' && nearbyItems.length > 0 && !notesPreviewDismissed;
 
   useEffect(() => {
     return () => {
@@ -218,17 +220,23 @@ export default function MapScreenIOS() {
       if (showFriendsPreview) {
         setShowFriendsPreview(false);
       }
+      if (notesPreviewDismissed) {
+        setNotesPreviewDismissed(false);
+      }
       setFilterType(nextType);
     },
-    [setFilterType, showFriendsPreview]
+    [notesPreviewDismissed, setFilterType, showFriendsPreview]
   );
 
   const handleToggleFavorites = useCallback(() => {
     if (showFriendsPreview) {
       setShowFriendsPreview(false);
     }
+    if (notesPreviewDismissed) {
+      setNotesPreviewDismissed(false);
+    }
     toggleFavoritesOnly();
-  }, [showFriendsPreview, toggleFavoritesOnly]);
+  }, [notesPreviewDismissed, showFriendsPreview, toggleFavoritesOnly]);
 
   const goToMyLocation = useCallback(async () => {
     let target = location;
@@ -266,6 +274,9 @@ export default function MapScreenIOS() {
     (node: MapClusterNode) => {
       if (showFriendsPreview) {
         setShowFriendsPreview(false);
+      }
+      if (notesPreviewDismissed) {
+        setNotesPreviewDismissed(false);
       }
       handleClusterMarkerPress();
       emitLightHaptic();
@@ -308,17 +319,23 @@ export default function MapScreenIOS() {
       if (showFriendsPreview) {
         setShowFriendsPreview(false);
       }
+      if (notesPreviewDismissed) {
+        setNotesPreviewDismissed(false);
+      }
       triggerMarkerPulse(groupId);
       handleLeafMarkerPress(groupId);
       emitLightHaptic();
     },
-    [emitLightHaptic, handleLeafMarkerPress, showFriendsPreview, triggerMarkerPulse]
+    [emitLightHaptic, handleLeafMarkerPress, notesPreviewDismissed, showFriendsPreview, triggerMarkerPulse]
   );
 
   const handleFocusNearbyNote = useCallback(
     (noteId: string) => {
       if (showFriendsPreview) {
         setShowFriendsPreview(false);
+      }
+      if (notesPreviewDismissed) {
+        setNotesPreviewDismissed(false);
       }
       const nearbyItem = nearbyItems.find((item) => item.note.id === noteId);
       if (!nearbyItem) {
@@ -342,7 +359,15 @@ export default function MapScreenIOS() {
       mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
       setVisibleRegion(nextRegion);
     },
-    [initialRegion, nearbyItems, reduceMotionEnabled, setVisibleRegion, showFriendsPreview, visibleRegion]
+    [
+      initialRegion,
+      nearbyItems,
+      notesPreviewDismissed,
+      reduceMotionEnabled,
+      setVisibleRegion,
+      showFriendsPreview,
+      visibleRegion,
+    ]
   );
 
   const handleOpenFriendsLayer = useCallback(() => {
@@ -354,6 +379,17 @@ export default function MapScreenIOS() {
     setShowFriendsPreview((current) => !current);
     setActiveFriendPostId((current) => current ?? friendPosts[0]?.id ?? null);
   }, [emitLightHaptic, friendPosts, hasFriendLayer]);
+
+  const handleDismissNotesPreview = useCallback(() => {
+    emitLightHaptic();
+    setNotesPreviewDismissed(true);
+    clearSelection();
+  }, [clearSelection, emitLightHaptic]);
+
+  const handleDismissFriendsPreview = useCallback(() => {
+    emitLightHaptic();
+    setShowFriendsPreview(false);
+  }, [emitLightHaptic]);
 
   const focusFriendPost = useCallback(
     (postId: string, options?: { animate?: boolean; openPreview?: boolean }) => {
@@ -616,7 +652,7 @@ export default function MapScreenIOS() {
       </View>
 
       {notes.length > 0 && !friendsPreviewVisible ? (
-        <MapPreviewCard
+          <MapPreviewCard
           previewMode={previewMode}
           visible={previewVisible}
           selectedGroup={selectedGroup}
@@ -625,6 +661,7 @@ export default function MapScreenIOS() {
           activeNearbyNoteId={activeNearbyNoteId}
           bottomOffset={previewBottomOffset}
           onOpen={handleOpenPreview}
+          onDismiss={handleDismissNotesPreview}
           onFocusNearbyNote={handleFocusNearbyNote}
           onFocusGroupNote={selectNoteById}
           onInteraction={emitLightHaptic}
@@ -639,6 +676,7 @@ export default function MapScreenIOS() {
           activePostId={activeFriendPostId}
           bottomOffset={previewBottomOffset}
           onOpen={() => handleOpenSharedPost()}
+          onDismiss={handleDismissFriendsPreview}
           onFocusPost={(postId) => focusFriendPost(postId)}
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
@@ -680,6 +718,7 @@ export default function MapScreenIOS() {
             actionTestID="map-clear-filters"
             onAction={() => {
               emitLightHaptic();
+              setNotesPreviewDismissed(false);
               clearFilters();
             }}
           />
@@ -702,6 +741,7 @@ export default function MapScreenIOS() {
             actionTestID="map-show-all-results"
             onAction={() => {
               emitLightHaptic();
+              setNotesPreviewDismissed(false);
               showAllFilteredResults();
             }}
           />
