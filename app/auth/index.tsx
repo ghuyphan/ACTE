@@ -35,7 +35,8 @@ import { useTheme } from '../../hooks/useTheme';
 
 type AuthScreenMode = 'landing' | 'signIn' | 'register' | 'resetPassword';
 type AuthIntent = 'share-note';
-const APP_ICON_SOURCE = require('../../assets/images/icon/icon-default.png');
+const APP_ICON_LIGHT_SOURCE = require('../../assets/images/icon/icon-default.png');
+const APP_ICON_DARK_SOURCE = require('../../assets/images/icon/icon-dark.png');
 const FORM_LAYOUT_TRANSITION = CurvedTransition.duration(220)
   .easingX(Easing.out(Easing.cubic))
   .easingY(Easing.out(Easing.cubic))
@@ -216,6 +217,7 @@ export default function LoginScreen() {
       ? [presentationDetents(nativeSheetDetents, { selection: { height: formContentHeight } })]
       : []),
   ];
+  const appIconSource = isDark ? APP_ICON_DARK_SOURCE : APP_ICON_LIGHT_SOURCE;
 
   const continueToApp = () => {
     router.replace('/' as Href);
@@ -604,7 +606,7 @@ export default function LoginScreen() {
 
         <View style={[styles.content, { paddingTop: insets.top }]}>
           <View style={styles.iconContainer}>
-            <Image source={APP_ICON_SOURCE} style={styles.appIcon} />
+            <Image source={appIconSource} style={styles.appIcon} />
           </View>
           <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
@@ -655,7 +657,7 @@ export default function LoginScreen() {
         ]}
       >
         <View style={styles.iconContainer}>
-          <Image source={APP_ICON_SOURCE} style={styles.appIcon} />
+          <Image source={appIconSource} style={styles.appIcon} />
         </View>
         <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
         <Text style={[styles.subtitle, { color: colors.secondaryText }]}>

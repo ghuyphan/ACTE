@@ -19,7 +19,6 @@ import { GlassView } from '../ui/GlassView';
 import { TFunction } from 'i18next';
 import { ComponentProps, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadius';
 import { isIOS26OrNewer } from '../../utils/platform';
 import GlassHeader from '../ui/GlassHeader';
 
@@ -36,10 +35,12 @@ interface HomeHeaderSearchProps {
   showNotesButton?: boolean;
   onOpenShared?: () => void;
   onOpenNotes?: () => void;
+  sharedButtonMode?: 'manage' | 'filter';
+  sharedButtonActive?: boolean;
+  sharedFilterValue?: 'all' | 'friends';
+  onChangeSharedFilter?: (nextFilter: 'all' | 'friends') => void;
   onToggleCaptureMode: () => void;
   captureMode: 'text' | 'camera';
-  radius: number;
-  onChangeRadius: (nextRadius: number) => void;
   colors: {
     text: string;
     primary: string;
@@ -64,17 +65,21 @@ export default function HomeHeaderSearch({
   showNotesButton = false,
   onOpenShared,
   onOpenNotes,
+  sharedButtonMode = 'manage',
+  sharedButtonActive = false,
+  sharedFilterValue = 'all',
+  onChangeSharedFilter,
   onToggleCaptureMode,
   captureMode,
-  radius,
-  onChangeRadius,
   colors,
   isDark,
   t,
 }: HomeHeaderSearchProps) {
   const modeIconScale = useRef(new Animated.Value(1)).current;
+  const sharedModeProgress = useRef(new Animated.Value(sharedButtonMode === 'filter' ? 1 : 0)).current;
+  const sharedFilterProgress = useRef(new Animated.Value(sharedButtonActive ? 1 : 0)).current;
   const didMountRef = useRef(false);
-  const [showAndroidRadiusSheet, setShowAndroidRadiusSheet] = useState(false);
+  const [showAndroidSharedFilterSheet, setShowAndroidSharedFilterSheet] = useState(false);
   const useDetachedWordmark = isIOS26OrNewer;
   const useDetachedControls = isIOS26OrNewer && !showSearchButton;
   const useNativeLiquidGlassControls = Platform.OS === 'ios' && isIOS26OrNewer;
@@ -95,6 +100,24 @@ export default function HomeHeaderSearch({
       useNativeDriver: true,
     }).start();
   }, [captureMode, modeIconScale]);
+
+  useEffect(() => {
+    Animated.timing(sharedModeProgress, {
+      toValue: sharedButtonMode === 'filter' ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [sharedButtonMode, sharedModeProgress]);
+
+  useEffect(() => {
+    Animated.timing(sharedFilterProgress, {
+      toValue: sharedButtonActive ? 1 : 0,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [sharedButtonActive, sharedFilterProgress]);
 
   const getHeaderControlMetrics = (size: 'regular' | 'large' = 'regular') => ({
     verticalPadding: size === 'large' ? 11 : 9,
@@ -170,54 +193,6 @@ export default function HomeHeaderSearch({
     );
   };
 
-  const renderRadiusMenu = (size: 'regular' | 'large' = 'regular') => {
-    if (Platform.OS !== 'ios') {
-      return null;
-    }
-
-    const radiusAccessibilityLabel = `${t('capture.radius', 'Radius')}: ${formatRadiusLabel(radius)}`;
-
-    return (
-      <Host
-        matchContents
-        colorScheme={isDark ? 'dark' : 'light'}
-        style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
-      >
-        <Menu
-          label={renderHeaderControlLabel('scope', formatRadiusLabel(radius), size)}
-          modifiers={[...getHeaderControlModifiers(radiusAccessibilityLabel)]}
-        >
-          {NOTE_RADIUS_OPTIONS.map((option) => (
-            <Button
-              key={option}
-              label={formatRadiusLabel(option)}
-              systemImage={radius === option ? 'checkmark' : undefined}
-              onPress={() => onChangeRadius(option)}
-            />
-          ))}
-        </Menu>
-      </Host>
-    );
-  };
-
-  const renderAndroidRadiusButton = () => {
-    if (Platform.OS !== 'android') {
-      return null;
-    }
-
-    return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${t('capture.radius', 'Radius')}: ${formatRadiusLabel(radius)}`}
-        onPress={() => setShowAndroidRadiusSheet(true)}
-        style={[styles.radiusToggleBtn, { backgroundColor: `${colors.primary}18` }]}
-      >
-        <Ionicons name="locate-outline" size={16} color={colors.primary} />
-        <Text style={[styles.radiusToggleText, { color: colors.primary }]}>{formatRadiusLabel(radius)}</Text>
-      </Pressable>
-    );
-  };
-
   const renderSearchButton = () => {
     if (!showSearchButton) {
       return null;
@@ -290,28 +265,164 @@ export default function HomeHeaderSearch({
     }
 
     const sharedLabel = t('shared.manageTitle', 'Friends');
+    const sharedA11yLabel =
+      sharedButtonMode === 'filter'
+        ? sharedButtonActive
+          ? t('home.friendsFilterActive', 'Friends filter on')
+          : t('home.friendsFilterInactive', 'Filter by friends')
+        : sharedLabel;
+    const canShowFilterMenu = sharedButtonMode === 'filter' && Boolean(onChangeSharedFilter);
+    const sharedSystemName =
+      sharedButtonMode === 'filter' && sharedButtonActive ? 'person.2.fill' : 'person.2';
+    const sharedAndroidIcon =
+      sharedButtonMode === 'filter' && sharedButtonActive ? 'people' : 'people-outline';
+    const animatedContainerStyle = {
+      transform: [
+        {
+          scale: sharedModeProgress.interpolate({
+            inputRange: [0, 1],
+            outputRange: [1, 1.04],
+          }),
+        },
+      ],
+    };
+    const badgeAnimatedStyle = {
+      opacity: Animated.multiply(sharedModeProgress, Animated.add(0.35, Animated.multiply(sharedFilterProgress, 0.65))),
+      transform: [
+        {
+          scale: Animated.add(
+            0.72,
+            Animated.multiply(sharedModeProgress, Animated.add(0.18, Animated.multiply(sharedFilterProgress, 0.1)))
+          ),
+        },
+      ],
+    };
 
     if (Platform.OS === 'ios') {
+      const controlLabel = renderHeaderControlLabel(sharedSystemName, sharedLabel, size);
+
+      if (canShowFilterMenu) {
+        return (
+          <Animated.View style={[styles.sharedButtonContainer, animatedContainerStyle]}>
+            <Host
+              matchContents
+              colorScheme={isDark ? 'dark' : 'light'}
+              style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
+            >
+              <Menu
+                label={controlLabel}
+                modifiers={getHeaderControlModifiers(sharedA11yLabel)}
+              >
+                <Button
+                  label={t('home.feedFilterAll', 'All posts')}
+                  systemImage={sharedFilterValue === 'all' ? 'checkmark' : undefined}
+                  onPress={() => onChangeSharedFilter?.('all')}
+                />
+                <Button
+                  label={t('home.feedFilterFriends', 'Friends only')}
+                  systemImage={sharedFilterValue === 'friends' ? 'checkmark' : undefined}
+                  onPress={() => onChangeSharedFilter?.('friends')}
+                />
+                <Button
+                  label={t('shared.manageTitle', 'Friends')}
+                  systemImage="person.crop.circle"
+                  onPress={onOpenShared}
+                />
+              </Menu>
+            </Host>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+              styles.sharedButtonBadge,
+              styles.sharedButtonChevronBadge,
+              {
+                  backgroundColor: colors.card,
+                  borderColor: `${colors.primary}2E`,
+                },
+                badgeAnimatedStyle,
+              ]}
+            >
+              <Ionicons name="chevron-down" size={9} color={colors.primary} />
+            </Animated.View>
+          </Animated.View>
+        );
+      }
+
       return (
-        <Host
-          matchContents
-          colorScheme={isDark ? 'dark' : 'light'}
-          style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
-        >
-          <Button onPress={onOpenShared} modifiers={getHeaderControlModifiers(sharedLabel)}>
-            {renderHeaderControlLabel('person.2', sharedLabel, size)}
-          </Button>
-        </Host>
+        <Animated.View style={[styles.sharedButtonContainer, animatedContainerStyle]}>
+          <Host
+            matchContents
+            colorScheme={isDark ? 'dark' : 'light'}
+            style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
+          >
+            <Button onPress={onOpenShared} modifiers={getHeaderControlModifiers(sharedA11yLabel)}>
+              {controlLabel}
+            </Button>
+          </Host>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.sharedButtonBadge,
+              {
+                backgroundColor: colors.primary,
+              },
+              badgeAnimatedStyle,
+            ]}
+          />
+        </Animated.View>
+      );
+    }
+
+    if (canShowFilterMenu) {
+      return (
+        <Animated.View style={animatedContainerStyle}>
+          <Pressable
+            accessibilityLabel={sharedA11yLabel}
+            onPress={() => setShowAndroidSharedFilterSheet(true)}
+            style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
+          >
+            <Ionicons name={sharedAndroidIcon} size={20} color={colors.primary} />
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.sharedButtonBadge,
+                styles.sharedButtonBadgeAndroid,
+                styles.sharedButtonChevronBadge,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: `${colors.primary}2A`,
+                },
+                badgeAnimatedStyle,
+              ]}
+            >
+              <Ionicons name="chevron-down" size={9} color={colors.primary} />
+            </Animated.View>
+          </Pressable>
+        </Animated.View>
       );
     }
 
     return (
-      <Pressable
-        onPress={onOpenShared}
-        style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
-      >
-        <Ionicons name="people-outline" size={20} color={colors.primary} />
-      </Pressable>
+      <Animated.View style={animatedContainerStyle}>
+        <Pressable
+          accessibilityLabel={sharedA11yLabel}
+          onPress={onOpenShared}
+          style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
+        >
+          <Ionicons name={sharedAndroidIcon} size={20} color={colors.primary} />
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.sharedButtonBadge,
+              styles.sharedButtonBadgeAndroid,
+              {
+                backgroundColor: colors.primary,
+              },
+              badgeAnimatedStyle,
+            ]}
+          />
+        </Pressable>
+      </Animated.View>
     );
   };
 
@@ -352,32 +463,45 @@ export default function HomeHeaderSearch({
         ? t('capture.switchCamera', 'Camera')
         : t('capture.switchText', 'Text');
     const modeSystemName = captureMode === 'text' ? 'camera' : 'square.and.pencil';
-    const radiusAccessibilityLabel = `${t('capture.radius', 'Radius')}: ${formatRadiusLabel(radius)}`;
 
     return (
       <Host matchContents colorScheme={isDark ? 'dark' : 'light'} style={styles.detachedSwiftControlsHost}>
         <HStack spacing={10} alignment="center">
-          <Menu
-            label={radiusAccessibilityLabel}
-            systemImage="scope"
-            modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
-          >
-            {NOTE_RADIUS_OPTIONS.map((option) => (
-              <Button
-                key={option}
-                label={formatRadiusLabel(option)}
-                systemImage={radius === option ? 'checkmark' : undefined}
-                onPress={() => onChangeRadius(option)}
-              />
-            ))}
-          </Menu>
           {showSharedButton && onOpenShared ? (
-            <Button
-              label={t('shared.manageTitle', 'Friends')}
-              systemImage="person.2"
-              onPress={onOpenShared}
-              modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
-            />
+            sharedButtonMode === 'filter' && onChangeSharedFilter ? (
+              <Menu
+                label={
+                  sharedButtonActive
+                    ? t('home.friendsFilterActive', 'Friends filter on')
+                    : t('home.friendsFilterInactive', 'Filter by friends')
+                }
+                systemImage={sharedButtonActive ? 'person.2.fill' : 'person.2'}
+                modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
+              >
+                <Button
+                  label={t('home.feedFilterAll', 'All posts')}
+                  systemImage={sharedFilterValue === 'all' ? 'checkmark' : undefined}
+                  onPress={() => onChangeSharedFilter('all')}
+                />
+                <Button
+                  label={t('home.feedFilterFriends', 'Friends only')}
+                  systemImage={sharedFilterValue === 'friends' ? 'checkmark' : undefined}
+                  onPress={() => onChangeSharedFilter('friends')}
+                />
+                <Button
+                  label={t('shared.manageTitle', 'Friends')}
+                  systemImage="person.crop.circle"
+                  onPress={onOpenShared}
+                />
+              </Menu>
+            ) : (
+              <Button
+                label={t('shared.manageTitle', 'Friends')}
+                systemImage="person.2"
+                onPress={onOpenShared}
+                modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
+              />
+            )
           ) : null}
           {showNotesButton && onOpenNotes ? (
             <Button
@@ -458,9 +582,6 @@ export default function HomeHeaderSearch({
           {renderSharedButton()}
           {renderNotesButton()}
 
-          {renderRadiusMenu()}
-          {renderAndroidRadiusButton()}
-
           {renderModeToggle()}
           {Platform.OS === 'android' ? renderSearchButton() : null}
         </View>
@@ -497,58 +618,84 @@ export default function HomeHeaderSearch({
       </Animated.View>
       </GlassHeader>
 
-      {Platform.OS === 'android' ? (
+      {Platform.OS === 'android' && sharedButtonMode === 'filter' && onChangeSharedFilter ? (
         <AppSheet
-          visible={showAndroidRadiusSheet}
-          onClose={() => setShowAndroidRadiusSheet(false)}
+          visible={showAndroidSharedFilterSheet}
+          onClose={() => setShowAndroidSharedFilterSheet(false)}
           androidPresentation="floating"
           topInset={topInset}
         >
           <AppSheetScaffold
             headerVariant="standard"
-            title={t('capture.radius', 'Radius')}
-            contentContainerStyle={styles.radiusSheet}
+            title={t('shared.manageTitle', 'Friends')}
+            subtitle={t('home.feedFilterHint', 'Choose what kind of posts you want to see in Home.')}
+            contentContainerStyle={styles.sharedFilterSheet}
           >
-            <View style={[styles.radiusSheetCard, { backgroundColor: colors.card }]}>
-              {NOTE_RADIUS_OPTIONS.map((option, index) => {
-                const isSelected = radius === option;
+            <View
+              style={[
+                styles.sharedFilterSheetCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              {(['all', 'friends'] as const).map((option, index) => {
+                const isSelected = sharedFilterValue === option;
+                const label =
+                  option === 'all'
+                    ? t('home.feedFilterAll', 'All posts')
+                    : t('home.feedFilterFriends', 'Friends only');
 
                 return (
                   <View key={option}>
                     <Pressable
-                      testID={`header-radius-${option}`}
                       accessibilityRole="button"
                       accessibilityState={{ selected: isSelected }}
                       onPress={() => {
-                        onChangeRadius(option);
-                        setShowAndroidRadiusSheet(false);
+                        onChangeSharedFilter(option);
+                        setShowAndroidSharedFilterSheet(false);
                       }}
                       style={({ pressed }) => [
-                        styles.radiusSheetRow,
+                        styles.sharedFilterRow,
                         isSelected ? { backgroundColor: `${colors.primary}12` } : null,
-                        pressed ? styles.radiusSheetRowPressed : null,
+                        pressed ? styles.sharedFilterRowPressed : null,
                       ]}
                     >
-                      <View>
-                        <Text style={[styles.radiusSheetLabel, { color: colors.text }]}>
-                          {formatRadiusLabel(option)}
-                        </Text>
-                        <Text style={[styles.radiusSheetHint, { color: colors.secondaryText }]}>
-                          {t('capture.reminderRadiusLabel', 'Reminder trigger distance')}
-                        </Text>
-                      </View>
+                      <Text style={[styles.sharedFilterLabel, { color: colors.text }]}>{label}</Text>
                       {isSelected ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
                     </Pressable>
-                    {index < NOTE_RADIUS_OPTIONS.length - 1 ? (
-                      <View style={[styles.radiusSheetDivider, { backgroundColor: colors.border }]} />
+                    {index === 0 ? (
+                      <View style={[styles.sharedFilterDivider, { backgroundColor: colors.border }]} />
                     ) : null}
                   </View>
                 );
               })}
             </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setShowAndroidSharedFilterSheet(false);
+                onOpenShared?.();
+              }}
+              style={({ pressed }) => [
+                styles.sharedManageRow,
+                {
+                  backgroundColor: `${colors.primary}10`,
+                  borderColor: `${colors.primary}24`,
+                  opacity: pressed ? 0.92 : 1,
+                },
+              ]}
+            >
+              <Ionicons name="people-outline" size={16} color={colors.primary} />
+              <Text style={[styles.sharedManageLabel, { color: colors.primary }]}>
+                {t('shared.manageTitle', 'Friends')}
+              </Text>
+            </Pressable>
           </AppSheetScaffold>
         </AppSheet>
       ) : null}
+
     </>
   );
 }
@@ -590,23 +737,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  radiusToggleBtn: {
-    minHeight: 36,
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  radiusToggleText: {
-    fontSize: 13,
-    fontWeight: '700',
-    fontFamily: 'System',
-  },
   swiftHeaderControlHost: {
     minHeight: 38,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  sharedButtonContainer: {
+    position: 'relative',
+  },
+  sharedButtonBadge: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  sharedButtonBadgeAndroid: {
+    right: 8,
+    bottom: 8,
+  },
+  sharedButtonChevronBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
   },
   searchHeader: {
     paddingHorizontal: 20,
@@ -666,44 +823,46 @@ const styles = StyleSheet.create({
   detachedHeaderOffset: {
     marginTop: 28,
   },
-  radiusSheet: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+  sharedFilterSheet: {
+    gap: 12,
   },
-  radiusSheetTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    fontFamily: 'System',
-    marginBottom: 16,
-  },
-  radiusSheetCard: {
-    borderRadius: 24,
+  sharedFilterSheetCard: {
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
-  radiusSheetRow: {
-    minHeight: 68,
-    paddingHorizontal: 20,
+  sharedFilterRow: {
+    minHeight: 60,
+    paddingHorizontal: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  radiusSheetRowPressed: {
-    opacity: 0.84,
+  sharedFilterRowPressed: {
+    opacity: 0.9,
   },
-  radiusSheetLabel: {
-    fontSize: 17,
-    fontWeight: '600',
+  sharedFilterLabel: {
+    fontSize: 16,
+    fontWeight: '700',
     fontFamily: 'System',
   },
-  radiusSheetHint: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontFamily: 'System',
-    marginTop: 4,
-  },
-  radiusSheetDivider: {
+  sharedFilterDivider: {
     height: StyleSheet.hairlineWidth,
-    marginHorizontal: 20,
+    marginLeft: 18,
+  },
+  sharedManageRow: {
+    minHeight: 50,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  sharedManageLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'System',
   },
 });

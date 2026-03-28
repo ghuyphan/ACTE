@@ -465,6 +465,8 @@ export default function NotesFeed({
       data={listData}
       keyExtractor={(item) => `${item.kind}:${item.id}`}
       renderItem={renderItem}
+      getItemType={(item) => item.kind}
+      drawDistance={snapHeight * 2}
       removeClippedSubviews={Platform.OS === 'android' && captureMode !== 'camera'}
       snapToInterval={snapHeight}
       disableIntervalMomentum={Platform.OS === 'android'}

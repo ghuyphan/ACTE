@@ -239,6 +239,8 @@ function createCaptureCardProps(
     cameraStatusText: null,
     libraryImportLocked: false,
     importingPhoto: false,
+    radius: 150,
+    onChangeRadius: () => undefined,
     shareTarget: 'private' as const,
     onChangeShareTarget: () => undefined,
     footerContent: <View />,
@@ -463,6 +465,8 @@ describe('CaptureCard doodle handle', () => {
         cameraStatusText={null}
         libraryImportLocked={false}
         importingPhoto={false}
+        radius={150}
+        onChangeRadius={() => undefined}
         shareTarget="private"
         onChangeShareTarget={() => undefined}
         footerContent={<View />}
@@ -535,6 +539,14 @@ describe('CaptureCard doodle handle', () => {
 
     expect(handleChangeNoteColor).toHaveBeenCalledWith('sunset-coral');
     expect(queryByTestId('capture-note-color-sunset-coral')).toBeNull();
+  });
+
+  it('keeps radius controls out of the capture card chrome', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { queryByTestId } = renderCaptureCard(ref);
+
+    expect(queryByTestId('capture-radius-toggle')).toBeNull();
+    expect(queryByTestId('capture-radius-150')).toBeNull();
   });
 
   it('shows a paste popover on text-card long press and pastes after confirmation', async () => {

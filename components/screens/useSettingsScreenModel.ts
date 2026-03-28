@@ -47,13 +47,13 @@ export function useSettingsScreenModel() {
   const [showLanguage, setShowLanguage] = useState(false);
   const [showSync, setShowSync] = useState(false);
 
-  const openAccountScreen = () => {
+  const openAccountScreen = useCallback(() => {
     if (!isAuthAvailable) {
       return;
     }
 
     router.push((user ? '/auth/profile' : '/auth') as Href);
-  };
+  }, [isAuthAvailable, router, user]);
 
   const openPlusScreen = () => {
     router.push('/plus');
@@ -70,7 +70,7 @@ export function useSettingsScreenModel() {
     }
 
     setShowSync(true);
-  }, [isAuthAvailable, user]);
+  }, [isAuthAvailable, openAccountScreen, user]);
 
   const openPrivacyPolicyLink = () => {
     void openPrivacyPolicy();

@@ -85,45 +85,57 @@ export default function PremiumNoteFinishOverlay({
   if (finish === 'holo') {
     const spectrumTranslateX = isInteractive
       ? tiltX.interpolate({
-          inputRange: [-1, 1],
-          outputRange: [-26, 26],
-        })
+        inputRange: [-1, 1],
+        outputRange: [-120, 120],
+      })
       : 0;
     const spectrumTranslateY = isInteractive
       ? tiltY.interpolate({
-          inputRange: [-1, 1],
-          outputRange: [16, -16],
-        })
+        inputRange: [-1, 1],
+        outputRange: [60, -60],
+      })
+      : 0;
+    const spectrum2TranslateX = isInteractive
+      ? tiltX.interpolate({
+        inputRange: [-1, 1],
+        outputRange: [80, -80],
+      })
+      : 0;
+    const spectrum2TranslateY = isInteractive
+      ? tiltY.interpolate({
+        inputRange: [-1, 1],
+        outputRange: [-40, 40],
+      })
       : 0;
     const sheenTranslateX = isInteractive
       ? tiltX.interpolate({
-          inputRange: [-1, 1],
-          outputRange: [-72, 72],
-        })
+        inputRange: [-1, 1],
+        outputRange: [-180, 180],
+      })
       : 12;
     const sheenTranslateY = isInteractive
       ? tiltY.interpolate({
-          inputRange: [-1, 1],
-          outputRange: [18, -18],
-        })
+        inputRange: [-1, 1],
+        outputRange: [90, -90],
+      })
       : -4;
     const sparkleTranslateX = isInteractive
       ? tiltX.interpolate({
-          inputRange: [-1, 1],
-          outputRange: [-8, 8],
-        })
+        inputRange: [-1, 1],
+        outputRange: [-12, 12],
+      })
       : 0;
     const sparkleTranslateY = isInteractive
       ? tiltY.interpolate({
-          inputRange: [-1, 1],
-          outputRange: [8, -8],
-        })
+        inputRange: [-1, 1],
+        outputRange: [12, -12],
+      })
       : 0;
 
     return (
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <LinearGradient
-          colors={['rgba(255,124,214,0.18)', 'rgba(100,222,255,0.10)', 'rgba(255,255,255,0.16)']}
+          colors={['rgba(255,124,214,0.12)', 'rgba(100,222,255,0.12)', 'rgba(255,255,255,0.12)']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[StyleSheet.absoluteFill, styles.holoBaseWash]}
@@ -135,20 +147,53 @@ export default function PremiumNoteFinishOverlay({
               transform: [
                 { translateX: spectrumTranslateX },
                 { translateY: spectrumTranslateY },
-                { rotate: '-18deg' },
+                { rotate: '-35deg' },
+                { scale: 1.6 },
               ],
             },
           ]}
         >
           <LinearGradient
             colors={[
-              'rgba(255,0,170,0.0)',
-              'rgba(255,103,199,0.30)',
-              'rgba(128,255,255,0.28)',
-              'rgba(255,255,255,0.0)',
+              'rgba(255,0,0,0)',
+              'rgba(255,0,0,0.3)',
+              'rgba(255,165,0,0.4)',
+              'rgba(255,255,0,0.4)',
+              'rgba(0,255,0,0.35)',
+              'rgba(0,191,255,0.4)',
+              'rgba(138,43,226,0.4)',
+              'rgba(255,0,255,0.3)',
+              'rgba(255,255,255,0)',
+            ]}
+            locations={[0, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 0.95, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.holoSpectrum}
+          />
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.holoSpectrumWrap,
+            {
+              transform: [
+                { translateX: spectrum2TranslateX },
+                { translateY: spectrum2TranslateY },
+                { rotate: '55deg' },
+                { scale: 1.8 },
+              ],
+            },
+          ]}
+        >
+          <LinearGradient
+            colors={[
+              'rgba(255,255,255,0)',
+              'rgba(0,255,255,0.3)',
+              'rgba(255,0,255,0.3)',
+              'rgba(255,255,0,0.3)',
+              'rgba(255,255,255,0)',
             ]}
             start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+            end={{ x: 1, y: 0 }}
             style={styles.holoSpectrum}
           />
         </Animated.View>
@@ -160,7 +205,8 @@ export default function PremiumNoteFinishOverlay({
               transform: [
                 { translateX: sheenTranslateX },
                 { translateY: sheenTranslateY },
-                { rotate: '16deg' },
+                { rotate: '15deg' },
+                { scale: 1.2 },
               ],
             },
           ]}
@@ -168,13 +214,16 @@ export default function PremiumNoteFinishOverlay({
           <LinearGradient
             colors={[
               'rgba(255,255,255,0.0)',
-              'rgba(255,255,255,0.16)',
-              'rgba(255,255,255,0.9)',
-              'rgba(255,255,255,0.18)',
+              'rgba(255,255,255,0.1)',
+              'rgba(255,255,255,0.85)',
+              'rgba(255,255,255,1)',
+              'rgba(255,255,255,0.85)',
+              'rgba(255,255,255,0.1)',
               'rgba(255,255,255,0.0)',
             ]}
+            locations={[0, 0.4, 0.48, 0.5, 0.52, 0.6, 1]}
             start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+            end={{ x: 1, y: 0 }}
             style={styles.holoSheen}
           />
         </Animated.View>
@@ -189,22 +238,35 @@ export default function PremiumNoteFinishOverlay({
             },
           ]}
         >
-          {HOLO_SPARKLES.map((sparkle, index) => (
-            <View
-              key={`holo-sparkle-${index}`}
-              style={[
-                styles.holoSparkle,
-                {
-                  top: sparkle.top,
-                  left: sparkle.left,
-                  width: sparkle.size,
-                  height: sparkle.size,
-                  borderRadius: sparkle.size / 2,
-                  opacity: sparkle.opacity,
-                },
-              ]}
-            />
-          ))}
+          {HOLO_SPARKLES.map((sparkle, index) => {
+            const sparkleOpacity = isInteractive
+              ? tiltX.interpolate({
+                inputRange: [-1, 0, 1],
+                outputRange: [
+                  index % 2 === 0 ? sparkle.opacity * 0.2 : sparkle.opacity,
+                  sparkle.opacity * ((index % 3) / 3 + 0.5),
+                  index % 2 !== 0 ? sparkle.opacity * 0.2 : sparkle.opacity,
+                ],
+              })
+              : sparkle.opacity;
+
+            return (
+              <Animated.View
+                key={`holo-sparkle-${index}`}
+                style={[
+                  styles.holoSparkle,
+                  {
+                    top: sparkle.top,
+                    left: sparkle.left,
+                    width: sparkle.size,
+                    height: sparkle.size,
+                    borderRadius: sparkle.size / 2,
+                    opacity: sparkleOpacity,
+                  },
+                ]}
+              />
+            );
+          })}
         </Animated.View>
         <View style={styles.holoNoiseVeil} />
         <View style={styles.holoEdgeGlow} />
@@ -217,19 +279,19 @@ export default function PremiumNoteFinishOverlay({
   const washColors = STATIC_WASH_COLORS[finish];
   const animatedSheenStyle = animated && !reduceMotionEnabled
     ? {
-        transform: [
-          {
-            translateX: sheenProgress.interpolate({
-              inputRange: [0, 1],
-              outputRange: [-180, 180],
-            }),
-          },
-          { rotate: finish === 'rgb' ? '14deg' : finish === 'chrome' ? '18deg' : '12deg' },
-        ],
-      }
+      transform: [
+        {
+          translateX: sheenProgress.interpolate({
+            inputRange: [0, 1],
+            outputRange: [-180, 180],
+          }),
+        },
+        { rotate: finish === 'rgb' ? '14deg' : finish === 'chrome' ? '18deg' : '12deg' },
+      ],
+    }
     : {
-        transform: [{ translateX: 12 }, { rotate: finish === 'chrome' ? '18deg' : '12deg' }],
-      };
+      transform: [{ translateX: 12 }, { rotate: finish === 'chrome' ? '18deg' : '12deg' }],
+    };
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -306,20 +368,21 @@ const styles = StyleSheet.create({
   },
   holoSpectrumWrap: {
     position: 'absolute',
-    top: -40,
-    left: '-14%',
-    width: '72%',
-    height: '150%',
-    opacity: 0.78,
+    top: '-50%',
+    left: '-50%',
+    width: '200%',
+    height: '200%',
+    opacity: 0.85,
   },
   holoSpectrum: {
     flex: 1,
   },
   holoSheenWrap: {
     position: 'absolute',
-    top: -40,
-    bottom: -40,
-    width: '56%',
+    top: '-50%',
+    left: '-50%',
+    width: '200%',
+    height: '200%',
   },
   holoSheen: {
     flex: 1,

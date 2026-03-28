@@ -2,7 +2,7 @@ import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Href, Stack, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Reanimated from 'react-native-reanimated';
 import {
@@ -39,7 +39,7 @@ const GRID_DOODLE_STROKE_WIDTH = 4.5;
 const GRID_STICKER_SIZE_MULTIPLIER = 0.82;
 const GRID_STICKER_MIN_SIZE = 52;
 
-function GridTile({
+const GridTile = memo(function GridTile({
   item,
   size,
   gap,
@@ -129,12 +129,16 @@ function GridTile({
     item.kind === 'note'
       ? item.note.content.trim()
       : (item.post.text || '').trim();
-  const textGradient = getTextNoteCardGradient({
-    text,
-    noteId: item.kind === 'note' ? item.note.id : item.post.id,
-    emoji: item.kind === 'note' ? item.note.moodEmoji : null,
-    noteColor: item.kind === 'note' ? item.note.noteColor : item.post.noteColor,
-  });
+  const textGradient = useMemo(
+    () =>
+      getTextNoteCardGradient({
+        text,
+        noteId: item.kind === 'note' ? item.note.id : item.post.id,
+        emoji: item.kind === 'note' ? item.note.moodEmoji : null,
+        noteColor: item.kind === 'note' ? item.note.noteColor : item.post.noteColor,
+      }),
+    [item, text]
+  );
   const tileText = text || (isPhotoTile ? photoFallbackLabel : '');
   const showPhotoPlaceholder = item.kind === 'shared-post' && item.post.type === 'photo' && !imageUri;
   const sharedTransitionTag = item.kind === 'note' ? `feed-note-card-${item.note.id}` : undefined;
@@ -232,7 +236,21 @@ function GridTile({
       </Reanimated.View>
     </Pressable>
   );
-}
+}, (prevProps, nextProps) => (
+  prevProps.index === nextProps.index &&
+  prevProps.size === nextProps.size &&
+  prevProps.gap === nextProps.gap &&
+  prevProps.colors === nextProps.colors &&
+  prevProps.photoFallbackLabel === nextProps.photoFallbackLabel &&
+  prevProps.item.id === nextProps.item.id &&
+  prevProps.item.kind === nextProps.item.kind &&
+  prevProps.item.createdAt === nextProps.item.createdAt &&
+  (prevProps.item.kind === 'note' && nextProps.item.kind === 'note'
+    ? prevProps.item.note === nextProps.item.note
+    : prevProps.item.kind === 'shared-post' && nextProps.item.kind === 'shared-post'
+      ? prevProps.item.post === nextProps.item.post
+      : false)
+));
 
 export default function NotesIndexScreen() {
   const { t } = useTranslation();
@@ -310,6 +328,8 @@ export default function NotesIndexScreen() {
         <FlashList
           data={items}
           keyExtractor={(item) => item.id}
+          getItemType={(item) => `${item.kind}:${item.kind === 'note' ? item.note.type : item.post.type}`}
+          drawDistance={gridSize * 4}
           renderItem={({ item, index }) => (
             <GridTile
               item={item}

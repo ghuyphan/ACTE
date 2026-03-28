@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { DOODLE_ARTBOARD_FRAME } from '../constants/doodleLayout';
 import { Layout, Shadows } from '../constants/theme';
@@ -21,7 +21,7 @@ interface TextMemoryCardProps {
     remoteBucket?: string;
 }
 
-export default function TextMemoryCard({
+function TextMemoryCard({
     text,
     noteId,
     emoji = null,
@@ -30,10 +30,22 @@ export default function TextMemoryCard({
     stickerPlacementsJson = null,
     remoteBucket,
 }: TextMemoryCardProps) {
-    const gradient = getTextNoteCardGradient({ text, noteId, emoji, noteColor });
-    const displayText = formatNoteTextWithEmoji(text, emoji);
-    const doodleStrokes = parseNoteDoodleStrokes(doodleStrokesJson);
-    const stickerPlacements = parseNoteStickerPlacements(stickerPlacementsJson);
+    const gradient = useMemo(
+        () => getTextNoteCardGradient({ text, noteId, emoji, noteColor }),
+        [emoji, noteColor, noteId, text]
+    );
+    const displayText = useMemo(
+        () => formatNoteTextWithEmoji(text, emoji),
+        [emoji, text]
+    );
+    const doodleStrokes = useMemo(
+        () => parseNoteDoodleStrokes(doodleStrokesJson),
+        [doodleStrokesJson]
+    );
+    const stickerPlacements = useMemo(
+        () => parseNoteStickerPlacements(stickerPlacementsJson),
+        [stickerPlacementsJson]
+    );
 
     return (
         <View style={styles.card}>
@@ -68,6 +80,8 @@ export default function TextMemoryCard({
         </View>
     );
 }
+
+export default memo(TextMemoryCard);
 
 const styles = StyleSheet.create({
     card: {

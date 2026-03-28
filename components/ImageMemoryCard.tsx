@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { DOODLE_ARTBOARD_FRAME } from '../constants/doodleLayout';
 import { Layout, Shadows } from '../constants/theme';
@@ -16,15 +16,21 @@ interface ImageMemoryCardProps {
     remoteBucket?: string;
 }
 
-export default function ImageMemoryCard({
+function ImageMemoryCard({
     imageUrl,
     doodleStrokesJson = null,
     stickerPlacementsJson = null,
     remoteBucket,
 }: ImageMemoryCardProps) {
     const { colors } = useTheme();
-    const doodleStrokes = parseNoteDoodleStrokes(doodleStrokesJson);
-    const stickerPlacements = parseNoteStickerPlacements(stickerPlacementsJson);
+    const doodleStrokes = useMemo(
+        () => parseNoteDoodleStrokes(doodleStrokesJson),
+        [doodleStrokesJson]
+    );
+    const stickerPlacements = useMemo(
+        () => parseNoteStickerPlacements(stickerPlacementsJson),
+        [stickerPlacementsJson]
+    );
 
     return (
         <View style={[styles.card, { backgroundColor: colors.card }]}>
@@ -47,6 +53,8 @@ export default function ImageMemoryCard({
         </View>
     );
 }
+
+export default memo(ImageMemoryCard);
 
 const styles = StyleSheet.create({
     card: {

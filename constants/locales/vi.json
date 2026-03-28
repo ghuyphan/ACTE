@@ -15,7 +15,12 @@
         "unknownLocation": "Địa điểm không xác định",
         "searchPlaceholder": "Tìm kiếm ghi chú...",
         "noResults": "Không tìm thấy ghi chú",
-        "noResultsMsg": "Thử từ khóa khác nhé"
+        "noResultsMsg": "Thử từ khóa khác nhé",
+        "feedFilterAll": "Tất cả bài viết",
+        "feedFilterFriends": "Chỉ bạn bè",
+        "feedFilterHint": "Chọn loại bài viết bạn muốn xem trên Home.",
+        "friendsFilterInactive": "Lọc theo bạn bè",
+        "friendsFilterActive": "Đang lọc bạn bè"
     },
     "capture": {
         "switchCamera": "Camera",
@@ -68,6 +73,7 @@
         "notesHint": "Ghi chú",
         "radius": "Bán kính",
         "radiusLabel": "Bán kính nhắc nhở",
+        "radiusPickerHint": "Chọn khoảng cách bạn cần đứng gần trước khi Noto nhắc bạn về địa điểm này.",
         "reminderRadiusLabel": "Khoảng cách kích hoạt nhắc nhở",
         "promptEyebrow": "Gợi ý vui",
         "promptShuffle": "Đổi câu hỏi",

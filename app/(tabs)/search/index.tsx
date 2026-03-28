@@ -63,7 +63,7 @@ export default function SearchScreen() {
   }, [deferredQuery, hasDeferredQuery, notes]);
   const shouldShowEmptyState = filteredNotes.length === 0;
 
-  const openNote = useCallback(
+const openNote = useCallback(
     (noteId: string) => {
       router.push(`/note/${noteId}` as any);
     },
@@ -220,6 +220,8 @@ export default function SearchScreen() {
         <FlashList
           data={filteredNotes}
           keyExtractor={(item) => item.id}
+          getItemType={(item) => item.type}
+          drawDistance={440}
           renderItem={renderNote}
           ItemSeparatorComponent={renderSeparator}
           contentInsetAdjustmentBehavior="never"

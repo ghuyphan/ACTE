@@ -64,7 +64,7 @@ const config = {
         resizeMode: 'contain',
         backgroundColor: '#F7F2EB',
         dark: {
-          image: './assets/images/icon/icon-default.png',
+          image: './assets/images/icon/icon-dark.png',
           backgroundColor: '#F7F2EB',
         },
       },

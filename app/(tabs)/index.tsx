@@ -178,9 +178,11 @@ export default function HomeScreen() {
     openAppSettings,
   } = useGeofence();
   const { alertProps, showAlert } = useAppSheetAlert();
-  const feedFocus = useFeedFocus();
-  const clearFeedFocus = feedFocus.clearFeedFocus ?? (() => {});
-  const peekFeedFocus = feedFocus.peekFeedFocus ?? feedFocus.consumeFeedFocus ?? (() => null);
+  const {
+    clearFeedFocus,
+    peekFeedFocus,
+    consumeFeedFocus,
+  } = useFeedFocus();
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
   const isScreenFocused = useIsFocused();
@@ -197,6 +199,8 @@ export default function HomeScreen() {
   const [appState, setAppState] = useState(AppState.currentState);
   const [cameraPreviewReady, setCameraPreviewReady] = useState(Platform.OS !== 'android');
   const [captureScrollLocked, setCaptureScrollLocked] = useState(false);
+  const [isCaptureVisible, setIsCaptureVisible] = useState(true);
+  const [isFriendsFilterEnabled, setIsFriendsFilterEnabled] = useState(false);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [noteColor, setNoteColor] = useState<string | null>(DEFAULT_NOTE_COLOR_ID);
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
@@ -325,16 +329,28 @@ export default function HomeScreen() {
 
     return null;
   }, [remainingPhotoSlots, t, tier]);
+  const suppressedHomeNoteIdSet = useMemo(
+    () => new Set(suppressedHomeNoteIds),
+    [suppressedHomeNoteIds]
+  );
+  const isFriendsFilterActive = useMemo(
+    () => isFriendsFilterEnabled && !(useInlineHeaderSearch && isSearching),
+    [isFriendsFilterEnabled, isSearching, useInlineHeaderSearch]
+  );
 
   const displayedNotes = useMemo(() => {
+    if (isFriendsFilterActive) {
+      return [];
+    }
+
     const baseNotes = useInlineHeaderSearch && isSearching ? filteredNotes : notes;
 
-    if (suppressedHomeNoteIds.length === 0) {
+    if (suppressedHomeNoteIdSet.size === 0) {
       return baseNotes;
     }
 
-    return baseNotes.filter((note) => !suppressedHomeNoteIds.includes(note.id));
-  }, [filteredNotes, isSearching, notes, suppressedHomeNoteIds, useInlineHeaderSearch]);
+    return baseNotes.filter((note) => !suppressedHomeNoteIdSet.has(note.id));
+  }, [filteredNotes, isFriendsFilterActive, isSearching, notes, suppressedHomeNoteIdSet, useInlineHeaderSearch]);
   const shouldRenderCameraPreview =
     captureMode === 'camera' &&
     isScreenFocused &&
@@ -349,6 +365,12 @@ export default function HomeScreen() {
       useInlineHeaderSearch && isSearching ? [] : friendPosts,
     [friendPosts, isSearching, useInlineHeaderSearch]
   );
+
+  useEffect(() => {
+    if (friendPosts.length === 0 && isFriendsFilterEnabled) {
+      setIsFriendsFilterEnabled(false);
+    }
+  }, [friendPosts.length, isFriendsFilterEnabled]);
 
   const handleRequestCameraPermission = useCallback(async () => {
     if (cameraPermissionRequiresSettings) {
@@ -589,7 +611,7 @@ export default function HomeScreen() {
         return undefined;
       }
 
-      const target = peekFeedFocus();
+      const target = (peekFeedFocus ?? consumeFeedFocus)?.() ?? null;
       if (!target) {
         return undefined;
       }
@@ -614,7 +636,7 @@ export default function HomeScreen() {
       let focusTimeout: ReturnType<typeof setTimeout> | null = null;
       const idleHandle = scheduleOnIdle(() => {
         focusTimeout = setTimeout(() => {
-          clearFeedFocus();
+          clearFeedFocus?.();
           flatListRef.current?.scrollToOffset({
             offset: (targetIndex + 1) * snapHeight,
             animated: true,
@@ -631,6 +653,7 @@ export default function HomeScreen() {
     }, [
       archiveFeedItems,
       clearFeedFocus,
+      consumeFeedFocus,
       isSearching,
       loading,
       peekFeedFocus,
@@ -1625,6 +1648,8 @@ export default function HomeScreen() {
           remainingPhotoSlots={captureMode === 'camera' ? remainingPhotoSlots : null}
           libraryImportLocked={!canImportFromLibrary}
           importingPhoto={importingPhoto || isPurchaseInFlight}
+          radius={radius}
+          onChangeRadius={setRadius}
           shareTarget={captureTarget}
           onChangeShareTarget={handleCaptureTargetChange}
           onDoodleModeChange={setCaptureScrollLocked}
@@ -1651,11 +1676,18 @@ export default function HomeScreen() {
         onCloseSearch={handleCloseSearch}
         showSearchButton={useInlineHeaderSearch}
         showSharedButton
+        showNotesButton
         onOpenShared={handleOpenSharedManage}
+        onOpenNotes={handleOpenNotes}
+        sharedButtonMode={isCaptureVisible ? 'manage' : 'filter'}
+        sharedButtonActive={!isCaptureVisible && isFriendsFilterEnabled}
+        sharedFilterValue={isFriendsFilterEnabled ? 'friends' : 'all'}
+        onChangeSharedFilter={(nextFilter) => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setIsFriendsFilterEnabled(nextFilter === 'friends');
+        }}
         onToggleCaptureMode={handleToggleCaptureMode}
         captureMode={captureMode}
-        radius={radius}
-        onChangeRadius={setRadius}
         colors={colors}
         isDark={isDark}
         t={t}
@@ -1705,6 +1737,7 @@ export default function HomeScreen() {
         revealedNoteId={null}
         revealToken={0}
         onSettledArchiveItemChange={handleSettledArchiveItemChange}
+        onCaptureVisibilityChange={setIsCaptureVisible}
         scrollEnabled={!captureScrollLocked}
       />
 

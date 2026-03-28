@@ -2,7 +2,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Stack, useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SharedPostMemoryCard } from '../../components/home/MemoryCardPrimitives';
 import { Layout } from '../../constants/theme';
@@ -10,6 +10,10 @@ import { useAuth } from '../../hooks/useAuth';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
 import { SharedPost } from '../../services/sharedFeedService';
+
+const { width } = Dimensions.get('window');
+const DEFAULT_SHARED_CARD_SIZE = width - (Layout.screenPadding - 8) * 2;
+const ESTIMATED_SHARED_CARD_HEIGHT = DEFAULT_SHARED_CARD_SIZE + 84;
 
 export default function SharedIndexScreen() {
   const { t } = useTranslation();
@@ -76,6 +80,8 @@ export default function SharedIndexScreen() {
         <FlashList
           data={sortedPosts}
           keyExtractor={(item) => item.id}
+          getItemType={(item) => item.type}
+          drawDistance={ESTIMATED_SHARED_CARD_HEIGHT * 2}
           renderItem={({ item }: { item: SharedPost }) => (
             <SharedPostMemoryCard
               post={item}

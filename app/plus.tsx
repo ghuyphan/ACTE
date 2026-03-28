@@ -14,12 +14,13 @@ import { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import OfflineNotice from '../components/ui/OfflineNotice';
 import PrimaryButton from '../components/ui/PrimaryButton';
-import { Layout, Shadows, Typography } from '../constants/theme';
+import { Layout, Typography } from '../constants/theme';
 import { useConnectivity } from '../hooks/useConnectivity';
 import { useSubscription } from '../hooks/useSubscription';
 import { useTheme } from '../hooks/useTheme';
 
-const APP_ICON_SOURCE = require('../assets/images/icon/icon-default.png');
+const APP_ICON_LIGHT_SOURCE = require('../assets/images/icon/icon-default.png');
+const APP_ICON_DARK_SOURCE = require('../assets/images/icon/icon-dark.png');
 
 function FeatureRow({
   icon,
@@ -70,6 +71,7 @@ export default function PlusScreen() {
   const gradientColors: [string, string, string] = isDark
     ? [colors.background, colors.card, '#1A1A1A']
     : [colors.background, colors.surface, '#ECE2D7'];
+  const appIconSource = isDark ? APP_ICON_DARK_SOURCE : APP_ICON_LIGHT_SOURCE;
 
   const handlePurchase = async (
     pkg: typeof monthlyPackage,
@@ -154,7 +156,7 @@ export default function PlusScreen() {
       >
         <View style={styles.heroSection}>
           <View style={styles.iconContainer}>
-            <Image source={APP_ICON_SOURCE} style={styles.appIcon} />
+            <Image source={appIconSource} style={styles.appIcon} />
           </View>
           <View style={styles.titleRow}>
             <Text style={[styles.title, { color: colors.text }]}>
