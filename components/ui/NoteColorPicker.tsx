@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   swatchFill: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 15,
   },
   selectedDot: {

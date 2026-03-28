@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   edgeGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.22)',
     opacity: 0.95,
@@ -395,13 +395,13 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   holoNoiseVeil: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.16)',
     opacity: 0.7,
   },
   holoEdgeGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 1.2,
     borderColor: 'rgba(190,255,255,0.48)',
     shadowColor: '#7EF3FF',
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
   },
   holoInnerGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 1,
     margin: 5,
     borderColor: 'rgba(255,255,255,0.18)',

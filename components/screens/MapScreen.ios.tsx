@@ -529,7 +529,7 @@ export default function MapScreenIOS() {
                     <View
                       pointerEvents="none"
                       style={[
-                        StyleSheet.absoluteFillObject,
+                        StyleSheet.absoluteFill,
                         {
                           backgroundColor: isDark ? 'rgba(255,193,7,0.16)' : 'rgba(255,193,7,0.14)',
                         },
@@ -538,14 +538,14 @@ export default function MapScreenIOS() {
                   ) : null}
                   <GlassView
                     pointerEvents="none"
-                    style={StyleSheet.absoluteFillObject}
+                    style={StyleSheet.absoluteFill}
                     glassEffectStyle="regular"
                     colorScheme={isDark ? 'dark' : 'light'}
                   />
                   {isOlderIOS ? (
                     <View
                       style={[
-                        StyleSheet.absoluteFillObject,
+                        StyleSheet.absoluteFill,
                         {
                           borderRadius: 16,
                           backgroundColor: friendsPreviewVisible
@@ -595,14 +595,14 @@ export default function MapScreenIOS() {
           <View style={styles.fab}>
             <GlassView
               pointerEvents="none"
-              style={StyleSheet.absoluteFillObject}
+              style={StyleSheet.absoluteFill}
               glassEffectStyle="regular"
               colorScheme={isDark ? 'dark' : 'light'}
             />
             {isOlderIOS ? (
               <View
                 style={[
-                  StyleSheet.absoluteFillObject,
+                  StyleSheet.absoluteFill,
                   {
                     borderRadius: 22,
                     backgroundColor: getOverlayFallbackColor(isDark),
@@ -722,7 +722,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollInsetGuard: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   fabContainer: {
     position: 'absolute',
@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   emptyOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,

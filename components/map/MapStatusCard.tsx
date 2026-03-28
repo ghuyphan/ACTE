@@ -54,7 +54,7 @@ export default function MapStatusCard({
         {shouldUseGlass ? (
           <GlassView
             pointerEvents="none"
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
             glassEffectStyle="regular"
             colorScheme={isDark ? 'dark' : 'light'}
           />
@@ -62,7 +62,7 @@ export default function MapStatusCard({
         <View
           pointerEvents="none"
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             styles.scrim,
             isIOS ? styles.scrimIOS : styles.scrimAndroid,
             {

@@ -147,16 +147,16 @@ export default function SharedMomentsStrip({
         ]}
       >
         <GlassView
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
         />
-        <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, { backgroundColor: glassOverlay }]} />
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: glassOverlay }]} />
         {isOlderIOS ? (
           <View
             pointerEvents="none"
             style={[
-              StyleSheet.absoluteFillObject,
+              StyleSheet.absoluteFill,
               {
                 borderRadius: 30,
                 backgroundColor: isDark ? 'rgba(18,18,24,0.9)' : 'rgba(255,255,255,0.92)',

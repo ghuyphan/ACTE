@@ -975,10 +975,10 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   skiaCanvas: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   fallbackCanvas: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   segment: {
     position: 'absolute',

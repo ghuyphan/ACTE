@@ -599,7 +599,7 @@ export default function LoginScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <LinearGradient
           colors={gradientColors}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         />
@@ -642,7 +642,7 @@ export default function LoginScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient
         colors={gradientColors}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
@@ -759,7 +759,7 @@ export default function LoginScreen() {
         </AppSheet>
       ) : (
         <KeyboardAvoidingView
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           behavior="padding"
           pointerEvents="box-none"
         >
@@ -881,7 +881,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   formBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   formContent: {
     paddingHorizontal: Layout.screenPadding,

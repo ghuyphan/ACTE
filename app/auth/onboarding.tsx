@@ -107,7 +107,7 @@ export default function OnboardingScreen() {
                         ? [colors.background, colors.card, '#1A1A1A']
                         : [colors.background, colors.surface, '#ECE2D7']
                 }
-                style={StyleSheet.absoluteFillObject}
+                style={StyleSheet.absoluteFill}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
             />
@@ -119,8 +119,8 @@ export default function OnboardingScreen() {
                     exiting={FadeOutDown.duration(200)}
                     style={[styles.emojiContainer, { overflow: 'hidden' }]}
                 >
-                    <View style={[StyleSheet.absoluteFillObject, isOlderIOS && { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }]} />
-                    <GlassView style={StyleSheet.absoluteFillObject} colorScheme={isDark ? 'dark' : 'light'} />
+                    <View style={[StyleSheet.absoluteFill, isOlderIOS && { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }]} />
+                    <GlassView style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'} />
                     <Text style={styles.emoji}>{slide.emoji}</Text>
                 </Animated.View>
 

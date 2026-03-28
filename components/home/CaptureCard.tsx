@@ -363,7 +363,7 @@ function CaptureGlassActionButton({
         <View
           pointerEvents="none"
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             {
               backgroundColor: fallbackColor,
             },
@@ -372,7 +372,7 @@ function CaptureGlassActionButton({
       ) : null}
       <GlassView
         pointerEvents="none"
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         glassEffectStyle="regular"
         colorScheme={glassColorScheme}
         fallbackColor={fallbackColor}
@@ -2042,7 +2042,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 {isOlderIOS ? (
                   <View
                     style={[
-                      StyleSheet.absoluteFillObject,
+                      StyleSheet.absoluteFill,
                       {
                         backgroundColor: colors.captureGlassFill,
                         borderRadius: Layout.pillRadius,
@@ -2052,7 +2052,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 ) : null}
                 <GlassView
                   pointerEvents="none"
-                  style={StyleSheet.absoluteFillObject}
+                  style={StyleSheet.absoluteFill}
                   glassEffectStyle="regular"
                   colorScheme={colors.captureGlassColorScheme}
                 />
@@ -2141,7 +2141,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 {!isOlderIOS ? (
                   <GlassView
                     pointerEvents="none"
-                    style={StyleSheet.absoluteFillObject}
+                    style={StyleSheet.absoluteFill}
                     glassEffectStyle="regular"
                     colorScheme={colors.captureGlassColorScheme}
                   />
@@ -2424,7 +2424,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   cardPasteSurface: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 0,
   },
   textInput: {
@@ -2533,12 +2533,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   doodleCanvasLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     ...DOODLE_ARTBOARD_FRAME,
     zIndex: 2,
   },
   textStickerCanvasLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     ...DOODLE_ARTBOARD_FRAME,
     zIndex: 0,
   },
@@ -2652,16 +2652,16 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   cameraPreview: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   cameraLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1,
   },
   cameraUnavailableState: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
@@ -2800,7 +2800,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   saveHalo: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 27,
   },
   shutterInnerCountText: {

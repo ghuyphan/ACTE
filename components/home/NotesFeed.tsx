@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     overflow: 'visible',
   },
   revealGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: Layout.cardRadius + 18,
   },
 });

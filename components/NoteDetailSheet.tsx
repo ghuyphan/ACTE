@@ -1985,7 +1985,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     cardPasteSurface: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         zIndex: 0,
     },
     doodleOverlay: {
@@ -2121,7 +2121,7 @@ const styles = StyleSheet.create({
         zIndex: 10,
     },
     favoriteBadgeTint: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         borderRadius: 18,
         backgroundColor: 'rgba(255,59,48,0.16)',
     },
@@ -2130,7 +2130,7 @@ const styles = StyleSheet.create({
         height: 20,
     },
     favoriteIconLayer: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -2139,7 +2139,7 @@ const styles = StyleSheet.create({
         height: 20,
     },
     editIconLayer: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         alignItems: 'center',
         justifyContent: 'center',
     },

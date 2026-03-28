@@ -294,7 +294,7 @@ export default function MapCanvas({
     <MapView
       testID="map-canvas"
       ref={mapRef}
-      style={StyleSheet.absoluteFillObject}
+      style={StyleSheet.absoluteFill}
       initialRegion={initialRegion}
       onPress={onMapPress}
       onMapReady={onMapReady}

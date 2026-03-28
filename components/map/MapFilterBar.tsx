@@ -180,12 +180,12 @@ export default function MapFilterBar({
           pointerEvents="none"
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
         {isOlderIOS ? (
           <View
             style={[
-              StyleSheet.absoluteFillObject,
+              StyleSheet.absoluteFill,
               {
                 borderRadius: mapOverlayTokens.overlayRadius,
                 backgroundColor: getOverlayFallbackColor(isDark),

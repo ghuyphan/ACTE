@@ -68,12 +68,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   fallback: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
   image: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   label: {
     fontWeight: '700',

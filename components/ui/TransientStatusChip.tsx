@@ -52,7 +52,7 @@ export default function TransientStatusChip({ icon, label, style }: TransientSta
         {isOlderIOS ? (
           <View
             style={[
-              StyleSheet.absoluteFillObject,
+              StyleSheet.absoluteFill,
               {
                 backgroundColor: isDark ? 'rgba(0,0,0,0.58)' : 'rgba(255,255,255,0.84)',
               },

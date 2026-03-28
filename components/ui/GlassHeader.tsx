@@ -33,7 +33,7 @@ export default function GlassHeader({ topInset, children, style }: GlassHeaderPr
         {isOlderIOS ? (
           <View
             style={[
-              StyleSheet.absoluteFillObject,
+              StyleSheet.absoluteFill,
               {
                 backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)',
               },

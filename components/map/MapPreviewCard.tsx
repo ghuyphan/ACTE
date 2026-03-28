@@ -203,12 +203,12 @@ export default function MapPreviewCard({
           pointerEvents="none"
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
         {isOlderIOS ? (
           <View
             style={[
-              StyleSheet.absoluteFillObject,
+              StyleSheet.absoluteFill,
               {
                 backgroundColor: getOverlayFallbackColor(isDark),
                 borderRadius: mapOverlayTokens.overlayRadius,
@@ -221,7 +221,7 @@ export default function MapPreviewCard({
           <View
             pointerEvents="none"
             style={[
-              StyleSheet.absoluteFillObject,
+              StyleSheet.absoluteFill,
               styles.modeHighlight,
               { backgroundColor: `${colors.primary}14` },
             ]}

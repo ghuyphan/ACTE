@@ -131,12 +131,12 @@ export default function MapFriendsPreviewCard({
           pointerEvents="none"
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
         {isOlderIOS ? (
           <View
             style={[
-              StyleSheet.absoluteFillObject,
+              StyleSheet.absoluteFill,
               {
                 backgroundColor: getOverlayFallbackColor(isDark),
                 borderRadius: mapOverlayTokens.overlayRadius,

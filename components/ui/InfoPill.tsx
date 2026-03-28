@@ -28,14 +28,14 @@ export default function InfoPill({
       {isOlderIOS ? (
         <View
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             {
               backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.75)',
             },
           ]}
         />
       ) : null}
-      <GlassView style={StyleSheet.absoluteFillObject} colorScheme={isDark ? 'dark' : 'light'} />
+      <GlassView style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'} />
       {icon ? <Ionicons name={icon} size={16} color={iconColor ?? colors.primary} /> : null}
       {typeof children === 'string' ? (
         <Text style={[styles.text, { color: colors.text }, textStyle]} numberOfLines={1}>
