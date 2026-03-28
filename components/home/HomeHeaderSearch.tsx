@@ -18,14 +18,22 @@ import AppSheetScaffold from '../AppSheetScaffold';
 import { GlassView } from '../ui/GlassView';
 import { TFunction } from 'i18next';
 import { ComponentProps, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, {
+  Easing,
+  interpolate,
+  type SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { isIOS26OrNewer } from '../../utils/platform';
 import GlassHeader from '../ui/GlassHeader';
 
 interface HomeHeaderSearchProps {
   topInset: number;
   isSearching: boolean;
-  searchAnim: Animated.Value;
+  searchAnim: SharedValue<number>;
   searchQuery: string;
   onSearchChange: (nextQuery: string) => void;
   onOpenSearch: () => void;
@@ -75,9 +83,9 @@ export default function HomeHeaderSearch({
   isDark,
   t,
 }: HomeHeaderSearchProps) {
-  const modeIconScale = useRef(new Animated.Value(1)).current;
-  const sharedModeProgress = useRef(new Animated.Value(sharedButtonMode === 'filter' ? 1 : 0)).current;
-  const sharedFilterProgress = useRef(new Animated.Value(sharedButtonActive ? 1 : 0)).current;
+  const modeIconScale = useSharedValue(1);
+  const sharedModeProgress = useSharedValue(sharedButtonMode === 'filter' ? 1 : 0);
+  const sharedFilterProgress = useSharedValue(sharedButtonActive ? 1 : 0);
   const didMountRef = useRef(false);
   const [showAndroidSharedFilterSheet, setShowAndroidSharedFilterSheet] = useState(false);
   const useDetachedWordmark = isIOS26OrNewer;
@@ -91,33 +99,53 @@ export default function HomeHeaderSearch({
       return;
     }
 
-    modeIconScale.setValue(0.88);
-
-    Animated.timing(modeIconScale, {
-      toValue: 1,
+    modeIconScale.value = 0.88;
+    modeIconScale.value = withTiming(1, {
       duration: 180,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
+    });
   }, [captureMode, modeIconScale]);
 
   useEffect(() => {
-    Animated.timing(sharedModeProgress, {
-      toValue: sharedButtonMode === 'filter' ? 1 : 0,
+    sharedModeProgress.value = withTiming(sharedButtonMode === 'filter' ? 1 : 0, {
       duration: 220,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
+    });
   }, [sharedButtonMode, sharedModeProgress]);
 
   useEffect(() => {
-    Animated.timing(sharedFilterProgress, {
-      toValue: sharedButtonActive ? 1 : 0,
+    sharedFilterProgress.value = withTiming(sharedButtonActive ? 1 : 0, {
       duration: 180,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
+    });
   }, [sharedButtonActive, sharedFilterProgress]);
+
+  const modeIconAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: modeIconScale.value }],
+  }));
+  const sharedButtonContainerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        scale: interpolate(sharedModeProgress.value, [0, 1], [1, 1.04]),
+      },
+    ],
+  }));
+  const sharedButtonBadgeAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: sharedModeProgress.value * (0.35 + sharedFilterProgress.value * 0.65),
+    transform: [
+      {
+        scale: 0.72 + sharedModeProgress.value * (0.18 + sharedFilterProgress.value * 0.1),
+      },
+    ],
+  }));
+  const defaultHeaderAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(searchAnim.value, [0, 1], [1, 0]),
+    transform: [{ translateY: interpolate(searchAnim.value, [0, 1], [0, -10]) }],
+  }));
+  const searchHeaderAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: searchAnim.value,
+    transform: [{ translateY: interpolate(searchAnim.value, [0, 1], [10, 0]) }],
+  }));
 
   const getHeaderControlMetrics = (size: 'regular' | 'large' = 'regular') => ({
     verticalPadding: size === 'large' ? 11 : 9,
@@ -261,11 +289,7 @@ export default function HomeHeaderSearch({
         onPress={onToggleCaptureMode}
         style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
       >
-        <Animated.View
-          style={{
-            transform: [{ scale: modeIconScale }],
-          }}
-        >
+        <Animated.View style={modeIconAnimatedStyle}>
           <Ionicons
             name={captureMode === 'text' ? 'camera-outline' : 'create-outline'}
             size={20}
@@ -293,34 +317,12 @@ export default function HomeHeaderSearch({
       sharedButtonMode === 'filter' && sharedButtonActive ? 'person.2.fill' : 'person.2';
     const sharedAndroidIcon =
       sharedButtonMode === 'filter' && sharedButtonActive ? 'people' : 'people-outline';
-    const animatedContainerStyle = {
-      transform: [
-        {
-          scale: sharedModeProgress.interpolate({
-            inputRange: [0, 1],
-            outputRange: [1, 1.04],
-          }),
-        },
-      ],
-    };
-    const badgeAnimatedStyle = {
-      opacity: Animated.multiply(sharedModeProgress, Animated.add(0.35, Animated.multiply(sharedFilterProgress, 0.65))),
-      transform: [
-        {
-          scale: Animated.add(
-            0.72,
-            Animated.multiply(sharedModeProgress, Animated.add(0.18, Animated.multiply(sharedFilterProgress, 0.1)))
-          ),
-        },
-      ],
-    };
-
     if (Platform.OS === 'ios') {
       const controlLabel = renderHeaderControlLabel(sharedSystemName, sharedLabel, size);
 
       if (canShowFilterMenu) {
         return (
-          <Animated.View style={[styles.sharedButtonContainer, animatedContainerStyle]}>
+          <Animated.View style={[styles.sharedButtonContainer, sharedButtonContainerAnimatedStyle]}>
             <Host
               matchContents
               colorScheme={isDark ? 'dark' : 'light'}
@@ -352,11 +354,11 @@ export default function HomeHeaderSearch({
               style={[
               styles.sharedButtonBadge,
               styles.sharedButtonChevronBadge,
-              {
+                {
                   backgroundColor: colors.card,
                   borderColor: `${colors.primary}2E`,
                 },
-                badgeAnimatedStyle,
+                sharedButtonBadgeAnimatedStyle,
               ]}
             >
               <Ionicons name="chevron-down" size={9} color={colors.primary} />
@@ -366,7 +368,7 @@ export default function HomeHeaderSearch({
       }
 
       return (
-        <Animated.View style={[styles.sharedButtonContainer, animatedContainerStyle]}>
+        <Animated.View style={[styles.sharedButtonContainer, sharedButtonContainerAnimatedStyle]}>
           <Host
             matchContents
             colorScheme={isDark ? 'dark' : 'light'}
@@ -383,7 +385,7 @@ export default function HomeHeaderSearch({
               {
                 backgroundColor: colors.primary,
               },
-              badgeAnimatedStyle,
+              sharedButtonBadgeAnimatedStyle,
             ]}
           />
         </Animated.View>
@@ -392,7 +394,7 @@ export default function HomeHeaderSearch({
 
     if (canShowFilterMenu) {
       return (
-        <Animated.View style={animatedContainerStyle}>
+        <Animated.View style={sharedButtonContainerAnimatedStyle}>
           <Pressable
             accessibilityLabel={sharedA11yLabel}
             onPress={() => setShowAndroidSharedFilterSheet(true)}
@@ -409,7 +411,7 @@ export default function HomeHeaderSearch({
                   backgroundColor: colors.card,
                   borderColor: `${colors.primary}2A`,
                 },
-                badgeAnimatedStyle,
+                sharedButtonBadgeAnimatedStyle,
               ]}
             >
               <Ionicons name="chevron-down" size={9} color={colors.primary} />
@@ -420,7 +422,7 @@ export default function HomeHeaderSearch({
     }
 
     return (
-      <Animated.View style={animatedContainerStyle}>
+      <Animated.View style={sharedButtonContainerAnimatedStyle}>
         <Pressable
           accessibilityLabel={sharedA11yLabel}
           onPress={onOpenShared}
@@ -435,7 +437,7 @@ export default function HomeHeaderSearch({
               {
                 backgroundColor: colors.primary,
               },
-              badgeAnimatedStyle,
+              sharedButtonBadgeAnimatedStyle,
             ]}
           />
         </Pressable>
@@ -577,12 +579,7 @@ export default function HomeHeaderSearch({
           StyleSheet.absoluteFill,
           styles.defaultHeader,
           useDetachedWordmark ? styles.defaultHeaderDetached : null,
-          {
-            opacity: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-            transform: [
-              { translateY: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }) },
-            ],
-          },
+          defaultHeaderAnimatedStyle,
         ]}
       >
         {!useDetachedWordmark ? (
@@ -606,10 +603,7 @@ export default function HomeHeaderSearch({
         style={[
           StyleSheet.absoluteFill,
           styles.searchHeader,
-          {
-            opacity: searchAnim,
-            transform: [{ translateY: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
-          },
+          searchHeaderAnimatedStyle,
         ]}
       >
         <View style={styles.searchContainer}>

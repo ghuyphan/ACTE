@@ -101,13 +101,13 @@ jest.mock('../hooks/useCaptureFlow', () => ({
   useCaptureFlow: () => ({
     // Build Animated values inside the factory to satisfy Jest's hoisting rules.
     ...(() => {
-      const { Animated } = require('react-native');
+      const createSharedValue = (value: number) => ({ value } as any);
       return {
-        captureOpacity: new Animated.Value(1),
-        captureScale: new Animated.Value(1),
-        captureTranslateY: new Animated.Value(0),
-        flashAnim: new Animated.Value(0),
-        shutterScale: new Animated.Value(1),
+        captureOpacity: createSharedValue(1),
+        captureScale: createSharedValue(1),
+        captureTranslateY: createSharedValue(0),
+        flashAnim: createSharedValue(0),
+        shutterScale: createSharedValue(1),
       };
     })(),
     captureMode: 'text',

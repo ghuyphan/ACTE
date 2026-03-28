@@ -1,11 +1,16 @@
 import { FlashList } from '@shopify/flash-list';
 import { TFunction } from 'i18next';
 import { ReactElement, RefObject, memo, useCallback, useEffect, useMemo, useRef } from 'react';
-import Reanimated from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import {
-  Animated,
   Dimensions,
-  Easing as RNEasing,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -49,41 +54,30 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   revealToken: number;
 }) {
   const reduceMotionEnabled = useReducedMotion();
-  const scale = useRef(new Animated.Value(0.9)).current;
-  const cardTranslateY = useRef(new Animated.Value(18)).current;
-  const metaTranslateY = useRef(new Animated.Value(10)).current;
-  const revealScale = useRef(new Animated.Value(1)).current;
-  const revealTranslateY = useRef(new Animated.Value(0)).current;
-  const revealGlow = useRef(new Animated.Value(0)).current;
+  const scale = useSharedValue(0.9);
+  const cardTranslateY = useSharedValue(18);
+  const metaTranslateY = useSharedValue(10);
+  const revealScale = useSharedValue(1);
+  const revealTranslateY = useSharedValue(0);
+  const revealGlow = useSharedValue(0);
   const lastRevealTokenRef = useRef<number | null>(null);
   const mountIndex = useRef(index).current;
   const sharedTransitionTag = `feed-note-card-${item.id}`;
   const entranceDelay = getEntranceDelay(mountIndex);
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(scale, {
-        toValue: 1,
+    scale.value = withDelay(entranceDelay, withTiming(1, {
         duration: 260,
-        easing: RNEasing.out(RNEasing.cubic),
-        delay: entranceDelay,
-        useNativeDriver: true,
-      }),
-      Animated.timing(cardTranslateY, {
-        toValue: 0,
+        easing: Easing.out(Easing.cubic),
+      }));
+    cardTranslateY.value = withDelay(entranceDelay, withTiming(0, {
         duration: 280,
-        delay: entranceDelay,
-        easing: RNEasing.out(RNEasing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(metaTranslateY, {
-        toValue: 0,
+        easing: Easing.out(Easing.cubic),
+      }));
+    metaTranslateY.value = withDelay(entranceDelay, withTiming(0, {
         duration: 240,
-        delay: entranceDelay,
-        easing: RNEasing.out(RNEasing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
+        easing: Easing.out(Easing.cubic),
+      }));
   }, [cardTranslateY, entranceDelay, metaTranslateY, scale]);
 
   useEffect(() => {
@@ -92,47 +86,48 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
     }
 
     lastRevealTokenRef.current = revealToken;
-    revealScale.setValue(reduceMotionEnabled ? 0.99 : 0.965);
-    revealTranslateY.setValue(reduceMotionEnabled ? 4 : 12);
-    revealGlow.setValue(0);
-
-    Animated.sequence([
-      Animated.parallel([
-        Animated.timing(revealScale, {
-          toValue: 1.02,
-          duration: reduceMotionEnabled ? 90 : 190,
-          easing: RNEasing.out(RNEasing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(revealTranslateY, {
-          toValue: 0,
-          duration: reduceMotionEnabled ? 100 : 220,
-          easing: RNEasing.out(RNEasing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(revealGlow, {
-          toValue: 1,
-          duration: reduceMotionEnabled ? 90 : 180,
-          easing: RNEasing.out(RNEasing.cubic),
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.parallel([
-        Animated.timing(revealScale, {
-          toValue: 1,
-          duration: reduceMotionEnabled ? 140 : 260,
-          easing: RNEasing.out(RNEasing.back(1.05)),
-          useNativeDriver: true,
-        }),
-        Animated.timing(revealGlow, {
-          toValue: 0,
-          duration: reduceMotionEnabled ? 220 : 620,
-          easing: RNEasing.out(RNEasing.cubic),
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
+    revealScale.value = reduceMotionEnabled ? 0.99 : 0.965;
+    revealTranslateY.value = reduceMotionEnabled ? 4 : 12;
+    revealGlow.value = 0;
+    revealScale.value = withSequence(
+      withTiming(1.02, {
+        duration: reduceMotionEnabled ? 90 : 190,
+        easing: Easing.out(Easing.cubic),
+      }),
+      withTiming(1, {
+        duration: reduceMotionEnabled ? 140 : 260,
+        easing: Easing.out(Easing.back(1.05)),
+      })
+    );
+    revealTranslateY.value = withTiming(0, {
+      duration: reduceMotionEnabled ? 100 : 220,
+      easing: Easing.out(Easing.cubic),
+    });
+    revealGlow.value = withSequence(
+      withTiming(1, {
+        duration: reduceMotionEnabled ? 90 : 180,
+        easing: Easing.out(Easing.cubic),
+      }),
+      withTiming(0, {
+        duration: reduceMotionEnabled ? 220 : 620,
+        easing: Easing.out(Easing.cubic),
+      })
+    );
   }, [reduceMotionEnabled, revealGlow, revealScale, revealToken, revealTranslateY, shouldReveal]);
+
+  const revealGlowAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: revealGlow.value,
+    transform: [{ scale: revealScale.value }],
+  }));
+  const noteCardAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: cardTranslateY.value + revealTranslateY.value },
+      { scale: scale.value * revealScale.value },
+    ],
+  }));
+  const noteMetaAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: metaTranslateY.value }],
+  }));
 
   return (
     <View style={styles.revealWrap}>
@@ -142,21 +137,13 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
           styles.revealGlow,
           {
             backgroundColor: colors.primary,
-            opacity: revealGlow,
-            transform: [{ scale: revealScale }],
           },
+          revealGlowAnimatedStyle,
         ]}
       />
-      <Reanimated.View sharedTransitionTag={sharedTransitionTag}>
-        <Animated.View
-          style={{
-            transform: [
-              { translateY: Animated.add(cardTranslateY, revealTranslateY) },
-              { scale: Animated.multiply(scale, revealScale) },
-            ],
-          }}
-        >
-          <Animated.View style={{ transform: [{ translateY: metaTranslateY }] }}>
+      <Animated.View sharedTransitionTag={sharedTransitionTag}>
+        <Animated.View style={noteCardAnimatedStyle}>
+          <Animated.View style={noteMetaAnimatedStyle}>
             <NoteMemoryCard
               note={item}
               onPress={() => onOpenNote(item.id)}
@@ -165,7 +152,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
             />
           </Animated.View>
         </Animated.View>
-      </Reanimated.View>
+      </Animated.View>
     </View>
   );
 }, (prevProps, nextProps) => (
@@ -210,32 +197,28 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   };
   t: TFunction;
 }) {
-  const scale = useRef(new Animated.Value(0.9)).current;
-  const translateY = useRef(new Animated.Value(18)).current;
+  const scale = useSharedValue(0.9);
+  const translateY = useSharedValue(18);
   const mountIndex = useRef(index).current;
   const entranceDelay = getEntranceDelay(mountIndex);
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(scale, {
-        toValue: 1,
+    scale.value = withDelay(entranceDelay, withTiming(1, {
         duration: 260,
-        easing: RNEasing.out(RNEasing.cubic),
-        delay: entranceDelay,
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateY, {
-        toValue: 0,
+        easing: Easing.out(Easing.cubic),
+      }));
+    translateY.value = withDelay(entranceDelay, withTiming(0, {
         duration: 280,
-        delay: entranceDelay,
-        easing: RNEasing.out(RNEasing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
+        easing: Easing.out(Easing.cubic),
+      }));
   }, [entranceDelay, scale, translateY]);
 
+  const animatedCardStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }, { scale: scale.value }],
+  }));
+
   return (
-    <Animated.View style={{ transform: [{ translateY }, { scale }] }}>
+    <Animated.View style={animatedCardStyle}>
       <SharedPostMemoryCard
         post={item}
         onPress={onOpenSharedPost ? () => onOpenSharedPost(item.id) : undefined}

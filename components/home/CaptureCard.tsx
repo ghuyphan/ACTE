@@ -13,10 +13,8 @@ import { forwardRef, ReactNode, RefObject, useCallback, useEffect, useRef, useSt
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   Dimensions,
   type GestureResponderEvent,
-  LayoutAnimation,
   Platform,
   Pressable,
   type PressableProps,
@@ -24,7 +22,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  UIManager,
   View,
   type ViewStyle,
 } from 'react-native';
@@ -34,6 +31,7 @@ import Reanimated, {
   FadeOutLeft,
   interpolateColor,
   LinearTransition,
+  type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -383,8 +381,8 @@ interface CaptureCardProps {
   isSearching: boolean;
   captureMode: 'text' | 'camera';
   cameraSessionKey: number;
-  captureScale: Animated.Value;
-  captureTranslateY: Animated.Value;
+  captureScale: SharedValue<number>;
+  captureTranslateY: SharedValue<number>;
   colors: Pick<
     ThemeColors,
     | 'primary'
@@ -428,7 +426,7 @@ interface CaptureCardProps {
   onOpenPhotoLibrary: () => void;
   cameraRef: RefObject<CameraView | null>;
   shouldRenderCameraPreview: boolean;
-  flashAnim: Animated.Value;
+  flashAnim: SharedValue<number>;
   permissionGranted: boolean;
   onShutterPressIn: () => void;
   onShutterPressOut: () => void;
@@ -437,7 +435,7 @@ interface CaptureCardProps {
   onOpenNotes: () => void;
   saving: boolean;
   saveState?: 'idle' | 'saving' | 'success';
-  shutterScale: Animated.Value;
+  shutterScale: SharedValue<number>;
   cameraStatusText?: string | null;
   remainingPhotoSlots?: number | null;
   libraryImportLocked?: boolean;
@@ -554,7 +552,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const photoPreviewActiveText = colors.captureCardText;
   const saveStateScale = useSharedValue(1);
   const saveSuccessProgress = useSharedValue(saveState === 'success' ? 1 : 0);
-  const savePressScale = useRef(new Animated.Value(1)).current;
+  const savePressScale = useSharedValue(1);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
   const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -647,7 +645,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
   useEffect(() => {
     if (isSaveBusy || isSaveSuccessful) {
-      savePressScale.setValue(1);
+      savePressScale.value = 1;
     }
   }, [isSaveBusy, isSaveSuccessful, savePressScale]);
 
@@ -705,21 +703,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       return;
     }
 
-    Animated.timing(savePressScale, {
-      toValue: 0.85,
+    savePressScale.value = withTiming(0.85, {
       duration: 120,
       easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start();
+    });
   }, [isSaveBusy, isSaveSuccessful, savePressScale]);
 
   const handleSavePressOut = useCallback(() => {
-    Animated.timing(savePressScale, {
-      toValue: 1,
+    savePressScale.value = withTiming(1, {
       duration: 180,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
+    });
   }, [savePressScale]);
 
   const schedulePastePromptDismiss = useCallback(() => {
@@ -831,6 +825,27 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const animatedSaveIconStyle = useAnimatedStyle(() => ({
     transform: [{ scale: 1 + saveSuccessProgress.value * 0.12 }],
   }));
+  const captureAreaAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: captureTranslateY.value },
+      { scale: captureScale.value },
+    ],
+  }), [captureScale, captureTranslateY]);
+  const belowCardAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: captureTranslateY.value },
+      { scale: captureScale.value },
+    ],
+  }), [captureScale, captureTranslateY]);
+  const flashAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: flashAnim.value,
+  }), [flashAnim]);
+  const shutterInnerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: shutterScale.value }],
+  }), [shutterScale]);
+  const savePressAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: savePressScale.value }],
+  }), [savePressScale]);
   const decorateActionLayout = reduceMotionEnabled ? undefined : LinearTransition.duration(180);
   const decorateActionEntering = reduceMotionEnabled ? undefined : FadeInLeft.duration(180);
   const decorateActionExiting = reduceMotionEnabled ? undefined : FadeOutLeft.duration(140);
@@ -865,33 +880,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
     setTextDecorateMenuExpanded((current) => !current);
   }, [dismissPastePrompt, doodleModeEnabled, isPhotoDoodleSurface, stickerModeEnabled]);
-  const animateDecorateControlsSwap = useCallback(() => {
-    if (reduceMotionEnabled) {
-      return;
-    }
-
-    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-      UIManager.setLayoutAnimationEnabledExperimental(true);
-    }
-
-    LayoutAnimation.configureNext({
-      duration: 180,
-      create: {
-        type: LayoutAnimation.Types.easeInEaseOut,
-        property: LayoutAnimation.Properties.opacity,
-      },
-      update: {
-        type: LayoutAnimation.Types.easeInEaseOut,
-      },
-      delete: {
-        type: LayoutAnimation.Types.easeInEaseOut,
-        property: LayoutAnimation.Properties.opacity,
-      },
-    });
-  }, [reduceMotionEnabled]);
   const handleToggleDoodleMode = useCallback(() => {
     dismissPastePrompt();
-    animateDecorateControlsSwap();
 
     if (isPhotoDoodleSurface) {
       setPhotoDecorateMenuExpanded(true);
@@ -903,7 +893,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setTextDecorateMenuExpanded(true);
     setTextStickerModeEnabled(false);
     setTextDoodleModeEnabled((current) => !current);
-  }, [animateDecorateControlsSwap, dismissPastePrompt, isPhotoDoodleSurface]);
+  }, [dismissPastePrompt, isPhotoDoodleSurface]);
   const handleUndoDoodle = useCallback(() => {
     if (isPhotoDoodleSurface) {
       setPhotoDoodleStrokes((current) => current.slice(0, -1));
@@ -1126,7 +1116,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     }
 
     dismissPastePrompt();
-    animateDecorateControlsSwap();
 
     if (isPhotoDoodleSurface) {
       setPhotoDecorateMenuExpanded(true);
@@ -1138,7 +1127,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setTextDecorateMenuExpanded(true);
     setTextDoodleModeEnabled(false);
     setTextStickerModeEnabled((current) => !current);
-  }, [animateDecorateControlsSwap, dismissPastePrompt, isPhotoDoodleSurface]);
+  }, [dismissPastePrompt, isPhotoDoodleSurface]);
   const handleChangeStickerPlacements = useCallback(
     (nextPlacements: NoteStickerPlacement[]) => {
       if (isPhotoDoodleSurface) {
@@ -1361,15 +1350,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   return (
     <>
       <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
-        <Animated.View
+        <Reanimated.View
           style={[
             styles.captureArea,
-            {
-              transform: [
-                { translateY: captureTranslateY },
-                { scale: captureScale },
-              ],
-            },
+            captureAreaAnimatedStyle,
           ]}
           pointerEvents={isSearching || interactionsDisabled ? 'none' : 'auto'}
         >
@@ -1968,11 +1952,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 onChangeStrokes={setPhotoDoodleStrokes}
               />
             </View>
-            <Animated.View
+            <Reanimated.View
               pointerEvents="none"
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: colors.captureFlashOverlay, opacity: flashAnim, zIndex: 50 },
+                { backgroundColor: colors.captureFlashOverlay, zIndex: 50 },
+                flashAnimatedStyle,
               ]}
             />
             <StickerPastePopover
@@ -2068,11 +2053,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 ) : null}
               </>
             )}
-            <Animated.View
+            <Reanimated.View
               pointerEvents="none"
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: colors.captureFlashOverlay, opacity: flashAnim, zIndex: 50 },
+                { backgroundColor: colors.captureFlashOverlay, zIndex: 50 },
+                flashAnimatedStyle,
               ]}
             />
             <CaptureAnimatedPressable
@@ -2103,17 +2089,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             </CaptureAnimatedPressable>
           </View>
         )}
-      </Animated.View>
+      </Reanimated.View>
 
-      <Animated.View
+      <Reanimated.View
         style={[
           styles.belowCardSection,
-          {
-            transform: [
-              { translateY: captureTranslateY },
-              { scale: captureScale },
-            ],
-          },
+          belowCardAnimatedStyle,
         ]}
         pointerEvents={interactionsDisabled ? 'none' : 'auto'}
       >
@@ -2266,19 +2247,19 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 pressedScale={0.985}
                 style={[styles.shutterOuter, { borderColor: colors.border }]}
               >
-                <Animated.View
+                <Reanimated.View
                   style={[
                     styles.shutterInner,
                     {
                       backgroundColor: colors.primary,
-                      transform: [{ scale: shutterScale }],
                     },
+                    shutterInnerAnimatedStyle,
                   ]}
                 >
                   {typeof remainingPhotoSlots === 'number' && remainingPhotoSlots > 0 ? (
                     <Text style={styles.shutterInnerCountText}>{remainingPhotoSlots}</Text>
                   ) : null}
-                </Animated.View>
+                </Reanimated.View>
               </CaptureAnimatedPressable>
             ) : null}
             {!showCameraUnavailableState && permissionGranted ? (
@@ -2327,7 +2308,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 },
               ]}
             >
-              <Animated.View style={{ transform: [{ scale: savePressScale }] }}>
+              <Reanimated.View style={savePressAnimatedStyle}>
                 <Reanimated.View
                   style={[
                     styles.shutterInner,
@@ -2357,7 +2338,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     </Reanimated.View>
                   )}
                 </Reanimated.View>
-              </Animated.View>
+              </Reanimated.View>
             </CaptureAnimatedPressable>
 
             <CaptureGlassActionButton
@@ -2405,7 +2386,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 },
               ]}
             >
-              <Animated.View style={{ transform: [{ scale: savePressScale }] }}>
+              <Reanimated.View style={savePressAnimatedStyle}>
                 <Reanimated.View
                   style={[
                     styles.shutterInner,
@@ -2435,13 +2416,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     </Reanimated.View>
                   )}
                 </Reanimated.View>
-              </Animated.View>
+              </Reanimated.View>
             </CaptureAnimatedPressable>
             <View style={[styles.belowCardSideActionSpacer, styles.belowCardTrailingAction]} />
           </View>
         )}
           {footerContent ? <View style={styles.footerSlot}>{footerContent}</View> : null}
-        </Animated.View>
+        </Reanimated.View>
       </View>
       <StickerSourceSheet
         visible={showStickerSourceSheet}

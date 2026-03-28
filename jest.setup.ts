@@ -98,9 +98,12 @@ jest.mock('react-native-gesture-handler', () => {
       enabled: () => chain,
       maxPointers: () => chain,
       minDistance: () => chain,
+      activeOffsetY: () => chain,
+      failOffsetX: () => chain,
       shouldCancelWhenOutside: () => chain,
       onBegin: () => chain,
       onUpdate: () => chain,
+      onEnd: () => chain,
       onFinalize: () => chain,
     };
 

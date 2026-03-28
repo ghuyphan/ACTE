@@ -10,7 +10,6 @@ import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   AppState,
   Dimensions,
   Keyboard,
@@ -21,6 +20,7 @@ import {
   View,
 } from 'react-native';
 import { PAYWALL_RESULT } from 'react-native-purchases-ui';
+import { cancelAnimation, runOnJS, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../../components/AppSheetAlert';
 import CaptureCard, { type CaptureCardHandle } from '../../components/home/CaptureCard';
@@ -217,7 +217,7 @@ export default function HomeScreen() {
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
-  const searchAnim = useRef(new Animated.Value(0)).current;
+  const searchAnim = useSharedValue(0);
   const flatListRef = useRef<any>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
   const lastFreeNoteColorRef = useRef<string>(DEFAULT_NOTE_COLOR_ID);
@@ -618,8 +618,8 @@ export default function HomeScreen() {
 
       if (useInlineHeaderSearch) {
         Keyboard.dismiss();
-        searchAnim.stopAnimation();
-        searchAnim.setValue(0);
+        cancelAnimation(searchAnim);
+        searchAnim.value = 0;
         if (isSearching || searchQuery.length > 0) {
           setIsSearching(false);
           setSearchQuery('');
@@ -1402,7 +1402,7 @@ export default function HomeScreen() {
       return;
     }
     setIsSearching(true);
-    Animated.timing(searchAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    searchAnim.value = withTiming(1, { duration: 250 });
     flatListRef.current?.scrollToOffset({ offset: snapHeight, animated: true });
   }, [searchAnim, snapHeight, useInlineHeaderSearch]);
 
@@ -1411,9 +1411,13 @@ export default function HomeScreen() {
       return;
     }
     Keyboard.dismiss();
-    Animated.timing(searchAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
-      setIsSearching(false);
-      setSearchQuery('');
+    searchAnim.value = withTiming(0, { duration: 250 }, (finished) => {
+      if (!finished) {
+        return;
+      }
+
+      runOnJS(setIsSearching)(false);
+      runOnJS(setSearchQuery)('');
     });
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, [searchAnim, useInlineHeaderSearch]);

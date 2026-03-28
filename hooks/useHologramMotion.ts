@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { cancelAnimation, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useReducedMotion } from './useReducedMotion';
 
 const DEFAULT_EDITOR_STRENGTH = 1;
@@ -33,8 +33,8 @@ export function useHologramMotion({
   strength?: number;
 }) {
   const reduceMotionEnabled = useReducedMotion();
-  const tiltX = useRef(new Animated.Value(0)).current;
-  const tiltY = useRef(new Animated.Value(0)).current;
+  const tiltX = useSharedValue(0);
+  const tiltY = useSharedValue(0);
   const [isMotionAvailable, setIsMotionAvailable] = useState(false);
 
   const effectiveStrength = useMemo(
@@ -47,22 +47,10 @@ export function useHologramMotion({
     let subscription: { remove?: () => void } | null = null;
 
     const resetTilt = () => {
-      tiltX.stopAnimation();
-      tiltY.stopAnimation();
-      Animated.parallel([
-        Animated.spring(tiltX, {
-          toValue: 0,
-          speed: 18,
-          bounciness: 0,
-          useNativeDriver: true,
-        }),
-        Animated.spring(tiltY, {
-          toValue: 0,
-          speed: 18,
-          bounciness: 0,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      cancelAnimation(tiltX);
+      cancelAnimation(tiltY);
+      tiltX.value = withSpring(0, { stiffness: 220, damping: 26 });
+      tiltY.value = withSpring(0, { stiffness: 220, damping: 26 });
     };
 
     if (!enabled || reduceMotionEnabled) {
@@ -109,20 +97,14 @@ export function useHologramMotion({
               1
             ) * effectiveStrength;
 
-          Animated.parallel([
-            Animated.spring(tiltX, {
-              toValue: nextTiltX,
-              speed: previewMode === 'editor' ? 22 : 18,
-              bounciness: 0,
-              useNativeDriver: true,
-            }),
-            Animated.spring(tiltY, {
-              toValue: nextTiltY,
-              speed: previewMode === 'editor' ? 22 : 18,
-              bounciness: 0,
-              useNativeDriver: true,
-            }),
-          ]).start();
+          tiltX.value = withSpring(nextTiltX, {
+            stiffness: previewMode === 'editor' ? 260 : 220,
+            damping: 28,
+          });
+          tiltY.value = withSpring(nextTiltY, {
+            stiffness: previewMode === 'editor' ? 260 : 220,
+            damping: 28,
+          });
         });
       })
       .catch(() => {

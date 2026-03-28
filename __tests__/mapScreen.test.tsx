@@ -66,6 +66,14 @@ jest.mock('expo-image', () => {
   };
 });
 
+jest.mock('expo-linear-gradient', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    LinearGradient: ({ children, ...props }: any) => <View {...props}>{children}</View>,
+  };
+});
+
 jest.mock('expo-haptics', () => ({
   impactAsync: (...args: unknown[]) => mockImpactAsync(...args),
   ImpactFeedbackStyle: {
@@ -389,7 +397,7 @@ describe('MapScreen', () => {
     expect(queryByTestId('map-canvas')).toBeNull();
   });
 
-  it('renders nearby mode in preview and opens only on explicit open action', async () => {
+  it('renders nearby mode in preview and opens the tapped preview card', async () => {
     const { getByTestId, queryByTestId } = render(<MapScreen />);
 
     expect(queryByTestId('nearby-rail')).toBeNull();
@@ -399,10 +407,6 @@ describe('MapScreen', () => {
     });
 
     fireEvent.press(getByTestId('map-preview-item-text-1'));
-    expect(mockOpenNoteDetail).not.toHaveBeenCalled();
-    expect(mockRouterPush).not.toHaveBeenCalled();
-
-    fireEvent.press(getByTestId('map-preview-open'));
     await waitFor(() => {
       expect(mockOpenNoteDetail).toHaveBeenCalledWith('text-1');
     });
@@ -436,7 +440,7 @@ describe('MapScreen', () => {
       });
     });
 
-    fireEvent.press(getByTestId('map-preview-open'));
+    fireEvent.press(getByTestId('map-preview-item-photo-1'));
     await waitFor(() => {
       const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
       expect(lastCall?.[0]?.latitude).toBeCloseTo(10.8, 2);
@@ -519,7 +523,7 @@ describe('MapScreen', () => {
 
     fireEvent.press(getByTestId('map-filter-text'));
     fireEvent.press(getByTestId('map-show-all-results'));
-    fireEvent.press(getByTestId('map-preview-open'));
+    fireEvent.press(getByTestId('map-preview-item-text-1'));
 
     await waitFor(() => {
       expect(mockOpenNoteDetail).toHaveBeenCalledWith('text-1');

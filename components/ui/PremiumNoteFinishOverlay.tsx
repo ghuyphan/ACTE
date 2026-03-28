@@ -1,6 +1,17 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  interpolate,
+  type SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useHologramMotion } from '../../hooks/useHologramMotion';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { getNoteColorFinish } from '../../services/noteAppearance';
@@ -35,6 +46,52 @@ const HOLO_SPARKLES = [
   { top: '74%' as const, left: '78%' as const, size: 6, opacity: 0.44 },
 ];
 
+function HoloSparkle({
+  sparkle,
+  index,
+  tiltX,
+  isInteractive,
+}: {
+  sparkle: (typeof HOLO_SPARKLES)[number];
+  index: number;
+  tiltX: SharedValue<number>;
+  isInteractive: boolean;
+}) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const opacity = isInteractive
+      ? interpolate(
+          tiltX.value,
+          [-1, 0, 1],
+          [
+            index % 2 === 0 ? sparkle.opacity * 0.2 : sparkle.opacity,
+            sparkle.opacity * ((index % 3) / 3 + 0.5),
+            index % 2 !== 0 ? sparkle.opacity * 0.2 : sparkle.opacity,
+          ]
+        )
+      : sparkle.opacity;
+
+    return {
+      opacity,
+    };
+  }, [index, isInteractive, sparkle.opacity]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.holoSparkle,
+        {
+          top: sparkle.top,
+          left: sparkle.left,
+          width: sparkle.size,
+          height: sparkle.size,
+          borderRadius: sparkle.size / 2,
+        },
+        animatedStyle,
+      ]}
+    />
+  );
+}
+
 export default function PremiumNoteFinishOverlay({
   noteColor,
   animated = false,
@@ -44,7 +101,7 @@ export default function PremiumNoteFinishOverlay({
 }: PremiumNoteFinishOverlayProps) {
   const finish = getNoteColorFinish(noteColor);
   const reduceMotionEnabled = useReducedMotion();
-  const sheenProgress = useRef(new Animated.Value(0)).current;
+  const sheenProgress = useSharedValue(0);
   const { tiltX, tiltY, isInteractive } = useHologramMotion({
     enabled: finish === 'holo' && animated && interactive,
     previewMode,
@@ -53,85 +110,81 @@ export default function PremiumNoteFinishOverlay({
 
   useEffect(() => {
     if (!animated || reduceMotionEnabled || finish === 'standard' || finish === 'holo') {
-      sheenProgress.stopAnimation();
-      sheenProgress.setValue(0);
+      cancelAnimation(sheenProgress);
+      sheenProgress.value = 0;
       return;
     }
 
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(sheenProgress, {
-          toValue: 1,
+    sheenProgress.value = withRepeat(
+      withSequence(
+        withTiming(1, {
           duration: 2600,
           easing: Easing.inOut(Easing.cubic),
-          useNativeDriver: true,
         }),
-        Animated.timing(sheenProgress, {
-          toValue: 0,
+        withTiming(0, {
           duration: 0,
-          useNativeDriver: true,
-        }),
-      ])
+        })
+      ),
+      -1,
+      false
     );
 
-    loop.start();
-    return () => loop.stop();
+    return () => {
+      cancelAnimation(sheenProgress);
+    };
   }, [animated, finish, reduceMotionEnabled, sheenProgress]);
+
+  const spectrumAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: finish === 'holo' && isInteractive ? interpolate(tiltX.value, [-1, 1], [-120, 120]) : 0 },
+      { translateY: finish === 'holo' && isInteractive ? interpolate(tiltY.value, [-1, 1], [60, -60]) : 0 },
+      { rotate: '-35deg' },
+      { scale: 1.6 },
+    ],
+  }), [finish, isInteractive]);
+  const spectrum2AnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: finish === 'holo' && isInteractive ? interpolate(tiltX.value, [-1, 1], [80, -80]) : 0 },
+      { translateY: finish === 'holo' && isInteractive ? interpolate(tiltY.value, [-1, 1], [-40, 40]) : 0 },
+      { rotate: '55deg' },
+      { scale: 1.8 },
+    ],
+  }), [finish, isInteractive]);
+  const holoSheenAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: finish === 'holo' && isInteractive ? 0.96 : 0.74,
+    transform: [
+      { translateX: finish === 'holo' && isInteractive ? interpolate(tiltX.value, [-1, 1], [-180, 180]) : 12 },
+      { translateY: finish === 'holo' && isInteractive ? interpolate(tiltY.value, [-1, 1], [90, -90]) : -4 },
+      { rotate: '15deg' },
+      { scale: 1.2 },
+    ],
+  }), [finish, isInteractive]);
+  const sparkleLayerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: finish === 'holo' && isInteractive ? interpolate(tiltX.value, [-1, 1], [-12, 12]) : 0 },
+      { translateY: finish === 'holo' && isInteractive ? interpolate(tiltY.value, [-1, 1], [12, -12]) : 0 },
+    ],
+  }), [finish, isInteractive]);
+  const animatedSheenStyle = useAnimatedStyle(() => (
+    animated && !reduceMotionEnabled && finish !== 'holo'
+      ? {
+          transform: [
+            {
+              translateX: interpolate(sheenProgress.value, [0, 1], [-180, 180]),
+            },
+            { rotate: finish === 'rgb' ? '14deg' : finish === 'chrome' ? '18deg' : '12deg' },
+          ],
+        }
+      : {
+          transform: [{ translateX: 12 }, { rotate: finish === 'chrome' ? '18deg' : '12deg' }],
+        }
+  ), [animated, finish, reduceMotionEnabled]);
 
   if (finish === 'standard') {
     return null;
   }
 
   if (finish === 'holo') {
-    const spectrumTranslateX = isInteractive
-      ? tiltX.interpolate({
-        inputRange: [-1, 1],
-        outputRange: [-120, 120],
-      })
-      : 0;
-    const spectrumTranslateY = isInteractive
-      ? tiltY.interpolate({
-        inputRange: [-1, 1],
-        outputRange: [60, -60],
-      })
-      : 0;
-    const spectrum2TranslateX = isInteractive
-      ? tiltX.interpolate({
-        inputRange: [-1, 1],
-        outputRange: [80, -80],
-      })
-      : 0;
-    const spectrum2TranslateY = isInteractive
-      ? tiltY.interpolate({
-        inputRange: [-1, 1],
-        outputRange: [-40, 40],
-      })
-      : 0;
-    const sheenTranslateX = isInteractive
-      ? tiltX.interpolate({
-        inputRange: [-1, 1],
-        outputRange: [-180, 180],
-      })
-      : 12;
-    const sheenTranslateY = isInteractive
-      ? tiltY.interpolate({
-        inputRange: [-1, 1],
-        outputRange: [90, -90],
-      })
-      : -4;
-    const sparkleTranslateX = isInteractive
-      ? tiltX.interpolate({
-        inputRange: [-1, 1],
-        outputRange: [-12, 12],
-      })
-      : 0;
-    const sparkleTranslateY = isInteractive
-      ? tiltY.interpolate({
-        inputRange: [-1, 1],
-        outputRange: [12, -12],
-      })
-      : 0;
-
     return (
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <LinearGradient
@@ -140,19 +193,7 @@ export default function PremiumNoteFinishOverlay({
           end={{ x: 1, y: 1 }}
           style={[StyleSheet.absoluteFill, styles.holoBaseWash]}
         />
-        <Animated.View
-          style={[
-            styles.holoSpectrumWrap,
-            {
-              transform: [
-                { translateX: spectrumTranslateX },
-                { translateY: spectrumTranslateY },
-                { rotate: '-35deg' },
-                { scale: 1.6 },
-              ],
-            },
-          ]}
-        >
+        <Animated.View style={[styles.holoSpectrumWrap, spectrumAnimatedStyle]}>
           <LinearGradient
             colors={[
               'rgba(255,0,0,0)',
@@ -171,19 +212,7 @@ export default function PremiumNoteFinishOverlay({
             style={styles.holoSpectrum}
           />
         </Animated.View>
-        <Animated.View
-          style={[
-            styles.holoSpectrumWrap,
-            {
-              transform: [
-                { translateX: spectrum2TranslateX },
-                { translateY: spectrum2TranslateY },
-                { rotate: '55deg' },
-                { scale: 1.8 },
-              ],
-            },
-          ]}
-        >
+        <Animated.View style={[styles.holoSpectrumWrap, spectrum2AnimatedStyle]}>
           <LinearGradient
             colors={[
               'rgba(255,255,255,0)',
@@ -197,20 +226,7 @@ export default function PremiumNoteFinishOverlay({
             style={styles.holoSpectrum}
           />
         </Animated.View>
-        <Animated.View
-          style={[
-            styles.holoSheenWrap,
-            {
-              opacity: isInteractive ? 0.96 : 0.74,
-              transform: [
-                { translateX: sheenTranslateX },
-                { translateY: sheenTranslateY },
-                { rotate: '15deg' },
-                { scale: 1.2 },
-              ],
-            },
-          ]}
-        >
+        <Animated.View style={[styles.holoSheenWrap, holoSheenAnimatedStyle]}>
           <LinearGradient
             colors={[
               'rgba(255,255,255,0.0)',
@@ -227,43 +243,15 @@ export default function PremiumNoteFinishOverlay({
             style={styles.holoSheen}
           />
         </Animated.View>
-        <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              transform: [
-                { translateX: sparkleTranslateX },
-                { translateY: sparkleTranslateY },
-              ],
-            },
-          ]}
-        >
+        <Animated.View style={[StyleSheet.absoluteFill, sparkleLayerAnimatedStyle]}>
           {HOLO_SPARKLES.map((sparkle, index) => {
-            const sparkleOpacity = isInteractive
-              ? tiltX.interpolate({
-                inputRange: [-1, 0, 1],
-                outputRange: [
-                  index % 2 === 0 ? sparkle.opacity * 0.2 : sparkle.opacity,
-                  sparkle.opacity * ((index % 3) / 3 + 0.5),
-                  index % 2 !== 0 ? sparkle.opacity * 0.2 : sparkle.opacity,
-                ],
-              })
-              : sparkle.opacity;
-
             return (
-              <Animated.View
+              <HoloSparkle
                 key={`holo-sparkle-${index}`}
-                style={[
-                  styles.holoSparkle,
-                  {
-                    top: sparkle.top,
-                    left: sparkle.left,
-                    width: sparkle.size,
-                    height: sparkle.size,
-                    borderRadius: sparkle.size / 2,
-                    opacity: sparkleOpacity,
-                  },
-                ]}
+                sparkle={sparkle}
+                index={index}
+                tiltX={tiltX}
+                isInteractive={isInteractive}
               />
             );
           })}
@@ -277,21 +265,6 @@ export default function PremiumNoteFinishOverlay({
 
   const sheenColors = STATIC_SHEEN_COLORS[finish];
   const washColors = STATIC_WASH_COLORS[finish];
-  const animatedSheenStyle = animated && !reduceMotionEnabled
-    ? {
-      transform: [
-        {
-          translateX: sheenProgress.interpolate({
-            inputRange: [0, 1],
-            outputRange: [-180, 180],
-          }),
-        },
-        { rotate: finish === 'rgb' ? '14deg' : finish === 'chrome' ? '18deg' : '12deg' },
-      ],
-    }
-    : {
-      transform: [{ translateX: 12 }, { rotate: finish === 'chrome' ? '18deg' : '12deg' }],
-    };
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>

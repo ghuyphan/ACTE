@@ -27,6 +27,18 @@ export const mapMotionPressTiming = {
   easing: mapMotionEasing.press,
 } as const;
 
+export const mapMotionMarkerSpring = {
+  damping: 28,
+  stiffness: 360,
+  mass: 0.42,
+} as const;
+
+export const mapMotionMarkerSettleSpring = {
+  damping: 30,
+  stiffness: 320,
+  mass: 0.46,
+} as const;
+
 export function getMapLayoutTransition(reduceMotionEnabled: boolean) {
   return reduceMotionEnabled
     ? LinearTransition.duration(mapMotionDurations.fast)

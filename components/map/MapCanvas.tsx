@@ -8,6 +8,7 @@ import Reanimated, {
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import type { MapClusterNode } from '../../hooks/map/mapDomain';
@@ -16,7 +17,12 @@ import type { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
 import type { SharedPost } from '../../services/sharedFeedService';
-import { mapMotionDurations, mapMotionEasing } from './mapMotion';
+import {
+  mapMotionDurations,
+  mapMotionEasing,
+  mapMotionMarkerSettleSpring,
+  mapMotionMarkerSpring,
+} from './mapMotion';
 
 const SELECTED_RICH_PREVIEW_MIN_ZOOM = 16;
 const PHOTO_ORB_MIN_ZOOM = 16;
@@ -174,6 +180,7 @@ const MarkerContent = memo(function MarkerContent({
 
     return getLeafMarkerBaseScale(zoomLevel, 'single');
   }, [isCluster, pointCount, showPhotoThumbnail, showRichPreview, showStackPreview, zoomLevel]);
+  const scaleProgress = useSharedValue(leafMarkerBaseScale);
 
   useEffect(() => {
     enterProgress.value = reduceMotionEnabled
@@ -184,11 +191,17 @@ const MarkerContent = memo(function MarkerContent({
   useEffect(() => {
     activeProgress.value = reduceMotionEnabled
       ? withTiming(selected ? 1 : 0, { duration: mapMotionDurations.fast })
-      : withTiming(selected ? 1 : 0, {
+      : withSpring(selected ? 1 : 0, mapMotionMarkerSpring);
+  }, [activeProgress, reduceMotionEnabled, selected]);
+
+  useEffect(() => {
+    scaleProgress.value = reduceMotionEnabled
+      ? withTiming(leafMarkerBaseScale, {
           duration: mapMotionDurations.standard,
           easing: mapMotionEasing.standard,
-        });
-  }, [activeProgress, reduceMotionEnabled, selected]);
+        })
+      : withSpring(leafMarkerBaseScale, mapMotionMarkerSettleSpring);
+  }, [leafMarkerBaseScale, reduceMotionEnabled, scaleProgress]);
 
   useEffect(() => {
     if (!pulseActive) {
@@ -207,20 +220,26 @@ const MarkerContent = memo(function MarkerContent({
   const containerStyle = useAnimatedStyle(() => {
     const focusProgress = Math.max(activeProgress.value, pulseProgress.value);
     const scaleBoost = isCluster
-      ? interpolate(pulseProgress.value, [0, 1], [1, 1.12])
-      : interpolate(focusProgress, [0, 1], [1, pointCount > 1 ? 1.08 : 1.14]);
+      ? interpolate(pulseProgress.value, [0, 1], [1, 1.08])
+      : interpolate(focusProgress, [0, 1], [1, pointCount > 1 ? 1.06 : 1.1]);
     const enterScale = interpolate(enterProgress.value, [0, 1], [0.88, 1]);
+    const lift = isCluster || showRichPreview || showStackPreview
+      ? 0
+      : interpolate(focusProgress, [0, 1], [0, pointCount > 1 ? -0.5 : -1]);
     return {
       opacity: enterProgress.value,
-      transform: [{ scale: enterScale * scaleBoost * leafMarkerBaseScale }],
+      transform: [
+        { translateY: lift },
+        { scale: enterScale * scaleBoost * scaleProgress.value },
+      ],
     };
-  }, [isCluster, leafMarkerBaseScale, pointCount]);
+  }, [isCluster, pointCount, scaleProgress, showRichPreview, showStackPreview]);
 
   const haloStyle = useAnimatedStyle(() => {
     const focusProgress = Math.max(activeProgress.value, pulseProgress.value);
     return {
-      opacity: interpolate(focusProgress, [0, 1], [0, isCluster ? 0.24 : 0.34]),
-      transform: [{ scale: interpolate(focusProgress, [0, 1], [0.82, 1.3]) }],
+      opacity: interpolate(focusProgress, [0, 1], [0, isCluster ? 0.18 : 0.26]),
+      transform: [{ scale: interpolate(focusProgress, [0, 1], [0.9, isCluster ? 1.18 : 1.22]) }],
     };
   });
 
@@ -239,6 +258,10 @@ const MarkerContent = memo(function MarkerContent({
   const singleMarkerOuterStyle = useAnimatedStyle(() => ({
     borderColor: interpolateColor(activeProgress.value, [0, 1], ['white', accentColor]),
     backgroundColor: interpolateColor(activeProgress.value, [0, 1], [`${color}30`, `${accentColor}44`]),
+  }));
+
+  const singleMarkerIconStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(activeProgress.value, [0, 1], [1, 1.04]) }],
   }));
 
   return (
@@ -422,9 +445,15 @@ const MarkerContent = memo(function MarkerContent({
           </Reanimated.View>
         ) : (
           <Reanimated.View style={[styles.singleMarker, singleMarkerOuterStyle]}>
-            <View style={[styles.singleMarkerIconWrap, { backgroundColor: `${color}16` }]}>
+            <Reanimated.View
+              style={[
+                styles.singleMarkerIconWrap,
+                { backgroundColor: `${color}16` },
+                singleMarkerIconStyle,
+              ]}
+            >
               <Ionicons name="document-text" size={14} color={selected ? accentColor : color} />
-            </View>
+            </Reanimated.View>
           </Reanimated.View>
         )}
       </Reanimated.View>

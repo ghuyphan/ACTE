@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useRef, useState } from 'react';
-import { Animated, Easing } from 'react-native';
+import { Easing, runOnJS, useSharedValue, withTiming } from 'react-native-reanimated';
 import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
 
 export type CaptureMode = 'text' | 'camera';
@@ -23,32 +23,28 @@ export function useCaptureFlow() {
   const [permission, requestPermission] = useCameraPermissions();
 
   const cameraRef = useRef<CameraView>(null);
-  const captureOpacity = useRef(new Animated.Value(1)).current;
-  const captureScale = useRef(new Animated.Value(1)).current;
-  const captureTranslateY = useRef(new Animated.Value(0)).current;
-  const flashAnim = useRef(new Animated.Value(0)).current;
-  const shutterScale = useRef(new Animated.Value(1)).current;
+  const captureOpacity = useSharedValue(1);
+  const captureScale = useSharedValue(1);
+  const captureTranslateY = useSharedValue(0);
+  const flashAnim = useSharedValue(0);
+  const shutterScale = useSharedValue(1);
 
   const animateModeSwitch = useCallback((callback: () => void) => {
-    Animated.parallel([
-      Animated.timing(captureScale, { toValue: 0.97, duration: 110, useNativeDriver: true }),
-      Animated.timing(captureTranslateY, { toValue: -10, duration: 110, useNativeDriver: true }),
-    ]).start(() => {
-      callback();
-      Animated.parallel([
-        Animated.timing(captureScale, {
-          toValue: 1,
-          duration: 220,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(captureTranslateY, {
-          toValue: 0,
-          duration: 220,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]).start();
+    captureScale.value = withTiming(0.97, { duration: 110 });
+    captureTranslateY.value = withTiming(-10, { duration: 110 }, (finished) => {
+      if (!finished) {
+        return;
+      }
+
+      runOnJS(callback)();
+      captureScale.value = withTiming(1, {
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+      });
+      captureTranslateY.value = withTiming(0, {
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+      });
     });
   }, [captureScale, captureTranslateY]);
 
@@ -77,21 +73,17 @@ export function useCaptureFlow() {
   }, []);
 
   const handleShutterPressIn = useCallback(() => {
-    Animated.timing(shutterScale, {
-      toValue: 0.85,
+    shutterScale.value = withTiming(0.85, {
       duration: 120,
       easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start();
+    });
   }, [shutterScale]);
 
   const handleShutterPressOut = useCallback(() => {
-    Animated.timing(shutterScale, {
-      toValue: 1,
+    shutterScale.value = withTiming(1, {
       duration: 180,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
+    });
   }, [shutterScale]);
 
   const takePicture = useCallback(async () => {
@@ -100,17 +92,15 @@ export function useCaptureFlow() {
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    flashAnim.setValue(1);
-    Animated.timing(flashAnim, {
-      toValue: 0,
+    flashAnim.value = 1;
+    flashAnim.value = withTiming(0, {
       duration: 400,
-      useNativeDriver: true,
-    }).start();
+    });
 
     const photo = await cameraRef.current.takePictureAsync({
       quality: 0.35,
     });
-    shutterScale.setValue(1);
+    shutterScale.value = 1;
     if (photo?.uri) {
       setCapturedPhoto(photo.uri);
     }

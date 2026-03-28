@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Animated, View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { getImageAsync, hasImageAsync } from 'expo-clipboard';
 import { deleteAsync, writeAsStringAsync } from 'expo-file-system/legacy';
@@ -173,13 +173,14 @@ const mockClipboardGetImageAsync = getImageAsync as jest.MockedFunction<typeof g
 const mockWriteAsStringAsync = writeAsStringAsync as jest.MockedFunction<typeof writeAsStringAsync>;
 const mockDeleteAsync = deleteAsync as jest.MockedFunction<typeof deleteAsync>;
 const mockImportStickerAsset = importStickerAsset as jest.MockedFunction<typeof importStickerAsset>;
+const createSharedValue = (initialValue: number) => ({ value: initialValue } as any);
 
 function createCaptureCardProps(
   ref: React.RefObject<CaptureCardHandle | null>,
   props: Partial<React.ComponentProps<typeof CaptureCard>> = {}
 ) {
-  const animatedValue = new Animated.Value(1);
-  const zeroValue = new Animated.Value(0);
+  const animatedValue = createSharedValue(1);
+  const zeroValue = createSharedValue(0);
 
   return {
     ref,
@@ -415,8 +416,8 @@ describe('CaptureCard doodle handle', () => {
         isSearching={false}
         captureMode="camera"
         cameraSessionKey={1}
-        captureScale={new Animated.Value(1)}
-        captureTranslateY={new Animated.Value(0)}
+        captureScale={createSharedValue(1)}
+        captureTranslateY={createSharedValue(0)}
         colors={{
           primary: '#FFC107',
           primarySoft: 'rgba(255, 193, 7, 0.2)',
@@ -453,7 +454,7 @@ describe('CaptureCard doodle handle', () => {
         onOpenPhotoLibrary={() => undefined}
         cameraRef={{ current: null }}
         shouldRenderCameraPreview={false}
-        flashAnim={new Animated.Value(0)}
+        flashAnim={createSharedValue(0)}
         permissionGranted
         onShutterPressIn={() => undefined}
         onShutterPressOut={() => undefined}
@@ -461,7 +462,7 @@ describe('CaptureCard doodle handle', () => {
         onSaveNote={() => undefined}
         onOpenNotes={() => undefined}
         saving={false}
-        shutterScale={new Animated.Value(1)}
+        shutterScale={createSharedValue(1)}
         cameraStatusText={null}
         libraryImportLocked={false}
         importingPhoto={false}

@@ -7,13 +7,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Alert,
-    Animated,
     Dimensions,
-    Easing,
     type GestureResponderEvent,
     Keyboard,
     KeyboardAvoidingView,
-    LayoutAnimation,
     Platform,
     Pressable,
     ScrollView,
@@ -21,10 +18,19 @@ import {
     StyleSheet,
     Text,
     TextInput,
-    UIManager,
     View,
 } from 'react-native';
 import { PAYWALL_RESULT } from 'react-native-purchases-ui';
+import Animated, {
+    cancelAnimation,
+    Easing,
+    interpolate,
+    useAnimatedStyle,
+    useSharedValue,
+    withDelay,
+    withRepeat,
+    withTiming,
+} from 'react-native-reanimated';
 import { DOODLE_ARTBOARD_FRAME } from '../constants/doodleLayout';
 import { ENABLE_PHOTO_STICKERS } from '../constants/experiments';
 import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../constants/noteRadius';
@@ -93,17 +99,21 @@ type StickerPastePromptState = {
 };
 
 function SkeletonCard({ colors }: { colors: { card: string } }) {
-    const opacity = useRef(new Animated.Value(0.3)).current;
+    const opacity = useSharedValue(0.3);
+    const animatedOpacityStyle = useAnimatedStyle(() => ({
+        opacity: opacity.value,
+    }));
 
     useEffect(() => {
-        const anim = Animated.loop(
-            Animated.sequence([
-                Animated.timing(opacity, { toValue: 0.7, duration: 800, useNativeDriver: true }),
-                Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-            ])
+        opacity.value = withRepeat(
+            withTiming(0.7, { duration: 800 }),
+            -1,
+            true
         );
-        anim.start();
-        return () => anim.stop();
+
+        return () => {
+            cancelAnimation(opacity);
+        };
     }, [opacity]);
 
     return (
@@ -111,13 +121,14 @@ function SkeletonCard({ colors }: { colors: { card: string } }) {
             <Animated.View
                 style={[
                     styles.skeletonCard,
-                    { backgroundColor: colors.card, opacity },
+                    { backgroundColor: colors.card },
+                    animatedOpacityStyle,
                 ]}
             />
             <View style={styles.infoSection}>
-                <Animated.View style={[styles.skeletonLine, { width: '60%', backgroundColor: colors.card, opacity }]} />
-                <Animated.View style={[styles.skeletonLine, { width: '45%', backgroundColor: colors.card, opacity }]} />
-                <Animated.View style={[styles.skeletonLine, { width: '55%', backgroundColor: colors.card, opacity }]} />
+                <Animated.View style={[styles.skeletonLine, { width: '60%', backgroundColor: colors.card }, animatedOpacityStyle]} />
+                <Animated.View style={[styles.skeletonLine, { width: '45%', backgroundColor: colors.card }, animatedOpacityStyle]} />
+                <Animated.View style={[styles.skeletonLine, { width: '55%', backgroundColor: colors.card }, animatedOpacityStyle]} />
             </View>
         </View>
     );
@@ -138,18 +149,22 @@ function AnimatedActionButton({
     delay?: number;
     disabled?: boolean;
 }) {
-    const scale = useRef(new Animated.Value(0)).current;
-    const pressScale = useRef(new Animated.Value(1)).current;
+    const scale = useSharedValue(0);
+    const pressScale = useSharedValue(1);
     const reduceMotionEnabled = useReducedMotion();
+    const animatedButtonStyle = useAnimatedStyle(() => ({
+        opacity: disabled ? 0.45 : 1,
+        transform: [{ scale: scale.value * pressScale.value }],
+    }), [disabled]);
 
     useEffect(() => {
-        Animated.timing(scale, {
-            toValue: 1,
+        scale.value = withDelay(
             delay,
-            duration: reduceMotionEnabled ? 110 : 140,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-        }).start();
+            withTiming(1, {
+                duration: reduceMotionEnabled ? 110 : 140,
+                easing: Easing.out(Easing.cubic),
+            })
+        );
     }, [delay, reduceMotionEnabled, scale]);
 
     return (
@@ -158,31 +173,19 @@ function AnimatedActionButton({
             onPress={onPress}
             disabled={disabled}
             onPressIn={() => {
-                Animated.timing(pressScale, {
-                    toValue: reduceMotionEnabled ? 0.97 : 0.93,
+                pressScale.value = withTiming(reduceMotionEnabled ? 0.97 : 0.93, {
                     duration: 80,
                     easing: Easing.out(Easing.quad),
-                    useNativeDriver: true
-                }).start();
+                });
             }}
             onPressOut={() => {
-                Animated.timing(pressScale, {
-                    toValue: 1,
+                pressScale.value = withTiming(1, {
                     duration: 110,
                     easing: Easing.out(Easing.quad),
-                    useNativeDriver: true
-                }).start();
+                });
             }}
         >
-            <Animated.View
-                style={[
-                    style,
-                    {
-                        opacity: disabled ? 0.45 : 1,
-                        transform: [{ scale: Animated.multiply(scale, pressScale) }]
-                    }
-                ]}
-            >
+            <Animated.View style={[style, animatedButtonStyle]}>
                 {children}
             </Animated.View>
         </Pressable>
@@ -256,13 +259,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
 
-    const cardScale = useRef(new Animated.Value(0.92)).current;
-    const cardOpacity = useRef(new Animated.Value(0)).current;
-    const infoTranslateY = useRef(new Animated.Value(20)).current;
-    const infoOpacity = useRef(new Animated.Value(0)).current;
-    const actionsOpacity = useRef(new Animated.Value(0)).current;
-    const favoriteFillProgress = useRef(new Animated.Value(0)).current;
-    const editModeAnim = useRef(new Animated.Value(0)).current;
+    const cardScale = useSharedValue(0.92);
+    const cardOpacity = useSharedValue(0);
+    const infoTranslateY = useSharedValue(20);
+    const favoriteFillProgress = useSharedValue(0);
+    const editModeAnim = useSharedValue(0);
     const contentInputRef = useRef<TextInput>(null);
     const locationInputRef = useRef<TextInput>(null);
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -285,6 +286,35 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         return PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS;
     }, [editNoteColor, note, tier]);
+    const cardAnimatedStyle = useAnimatedStyle(() => ({
+        opacity: cardOpacity.value,
+        transform: [{ scale: cardScale.value }],
+    }));
+    const favoriteFilledTintStyle = useAnimatedStyle(() => ({
+        opacity: favoriteFillProgress.value,
+    }));
+    const favoriteOutlineIconStyle = useAnimatedStyle(() => ({
+        opacity: interpolate(favoriteFillProgress.value, [0, 1], [1, 0]),
+        transform: [{ scale: interpolate(favoriteFillProgress.value, [0, 1], [1, 0.82]) }],
+    }));
+    const favoriteFilledIconStyle = useAnimatedStyle(() => ({
+        opacity: interpolate(favoriteFillProgress.value, [0, 1], [0, 1]),
+        transform: [{ scale: interpolate(favoriteFillProgress.value, [0, 1], [0.72, 1]) }],
+    }));
+    const editIconAnimatedStyle = useAnimatedStyle(() => ({
+        opacity: interpolate(editModeAnim.value, [0, 1], [1, 0]),
+        transform: [{ scale: interpolate(editModeAnim.value, [0, 1], [1, 0.72]) }],
+    }));
+    const saveIconAnimatedStyle = useAnimatedStyle(() => ({
+        opacity: interpolate(editModeAnim.value, [0, 1], [0, 1]),
+        transform: [{ scale: interpolate(editModeAnim.value, [0, 1], [0.72, 1]) }],
+    }));
+    const editingHintAnimatedStyle = useAnimatedStyle(() => ({
+        opacity: editModeAnim.value,
+    }));
+    const infoSectionAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: infoTranslateY.value }],
+    }));
 
     const showPremiumColorAlert = useCallback(() => {
         const buttons: {
@@ -497,13 +527,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setStickerModeEnabled(false);
         setSelectedStickerId(null);
         setShowStickerSourceSheet(false);
-        favoriteFillProgress.setValue(0);
-        cardScale.setValue(0.97);
-        cardOpacity.setValue(0);
-        infoTranslateY.setValue(12);
-        infoOpacity.setValue(0);
-        actionsOpacity.setValue(0);
-        editModeAnim.setValue(0);
+        favoriteFillProgress.value = 0;
+        cardScale.value = 0.97;
+        cardOpacity.value = 0;
+        infoTranslateY.value = 12;
+        editModeAnim.value = 0;
 
         getNoteById(noteId)
             .then((nextNote) => {
@@ -512,7 +540,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 }
 
                 setNote(nextNote);
-                favoriteFillProgress.setValue(nextNote?.isFavorite ? 1 : 0);
+                favoriteFillProgress.value = nextNote?.isFavorite ? 1 : 0;
                 if (nextNote) {
                     setEditContent(nextNote.content);
                     setEditLocation(nextNote.locationName || '');
@@ -533,41 +561,21 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 }
                 setLoading(false);
 
-                Animated.parallel([
-                    Animated.timing(cardScale, {
-                        toValue: 1,
+                cardScale.value = withTiming(1, {
                         duration: reduceMotionEnabled ? 140 : 180,
                         easing: Easing.out(Easing.cubic),
-                        useNativeDriver: true
-                    }),
-                    Animated.timing(cardOpacity, {
-                        toValue: 1,
+                    });
+                cardOpacity.value = withTiming(1, {
                         duration: reduceMotionEnabled ? 140 : 180,
                         easing: Easing.out(Easing.cubic),
-                        useNativeDriver: true
-                    }),
-                    Animated.timing(actionsOpacity, {
-                        toValue: 1,
-                        duration: reduceMotionEnabled ? 120 : 160,
-                        delay: 70,
-                        easing: Easing.out(Easing.cubic),
-                        useNativeDriver: true
-                    }),
-                    Animated.timing(infoOpacity, {
-                        toValue: 1,
+                    });
+                infoTranslateY.value = withDelay(
+                    100,
+                    withTiming(0, {
                         duration: reduceMotionEnabled ? 140 : 180,
-                        delay: 100,
                         easing: Easing.out(Easing.cubic),
-                        useNativeDriver: true
-                    }),
-                    Animated.timing(infoTranslateY, {
-                        toValue: 0,
-                        duration: reduceMotionEnabled ? 140 : 180,
-                        delay: 100,
-                        easing: Easing.out(Easing.cubic),
-                        useNativeDriver: true
-                    }),
-                ]).start();
+                    })
+                );
             })
             .catch(() => {
                 if (cancelled) {
@@ -581,7 +589,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         return () => {
             cancelled = true;
         };
-    }, [actionsOpacity, cardOpacity, cardScale, editModeAnim, favoriteFillProgress, getNoteById, infoOpacity, infoTranslateY, noteId, reduceMotionEnabled, visible]);
+    }, [cardOpacity, cardScale, editModeAnim, favoriteFillProgress, getNoteById, infoTranslateY, noteId, reduceMotionEnabled, visible]);
 
     useEffect(() => {
         if (!isEditing || !note || importingSticker) {
@@ -590,21 +598,17 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     }, [importingSticker, isEditing, note]);
 
     useEffect(() => {
-        favoriteFillProgress.stopAnimation();
-        Animated.timing(favoriteFillProgress, {
-            toValue: note?.isFavorite ? 1 : 0,
+        cancelAnimation(favoriteFillProgress);
+        favoriteFillProgress.value = withTiming(note?.isFavorite ? 1 : 0, {
             duration: reduceMotionEnabled ? 120 : 180,
             easing: Easing.out(Easing.cubic),
-            useNativeDriver: false,
-        }).start();
+        });
     }, [favoriteFillProgress, note?.isFavorite, reduceMotionEnabled]);
 
     useEffect(() => {
-        Animated.timing(editModeAnim, {
-            toValue: isEditing ? 1 : 0,
+        editModeAnim.value = withTiming(isEditing ? 1 : 0, {
             duration: reduceMotionEnabled ? 100 : 180,
-            useNativeDriver: true,
-        }).start();
+        });
     }, [editModeAnim, isEditing, reduceMotionEnabled]);
 
     useEffect(() => {
@@ -927,31 +931,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     const performDelete = useCallback(async (targetNoteId: string) => {
         try {
-            if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-                UIManager.setLayoutAnimationEnabledExperimental(true);
-            }
-
-            LayoutAnimation.configureNext(
-                reduceMotionEnabled
-                    ? LayoutAnimation.Presets.easeInEaseOut
-                    : {
-                        duration: 220,
-                        create: {
-                            type: LayoutAnimation.Types.easeInEaseOut,
-                            property: LayoutAnimation.Properties.opacity,
-                            duration: 140,
-                        },
-                        update: {
-                            type: LayoutAnimation.Types.easeInEaseOut,
-                        },
-                        delete: {
-                            type: LayoutAnimation.Types.easeInEaseOut,
-                            property: LayoutAnimation.Properties.opacity,
-                            duration: 180,
-                        },
-                    }
-            );
-
             await deleteNote(targetNoteId);
             emitInteractionFeedback('deleted');
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -979,7 +958,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         } finally {
             setIsDeleting(false);
         }
-    }, [deleteNote, deleteSharedNote, reduceMotionEnabled, t, user]);
+    }, [deleteNote, deleteSharedNote, t, user]);
 
     useEffect(() => {
         if (visible) {
@@ -1061,23 +1040,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
     };
 
-    const favoriteFilledOpacity = favoriteFillProgress.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, 1],
-    });
-    const favoriteOutlineOpacity = favoriteFillProgress.interpolate({
-        inputRange: [0, 1],
-        outputRange: [1, 0],
-    });
-    const favoriteFilledScale = favoriteFillProgress.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0.72, 1],
-    });
-    const favoriteOutlineScale = favoriteFillProgress.interpolate({
-        inputRange: [0, 1],
-        outputRange: [1, 0.82],
-    });
-
     const renderFavoriteBadge = (backgroundColor: string, inactiveColor: string) => (
         <Pressable
             testID="note-detail-favorite"
@@ -1088,9 +1050,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 pointerEvents="none"
                 style={[
                     styles.favoriteBadgeTint,
-                    {
-                        opacity: favoriteFilledOpacity,
-                    },
+                    favoriteFilledTintStyle,
                 ]}
             />
             <View style={styles.favoriteIconStack}>
@@ -1098,10 +1058,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     pointerEvents="none"
                     style={[
                         styles.favoriteIconLayer,
-                        {
-                            opacity: favoriteOutlineOpacity,
-                            transform: [{ scale: favoriteOutlineScale }],
-                        },
+                        favoriteOutlineIconStyle,
                     ]}
                 >
                     <Ionicons name="heart-outline" size={20} color={inactiveColor} />
@@ -1110,10 +1067,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     pointerEvents="none"
                     style={[
                         styles.favoriteIconLayer,
-                        {
-                            opacity: favoriteFilledOpacity,
-                            transform: [{ scale: favoriteFilledScale }],
-                        },
+                        favoriteFilledIconStyle,
                     ]}
                 >
                     <Ionicons name="heart" size={20} color="#FF3B30" />
@@ -1307,14 +1261,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         });
         const displayedDoodleStrokes = isEditing ? editDoodleStrokes : parsedNoteDoodleStrokes;
         const displayedStickerPlacements = isEditing ? editStickerPlacements : parsedNoteStickerPlacements;
-        const editIconStyle = {
-            opacity: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-            transform: [{ scale: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.72] }) }],
-        };
-        const saveIconStyle = {
-            opacity: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
-            transform: [{ scale: editModeAnim.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }) }],
-        };
 
         return (
             <KeyboardAvoidingView
@@ -1331,7 +1277,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     </View>
                 ) : null}
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    <Animated.View style={{ transform: [{ scale: cardScale }] }}>
+                    <Animated.View style={cardAnimatedStyle}>
                         {note.type === 'photo' ? (
                             <View style={styles.photoContainer}>
                                 <View style={styles.photo}>
@@ -1713,14 +1659,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                             disabled={isDeleting}
                         >
                             <View style={styles.editIconStack}>
-                                <Animated.View style={[styles.editIconLayer, editIconStyle]}>
+                                <Animated.View style={[styles.editIconLayer, editIconAnimatedStyle]}>
                                     <Ionicons
                                         name="create-outline"
                                         size={20}
                                         color={colors.secondaryText}
                                     />
                                 </Animated.View>
-                                <Animated.View style={[styles.editIconLayer, saveIconStyle]}>
+                                <Animated.View style={[styles.editIconLayer, saveIconAnimatedStyle]}>
                                     <Ionicons
                                         name="checkmark"
                                         size={20}
@@ -1752,7 +1698,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     </Animated.View>
 
                     {isEditing ? (
-                        <Animated.View style={{ opacity: editModeAnim }}>
+                        <Animated.View style={editingHintAnimatedStyle}>
                             <View
                                 style={[
                                     styles.editingHintCard,
@@ -1770,7 +1716,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                         </Animated.View>
                     ) : null}
 
-                    <Animated.View style={{ transform: [{ translateY: infoTranslateY }] }}>
+                    <Animated.View style={infoSectionAnimatedStyle}>
                         <View style={styles.infoSection}>
                             {isEditing && note.type === 'text' ? (
                                 <>

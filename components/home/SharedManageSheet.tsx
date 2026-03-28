@@ -6,18 +6,22 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Alert,
-  Animated,
-  Easing,
-  LayoutAnimation,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  UIManager,
   View,
 } from 'react-native';
+import Animated, {
+  Easing,
+  LinearTransition,
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import AppSheet from '../AppSheet';
 import AppSheetScaffold from '../AppSheetScaffold';
 import PrimaryButton from '../ui/PrimaryButton';
@@ -367,52 +371,27 @@ export default function SharedManageSheet(props: {
   const [inviteValue, setInviteValue] = useState('');
   const [joining, setJoining] = useState(false);
   const hasInviteValue = inviteValue.trim().length > 0;
-  const contentOpacity = useState(() => new Animated.Value(1))[0];
-  const contentTranslateY = useState(() => new Animated.Value(0))[0];
-
-  const animateSheetLayout = useCallback(() => {
-    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-      UIManager.setLayoutAnimationEnabledExperimental(true);
-    }
-
-    LayoutAnimation.configureNext({
-      duration: 220,
-      create: {
-        type: LayoutAnimation.Types.easeInEaseOut,
-        property: LayoutAnimation.Properties.opacity,
-        duration: 160,
-      },
-      update: {
-        type: LayoutAnimation.Types.easeInEaseOut,
-      },
-      delete: {
-        type: LayoutAnimation.Types.easeInEaseOut,
-        property: LayoutAnimation.Properties.opacity,
-        duration: 180,
-      },
-    });
-  }, []);
+  const contentOpacity = useSharedValue(1);
+  const contentTranslateY = useSharedValue(0);
+  const contentAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: contentOpacity.value,
+    transform: [{ translateY: contentTranslateY.value }],
+  }));
+  const contentLayoutTransition = LinearTransition.duration(220).easing(Easing.out(Easing.cubic));
 
   const animateContentChange = useCallback(() => {
-    contentOpacity.stopAnimation();
-    contentTranslateY.stopAnimation();
-    contentOpacity.setValue(0.92);
-    contentTranslateY.setValue(10);
-
-    Animated.parallel([
-      Animated.timing(contentOpacity, {
-        toValue: 1,
-        duration: 180,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(contentTranslateY, {
-        toValue: 0,
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
+    cancelAnimation(contentOpacity);
+    cancelAnimation(contentTranslateY);
+    contentOpacity.value = 0.92;
+    contentTranslateY.value = 10;
+    contentOpacity.value = withTiming(1, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+    });
+    contentTranslateY.value = withTiming(0, {
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+    });
   }, [contentOpacity, contentTranslateY]);
 
   useEffect(() => {
@@ -428,9 +407,8 @@ export default function SharedManageSheet(props: {
       return;
     }
 
-    animateSheetLayout();
     animateContentChange();
-  }, [activeInvite?.id, animateContentChange, animateSheetLayout, friends.length, hasInviteValue, mode, visible]);
+  }, [activeInvite?.id, animateContentChange, friends.length, hasInviteValue, mode, visible]);
 
   const handleOpenJoin = useCallback(() => {
     setMode('join');
@@ -493,11 +471,8 @@ export default function SharedManageSheet(props: {
 
   const content = (
     <Animated.View
-      key={`shared-manage-${mode}`}
-      style={{
-        opacity: contentOpacity,
-        transform: [{ translateY: contentTranslateY }],
-      }}
+      layout={contentLayoutTransition}
+      style={contentAnimatedStyle}
     >
       {mode === 'join' ? (
         <AppSheetScaffold

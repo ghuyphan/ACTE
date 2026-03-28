@@ -235,12 +235,12 @@ describe('HomeScreen camera lifecycle', () => {
     mockRequestPermission.mockClear();
     mockRequestPermission.mockResolvedValue({ granted: true, canAskAgain: true });
     mockUseCaptureFlow.mockImplementation(() => {
-      const { Animated } = require('react-native');
+      const createSharedValue = (value: number) => ({ value } as any);
       return {
-        captureScale: new Animated.Value(1),
-        captureTranslateY: new Animated.Value(0),
-        flashAnim: new Animated.Value(0),
-        shutterScale: new Animated.Value(1),
+        captureScale: createSharedValue(1),
+        captureTranslateY: createSharedValue(0),
+        flashAnim: createSharedValue(0),
+        shutterScale: createSharedValue(1),
         captureMode: 'camera',
         cameraSessionKey: 1,
         setCaptureMode: jest.fn(),
@@ -310,12 +310,12 @@ describe('HomeScreen camera lifecycle', () => {
 
   it('routes blocked camera permission requests to Settings', async () => {
     mockUseCaptureFlow.mockImplementation(() => {
-      const { Animated } = require('react-native');
+      const createSharedValue = (value: number) => ({ value } as any);
       return {
-        captureScale: new Animated.Value(1),
-        captureTranslateY: new Animated.Value(0),
-        flashAnim: new Animated.Value(0),
-        shutterScale: new Animated.Value(1),
+        captureScale: createSharedValue(1),
+        captureTranslateY: createSharedValue(0),
+        flashAnim: createSharedValue(0),
+        shutterScale: createSharedValue(1),
         captureMode: 'camera',
         cameraSessionKey: 1,
         setCaptureMode: jest.fn(),

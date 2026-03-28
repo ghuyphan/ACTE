@@ -152,18 +152,6 @@ export default function MapScreenIOS() {
     [openNoteDetail, router]
   );
 
-  const activeNearbyItem = useMemo(() => {
-    if (nearbyItems.length === 0) {
-      return null;
-    }
-
-    if (activeNearbyNoteId) {
-      return nearbyItems.find((item) => item.note.id === activeNearbyNoteId) ?? nearbyItems[0];
-    }
-
-    return nearbyItems[0];
-  }, [activeNearbyNoteId, nearbyItems]);
-
   useEffect(() => {
     if (nearbyItems.length === 0) {
       if (activeNearbyNoteId !== null) {
@@ -196,17 +184,6 @@ export default function MapScreenIOS() {
 
     setActiveFriendPostId(friendPosts[0].id);
   }, [activeFriendPostId, friendPosts, showFriendsPreview]);
-
-  const handleOpenPreview = useCallback(() => {
-    if (selectedNote) {
-      openNote(selectedNote.id);
-      return;
-    }
-
-    if (activeNearbyItem) {
-      openNote(activeNearbyItem.note.id);
-    }
-  }, [activeNearbyItem, openNote, selectedNote]);
 
   const handleMapCanvasPress = useCallback(() => {
     if (showFriendsPreview) {
@@ -660,7 +637,7 @@ export default function MapScreenIOS() {
           nearbyItems={nearbyItems}
           activeNearbyNoteId={activeNearbyNoteId}
           bottomOffset={previewBottomOffset}
-          onOpen={handleOpenPreview}
+          onOpenNote={openNote}
           onDismiss={handleDismissNotesPreview}
           onFocusNearbyNote={handleFocusNearbyNote}
           onFocusGroupNote={selectNoteById}

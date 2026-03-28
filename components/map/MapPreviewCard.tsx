@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../ui/GlassView';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -16,6 +17,7 @@ import {
 import type { MapPointGroup, NearbyNoteItem } from '../../hooks/map/mapDomain';
 import { useTheme } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
+import { getTextNoteCardGradient } from '../../services/noteAppearance';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
 import { isOlderIOS } from '../../utils/platform';
@@ -34,7 +36,7 @@ interface MapPreviewCardProps {
   nearbyItems: NearbyNoteItem[];
   activeNearbyNoteId: string | null;
   bottomOffset: number;
-  onOpen: () => void;
+  onOpenNote: (noteId: string) => void;
   onDismiss: () => void;
   onFocusNearbyNote: (noteId: string) => void;
   onFocusGroupNote: (noteId: string) => void;
@@ -78,7 +80,7 @@ export default function MapPreviewCard({
   nearbyItems,
   activeNearbyNoteId,
   bottomOffset,
-  onOpen,
+  onOpenNote,
   onDismiss,
   onFocusNearbyNote,
   onFocusGroupNote,
@@ -189,9 +191,11 @@ export default function MapPreviewCard({
 
   const previewCountLabel = `${Math.max(activeIndex, 0) + 1}/${previewItems.length}`;
   const pointerEvents = 'auto';
+  const sheetInstanceKey = isGroupMode && selectedGroup ? `group:${selectedGroup.id}` : 'nearby';
 
   return (
     <MapPreviewSheet
+      key={sheetInstanceKey}
       shellTestID="map-preview-shell"
       dismissTestID="map-preview-dismiss"
       bottomOffset={bottomOffset}
@@ -249,6 +253,12 @@ export default function MapPreviewCard({
                 t('map.noContent', 'No note content')
               );
               const photoUri = item.note.type === 'photo' ? getNotePhotoUri(item.note) : '';
+              const textTileGradient = getTextNoteCardGradient({
+                text: item.note.content,
+                noteId: item.note.id,
+                emoji: item.note.moodEmoji,
+                noteColor: item.note.noteColor,
+              });
               const metaLabel = isGroupMode
                 ? t('map.singleNote', 'Pinned note')
                 : formatDistanceLabel(item.distanceMeters ?? 0);
@@ -265,18 +275,11 @@ export default function MapPreviewCard({
 
                     if (isGroupMode) {
                       onFocusGroupNote(item.note.id);
-                      return;
+                    } else {
+                      onFocusNearbyNote(item.note.id);
                     }
 
-                    onFocusNearbyNote(item.note.id);
-
-                    const itemIndex = previewItems.findIndex((previewItem) => previewItem.note.id === item.note.id);
-                    if (itemIndex >= 0) {
-                      previewListRef.current?.scrollToOffset({
-                        offset: itemIndex * nearbyPageWidth,
-                        animated: !reduceMotionEnabled,
-                      });
-                    }
+                    onOpenNote(item.note.id);
                   }}
                 >
                   <View style={styles.previewPageInner}>
@@ -295,11 +298,26 @@ export default function MapPreviewCard({
                           transition={0}
                         />
                       </View>
-                    ) : null}
+                    ) : (
+                      <LinearGradient
+                        colors={textTileGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.textThumb}
+                      >
+                        <View style={styles.textThumbPaper}>
+                          <View style={[styles.textThumbLine, styles.textThumbLineLong]} />
+                          <View style={[styles.textThumbLine, styles.textThumbLineMedium]} />
+                          <View style={[styles.textThumbLine, styles.textThumbLineShort]} />
+                        </View>
+                      </LinearGradient>
+                    )}
                     <View style={styles.copyWrap}>
-                      <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-                        {item.note.locationName || t('map.unknownLocation', 'Unknown')}
-                      </Text>
+                      <View style={styles.titleRow}>
+                        <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+                          {item.note.locationName || t('map.unknownLocation', 'Unknown')}
+                        </Text>
+                      </View>
                       <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={1}>
                         {cardPreview}
                       </Text>
@@ -338,22 +356,6 @@ export default function MapPreviewCard({
                 {previewCountLabel}
               </Text>
             </View>
-
-            <Pressable
-              testID="map-preview-open"
-              style={[
-                styles.actionButton,
-                { backgroundColor: `${colors.primary}1F`, borderColor: `${colors.primary}36` },
-              ]}
-              onPress={() => {
-                onInteraction?.();
-                onOpen();
-              }}
-            >
-              <Text style={[styles.actionText, { color: colors.primary }]}>
-                {t('map.openNote', 'Open note')}
-              </Text>
-            </Pressable>
           </View>
         </View>
       </View>
@@ -387,7 +389,7 @@ const styles = StyleSheet.create({
   },
   previewPageInner: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: mapOverlayTokens.overlayGap,
     minHeight: 64,
   },
@@ -395,15 +397,58 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
   photoThumb: {
     width: 54,
     height: 54,
     borderRadius: 14,
+    borderCurve: 'continuous',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
+  textThumb: {
+    width: 54,
+    height: 54,
+    borderRadius: 14,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  textThumbPaper: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    borderCurve: 'continuous',
+    backgroundColor: 'rgba(255,252,246,0.82)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.38)',
+    paddingHorizontal: 8,
+    paddingVertical: 9,
+    justifyContent: 'space-between',
+  },
+  textThumbLine: {
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: 'rgba(92,74,58,0.34)',
+  },
+  textThumbLineLong: {
+    width: '100%',
+  },
+  textThumbLineMedium: {
+    width: '78%',
+  },
+  textThumbLineShort: {
+    width: '62%',
+  },
   metaRow: {
-    marginTop: 5,
+    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -425,10 +470,10 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
   },
   footer: {
+    marginTop: 8,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
   },
   indexLabelWrap: {
     minWidth: 34,
@@ -436,17 +481,6 @@ const styles = StyleSheet.create({
   indexText: {
     fontSize: 12,
     fontWeight: '500',
-    fontFamily: 'System',
-  },
-  actionButton: {
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  actionText: {
-    fontSize: 13,
-    fontWeight: '700',
     fontFamily: 'System',
   },
 });

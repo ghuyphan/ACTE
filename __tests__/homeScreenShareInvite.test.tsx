@@ -116,12 +116,12 @@ jest.mock('../hooks/useFeedFocus', () => ({
 
 jest.mock('../hooks/useCaptureFlow', () => ({
   useCaptureFlow: () => {
-    const { Animated } = require('react-native');
+    const createSharedValue = (value: number) => ({ value } as any);
     return {
-      captureScale: new Animated.Value(1),
-      captureTranslateY: new Animated.Value(0),
-      flashAnim: new Animated.Value(0),
-      shutterScale: new Animated.Value(1),
+      captureScale: createSharedValue(1),
+      captureTranslateY: createSharedValue(0),
+      flashAnim: createSharedValue(0),
+      shutterScale: createSharedValue(1),
       captureMode: 'text',
       cameraSessionKey: 0,
       restaurantName: '',
