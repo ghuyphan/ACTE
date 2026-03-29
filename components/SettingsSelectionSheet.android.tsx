@@ -1,5 +1,5 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
+import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 import AppSheetScaffold from './AppSheetScaffold';
@@ -22,7 +22,6 @@ export default function SettingsSelectionSheetAndroid({
   onSelect: (key: string) => void | Promise<void>;
   onClose: () => void;
 }) {
-  const { t } = useTranslation();
   const { colors } = useTheme();
 
   return (
@@ -30,31 +29,31 @@ export default function SettingsSelectionSheetAndroid({
       headerVariant="standard"
       title={title}
     >
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View>
         {options.map((option) => {
           const selected = selectedKey === option.key;
           return (
-            <Pressable
-              key={option.key}
-              style={[
-                styles.option,
-                selected ? { backgroundColor: colors.primarySoft } : null,
-              ]}
-              onPress={() => {
-                void onSelect(option.key);
-                onClose();
-              }}
-            >
-              <Text style={[styles.optionLabel, { color: colors.text }]}>{option.label}</Text>
-              <Text
-                style={[
-                  styles.optionValue,
-                  { color: selected ? colors.primary : colors.secondaryText },
-                ]}
+            <View key={option.key}>
+              <Pressable
+                accessibilityRole="button"
+                android_ripple={{ color: `${colors.text}10` }}
+                style={styles.option}
+                onPress={() => {
+                  void onSelect(option.key);
+                  onClose();
+                }}
               >
-                {selected ? t('common.done', 'Done') : ''}
-              </Text>
-            </Pressable>
+                <Text style={[styles.optionLabel, { color: colors.text }]}>{option.label}</Text>
+                <Ionicons
+                  name={selected ? 'radio-button-on' : 'radio-button-off-outline'}
+                  size={20}
+                  color={selected ? colors.primary : colors.secondaryText}
+                />
+              </Pressable>
+              {option.key !== options[options.length - 1]?.key ? (
+                <View style={[styles.divider, { backgroundColor: colors.border }]} />
+              ) : null}
+            </View>
           );
         })}
       </View>
@@ -63,14 +62,9 @@ export default function SettingsSelectionSheetAndroid({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderWidth: 1,
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
   option: {
-    minHeight: 56,
-    paddingHorizontal: 16,
+    minHeight: 60,
+    paddingHorizontal: 4,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -80,9 +74,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontFamily: 'System',
   },
-  optionValue: {
-    fontSize: 13,
-    fontWeight: '700',
-    fontFamily: 'System',
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 4,
   },
 });

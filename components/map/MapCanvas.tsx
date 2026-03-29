@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo, useEffect, useMemo, type RefObject } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import Reanimated, {
   interpolate,
@@ -483,6 +483,8 @@ export default function MapCanvas({
   colors,
 }: MapCanvasProps) {
   const palette = useMemo(() => getMapPalette(colors, isDark), [colors, isDark]);
+  // Android applies map color scheme only from initial props, so remount on theme flips.
+  const mapViewKey = Platform.OS === 'android' ? `map-${isDark ? 'dark' : 'light'}` : 'map';
 
   const markerRenderItems = useMemo(
     () =>
@@ -533,6 +535,7 @@ export default function MapCanvas({
 
   return (
     <MapView
+      key={mapViewKey}
       testID="map-canvas"
       ref={mapRef}
       style={StyleSheet.absoluteFill}

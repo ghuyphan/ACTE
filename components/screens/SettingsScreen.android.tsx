@@ -1,3 +1,5 @@
+import { Ionicons } from '@expo/vector-icons';
+import { Stack } from 'expo-router';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import AppSheet from '../AppSheet';
@@ -5,7 +7,6 @@ import AppSheetAlert from '../AppSheetAlert';
 import SettingsLanguageSheetAndroid from '../SettingsLanguageSheet.android';
 import SettingsSyncSheetAndroid from '../SettingsSyncSheet.android';
 import SettingsThemeSheetAndroid from '../SettingsThemeSheet.android';
-import PrimaryButton from '../ui/PrimaryButton';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { Layout } from '../../constants/theme';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
@@ -46,6 +47,7 @@ function SettingsCard({
 
 function SettingRow({
   colors,
+  icon,
   title,
   subtitle,
   value,
@@ -53,21 +55,29 @@ function SettingRow({
   destructive = false,
 }: {
   colors: ThemeColors;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
   title: string;
   subtitle?: string | null;
   value?: string | null;
   onPress?: () => void;
   destructive?: boolean;
 }) {
+  const iconColor = destructive ? colors.danger : colors.primary;
   const content = (
     <>
+      <View style={[styles.rowIcon, { backgroundColor: destructive ? `${colors.danger}12` : colors.primarySoft }]}>
+        <Ionicons name={icon} size={18} color={iconColor} />
+      </View>
       <View style={styles.rowCopy}>
         <Text style={[styles.rowTitle, { color: destructive ? colors.danger : colors.text }]}>{title}</Text>
         {subtitle ? (
           <Text style={[styles.rowSubtitle, { color: colors.secondaryText }]}>{subtitle}</Text>
         ) : null}
       </View>
-      {value ? <Text style={[styles.rowValue, { color: colors.primary }]}>{value}</Text> : null}
+      <View style={styles.rowTrailing}>
+        {value ? <Text style={[styles.rowValue, { color: colors.secondaryText }]}>{value}</Text> : null}
+        {onPress ? <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} /> : null}
+      </View>
     </>
   );
 
@@ -77,6 +87,8 @@ function SettingRow({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      android_ripple={{ color: `${colors.text}10` }}
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
@@ -125,10 +137,27 @@ export default function SettingsScreenAndroid() {
   const [sheet, setSheet] = React.useState<SheetKey>(null);
   const languageCode = i18n.resolvedLanguage?.startsWith('vi') ? 'vi' : 'en';
   const languageLabel = languageCode === 'vi' ? 'Tiếng Việt' : 'English';
-  const contentTopInset = insets.top + 72;
+  const contentTopInset = 16;
+  const accountSubtitle = !isAuthAvailable
+    ? t(
+        'settings.accountUnavailableMsg',
+        'Account sign-in is unavailable right now. Your notes stay safely on this device.'
+      )
+    : !user
+      ? t(
+          'settings.accountSignedOutMsg',
+          'Sign in to back up your notes and keep them synced across your devices.'
+        )
+      : null;
+  const plusSubtitle = isPurchaseAvailable
+    ? plusHint
+    : t('settings.plusUnavailable', 'Plus is coming soon to this build.');
+  const plusEntryValue = isPurchaseAvailable
+    ? plusValue
+    : t('settings.unavailableShort', 'Unavailable');
 
   let sheetContent: React.ReactNode = null;
-  const sheetPresentation = sheet === 'theme' || sheet === 'language' ? 'floating' : 'edge';
+  const sheetPresentation = 'edge';
 
   if (sheet === 'theme') {
     sheetContent = (
@@ -149,7 +178,28 @@ export default function SettingsScreenAndroid() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          headerTransparent: false,
+          headerShadowVisible: false,
+          title: t('settings.title', 'Settings'),
+          headerTintColor: colors.text,
+          headerTitleAlign: 'left',
+          headerStyle: {
+            backgroundColor: colors.background,
+          },
+          headerTitleStyle: [
+            styles.stackHeaderTitle,
+            {
+              color: colors.text,
+            },
+          ],
+        }}
+      />
+
       <ScrollView
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
           { paddingTop: contentTopInset, paddingBottom: insets.bottom + 32 },
@@ -160,7 +210,9 @@ export default function SettingsScreenAndroid() {
           <SettingsCard colors={colors}>
             <SettingRow
               colors={colors}
+              icon="person-circle-outline"
               title={t('settings.accountEntry', 'Account')}
+              subtitle={accountSubtitle}
               value={accountValue}
               onPress={isAuthAvailable ? openAccountScreen : undefined}
             />
@@ -169,6 +221,7 @@ export default function SettingsScreenAndroid() {
                 <CardDivider colors={colors} />
                 <SettingRow
                   colors={colors}
+                  icon="sync-outline"
                   title={t('settings.autoSync', 'Auto sync')}
                   subtitle={accountHint ?? t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')}
                   value={syncValue}
@@ -181,21 +234,12 @@ export default function SettingsScreenAndroid() {
             )}
             <SettingRow
               colors={colors}
+              icon="sparkles-outline"
               title={t('settings.plusTitle', 'Noto Plus')}
-              subtitle={plusHint}
-              value={plusValue}
-              onPress={openPlusScreen}
+              subtitle={plusSubtitle}
+              value={plusEntryValue}
+              onPress={isPurchaseAvailable ? openPlusScreen : undefined}
             />
-            {isAuthAvailable ? (
-              <View style={styles.cardAction}>
-                <PrimaryButton
-                  label={user ? t('settings.manageAccount', 'Manage account') : t('settings.login', 'Sign In')}
-                  variant={user ? 'secondary' : 'primary'}
-                  onPress={openAccountScreen}
-                  style={styles.fullWidthButton}
-                />
-              </View>
-            ) : null}
           </SettingsCard>
         </View>
 
@@ -204,6 +248,7 @@ export default function SettingsScreenAndroid() {
           <SettingsCard colors={colors}>
             <SettingRow
               colors={colors}
+              icon="language-outline"
               title={t('settings.language', 'Language')}
               value={languageLabel}
               onPress={() => setSheet('language')}
@@ -211,6 +256,7 @@ export default function SettingsScreenAndroid() {
             <CardDivider colors={colors} />
             <SettingRow
               colors={colors}
+              icon="contrast-outline"
               title={t('settings.theme', 'Theme')}
               value={themeLabel}
               onPress={() => setSheet('theme')}
@@ -223,12 +269,14 @@ export default function SettingsScreenAndroid() {
           <SettingsCard colors={colors}>
             <SettingRow
               colors={colors}
+              icon="documents-outline"
               title={t('settings.noteCount', 'Saved Notes')}
               value={`${notes.length}`}
             />
             <CardDivider colors={colors} />
             <SettingRow
               colors={colors}
+              icon="trash-outline"
               title={t('settings.clearAll', 'Clear All Notes')}
               subtitle={t(
                 'settings.clearAllMsg',
@@ -242,11 +290,12 @@ export default function SettingsScreenAndroid() {
 
         {(showPrivacyPolicyLink || showSupportLink || showAccountDeletionLink) ? (
           <View style={styles.section}>
-            <SectionTitle colors={colors} title={t('settings.supportTitle', 'Support')} />
+            <SectionTitle colors={colors} title={t('settings.legal', 'Legal & Support')} />
             <SettingsCard colors={colors}>
               {showPrivacyPolicyLink ? (
                 <SettingRow
                   colors={colors}
+                  icon="shield-checkmark-outline"
                   title={t('settings.privacyPolicy', 'Privacy Policy')}
                   subtitle={t('settings.privacyPolicyHint', 'Review how Noto handles your data and permissions.')}
                   onPress={openPrivacyPolicyLink}
@@ -258,6 +307,7 @@ export default function SettingsScreenAndroid() {
               {showSupportLink ? (
                 <SettingRow
                   colors={colors}
+                  icon="help-circle-outline"
                   title={t('settings.support', 'Support')}
                   subtitle={t('settings.supportHint', 'Contact support if sign-in, sync, or account issues need a hand.')}
                   onPress={openSupportLink}
@@ -267,6 +317,7 @@ export default function SettingsScreenAndroid() {
               {showAccountDeletionLink ? (
                 <SettingRow
                   colors={colors}
+                  icon="person-remove-outline"
                   title={t('settings.accountDeletion', 'Account deletion help')}
                   subtitle={t('settings.accountDeletionHint', 'Open the external deletion page or support contact for your store listing.')}
                   onPress={openAccountDeletionHelpLink}
@@ -276,33 +327,15 @@ export default function SettingsScreenAndroid() {
           </View>
         ) : null}
 
-        <View style={styles.section}>
-          <SectionTitle colors={colors} title={t('settings.aboutTitle', 'About')} />
-          <SettingsCard colors={colors}>
-            <SettingRow
-              colors={colors}
-              title={t('settings.version', 'Version')}
-              value={appVersion}
-            />
-            <CardDivider colors={colors} />
-            <SettingRow
-              colors={colors}
-              title="Noto"
-              subtitle={t('settings.about', 'So you never forget what she likes 💛')}
-              value={null}
-            />
-            {!isPurchaseAvailable ? (
-              <>
-                <CardDivider colors={colors} />
-                <SettingRow
-                  colors={colors}
-                  title={t('settings.plusTitle', 'Noto Plus')}
-                  subtitle={t('settings.plusUnavailable', 'Plus is coming soon to this build.')}
-                  value={null}
-                />
-              </>
-            ) : null}
-          </SettingsCard>
+        <View style={styles.footerInfo}>
+          <View style={[styles.footerDivider, { backgroundColor: colors.border }]} />
+          <Text style={[styles.footerAppName, { color: colors.text }]}>Noto</Text>
+          <Text style={[styles.footerTagline, { color: colors.secondaryText }]}>
+            {t('settings.about', 'So you never forget what she likes 💛')}
+          </Text>
+          <Text style={[styles.footerVersion, { color: colors.secondaryText }]}>
+            {t('settings.version', 'Version')} {appVersion}
+          </Text>
         </View>
       </ScrollView>
 
@@ -326,72 +359,106 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Layout.screenPadding,
   },
+  stackHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
   section: {
     marginTop: 24,
   },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
     marginBottom: 10,
-    marginLeft: 4,
+    marginLeft: 2,
     fontFamily: 'System',
   },
   card: {
     borderWidth: 1,
-    borderRadius: 28,
+    borderRadius: 22,
     overflow: 'hidden',
   },
   row: {
-    minHeight: 60,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    minHeight: 64,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 14,
+    gap: 12,
   },
   rowPressed: {
-    opacity: 0.84,
+    opacity: 0.92,
+  },
+  rowIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rowCopy: {
     flex: 1,
   },
+  rowTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginLeft: 12,
+  },
   rowTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600',
     fontFamily: 'System',
   },
   rowSubtitle: {
     fontSize: 13,
-    lineHeight: 19,
-    marginTop: 5,
+    lineHeight: 18,
+    marginTop: 4,
     fontFamily: 'System',
   },
   rowValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    maxWidth: 116,
+    fontSize: 14,
+    fontWeight: '500',
+    maxWidth: 140,
     textAlign: 'right',
     fontFamily: 'System',
   },
   cardDivider: {
     height: StyleSheet.hairlineWidth,
-    marginHorizontal: 20,
+    marginHorizontal: 18,
   },
-  cardAction: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 20,
+  footerInfo: {
+    alignItems: 'center',
+    paddingTop: 28,
+    paddingBottom: 8,
   },
-  fullWidthButton: {
-    width: '100%',
+  footerDivider: {
+    width: 56,
+    height: 4,
+    borderRadius: 999,
+    marginBottom: 18,
   },
-  cardFootnote: {
+  footerAppName: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
+  footerTagline: {
     fontSize: 13,
-    lineHeight: 19,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    lineHeight: 18,
+    marginTop: 6,
+    textAlign: 'center',
+    fontFamily: 'System',
+  },
+  footerVersion: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 6,
+    opacity: 0.72,
     fontFamily: 'System',
   },
 });

@@ -38,14 +38,12 @@ export default function SettingsSyncSheetAndroid({
         </Pressable>
       )}
     >
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View style={styles.row}>
-          <View style={styles.copy}>
-            <Text style={[styles.label, { color: colors.text }]}>{t('settings.autoSync', 'Auto sync')}</Text>
-            <Text style={[styles.hint, { color: colors.secondaryText }]}>{statusLabel}</Text>
-          </View>
-          {canManageSync ? <Switch value={isEnabled} onValueChange={setSyncEnabled} /> : null}
+      <View style={styles.row}>
+        <View style={styles.copy}>
+          <Text style={[styles.label, { color: colors.text }]}>{t('settings.autoSync', 'Auto sync')}</Text>
+          <Text style={[styles.hint, { color: colors.secondaryText }]}>{statusLabel}</Text>
         </View>
+        {canManageSync ? <Switch value={isEnabled} onValueChange={setSyncEnabled} /> : null}
       </View>
 
       {canManageSync && accountHintText ? (
@@ -58,17 +56,13 @@ export default function SettingsSyncSheetAndroid({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderWidth: 1,
-    borderRadius: 24,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-  },
   row: {
+    minHeight: 60,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+    paddingHorizontal: 4,
   },
   copy: {
     flex: 1,

@@ -32,22 +32,28 @@ function HeaderActionButton({ action }: { action?: AppSheetHeaderAction }) {
   const { colors } = useTheme();
 
   if (!action) {
-    return <View style={styles.actionButtonSpacer} />;
+    return Platform.OS === 'android' ? null : <View style={styles.actionButtonSpacer} />;
   }
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={action.accessibilityLabel}
+      android_ripple={Platform.OS === 'android' ? { color: `${colors.text}12`, borderless: true } : undefined}
       disabled={action.disabled}
       onPress={action.onPress}
       style={({ pressed }) => [
         styles.actionButton,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          opacity: action.disabled ? 0.45 : pressed ? 0.82 : 1,
-        },
+        Platform.OS === 'android' ? styles.actionButtonAndroid : null,
+        Platform.OS === 'android'
+          ? {
+              opacity: action.disabled ? 0.45 : pressed ? 0.88 : 1,
+            }
+          : {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              opacity: action.disabled ? 0.45 : pressed ? 0.82 : 1,
+            },
       ]}
       testID={action.testID}
     >
@@ -70,6 +76,7 @@ export default function AppSheetScaffold({
   style,
 }: AppSheetScaffoldProps) {
   const { colors } = useTheme();
+  const isAndroid = Platform.OS === 'android';
   const horizontalPadding =
     Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
   const headerTopPadding =
@@ -116,6 +123,7 @@ export default function AppSheetScaffold({
         <View
           style={[
             styles.header,
+            isAndroid ? styles.headerAndroid : null,
             {
               paddingHorizontal: horizontalPadding,
               paddingTop: headerTopPadding,
@@ -124,7 +132,12 @@ export default function AppSheetScaffold({
           ]}
         >
           {headerVariant === 'action' ? (
-            <View style={styles.actionRow}>
+            <View
+              style={[
+                styles.actionRow,
+                isAndroid && !leadingAction ? styles.actionRowAndroidTrailing : null,
+              ]}
+            >
               <HeaderActionButton action={leadingAction} />
               <HeaderActionButton action={trailingAction} />
             </View>
@@ -133,13 +146,13 @@ export default function AppSheetScaffold({
           {headerTop ? <View style={styles.headerTop}>{headerTop}</View> : null}
 
           {title ? (
-            <Text style={[styles.title, { color: colors.text }]}>
+            <Text style={[styles.title, isAndroid ? styles.titleAndroid : null, { color: colors.text }]}>
               {title}
             </Text>
           ) : null}
 
           {subtitle ? (
-            <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
+            <Text style={[styles.subtitle, isAndroid ? styles.subtitleAndroid : null, { color: colors.secondaryText }]}>
               {subtitle}
             </Text>
           ) : null}
@@ -172,11 +185,17 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
   },
+  headerAndroid: {
+    alignItems: 'stretch',
+  },
   actionRow: {
     width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 18,
+  },
+  actionRowAndroidTrailing: {
+    justifyContent: 'flex-end',
   },
   actionButton: {
     width: 44,
@@ -185,6 +204,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  actionButtonAndroid: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
   },
   actionButtonSpacer: {
     width: 44,
@@ -197,12 +223,19 @@ const styles = StyleSheet.create({
     ...Typography.screenTitle,
     textAlign: 'center',
   },
+  titleAndroid: {
+    textAlign: 'left',
+    fontWeight: '600',
+  },
   subtitle: {
     ...Typography.body,
     fontSize: 15,
     lineHeight: 21,
     marginTop: 8,
     textAlign: 'center',
+  },
+  subtitleAndroid: {
+    textAlign: 'left',
   },
   body: {
     width: '100%',
