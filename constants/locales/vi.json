@@ -463,6 +463,8 @@
         "body": "Có một ghi chú đang chờ bạn mở trong Noto.",
         "channelName": "Nhắc nhở khi ở gần",
         "channelDescription": "Thông báo nhắc theo vị trí cho các ghi chú bạn đã lưu trong Noto.",
+        "socialChannelName": "Hoạt động bạn bè",
+        "socialChannelDescription": "Thông báo đẩy khi bạn bè chấp nhận lời mời hoặc chia sẻ ký ức với bạn.",
         "textTitle": "{{location}}",
         "photoTitle": "{{location}}",
         "photoBody": "Có một kỷ niệm từ nơi này đang chờ bạn.",

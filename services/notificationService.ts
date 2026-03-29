@@ -6,6 +6,7 @@ import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 // Android channel sound settings are immutable after the channel is first created,
 // so we version the id when fixing channel-level sound behavior.
 export const ANDROID_REMINDER_CHANNEL_ID = 'reminders-v2';
+export const ANDROID_SOCIAL_CHANNEL_ID = 'social-v1';
 const REMINDER_VARIANT_CURSOR_STORAGE_KEY = 'notification.reminderVariantCursor.v1';
 
 const DEFAULT_REMINDER_TITLES_WITH_LOCATION = {
@@ -215,6 +216,19 @@ export async function configureNotificationChannels(platformOS = Platform.OS) {
     enableVibrate: true,
     showBadge: false,
     vibrationPattern: [0, 250, 200, 250],
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+  });
+
+  await Notifications.setNotificationChannelAsync(ANDROID_SOCIAL_CHANNEL_ID, {
+    name: i18n.t('notification.socialChannelName', 'Friend activity'),
+    description: i18n.t(
+      'notification.socialChannelDescription',
+      'Push notifications when friends accept invites or share moments with you.'
+    ),
+    importance: Notifications.AndroidImportance.HIGH,
+    enableVibrate: true,
+    showBadge: true,
+    vibrationPattern: [0, 180, 120, 180],
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
   });
 }

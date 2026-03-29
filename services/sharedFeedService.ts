@@ -15,6 +15,7 @@ import { parseNoteStickerPlacements, serializeStickerPlacementsForStorage } from
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getPublicUserProfile, upsertPublicUserProfile } from './publicProfileService';
 import { cacheSharedFeedSnapshot } from './sharedFeedCache';
+import { sendSocialNotificationEvent } from './socialPushService';
 
 export interface FriendConnection {
   userId: string;
@@ -532,11 +533,20 @@ export async function acceptFriendInvite(
   const connection = mapFriend(row as FriendshipRow);
   const inviterProfile = await getUserProfileSnapshot(connection.userId);
 
-  return {
+  const resolvedConnection = {
     ...connection,
     displayNameSnapshot: inviterProfile.displayNameSnapshot ?? connection.displayNameSnapshot,
     photoURLSnapshot: inviterProfile.photoURLSnapshot ?? connection.photoURLSnapshot,
   };
+
+  void sendSocialNotificationEvent({
+    type: 'friend_accepted',
+    friendUserId: resolvedConnection.userId,
+  }).catch((error) => {
+    console.warn('[shared-feed] Failed to send invite acceptance notification:', error);
+  });
+
+  return resolvedConnection;
 }
 
 export async function removeFriend(user: AppUser, friendUid: string): Promise<void> {
@@ -617,6 +627,13 @@ export async function createSharedPost(
       .eq('user_id', user.id)
       .in('friend_user_id', friendRefs);
   }
+
+  void sendSocialNotificationEvent({
+    type: 'shared_post_created',
+    postId,
+  }).catch((error) => {
+    console.warn('[shared-feed] Failed to send shared post notification:', error);
+  });
 
   return {
     ...mapSharedPost(record),

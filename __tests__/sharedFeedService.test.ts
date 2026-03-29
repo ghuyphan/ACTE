@@ -191,6 +191,7 @@ const mockDownloadPhotoFromStorage = jest.fn<Promise<string | null>, [string, st
 );
 const mockDeletePhotoFromStorage = jest.fn<Promise<void>, [string, string | null]>(async () => undefined);
 const mockCacheSharedFeedSnapshot = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
+const mockSendSocialNotificationEvent = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 jest.mock('../services/remoteMedia', () => ({
   SHARED_POST_MEDIA_BUCKET: 'shared-post-media',
   uploadPhotoToStorage: (bucket: string, path: string, localUri?: string | null) =>
@@ -217,6 +218,10 @@ jest.mock('../services/publicProfileService', () => ({
 
 jest.mock('../services/sharedFeedCache', () => ({
   cacheSharedFeedSnapshot: (userUid: string, snapshot: unknown) => mockCacheSharedFeedSnapshot(userUid, snapshot),
+}));
+
+jest.mock('../services/socialPushService', () => ({
+  sendSocialNotificationEvent: (event: unknown) => mockSendSocialNotificationEvent(event),
 }));
 
 jest.mock('../utils/supabase', () => ({
@@ -433,6 +438,10 @@ describe('sharedFeedService', () => {
         display_name_snapshot: friendUser.displayName,
       })
     );
+    expect(mockSendSocialNotificationEvent).toHaveBeenCalledWith({
+      type: 'friend_accepted',
+      friendUserId: ownerUser.id,
+    });
   });
 
   it('creates a shared photo post and returns it in the refreshed feed', async () => {
@@ -486,6 +495,10 @@ describe('sharedFeedService', () => {
       })
     );
     expect(mockCacheSharedFeedSnapshot).toHaveBeenCalled();
+    expect(mockSendSocialNotificationEvent).toHaveBeenCalledWith({
+      type: 'shared_post_created',
+      postId: post.id,
+    });
   });
 
   it('revokes old shared audiences and hides author-only leftovers after removing a friend', async () => {

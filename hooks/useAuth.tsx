@@ -11,6 +11,7 @@ import i18n from '../constants/i18n';
 import { LOCAL_NOTES_SCOPE, setActiveNotesScope } from '../services/database';
 import { upsertPublicUserProfile } from '../services/publicProfileService';
 import { clearSharedFeedCache } from '../services/sharedFeedCache';
+import { unregisterCurrentSocialPushToken } from '../services/socialPushService';
 import { AppUser, mapSupabaseUser } from '../utils/appUser';
 import { getSupabase, getSupabaseErrorMessage, hasSupabaseConfig } from '../utils/supabase';
 
@@ -450,6 +451,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         try {
+          await unregisterCurrentSocialPushToken().catch(() => undefined);
           const { data, error } = await supabase.functions.invoke('delete-account', {
             body: {},
           });
@@ -507,6 +509,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const supabase = getSupabase();
 
         try {
+          await unregisterCurrentSocialPushToken().catch(() => undefined);
           await GoogleSignin.signOut();
         } catch {
           // Ignore Google sign-out failures and still clear the Supabase session.

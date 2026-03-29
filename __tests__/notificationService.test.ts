@@ -43,7 +43,11 @@ describe('notificationService', () => {
   });
 
   it('creates the Android reminder channel with the expected configuration', async () => {
-    const { configureNotificationChannels, ANDROID_REMINDER_CHANNEL_ID } = loadNotificationService();
+    const {
+      configureNotificationChannels,
+      ANDROID_REMINDER_CHANNEL_ID,
+      ANDROID_SOCIAL_CHANNEL_ID,
+    } = loadNotificationService();
 
     await configureNotificationChannels('android');
 
@@ -53,6 +57,14 @@ describe('notificationService', () => {
         name: 'Nearby reminders',
         importance: 'high',
         showBadge: false,
+      })
+    );
+    expect(mockSetNotificationChannelAsync).toHaveBeenCalledWith(
+      ANDROID_SOCIAL_CHANNEL_ID,
+      expect.objectContaining({
+        name: 'Friend activity',
+        importance: 'high',
+        showBadge: true,
       })
     );
 

@@ -1,7 +1,23 @@
+import { existsSync } from 'node:fs';
 import type { ExpoConfig } from 'expo/config';
 
 const googleMapsAndroidApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY;
 const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() ?? '';
+const easProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ?? '';
+const rootGoogleServicesFile = './google-services.json';
+const nativeAndroidGoogleServicesFile = './android/app/google-services.json';
+const rootGoogleServiceInfoPlist = './GoogleService-Info.plist';
+const nativeIosGoogleServiceInfoPlist = './ios/Noto/GoogleService-Info.plist';
+const androidGoogleServicesFile = existsSync(rootGoogleServicesFile)
+  ? rootGoogleServicesFile
+  : existsSync(nativeAndroidGoogleServicesFile)
+    ? nativeAndroidGoogleServicesFile
+    : undefined;
+const iosGoogleServicesFile = existsSync(rootGoogleServiceInfoPlist)
+  ? rootGoogleServiceInfoPlist
+  : existsSync(nativeIosGoogleServiceInfoPlist)
+    ? nativeIosGoogleServiceInfoPlist
+    : undefined;
 const googleIosUrlScheme = googleIosClientId
   ? `com.googleusercontent.apps.${googleIosClientId.replace(/\.apps\.googleusercontent\.com$/i, '')}`
   : '';
@@ -19,9 +35,11 @@ const config = {
     supportsTablet: true,
     bundleIdentifier: 'com.acte.app',
     icon: './Untitled.icon',
+    googleServicesFile: iosGoogleServicesFile,
   },
   android: {
     package: 'com.acte.app',
+    googleServicesFile: androidGoogleServicesFile,
     adaptiveIcon: {
       backgroundColor: '#F7F2EB',
       foregroundImage: './assets/images/icon/icon-default.png',
@@ -140,6 +158,11 @@ const config = {
   experiments: {
     typedRoutes: true,
     reactCompiler: true,
+  },
+  extra: {
+    eas: {
+      projectId: easProjectId,
+    },
   },
 } as ExpoConfig;
 

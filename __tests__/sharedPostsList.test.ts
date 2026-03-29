@@ -26,6 +26,10 @@ describe('supabase migration hardening', () => {
     resolve(__dirname, '../supabase/migrations/20260327133000_remove_storage_cleanup_triggers.sql'),
     'utf8'
   );
+  const socialPushMigration = readFileSync(
+    resolve(__dirname, '../supabase/migrations/20260329100000_add_social_push_tokens.sql'),
+    'utf8'
+  );
   const normalizedRemoveStorageCleanupTriggersMigration =
     removeStorageCleanupTriggersMigration.toLowerCase();
 
@@ -75,6 +79,13 @@ describe('supabase migration hardening', () => {
     expect(sharedFriendRevocationMigration).toContain('create or replace function public.remove_friend(friend_user_id uuid)');
     expect(sharedFriendRevocationMigration).toContain('set audience_user_ids = array_remove(audience_user_ids, remove_friend.friend_user_id)');
     expect(sharedFriendRevocationMigration).toContain('set audience_user_ids = array_remove(audience_user_ids, current_user_id)');
+  });
+
+  it('stores device push tokens and exposes RPCs for secure registration', () => {
+    expect(socialPushMigration).toContain('create table if not exists public.device_push_tokens');
+    expect(socialPushMigration).toContain('alter table public.device_push_tokens enable row level security;');
+    expect(socialPushMigration).toContain('create or replace function public.register_push_token');
+    expect(socialPushMigration).toContain('create or replace function public.unregister_push_token');
   });
 
   it('removes unsupported storage cleanup triggers that delete from storage.objects directly', () => {

@@ -463,6 +463,8 @@
         "body": "A note is ready when you open Noto.",
         "channelName": "Nearby reminders",
         "channelDescription": "Location-based reminders for notes you saved in Noto.",
+        "socialChannelName": "Friend activity",
+        "socialChannelDescription": "Push notifications when friends accept invites or share moments with you.",
         "textTitle": "{{location}}",
         "photoTitle": "{{location}}",
         "photoBody": "A memory from here is waiting.",

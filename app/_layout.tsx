@@ -23,6 +23,7 @@ import { ThemeProvider, useTheme } from '../hooks/useTheme';
 import { getDB } from '../services/database';
 import { syncGeofenceRegions } from '../services/geofenceService';
 import { configureNotificationChannels } from '../services/notificationService';
+import { syncSocialPushRegistration } from '../services/socialPushService';
 import { updateWidgetData } from '../services/widgetService';
 import { runMediaCacheEviction } from '../services/mediaCacheManager';
 import { getPersistentItem, getPersistentItemSync } from '../utils/appStorage';
@@ -186,6 +187,16 @@ function AppContent() {
   }, [isOnline, user]);
 
   useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    syncSocialPushRegistration(user).catch((error) => {
+      console.warn('[social-push] Registration failed:', error);
+    });
+  }, [user]);
+
+  useEffect(() => {
     void i18nReady
       .catch((error) => {
         console.error('i18n init failed:', error);
@@ -227,8 +238,14 @@ function AppContent() {
       lastHandledNotificationIdRef.current = notificationId;
 
       const noteId = response.notification.request.content.data?.noteId;
+      const sharedPostId = response.notification.request.content.data?.sharedPostId;
+      const route = response.notification.request.content.data?.route;
       if (noteId && typeof noteId === 'string') {
         openNoteDetail(noteId);
+      } else if (sharedPostId && typeof sharedPostId === 'string') {
+        router.push(`/shared/${sharedPostId}` as any);
+      } else if (route && typeof route === 'string') {
+        router.push(route as any);
       }
 
       try {
@@ -237,7 +254,7 @@ function AppContent() {
         return;
       }
     },
-    [openNoteDetail]
+    [openNoteDetail, router]
   );
 
   // Handle notification tap deep-link
