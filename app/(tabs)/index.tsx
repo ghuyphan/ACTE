@@ -281,6 +281,7 @@ export default function HomeScreen() {
 
     return baseNotes.filter((note) => !suppressedHomeNoteIdSet.has(note.id));
   }, [filteredNotes, isFriendsFilterActive, isSearching, notes, suppressedHomeNoteIdSet, useInlineHeaderSearch]);
+  const hasSearchableNotes = notes.length > 0;
   const shouldRenderCameraPreview =
     captureMode === 'camera' &&
     isScreenFocused &&
@@ -1311,13 +1312,13 @@ export default function HomeScreen() {
   }, [canImportFromLibrary, setCapturedPhoto, showDoneSheet, showPlusSheet, t]);
 
   const handleOpenSearch = useCallback(() => {
-    if (!useInlineHeaderSearch) {
+    if (!useInlineHeaderSearch || !hasSearchableNotes) {
       return;
     }
     setIsSearching(true);
     searchAnim.value = withTiming(1, { duration: 250 });
     flatListRef.current?.scrollToOffset({ offset: snapHeight, animated: true });
-  }, [searchAnim, snapHeight, useInlineHeaderSearch]);
+  }, [hasSearchableNotes, searchAnim, snapHeight, useInlineHeaderSearch]);
 
   const handleCloseSearch = useCallback(() => {
     if (!useInlineHeaderSearch) {
@@ -1583,7 +1584,7 @@ export default function HomeScreen() {
         onSearchChange={handleSearchChange}
         onOpenSearch={handleOpenSearch}
         onCloseSearch={handleCloseSearch}
-        showSearchButton={useInlineHeaderSearch}
+        showSearchButton={useInlineHeaderSearch && hasSearchableNotes}
         showSharedButton
         showNotesButton
         onOpenShared={handleOpenSharedManage}

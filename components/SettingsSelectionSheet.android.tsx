@@ -37,7 +37,11 @@ export default function SettingsSelectionSheetAndroid({
               <Pressable
                 accessibilityRole="button"
                 android_ripple={{ color: `${colors.text}10` }}
-                style={styles.option}
+                style={({ pressed }) => [
+                  styles.option,
+                  selected ? { backgroundColor: `${colors.primary}12` } : null,
+                  pressed ? styles.optionPressed : null,
+                ]}
                 onPress={() => {
                   void onSelect(option.key);
                   onClose();
@@ -68,6 +72,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  optionPressed: {
+    opacity: 0.84,
   },
   optionLabel: {
     fontSize: 16,

@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Layout, Typography } from '../constants/theme';
+import { Typography } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import AppSheet from './AppSheet';
 import AppSheetScaffold from './AppSheetScaffold';
-import PrimaryButton from './ui/PrimaryButton';
 
 interface StickerSourceSheetProps {
   visible: boolean;
@@ -29,7 +28,6 @@ function StickerSourceSheetBody({
   onClose,
 }: Omit<StickerSourceSheetProps, 'visible'>) {
   const { colors } = useTheme();
-  const optionBackground = colors.surface ?? colors.card ?? '#FCF9F5';
   const borderColor = colors.border ?? 'rgba(0,0,0,0.08)';
   const primaryTextColor = colors.text ?? '#2B2621';
   const secondaryTextColor = colors.secondaryText ?? primaryTextColor;
@@ -40,16 +38,24 @@ function StickerSourceSheetBody({
       headerVariant="standard"
       title={title}
       subtitle={canPasteFromClipboard ? pasteLabel : photoLabel}
+      footer={(
+        <View style={styles.footer}>
+          <Pressable
+            accessibilityRole="button"
+            android_ripple={{ color: `${primaryTextColor}10`, borderless: false }}
+            onPress={onClose}
+            style={({ pressed }) => [
+              styles.cancelAction,
+              pressed ? styles.cancelActionPressed : null,
+            ]}
+            testID="sticker-source-cancel"
+          >
+            <Text style={[styles.cancelActionLabel, { color: primaryTextColor }]}>{cancelLabel}</Text>
+          </Pressable>
+        </View>
+      )}
     >
-      <View
-        style={[
-          styles.optionCard,
-          {
-            backgroundColor: optionBackground,
-            borderColor,
-          },
-        ]}
-      >
+      <View>
         {canPasteFromClipboard ? (
           <>
             <Pressable
@@ -80,13 +86,6 @@ function StickerSourceSheetBody({
           <Ionicons name="chevron-forward" size={18} color={secondaryTextColor} />
         </Pressable>
       </View>
-      <PrimaryButton
-        label={cancelLabel}
-        onPress={onClose}
-        variant="secondary"
-        style={styles.cancelButton}
-        testID="sticker-source-cancel"
-      />
     </AppSheetScaffold>
   );
 }
@@ -119,14 +118,9 @@ export default function StickerSourceSheet({
 }
 
 const styles = StyleSheet.create({
-  optionCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
   optionRow: {
     minHeight: 68,
-    paddingHorizontal: 18,
+    paddingHorizontal: 4,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
@@ -148,11 +142,25 @@ const styles = StyleSheet.create({
   },
   optionDivider: {
     height: StyleSheet.hairlineWidth,
-    marginLeft: 72,
+    marginLeft: 58,
   },
-  cancelButton: {
-    width: '100%',
-    marginTop: 14,
-    borderRadius: Layout.pillRadius,
+  footer: {
+    alignItems: 'flex-end',
+    marginTop: 8,
+  },
+  cancelAction: {
+    minHeight: 40,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelActionPressed: {
+    opacity: 0.72,
+  },
+  cancelActionLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: 'System',
   },
 });

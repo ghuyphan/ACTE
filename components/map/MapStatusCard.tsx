@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { GlassView } from '../ui/GlassView';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { GlassView } from '../ui/GlassView';
 import { getOverlayBorderColor, mapOverlayTokens } from './overlayTokens';
 
 type OverlayState = 'no-filter-results' | 'no-notes' | 'no-area-results';

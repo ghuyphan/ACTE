@@ -1,6 +1,34 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
+let mockNotes = [
+  {
+    id: 'photo-1',
+    type: 'photo',
+    content: 'file:///private/photo-1.jpg',
+    photoLocalUri: 'file:///private/photo-1.jpg',
+    locationName: 'District 3',
+    latitude: 10.8,
+    longitude: 106.7,
+    radius: 150,
+    isFavorite: false,
+    createdAt: '2026-03-11T00:00:00.000Z',
+    updatedAt: null,
+  },
+  {
+    id: 'text-1',
+    type: 'text',
+    content: 'Best iced coffee',
+    locationName: 'District 1',
+    latitude: 10.7,
+    longitude: 106.6,
+    radius: 150,
+    isFavorite: false,
+    createdAt: '2026-03-10T00:00:00.000Z',
+    updatedAt: null,
+  },
+];
+
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
   useFocusEffect: (callback: () => void | (() => void)) => {
@@ -151,33 +179,7 @@ jest.mock('../hooks/useCaptureFlow', () => ({
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
-    notes: [
-      {
-        id: 'photo-1',
-        type: 'photo',
-        content: 'file:///private/photo-1.jpg',
-        photoLocalUri: 'file:///private/photo-1.jpg',
-        locationName: 'District 3',
-        latitude: 10.8,
-        longitude: 106.7,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-11T00:00:00.000Z',
-        updatedAt: null,
-      },
-      {
-        id: 'text-1',
-        type: 'text',
-        content: 'Best iced coffee',
-        locationName: 'District 1',
-        latitude: 10.7,
-        longitude: 106.6,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-10T00:00:00.000Z',
-        updatedAt: null,
-      },
-    ],
+    notes: mockNotes,
     refreshNotes: jest.fn(async () => undefined),
     createNote: jest.fn(async () => undefined),
   }),
@@ -240,9 +242,11 @@ jest.mock('../components/home/HomeHeaderSearch', () => {
   return function MockHomeHeaderSearch(props: any) {
     return (
       <View>
-        <Pressable testID="home-open-search" onPress={props.onOpenSearch}>
-          <Text>Open search</Text>
-        </Pressable>
+        {props.showSearchButton ? (
+          <Pressable testID="home-open-search" onPress={props.onOpenSearch}>
+            <Text>Open search</Text>
+          </Pressable>
+        ) : null}
         <TextInput
           testID="home-search-input"
           value={props.searchQuery}
@@ -291,6 +295,36 @@ jest.mock('../utils/platform', () => ({
 import HomeScreen from '../app/(tabs)/index';
 
 describe('HomeScreen search', () => {
+  beforeEach(() => {
+    mockNotes = [
+      {
+        id: 'photo-1',
+        type: 'photo',
+        content: 'file:///private/photo-1.jpg',
+        photoLocalUri: 'file:///private/photo-1.jpg',
+        locationName: 'District 3',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'text-1',
+        type: 'text',
+        content: 'Best iced coffee',
+        locationName: 'District 1',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-10T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ];
+  });
+
   it('filters with shared search logic and ignores photo file uris', async () => {
     const { getByTestId, queryByText } = render(<HomeScreen />);
 
@@ -308,5 +342,13 @@ describe('HomeScreen search', () => {
       expect(getByTestId('home-notes-count').props.children).toBe('1');
       expect(queryByText('photo-1')).toBeTruthy();
     });
+  });
+
+  it('hides inline search when there are no local notes to search', () => {
+    mockNotes = [];
+
+    const { queryByTestId } = render(<HomeScreen />);
+
+    expect(queryByTestId('home-open-search')).toBeNull();
   });
 });

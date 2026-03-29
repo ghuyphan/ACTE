@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, View } from 'react-native';
+import { Alert, Platform, View } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { getImageAsync, hasImageAsync } from 'expo-clipboard';
 import { deleteAsync, writeAsStringAsync } from 'expo-file-system/legacy';
@@ -51,6 +51,13 @@ jest.mock('expo-file-system/legacy', () => ({
 
 jest.mock('expo-image', () => ({
   Image: () => null,
+}));
+
+jest.mock('expo-image-picker', () => ({
+  __esModule: true,
+  getMediaLibraryPermissionsAsync: jest.fn(),
+  requestMediaLibraryPermissionsAsync: jest.fn(),
+  launchImageLibraryAsync: jest.fn(),
 }));
 
 jest.mock('expo-linear-gradient', () => {
@@ -123,12 +130,13 @@ jest.mock('../components/NoteDoodleCanvas', () => {
       return (
         <View testID="mock-doodle-canvas">
           <Text testID="mock-doodle-editable">{String(props.editable)}</Text>
+          <Text testID="mock-doodle-active-color">{String(props.activeColor)}</Text>
           <Pressable
             testID="mock-doodle-commit"
             onPress={() =>
               props.onChangeStrokes?.([
-                { color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] },
-                { color: '#1C1C1E', points: [0.3, 0.3, 0.4, 0.4] },
+                { color: props.activeColor, points: [0.1, 0.1, 0.2, 0.2] },
+                { color: props.activeColor, points: [0.3, 0.3, 0.4, 0.4] },
               ])
             }
           />
@@ -393,6 +401,73 @@ describe('CaptureCard doodle handle', () => {
     expect(ref.current?.getDoodleSnapshot().strokes).toHaveLength(2);
   });
 
+  it('lets you change the text-card doodle color', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByTestId } = renderCaptureCard(ref);
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(getByTestId('capture-doodle-toggle'));
+    });
+
+    expect(getByTestId('mock-doodle-active-color')).toHaveTextContent('#1C1C1E');
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-doodle-color-2'));
+    });
+
+    expect(getByTestId('mock-doodle-active-color')).toHaveTextContent('#FFC107');
+
+    act(() => {
+      fireEvent.press(getByTestId('mock-doodle-commit'));
+    });
+
+    expect(ref.current?.getDoodleSnapshot()).toEqual({
+      enabled: true,
+      strokes: [
+        { color: '#FFC107', points: [0.1, 0.1, 0.2, 0.2] },
+        { color: '#FFC107', points: [0.3, 0.3, 0.4, 0.4] },
+      ],
+    });
+  });
+
+  it('lets you change the photo-card doodle color', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///photo.jpg',
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(getByTestId('capture-doodle-toggle'));
+    });
+
+    expect(getByTestId('mock-doodle-active-color')).toHaveTextContent('#FFFFFF');
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-doodle-color-2'));
+    });
+
+    expect(getByTestId('mock-doodle-active-color')).toHaveTextContent('#FFC107');
+
+    act(() => {
+      fireEvent.press(getByTestId('mock-doodle-commit'));
+    });
+
+    expect(ref.current?.getDoodleSnapshot()).toEqual({
+      enabled: true,
+      strokes: [
+        { color: '#FFC107', points: [0.1, 0.1, 0.2, 0.2] },
+        { color: '#FFC107', points: [0.3, 0.3, 0.4, 0.4] },
+      ],
+    });
+  });
+
   it('keeps text and photo doodle drafts separate', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const view = renderCaptureCard(ref);
@@ -566,6 +641,35 @@ describe('CaptureCard doodle handle', () => {
     expect(queryByTestId('capture-radius-250')).toBeNull();
   });
 
+  it('drops the animated card transform while the android note input is focused', () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+
+    try {
+      const ref = React.createRef<CaptureCardHandle>();
+      const { getByTestId } = renderCaptureCard(ref);
+
+      const hasTransform = () =>
+        getByTestId('capture-card-area').props.style.some((item: { transform?: unknown } | null) => Boolean(item?.transform));
+
+      expect(hasTransform()).toBe(true);
+
+      act(() => {
+        fireEvent(getByTestId('capture-note-input'), 'focus');
+      });
+
+      expect(hasTransform()).toBe(false);
+
+      act(() => {
+        fireEvent(getByTestId('capture-note-input'), 'blur');
+      });
+
+      expect(hasTransform()).toBe(true);
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+  });
+
   it('shows a paste popover on text-card long press and pastes after confirmation', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockClipboardHasImageAsync.mockResolvedValue(true);
@@ -637,11 +741,40 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
+  it('opens the sticker source sheet from a tap on the add button', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+
+    const { getByTestId } = renderCaptureCard(ref);
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(getByTestId('capture-sticker-toggle'));
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-sticker-import'));
+    });
+
+    expect(getByTestId('sticker-source-option-clipboard')).toBeTruthy();
+    expect(getByTestId('sticker-source-option-photos')).toBeTruthy();
+  });
+
   it('keeps text-input long press native and does not paste a sticker', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockClipboardHasImageAsync.mockResolvedValue(true);
 
     const { getByTestId, queryByTestId } = renderCaptureCard(ref);
+
+    if (queryByTestId('capture-card-paste-dismiss')) {
+      await act(async () => {
+        fireEvent.press(getByTestId('capture-card-paste-dismiss'));
+      });
+    }
+
+    mockClipboardHasImageAsync.mockClear();
 
     await act(async () => {
       fireEvent(getByTestId('capture-note-input'), 'longPress');

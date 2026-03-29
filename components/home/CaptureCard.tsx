@@ -13,6 +13,7 @@ import {
   Platform,
   Pressable,
   type PressableProps,
+  ScrollView,
   type StyleProp,
   StyleSheet,
   Text,
@@ -82,6 +83,7 @@ const SHUTTER_OUTER_SIZE = 68;
 const SIDE_ACTION_SIZE = 46;
 const SHUTTER_SIDE_ACTION_OFFSET = SHUTTER_OUTER_SIZE / 2 + 12 + SIDE_ACTION_SIZE;
 const STICKER_SOURCE_SHEET_DISMISS_DELAY_MS = 250;
+const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
 const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad) };
 const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
 const CAPTURE_BUTTON_STATE_IN = { duration: 160, easing: Easing.out(Easing.cubic) };
@@ -105,6 +107,10 @@ function getCaptureTextPlaceholderVariants(t: TFunction) {
   return Array.isArray(translated) && translated.every((item) => typeof item === 'string')
     ? translated
     : DEFAULT_CAPTURE_TEXT_PLACEHOLDERS;
+}
+
+function getUniqueColors(colors: string[]) {
+  return colors.filter((color, index) => colors.indexOf(color) === index);
 }
 
 export interface CaptureCardHandle {
@@ -321,6 +327,77 @@ function CaptureToggleIconButton({
   );
 }
 
+interface DoodleColorPaletteProps {
+  colors: string[];
+  selectedColor: string;
+  onSelectColor: (color: string) => void;
+  buttonBackgroundColor: string;
+  buttonBorderColor: string;
+  selectedBorderColor: string;
+  swatchBorderColor: string;
+  testIDPrefix: string;
+}
+
+function DoodleColorPalette({
+  colors,
+  selectedColor,
+  onSelectColor,
+  buttonBackgroundColor,
+  buttonBorderColor,
+  selectedBorderColor,
+  swatchBorderColor,
+  testIDPrefix,
+}: DoodleColorPaletteProps) {
+  return (
+    <View style={styles.doodleColorPalette}>
+      <ScrollView
+        horizontal
+        style={styles.doodleColorPaletteScroll}
+        contentContainerStyle={styles.doodleColorPaletteContent}
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {colors.map((color, index) => {
+          const isSelected = selectedColor === color;
+
+          return (
+            <CaptureAnimatedPressable
+              key={`${testIDPrefix}-${color}`}
+              testID={`${testIDPrefix}-${index}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              accessibilityLabel={`Doodle color ${index + 1}`}
+              onPress={() => onSelectColor(color)}
+              active={isSelected}
+              activeScale={1}
+              activeTranslateY={0}
+              contentActiveScale={1}
+              contentActiveTranslateY={0}
+              style={[
+                styles.doodleColorButton,
+                {
+                  backgroundColor: buttonBackgroundColor,
+                  borderColor: isSelected ? selectedBorderColor : buttonBorderColor,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.doodleColorSwatch,
+                  {
+                    backgroundColor: color,
+                    borderColor: color.toUpperCase() === '#FFFFFF' ? swatchBorderColor : 'transparent',
+                  },
+                ]}
+              />
+            </CaptureAnimatedPressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 type CaptureGlassActionButtonProps = Omit<CaptureAnimatedPressableProps, 'children'> & {
   iconName: ComponentProps<typeof Ionicons>['name'];
   iconColor: string;
@@ -511,6 +588,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [photoDecorateMenuExpanded, setPhotoDecorateMenuExpanded] = useState(false);
   const [textDoodleStrokes, setTextDoodleStrokes] = useState<DoodleStroke[]>([]);
   const [photoDoodleStrokes, setPhotoDoodleStrokes] = useState<DoodleStroke[]>([]);
+  const [textDoodleColor, setTextDoodleColor] = useState(colors.captureCardText);
+  const [photoDoodleColor, setPhotoDoodleColor] = useState(PHOTO_DOODLE_DEFAULT_COLOR);
   const [textStickerModeEnabled, setTextStickerModeEnabled] = useState(false);
   const [photoStickerModeEnabled, setPhotoStickerModeEnabled] = useState(false);
   const [textStickerPlacements, setTextStickerPlacements] = useState<NoteStickerPlacement[]>([]);
@@ -523,13 +602,24 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
   const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
   const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
+  const [isNoteInputFocused, setIsNoteInputFocused] = useState(false);
   const isPhotoDoodleSurface = captureMode === 'camera' && Boolean(capturedPhoto);
   const doodleModeEnabled = isPhotoDoodleSurface ? photoDoodleModeEnabled : textDoodleModeEnabled;
   const doodleStrokes = isPhotoDoodleSurface ? photoDoodleStrokes : textDoodleStrokes;
+  const doodleColor = isPhotoDoodleSurface ? photoDoodleColor : textDoodleColor;
   const stickerModeEnabled = isPhotoDoodleSurface ? photoStickerModeEnabled : textStickerModeEnabled;
   const stickerPlacements = isPhotoDoodleSurface ? photoStickerPlacements : textStickerPlacements;
   const selectedStickerId = isPhotoDoodleSurface ? photoSelectedStickerId : textSelectedStickerId;
   const decorateMenuExpanded = isPhotoDoodleSurface ? photoDecorateMenuExpanded : textDecorateMenuExpanded;
+  const textDoodleColors = useMemo(
+    () => getUniqueColors([colors.captureCardText, PHOTO_DOODLE_DEFAULT_COLOR, colors.primary]),
+    [colors.captureCardText, colors.primary]
+  );
+  const photoDoodleColors = useMemo(
+    () => getUniqueColors([PHOTO_DOODLE_DEFAULT_COLOR, '#1C1C1E', colors.primary]),
+    [colors.primary]
+  );
+  const doodleColorOptions = isPhotoDoodleSurface ? photoDoodleColors : textDoodleColors;
   const isCameraSaveMode = captureMode === 'camera';
   const isSharedTarget = shareTarget === 'shared';
   const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
@@ -555,6 +645,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const savePressScale = useSharedValue(1);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
+  const previousTextDoodleDefaultColorRef = useRef(colors.captureCardText);
   const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
   const activeTextPlaceholder =
@@ -565,6 +656,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const isSaveSuccessful = saveState === 'success';
   const interactionsDisabled = isSaveBusy || isSaveSuccessful;
   const saveIdleBackground = isCameraSaveMode ? colors.primary : colors.captureButtonBg;
+  const disableAndroidTextTransforms = Platform.OS === 'android' && captureMode === 'text' && isNoteInputFocused;
   const decorateProgress = useSharedValue(showDecorateControls ? 1 : 0);
 
   useEffect(() => {
@@ -651,6 +743,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
   useEffect(() => {
     if (captureMode !== 'text') {
+      setIsNoteInputFocused(false);
       setTextDoodleModeEnabled(false);
       setTextStickerModeEnabled(false);
       setTextDecorateMenuExpanded(false);
@@ -664,6 +757,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
     setShowStickerSourceSheet(false);
   }, [captureMode, capturedPhoto]);
+
+  useEffect(() => {
+    const previousDefaultColor = previousTextDoodleDefaultColorRef.current;
+    setTextDoodleColor((current) => (
+      current === previousDefaultColor ? colors.captureCardText : current
+    ));
+    previousTextDoodleDefaultColorRef.current = colors.captureCardText;
+  }, [colors.captureCardText]);
 
   useEffect(() => {
     const isTextDraftEmpty = noteText.length === 0;
@@ -743,7 +844,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setPhotoDoodleModeEnabled(false);
     setTextDoodleStrokes([]);
     setPhotoDoodleStrokes([]);
-  }, []);
+    setTextDoodleColor(colors.captureCardText);
+    setPhotoDoodleColor(PHOTO_DOODLE_DEFAULT_COLOR);
+  }, [colors.captureCardText]);
 
   const resetStickers = useCallback(() => {
     setTextStickerModeEnabled(false);
@@ -797,7 +900,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   }));
   const decorateControlsTargetWidth =
     doodleModeEnabled || stickerModeEnabled
-      ? TOP_CONTROL_HEIGHT * 3 + 16
+      ? doodleModeEnabled
+        ? 228
+        : TOP_CONTROL_HEIGHT * 3 + 16
       : ENABLE_PHOTO_STICKERS
         ? TOP_CONTROL_HEIGHT * 2 + 8
         : TOP_CONTROL_HEIGHT;
@@ -910,6 +1015,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
     setTextDoodleStrokes([]);
   }, [isPhotoDoodleSurface]);
+  const handleSelectDoodleColor = useCallback(
+    (nextColor: string) => {
+      if (isPhotoDoodleSurface) {
+        setPhotoDoodleColor(nextColor);
+        return;
+      }
+
+      setTextDoodleColor(nextColor);
+    },
+    [isPhotoDoodleSurface]
+  );
   const applyImportedSticker = useCallback((nextPlacement: NoteStickerPlacement) => {
     if (isPhotoDoodleSurface) {
       setPhotoStickerPlacements((current) => [...current, nextPlacement]);
@@ -1014,7 +1130,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         ),
         unavailable: t(
           'capture.clipboardStickerUnavailableMsg',
-          'Copy a transparent sticker image first, then long press again to paste it.'
+          'Copy a transparent sticker image first, then try again.'
         ),
         unsupported: t(
           'capture.clipboardStickerUnsupported',
@@ -1264,15 +1380,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       subtitle={t('capture.noteColorHint', 'Pick the gradient you want before saving this note.')}
       contentContainerStyle={styles.noteColorSheet}
     >
-      <View
-        style={[
-          styles.noteColorSheetCard,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          },
-        ]}
-      >
+      <View>
         <NoteColorPicker
           selectedColor={noteColor ?? DEFAULT_NOTE_COLOR_ID}
           onSelectColor={handleSelectNoteColor}
@@ -1299,19 +1407,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       title={t('capture.radius', 'Radius')}
       subtitle={t(
         'capture.radiusPickerHint',
-        'Choose how close you need to be before Noto reminds you about this place.'
+        'Pick how close you need to be.'
       )}
       contentContainerStyle={styles.radiusSheet}
     >
-      <View
-        style={[
-          styles.radiusSheetCard,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          },
-        ]}
-      >
+      <View>
         {NOTE_RADIUS_OPTIONS.map((option, index) => {
           const isSelected = radius === option;
 
@@ -1328,15 +1428,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   pressed ? styles.radiusSheetRowPressed : null,
                 ]}
               >
-                <View style={styles.radiusSheetCopy}>
-                  <Text style={[styles.radiusSheetLabel, { color: colors.text }]}>
-                    {formatRadiusLabel(option)}
-                  </Text>
-                  <Text style={[styles.radiusSheetHint, { color: colors.secondaryText }]}>
-                    {t('capture.reminderRadiusLabel', 'Reminder trigger distance')}
-                  </Text>
-                </View>
-                {isSelected ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
+                <Text style={[styles.radiusSheetLabel, { color: colors.text }]}>
+                  {formatRadiusLabel(option)}
+                </Text>
+                <Ionicons
+                  name={isSelected ? 'radio-button-on' : 'radio-button-off-outline'}
+                  size={20}
+                  color={isSelected ? colors.primary : colors.secondaryText}
+                />
               </Pressable>
               {index < NOTE_RADIUS_OPTIONS.length - 1 ? (
                 <View style={[styles.radiusSheetDivider, { backgroundColor: colors.border }]} />
@@ -1351,9 +1450,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     <>
       <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
         <Reanimated.View
+          testID="capture-card-area"
           style={[
             styles.captureArea,
-            captureAreaAnimatedStyle,
+            disableAndroidTextTransforms ? null : captureAreaAnimatedStyle,
           ]}
           pointerEvents={isSearching || interactionsDisabled ? 'none' : 'auto'}
         >
@@ -1478,6 +1578,22 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                               <Ionicons name="close-outline" size={14} color={colors.captureGlassText} />
                             </CaptureAnimatedPressable>
                           </Reanimated.View>
+                          <Reanimated.View
+                            entering={decorateActionEntering}
+                            exiting={decorateActionExiting}
+                            layout={decorateActionLayout}
+                          >
+                            <DoodleColorPalette
+                              colors={doodleColorOptions}
+                              selectedColor={doodleColor}
+                              onSelectColor={handleSelectDoodleColor}
+                              buttonBackgroundColor={colors.captureGlassFill}
+                              buttonBorderColor={colors.captureGlassBorder}
+                              selectedBorderColor={colors.captureButtonBg}
+                              swatchBorderColor="rgba(43,38,33,0.16)"
+                              testIDPrefix="capture-doodle-color"
+                            />
+                          </Reanimated.View>
                         </Reanimated.View>
                       ) : stickerModeEnabled ? (
                         <Reanimated.View layout={decorateActionLayout} style={styles.textCardActionCluster}>
@@ -1485,7 +1601,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                             testID="capture-sticker-toggle"
                             accessibilityHint={t(
                               'capture.stickerPasteHint',
-                              'Tap to edit stickers. Long press the card to paste from your clipboard.'
+                              'Tap to edit stickers. Tap + to add from Clipboard or Photos.'
                             )}
                             onPress={handleToggleStickerMode}
                             active={stickerModeEnabled}
@@ -1573,7 +1689,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                               testID="capture-sticker-toggle"
                               accessibilityHint={t(
                                 'capture.stickerPasteHint',
-                                'Tap to edit stickers. Long press the card to paste from your clipboard.'
+                                'Tap to edit stickers. Tap + to add from Clipboard or Photos.'
                               )}
                               onPress={handleToggleStickerMode}
                               active={stickerModeEnabled}
@@ -1620,7 +1736,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 <NoteDoodleCanvas
                   strokes={doodleStrokes}
                   editable={doodleModeEnabled}
-                  activeColor={colors.captureCardText}
+                  activeColor={doodleColor}
                   onChangeStrokes={setTextDoodleStrokes}
                 />
               </View>
@@ -1647,6 +1763,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   value={noteText}
                   editable={!doodleModeEnabled && !stickerModeEnabled}
                   onChangeText={handleChangeNoteText}
+                  onFocus={() => setIsNoteInputFocused(true)}
+                  onBlur={() => setIsNoteInputFocused(false)}
                   maxLength={300}
                   selectionColor={colors.captureCardText}
                 />
@@ -1793,6 +1911,22 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                               <Ionicons name="close-outline" size={14} color={photoPreviewControlText} />
                             </CaptureAnimatedPressable>
                           </Reanimated.View>
+                          <Reanimated.View
+                            entering={decorateActionEntering}
+                            exiting={decorateActionExiting}
+                            layout={decorateActionLayout}
+                          >
+                            <DoodleColorPalette
+                              colors={doodleColorOptions}
+                              selectedColor={doodleColor}
+                              onSelectColor={handleSelectDoodleColor}
+                              buttonBackgroundColor={photoPreviewControlFill}
+                              buttonBorderColor={photoPreviewControlBorder}
+                              selectedBorderColor={photoPreviewActiveFill}
+                              swatchBorderColor="rgba(43,38,33,0.16)"
+                              testIDPrefix="capture-doodle-color"
+                            />
+                          </Reanimated.View>
                         </Reanimated.View>
                       ) : stickerModeEnabled ? (
                         <Reanimated.View
@@ -1805,7 +1939,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                             accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
                             accessibilityHint={t(
                               'capture.stickerPasteHint',
-                              'Tap to edit stickers. Long press the card to paste from your clipboard.'
+                              'Tap to edit stickers. Tap + to add from Clipboard or Photos.'
                             )}
                             onPress={handleToggleStickerMode}
                             active={stickerModeEnabled}
@@ -1905,7 +2039,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                               accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
                               accessibilityHint={t(
                                 'capture.stickerPasteHint',
-                                'Tap to edit stickers. Long press the card to paste from your clipboard.'
+                                'Tap to edit stickers. Tap + to add from Clipboard or Photos.'
                               )}
                               onPress={handleToggleStickerMode}
                               active={stickerModeEnabled}
@@ -1948,7 +2082,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 <NoteDoodleCanvas
                   strokes={doodleStrokes}
                   editable={doodleModeEnabled}
-                  activeColor="#FFFFFF"
+                  activeColor={doodleColor}
                   onChangeStrokes={setPhotoDoodleStrokes}
                 />
               </View>
@@ -2613,6 +2747,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  doodleColorPalette: {
+    width: 96,
+    overflow: 'hidden',
+  },
+  doodleColorPaletteScroll: {
+    flexGrow: 0,
+  },
+  doodleColorPaletteContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingRight: 4,
+  },
+  doodleColorButton: {
+    width: TOP_CONTROL_HEIGHT,
+    height: TOP_CONTROL_HEIGHT,
+    borderRadius: TOP_CONTROL_RADIUS,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  doodleColorSwatch: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   doodleCanvasLayer: {
     ...StyleSheet.absoluteFill,
     ...DOODLE_ARTBOARD_FRAME,
@@ -2900,15 +3061,9 @@ const styles = StyleSheet.create({
   noteColorSheet: {
     gap: 12,
   },
-  noteColorSheetCard: {
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 16,
-    paddingVertical: 18,
-  },
   noteColorPreviewHint: {
     marginTop: 12,
-    textAlign: 'center',
+    textAlign: 'left',
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '600',
@@ -2916,14 +3071,9 @@ const styles = StyleSheet.create({
   radiusSheet: {
     gap: 12,
   },
-  radiusSheetCard: {
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
   radiusSheetRow: {
-    minHeight: 64,
-    paddingHorizontal: 18,
+    minHeight: 60,
+    paddingHorizontal: 4,
     paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
@@ -2932,23 +3082,13 @@ const styles = StyleSheet.create({
   radiusSheetRowPressed: {
     opacity: 0.9,
   },
-  radiusSheetCopy: {
-    flexShrink: 1,
-    paddingRight: 12,
-  },
   radiusSheetLabel: {
     fontSize: 16,
     fontWeight: '700',
     fontFamily: 'System',
   },
-  radiusSheetHint: {
-    marginTop: 3,
-    fontSize: 13,
-    fontWeight: '500',
-    fontFamily: 'System',
-  },
   radiusSheetDivider: {
     height: StyleSheet.hairlineWidth,
-    marginLeft: 18,
+    marginLeft: 4,
   },
 });

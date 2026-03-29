@@ -49,7 +49,6 @@ function SettingRow({
   colors,
   icon,
   title,
-  subtitle,
   value,
   onPress,
   destructive = false,
@@ -70,9 +69,6 @@ function SettingRow({
       </View>
       <View style={styles.rowCopy}>
         <Text style={[styles.rowTitle, { color: destructive ? colors.danger : colors.text }]}>{title}</Text>
-        {subtitle ? (
-          <Text style={[styles.rowSubtitle, { color: colors.secondaryText }]}>{subtitle}</Text>
-        ) : null}
       </View>
       <View style={styles.rowTrailing}>
         {value ? <Text style={[styles.rowValue, { color: colors.secondaryText }]}>{value}</Text> : null}
@@ -412,12 +408,6 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: 'System',
-  },
-  rowSubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 4,
     fontFamily: 'System',
   },
   rowValue: {
