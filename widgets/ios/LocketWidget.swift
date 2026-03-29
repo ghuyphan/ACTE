@@ -699,7 +699,15 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var shouldShowAuthorChip: Bool {
-        false
+        !isAccessoryFamily &&
+        !payload.isIdleState &&
+        payload.isSharedContent &&
+        (
+            !compactAuthorName.isEmpty ||
+            !payload.authorInitials.isEmpty ||
+            payload.authorAvatarImageUrl != nil ||
+            payload.authorAvatarImageBase64 != nil
+        )
     }
 
     private var noteOverlayOpacity: Double {
