@@ -1,8 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
-import { useAuth } from '../hooks/useAuth';
-import { useSyncStatus } from '../hooks/useSyncStatus';
+import { useSyncSheetDetails } from '../hooks/useSyncSheetDetails';
 import { useTheme } from '../hooks/useTheme';
 import AppSheetScaffold from './AppSheetScaffold';
 
@@ -15,16 +14,15 @@ export default function SettingsSyncSheetAndroid({
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { user, isAuthAvailable } = useAuth();
-  const { blockedCount, failedCount, isEnabled, pendingCount, setSyncEnabled } = useSyncStatus();
-  const canManageSync = Boolean(user && isAuthAvailable);
-  const description =
-    canManageSync
-      ? t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')
-      : accountHint ??
-        (isAuthAvailable
-          ? t('settings.accountSignedOutMsg', 'Sign in to back up your notes and keep them synced across your devices.')
-          : t('settings.accountUnavailableMsg', 'Account sign-in is unavailable right now. Your notes stay safely on this device.'));
+  const {
+    accountHintText,
+    canManageSync,
+    description,
+    isEnabled,
+    queueSummary,
+    setSyncEnabled,
+    statusLabel,
+  } = useSyncSheetDetails(accountHint);
 
   return (
     <AppSheetScaffold
@@ -44,31 +42,17 @@ export default function SettingsSyncSheetAndroid({
         <View style={styles.row}>
           <View style={styles.copy}>
             <Text style={[styles.label, { color: colors.text }]}>{t('settings.autoSync', 'Auto sync')}</Text>
-            <Text style={[styles.hint, { color: colors.secondaryText }]}>
-              {canManageSync
-                ? (isEnabled
-                  ? t('settings.autoSyncOnShort', 'On')
-                  : t('settings.autoSyncOff', 'Off'))
-                : isAuthAvailable
-                  ? t('settings.notSignedIn', 'Not signed in')
-                  : t('settings.unavailableShort', 'Unavailable')}
-            </Text>
+            <Text style={[styles.hint, { color: colors.secondaryText }]}>{statusLabel}</Text>
           </View>
           {canManageSync ? <Switch value={isEnabled} onValueChange={setSyncEnabled} /> : null}
         </View>
       </View>
 
-      {canManageSync && accountHint ? (
-        <Text style={[styles.footnote, { color: colors.secondaryText }]}>{accountHint}</Text>
+      {canManageSync && accountHintText ? (
+        <Text style={[styles.footnote, { color: colors.secondaryText }]}>{accountHintText}</Text>
       ) : null}
 
-      <Text style={[styles.footnote, { color: colors.secondaryText }]}>
-        {t('settings.syncQueueSummary', 'Pending: {{pending}} · Retry: {{failed}} · Blocked: {{blocked}}', {
-          pending: pendingCount,
-          failed: failedCount,
-          blocked: blockedCount,
-        })}
-      </Text>
+      <Text style={[styles.footnote, { color: colors.secondaryText }]}>{queueSummary}</Text>
     </AppSheetScaffold>
   );
 }

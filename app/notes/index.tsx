@@ -1,4 +1,5 @@
 import { FlashList } from '@shopify/flash-list';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Href, Stack, useRouter } from 'expo-router';
@@ -324,6 +325,30 @@ export default function NotesIndexScreen() {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
+      ) : items.length === 0 ? (
+        <View
+          testID="notes-empty-state"
+          style={[
+            styles.center,
+            styles.emptyScreen,
+            {
+              paddingTop: contentTopInset,
+              paddingBottom: insets.bottom + 28,
+            },
+          ]}
+        >
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconWrap}>
+              <Ionicons name="document-text-outline" size={44} color={colors.secondaryText} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              {t('home.emptyTitle', 'No notes yet')}
+            </Text>
+            <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
+              {t('home.emptySubtitle', 'Write down what she likes or dislikes\nat each restaurant — we\'ll remind you!')}
+            </Text>
+          </View>
+        </View>
       ) : (
         <FlashList
           data={items}
@@ -348,16 +373,6 @@ export default function NotesIndexScreen() {
             paddingBottom: insets.bottom + 28,
             paddingHorizontal: Layout.screenPadding,
           }}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                {t('home.emptyTitle', 'No notes yet')}
-              </Text>
-              <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-                {t('home.emptySubtitle', 'Write down what she likes or dislikes\nat each restaurant — we\'ll remind you!')}
-              </Text>
-            </View>
-          }
         />
       )}
     </View>
@@ -372,6 +387,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  emptyScreen: {
+    paddingHorizontal: Layout.screenPadding,
   },
   tilePressable: {
     borderRadius: 24,
@@ -438,14 +456,19 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   emptyState: {
-    paddingTop: 72,
+    width: '100%',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: Layout.screenPadding,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '600',
     textAlign: 'center',
     fontFamily: 'System',
   },
@@ -454,5 +477,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'center',
     fontFamily: 'System',
+    marginTop: 8,
+    maxWidth: 240,
   },
 });

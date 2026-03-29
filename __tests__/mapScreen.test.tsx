@@ -387,14 +387,16 @@ describe('MapScreen', () => {
     expect(mockAnimateToRegion).not.toHaveBeenCalled();
   });
 
-  it('skips mounting the native map on Android and shows a fallback card', () => {
+  it('mounts the shared map experience on Android instead of the placeholder fallback', async () => {
     setPlatformOS('android');
 
-    const { getByTestId, getByText, queryByTestId } = render(<MapScreen />);
+    const { getByTestId, queryByTestId, queryByText } = render(<MapScreen />);
 
-    expect(getByTestId('map-android-fallback')).toBeTruthy();
-    expect(getByText('Map is temporarily unavailable on Android')).toBeTruthy();
-    expect(queryByTestId('map-canvas')).toBeNull();
+    await waitFor(() => {
+      expect(getByTestId('map-canvas')).toBeTruthy();
+    });
+    expect(queryByTestId('map-android-fallback')).toBeNull();
+    expect(queryByText('Map is temporarily unavailable on Android')).toBeNull();
   });
 
   it('renders nearby mode in preview and opens the tapped preview card', async () => {

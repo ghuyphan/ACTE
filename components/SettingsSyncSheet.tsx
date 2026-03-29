@@ -2,8 +2,7 @@ import { Group, HStack, Text as SwiftUIText, Toggle, VStack } from '@expo/ui/swi
 import { backgroundOverlay, cornerRadius, font, foregroundStyle, padding } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../hooks/useAuth';
-import { useSyncStatus } from '../hooks/useSyncStatus';
+import { useSyncSheetDetails } from '../hooks/useSyncSheetDetails';
 import { useTheme } from '../hooks/useTheme';
 import { isOlderIOS } from '../utils/platform';
 
@@ -14,16 +13,14 @@ export default function SettingsSyncSheet({
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { user, isAuthAvailable } = useAuth();
-  const { blockedCount, failedCount, isEnabled, pendingCount, setSyncEnabled } = useSyncStatus();
-  const canManageSync = Boolean(user && isAuthAvailable);
-  const description =
-    canManageSync
-      ? t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')
-      : accountHint ??
-        (isAuthAvailable
-          ? t('settings.accountSignedOutMsg', 'Sign in to back up your notes and keep them synced across your devices.')
-          : t('settings.accountUnavailableMsg', 'Account sign-in is unavailable right now. Your notes stay safely on this device.'));
+  const {
+    accountHintText,
+    canManageSync,
+    description,
+    isEnabled,
+    queueSummary,
+    setSyncEnabled,
+  } = useSyncSheetDetails(accountHint);
 
   const containerModifiers = [
     padding({ top: 24, leading: 24, trailing: 24, bottom: 40 }),
@@ -72,14 +69,10 @@ export default function SettingsSyncSheet({
             padding({ top: 16 }),
           ]}
         >
-          {t('settings.syncQueueSummary', 'Pending: {{pending}} · Retry: {{failed}} · Blocked: {{blocked}}', {
-            pending: pendingCount,
-            failed: failedCount,
-            blocked: blockedCount,
-          })}
+          {queueSummary}
         </SwiftUIText>
 
-        {canManageSync && accountHint && (
+        {canManageSync && accountHintText && (
           <SwiftUIText
             modifiers={[
               foregroundStyle(colors.secondaryText + '99'),
@@ -87,7 +80,7 @@ export default function SettingsSyncSheet({
               padding({ top: 16, leading: 4, trailing: 4 }),
             ]}
           >
-            {accountHint}
+            {accountHintText}
           </SwiftUIText>
         )}
       </VStack>

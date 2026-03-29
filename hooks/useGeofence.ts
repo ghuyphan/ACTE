@@ -2,7 +2,9 @@ import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
 import { Linking } from 'react-native';
+import { useAuth } from './useAuth';
 import { getReminderPermissionState, syncGeofenceRegions } from '../services/geofenceService';
+import { syncSocialPushRegistration } from '../services/socialPushService';
 import { scheduleOnIdle } from '../utils/scheduleOnIdle';
 
 const LOCATION_FIX_TIMEOUT_MS = 8000;
@@ -30,6 +32,7 @@ export interface ReminderPermissionRequestResult {
 }
 
 export function useGeofence() {
+    const { user } = useAuth();
     const [hasLocationPermission, setHasLocationPermission] = useState(false);
     const [remindersEnabled, setRemindersEnabled] = useState(false);
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
@@ -153,6 +156,11 @@ export function useGeofence() {
         setRemindersEnabled(enabled);
         if (enabled) {
             await syncGeofenceRegions();
+            if (user) {
+                void syncSocialPushRegistration(user).catch((error) => {
+                    console.warn('[social-push] Registration refresh failed:', error);
+                });
+            }
         }
 
         const requiresSettings =
@@ -163,7 +171,7 @@ export function useGeofence() {
             enabled,
             requiresSettings,
         };
-    }, [requestForegroundLocation]);
+    }, [requestForegroundLocation, user]);
 
     const openAppSettings = useCallback(async () => {
         try {

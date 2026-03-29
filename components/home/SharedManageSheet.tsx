@@ -1,17 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import Animated, {
@@ -24,12 +21,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import AppSheet from '../AppSheet';
 import AppSheetScaffold from '../AppSheetScaffold';
-import PrimaryButton from '../ui/PrimaryButton';
+import FriendInviteJoinBody from '../FriendInviteJoinBody';
 import { Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
-import { useSharedFeedStore } from '../../hooks/useSharedFeed';
+import { useFriendInviteJoin } from '../../hooks/useFriendInviteJoin';
 import { useTheme } from '../../hooks/useTheme';
-import { FriendConnection, FriendInvite, getSharedFeedErrorMessage } from '../../services/sharedFeedService';
+import { FriendConnection, FriendInvite } from '../../services/sharedFeedService';
 
 function ManageBody({
   friends,
@@ -261,96 +258,6 @@ function ManageBody({
   );
 }
 
-function JoinBody({
-  user,
-  isAuthAvailable,
-  inviteValue,
-  joining,
-  onChangeInvite,
-  onSubmit,
-  onGoToAuth,
-}: {
-  user: ReturnType<typeof useAuth>['user'];
-  isAuthAvailable: boolean;
-  inviteValue: string;
-  joining: boolean;
-  onChangeInvite: (value: string) => void;
-  onSubmit: () => void;
-  onGoToAuth: () => void;
-}) {
-  const { t } = useTranslation();
-  const { colors } = useTheme();
-
-  return (
-    <View style={styles.sheetContent}>
-      {user ? (
-        <View style={styles.joinFormBlock}>
-          <Text style={[styles.joinFieldLabel, { color: colors.secondaryText }]}>
-            {t('shared.joinCardTitle', 'Invite link')}
-          </Text>
-          <TextInput
-            value={inviteValue}
-            onChangeText={onChangeInvite}
-            placeholder={t('shared.joinPlaceholder', 'Paste the full invite link')}
-            placeholderTextColor={colors.secondaryText}
-            style={[
-              styles.joinInput,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                color: colors.text,
-              },
-            ]}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-          />
-        </View>
-      ) : null}
-
-      <PrimaryButton
-        label={user ? t('shared.joinButton', 'Continue') : t('shared.signInButton', 'Sign in')}
-        onPress={() => {
-          if (user) {
-            onSubmit();
-            return;
-          }
-
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onGoToAuth();
-        }}
-        loading={user ? joining : false}
-        disabled={user ? !inviteValue.trim() : !isAuthAvailable}
-        leadingIcon={
-          <Ionicons
-            name={user ? 'enter-outline' : 'person-circle-outline'}
-            size={18}
-            color="#1C1C1E"
-          />
-        }
-        style={styles.joinPrimaryAction}
-      />
-
-      {user && inviteValue.trim() ? (
-        <View
-          style={[
-            styles.joinHelperCard,
-            {
-              backgroundColor: colors.primarySoft,
-              borderColor: colors.primary + '22',
-            },
-          ]}
-        >
-          <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
-          <Text style={[styles.joinHelperText, { color: colors.text }]}>
-            {t('shared.joinFooterBody', 'We’ll connect you as soon as this invite checks out.')}
-          </Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
 export default function SharedManageSheet(props: {
   visible: boolean;
   friends: FriendConnection[];
@@ -365,11 +272,9 @@ export default function SharedManageSheet(props: {
   const { t } = useTranslation();
   const router = useRouter();
   const { user, isAuthAvailable } = useAuth();
-  const { acceptFriendInvite } = useSharedFeedStore();
   const { visible, friends, activeInvite, loading, onClose, onShareInvite, onRevokeInvite, onRemoveFriend } = props;
   const [mode, setMode] = useState<'manage' | 'join'>('manage');
   const [inviteValue, setInviteValue] = useState('');
-  const [joining, setJoining] = useState(false);
   const hasInviteValue = inviteValue.trim().length > 0;
   const contentOpacity = useSharedValue(1);
   const contentTranslateY = useSharedValue(0);
@@ -394,25 +299,27 @@ export default function SharedManageSheet(props: {
     });
   }, [contentOpacity, contentTranslateY]);
 
-  useEffect(() => {
-    if (!visible) {
-      setMode('manage');
-      setInviteValue('');
-      setJoining(false);
-    }
-  }, [visible]);
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-
-    animateContentChange();
-  }, [activeInvite?.id, animateContentChange, friends.length, hasInviteValue, mode, visible]);
-
   const handleOpenJoin = useCallback(() => {
     setMode('join');
   }, []);
+
+  const handleGoToAuth = useCallback(() => {
+    onClose();
+    setMode('manage');
+    setInviteValue('');
+    setTimeout(() => {
+      router.push('/auth');
+    }, 180);
+  }, [onClose, router]);
+
+  const { joining, joinInvite, resetJoinState } = useFriendInviteJoin({
+    inviteValue,
+    onRequireAuth: handleGoToAuth,
+    onBeforeSuccessAlert: () => {
+      setInviteValue('');
+      setMode('manage');
+    },
+  });
 
   const handleBackToManage = useCallback(() => {
     if (joining) {
@@ -423,51 +330,21 @@ export default function SharedManageSheet(props: {
     setMode('manage');
   }, [joining]);
 
-  const handleGoToAuth = useCallback(() => {
-    if (joining) {
-      return;
-    }
-
-    onClose();
-    setMode('manage');
-    setInviteValue('');
-    setTimeout(() => {
-      router.push('/auth');
-    }, 180);
-  }, [joining, onClose, router]);
-
-  const handleJoinInvite = useCallback(async () => {
-    if (!inviteValue.trim()) {
-      Alert.alert(
-        t('shared.joinErrorTitle', 'Invite needed'),
-        t('shared.joinErrorBody', 'Paste a valid invite link to connect.')
-      );
-      return;
-    }
-
-    if (!user) {
-      handleGoToAuth();
-      return;
-    }
-
-    setJoining(true);
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    try {
-      await acceptFriendInvite(inviteValue.trim());
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setInviteValue('');
+  useEffect(() => {
+    if (!visible) {
       setMode('manage');
-      Alert.alert(
-        t('shared.joinSuccessTitle', "You're connected"),
-        t('shared.joinSuccessBody', 'You can now share notes with this friend from Home.')
-      );
-    } catch (error) {
-      Alert.alert(t('shared.joinFailedTitle', 'Could not join'), getSharedFeedErrorMessage(error));
-    } finally {
-      setJoining(false);
+      setInviteValue('');
+      resetJoinState();
     }
-  }, [acceptFriendInvite, handleGoToAuth, inviteValue, t, user]);
+  }, [resetJoinState, visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    animateContentChange();
+  }, [activeInvite?.id, animateContentChange, friends.length, hasInviteValue, mode, visible]);
 
   const content = (
     <Animated.View
@@ -505,14 +382,15 @@ export default function SharedManageSheet(props: {
             onPress: onClose,
           }}
         >
-          <JoinBody
+          <FriendInviteJoinBody
             user={user}
             isAuthAvailable={isAuthAvailable}
             inviteValue={inviteValue}
             joining={joining}
+            contentStyle={styles.sheetContent}
             onChangeInvite={setInviteValue}
             onSubmit={() => {
-              void handleJoinInvite();
+              void joinInvite();
             }}
             onGoToAuth={handleGoToAuth}
           />
@@ -800,41 +678,5 @@ const styles = StyleSheet.create({
   joinSubtitle: {
     ...Typography.body,
     marginTop: 10,
-  },
-  joinFormBlock: {
-    marginTop: 22,
-    gap: 8,
-  },
-  joinFieldLabel: {
-    ...Typography.pill,
-    fontSize: 13,
-  },
-  joinInput: {
-    minHeight: 56,
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    ...Typography.body,
-  },
-  joinPrimaryAction: {
-    width: '100%',
-    marginTop: 22,
-  },
-  joinHelperCard: {
-    marginTop: 16,
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  joinHelperText: {
-    ...Typography.body,
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
   },
 });

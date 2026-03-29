@@ -13,6 +13,7 @@ const mockNotificationsGetPermissionsAsync = jest.fn();
 const mockNotificationsRequestPermissionsAsync = jest.fn();
 const mockSyncGeofenceRegions = jest.fn();
 const mockGetReminderPermissionState = jest.fn();
+const mockSyncSocialPushRegistration = jest.fn();
 
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: (...args: unknown[]) => mockGetForegroundPermissionsAsync(...args),
@@ -34,6 +35,18 @@ jest.mock('../services/geofenceService', () => ({
   getReminderPermissionState: (...args: unknown[]) => mockGetReminderPermissionState(...args),
 }));
 
+jest.mock('../services/socialPushService', () => ({
+  syncSocialPushRegistration: (...args: unknown[]) => mockSyncSocialPushRegistration(...args),
+}));
+
+jest.mock('../hooks/useAuth', () => ({
+  useAuth: () => ({
+    user: {
+      uid: 'user-1',
+    },
+  }),
+}));
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
@@ -50,6 +63,7 @@ beforeEach(() => {
     remindersEnabled: false,
   });
   mockSyncGeofenceRegions.mockResolvedValue(true);
+  mockSyncSocialPushRegistration.mockResolvedValue(undefined);
 });
 
 describe('useGeofence', () => {
@@ -114,5 +128,8 @@ describe('useGeofence', () => {
     });
 
     expect(mockSyncGeofenceRegions).toHaveBeenCalled();
+    expect(mockSyncSocialPushRegistration).toHaveBeenCalledWith({
+      uid: 'user-1',
+    });
   });
 });

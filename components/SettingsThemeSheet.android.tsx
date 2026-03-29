@@ -1,8 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
-import AppSheetScaffold from './AppSheetScaffold';
+import SettingsSelectionSheetAndroid from './SettingsSelectionSheet.android';
 
 const OPTIONS: { key: 'system' | 'light' | 'dark'; labelKey: string; fallback: string }[] = [
   { key: 'system', labelKey: 'settings.system', fallback: 'System' },
@@ -12,68 +11,18 @@ const OPTIONS: { key: 'system' | 'light' | 'dark'; labelKey: string; fallback: s
 
 export default function SettingsThemeSheetAndroid({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
-  const { theme, setTheme, colors } = useTheme();
+  const { theme, setTheme } = useTheme();
 
   return (
-    <AppSheetScaffold
-      headerVariant="standard"
+    <SettingsSelectionSheetAndroid
       title={t('settings.theme', 'Theme')}
-    >
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        {OPTIONS.map((option) => {
-          const selected = theme === option.key;
-          return (
-            <Pressable
-              key={option.key}
-              style={[
-                styles.option,
-                selected ? { backgroundColor: colors.primarySoft } : null,
-              ]}
-              onPress={() => {
-                void setTheme(option.key);
-                onClose();
-              }}
-            >
-              <Text style={[styles.optionLabel, { color: colors.text }]}>
-                {t(option.labelKey, option.fallback)}
-              </Text>
-              <Text
-                style={[
-                  styles.optionValue,
-                  { color: selected ? colors.primary : colors.secondaryText },
-                ]}
-              >
-                {selected ? t('common.done', 'Done') : ''}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </AppSheetScaffold>
+      options={OPTIONS.map((option) => ({
+        key: option.key,
+        label: t(option.labelKey, option.fallback),
+      }))}
+      selectedKey={theme}
+      onSelect={(nextTheme) => setTheme(nextTheme as 'system' | 'light' | 'dark')}
+      onClose={onClose}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    borderWidth: 1,
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  option: {
-    minHeight: 56,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  optionLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: 'System',
-  },
-  optionValue: {
-    fontSize: 13,
-    fontWeight: '700',
-    fontFamily: 'System',
-  },
-});

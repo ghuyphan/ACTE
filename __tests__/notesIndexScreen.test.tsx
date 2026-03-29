@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import NotesIndexScreen from '../app/notes/index';
@@ -42,6 +43,14 @@ const mockSharedPosts: any[] = [
     createdAt: '2026-03-13T00:00:00.000Z',
   },
 ];
+
+jest.mock('@expo/vector-icons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return {
+    Ionicons: ({ name }: { name: string }) => <Text>{name}</Text>,
+  };
+});
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -128,6 +137,22 @@ jest.mock('../hooks/useSharedFeed', () => ({
 describe('NotesIndexScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockNotes.splice(
+      0,
+      mockNotes.length,
+      {
+        id: 'note-1',
+        type: 'text',
+        content: 'Newest note',
+        locationName: 'District 1',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      }
+    );
     mockSharedPosts.splice(
       0,
       mockSharedPosts.length,
@@ -150,6 +175,17 @@ describe('NotesIndexScreen', () => {
         createdAt: '2026-03-13T00:00:00.000Z',
       }
     );
+  });
+
+  it('renders a centered empty state when there are no notes or shared posts', () => {
+    mockNotes.splice(0, mockNotes.length);
+    mockSharedPosts.splice(0, mockSharedPosts.length);
+
+    const { getByTestId, getByText } = render(<NotesIndexScreen />);
+
+    expect(getByTestId('notes-empty-state')).toBeTruthy();
+    expect(getByText('document-text-outline')).toBeTruthy();
+    expect(getByText('No notes yet')).toBeTruthy();
   });
 
   it('queues a note focus request and returns to Home instead of pushing note detail', () => {

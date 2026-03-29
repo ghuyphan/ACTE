@@ -128,10 +128,7 @@ export async function syncSocialPushRegistration(user: AppUser | null) {
     return;
   }
 
-  let permissions = await Notifications.getPermissionsAsync();
-  if (permissions.status !== 'granted') {
-    permissions = await Notifications.requestPermissionsAsync();
-  }
+  const permissions = await Notifications.getPermissionsAsync();
 
   if (permissions.status !== 'granted') {
     if (persisted?.token) {

@@ -1,0 +1,106 @@
+const mockGetPermissionsAsync = jest.fn();
+const mockGetExpoPushTokenAsync = jest.fn();
+const mockGetPersistentItem = jest.fn();
+const mockRemovePersistentItem = jest.fn();
+const mockSetPersistentItem = jest.fn();
+const mockHasSupabaseConfig = jest.fn();
+const mockGetSupabase = jest.fn();
+
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: {
+    easConfig: {
+      projectId: 'project-123',
+    },
+    expoConfig: {
+      version: '1.0.0',
+    },
+  },
+}));
+
+jest.mock('expo-notifications', () => ({
+  getPermissionsAsync: (...args: unknown[]) => mockGetPermissionsAsync(...args),
+  getExpoPushTokenAsync: (...args: unknown[]) => mockGetExpoPushTokenAsync(...args),
+}));
+
+jest.mock('react-native', () => ({
+  Platform: {
+    OS: 'ios',
+  },
+}));
+
+jest.mock('../utils/appStorage', () => ({
+  getPersistentItem: (...args: unknown[]) => mockGetPersistentItem(...args),
+  removePersistentItem: (...args: unknown[]) => mockRemovePersistentItem(...args),
+  setPersistentItem: (...args: unknown[]) => mockSetPersistentItem(...args),
+}));
+
+jest.mock('../utils/supabase', () => ({
+  getSupabase: (...args: unknown[]) => mockGetSupabase(...args),
+  getSupabaseErrorMessage: jest.fn(() => ''),
+  hasSupabaseConfig: (...args: unknown[]) => mockHasSupabaseConfig(...args),
+}));
+
+import { syncSocialPushRegistration } from '../services/socialPushService';
+
+describe('syncSocialPushRegistration', () => {
+  const rpc = jest.fn();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockHasSupabaseConfig.mockReturnValue(true);
+    mockGetSupabase.mockReturnValue({ rpc });
+    mockGetPermissionsAsync.mockResolvedValue({
+      status: 'denied',
+      canAskAgain: true,
+    });
+    mockGetPersistentItem.mockResolvedValue(null);
+    mockRemovePersistentItem.mockResolvedValue(undefined);
+    mockSetPersistentItem.mockResolvedValue(undefined);
+    mockGetExpoPushTokenAsync.mockResolvedValue({
+      data: 'ExponentPushToken[token]',
+    });
+    rpc.mockResolvedValue({ error: null });
+  });
+
+  it('does not try to register or prompt when notification permission is not granted', async () => {
+    await syncSocialPushRegistration({
+      id: 'user-1',
+      uid: 'user-1',
+      email: 'hello@example.com',
+      displayName: 'Noto User',
+      photoURL: null,
+      providerData: [],
+    });
+
+    expect(mockGetPermissionsAsync).toHaveBeenCalled();
+    expect(mockGetExpoPushTokenAsync).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('registers the token when permission is already granted', async () => {
+    mockGetPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+      canAskAgain: true,
+    });
+
+    await syncSocialPushRegistration({
+      id: 'user-1',
+      uid: 'user-1',
+      email: 'hello@example.com',
+      displayName: 'Noto User',
+      photoURL: null,
+      providerData: [],
+    });
+
+    expect(mockGetExpoPushTokenAsync).toHaveBeenCalledWith({
+      projectId: 'project-123',
+    });
+    expect(rpc).toHaveBeenCalledWith('register_push_token', {
+      expo_push_token_input: 'ExponentPushToken[token]',
+      platform_input: 'ios',
+      app_version_input: '1.0.0',
+    });
+    expect(mockSetPersistentItem).toHaveBeenCalled();
+  });
+});
