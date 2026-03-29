@@ -3,7 +3,8 @@ import type { ExpoConfig } from 'expo/config';
 
 const googleMapsAndroidApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY;
 const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() ?? '';
-const easProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ?? '';
+const easProjectId =
+  process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ?? '82e9519b-f89b-466e-af4d-697349535c13';
 const rootGoogleServicesFile = './google-services.json';
 const nativeAndroidGoogleServicesFile = './android/app/google-services.json';
 const rootGoogleServiceInfoPlist = './GoogleService-Info.plist';
