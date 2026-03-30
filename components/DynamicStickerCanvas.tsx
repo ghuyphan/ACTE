@@ -41,7 +41,8 @@ interface StickerSpriteProps {
   height: number;
   outlineSize: number;
   opacity: number | SharedValue<number>;
-  transform: Transforms3d | SharedValue<Transforms3d>;
+  motionTransform: Transforms3d | SharedValue<Transforms3d>;
+  jellyTransform: Transforms3d | SharedValue<Transforms3d>;
 }
 
 interface StickerLayerProps {
@@ -63,13 +64,20 @@ interface PhysicsStickerSpriteProps {
 }
 
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
+
+function clamp(value: number, minValue: number, maxValue: number) {
+  'worklet';
+  return Math.min(maxValue, Math.max(minValue, value));
+}
+
 function StickerSprite({
   placement,
   width,
   height,
   outlineSize,
   opacity,
-  transform,
+  motionTransform,
+  jellyTransform,
 }: StickerSpriteProps) {
   const image = useImage(placement.asset.localUri);
   const outlineOffsets = getStickerOutlineOffsets(outlineSize);
@@ -79,38 +87,40 @@ function StickerSprite({
   }
 
   return (
-    <Group opacity={opacity} transform={transform}>
-      {placement.outlineEnabled !== false ? (
-        <Group
-          opacity={0.94}
-          layer={
-            <Paint>
-              <BlendColor color={STICKER_OUTLINE_COLOR} mode="srcIn" />
-            </Paint>
-          }
-        >
-          {outlineOffsets.map((offset, index) => (
-            <Group key={`${placement.id}-outline-${index}`}>
-              <SkiaImage
-                image={image}
-                fit="contain"
-                x={-width / 2 + offset.x * outlineSize}
-                y={-height / 2 + offset.y * outlineSize}
-                width={width}
-                height={height}
-              />
-            </Group>
-          ))}
-        </Group>
-      ) : null}
-      <SkiaImage
-        image={image}
-        fit="contain"
-        x={-width / 2}
-        y={-height / 2}
-        width={width}
-        height={height}
-      />
+    <Group opacity={opacity} transform={motionTransform}>
+      <Group transform={jellyTransform}>
+        {placement.outlineEnabled !== false ? (
+          <Group
+            opacity={0.94}
+            layer={
+              <Paint>
+                <BlendColor color={STICKER_OUTLINE_COLOR} mode="srcIn" />
+              </Paint>
+            }
+          >
+            {outlineOffsets.map((offset, index) => (
+              <Group key={`${placement.id}-outline-${index}`}>
+                <SkiaImage
+                  image={image}
+                  fit="contain"
+                  x={-width / 2 + offset.x * outlineSize}
+                  y={-height / 2 + offset.y * outlineSize}
+                  width={width}
+                  height={height}
+                />
+              </Group>
+            ))}
+          </Group>
+        ) : null}
+        <SkiaImage
+          image={image}
+          fit="contain"
+          x={-width / 2}
+          y={-height / 2}
+          width={width}
+          height={height}
+        />
+      </Group>
     </Group>
   );
 }
@@ -127,7 +137,7 @@ function PhysicsStickerSprite({
 }: PhysicsStickerSpriteProps) {
   const dimensions = getStickerDimensions(placement, layout, sizeMultiplier, minimumBaseSize);
   const outlineSize = getStickerOutlineSize(dimensions.width, dimensions.height);
-  const transform = useDerivedValue<Transforms3d>(() => {
+  const motionTransform = useDerivedValue<Transforms3d>(() => {
     const state = physicsState.value[index];
     if (!state) {
       return [
@@ -143,6 +153,17 @@ function PhysicsStickerSprite({
       { rotate: (state.rotation * Math.PI) / 180 },
     ] as Transforms3d;
   }, [index, layout.height, layout.width, placement.rotation, placement.x, placement.y]);
+  const jellyTransform = useDerivedValue<Transforms3d>(() => {
+    const state = physicsState.value[index];
+    if (!state) {
+      return [{ scaleX: 1 }, { scaleY: 1 }] as Transforms3d;
+    }
+
+    return [
+      { scaleX: clamp(state.jellyScaleX, 0.92, 1.08) },
+      { scaleY: clamp(state.jellyScaleY, 0.92, 1.08) },
+    ] as Transforms3d;
+  }, [index]);
   const opacity = useDerivedValue(() => physicsState.value[index]?.opacity ?? placement.opacity, [
     index,
     placement.opacity,
@@ -155,7 +176,8 @@ function PhysicsStickerSprite({
       height={dimensions.height}
       outlineSize={outlineSize}
       opacity={opacity}
-      transform={transform}
+      motionTransform={motionTransform}
+      jellyTransform={jellyTransform}
     />
   );
 }

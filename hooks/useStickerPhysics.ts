@@ -20,7 +20,7 @@ interface StickerPhysicsDescriptor {
   width: number;
   height: number;
   radius: number;
-  rotation: number;
+  baseRotation: number;
   opacity: number;
 }
 
@@ -29,6 +29,10 @@ export interface StickerPhysicsState extends StickerPhysicsDescriptor {
   y: number;
   vx: number;
   vy: number;
+  rotation: number;
+  angularVelocity: number;
+  jellyScaleX: number;
+  jellyScaleY: number;
 }
 
 interface UseStickerPhysicsParams {
@@ -45,19 +49,40 @@ interface UseStickerPhysicsParams {
 }
 
 const MAX_FRAME_DELTA_MS = 32;
-const TILT_ACCELERATION = 1180;
-const RESTORE_ACCELERATION = 10.5;
-const LINEAR_DAMPING = 0.965;
-const BOUNDARY_RESTITUTION = 0.72;
-const COLLISION_RESTITUTION = 0.78;
+const TILT_ACCELERATION = 1510;
+const TILT_CROSS_ACCELERATION = 185;
+const RESTORE_ACCELERATION = 8.1;
+const LINEAR_DAMPING = 0.978;
+const ANGULAR_DAMPING = 0.952;
+const ROTATION_RESTORE_ACCELERATION = 8.5;
+const BOUNDARY_RESTITUTION = 0.86;
+const COLLISION_RESTITUTION = 0.92;
 const MAX_SENSOR_COMPONENT = 1.15;
 const FLAT_RESTORE_THRESHOLD = 0.28;
 const MIN_DISTANCE_EPSILON = 0.001;
-const COLLISION_ITERATIONS = 2;
+const COLLISION_ITERATIONS = 3;
+const COLLISION_SPIN_FACTOR = 0.34;
+const BOUNDARY_SPIN_FACTOR = 0.18;
+const MAX_ANGULAR_VELOCITY = 165;
+const MAX_LINEAR_VELOCITY = 1550;
+const JELLY_RESPONSE = 0.16;
+const MAX_JELLY_STRETCH = 0.08;
 
 function clamp(value: number, minValue: number, maxValue: number) {
   'worklet';
   return Math.min(maxValue, Math.max(minValue, value));
+}
+
+function clampVelocity(sticker: StickerPhysicsState) {
+  'worklet';
+
+  sticker.vx = clamp(sticker.vx, -MAX_LINEAR_VELOCITY, MAX_LINEAR_VELOCITY);
+  sticker.vy = clamp(sticker.vy, -MAX_LINEAR_VELOCITY, MAX_LINEAR_VELOCITY);
+  sticker.angularVelocity = clamp(
+    sticker.angularVelocity,
+    -MAX_ANGULAR_VELOCITY,
+    MAX_ANGULAR_VELOCITY
+  );
 }
 
 function applyBoundaryConstraint(sticker: StickerPhysicsState, layout: StickerCanvasLayout) {
@@ -74,11 +99,13 @@ function applyBoundaryConstraint(sticker: StickerPhysicsState, layout: StickerCa
     sticker.x = minX;
     if (sticker.vx < 0) {
       sticker.vx = -sticker.vx * BOUNDARY_RESTITUTION;
+      sticker.angularVelocity += Math.abs(sticker.vx) * BOUNDARY_SPIN_FACTOR;
     }
   } else if (sticker.x > maxX) {
     sticker.x = maxX;
     if (sticker.vx > 0) {
       sticker.vx = -sticker.vx * BOUNDARY_RESTITUTION;
+      sticker.angularVelocity -= Math.abs(sticker.vx) * BOUNDARY_SPIN_FACTOR;
     }
   }
 
@@ -86,11 +113,13 @@ function applyBoundaryConstraint(sticker: StickerPhysicsState, layout: StickerCa
     sticker.y = minY;
     if (sticker.vy < 0) {
       sticker.vy = -sticker.vy * BOUNDARY_RESTITUTION;
+      sticker.angularVelocity -= Math.abs(sticker.vy) * BOUNDARY_SPIN_FACTOR;
     }
   } else if (sticker.y > maxY) {
     sticker.y = maxY;
     if (sticker.vy > 0) {
       sticker.vy = -sticker.vy * BOUNDARY_RESTITUTION;
+      sticker.angularVelocity += Math.abs(sticker.vy) * BOUNDARY_SPIN_FACTOR;
     }
   }
 }
@@ -133,8 +162,20 @@ function resolveStickerCollisions(stickers: StickerPhysicsState[], layout: Stick
           left.vy -= impulse * normalY;
           right.vx += impulse * normalX;
           right.vy += impulse * normalY;
+
+          const tangentialVelocity =
+            relativeVelocityX * -normalY + relativeVelocityY * normalX;
+          const spinImpulse = tangentialVelocity * COLLISION_SPIN_FACTOR;
+          left.angularVelocity -= spinImpulse;
+          right.angularVelocity += spinImpulse;
+          left.vx -= normalY * spinImpulse * 0.12;
+          left.vy += normalX * spinImpulse * 0.12;
+          right.vx += normalY * spinImpulse * 0.12;
+          right.vy -= normalX * spinImpulse * 0.12;
         }
 
+        clampVelocity(left);
+        clampVelocity(right);
         applyBoundaryConstraint(left, layout);
         applyBoundaryConstraint(right, layout);
       }
@@ -166,7 +207,7 @@ export function useStickerPhysics({
           width: dimensions.width,
           height: dimensions.height,
           radius: Math.max(dimensions.width, dimensions.height) / 2,
-          rotation: placement.rotation,
+          baseRotation: placement.rotation,
           opacity: placement.opacity,
         };
       }),
@@ -192,6 +233,10 @@ export function useStickerPhysics({
         y: nextY,
         vx: previousState && isActive ? previousState.vx : 0,
         vy: previousState && isActive ? previousState.vy : 0,
+        rotation: previousState && isActive ? previousState.rotation : descriptor.baseRotation,
+        angularVelocity: previousState && isActive ? previousState.angularVelocity : 0,
+        jellyScaleX: previousState && isActive ? previousState.jellyScaleX : 1,
+        jellyScaleY: previousState && isActive ? previousState.jellyScaleY : 1,
       };
     });
   }, [descriptors, isActive, physicsState]);
@@ -206,6 +251,7 @@ export function useStickerPhysics({
     const deltaTimeMs = frameInfo.timeSincePreviousFrame ?? 16.667;
     const dt = Math.min(deltaTimeMs, MAX_FRAME_DELTA_MS) / 1000;
     const damping = Math.pow(LINEAR_DAMPING, dt * 60);
+    const angularDamping = Math.pow(ANGULAR_DAMPING, dt * 60);
     const sensor = gravitySensor.sensor.value;
     const tiltOverride = debugTiltOverride?.value;
     const normalizedGravityX = clamp(
@@ -228,13 +274,41 @@ export function useStickerPhysics({
       const sticker = nextStates[index];
       const restoreX = (sticker.anchorX - sticker.x) * RESTORE_ACCELERATION * flatRestoreFactor;
       const restoreY = (sticker.anchorY - sticker.y) * RESTORE_ACCELERATION * flatRestoreFactor;
+      const crossAxisX = normalizedGravityY * TILT_CROSS_ACCELERATION;
+      const crossAxisY = -normalizedGravityX * TILT_CROSS_ACCELERATION;
+      const stickerOffsetX = sticker.x - sticker.anchorX;
+      const stickerOffsetY = sticker.y - sticker.anchorY;
+      const orbitalX = clamp(stickerOffsetY * -0.55, -160, 160);
+      const orbitalY = clamp(stickerOffsetX * 0.55, -160, 160);
 
-      sticker.vx += (normalizedGravityX * TILT_ACCELERATION + restoreX) * dt;
-      sticker.vy += (normalizedGravityY * TILT_ACCELERATION + restoreY) * dt;
+      sticker.vx +=
+        (normalizedGravityX * TILT_ACCELERATION + crossAxisX + orbitalX + restoreX) * dt;
+      sticker.vy +=
+        (normalizedGravityY * TILT_ACCELERATION + crossAxisY + orbitalY + restoreY) * dt;
       sticker.vx *= damping;
       sticker.vy *= damping;
+      clampVelocity(sticker);
       sticker.x += sticker.vx * dt;
       sticker.y += sticker.vy * dt;
+      sticker.angularVelocity +=
+        (normalizedGravityX * sticker.vy - normalizedGravityY * sticker.vx) * 0.0024 * dt;
+      sticker.angularVelocity +=
+        (sticker.baseRotation - sticker.rotation) *
+        ROTATION_RESTORE_ACCELERATION *
+        Math.max(0.12, flatRestoreFactor) *
+        dt;
+      sticker.angularVelocity += (orbitalX - orbitalY) * 0.006 * dt;
+      sticker.angularVelocity *= angularDamping;
+      clampVelocity(sticker);
+      sticker.rotation += sticker.angularVelocity * dt;
+
+      const normalizedVx = clamp(Math.abs(sticker.vx) / 1200, 0, 1);
+      const normalizedVy = clamp(Math.abs(sticker.vy) / 1200, 0, 1);
+      const targetJellyX = 1 + normalizedVx * MAX_JELLY_STRETCH - normalizedVy * MAX_JELLY_STRETCH * 0.55;
+      const targetJellyY = 1 + normalizedVy * MAX_JELLY_STRETCH - normalizedVx * MAX_JELLY_STRETCH * 0.55;
+      const jellyStep = 1 - Math.pow(1 - JELLY_RESPONSE, dt * 60);
+      sticker.jellyScaleX += (targetJellyX - sticker.jellyScaleX) * jellyStep;
+      sticker.jellyScaleY += (targetJellyY - sticker.jellyScaleY) * jellyStep;
 
       applyBoundaryConstraint(sticker, layout);
     }
