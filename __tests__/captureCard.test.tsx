@@ -2,7 +2,7 @@ import React from 'react';
 import { Alert, Platform, View } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { getImageAsync, hasImageAsync } from 'expo-clipboard';
-import { deleteAsync, writeAsStringAsync } from 'expo-file-system/legacy';
+import { deleteAsync, writeAsStringAsync } from '../utils/fileSystem';
 import { importStickerAsset } from '../services/noteStickers';
 import CaptureCard, { type CaptureCardHandle } from '../components/home/CaptureCard';
 
@@ -39,7 +39,7 @@ jest.mock('expo-clipboard', () => ({
   getImageAsync: jest.fn(),
 }));
 
-jest.mock('expo-file-system/legacy', () => ({
+jest.mock('../utils/fileSystem', () => ({
   __esModule: true,
   cacheDirectory: 'file:///cache/',
   EncodingType: {

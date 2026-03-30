@@ -157,7 +157,7 @@ jest.mock('expo-file-system', () => ({
   },
 }));
 
-jest.mock('expo-file-system/legacy', () => ({
+jest.mock('../utils/fileSystem', () => ({
   documentDirectory: 'file:///mock-documents/',
   makeDirectoryAsync: (...args: unknown[]) => mockMakeDirectoryAsync(...args),
   deleteAsync: (...args: unknown[]) => mockDeleteAsync(...args),

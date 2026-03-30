@@ -5,6 +5,7 @@ const googleMapsAndroidApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_
 const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() ?? '';
 const easProjectId =
   process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ?? '82e9519b-f89b-466e-af4d-697349535c13';
+const easUpdateUrl = `https://u.expo.dev/${easProjectId}`;
 const rootGoogleServicesFile = './google-services.json';
 const nativeAndroidGoogleServicesFile = './android/app/google-services.json';
 const rootGoogleServiceInfoPlist = './GoogleService-Info.plist';
@@ -27,11 +28,20 @@ const config = {
   name: 'Noto',
   slug: 'noto',
   version: '1.0.0',
+  runtimeVersion: {
+    policy: 'appVersion',
+  },
   orientation: 'portrait',
   icon: './assets/images/icon/icon-default.png',
   scheme: 'noto',
   userInterfaceStyle: 'automatic',
   newArchEnabled: true,
+  updates: {
+    enabled: true,
+    url: easUpdateUrl,
+    checkAutomatically: 'ON_LOAD',
+    fallbackToCacheTimeout: 0,
+  },
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.acte.app',

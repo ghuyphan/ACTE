@@ -1,5 +1,5 @@
 import { Paths } from 'expo-file-system';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '../utils/fileSystem';
 import * as Location from 'expo-location';
 import { NativeModules, Platform } from 'react-native';
 import i18n from '../constants/i18n';

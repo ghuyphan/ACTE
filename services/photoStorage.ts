@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '../utils/fileSystem';
 import type { Note } from './database';
 
 export const PHOTO_DIRECTORY = FileSystem.documentDirectory

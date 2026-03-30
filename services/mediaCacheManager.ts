@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '../utils/fileSystem';
 import { SHARED_PHOTO_CACHE_DIRECTORY } from './photoStorage';
 
 const MAX_CACHE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB

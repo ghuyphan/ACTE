@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '../utils/fileSystem';
 import { getAllNotes } from './database';
 import { getStickerAssets, cleanupUnusedSharedStickerCacheFiles, STICKER_DIRECTORY } from './noteStickers';
 import { PHOTO_DIRECTORY, getNotePhotoUri } from './photoStorage';

@@ -94,8 +94,35 @@ export default function MapPreviewCard({
   const previewListRef = useRef<any>(null);
   const previewDraggingRef = useRef(false);
   const prevPreviewModeRef = useRef(previewMode);
+  const lastVisiblePreviewStateRef = useRef<{
+    previewMode: PreviewMode;
+    selectedGroup: MapPointGroup | null;
+    selectedNoteIndex: number;
+  } | null>(null);
 
   const [isMounted, setIsMounted] = useState(visible);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    lastVisiblePreviewStateRef.current = {
+      previewMode,
+      selectedGroup,
+      selectedNoteIndex,
+    };
+  }, [previewMode, selectedGroup, selectedNoteIndex, visible]);
+
+  const renderPreviewMode = visible
+    ? previewMode
+    : lastVisiblePreviewStateRef.current?.previewMode ?? previewMode;
+  const renderSelectedGroup = visible
+    ? selectedGroup
+    : lastVisiblePreviewStateRef.current?.selectedGroup ?? selectedGroup;
+  const renderSelectedNoteIndex = visible
+    ? selectedNoteIndex
+    : lastVisiblePreviewStateRef.current?.selectedNoteIndex ?? selectedNoteIndex;
 
   useEffect(() => {
     if (visible && !isMounted) {
@@ -112,12 +139,12 @@ export default function MapPreviewCard({
     [windowWidth]
   );
 
-  const isGroupMode = previewMode === 'group' && Boolean(selectedGroup);
+  const isGroupMode = renderPreviewMode === 'group' && Boolean(renderSelectedGroup);
 
   const previewItems = useMemo<PreviewRailItem[]>(
     () =>
-      isGroupMode && selectedGroup
-        ? selectedGroup.notes.map((note) => ({
+      isGroupMode && renderSelectedGroup
+        ? renderSelectedGroup.notes.map((note) => ({
             note,
             distanceMeters: null,
           }))
@@ -125,7 +152,7 @@ export default function MapPreviewCard({
             note: item.note,
             distanceMeters: item.distanceMeters,
           })),
-    [isGroupMode, nearbyItems, selectedGroup]
+    [isGroupMode, nearbyItems, renderSelectedGroup]
   );
 
   const activeNearbyIndex = useMemo(
@@ -139,11 +166,11 @@ export default function MapPreviewCard({
     }
 
     if (isGroupMode) {
-      return Math.max(0, Math.min(selectedNoteIndex, previewItems.length - 1));
+      return Math.max(0, Math.min(renderSelectedNoteIndex, previewItems.length - 1));
     }
 
     return activeNearbyIndex >= 0 ? activeNearbyIndex : 0;
-  }, [activeNearbyIndex, isGroupMode, previewItems.length, selectedNoteIndex]);
+  }, [activeNearbyIndex, isGroupMode, previewItems.length, renderSelectedNoteIndex]);
 
   const activePreviewItem = useMemo(() => {
     if (previewItems.length === 0) {
@@ -173,8 +200,8 @@ export default function MapPreviewCard({
     : lastValidDataRef.current;
 
   useEffect(() => {
-    const modeChanged = prevPreviewModeRef.current !== previewMode;
-    prevPreviewModeRef.current = previewMode;
+    const modeChanged = prevPreviewModeRef.current !== renderPreviewMode;
+    prevPreviewModeRef.current = renderPreviewMode;
 
     if (!previewListRef.current || activeIndex < 0) {
       return;
@@ -189,7 +216,7 @@ export default function MapPreviewCard({
     if (modeChanged) {
       previewDraggingRef.current = false;
     }
-  }, [activeIndex, nearbyPageWidth, previewMode, reduceMotionEnabled]);
+  }, [activeIndex, nearbyPageWidth, renderPreviewMode, reduceMotionEnabled]);
 
   const handlePreviewMomentumEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -233,7 +260,7 @@ export default function MapPreviewCard({
   const previewCountLabel = `${Math.max(renderIndex, 0) + 1}/${renderItems.length}`;
   const pointerEvents = 'auto';
   // Use a stable key so re-renders from state don't break the animation sheet container
-  const sheetInstanceKey = isGroupMode && selectedGroup ? `group:${selectedGroup.id}` : 'nearby';
+  const sheetInstanceKey = isGroupMode && renderSelectedGroup ? `group:${renderSelectedGroup.id}` : 'nearby';
 
   return (
     <MapPreviewSheet

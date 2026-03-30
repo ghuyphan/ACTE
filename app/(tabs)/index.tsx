@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useIsFocused, useScrollToTop } from '@react-navigation/native';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '../../utils/fileSystem';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';

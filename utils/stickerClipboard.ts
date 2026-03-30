@@ -3,7 +3,7 @@ import {
   deleteAsync as deleteFileAsync,
   EncodingType,
   writeAsStringAsync,
-} from 'expo-file-system/legacy';
+} from './fileSystem';
 import { importStickerAsset, type StickerAsset } from '../services/noteStickers';
 
 const CLIPBOARD_STICKER_PREFIX = 'data:image/png;base64,';

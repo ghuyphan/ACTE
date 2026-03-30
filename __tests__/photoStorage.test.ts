@@ -1,4 +1,4 @@
-jest.mock('expo-file-system/legacy', () => ({
+jest.mock('../utils/fileSystem', () => ({
   documentDirectory: 'file:///current-container/Documents/',
 }));
 

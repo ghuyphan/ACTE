@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '../../utils/fileSystem';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';

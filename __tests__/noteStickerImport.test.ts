@@ -15,7 +15,7 @@ jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => 'test-uuid-1234'),
 }));
 
-jest.mock('expo-file-system/legacy', () => ({
+jest.mock('../utils/fileSystem', () => ({
   __esModule: true,
   documentDirectory: 'file:///documents/',
   cacheDirectory: 'file:///cache/',

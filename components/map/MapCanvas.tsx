@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { memo, useEffect, useMemo, useRef, type RefObject } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
-import MapView, { Callout, Marker, Region } from 'react-native-maps';
+import MapView, { Marker, Region } from 'react-native-maps';
 import Reanimated, {
   interpolate,
   interpolateColor,
@@ -30,6 +30,15 @@ type SharedPostWithCoordinates = SharedPost & {
   latitude: number;
   longitude: number;
 };
+
+interface DetachedSelectedMarker {
+  groupId: string;
+  latitude: number;
+  longitude: number;
+  note: Note;
+}
+
+const DETACHED_SELECTED_MARKER_EXIT_MS = 180;
 
 interface MapCanvasProps {
   mapRef: RefObject<MapView | null>;
@@ -482,9 +491,9 @@ function MapCanvas({
   colors,
 }: MapCanvasProps) {
   const palette = useMemo(() => getMapPalette(colors, isDark), [colors, isDark]);
-  const markerRefs = useRef<Record<string, any>>({});
-  const previousCalloutGroupIdRef = useRef<string | null>(null);
-  const showCalloutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [detachedSelectedMarker, setDetachedSelectedMarker] = useState<DetachedSelectedMarker | null>(null);
+  const [detachedSelectedMarkerVisible, setDetachedSelectedMarkerVisible] = useState(false);
+  const detachedSelectedMarkerExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Android applies map color scheme only from initial props, so remount on theme flips.
   const mapViewKey = Platform.OS === 'android' ? `map-${isDark ? 'dark' : 'light'}` : 'map';
 
@@ -531,46 +540,77 @@ function MapCanvas({
       }),
     [currentZoom, markerNodes, markerPulseId, noteById, palette.photo, palette.text, selectedGroupId]
   );
+  const selectedMarkerItems = useMemo(
+    () =>
+      markerRenderItems.filter(
+        (item) =>
+          !item.node.isCluster &&
+          item.isSelected &&
+          item.node.pointCount === 1 &&
+          Boolean(item.previewNoteId)
+      ),
+    [markerRenderItems]
+  );
 
   useEffect(() => {
     return () => {
-      if (showCalloutTimerRef.current) {
-        clearTimeout(showCalloutTimerRef.current);
+      if (detachedSelectedMarkerExitTimerRef.current) {
+        clearTimeout(detachedSelectedMarkerExitTimerRef.current);
       }
     };
   }, []);
 
   useEffect(() => {
-    const previousCalloutGroupId = previousCalloutGroupIdRef.current;
-    if (previousCalloutGroupId && previousCalloutGroupId !== selectedGroupId) {
-      markerRefs.current[previousCalloutGroupId]?.hideCallout?.();
-      previousCalloutGroupIdRef.current = null;
+    const activeSelectedMarker = selectedMarkerItems[0];
+    const activeSelectedNote = activeSelectedMarker?.previewNoteId
+      ? noteById.get(activeSelectedMarker.previewNoteId) ?? null
+      : null;
+
+    if (detachedSelectedMarkerExitTimerRef.current) {
+      clearTimeout(detachedSelectedMarkerExitTimerRef.current);
+      detachedSelectedMarkerExitTimerRef.current = null;
     }
 
-    if (showCalloutTimerRef.current) {
-      clearTimeout(showCalloutTimerRef.current);
-      showCalloutTimerRef.current = null;
-    }
+    if (activeSelectedMarker && activeSelectedMarker.node.groupId && activeSelectedNote) {
+      const nextGroupId = activeSelectedMarker.node.groupId;
+      setDetachedSelectedMarker((current) => {
+        if (
+          current &&
+          current.groupId === nextGroupId &&
+          current.note.id === activeSelectedNote.id &&
+          current.latitude === activeSelectedMarker.node.latitude &&
+          current.longitude === activeSelectedMarker.node.longitude
+        ) {
+          return current;
+        }
 
-    if (!selectedGroupId) {
+        return {
+          groupId: nextGroupId,
+          latitude: activeSelectedMarker.node.latitude,
+          longitude: activeSelectedMarker.node.longitude,
+          note: activeSelectedNote,
+        };
+      });
+      setDetachedSelectedMarkerVisible(true);
       return;
     }
 
-    const selectedItem = markerRenderItems.find(
-      (item) => !item.node.isCluster && item.node.groupId === selectedGroupId && item.node.pointCount === 1
-    );
-
-    if (!selectedItem) {
+    if (!detachedSelectedMarker) {
       return;
     }
 
-    markerRefs.current[selectedGroupId]?.showCallout?.();
-    showCalloutTimerRef.current = setTimeout(() => {
-      markerRefs.current[selectedGroupId]?.showCallout?.();
-      showCalloutTimerRef.current = null;
-    }, 40);
-    previousCalloutGroupIdRef.current = selectedGroupId;
-  }, [markerRenderItems, selectedGroupId]);
+    if (reduceMotionEnabled) {
+      setDetachedSelectedMarkerVisible(false);
+      setDetachedSelectedMarker(null);
+      return;
+    }
+
+    setDetachedSelectedMarkerVisible(false);
+    detachedSelectedMarkerExitTimerRef.current = setTimeout(() => {
+      setDetachedSelectedMarker(null);
+      detachedSelectedMarkerExitTimerRef.current = null;
+    }, DETACHED_SELECTED_MARKER_EXIT_MS);
+  }, [detachedSelectedMarker, noteById, reduceMotionEnabled, selectedMarkerItems]);
 
   return (
     <MapView
@@ -603,21 +643,14 @@ function MapCanvas({
           previewText,
           countBadgeLabel,
         }) => {
+        const renderDetachedSelectedMarker =
+          !node.isCluster &&
+          detachedSelectedMarker?.groupId === node.groupId;
+
         return (
           <Marker
             key={node.id}
             testID={node.isCluster ? `cluster-marker-${node.id}` : `leaf-marker-${node.groupId ?? node.id}`}
-            ref={(marker) => {
-              if (!node.groupId) {
-                return;
-              }
-
-              if (marker) {
-                markerRefs.current[node.groupId] = marker;
-              } else {
-                delete markerRefs.current[node.groupId];
-              }
-            }}
             coordinate={{ latitude: node.latitude, longitude: node.longitude }}
             anchor={{ x: 0.5, y: 0.5 }}
             tracksViewChanges={pulseActive || isSelected || reduceMotionEnabled}
@@ -625,10 +658,10 @@ function MapCanvas({
               event.stopPropagation?.();
               if (node.isCluster) {
                 onClusterPress(node);
+                return;
               }
-            }}
-            onSelect={() => {
-              if (!node.isCluster && node.groupId) {
+
+              if (node.groupId) {
                 onLeafPress(node.groupId);
               }
             }}
@@ -636,47 +669,67 @@ function MapCanvas({
             <View
               style={[
                 styles.markerWrap,
+                renderDetachedSelectedMarker ? styles.hiddenMarkerWrap : null,
                 showRichPreviewMarker ? styles.richMarkerHitArea : null,
                 showStackPreviewMarker ? styles.stackMarkerHitArea : null,
               ]}
               collapsable={false}
             >
-              <MarkerContent
-                isCluster={node.isCluster}
-                pointCount={node.pointCount}
-                zoomLevel={currentZoom}
-                showRichPreview={showRichPreviewMarker}
-                showStackPreview={showStackPreviewMarker}
-                previewNoteId={previewNoteId}
-                showPhotoThumbnail={Boolean(photoUri)}
-                photoNoteId={photoNoteId}
-                photoUri={photoUri}
-                previewTitle={previewTitle}
-                previewText={previewText}
-                countBadgeLabel={showRichPreviewMarker || showStackPreviewMarker ? countBadgeLabel : null}
-                selected={isSelected}
-                color={node.isCluster ? palette.cluster : markerColor}
-                accentColor={palette.focus}
-                cardBackgroundColor={palette.cardBackground}
-                cardTextColor={palette.cardText}
-                cardSubtextColor={palette.cardSubtext}
-                labelShadowColor={palette.labelShadow}
-                pulseActive={pulseActive}
-                pulseKey={markerPulseKey}
-                reduceMotionEnabled={reduceMotionEnabled}
-              />
-            </View>
-            {isSelected && node.pointCount === 1 && previewNoteId ? (
-              <Callout tooltip>
-                <MapSelectedNoteCallout
-                  note={noteById.get(previewNoteId) ?? noteById.get(node.noteIds[0])!}
-                  colors={colors}
+              {renderDetachedSelectedMarker ? null : (
+                <MarkerContent
+                  isCluster={node.isCluster}
+                  pointCount={node.pointCount}
+                  zoomLevel={currentZoom}
+                  showRichPreview={showRichPreviewMarker}
+                  showStackPreview={showStackPreviewMarker}
+                  previewNoteId={previewNoteId}
+                  showPhotoThumbnail={Boolean(photoUri)}
+                  photoNoteId={photoNoteId}
+                  photoUri={photoUri}
+                  previewTitle={previewTitle}
+                  previewText={previewText}
+                  countBadgeLabel={showRichPreviewMarker || showStackPreviewMarker ? countBadgeLabel : null}
+                  selected={isSelected}
+                  color={node.isCluster ? palette.cluster : markerColor}
+                  accentColor={palette.focus}
+                  cardBackgroundColor={palette.cardBackground}
+                  cardTextColor={palette.cardText}
+                  cardSubtextColor={palette.cardSubtext}
+                  labelShadowColor={palette.labelShadow}
+                  pulseActive={pulseActive}
+                  pulseKey={markerPulseKey}
+                  reduceMotionEnabled={reduceMotionEnabled}
                 />
-              </Callout>
-            ) : null}
+              )}
+            </View>
           </Marker>
         );
       })}
+      {detachedSelectedMarker ? (
+        <Marker
+          key={`selected-note-${detachedSelectedMarker.groupId}`}
+          coordinate={{
+            latitude: detachedSelectedMarker.latitude,
+            longitude: detachedSelectedMarker.longitude,
+          }}
+          anchor={{ x: 0.5, y: 30 / 136 }}
+          tracksViewChanges={detachedSelectedMarkerVisible || reduceMotionEnabled}
+          zIndex={40}
+          onPress={(event) => {
+            event.stopPropagation?.();
+            onLeafPress(detachedSelectedMarker.groupId);
+          }}
+        >
+          <View pointerEvents="none" style={styles.selectedMarkerWrap} collapsable={false}>
+            <MapSelectedNoteCallout
+              note={detachedSelectedMarker.note}
+              colors={colors}
+              visible={detachedSelectedMarkerVisible}
+              reduceMotionEnabled={reduceMotionEnabled}
+            />
+          </View>
+        </Marker>
+      ) : null}
       {friendMarkers.map((post) => {
         const isSelected = selectedFriendPostId === post.id;
         const authorLabel = post.authorDisplayName?.trim() || 'F';
@@ -738,6 +791,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minWidth: 60,
     minHeight: 60,
+  },
+  hiddenMarkerWrap: {
+    minWidth: 1,
+    minHeight: 1,
+  },
+  selectedMarkerWrap: {
+    width: 176,
+    height: 136,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
   },
   richMarkerHitArea: {
     minWidth: 164,

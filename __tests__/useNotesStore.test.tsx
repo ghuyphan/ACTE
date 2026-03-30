@@ -19,7 +19,7 @@ const mockUseAuth = jest.fn(() => ({
 let mockNotesDb: Note[] = [];
 let mockIdCounter = 1;
 
-jest.mock('expo-file-system/legacy', () => ({
+jest.mock('../utils/fileSystem', () => ({
   getInfoAsync: (...args: unknown[]) => mockGetInfoAsync(...args),
   deleteAsync: (...args: unknown[]) => mockDeleteAsync(...args),
 }));

@@ -625,6 +625,38 @@ describe('MapScreen', () => {
     expect(getByTestId('note-marker-text-1')).toBeTruthy();
   });
 
+  it('keeps the selected marker and pinned preview visible for the start of the dismiss animation', async () => {
+    const nowSpy = jest.spyOn(Date, 'now');
+    let now = 1000;
+    nowSpy.mockImplementation(() => now);
+
+    const { getByTestId, getByText } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByText('Pinned note')).toBeTruthy();
+    });
+
+    now = 1400;
+    fireEvent.press(getByTestId('mock-map-press'));
+
+    expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    expect(getByText('Pinned note')).toBeTruthy();
+
+    nowSpy.mockRestore();
+  });
+
   it('keeps same-place notes compact on the map even when focused', async () => {
     replaceMockNotes([
       {

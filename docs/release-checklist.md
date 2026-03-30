@@ -59,6 +59,12 @@
 - [ ] Android: capture, map, shared feed, and settings remain readable in both themes.
 - [ ] Android: background location and notification permission recovery flows still work.
 
+## OTA / EAS Update
+
+- [ ] Publish app-store builds from the intended EAS channel (`preview` or `production`).
+- [ ] For native changes, bump the Expo `version` in `app.config.ts` before shipping a new build.
+- [ ] For JavaScript-only changes, publish an OTA update to the matching channel.
+
 ## Quality Gates
 
 - [ ] `npm run lint`
