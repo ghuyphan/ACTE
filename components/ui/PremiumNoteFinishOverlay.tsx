@@ -102,8 +102,9 @@ export default function PremiumNoteFinishOverlay({
   const finish = getNoteColorFinish(noteColor);
   const reduceMotionEnabled = useReducedMotion();
   const sheenProgress = useSharedValue(0);
+  const shouldRenderInteractiveHolo = finish === 'holo' && animated && interactive;
   const { tiltX, tiltY, isInteractive } = useHologramMotion({
-    enabled: finish === 'holo' && animated && interactive,
+    enabled: shouldRenderInteractiveHolo,
     previewMode,
     strength,
   });
@@ -151,7 +152,7 @@ export default function PremiumNoteFinishOverlay({
     ],
   }), [finish, isInteractive]);
   const holoSheenAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: finish === 'holo' && isInteractive ? 0.96 : 0.74,
+    opacity: finish === 'holo' && isInteractive ? 0.56 : 0.38,
     transform: [
       { translateX: finish === 'holo' && isInteractive ? interpolate(tiltX.value, [-1, 1], [-180, 180]) : 12 },
       { translateY: finish === 'holo' && isInteractive ? interpolate(tiltY.value, [-1, 1], [90, -90]) : -4 },
@@ -163,6 +164,24 @@ export default function PremiumNoteFinishOverlay({
     transform: [
       { translateX: finish === 'holo' && isInteractive ? interpolate(tiltX.value, [-1, 1], [-12, 12]) : 0 },
       { translateY: finish === 'holo' && isInteractive ? interpolate(tiltY.value, [-1, 1], [12, -12]) : 0 },
+    ],
+  }), [finish, isInteractive]);
+  const rainbowSweepAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: finish === 'holo' && isInteractive ? 0.98 : 0.88,
+    transform: [
+      { translateX: finish === 'holo' && isInteractive ? interpolate(tiltX.value, [-1, 1], [-140, 140]) : -16 },
+      { translateY: finish === 'holo' && isInteractive ? interpolate(tiltY.value, [-1, 1], [78, -78]) : 10 },
+      { rotate: '-18deg' },
+      { scale: 1.24 },
+    ],
+  }), [finish, isInteractive]);
+  const prismRibbonAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: finish === 'holo' && isInteractive ? 0.88 : 0.76,
+    transform: [
+      { translateX: finish === 'holo' && isInteractive ? interpolate(tiltX.value, [-1, 1], [120, -120]) : 14 },
+      { translateY: finish === 'holo' && isInteractive ? interpolate(tiltY.value, [-1, 1], [-48, 48]) : 0 },
+      { rotate: '62deg' },
+      { scale: 1.5 },
     ],
   }), [finish, isInteractive]);
   const animatedSheenStyle = useAnimatedStyle(() => (
@@ -184,26 +203,62 @@ export default function PremiumNoteFinishOverlay({
     return null;
   }
 
-  if (finish === 'holo') {
+  if (finish === 'holo' && shouldRenderInteractiveHolo) {
     return (
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <LinearGradient
-          colors={['rgba(255,124,214,0.12)', 'rgba(100,222,255,0.12)', 'rgba(255,255,255,0.12)']}
+          colors={[
+            'rgba(255,255,255,0.34)',
+            'rgba(243,240,234,0.22)',
+            'rgba(225,232,241,0.18)',
+            'rgba(255,255,255,0.2)',
+          ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[StyleSheet.absoluteFill, styles.holoBaseWash]}
         />
+        <LinearGradient
+          colors={[
+            'rgba(255,224,108,0.34)',
+            'rgba(196,247,150,0.24)',
+            'rgba(89,227,255,0.28)',
+            'rgba(144,129,255,0.24)',
+            'rgba(255,163,229,0.2)',
+            'rgba(255,255,255,0.0)',
+          ]}
+          locations={[0.02, 0.24, 0.48, 0.72, 0.9, 1]}
+          start={{ x: 0.02, y: 0.5 }}
+          end={{ x: 0.98, y: 0.5 }}
+          style={[StyleSheet.absoluteFill, styles.holoRainbowField]}
+        />
+        <Animated.View style={[styles.holoRainbowSweepWrap, rainbowSweepAnimatedStyle]}>
+          <LinearGradient
+            colors={[
+              'rgba(255,255,255,0.0)',
+              'rgba(255,226,112,0.28)',
+              'rgba(255,137,204,0.24)',
+              'rgba(140,116,255,0.2)',
+              'rgba(81,233,255,0.24)',
+              'rgba(188,255,151,0.18)',
+              'rgba(255,255,255,0.0)',
+            ]}
+            locations={[0, 0.12, 0.28, 0.46, 0.66, 0.84, 1]}
+            start={{ x: 0, y: 0.08 }}
+            end={{ x: 1, y: 0.92 }}
+            style={styles.holoRainbowSweep}
+          />
+        </Animated.View>
         <Animated.View style={[styles.holoSpectrumWrap, spectrumAnimatedStyle]}>
           <LinearGradient
             colors={[
               'rgba(255,0,0,0)',
-              'rgba(255,0,0,0.3)',
-              'rgba(255,165,0,0.4)',
-              'rgba(255,255,0,0.4)',
-              'rgba(0,255,0,0.35)',
-              'rgba(0,191,255,0.4)',
-              'rgba(138,43,226,0.4)',
-              'rgba(255,0,255,0.3)',
+              'rgba(255,112,112,0.18)',
+              'rgba(255,188,94,0.24)',
+              'rgba(255,244,125,0.26)',
+              'rgba(156,255,160,0.22)',
+              'rgba(90,223,255,0.24)',
+              'rgba(148,129,255,0.26)',
+              'rgba(255,118,216,0.22)',
               'rgba(255,255,255,0)',
             ]}
             locations={[0, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 0.95, 1]}
@@ -212,13 +267,29 @@ export default function PremiumNoteFinishOverlay({
             style={styles.holoSpectrum}
           />
         </Animated.View>
+        <Animated.View style={[styles.holoPrismRibbonWrap, prismRibbonAnimatedStyle]}>
+          <LinearGradient
+            colors={[
+              'rgba(255,255,255,0.0)',
+              'rgba(255,255,255,0.12)',
+              'rgba(255,239,112,0.34)',
+              'rgba(120,243,255,0.38)',
+              'rgba(255,145,226,0.3)',
+              'rgba(255,255,255,0.0)',
+            ]}
+            locations={[0, 0.16, 0.34, 0.52, 0.74, 1]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.holoPrismRibbon}
+          />
+        </Animated.View>
         <Animated.View style={[styles.holoSpectrumWrap, spectrum2AnimatedStyle]}>
           <LinearGradient
             colors={[
               'rgba(255,255,255,0)',
-              'rgba(0,255,255,0.3)',
-              'rgba(255,0,255,0.3)',
-              'rgba(255,255,0,0.3)',
+              'rgba(118,245,255,0.24)',
+              'rgba(255,160,228,0.24)',
+              'rgba(255,243,128,0.22)',
               'rgba(255,255,255,0)',
             ]}
             start={{ x: 0, y: 0 }}
@@ -230,11 +301,12 @@ export default function PremiumNoteFinishOverlay({
           <LinearGradient
             colors={[
               'rgba(255,255,255,0.0)',
-              'rgba(255,255,255,0.1)',
-              'rgba(255,255,255,0.85)',
-              'rgba(255,255,255,1)',
-              'rgba(255,255,255,0.85)',
-              'rgba(255,255,255,0.1)',
+              'rgba(255,255,255,0.02)',
+              'rgba(255,255,255,0.22)',
+              'rgba(255,255,255,0.55)',
+              'rgba(255,255,255,0.68)',
+              'rgba(255,255,255,0.55)',
+              'rgba(255,255,255,0.22)',
               'rgba(255,255,255,0.0)',
             ]}
             locations={[0, 0.4, 0.48, 0.5, 0.52, 0.6, 1]}
@@ -257,6 +329,19 @@ export default function PremiumNoteFinishOverlay({
           })}
         </Animated.View>
         <View style={styles.holoNoiseVeil} />
+        <LinearGradient
+          colors={['rgba(255,184,228,0.34)', 'rgba(121,232,255,0.14)', 'rgba(255,255,255,0.0)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.holoLeftRail}
+        />
+        <LinearGradient
+          colors={['rgba(255,255,255,0.0)', 'rgba(255,228,125,0.2)', 'rgba(103,225,255,0.34)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.holoRightRail}
+        />
+        <View style={styles.holoFrameBloom} />
         <View style={styles.holoEdgeGlow} />
         <View style={styles.holoInnerGlow} />
       </View>
@@ -337,7 +422,23 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
   },
   holoBaseWash: {
-    opacity: 0.94,
+    opacity: 1,
+  },
+  holoRainbowField: {
+    opacity: 0.46,
+  },
+  holoBand: {
+    flex: 1,
+  },
+  holoRainbowSweepWrap: {
+    position: 'absolute',
+    top: '-28%',
+    left: '-18%',
+    width: '126%',
+    height: '126%',
+  },
+  holoRainbowSweep: {
+    flex: 1,
   },
   holoSpectrumWrap: {
     position: 'absolute',
@@ -348,6 +449,16 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   holoSpectrum: {
+    flex: 1,
+  },
+  holoPrismRibbonWrap: {
+    position: 'absolute',
+    top: '-42%',
+    left: '-42%',
+    width: '184%',
+    height: '184%',
+  },
+  holoPrismRibbon: {
     flex: 1,
   },
   holoSheenWrap: {
@@ -370,21 +481,48 @@ const styles = StyleSheet.create({
   holoNoiseVeil: {
     ...StyleSheet.absoluteFill,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    opacity: 0.7,
+    borderColor: 'rgba(255,255,255,0.22)',
+    opacity: 0.78,
+  },
+  holoLeftRail: {
+    position: 'absolute',
+    top: '8%',
+    bottom: '8%',
+    left: 3,
+    width: 7,
+    borderRadius: 999,
+    opacity: 0.9,
+  },
+  holoRightRail: {
+    position: 'absolute',
+    top: '8%',
+    bottom: '8%',
+    right: 3,
+    width: 7,
+    borderRadius: 999,
+    opacity: 0.9,
+  },
+  holoFrameBloom: {
+    ...StyleSheet.absoluteFill,
+    margin: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(255,250,236,0.52)',
+    shadowColor: '#FFF6C8',
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
   },
   holoEdgeGlow: {
     ...StyleSheet.absoluteFill,
     borderWidth: 1.2,
-    borderColor: 'rgba(190,255,255,0.48)',
-    shadowColor: '#7EF3FF',
-    shadowOpacity: 0.42,
-    shadowRadius: 18,
+    borderColor: 'rgba(232,248,255,0.68)',
+    shadowColor: '#BDEEFF',
+    shadowOpacity: 0.52,
+    shadowRadius: 22,
   },
   holoInnerGlow: {
     ...StyleSheet.absoluteFill,
     borderWidth: 1,
     margin: 5,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.3)',
   },
 });

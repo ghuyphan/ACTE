@@ -305,6 +305,42 @@ describe('widgetService', () => {
     expect(result.selectionMode).toBe('nearest_memory');
   });
 
+  it('uses an explicit current location override when updating the widget timeline', async () => {
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'near-note',
+        content: 'She likes the iced tea here',
+        locationName: 'Cafe A',
+        latitude: 10.0,
+        longitude: 106.0,
+      }),
+      buildNote({
+        id: 'far-note',
+        content: 'Far away memory',
+        locationName: 'Cafe B',
+        latitude: 11.0,
+        longitude: 107.0,
+      }),
+    ]);
+
+    await updateWidgetData({
+      currentLocation: { latitude: 10.0, longitude: 106.0 },
+      includeLocationLookup: false,
+      referenceDate: new Date('2026-03-10T00:00:00.000Z'),
+    });
+
+    const entries = getLastTimelineEntries();
+
+    expect(mockGetForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        locationName: 'Cafe A',
+        nearbyPlacesCount: 1,
+        primaryActionUrl: 'noto:///widget/note/near-note',
+      })
+    );
+  });
+
   it('prefers nearby visual notes over plain text notes when they share the same place', () => {
     const result = selectWidgetNote({
       notes: [

@@ -27,6 +27,7 @@ import HomeHeaderSearch from '../../components/home/HomeHeaderSearch';
 import NotesFeed from '../../components/home/NotesFeed';
 import SharedManageSheet from '../../components/home/SharedManageSheet';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
+import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
 import { useAuth } from '../../hooks/useAuth';
 import { useCaptureFlow } from '../../hooks/useCaptureFlow';
 import { useFeedFocus } from '../../hooks/useFeedFocus';
@@ -109,6 +110,7 @@ export default function HomeScreen() {
     openAppSettings,
   } = useGeofence();
   const { alertProps, showAlert } = useAppSheetAlert();
+  const { setActiveFeedTarget, clearActiveFeedTarget } = useActiveFeedTarget();
   const {
     clearFeedFocus,
     peekFeedFocus,
@@ -390,8 +392,28 @@ export default function HomeScreen() {
   const handleSettledArchiveItemChange = useCallback(
     (item: { id: string; kind: 'note' | 'shared-post' } | null) => {
       settledArchiveItemRef.current = item;
+      if (!isScreenFocused) {
+        return;
+      }
+
+      if (item) {
+        setActiveFeedTarget(item);
+        return;
+      }
+
+      clearActiveFeedTarget();
     },
-    []
+    [clearActiveFeedTarget, isScreenFocused, setActiveFeedTarget]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      setActiveFeedTarget(settledArchiveItemRef.current);
+
+      return () => {
+        clearActiveFeedTarget();
+      };
+    }, [clearActiveFeedTarget, setActiveFeedTarget])
   );
 
   useEffect(() => {
@@ -527,6 +549,12 @@ export default function HomeScreen() {
 
       const target = (peekFeedFocus ?? consumeFeedFocus)?.() ?? null;
       if (!target) {
+        return undefined;
+      }
+
+      const settledItem = settledArchiveItemRef.current;
+      if (settledItem?.kind === target.kind && settledItem.id === target.id) {
+        clearFeedFocus?.();
         return undefined;
       }
 

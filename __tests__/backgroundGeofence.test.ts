@@ -2,6 +2,7 @@ const mockStorage = new Map<string, string>();
 const mockScheduleNotificationAsync = jest.fn();
 const mockGetNoteById = jest.fn();
 const mockGetAllNotes = jest.fn();
+const mockUpdateWidgetData = jest.fn();
 
 (globalThis as any).__mockGeofenceTaskHandler = null;
 
@@ -36,6 +37,10 @@ jest.mock('expo-task-manager', () => ({
 jest.mock('../services/database', () => ({
   getNoteById: (...args: unknown[]) => mockGetNoteById(...args),
   getAllNotes: (...args: unknown[]) => mockGetAllNotes(...args),
+}));
+
+jest.mock('../services/widgetService', () => ({
+  updateWidgetData: (...args: unknown[]) => mockUpdateWidgetData(...args),
 }));
 
 jest.mock('../constants/i18n', () => ({
@@ -93,6 +98,7 @@ function setMockNotes(notes: Array<any>) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockStorage.clear();
+  mockUpdateWidgetData.mockResolvedValue(undefined);
   setMockNotes([buildNote()]);
 });
 
@@ -176,6 +182,11 @@ describe('backgroundGeofence', () => {
   it('uses place-led subtle copy for text reminders', async () => {
     await runEnterEvent('note-1');
 
+    expect(mockUpdateWidgetData).toHaveBeenCalledWith({
+      notes: [buildNote()],
+      includeLocationLookup: false,
+      currentLocation: { latitude: 10.77, longitude: 106.69 },
+    });
     expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
       content: {
         title: 'Này, District 1 quen không?',

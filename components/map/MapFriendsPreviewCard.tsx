@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../ui/GlassView';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -13,6 +12,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useTheme } from '../../hooks/useTheme';
 import { SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
@@ -60,12 +60,24 @@ export default function MapFriendsPreviewCard({
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
-  const previewListRef = useRef<FlatList<SharedPost>>(null);
+  const previewListRef = useRef<any>(null);
   const previewDraggingRef = useRef(false);
   const pageWidth = useMemo(
     () => Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2 - mapOverlayTokens.overlayPadding * 2),
     [windowWidth]
   );
+
+  const [isMounted, setIsMounted] = useState(visible);
+
+  useEffect(() => {
+    if (visible && !isMounted) {
+      setIsMounted(true);
+    }
+  }, [visible, isMounted]);
+
+  const handleFullyClosed = useCallback(() => {
+    setIsMounted(false);
+  }, []);
 
   const activeIndex = useMemo(() => {
     if (posts.length === 0) {
@@ -77,6 +89,25 @@ export default function MapFriendsPreviewCard({
   }, [activePostId, posts]);
 
   const activePost = activeIndex >= 0 ? posts[activeIndex] ?? posts[0] : null;
+
+  // Survive parent state clearing the posts while we animate out
+  const lastValidDataRef = useRef<{
+    posts: SharedPost[];
+    activeIndex: number;
+    activePost: SharedPost;
+  } | null>(null);
+
+  if (activePost && posts.length > 0) {
+    lastValidDataRef.current = {
+      posts,
+      activeIndex,
+      activePost,
+    };
+  }
+
+  const renderData = (activePost && posts.length > 0)
+    ? { posts, activeIndex, activePost }
+    : lastValidDataRef.current;
 
   useEffect(() => {
     if (!previewListRef.current || activeIndex < 0) {
@@ -109,14 +140,26 @@ export default function MapFriendsPreviewCard({
     [onFocusPost, pageWidth, posts]
   );
 
-  if (!visible || !activePost) {
+  if (!isMounted && !visible) {
     return null;
   }
 
-  const previewCountLabel = `${Math.max(activeIndex, 0) + 1}/${posts.length}`;
+  if (!renderData) {
+    return null;
+  }
+
+  const {
+    posts: renderPosts,
+    activeIndex: renderIndex,
+    activePost: renderPost,
+  } = renderData;
+
+  const previewCountLabel = `${Math.max(renderIndex, 0) + 1}/${renderPosts.length}`;
 
   return (
     <MapPreviewSheet
+      isVisible={visible}
+      onFullyClosed={handleFullyClosed}
       shellTestID="map-friends-preview-shell"
       dismissTestID="map-friends-preview-dismiss"
       bottomOffset={bottomOffset}
@@ -125,16 +168,20 @@ export default function MapFriendsPreviewCard({
       reduceMotionEnabled={reduceMotionEnabled}
     >
       <View
-        style={[
-          styles.inner,
-          { borderColor: getOverlayBorderColor(isDark) },
-        ]}
+        style={[styles.inner]}
       >
         <GlassView
           pointerEvents="none"
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
           style={StyleSheet.absoluteFill}
+        />
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: isDark ? 'rgba(24,24,28,0.24)' : 'rgba(255,255,255,0.44)' },
+          ]}
         />
         {isOlderIOS ? (
           <View
@@ -149,12 +196,13 @@ export default function MapFriendsPreviewCard({
         ) : null}
 
         <View style={styles.cardContent}>
-          <FlatList
+          <FlashList
             ref={previewListRef}
             testID="map-friends-preview-list"
             horizontal
-            data={posts}
+            data={renderPosts}
             keyExtractor={(item) => item.id}
+            drawDistance={pageWidth * 2}
             renderItem={({ item }) => {
               const authorLabel = item.authorDisplayName?.trim() || t('shared.someone', 'Someone');
               const previewText = getPreviewText(
@@ -167,7 +215,7 @@ export default function MapFriendsPreviewCard({
                 <Pressable
                   testID={`map-friends-preview-item-${item.id}`}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: item.id === activePost.id }}
+                  accessibilityState={{ selected: item.id === renderPost.id }}
                   style={[styles.previewPage, { width: pageWidth }]}
                   onPress={() => {
                     previewDraggingRef.current = false;
@@ -212,12 +260,11 @@ export default function MapFriendsPreviewCard({
             snapToAlignment="start"
             disableIntervalMomentum
             bounces={false}
-            scrollEnabled={posts.length > 1}
+            scrollEnabled={renderPosts.length > 1}
             onScrollBeginDrag={() => {
               previewDraggingRef.current = true;
             }}
             onMomentumScrollEnd={handleMomentumEnd}
-            onScrollToIndexFailed={() => undefined}
           />
 
           <View style={styles.footer}>
@@ -251,7 +298,6 @@ export default function MapFriendsPreviewCard({
 
 const styles = StyleSheet.create({
   inner: {
-    borderWidth: 1,
     borderRadius: mapOverlayTokens.overlayRadius,
     overflow: 'hidden',
     ...mapOverlayTokens.overlayShadow,

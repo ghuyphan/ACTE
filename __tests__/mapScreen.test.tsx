@@ -280,6 +280,7 @@ jest.mock('react-native-maps', () => {
     __esModule: true,
     default: MockMapView,
     Marker,
+    Callout: ({ children }: any) => <View>{children}</View>,
   };
 });
 
@@ -586,6 +587,42 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(getByTestId('note-marker-text-1')).toBeTruthy();
     });
+
+    expect(getByTestId('leaf-marker-10.76000:106.66000').props.anchor).toMatchObject({
+      x: 0.5,
+      y: 0.5,
+    });
+    expect(mockAnimateToRegion).not.toHaveBeenCalled();
+  });
+
+  it('keeps the selected note callout mounted when the visible region updates', async () => {
+    const { getByTestId } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.7605,
+        longitude: 106.6605,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    expect(getByTestId('note-marker-text-1')).toBeTruthy();
   });
 
   it('keeps same-place notes compact on the map even when focused', async () => {

@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   container: {
-    borderWidth: 0,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: mapOverlayTokens.overlayRadius,
     minHeight: mapOverlayTokens.overlayMinHeight,
     overflow: 'hidden',

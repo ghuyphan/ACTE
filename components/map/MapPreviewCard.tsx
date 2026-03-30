@@ -2,10 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../ui/GlassView';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -14,6 +13,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import type { MapPointGroup, NearbyNoteItem } from '../../hooks/map/mapDomain';
 import { useTheme } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
@@ -91,9 +91,21 @@ export default function MapPreviewCard({
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const hasAlignedInitialPreviewRef = useRef(false);
-  const previewListRef = useRef<FlatList<PreviewRailItem>>(null);
+  const previewListRef = useRef<any>(null);
   const previewDraggingRef = useRef(false);
   const prevPreviewModeRef = useRef(previewMode);
+
+  const [isMounted, setIsMounted] = useState(visible);
+
+  useEffect(() => {
+    if (visible && !isMounted) {
+      setIsMounted(true);
+    }
+  }, [visible, isMounted]);
+
+  const handleFullyClosed = useCallback(() => {
+    setIsMounted(false);
+  }, []);
 
   const nearbyPageWidth = useMemo(
     () => Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2 - mapOverlayTokens.overlayPadding * 2),
@@ -141,6 +153,25 @@ export default function MapPreviewCard({
     return activeIndex >= 0 ? previewItems[activeIndex] ?? previewItems[0] : previewItems[0];
   }, [activeIndex, previewItems]);
 
+  // Survive parent state clearing the items while we animate out
+  const lastValidDataRef = useRef<{
+    previewItems: PreviewRailItem[];
+    activeIndex: number;
+    activePreviewItem: PreviewRailItem;
+  } | null>(null);
+
+  if (activePreviewItem && previewItems.length > 0) {
+    lastValidDataRef.current = {
+      previewItems,
+      activeIndex,
+      activePreviewItem,
+    };
+  }
+
+  const renderData = (activePreviewItem && previewItems.length > 0)
+    ? { previewItems, activeIndex, activePreviewItem }
+    : lastValidDataRef.current;
+
   useEffect(() => {
     const modeChanged = prevPreviewModeRef.current !== previewMode;
     prevPreviewModeRef.current = previewMode;
@@ -185,17 +216,30 @@ export default function MapPreviewCard({
     [isGroupMode, nearbyPageWidth, onFocusGroupNote, onFocusNearbyNote, previewItems]
   );
 
-  if (!visible || !activePreviewItem) {
+  if (!isMounted && !visible) {
     return null;
   }
 
-  const previewCountLabel = `${Math.max(activeIndex, 0) + 1}/${previewItems.length}`;
+  if (!renderData) {
+    return null;
+  }
+
+  const {
+    previewItems: renderItems,
+    activeIndex: renderIndex,
+    activePreviewItem: renderItem,
+  } = renderData;
+
+  const previewCountLabel = `${Math.max(renderIndex, 0) + 1}/${renderItems.length}`;
   const pointerEvents = 'auto';
+  // Use a stable key so re-renders from state don't break the animation sheet container
   const sheetInstanceKey = isGroupMode && selectedGroup ? `group:${selectedGroup.id}` : 'nearby';
 
   return (
     <MapPreviewSheet
       key={sheetInstanceKey}
+      isVisible={visible}
+      onFullyClosed={handleFullyClosed}
       shellTestID="map-preview-shell"
       dismissTestID="map-preview-dismiss"
       bottomOffset={bottomOffset}
@@ -240,12 +284,13 @@ export default function MapPreviewCard({
         ) : null}
 
         <View style={styles.cardContent}>
-          <FlatList
+          <FlashList
             ref={previewListRef}
             testID="map-preview-list"
             horizontal
-            data={previewItems}
+            data={renderItems}
             keyExtractor={(item) => item.note.id}
+            drawDistance={nearbyPageWidth * 2}
             renderItem={({ item }) => {
               const cardPreview = getPreviewText(
                 item.note,
@@ -267,11 +312,13 @@ export default function MapPreviewCard({
                 <Pressable
                   testID={`map-preview-item-${item.note.id}`}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: item.note.id === activePreviewItem.note.id }}
+                  accessibilityState={{ selected: item.note.id === renderItem.note.id }}
                   style={[styles.previewPage, { width: nearbyPageWidth }]}
                   onPress={() => {
                     previewDraggingRef.current = false;
                     onInteraction?.();
+
+                    const isCurrentlyCentered = item.note.id === renderItem.note.id;
 
                     if (isGroupMode) {
                       onFocusGroupNote(item.note.id);
@@ -279,7 +326,13 @@ export default function MapPreviewCard({
                       onFocusNearbyNote(item.note.id);
                     }
 
-                    onOpenNote(item.note.id);
+                    if (isCurrentlyCentered) {
+                      onOpenNote(item.note.id);
+                    } else {
+                      setTimeout(() => {
+                        onOpenNote(item.note.id);
+                      }, 350);
+                    }
                   }}
                 >
                   <View style={styles.previewPageInner}>
@@ -342,12 +395,11 @@ export default function MapPreviewCard({
             snapToAlignment="start"
             disableIntervalMomentum
             bounces={false}
-            scrollEnabled={previewItems.length > 1}
+            scrollEnabled={renderItems.length > 1}
             onScrollBeginDrag={() => {
               previewDraggingRef.current = true;
             }}
             onMomentumScrollEnd={handlePreviewMomentumEnd}
-            onScrollToIndexFailed={() => undefined}
           />
 
           <View style={styles.footer}>
@@ -365,7 +417,7 @@ export default function MapPreviewCard({
 
 const styles = StyleSheet.create({
   inner: {
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: mapOverlayTokens.overlayRadius,
     ...mapOverlayTokens.overlayShadow,
     overflow: 'hidden',

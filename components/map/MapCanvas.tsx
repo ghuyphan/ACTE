@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { memo, useEffect, useMemo, type RefObject } from 'react';
+import { memo, useEffect, useMemo, useRef, type RefObject } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Region } from 'react-native-maps';
+import MapView, { Callout, Marker, Region } from 'react-native-maps';
 import Reanimated, {
   interpolate,
   interpolateColor,
@@ -23,9 +23,8 @@ import {
   mapMotionMarkerSettleSpring,
   mapMotionMarkerSpring,
 } from './mapMotion';
-
-const SELECTED_RICH_PREVIEW_MIN_ZOOM = 16;
-const PHOTO_ORB_MIN_ZOOM = 16;
+import { photoOrbMinZoom } from './mapMarkerTokens';
+import MapSelectedNoteCallout from './MapSelectedNoteCallout';
 
 type SharedPostWithCoordinates = SharedPost & {
   latitude: number;
@@ -461,7 +460,7 @@ const MarkerContent = memo(function MarkerContent({
   );
 });
 
-export default function MapCanvas({
+function MapCanvas({
   mapRef,
   initialRegion,
   isDark,
@@ -483,6 +482,9 @@ export default function MapCanvas({
   colors,
 }: MapCanvasProps) {
   const palette = useMemo(() => getMapPalette(colors, isDark), [colors, isDark]);
+  const markerRefs = useRef<Record<string, any>>({});
+  const previousCalloutGroupIdRef = useRef<string | null>(null);
+  const showCalloutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Android applies map color scheme only from initial props, so remount on theme flips.
   const mapViewKey = Platform.OS === 'android' ? `map-${isDark ? 'dark' : 'light'}` : 'map';
 
@@ -496,10 +498,7 @@ export default function MapCanvas({
         const representativeNote =
           !node.isCluster && node.noteIds.length > 0 ? noteById.get(node.noteIds[0]) ?? null : null;
         const previewNote = !node.isCluster && representativeNote && isSelected ? representativeNote : null;
-        const showRichPreviewMarker =
-          Boolean(previewNote) &&
-          node.pointCount === 1 &&
-          currentZoom >= SELECTED_RICH_PREVIEW_MIN_ZOOM;
+        const showRichPreviewMarker = false;
         const showStackPreviewMarker = false;
         const canShowPhotoThumbnail =
           !showRichPreviewMarker &&
@@ -507,7 +506,7 @@ export default function MapCanvas({
           node.pointCount === 1 &&
           node.primaryType === 'photo' &&
           node.noteIds.length === 1 &&
-          currentZoom >= PHOTO_ORB_MIN_ZOOM;
+          currentZoom >= photoOrbMinZoom;
         const photoNote = canShowPhotoThumbnail
           ? noteById.get(node.noteIds[0]) ?? null
           : representativeNote && (showRichPreviewMarker || showStackPreviewMarker)
@@ -532,6 +531,46 @@ export default function MapCanvas({
       }),
     [currentZoom, markerNodes, markerPulseId, noteById, palette.photo, palette.text, selectedGroupId]
   );
+
+  useEffect(() => {
+    return () => {
+      if (showCalloutTimerRef.current) {
+        clearTimeout(showCalloutTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const previousCalloutGroupId = previousCalloutGroupIdRef.current;
+    if (previousCalloutGroupId && previousCalloutGroupId !== selectedGroupId) {
+      markerRefs.current[previousCalloutGroupId]?.hideCallout?.();
+      previousCalloutGroupIdRef.current = null;
+    }
+
+    if (showCalloutTimerRef.current) {
+      clearTimeout(showCalloutTimerRef.current);
+      showCalloutTimerRef.current = null;
+    }
+
+    if (!selectedGroupId) {
+      return;
+    }
+
+    const selectedItem = markerRenderItems.find(
+      (item) => !item.node.isCluster && item.node.groupId === selectedGroupId && item.node.pointCount === 1
+    );
+
+    if (!selectedItem) {
+      return;
+    }
+
+    markerRefs.current[selectedGroupId]?.showCallout?.();
+    showCalloutTimerRef.current = setTimeout(() => {
+      markerRefs.current[selectedGroupId]?.showCallout?.();
+      showCalloutTimerRef.current = null;
+    }, 40);
+    previousCalloutGroupIdRef.current = selectedGroupId;
+  }, [markerRenderItems, selectedGroupId]);
 
   return (
     <MapView
@@ -568,16 +607,28 @@ export default function MapCanvas({
           <Marker
             key={node.id}
             testID={node.isCluster ? `cluster-marker-${node.id}` : `leaf-marker-${node.groupId ?? node.id}`}
+            ref={(marker) => {
+              if (!node.groupId) {
+                return;
+              }
+
+              if (marker) {
+                markerRefs.current[node.groupId] = marker;
+              } else {
+                delete markerRefs.current[node.groupId];
+              }
+            }}
             coordinate={{ latitude: node.latitude, longitude: node.longitude }}
-            anchor={usesFloatingLabel ? { x: 0.5, y: 0.28 } : { x: 0.5, y: 0.5 }}
+            anchor={{ x: 0.5, y: 0.5 }}
             tracksViewChanges={pulseActive || isSelected || reduceMotionEnabled}
             onPress={(event) => {
               event.stopPropagation?.();
               if (node.isCluster) {
                 onClusterPress(node);
-                return;
               }
-              if (node.groupId) {
+            }}
+            onSelect={() => {
+              if (!node.isCluster && node.groupId) {
                 onLeafPress(node.groupId);
               }
             }}
@@ -615,6 +666,14 @@ export default function MapCanvas({
                 reduceMotionEnabled={reduceMotionEnabled}
               />
             </View>
+            {isSelected && node.pointCount === 1 && previewNoteId ? (
+              <Callout tooltip>
+                <MapSelectedNoteCallout
+                  note={noteById.get(previewNoteId) ?? noteById.get(node.noteIds[0])!}
+                  colors={colors}
+                />
+              </Callout>
+            ) : null}
           </Marker>
         );
       })}
@@ -671,6 +730,8 @@ export default function MapCanvas({
   );
 }
 
+export default memo(MapCanvas);
+
 const styles = StyleSheet.create({
   markerWrap: {
     justifyContent: 'center',
@@ -681,7 +742,6 @@ const styles = StyleSheet.create({
   richMarkerHitArea: {
     minWidth: 164,
     minHeight: 108,
-    paddingBottom: 14,
   },
   stackMarkerHitArea: {
     minWidth: 116,
@@ -780,8 +840,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   richMarkerWrap: {
+    width: 176,
+    height: 136,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: 8,
   },
   richMarkerOrb: {
@@ -802,11 +864,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   richMarkerLabel: {
-    minWidth: 132,
-    maxWidth: 168,
+    width: 168,
+    height: 68,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    justifyContent: 'center',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 16,

@@ -4,7 +4,14 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import type MapView from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapCanvas from '../map/MapCanvas';
@@ -62,7 +69,6 @@ export default function MapScreenIOS() {
     setVisibleRegion,
     selectedGroupId,
     selectedGroup,
-    selectedNote,
     selectedNoteIndex,
     handleLeafMarkerPress,
     handleClusterMarkerPress,
@@ -81,6 +87,7 @@ export default function MapScreenIOS() {
   const previewBottomOffset = insets.bottom + 12;
   const previewMode = selectedGroup ? 'group' : 'nearby';
   const noteById = useMemo(() => new Map(notes.map((note) => [note.id, note] as const)), [notes]);
+  const currentZoom = visibleRegion ? regionToZoom(visibleRegion) : regionToZoom(initialRegion);
   const friendPosts = useMemo(
     () =>
       sharedPosts
@@ -189,8 +196,11 @@ export default function MapScreenIOS() {
     if (showFriendsPreview) {
       setShowFriendsPreview(false);
     }
+    if (!notesPreviewDismissed) {
+      setNotesPreviewDismissed(true);
+    }
     handleMapPress();
-  }, [handleMapPress, showFriendsPreview]);
+  }, [handleMapPress, notesPreviewDismissed, showFriendsPreview]);
 
   const handleChangeFilterType = useCallback(
     (nextType: Parameters<typeof setFilterType>[0]) => {
@@ -283,6 +293,7 @@ export default function MapScreenIOS() {
       emitLightHaptic,
       handleClusterMarkerPress,
       initialRegion,
+      notesPreviewDismissed,
       reduceMotionEnabled,
       setVisibleRegion,
       showFriendsPreview,
@@ -296,14 +307,28 @@ export default function MapScreenIOS() {
       if (showFriendsPreview) {
         setShowFriendsPreview(false);
       }
-      if (notesPreviewDismissed) {
-        setNotesPreviewDismissed(false);
-      }
       triggerMarkerPulse(groupId);
       handleLeafMarkerPress(groupId);
       emitLightHaptic();
+
+      if (notesPreviewDismissed) {
+        if (reduceMotionEnabled) {
+          setNotesPreviewDismissed(false);
+        } else {
+          setTimeout(() => {
+            setNotesPreviewDismissed(false);
+          }, 150);
+        }
+      }
     },
-    [emitLightHaptic, handleLeafMarkerPress, notesPreviewDismissed, showFriendsPreview, triggerMarkerPulse]
+    [
+      emitLightHaptic,
+      handleLeafMarkerPress,
+      notesPreviewDismissed,
+      reduceMotionEnabled,
+      showFriendsPreview,
+      triggerMarkerPulse,
+    ]
   );
 
   const handleFocusNearbyNote = useCallback(
@@ -377,9 +402,6 @@ export default function MapScreenIOS() {
         return;
       }
 
-      if (options?.openPreview ?? true) {
-        setShowFriendsPreview(true);
-      }
       setActiveFriendPostId(postId);
 
       if (
@@ -399,14 +421,25 @@ export default function MapScreenIOS() {
         mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
         setVisibleRegion(nextRegion);
       }
+
+      const shouldOpenPreview = options?.openPreview ?? true;
+      if (shouldOpenPreview) {
+        if (options?.animate !== false && !reduceMotionEnabled && !showFriendsPreview) {
+          setTimeout(() => {
+            setShowFriendsPreview(true);
+          }, 150);
+        } else {
+          setShowFriendsPreview(true);
+        }
+      }
     },
-    [friendMarkerPosts, friendPosts, initialRegion, reduceMotionEnabled, setVisibleRegion, visibleRegion]
+    [friendMarkerPosts, friendPosts, initialRegion, reduceMotionEnabled, setVisibleRegion, showFriendsPreview, visibleRegion]
   );
 
   const handleFriendMarkerPress = useCallback(
     (postId: string) => {
       emitLightHaptic();
-      focusFriendPost(postId, { animate: false, openPreview: true });
+      focusFriendPost(postId, { animate: true, openPreview: true });
     },
     [emitLightHaptic, focusFriendPost]
   );
@@ -490,7 +523,7 @@ export default function MapScreenIOS() {
         mapRef={mapRef}
         initialRegion={initialRegion}
         isDark={isDark}
-        currentZoom={visibleRegion ? regionToZoom(visibleRegion) : regionToZoom(initialRegion)}
+        currentZoom={currentZoom}
         markerNodes={clusterNodes}
         friendMarkers={friendMarkerPosts}
         noteById={noteById}

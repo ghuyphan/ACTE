@@ -37,7 +37,7 @@ export const NOTE_COLOR_PRESETS: NoteColorPreset[] = [
   { id: 'olive-lime', card: ['#D4FC79', '#96E6A1'] },
   { id: 'raspberry-dusk', card: ['#FF758C', '#FF7EB3'] },
   { id: 'aurora-rgb', card: ['#5B5FFF', '#FF4FD8'], tier: 'plus', finish: 'rgb' },
-  { id: 'holo-foil', card: ['#7B7CF6', '#71E6FF'], tier: 'plus', finish: 'holo' },
+  { id: 'holo-foil', card: ['#F5F1EA', '#DDE6F1'], tier: 'plus', finish: 'holo' },
   { id: 'chrome-rare', card: ['#5E6B88', '#D2A7FF'], tier: 'plus', finish: 'chrome' },
 ];
 

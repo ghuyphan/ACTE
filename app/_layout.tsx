@@ -11,6 +11,8 @@ import { AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import i18n, { i18nReady } from '../constants/i18n';
+import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
+import { ActiveNoteProvider } from '../hooks/useActiveNote';
 import { AuthProvider, useAuth } from '../hooks/useAuth';
 import { ConnectivityProvider, useConnectivity } from '../hooks/useConnectivity';
 import { FeedFocusProvider } from '../hooks/useFeedFocus';
@@ -375,19 +377,23 @@ export default function RootLayout() {
             <ConnectivityProvider>
               <AuthProvider>
                 <SubscriptionProvider>
-                  <FeedFocusProvider>
-                    <NotesProvider>
-                      <SyncStatusProvider>
-                        <SharedFeedProvider>
-                          <NoteDetailSheetProvider>
-                            <BottomSheetModalProvider>
-                              <AppContent />
-                            </BottomSheetModalProvider>
-                          </NoteDetailSheetProvider>
-                        </SharedFeedProvider>
-                      </SyncStatusProvider>
-                    </NotesProvider>
-                  </FeedFocusProvider>
+                  <ActiveNoteProvider>
+                    <ActiveFeedTargetProvider>
+                      <FeedFocusProvider>
+                        <NotesProvider>
+                          <SyncStatusProvider>
+                            <SharedFeedProvider>
+                              <NoteDetailSheetProvider>
+                                <BottomSheetModalProvider>
+                                  <AppContent />
+                                </BottomSheetModalProvider>
+                              </NoteDetailSheetProvider>
+                            </SharedFeedProvider>
+                          </SyncStatusProvider>
+                        </NotesProvider>
+                      </FeedFocusProvider>
+                    </ActiveFeedTargetProvider>
+                  </ActiveNoteProvider>
                 </SubscriptionProvider>
               </AuthProvider>
             </ConnectivityProvider>

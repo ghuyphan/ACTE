@@ -5,6 +5,7 @@ import i18n from '../constants/i18n';
 import { getAllNotes, getNoteById } from '../services/database';
 import { buildNearbyReminderCopy, buildReminderNotificationContent } from '../services/notificationService';
 import { buildReminderTextExcerpt, findReminderPlaceGroupByNoteId } from '../services/reminderSelection';
+import { updateWidgetData } from '../services/widgetService';
 import { getGeofenceCooldownKey, getLocationCooldownId, getSkipNextEnterKey } from './geofenceKeys';
 import { getPersistentItem, removePersistentItem, setPersistentItem } from './appStorage';
 
@@ -28,6 +29,23 @@ async function isOnCooldown(scope: 'note' | 'location', id: string, durationMs: 
 
 async function setCooldown(scope: 'note' | 'location', id: string) {
     await setPersistentItem(getCooldownKey(scope, id), String(Date.now()));
+}
+
+function getWidgetRefreshLocation(
+    note: {
+        latitude?: number | null;
+        longitude?: number | null;
+    } | null,
+    region: LocationRegion
+) {
+    const latitude = note?.latitude ?? region.latitude;
+    const longitude = note?.longitude ?? region.longitude;
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return null;
+    }
+
+    return { latitude, longitude };
 }
 
 // Configure how notifications appear when the app is in the foreground
@@ -83,6 +101,15 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
 
                 if (note) {
                     cooldownNoteId = note.id;
+                    const widgetRefreshLocation = getWidgetRefreshLocation(note, region);
+                    void updateWidgetData({
+                        notes: allNotes,
+                        includeLocationLookup: false,
+                        currentLocation: widgetRefreshLocation,
+                    }).catch((widgetError) => {
+                        console.warn('Widget geofence refresh failed:', widgetError);
+                    });
+
                     const isNoteCoolingDown = await isOnCooldown(
                         'note',
                         cooldownNoteId,

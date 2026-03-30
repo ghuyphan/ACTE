@@ -7,6 +7,7 @@ import {
   getNoteColorCardGradient,
   isPremiumNoteColor,
 } from '../../services/noteAppearance';
+import PremiumNoteFinishOverlay from './PremiumNoteFinishOverlay';
 
 interface NoteColorPickerProps {
   label?: string;
@@ -110,7 +111,9 @@ export default function NoteColorPicker({
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.swatchFill}
-              />
+              >
+                {premium ? <PremiumNoteFinishOverlay noteColor={preset.id} /> : null}
+              </LinearGradient>
               {premium ? (
                 <View
                   pointerEvents="none"

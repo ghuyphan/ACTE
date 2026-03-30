@@ -36,6 +36,7 @@ import { ENABLE_PHOTO_STICKERS } from '../constants/experiments';
 import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../constants/noteRadius';
 import { Layout, Typography } from '../constants/theme';
 import { useAuth } from '../hooks/useAuth';
+import { useActiveNote } from '../hooks/useActiveNote';
 import { useNotes } from '../hooks/useNotes';
 import { useSharedFeedStore } from '../hooks/useSharedFeed';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -228,6 +229,7 @@ interface NoteDetailSheetProps {
 export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: NoteDetailSheetProps) {
     const { getNoteById, deleteNote, refreshNotes, updateNote, toggleFavorite } = useNotes();
     const { user } = useAuth();
+    const { setActiveNote, clearActiveNote } = useActiveNote();
     const { deleteSharedNote, updateSharedNote } = useSharedFeedStore();
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
@@ -270,6 +272,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingDeleteNoteIdRef = useRef<string | null>(null);
     const closeCompletionHandledRef = useRef(false);
+    const activeNoteKeyRef = useRef(`note-detail-${Math.random().toString(36).slice(2)}`);
     const lastFreeEditNoteColorRef = useRef('marigold-glow');
     const lockedPremiumNoteColorIds = useMemo(
         () => (tier === 'plus' ? [] : PREMIUM_NOTE_COLOR_IDS),
@@ -504,6 +507,19 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             pastePromptTimeoutRef.current = null;
         }, 2600);
     }, [clearPastePromptTimeout]);
+
+    useEffect(() => {
+        if (visible && noteId) {
+            setActiveNote(activeNoteKeyRef.current, noteId);
+
+            return () => {
+                clearActiveNote(activeNoteKeyRef.current);
+            };
+        }
+
+        clearActiveNote(activeNoteKeyRef.current);
+        return undefined;
+    }, [clearActiveNote, noteId, setActiveNote, visible]);
 
     useEffect(() => {
         if (!visible || !noteId) {
@@ -1455,7 +1471,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                     <PremiumNoteFinishOverlay
                                         noteColor={isEditing ? editNoteColor : note.noteColor}
                                         animated
-                                        interactive
+                                        interactive={!isEditing}
                                         previewMode={isEditing ? 'editor' : 'saved'}
                                         strength={isEditing ? 1 : 0.55}
                                     />
@@ -1730,14 +1746,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                         testIDPrefix="note-detail-color"
                                         compact
                                     />
-                                    {editNoteColor && previewOnlyNoteColorIds.includes(editNoteColor) ? (
-                                        <Text style={[styles.previewOnlyHint, { color: colors.secondaryText }]}>
-                                            {t(
-                                                'plus.hologramPreviewHint',
-                                                'Interactive hologram preview is ready now. Upgrade to Plus to save it.'
-                                            )}
-                                        </Text>
-                                    ) : null}
                                 </>
                             ) : null}
                             {isEditing ? (

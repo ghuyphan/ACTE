@@ -776,6 +776,10 @@ private struct LocketWidgetEntryView: View {
         return payload.accessoryMemoryNearbyText.isEmpty ? "Memory nearby" : payload.accessoryMemoryNearbyText
     }
 
+    private var accessoryNearLabel: String {
+        payload.accessoryNearLabelText.isEmpty ? "Near" : payload.accessoryNearLabelText
+    }
+
     private var accessorySubtitle: String {
         if payload.noteCount <= 0 {
             return payload.accessoryAddFirstPlaceText.isEmpty ? "Add your first place" : payload.accessoryAddFirstPlaceText
@@ -803,11 +807,14 @@ private struct LocketWidgetEntryView: View {
 
         let locationLabel = compactLocationName
         if !locationLabel.isEmpty {
-            let nearLabel = payload.accessoryNearLabelText.isEmpty ? "Near" : payload.accessoryNearLabelText
-            return "\(nearLabel) \(locationLabel)"
+            return "\(accessoryNearLabel) \(locationLabel)"
         }
 
         return payload.accessoryMemoryNearbyText.isEmpty ? "Memory nearby" : payload.accessoryMemoryNearbyText
+    }
+
+    private var accessoryInlineFallbackText: String {
+        payload.isIdleState ? countLabel : accessoryNearLabel
     }
 
     private var accessoryCircularValue: String {
@@ -831,7 +838,7 @@ private struct LocketWidgetEntryView: View {
             return payload.accessorySavedLabelText.isEmpty ? "Saved" : payload.accessorySavedLabelText
         }
 
-        return payload.accessoryNearLabelText.isEmpty ? "Near" : payload.accessoryNearLabelText
+        return accessoryNearLabel
     }
 
     private var accessoryRectangularValue: String? {
@@ -967,45 +974,78 @@ private struct LocketWidgetEntryView: View {
 
     private var accessoryInlineLayout: some View {
         ViewThatFits {
-            Text(accessoryInlineText)
-            Text(payload.isIdleState ? countLabel : "Nearby")
+            HStack(spacing: 4) {
+                Image(systemName: accessorySymbolName)
+                    .font(.caption2.weight(.semibold))
+                    .widgetAccentable()
+
+                Text(accessoryInlineText)
+            }
+            HStack(spacing: 4) {
+                Image(systemName: accessorySymbolName)
+                    .font(.caption2.weight(.semibold))
+                    .widgetAccentable()
+
+                Text(accessoryInlineFallbackText)
+            }
+            Text(accessoryInlineFallbackText)
         }
         .font(.caption.weight(.semibold))
         .lineLimit(1)
+        .minimumScaleFactor(0.85)
     }
 
     private var accessoryCircularLayout: some View {
         VStack(spacing: 1) {
-            Text(accessoryCircularValue)
-                .font(.title2.weight(.bold))
-                .lineLimit(1)
-                .widgetAccentable()
+            if payload.noteCount <= 0 {
+                Image(systemName: "plus")
+                    .font(.callout.weight(.bold))
+                    .widgetAccentable()
+            } else {
+                Text(accessoryCircularValue)
+                    .font(.title3.weight(.bold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .widgetAccentable()
+            }
 
             Text(accessoryCircularCaption)
                 .font(.caption2)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
     }
 
     private var accessoryRectangularLayout: some View {
         HStack(alignment: .center, spacing: 8) {
+            Image(systemName: accessorySymbolName)
+                .font(.caption.weight(.semibold))
+                .widgetAccentable()
+
             VStack(alignment: .leading, spacing: 1) {
                 Text(accessoryTitle)
                     .font(.headline)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.82)
                     .widgetAccentable()
 
                 Text(accessorySubtitle)
                     .font(.caption)
                     .lineLimit(2)
+                    .minimumScaleFactor(0.85)
             }
 
             Spacer(minLength: 0)
 
-            if payload.isIdleState, let value = accessoryRectangularValue {
+            if let value = accessoryRectangularValue {
                 Text(value)
-                    .font(.title2.weight(.bold))
+                    .font(.headline.weight(.bold))
+                    .monospacedDigit()
                     .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.16), in: Capsule())
                     .widgetAccentable()
             }
         }

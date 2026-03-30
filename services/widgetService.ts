@@ -60,6 +60,7 @@ export interface UpdateWidgetDataOptions {
     includeLocationLookup?: boolean;
     referenceDate?: Date;
     includeSharedRefresh?: boolean;
+    currentLocation?: LocationCoords | null;
 }
 
 interface LocationCoords {
@@ -281,6 +282,15 @@ function buildWidgetRequestKey(options: UpdateWidgetDataOptions) {
         includeLocationLookup: options.includeLocationLookup !== false,
         includeSharedRefresh: options.includeSharedRefresh === true,
         referenceDate: options.referenceDate?.toISOString() ?? 'live',
+        currentLocation:
+            options.currentLocation === undefined
+                ? 'auto'
+                : options.currentLocation
+                    ? [
+                        options.currentLocation.latitude,
+                        options.currentLocation.longitude,
+                    ]
+                    : null,
     });
 }
 
@@ -1567,7 +1577,10 @@ async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<v
     try {
         const notes = options.notes ?? await getAllNotes();
         const sharedFeedSnapshot = await getSharedWidgetFeedSnapshot(options.includeSharedRefresh === true);
-        const currentLocation = await getWidgetCurrentLocation(options.includeLocationLookup !== false);
+        const currentLocation =
+            options.currentLocation !== undefined
+                ? options.currentLocation
+                : await getWidgetCurrentLocation(options.includeLocationLookup !== false);
 
         const { entries, history } = await buildWidgetTimeline({
             notes,

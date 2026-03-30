@@ -10,6 +10,8 @@ import {
   Alert,
   Dimensions,
   type GestureResponderEvent,
+  Keyboard,
+  type KeyboardEvent,
   Platform,
   Pressable,
   type PressableProps,
@@ -603,6 +605,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
   const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
   const [isNoteInputFocused, setIsNoteInputFocused] = useState(false);
+  const [isRestaurantInputFocused, setIsRestaurantInputFocused] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const isPhotoDoodleSurface = captureMode === 'camera' && Boolean(capturedPhoto);
   const doodleModeEnabled = isPhotoDoodleSurface ? photoDoodleModeEnabled : textDoodleModeEnabled;
   const doodleStrokes = isPhotoDoodleSurface ? photoDoodleStrokes : textDoodleStrokes;
@@ -658,6 +662,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const saveIdleBackground = isCameraSaveMode ? colors.primary : colors.captureButtonBg;
   const disableAndroidTextTransforms = Platform.OS === 'android' && captureMode === 'text' && isNoteInputFocused;
   const decorateProgress = useSharedValue(showDecorateControls ? 1 : 0);
+  const keyboardLift = useSharedValue(0);
+  const isTextEntryFocused = captureMode === 'text' && (isNoteInputFocused || isRestaurantInputFocused);
 
   useEffect(() => {
     if (captureMode === 'camera' && !capturedPhoto && permissionGranted && shouldRenderCameraPreview) {
@@ -744,6 +750,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   useEffect(() => {
     if (captureMode !== 'text') {
       setIsNoteInputFocused(false);
+      setIsRestaurantInputFocused(false);
       setTextDoodleModeEnabled(false);
       setTextStickerModeEnabled(false);
       setTextDecorateMenuExpanded(false);
@@ -786,6 +793,38 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   useEffect(() => {
     onDoodleModeChange?.((captureMode === 'text' || Boolean(capturedPhoto)) && doodleModeEnabled);
   }, [captureMode, capturedPhoto, doodleModeEnabled, onDoodleModeChange]);
+
+  useEffect(() => {
+    const handleKeyboardFrame = (event: KeyboardEvent) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    };
+    const handleKeyboardHide = () => {
+      setKeyboardHeight(0);
+    };
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const frameEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSubscription = Keyboard.addListener(showEvent, handleKeyboardFrame);
+    const frameSubscription = Keyboard.addListener(frameEvent, handleKeyboardFrame);
+    const hideSubscription = Keyboard.addListener(hideEvent, handleKeyboardHide);
+
+    return () => {
+      showSubscription.remove();
+      frameSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    const nextLift = isTextEntryFocused
+      ? Math.min(Math.max(keyboardHeight - 150, 0), 170)
+      : 0;
+
+    keyboardLift.value = withTiming(nextLift, {
+      duration: reduceMotionEnabled ? 110 : 220,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [isTextEntryFocused, keyboardHeight, keyboardLift, reduceMotionEnabled]);
 
   const clearPastePromptTimeout = useCallback(() => {
     if (pastePromptTimeoutRef.current) {
@@ -945,6 +984,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const flashAnimatedStyle = useAnimatedStyle(() => ({
     opacity: flashAnim.value,
   }), [flashAnim]);
+  const keyboardLiftAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -keyboardLift.value }],
+  }), [keyboardLift]);
   const shutterInnerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: shutterScale.value }],
   }), [shutterScale]);
@@ -1390,14 +1432,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           testIDPrefix="capture-note-color"
           compact
         />
-        {noteColor && previewOnlyNoteColorIds.includes(noteColor) ? (
-          <Text style={[styles.noteColorPreviewHint, { color: colors.secondaryText }]}>
-            {t(
-              'plus.hologramPreviewHint',
-              'Interactive hologram preview is ready now. Upgrade to Plus to save it.'
-            )}
-          </Text>
-        ) : null}
       </View>
     </AppSheetScaffold>
   ) : null;
@@ -1449,14 +1483,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   return (
     <>
       <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
-        <Reanimated.View
-          testID="capture-card-area"
-          style={[
-            styles.captureArea,
-            disableAndroidTextTransforms ? null : captureAreaAnimatedStyle,
-          ]}
-          pointerEvents={isSearching || interactionsDisabled ? 'none' : 'auto'}
-        >
+        <Reanimated.View style={keyboardLiftAnimatedStyle}>
+          <Reanimated.View
+            testID="capture-card-area"
+            style={[
+              styles.captureArea,
+              disableAndroidTextTransforms ? null : captureAreaAnimatedStyle,
+            ]}
+            pointerEvents={isSearching || interactionsDisabled ? 'none' : 'auto'}
+          >
           {captureMode === 'text' ? (
             <LinearGradient
               style={[
@@ -1472,7 +1507,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               <PremiumNoteFinishOverlay
                 noteColor={noteColor}
                 animated
-                interactive
+                interactive={false}
                 previewMode="editor"
               />
               {ENABLE_PHOTO_STICKERS ? (
@@ -2223,15 +2258,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               </CaptureAnimatedPressable>
             </View>
           )}
-        </Reanimated.View>
+          </Reanimated.View>
 
-        <Reanimated.View
-          style={[
-            styles.belowCardSection,
-            belowCardAnimatedStyle,
-          ]}
-          pointerEvents={interactionsDisabled ? 'none' : 'auto'}
-        >
+          <Reanimated.View
+            style={[
+              styles.belowCardSection,
+              belowCardAnimatedStyle,
+            ]}
+            pointerEvents={interactionsDisabled ? 'none' : 'auto'}
+          >
           {cameraStatusText ? (
             <Text style={[styles.cameraStatusText, { color: colors.secondaryText }]}>{cameraStatusText}</Text>
           ) : null}
@@ -2270,6 +2305,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       placeholderTextColor={colors.captureGlassPlaceholder}
                       value={restaurantName}
                       onChangeText={onChangeRestaurantName}
+                      onFocus={() => setIsRestaurantInputFocused(true)}
+                      onBlur={() => setIsRestaurantInputFocused(false)}
                       maxLength={100}
                       selectionColor={colors.captureGlassText}
                     />
@@ -2568,6 +2605,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             </View>
           )}
           {footerContent ? <View style={styles.footerSlot}>{footerContent}</View> : null}
+          </Reanimated.View>
         </Reanimated.View>
       </View>
       <StickerSourceSheet
