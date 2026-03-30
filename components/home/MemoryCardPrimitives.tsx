@@ -31,6 +31,7 @@ interface NoteMemoryCardProps {
   onPress?: () => void;
   cardSize?: number;
   containerStyle?: StyleProp<ViewStyle>;
+  isActive?: boolean;
 }
 
 interface SharedPostMemoryCardProps {
@@ -40,6 +41,7 @@ interface SharedPostMemoryCardProps {
   onPress?: () => void;
   cardSize?: number;
   containerStyle?: StyleProp<ViewStyle>;
+  isActive?: boolean;
 }
 
 export function NoteMemoryCard({
@@ -49,6 +51,7 @@ export function NoteMemoryCard({
   onPress,
   cardSize = DEFAULT_CARD_SIZE,
   containerStyle,
+  isActive = false,
 }: NoteMemoryCardProps) {
   const dateStr = formatDate(note.createdAt, 'short');
   const content = (
@@ -60,6 +63,7 @@ export function NoteMemoryCard({
               imageUrl={getNotePhotoUri(note)}
               doodleStrokesJson={note.doodleStrokesJson}
               stickerPlacementsJson={note.stickerPlacementsJson}
+              isActive={isActive}
             />
           ) : (
             <TextMemoryCard
@@ -69,6 +73,7 @@ export function NoteMemoryCard({
               noteColor={note.noteColor}
               doodleStrokesJson={note.doodleStrokesJson}
               stickerPlacementsJson={note.stickerPlacementsJson}
+              isActive={isActive}
             />
           )}
         </View>
@@ -112,6 +117,7 @@ export function SharedPostMemoryCard({
   onPress,
   cardSize = DEFAULT_CARD_SIZE,
   containerStyle,
+  isActive = false,
 }: SharedPostMemoryCardProps) {
   const authorLabel = post.authorDisplayName ?? t('shared.someone', 'Someone');
   const dateStr = formatDate(post.createdAt, 'short');
@@ -123,6 +129,7 @@ export function SharedPostMemoryCard({
             <SharedPostCardVisual
               post={post}
               fallbackText={t('shared.noteFallback', 'Shared note')}
+              isActive={isActive}
             />
           </View>
         </View>

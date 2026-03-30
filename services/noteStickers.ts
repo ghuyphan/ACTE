@@ -16,6 +16,10 @@ import {
 } from '../utils/supabase';
 
 export type StickerSource = 'import';
+export type StickerImportErrorCode =
+  | 'unsupported-format'
+  | 'file-unavailable'
+  | 'missing-transparency';
 
 export interface StickerAsset {
   id: string;
@@ -50,6 +54,16 @@ export interface StickerImportSource {
   uri: string;
   mimeType?: string | null;
   name?: string | null;
+}
+
+export class StickerImportError extends Error {
+  code: StickerImportErrorCode;
+
+  constructor(code: StickerImportErrorCode, message?: string) {
+    super(message ?? code);
+    this.name = 'StickerImportError';
+    this.code = code;
+  }
 }
 
 interface StickerAssetRow {
@@ -395,12 +409,12 @@ async function ensureSharedStickerCacheDirectory() {
 
 async function validateStickerFile(uri: string, mimeType: string) {
   if (!SUPPORTED_STICKER_MIME_TYPES.has(mimeType)) {
-    throw new Error('Please import a transparent PNG or WebP sticker.');
+    throw new StickerImportError('unsupported-format');
   }
 
   const fileInfo = await FileSystem.getInfoAsync(uri);
   if (!fileInfo.exists || fileInfo.isDirectory) {
-    throw new Error('Sticker file is not available on this device.');
+    throw new StickerImportError('file-unavailable');
   }
 
   const base64Data = await FileSystem.readAsStringAsync(uri, {
@@ -408,7 +422,7 @@ async function validateStickerFile(uri: string, mimeType: string) {
   });
 
   if (!base64Data.trim() || !hasTransparency(base64Data, mimeType)) {
-    throw new Error('This image does not include transparency. Import a transparent PNG or WebP sticker.');
+    throw new StickerImportError('missing-transparency');
   }
 }
 

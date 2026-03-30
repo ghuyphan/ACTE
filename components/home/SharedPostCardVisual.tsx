@@ -11,9 +11,11 @@ import TextMemoryCard from '../TextMemoryCard';
 export default function SharedPostCardVisual({
   post,
   fallbackText,
+  isActive = false,
 }: {
   post: SharedPost;
   fallbackText: string;
+  isActive?: boolean;
 }) {
   const { colors } = useTheme();
   const normalizedText = post.text.trim();
@@ -57,6 +59,7 @@ export default function SharedPostCardVisual({
           doodleStrokesJson={post.doodleStrokesJson}
           stickerPlacementsJson={post.stickerPlacementsJson}
           remoteBucket={SHARED_POST_MEDIA_BUCKET}
+          isActive={isActive}
         />
       );
     }
@@ -93,6 +96,7 @@ export default function SharedPostCardVisual({
       doodleStrokesJson={post.doodleStrokesJson}
       stickerPlacementsJson={post.stickerPlacementsJson}
       remoteBucket={SHARED_POST_MEDIA_BUCKET}
+      isActive={isActive}
     />
   );
 }

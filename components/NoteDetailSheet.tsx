@@ -57,6 +57,7 @@ import {
     parseNoteStickerPlacements,
     saveNoteStickerPlacementsWithAssets,
     clearNoteStickers,
+    StickerImportError,
     setStickerPlacementOutlineEnabled,
     type NoteStickerPlacement,
     updateStickerPlacementTransform,
@@ -99,6 +100,38 @@ type StickerPastePromptState = {
     x: number;
     y: number;
 };
+
+function getStickerImportErrorMessage(
+    t: ReturnType<typeof useTranslation>['t'],
+    error: unknown
+) {
+    if (error instanceof StickerImportError) {
+        if (error.code === 'unsupported-format') {
+            return t(
+                'capture.stickerUnsupportedFormat',
+                'Please import a transparent PNG or WebP sticker.'
+            );
+        }
+
+        if (error.code === 'file-unavailable') {
+            return t(
+                'capture.stickerFileUnavailable',
+                'Sticker file is not available on this device.'
+            );
+        }
+
+        if (error.code === 'missing-transparency') {
+            return t(
+                'capture.stickerMissingTransparency',
+                'This image does not include transparency. Import a transparent PNG or WebP sticker.'
+            );
+        }
+    }
+
+    return error instanceof Error
+        ? error.message
+        : t('capture.photoImportFailed', 'We could not import that photo right now.');
+}
 
 function SkeletonCard({ colors }: { colors: { card: string } }) {
     const opacity = useSharedValue(0.3);
@@ -746,9 +779,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             console.warn('Sticker import failed:', error);
             Alert.alert(
                 t('capture.error', 'Error'),
-                error instanceof Error
-                    ? error.message
-                    : t('capture.photoImportFailed', 'We could not import that photo right now.')
+                getStickerImportErrorMessage(t, error)
             );
         } finally {
             setImportingSticker(false);
@@ -894,7 +925,24 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         Keyboard.dismiss();
         setDoodleModeEnabled(false);
         setStickerModeEnabled((current) => !current);
-    }, [dismissPastePrompt, isEditing, note]);
+        if (stickerModeEnabled) {
+            setSelectedStickerId(null);
+        }
+    }, [dismissPastePrompt, isEditing, note, stickerModeEnabled]);
+    const handlePressStickerCanvas = useCallback(() => {
+        if (!stickerModeEnabled) {
+            return;
+        }
+
+        dismissPastePrompt();
+
+        if (selectedStickerId) {
+            setSelectedStickerId(null);
+            return;
+        }
+
+        setStickerModeEnabled(false);
+    }, [dismissPastePrompt, selectedStickerId, stickerModeEnabled]);
     const handleStickerAction = useCallback(
         (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove' | 'outline-toggle') => {
             if (!selectedStickerId) {
@@ -1336,6 +1384,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             onChangePlacements={setEditStickerPlacements}
                                             selectedPlacementId={selectedStickerId}
                                             onChangeSelectedPlacementId={setSelectedStickerId}
+                                            onPressCanvas={handlePressStickerCanvas}
                                         />
                                     </View>
                                 ) : null}
@@ -1387,7 +1436,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                     ]}
                                                 >
                                                     <Ionicons
-                                                        name={stickerModeEnabled ? 'pricetags' : 'pricetags-outline'}
+                                                        name={stickerModeEnabled ? 'images' : 'images-outline'}
                                                         size={16}
                                                         color="#FFFFFF"
                                                     />
@@ -1536,6 +1585,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                 onChangePlacements={setEditStickerPlacements}
                                                 selectedPlacementId={selectedStickerId}
                                                 onChangeSelectedPlacementId={setSelectedStickerId}
+                                                onPressCanvas={handlePressStickerCanvas}
                                             />
                                         </View>
                                     ) : null}
@@ -1586,7 +1636,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                         ]}
                                                     >
                                                         <Ionicons
-                                                            name={stickerModeEnabled ? 'pricetags' : 'pricetags-outline'}
+                                                            name={stickerModeEnabled ? 'images' : 'images-outline'}
                                                             size={16}
                                                             color="#FFFFFF"
                                                         />

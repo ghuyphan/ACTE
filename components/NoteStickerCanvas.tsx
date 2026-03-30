@@ -13,6 +13,14 @@ import {
   hydrateStickerPlacements,
   type NoteStickerPlacement,
 } from '../services/noteStickers';
+import {
+  clampStickerScale,
+  getStickerDimensions,
+  getStickerOutlineOffsets,
+  getStickerOutlineSize,
+  sortStickerPlacements,
+  type StickerCanvasLayout as CanvasLayout,
+} from './stickerCanvasMetrics';
 
 interface NoteStickerCanvasProps {
   placements: NoteStickerPlacement[];
@@ -20,6 +28,7 @@ interface NoteStickerCanvasProps {
   onChangePlacements?: (nextPlacements: NoteStickerPlacement[]) => void;
   selectedPlacementId?: string | null;
   onChangeSelectedPlacementId?: (placementId: string | null) => void;
+  onPressCanvas?: () => void;
   style?: StyleProp<ViewStyle>;
   remoteBucket?: string;
   sharedCache?: boolean;
@@ -27,62 +36,16 @@ interface NoteStickerCanvasProps {
   minimumBaseSize?: number;
 }
 
-interface CanvasLayout {
-  width: number;
-  height: number;
-}
-
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
-const STICKER_OUTLINE_OFFSETS = [
-  { x: -1, y: 0 },
-  { x: 1, y: 0 },
-  { x: 0, y: -1 },
-  { x: 0, y: 1 },
-  { x: -0.8, y: -0.8 },
-  { x: -0.8, y: 0.8 },
-  { x: 0.8, y: -0.8 },
-  { x: 0.8, y: 0.8 },
-];
-
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
 }
 
-function clampScale(value: number) {
-  return Math.max(0.35, Math.min(value, 3));
-}
-
-function sortPlacements(placements: NoteStickerPlacement[]) {
-  return [...placements].sort((left, right) => left.zIndex - right.zIndex);
-}
-
 function normalizePlacements(placements: NoteStickerPlacement[]) {
-  return sortPlacements(placements).map((placement, index) => ({
+  return sortStickerPlacements(placements).map((placement, index) => ({
     ...placement,
     zIndex: index + 1,
   }));
-}
-
-function getStickerDimensions(
-  placement: NoteStickerPlacement,
-  layout: CanvasLayout,
-  sizeMultiplier: number,
-  minimumBaseSize: number
-) {
-  const longestEdge = Math.max(placement.asset.width, placement.asset.height, 1);
-  const baseSize = Math.max(minimumBaseSize, Math.min(layout.width, layout.height) * 0.3) * sizeMultiplier;
-  const baseScale = baseSize / longestEdge;
-  const scaledWidth = placement.asset.width * baseScale * clampScale(placement.scale);
-  const scaledHeight = placement.asset.height * baseScale * clampScale(placement.scale);
-
-  return {
-    width: scaledWidth,
-    height: scaledHeight,
-  };
-}
-
-function getStickerOutlineSize(width: number, height: number) {
-  return Math.max(3, Math.min(8, Math.min(width, height) * 0.045));
 }
 
 function EditableSticker({
@@ -200,7 +163,7 @@ function EditableSticker({
             return;
           }
           updateLivePlacement({
-            scale: clampScale(pinchStartScaleRef.current * event.scale),
+            scale: clampStickerScale(pinchStartScaleRef.current * event.scale),
           });
         })
         .onFinalize(() => {
@@ -247,6 +210,7 @@ function EditableSticker({
   const frameWidth = dimensions.width + outlineSize * 2;
   const frameHeight = dimensions.height + outlineSize * 2;
   const showOutline = activePlacement.outlineEnabled !== false;
+  const outlineOffsets = getStickerOutlineOffsets(outlineSize);
   const stickerFrameStyle = {
     width: dimensions.width,
     height: dimensions.height,
@@ -283,7 +247,7 @@ function EditableSticker({
                 testID={`note-sticker-outline-${placement.id}`}
                 style={styles.stickerOutlineLayer}
               >
-                {STICKER_OUTLINE_OFFSETS.map((offset, index) => (
+                {outlineOffsets.map((offset, index) => (
                   <Image
                     key={`${placement.id}-outline-${index}`}
                     source={{ uri: activePlacement.asset.localUri }}
@@ -326,6 +290,7 @@ export default function NoteStickerCanvas({
   onChangePlacements,
   selectedPlacementId = null,
   onChangeSelectedPlacementId,
+  onPressCanvas,
   style,
   remoteBucket,
   sharedCache = false,
@@ -355,7 +320,7 @@ export default function NoteStickerCanvas({
   }, [editable, placements, remoteBucket, sharedCache]);
 
   const renderedPlacements = editable ? placements : hydratedPlacements;
-  const sortedPlacements = useMemo(() => sortPlacements(renderedPlacements), [renderedPlacements]);
+  const sortedPlacements = useMemo(() => sortStickerPlacements(renderedPlacements), [renderedPlacements]);
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -380,6 +345,14 @@ export default function NoteStickerCanvas({
 
   return (
     <View pointerEvents={editable ? 'box-none' : 'none'} style={[styles.canvas, style]} onLayout={handleLayout}>
+      {editable && onPressCanvas ? (
+        <Pressable
+          testID="note-sticker-canvas-empty"
+          accessibilityRole="button"
+          onPress={onPressCanvas}
+          style={styles.canvasTapTarget}
+        />
+      ) : null}
       {sortedPlacements.map((placement) => (
         <MemoEditableSticker
           key={placement.id}
@@ -402,6 +375,9 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     position: 'relative',
+  },
+  canvasTapTarget: {
+    ...StyleSheet.absoluteFillObject,
   },
   stickerWrap: {
     position: 'absolute',

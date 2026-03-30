@@ -6,6 +6,9 @@ import { deleteAsync, writeAsStringAsync } from '../utils/fileSystem';
 import { importStickerAsset } from '../services/noteStickers';
 import CaptureCard, { type CaptureCardHandle } from '../components/home/CaptureCard';
 
+const transparentPngBase64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFAAH/e+m+7wAAAABJRU5ErkJggg==';
+
 jest.mock('@expo/vector-icons', () => {
   const React = require('react');
   const { Text } = require('react-native');
@@ -148,12 +151,18 @@ jest.mock('../components/NoteDoodleCanvas', () => {
 
 jest.mock('../components/NoteStickerCanvas', () => {
   const React = require('react');
-  const { View } = require('react-native');
+  const { Pressable, Text, View } = require('react-native');
 
   return {
     __esModule: true,
-    default: function MockNoteStickerCanvas() {
-      return <View testID="mock-sticker-canvas" />;
+    default: function MockNoteStickerCanvas(props: any) {
+      return (
+        <View testID="mock-sticker-canvas">
+          <Text testID="mock-sticker-editable">{String(props.editable)}</Text>
+          <Text testID="mock-sticker-selected">{String(props.selectedPlacementId ?? 'null')}</Text>
+          <Pressable testID="mock-sticker-canvas-empty" onPress={() => props.onPressCanvas?.()} />
+        </View>
+      );
     },
   };
 });
@@ -169,10 +178,16 @@ jest.mock('../services/noteStickers', () => ({
     rotation: 0,
     zIndex: existingPlacements.length + 1,
     opacity: 1,
+    outlineEnabled: true,
     asset,
   })),
   duplicateStickerPlacement: jest.fn((placements: any[]) => placements),
   importStickerAsset: jest.fn(),
+  setStickerPlacementOutlineEnabled: jest.fn((placements: any[], placementId: string, outlineEnabled: boolean) =>
+    placements.map((placement) =>
+      placement.id === placementId ? { ...placement, outlineEnabled } : placement
+    )
+  ),
   updateStickerPlacementTransform: jest.fn((placements: any[]) => placements),
 }));
 
@@ -760,6 +775,78 @@ describe('CaptureCard doodle handle', () => {
 
     expect(getByTestId('sticker-source-option-clipboard')).toBeTruthy();
     expect(getByTestId('sticker-source-option-photos')).toBeTruthy();
+  });
+
+  it('clears sticker selection first, then exits sticker mode on empty-card taps', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardGetImageAsync.mockResolvedValue({
+      data: `data:image/png;base64,${transparentPngBase64}`,
+    } as any);
+    mockImportStickerAsset.mockResolvedValue({
+      id: 'asset-1',
+      ownerUid: '__local__',
+      localUri: 'file:///documents/stickers/asset-1.png',
+      remotePath: null,
+      mimeType: 'image/png',
+      width: 120,
+      height: 120,
+      createdAt: '2026-03-27T00:00:00.000Z',
+      updatedAt: null,
+      source: 'import',
+    } as any);
+
+    const { getByTestId } = renderCaptureCard(ref);
+
+    await act(async () => {
+      fireEvent(getByTestId('capture-card-paste-surface'), 'longPress', {
+        nativeEvent: { locationX: 150, locationY: 220 },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-card-paste-action'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('mock-sticker-selected')).toHaveTextContent('placement-1');
+      expect(getByTestId('mock-sticker-editable')).toHaveTextContent('true');
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('mock-sticker-canvas-empty'));
+    });
+
+    expect(getByTestId('mock-sticker-selected')).toHaveTextContent('null');
+    expect(getByTestId('mock-sticker-editable')).toHaveTextContent('true');
+
+    act(() => {
+      fireEvent.press(getByTestId('mock-sticker-canvas-empty'));
+    });
+
+    expect(getByTestId('mock-sticker-editable')).toHaveTextContent('false');
+  });
+
+  it('closes decorate mode from an outside-card tap', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByTestId } = renderCaptureCard(ref);
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(getByTestId('capture-doodle-toggle'));
+    });
+
+    expect(getByTestId('mock-doodle-editable')).toHaveTextContent('true');
+    expect(getByTestId('capture-decorate-dismiss-surface').props.pointerEvents).toBe('auto');
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-decorate-dismiss-surface'));
+    });
+
+    expect(getByTestId('mock-doodle-editable')).toHaveTextContent('false');
+    expect(getByTestId('capture-decorate-dismiss-surface').props.pointerEvents).toBe('none');
   });
 
   it('keeps text-input long press native and does not paste a sticker', async () => {

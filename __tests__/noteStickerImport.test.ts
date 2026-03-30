@@ -189,4 +189,21 @@ describe('importStickerAsset', () => {
     expect(asset.mimeType).toBe('image/webp');
     expect(asset.localUri.endsWith('.webp')).toBe(true);
   });
+
+  it('returns a typed error when the file format is unsupported', async () => {
+    const importStickerAsset = loadImportStickerAsset();
+
+    mockGetInfoAsync.mockResolvedValue({ exists: true, isDirectory: false, size: 80 * 1024 });
+
+    await expect(
+      importStickerAsset({
+        uri: 'file:///imports/not-a-sticker.jpg',
+        mimeType: 'image/jpeg',
+        name: 'not-a-sticker.jpg',
+      })
+    ).rejects.toMatchObject({
+      name: 'StickerImportError',
+      code: 'unsupported-format',
+    });
+  });
 });

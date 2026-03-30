@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import NoteStickerCanvas from '../components/NoteStickerCanvas';
 import type { NoteStickerPlacement } from '../services/noteStickers';
 
@@ -48,5 +48,16 @@ describe('NoteStickerCanvas', () => {
     );
 
     expect(queryByTestId('note-sticker-outline-placement-1')).toBeNull();
+  });
+
+  it('lets editable canvases react to empty-space taps', () => {
+    const onPressCanvas = jest.fn();
+    const { getByTestId } = render(
+      <NoteStickerCanvas placements={[stickerPlacement]} editable onPressCanvas={onPressCanvas} />
+    );
+
+    fireEvent.press(getByTestId('note-sticker-canvas-empty'));
+
+    expect(onPressCanvas).toHaveBeenCalledTimes(1);
   });
 });

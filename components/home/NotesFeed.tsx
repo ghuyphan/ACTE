@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import { TFunction } from 'i18next';
-import { ReactElement, RefObject, memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { ReactElement, RefObject, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -38,6 +38,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   t,
   shouldReveal,
   revealToken,
+  isActive,
 }: {
   item: Note;
   index: number;
@@ -52,6 +53,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   t: TFunction;
   shouldReveal: boolean;
   revealToken: number;
+  isActive: boolean;
 }) {
   const reduceMotionEnabled = useReducedMotion();
   const scale = useSharedValue(0.9);
@@ -149,6 +151,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
               onPress={() => onOpenNote(item.id)}
               colors={colors}
               t={t}
+              isActive={isActive}
             />
           </Animated.View>
         </Animated.View>
@@ -174,7 +177,8 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   prevProps.item.hasStickers === nextProps.item.hasStickers &&
   prevProps.item.stickerPlacementsJson === nextProps.item.stickerPlacementsJson &&
   prevProps.shouldReveal === nextProps.shouldReveal &&
-  prevProps.revealToken === nextProps.revealToken
+  prevProps.revealToken === nextProps.revealToken &&
+  prevProps.isActive === nextProps.isActive
 ));
 
 const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
@@ -183,6 +187,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   colors,
   t,
   onOpenSharedPost,
+  isActive,
 }: {
   item: SharedPost;
   index: number;
@@ -196,6 +201,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
     border?: string;
   };
   t: TFunction;
+  isActive: boolean;
 }) {
   const scale = useSharedValue(0.9);
   const translateY = useSharedValue(18);
@@ -224,6 +230,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
         onPress={onOpenSharedPost ? () => onOpenSharedPost(item.id) : undefined}
         colors={colors}
         t={t}
+        isActive={isActive}
       />
     </Animated.View>
   );
@@ -244,7 +251,8 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   prevProps.item.placeName === nextProps.item.placeName &&
   prevProps.item.createdAt === nextProps.item.createdAt &&
   prevProps.item.authorDisplayName === nextProps.item.authorDisplayName &&
-  prevProps.item.authorPhotoURLSnapshot === nextProps.item.authorPhotoURLSnapshot
+  prevProps.item.authorPhotoURLSnapshot === nextProps.item.authorPhotoURLSnapshot &&
+  prevProps.isActive === nextProps.isActive
 ));
 
 type NotesFeedListItem =
@@ -301,6 +309,7 @@ export default function NotesFeed({
 }: NotesFeedProps) {
   const captureVisibilityRef = useRef(true);
   const isAdjustingSnapRef = useRef(false);
+  const [activeCardKey, setActiveCardKey] = useState<string | null>(null);
   const listData = useMemo<NotesFeedListItem[]>(
     () =>
       [
@@ -345,6 +354,29 @@ export default function NotesFeed({
     reportCaptureVisibility(offsetY);
   }, [reportCaptureVisibility]);
 
+  const getSettledItemFromOffset = useCallback(
+    (offsetY: number) => {
+      const settledOffset =
+        Platform.OS === 'android'
+          ? Math.min(
+              listData.length * snapHeight,
+              Math.max(0, Math.round(offsetY / snapHeight) * snapHeight)
+            )
+          : offsetY;
+      const rawIndex = Math.round(settledOffset / snapHeight) - 1;
+      return rawIndex >= 0 ? listData[rawIndex] ?? null : null;
+    },
+    [listData, snapHeight]
+  );
+
+  const reportActiveCard = useCallback(
+    (offsetY: number) => {
+      const nextItem = getSettledItemFromOffset(offsetY);
+      setActiveCardKey(nextItem ? `${nextItem.kind}:${nextItem.id}` : null);
+    },
+    [getSettledItemFromOffset]
+  );
+
   const settleAndroidSnap = useCallback(
     (offsetY: number) => {
       if (Platform.OS !== 'android') {
@@ -374,15 +406,7 @@ export default function NotesFeed({
 
   const reportSettledArchiveItem = useCallback(
     (offsetY: number) => {
-      const settledOffset =
-        Platform.OS === 'android'
-          ? Math.min(
-              listData.length * snapHeight,
-              Math.max(0, Math.round(offsetY / snapHeight) * snapHeight)
-            )
-          : offsetY;
-      const rawIndex = Math.round(settledOffset / snapHeight) - 1;
-      const nextItem = rawIndex >= 0 ? listData[rawIndex] ?? null : null;
+      const nextItem = getSettledItemFromOffset(offsetY);
 
       onSettledArchiveItemChange?.(
         nextItem
@@ -393,11 +417,13 @@ export default function NotesFeed({
           : null
       );
     },
-    [listData, onSettledArchiveItemChange, snapHeight]
+    [getSettledItemFromOffset, onSettledArchiveItemChange]
   );
 
   const renderItem = useCallback(
     ({ item, index }: { item: NotesFeedListItem; index: number }) => {
+      const isActive = activeCardKey === `${item.kind}:${item.id}`;
+
       if (item.kind === 'shared-post') {
         return (
           <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
@@ -408,6 +434,7 @@ export default function NotesFeed({
                 onOpenSharedPost={onOpenSharedPost}
                 colors={colors}
                 t={t}
+                isActive={isActive}
               />
             </View>
           </View>
@@ -425,12 +452,14 @@ export default function NotesFeed({
               t={t}
               shouldReveal={item.note.id === revealedNoteId}
               revealToken={revealToken}
+              isActive={isActive}
             />
           </View>
         </View>
       );
     },
     [
+      activeCardKey,
       colors,
       onOpenNote,
       onOpenSharedPost,
@@ -448,6 +477,7 @@ export default function NotesFeed({
       data={listData}
       keyExtractor={(item) => `${item.kind}:${item.id}`}
       renderItem={renderItem}
+      extraData={activeCardKey}
       getItemType={(item) => item.kind}
       drawDistance={snapHeight * 2}
       removeClippedSubviews={Platform.OS === 'android' && captureMode !== 'camera'}
@@ -461,18 +491,26 @@ export default function NotesFeed({
         reportCaptureVisibility(event.nativeEvent.contentOffset.y);
       }}
       scrollEventThrottle={16}
+      onScrollBeginDrag={() => {
+        setActiveCardKey(null);
+      }}
       onScrollEndDrag={(event) => {
         const velocityY = event.nativeEvent.velocity?.y ?? 0;
         if (Math.abs(velocityY) < 0.05) {
           const offsetY = event.nativeEvent.contentOffset.y;
           settleCaptureVisibility(offsetY);
+          reportActiveCard(offsetY);
           reportSettledArchiveItem(offsetY);
         }
+      }}
+      onMomentumScrollBegin={() => {
+        setActiveCardKey(null);
       }}
       onMomentumScrollEnd={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
         settleCaptureVisibility(offsetY);
         settleAndroidSnap(offsetY);
+        reportActiveCard(offsetY);
         reportSettledArchiveItem(offsetY);
       }}
       contentContainerStyle={{ paddingBottom: height - snapHeight }}

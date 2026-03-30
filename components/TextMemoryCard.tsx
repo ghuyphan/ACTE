@@ -8,7 +8,7 @@ import { parseNoteDoodleStrokes } from '../services/noteDoodles';
 import { parseNoteStickerPlacements } from '../services/noteStickers';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import NoteDoodleCanvas from './NoteDoodleCanvas';
-import NoteStickerCanvas from './NoteStickerCanvas';
+import DynamicStickerCanvas from './DynamicStickerCanvas';
 import PremiumNoteFinishOverlay from './ui/PremiumNoteFinishOverlay';
 
 interface TextMemoryCardProps {
@@ -19,6 +19,7 @@ interface TextMemoryCardProps {
     doodleStrokesJson?: string | null;
     stickerPlacementsJson?: string | null;
     remoteBucket?: string;
+    isActive?: boolean;
 }
 
 function TextMemoryCard({
@@ -29,6 +30,7 @@ function TextMemoryCard({
     doodleStrokesJson = null,
     stickerPlacementsJson = null,
     remoteBucket,
+    isActive = false,
 }: TextMemoryCardProps) {
     const gradient = useMemo(
         () => getTextNoteCardGradient({ text, noteId, emoji, noteColor }),
@@ -57,8 +59,15 @@ function TextMemoryCard({
             >
                 <PremiumNoteFinishOverlay noteColor={noteColor} />
                 {stickerPlacements.length > 0 ? (
-                    <View pointerEvents="none" style={styles.stickerOverlay}>
-                        <NoteStickerCanvas placements={stickerPlacements} remoteBucket={remoteBucket} />
+                    <View
+                        pointerEvents={__DEV__ && isActive ? 'box-none' : 'none'}
+                        style={styles.stickerOverlay}
+                    >
+                        <DynamicStickerCanvas
+                            placements={stickerPlacements}
+                            remoteBucket={remoteBucket}
+                            isActive={isActive}
+                        />
                     </View>
                 ) : null}
                 {doodleStrokes.length > 0 ? (

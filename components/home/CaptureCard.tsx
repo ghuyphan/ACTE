@@ -54,6 +54,7 @@ import {
   duplicateStickerPlacement,
   importStickerAsset,
   type NoteStickerPlacement,
+  StickerImportError,
   setStickerPlacementOutlineEnabled,
   updateStickerPlacementTransform,
 } from '../../services/noteStickers';
@@ -114,6 +115,35 @@ function getCaptureTextPlaceholderVariants(t: TFunction) {
 
 function getUniqueColors(colors: string[]) {
   return colors.filter((color, index) => colors.indexOf(color) === index);
+}
+
+function getStickerImportErrorMessage(t: TFunction, error: unknown) {
+  if (error instanceof StickerImportError) {
+    if (error.code === 'unsupported-format') {
+      return t(
+        'capture.stickerUnsupportedFormat',
+        'Please import a transparent PNG or WebP sticker.'
+      );
+    }
+
+    if (error.code === 'file-unavailable') {
+      return t(
+        'capture.stickerFileUnavailable',
+        'Sticker file is not available on this device.'
+      );
+    }
+
+    if (error.code === 'missing-transparency') {
+      return t(
+        'capture.stickerMissingTransparency',
+        'This image does not include transparency. Import a transparent PNG or WebP sticker.'
+      );
+    }
+  }
+
+  return error instanceof Error
+    ? error.message
+    : t('capture.photoImportFailed', 'We could not import that photo right now.');
 }
 
 export interface CaptureCardHandle {
@@ -947,7 +977,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     doodleModeEnabled || stickerModeEnabled
       ? doodleModeEnabled
         ? 228
-        : TOP_CONTROL_HEIGHT * 3 + 16
+        : TOP_CONTROL_HEIGHT * 4 + 24
       : ENABLE_PHOTO_STICKERS
         ? TOP_CONTROL_HEIGHT * 2 + 8
         : TOP_CONTROL_HEIGHT;
@@ -1142,9 +1172,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       console.warn('Sticker import failed:', error);
       Alert.alert(
         t('capture.error', 'Error'),
-        error instanceof Error
-          ? error.message
-          : t('capture.photoImportFailed', 'We could not import that photo right now.')
+        getStickerImportErrorMessage(t, error)
       );
     } finally {
       setImportingSticker(false);
@@ -1282,16 +1310,22 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     dismissPastePrompt();
 
     if (isPhotoDoodleSurface) {
+      if (photoStickerModeEnabled) {
+        setPhotoSelectedStickerId(null);
+      }
       setPhotoDecorateMenuExpanded(true);
       setPhotoDoodleModeEnabled(false);
       setPhotoStickerModeEnabled((current) => !current);
       return;
     }
 
+    if (textStickerModeEnabled) {
+      setTextSelectedStickerId(null);
+    }
     setTextDecorateMenuExpanded(true);
     setTextDoodleModeEnabled(false);
     setTextStickerModeEnabled((current) => !current);
-  }, [dismissPastePrompt, isPhotoDoodleSurface]);
+  }, [dismissPastePrompt, isPhotoDoodleSurface, photoStickerModeEnabled, textStickerModeEnabled]);
   const handleChangeStickerPlacements = useCallback(
     (nextPlacements: NoteStickerPlacement[]) => {
       if (isPhotoDoodleSurface) {
@@ -1314,6 +1348,51 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     },
     [isPhotoDoodleSurface]
   );
+  const handlePressStickerCanvas = useCallback(() => {
+    if (!stickerModeEnabled) {
+      return;
+    }
+
+    dismissPastePrompt();
+
+    if (selectedStickerId) {
+      handleSelectSticker(null);
+      return;
+    }
+
+    if (isPhotoDoodleSurface) {
+      setPhotoStickerModeEnabled(false);
+      return;
+    }
+
+    setTextStickerModeEnabled(false);
+  }, [
+    dismissPastePrompt,
+    handleSelectSticker,
+    isPhotoDoodleSurface,
+    selectedStickerId,
+    stickerModeEnabled,
+  ]);
+  const handlePressOutsideCard = useCallback(() => {
+    if (!showDecorateControls) {
+      return;
+    }
+
+    dismissPastePrompt();
+
+    if (isPhotoDoodleSurface) {
+      setPhotoSelectedStickerId(null);
+      setPhotoDoodleModeEnabled(false);
+      setPhotoStickerModeEnabled(false);
+      setPhotoDecorateMenuExpanded(false);
+      return;
+    }
+
+    setTextSelectedStickerId(null);
+    setTextDoodleModeEnabled(false);
+    setTextStickerModeEnabled(false);
+    setTextDecorateMenuExpanded(false);
+  }, [dismissPastePrompt, isPhotoDoodleSurface, showDecorateControls]);
   const handleSelectedStickerAction = useCallback(
     (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove' | 'outline-toggle') => {
       if (!selectedStickerId) {
@@ -1498,6 +1577,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   return (
     <>
       <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
+        <Pressable
+          testID="capture-decorate-dismiss-surface"
+          accessible={false}
+          pointerEvents={showDecorateControls && !interactionsDisabled ? 'auto' : 'none'}
+          style={styles.decorateDismissSurface}
+          onPress={handlePressOutsideCard}
+        />
         <Reanimated.View style={keyboardLiftAnimatedStyle}>
           <Reanimated.View
             testID="capture-card-area"
@@ -1819,6 +1905,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     onChangePlacements={handleChangeStickerPlacements}
                     selectedPlacementId={selectedStickerId}
                     onChangeSelectedPlacementId={handleSelectSticker}
+                    onPressCanvas={handlePressStickerCanvas}
                   />
                 </View>
               ) : null}
@@ -2206,6 +2293,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     onChangePlacements={handleChangeStickerPlacements}
                     selectedPlacementId={selectedStickerId}
                     onChangeSelectedPlacementId={handleSelectSticker}
+                    onPressCanvas={handlePressStickerCanvas}
                   />
                 </View>
               ) : null}
@@ -2759,6 +2847,9 @@ const styles = StyleSheet.create({
   snapItem: {
     width,
     justifyContent: 'center',
+  },
+  decorateDismissSurface: {
+    ...StyleSheet.absoluteFillObject,
   },
   captureArea: {
     height: CARD_SIZE,

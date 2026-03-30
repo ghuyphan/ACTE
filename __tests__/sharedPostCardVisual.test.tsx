@@ -21,17 +21,21 @@ jest.mock('../services/remoteMedia', () => ({
 
 jest.mock('../components/ImageMemoryCard', () => {
   const React = require('react');
-  const { View } = require('react-native');
-  return function MockImageMemoryCard() {
-    return <View testID="shared-post-image-card" />;
+  const { Text, View } = require('react-native');
+  return function MockImageMemoryCard({ isActive }: { isActive?: boolean }) {
+    return (
+      <View testID="shared-post-image-card">
+        <Text testID="shared-post-image-card-active">{String(Boolean(isActive))}</Text>
+      </View>
+    );
   };
 });
 
 jest.mock('../components/TextMemoryCard', () => {
   const React = require('react');
   const { Text } = require('react-native');
-  return function MockTextMemoryCard({ text }: { text: string }) {
-    return <Text>{text}</Text>;
+  return function MockTextMemoryCard({ text, isActive }: { text: string; isActive?: boolean }) {
+    return <Text>{`${text}:${String(Boolean(isActive))}`}</Text>;
   };
 });
 
@@ -81,6 +85,38 @@ describe('SharedPostCardVisual', () => {
     await waitFor(() => {
       expect(queryByTestId('shared-post-photo-placeholder')).toBeNull();
       expect(getByTestId('shared-post-image-card')).toBeTruthy();
+    });
+  });
+
+  it('forwards active state into the rendered shared card', async () => {
+    mockDownloadPhotoFromStorage.mockResolvedValue('file:///shared-photo-1.jpg');
+
+    const { getByTestId } = render(
+      <SharedPostCardVisual
+        post={{
+          id: 'shared-photo-1',
+          authorUid: 'friend-1',
+          authorDisplayName: 'Lan',
+          authorPhotoURLSnapshot: null,
+          audienceUserIds: [],
+          type: 'photo',
+          text: '',
+          photoPath: 'friend-1/shared-photo-1.jpg',
+          photoLocalUri: null,
+          doodleStrokesJson: null,
+          placeName: 'District 1',
+          sourceNoteId: null,
+          createdAt: '2026-03-22T00:00:00.000Z',
+          updatedAt: null,
+        }}
+        fallbackText="Photo memory"
+        isActive
+      />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('shared-post-image-card')).toBeTruthy();
+      expect(getByTestId('shared-post-image-card-active')).toHaveTextContent('true');
     });
   });
 
@@ -146,7 +182,7 @@ describe('SharedPostCardVisual', () => {
       />
     );
 
-    expect(getByText('Shared note')).toBeTruthy();
+    expect(getByText('Shared note:false')).toBeTruthy();
     expect(queryByText('Photo memory')).toBeNull();
   });
 });

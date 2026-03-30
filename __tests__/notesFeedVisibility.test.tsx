@@ -9,17 +9,20 @@ const mockTextMemoryCard = jest.fn(
     noteColor,
     doodleStrokesJson,
     stickerPlacementsJson,
+    isActive,
   }: {
     text: string;
     noteColor?: string | null;
     doodleStrokesJson?: string | null;
     stickerPlacementsJson?: string | null;
+    isActive?: boolean;
   }) => (
     <View>
       <Text testID="mock-text-memory-card-text">{text}</Text>
       <Text testID="mock-text-memory-card-color">{noteColor ?? 'null'}</Text>
       <Text testID="mock-text-memory-card-doodle">{doodleStrokesJson ?? 'null'}</Text>
       <Text testID="mock-text-memory-card-stickers">{stickerPlacementsJson ?? 'null'}</Text>
+      <Text testID="mock-text-memory-card-active">{String(Boolean(isActive))}</Text>
     </View>
   )
 );
@@ -54,6 +57,87 @@ beforeEach(() => {
 });
 
 describe('NotesFeed capture visibility', () => {
+  it('marks only the settled centered card as active', () => {
+    const view = render(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="camera"
+        notes={[
+          {
+            id: 'note-1',
+            type: 'text',
+            content: 'first',
+            locationName: 'Cafe',
+            latitude: 0,
+            longitude: 0,
+            radius: 150,
+            isFavorite: false,
+            createdAt: '2026-03-19T00:00:00.000Z',
+            updatedAt: null,
+          },
+          {
+            id: 'note-2',
+            type: 'text',
+            content: 'second',
+            locationName: 'Park',
+            latitude: 0,
+            longitude: 0,
+            radius: 150,
+            isFavorite: false,
+            createdAt: '2026-03-18T00:00:00.000Z',
+            updatedAt: null,
+          },
+        ] as any}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    const list = view.UNSAFE_getByType(FlatList);
+
+    act(() => {
+      list.props.onMomentumScrollEnd({
+        nativeEvent: {
+          contentOffset: {
+            y: 700,
+          },
+        },
+      });
+    });
+
+    let activeLabels = view.getAllByTestId('mock-text-memory-card-active');
+    expect(activeLabels[0]).toHaveTextContent('true');
+    expect(activeLabels[1]).toHaveTextContent('false');
+
+    act(() => {
+      list.props.onMomentumScrollEnd({
+        nativeEvent: {
+          contentOffset: {
+            y: 1400,
+          },
+        },
+      });
+    });
+
+    activeLabels = view.getAllByTestId('mock-text-memory-card-active');
+    expect(activeLabels[0]).toHaveTextContent('false');
+    expect(activeLabels[1]).toHaveTextContent('true');
+  });
+
   it('re-renders a note card when only doodle strokes change', () => {
     const baseNote = {
       id: 'note-1',

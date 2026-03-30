@@ -215,6 +215,7 @@ jest.mock('../services/noteStickers', () => ({
     rotation: 0,
     zIndex: existingPlacements.length + 1,
     opacity: 1,
+    outlineEnabled: true,
     asset,
   })),
   duplicateStickerPlacement: jest.fn((placements: any[]) => placements),
@@ -228,6 +229,11 @@ jest.mock('../services/noteStickers', () => ({
   }),
   saveNoteStickerPlacementsWithAssets: jest.fn(async () => undefined),
   clearNoteStickers: jest.fn(async () => undefined),
+  setStickerPlacementOutlineEnabled: jest.fn((placements: any[], placementId: string, outlineEnabled: boolean) =>
+    placements.map((placement: any) =>
+      placement.id === placementId ? { ...placement, outlineEnabled } : placement
+    )
+  ),
   updateStickerPlacementTransform: jest.fn((placements: any[]) => placements),
 }));
 
