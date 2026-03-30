@@ -6,16 +6,20 @@ import { useTheme } from '../../hooks/useTheme';
 import { SharedPost } from '../../services/sharedFeedService';
 import { downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET } from '../../services/remoteMedia';
 import ImageMemoryCard from '../ImageMemoryCard';
+import type { DebugTiltState } from '../StickerPhysicsDebugControls';
 import TextMemoryCard from '../TextMemoryCard';
+import type { SharedValue } from 'react-native-reanimated';
 
 export default function SharedPostCardVisual({
   post,
   fallbackText,
   isActive = false,
+  debugTiltOverride,
 }: {
   post: SharedPost;
   fallbackText: string;
   isActive?: boolean;
+  debugTiltOverride?: SharedValue<DebugTiltState>;
 }) {
   const { colors } = useTheme();
   const normalizedText = post.text.trim();
@@ -60,6 +64,7 @@ export default function SharedPostCardVisual({
           stickerPlacementsJson={post.stickerPlacementsJson}
           remoteBucket={SHARED_POST_MEDIA_BUCKET}
           isActive={isActive}
+          debugTiltOverride={debugTiltOverride}
         />
       );
     }
@@ -97,6 +102,7 @@ export default function SharedPostCardVisual({
       stickerPlacementsJson={post.stickerPlacementsJson}
       remoteBucket={SHARED_POST_MEDIA_BUCKET}
       isActive={isActive}
+      debugTiltOverride={debugTiltOverride}
     />
   );
 }

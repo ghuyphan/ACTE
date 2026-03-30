@@ -7,17 +7,10 @@ import {
   type Transforms3d,
   useImage,
 } from '@shopify/react-native-skia';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type LayoutChangeEvent,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
-import { useDerivedValue, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import { memo, useEffect, useMemo, useState } from 'react';
+import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
+import type { DebugTiltState } from './StickerPhysicsDebugControls';
 import { useStickerPhysics, type StickerPhysicsState } from '../hooks/useStickerPhysics';
 import {
   hydrateStickerPlacements,
@@ -39,6 +32,7 @@ interface DynamicStickerCanvasProps {
   sizeMultiplier?: number;
   minimumBaseSize?: number;
   isActive?: boolean;
+  debugTiltOverride?: SharedValue<DebugTiltState>;
 }
 
 interface StickerSpriteProps {
@@ -66,12 +60,6 @@ interface PhysicsStickerSpriteProps {
   layout: StickerCanvasLayout;
   sizeMultiplier: number;
   minimumBaseSize: number;
-}
-
-interface DebugTiltState {
-  enabled: boolean;
-  x: number;
-  y: number;
 }
 
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
@@ -208,52 +196,6 @@ function StickerLayer({
   );
 }
 
-const DEBUG_TILT_PRESETS: {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
-  enabled: boolean;
-}[] = [
-  { id: 'sensor', label: 'Sensor', x: 0, y: 0, enabled: false },
-  { id: 'left', label: 'Left', x: -0.92, y: 0, enabled: true },
-  { id: 'right', label: 'Right', x: 0.92, y: 0, enabled: true },
-  { id: 'up', label: 'Up', x: 0, y: -0.92, enabled: true },
-  { id: 'down', label: 'Down', x: 0, y: 0.92, enabled: true },
-  { id: 'drift', label: 'Drift', x: 0.98, y: 0.82, enabled: true },
-  { id: 'flat', label: 'Flat', x: 0, y: 0, enabled: true },
-];
-
-function DebugTiltPanel({
-  activePresetId,
-  onSelectPreset,
-}: {
-  activePresetId: string;
-  onSelectPreset: (presetId: string) => void;
-}) {
-  return (
-    <View style={styles.debugPanel}>
-      <Text style={styles.debugTitle}>Sim Tilt</Text>
-      <View style={styles.debugButtonGrid}>
-        {DEBUG_TILT_PRESETS.map((preset) => {
-          const selected = activePresetId === preset.id;
-          return (
-            <Pressable
-              key={preset.id}
-              onPress={() => onSelectPreset(preset.id)}
-              style={[styles.debugButton, selected ? styles.debugButtonActive : null]}
-            >
-              <Text style={[styles.debugButtonLabel, selected ? styles.debugButtonLabelActive : null]}>
-                {preset.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
 export default function DynamicStickerCanvas({
   placements,
   style,
@@ -262,15 +204,10 @@ export default function DynamicStickerCanvas({
   sizeMultiplier = 1,
   minimumBaseSize = 68,
   isActive = false,
+  debugTiltOverride,
 }: DynamicStickerCanvasProps) {
   const [layout, setLayout] = useState<StickerCanvasLayout>({ width: 1, height: 1 });
   const [hydratedPlacements, setHydratedPlacements] = useState(placements);
-  const [activeDebugPresetId, setActiveDebugPresetId] = useState('sensor');
-  const debugTiltOverride = useSharedValue<DebugTiltState>({
-    enabled: false,
-    x: 0,
-    y: 0,
-  });
 
   useEffect(() => {
     if (!remoteBucket) {
@@ -304,36 +241,6 @@ export default function DynamicStickerCanvas({
     });
   };
 
-  const handleSelectDebugPreset = useCallback(
-    (presetId: string) => {
-      const preset = DEBUG_TILT_PRESETS.find((candidate) => candidate.id === presetId);
-      if (!preset) {
-        return;
-      }
-
-      setActiveDebugPresetId(preset.id);
-      debugTiltOverride.value = {
-        enabled: preset.enabled,
-        x: preset.x,
-        y: preset.y,
-      };
-    },
-    [debugTiltOverride]
-  );
-
-  useEffect(() => {
-    if (!__DEV__ || isActive) {
-      return;
-    }
-
-    setActiveDebugPresetId('sensor');
-    debugTiltOverride.value = {
-      enabled: false,
-      x: 0,
-      y: 0,
-    };
-  }, [debugTiltOverride, isActive]);
-
   return (
     <View style={[styles.canvasWrap, style]} onLayout={handleLayout}>
       <Canvas pointerEvents="none" style={styles.canvas}>
@@ -346,14 +253,6 @@ export default function DynamicStickerCanvas({
           debugTiltOverride={debugTiltOverride}
         />
       </Canvas>
-      {__DEV__ && isActive ? (
-        <View pointerEvents="box-none" style={styles.debugPanelWrap}>
-          <DebugTiltPanel
-            activePresetId={activeDebugPresetId}
-            onSelectPreset={handleSelectDebugPreset}
-          />
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -366,54 +265,5 @@ const styles = StyleSheet.create({
   canvas: {
     width: '100%',
     height: '100%',
-  },
-  debugPanelWrap: {
-    position: 'absolute',
-    right: 10,
-    bottom: 10,
-    left: 10,
-    alignItems: 'center',
-  },
-  debugPanel: {
-    width: '100%',
-    maxWidth: 280,
-    borderRadius: 18,
-    backgroundColor: 'rgba(15,23,42,0.72)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  debugTitle: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  debugButtonGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  debugButton: {
-    minWidth: 56,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-  },
-  debugButtonActive: {
-    backgroundColor: 'rgba(255,255,255,0.94)',
-  },
-  debugButtonLabel: {
-    color: '#F8FAFC',
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  debugButtonLabelActive: {
-    color: '#0F172A',
   },
 });

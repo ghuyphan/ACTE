@@ -8,6 +8,8 @@ import NoteDoodleCanvas from './NoteDoodleCanvas';
 import { parseNoteDoodleStrokes } from '../services/noteDoodles';
 import DynamicStickerCanvas from './DynamicStickerCanvas';
 import { parseNoteStickerPlacements } from '../services/noteStickers';
+import type { DebugTiltState } from './StickerPhysicsDebugControls';
+import type { SharedValue } from 'react-native-reanimated';
 
 interface ImageMemoryCardProps {
     imageUrl: string;
@@ -15,6 +17,7 @@ interface ImageMemoryCardProps {
     stickerPlacementsJson?: string | null;
     remoteBucket?: string;
     isActive?: boolean;
+    debugTiltOverride?: SharedValue<DebugTiltState>;
 }
 
 function ImageMemoryCard({
@@ -23,6 +26,7 @@ function ImageMemoryCard({
     stickerPlacementsJson = null,
     remoteBucket,
     isActive = false,
+    debugTiltOverride,
 }: ImageMemoryCardProps) {
     const { colors } = useTheme();
     const doodleStrokes = useMemo(
@@ -51,6 +55,7 @@ function ImageMemoryCard({
                         placements={stickerPlacements}
                         remoteBucket={remoteBucket}
                         isActive={isActive}
+                        debugTiltOverride={debugTiltOverride}
                     />
                 </View>
             ) : null}

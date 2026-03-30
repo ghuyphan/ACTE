@@ -9,7 +9,9 @@ import { parseNoteStickerPlacements } from '../services/noteStickers';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import NoteDoodleCanvas from './NoteDoodleCanvas';
 import DynamicStickerCanvas from './DynamicStickerCanvas';
+import type { DebugTiltState } from './StickerPhysicsDebugControls';
 import PremiumNoteFinishOverlay from './ui/PremiumNoteFinishOverlay';
+import type { SharedValue } from 'react-native-reanimated';
 
 interface TextMemoryCardProps {
     text: string;
@@ -20,6 +22,7 @@ interface TextMemoryCardProps {
     stickerPlacementsJson?: string | null;
     remoteBucket?: string;
     isActive?: boolean;
+    debugTiltOverride?: SharedValue<DebugTiltState>;
 }
 
 function TextMemoryCard({
@@ -31,6 +34,7 @@ function TextMemoryCard({
     stickerPlacementsJson = null,
     remoteBucket,
     isActive = false,
+    debugTiltOverride,
 }: TextMemoryCardProps) {
     const gradient = useMemo(
         () => getTextNoteCardGradient({ text, noteId, emoji, noteColor }),
@@ -67,6 +71,7 @@ function TextMemoryCard({
                             placements={stickerPlacements}
                             remoteBucket={remoteBucket}
                             isActive={isActive}
+                            debugTiltOverride={debugTiltOverride}
                         />
                     </View>
                 ) : null}

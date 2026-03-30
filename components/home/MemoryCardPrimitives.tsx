@@ -1,13 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
+import { useEffect } from 'react';
 import { Dimensions, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { useSharedValue } from 'react-native-reanimated';
 import { Layout, Typography } from '../../constants/theme';
 import { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { SharedPost } from '../../services/sharedFeedService';
 import { formatDate } from '../../utils/dateUtils';
 import ImageMemoryCard from '../ImageMemoryCard';
+import StickerPhysicsDebugControls, {
+  DEFAULT_DEBUG_TILT_STATE,
+  type DebugTiltState,
+} from '../StickerPhysicsDebugControls';
 import TextMemoryCard from '../TextMemoryCard';
 import InfoPill from '../ui/InfoPill';
 import SharedPostCardVisual from './SharedPostCardVisual';
@@ -54,6 +60,17 @@ export function NoteMemoryCard({
   isActive = false,
 }: NoteMemoryCardProps) {
   const dateStr = formatDate(note.createdAt, 'short');
+  const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
+  const showDebugControls = __DEV__ && isActive && Boolean(note.hasStickers || note.stickerPlacementsJson);
+
+  useEffect(() => {
+    if (showDebugControls) {
+      return;
+    }
+
+    debugTiltOverride.value = DEFAULT_DEBUG_TILT_STATE;
+  }, [debugTiltOverride, showDebugControls]);
+
   const content = (
     <View style={[styles.cardRoot, containerStyle, { width: cardSize }]}>
       <View style={[styles.noteCardWrapper, { width: cardSize, height: cardSize }]}>
@@ -64,6 +81,7 @@ export function NoteMemoryCard({
               doodleStrokesJson={note.doodleStrokesJson}
               stickerPlacementsJson={note.stickerPlacementsJson}
               isActive={isActive}
+              debugTiltOverride={debugTiltOverride}
             />
           ) : (
             <TextMemoryCard
@@ -74,6 +92,7 @@ export function NoteMemoryCard({
               doodleStrokesJson={note.doodleStrokesJson}
               stickerPlacementsJson={note.stickerPlacementsJson}
               isActive={isActive}
+              debugTiltOverride={debugTiltOverride}
             />
           )}
         </View>
@@ -100,6 +119,15 @@ export function NoteMemoryCard({
           ) : null}
         </InfoPill>
       </View>
+      <View
+        pointerEvents="box-none"
+        style={[styles.debugControlsOverlay, { top: cardSize + 72, width: cardSize }]}
+      >
+        <StickerPhysicsDebugControls
+          debugTiltOverride={debugTiltOverride}
+          visible={showDebugControls}
+        />
+      </View>
     </View>
   );
 
@@ -121,6 +149,17 @@ export function SharedPostMemoryCard({
 }: SharedPostMemoryCardProps) {
   const authorLabel = post.authorDisplayName ?? t('shared.someone', 'Someone');
   const dateStr = formatDate(post.createdAt, 'short');
+  const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
+  const showDebugControls = __DEV__ && isActive && Boolean(post.hasStickers || post.stickerPlacementsJson);
+
+  useEffect(() => {
+    if (showDebugControls) {
+      return;
+    }
+
+    debugTiltOverride.value = DEFAULT_DEBUG_TILT_STATE;
+  }, [debugTiltOverride, showDebugControls]);
+
   const content = (
     <View style={[styles.cardRoot, containerStyle, { width: cardSize }]}>
       <View style={[styles.sharedCardWrap, { width: cardSize }]}>
@@ -130,6 +169,7 @@ export function SharedPostMemoryCard({
               post={post}
               fallbackText={t('shared.noteFallback', 'Shared note')}
               isActive={isActive}
+              debugTiltOverride={debugTiltOverride}
             />
           </View>
         </View>
@@ -159,6 +199,15 @@ export function SharedPostMemoryCard({
           </InfoPill>
         </View>
       </View>
+      <View
+        pointerEvents="box-none"
+        style={[styles.debugControlsOverlay, { top: cardSize + 72, width: cardSize }]}
+      >
+        <StickerPhysicsDebugControls
+          debugTiltOverride={debugTiltOverride}
+          visible={showDebugControls}
+        />
+      </View>
     </View>
   );
 
@@ -172,6 +221,7 @@ export function SharedPostMemoryCard({
 const styles = StyleSheet.create({
   cardRoot: {
     alignSelf: 'center',
+    position: 'relative',
   },
   cardFill: {
     flex: 1,
@@ -243,5 +293,11 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     marginHorizontal: 2,
+  },
+  debugControlsOverlay: {
+    position: 'absolute',
+    left: 0,
+    alignSelf: 'center',
+    zIndex: 20,
   },
 });
