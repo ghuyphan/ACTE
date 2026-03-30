@@ -115,6 +115,9 @@ jest.mock('react-native-gesture-handler', () => {
     GestureDetector: ({ children, ...props }: any) => React.createElement(View, props, children),
     Gesture: {
       Pan: () => createGestureChain(),
+      Pinch: () => createGestureChain(),
+      Rotation: () => createGestureChain(),
+      Simultaneous: () => createGestureChain(),
     },
   };
 });

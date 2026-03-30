@@ -32,6 +32,18 @@ interface CanvasLayout {
   height: number;
 }
 
+const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
+const STICKER_OUTLINE_OFFSETS = [
+  { x: -1, y: 0 },
+  { x: 1, y: 0 },
+  { x: 0, y: -1 },
+  { x: 0, y: 1 },
+  { x: -0.8, y: -0.8 },
+  { x: -0.8, y: 0.8 },
+  { x: 0.8, y: -0.8 },
+  { x: 0.8, y: 0.8 },
+];
+
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
 }
@@ -67,6 +79,10 @@ function getStickerDimensions(
     width: scaledWidth,
     height: scaledHeight,
   };
+}
+
+function getStickerOutlineSize(width: number, height: number) {
+  return Math.max(3, Math.min(8, Math.min(width, height) * 0.045));
 }
 
 function EditableSticker({
@@ -227,6 +243,15 @@ function EditableSticker({
 
   const activePlacement = editable ? dragPlacement : placement;
   const dimensions = getStickerDimensions(activePlacement, layout, sizeMultiplier, minimumBaseSize);
+  const outlineSize = getStickerOutlineSize(dimensions.width, dimensions.height);
+  const frameWidth = dimensions.width + outlineSize * 2;
+  const frameHeight = dimensions.height + outlineSize * 2;
+  const stickerFrameStyle = {
+    width: dimensions.width,
+    height: dimensions.height,
+    top: outlineSize,
+    left: outlineSize,
+  } as const;
 
   return (
     <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture)}>
@@ -234,10 +259,10 @@ function EditableSticker({
         style={[
           styles.stickerWrap,
           {
-            width: dimensions.width,
-            height: dimensions.height,
-            left: activePlacement.x * layout.width - dimensions.width / 2,
-            top: activePlacement.y * layout.height - dimensions.height / 2,
+            width: frameWidth,
+            height: frameHeight,
+            left: activePlacement.x * layout.width - frameWidth / 2,
+            top: activePlacement.y * layout.height - frameHeight / 2,
             zIndex: activePlacement.zIndex,
             opacity: activePlacement.opacity,
             transform: [{ rotate: `${activePlacement.rotation}deg` }],
@@ -250,12 +275,40 @@ function EditableSticker({
           onPress={editable ? onSelect : undefined}
           style={styles.stickerPressable}
         >
-          <Image
-            source={{ uri: activePlacement.asset.localUri }}
-            style={styles.stickerImage}
-            contentFit="contain"
-            transition={120}
-          />
+          <View style={styles.stickerArtwork}>
+            <View
+              pointerEvents="none"
+              testID={`note-sticker-outline-${placement.id}`}
+              style={styles.stickerOutlineLayer}
+            >
+              {STICKER_OUTLINE_OFFSETS.map((offset, index) => (
+                <Image
+                  key={`${placement.id}-outline-${index}`}
+                  source={{ uri: activePlacement.asset.localUri }}
+                  style={[
+                    styles.stickerLayerImage,
+                    stickerFrameStyle,
+                    {
+                      tintColor: STICKER_OUTLINE_COLOR,
+                      opacity: 0.92,
+                      transform: [
+                        { translateX: offset.x * outlineSize },
+                        { translateY: offset.y * outlineSize },
+                      ],
+                    },
+                  ]}
+                  contentFit="contain"
+                  transition={0}
+                />
+              ))}
+            </View>
+            <Image
+              source={{ uri: activePlacement.asset.localUri }}
+              style={[styles.stickerLayerImage, stickerFrameStyle]}
+              contentFit="contain"
+              transition={120}
+            />
+          </View>
         </Pressable>
       </View>
     </GestureDetector>
@@ -353,8 +406,13 @@ const styles = StyleSheet.create({
   stickerPressable: {
     width: '100%',
     height: '100%',
-    borderRadius: 18,
-    overflow: 'hidden',
+  },
+  stickerArtwork: {
+    width: '100%',
+    height: '100%',
+  },
+  stickerOutlineLayer: {
+    ...StyleSheet.absoluteFillObject,
   },
   selectionRing: {
     position: 'absolute',
@@ -367,8 +425,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.88)',
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
-  stickerImage: {
-    width: '100%',
-    height: '100%',
+  stickerLayerImage: {
+    position: 'absolute',
   },
 });
