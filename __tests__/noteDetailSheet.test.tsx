@@ -24,6 +24,8 @@ const mockImportStickerAssetFromClipboard = jest.fn<Promise<unknown>, [unknown]>
 const mockRouterPush = jest.fn();
 const mockImpactAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockNotificationAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
+const mockSetActiveNote = jest.fn();
+const mockClearActiveNote = jest.fn();
 const mockNotesStore = {
   getNoteById: (noteId: string) => mockGetNoteById(noteId),
   deleteNote: (noteId: string) => mockDeleteNote(noteId),
@@ -142,6 +144,13 @@ jest.mock('../hooks/useTheme', () => ({
       captureCameraOverlayText: '#FFFDFC',
       captureFlashOverlay: 'rgba(255,250,242,0.96)',
     },
+  }),
+}));
+
+jest.mock('../hooks/useActiveNote', () => ({
+  useActiveNote: () => ({
+    setActiveNote: mockSetActiveNote,
+    clearActiveNote: mockClearActiveNote,
   }),
 }));
 

@@ -39,6 +39,7 @@ export interface StickerPlacement {
   rotation: number;
   zIndex: number;
   opacity: number;
+  outlineEnabled?: boolean;
 }
 
 export interface NoteStickerPlacement extends StickerPlacement {
@@ -464,6 +465,8 @@ export function parseNoteStickerPlacements(
         typeof maybePlacement.rotation === 'number' &&
         typeof maybePlacement.zIndex === 'number' &&
         typeof maybePlacement.opacity === 'number' &&
+        (typeof maybePlacement.outlineEnabled === 'undefined' ||
+          typeof maybePlacement.outlineEnabled === 'boolean') &&
         Boolean(
           maybePlacement.asset &&
             typeof maybePlacement.asset === 'object' &&
@@ -493,6 +496,7 @@ export function createStickerPlacement(
     rotation: 0,
     zIndex: nextZIndex,
     opacity: 1,
+    outlineEnabled: true,
     asset,
   };
 }
@@ -510,6 +514,7 @@ export function normalizeStickerPlacements(
       y: clamp01(placement.y),
       scale: Math.max(0.2, Math.min(placement.scale, 3)),
       opacity: clamp01(placement.opacity),
+      outlineEnabled: placement.outlineEnabled !== false,
     }));
 }
 
@@ -524,6 +529,23 @@ export function updateStickerPlacementTransform(
         ? {
             ...placement,
             ...updates,
+          }
+        : placement
+    )
+  );
+}
+
+export function setStickerPlacementOutlineEnabled(
+  placements: NoteStickerPlacement[],
+  placementId: string,
+  outlineEnabled: boolean
+) {
+  return normalizeStickerPlacements(
+    placements.map((placement) =>
+      placement.id === placementId
+        ? {
+            ...placement,
+            outlineEnabled,
           }
         : placement
     )

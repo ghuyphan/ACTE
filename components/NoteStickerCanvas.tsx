@@ -246,6 +246,7 @@ function EditableSticker({
   const outlineSize = getStickerOutlineSize(dimensions.width, dimensions.height);
   const frameWidth = dimensions.width + outlineSize * 2;
   const frameHeight = dimensions.height + outlineSize * 2;
+  const showOutline = activePlacement.outlineEnabled !== false;
   const stickerFrameStyle = {
     width: dimensions.width,
     height: dimensions.height,
@@ -276,32 +277,34 @@ function EditableSticker({
           style={styles.stickerPressable}
         >
           <View style={styles.stickerArtwork}>
-            <View
-              pointerEvents="none"
-              testID={`note-sticker-outline-${placement.id}`}
-              style={styles.stickerOutlineLayer}
-            >
-              {STICKER_OUTLINE_OFFSETS.map((offset, index) => (
-                <Image
-                  key={`${placement.id}-outline-${index}`}
-                  source={{ uri: activePlacement.asset.localUri }}
-                  style={[
-                    styles.stickerLayerImage,
-                    stickerFrameStyle,
-                    {
-                      tintColor: STICKER_OUTLINE_COLOR,
-                      opacity: 0.92,
-                      transform: [
-                        { translateX: offset.x * outlineSize },
-                        { translateY: offset.y * outlineSize },
-                      ],
-                    },
-                  ]}
-                  contentFit="contain"
-                  transition={0}
-                />
-              ))}
-            </View>
+            {showOutline ? (
+              <View
+                pointerEvents="none"
+                testID={`note-sticker-outline-${placement.id}`}
+                style={styles.stickerOutlineLayer}
+              >
+                {STICKER_OUTLINE_OFFSETS.map((offset, index) => (
+                  <Image
+                    key={`${placement.id}-outline-${index}`}
+                    source={{ uri: activePlacement.asset.localUri }}
+                    style={[
+                      styles.stickerLayerImage,
+                      stickerFrameStyle,
+                      {
+                        tintColor: STICKER_OUTLINE_COLOR,
+                        opacity: 0.92,
+                        transform: [
+                          { translateX: offset.x * outlineSize },
+                          { translateY: offset.y * outlineSize },
+                        ],
+                      },
+                    ]}
+                    contentFit="contain"
+                    transition={0}
+                  />
+                ))}
+              </View>
+            ) : null}
             <Image
               source={{ uri: activePlacement.asset.localUri }}
               style={[styles.stickerLayerImage, stickerFrameStyle]}

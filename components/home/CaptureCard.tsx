@@ -54,6 +54,7 @@ import {
   duplicateStickerPlacement,
   importStickerAsset,
   type NoteStickerPlacement,
+  setStickerPlacementOutlineEnabled,
   updateStickerPlacementTransform,
 } from '../../services/noteStickers';
 import { isOlderIOS } from '../../utils/platform';
@@ -614,6 +615,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const stickerModeEnabled = isPhotoDoodleSurface ? photoStickerModeEnabled : textStickerModeEnabled;
   const stickerPlacements = isPhotoDoodleSurface ? photoStickerPlacements : textStickerPlacements;
   const selectedStickerId = isPhotoDoodleSurface ? photoSelectedStickerId : textSelectedStickerId;
+  const selectedStickerPlacement = useMemo(
+    () => stickerPlacements.find((placement) => placement.id === selectedStickerId) ?? null,
+    [selectedStickerId, stickerPlacements]
+  );
+  const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
   const decorateMenuExpanded = isPhotoDoodleSurface ? photoDecorateMenuExpanded : textDecorateMenuExpanded;
   const textDoodleColors = useMemo(
     () => getUniqueColors([colors.captureCardText, PHOTO_DOODLE_DEFAULT_COLOR, colors.primary]),
@@ -1309,7 +1315,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     [isPhotoDoodleSurface]
   );
   const handleSelectedStickerAction = useCallback(
-    (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove') => {
+    (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove' | 'outline-toggle') => {
       if (!selectedStickerId) {
         return;
       }
@@ -1321,6 +1327,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         nextPlacements = duplicateStickerPlacement(currentPlacements, selectedStickerId);
       } else if (action === 'front') {
         nextPlacements = bringStickerPlacementToFront(currentPlacements, selectedStickerId);
+      } else if (action === 'outline-toggle') {
+        const selectedPlacement = currentPlacements.find((placement) => placement.id === selectedStickerId);
+        nextPlacements = selectedPlacement
+          ? setStickerPlacementOutlineEnabled(
+            currentPlacements,
+            selectedStickerId,
+            selectedPlacement.outlineEnabled === false
+          )
+          : currentPlacements;
       } else if (action === 'remove') {
         nextPlacements = currentPlacements.filter((placement) => placement.id !== selectedStickerId);
         handleSelectSticker(null);
@@ -1683,6 +1698,46 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                             layout={decorateActionLayout}
                           >
                             <CaptureAnimatedPressable
+                              testID="capture-sticker-outline-toggle"
+                              accessibilityLabel={
+                                selectedStickerOutlineEnabled
+                                  ? t('capture.stickerOutlineDisable', 'Turn off outline')
+                                  : t('capture.stickerOutlineEnable', 'Turn on outline')
+                              }
+                              onPress={() => handleSelectedStickerAction('outline-toggle')}
+                              disabled={!selectedStickerId}
+                              disabledOpacity={0.45}
+                              style={[
+                                styles.textCardActionPill,
+                                {
+                                  backgroundColor:
+                                    selectedStickerId && selectedStickerOutlineEnabled
+                                      ? colors.captureButtonBg
+                                      : colors.captureGlassFill,
+                                  borderColor:
+                                    selectedStickerId && selectedStickerOutlineEnabled
+                                      ? 'rgba(255,255,255,0.18)'
+                                      : colors.captureGlassBorder,
+                                },
+                              ]}
+                            >
+                              <Ionicons
+                                name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
+                                size={14}
+                                color={
+                                  selectedStickerId && selectedStickerOutlineEnabled
+                                    ? textCardActiveIconColor
+                                    : colors.captureGlassText
+                                }
+                              />
+                            </CaptureAnimatedPressable>
+                          </Reanimated.View>
+                          <Reanimated.View
+                            entering={decorateActionEntering}
+                            exiting={decorateActionExiting}
+                            layout={decorateActionLayout}
+                          >
+                            <CaptureAnimatedPressable
                               testID="capture-sticker-remove"
                               onPress={() => handleSelectedStickerAction('remove')}
                               disabled={!selectedStickerId}
@@ -2017,6 +2072,47 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                               ]}
                             >
                               <Ionicons name="add-outline" size={14} color={photoPreviewControlText} />
+                            </CaptureAnimatedPressable>
+                          </Reanimated.View>
+                          <Reanimated.View
+                            entering={decorateActionEntering}
+                            exiting={decorateActionExiting}
+                            layout={decorateActionLayout}
+                          >
+                            <CaptureAnimatedPressable
+                              testID="capture-sticker-outline-toggle"
+                              accessibilityLabel={
+                                selectedStickerOutlineEnabled
+                                  ? t('capture.stickerOutlineDisable', 'Turn off outline')
+                                  : t('capture.stickerOutlineEnable', 'Turn on outline')
+                              }
+                              onPress={() => handleSelectedStickerAction('outline-toggle')}
+                              disabled={!selectedStickerId}
+                              disabledOpacity={0.45}
+                              style={[
+                                styles.cameraOverlayButton,
+                                styles.textCardActionPill,
+                                {
+                                  backgroundColor:
+                                    selectedStickerId && selectedStickerOutlineEnabled
+                                      ? photoPreviewActiveFill
+                                      : photoPreviewControlFill,
+                                  borderColor:
+                                    selectedStickerId && selectedStickerOutlineEnabled
+                                      ? photoPreviewActiveFill
+                                      : photoPreviewControlBorder,
+                                },
+                              ]}
+                            >
+                              <Ionicons
+                                name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
+                                size={14}
+                                color={
+                                  selectedStickerId && selectedStickerOutlineEnabled
+                                    ? photoPreviewActiveText
+                                    : photoPreviewControlText
+                                }
+                              />
                             </CaptureAnimatedPressable>
                           </Reanimated.View>
                           <Reanimated.View

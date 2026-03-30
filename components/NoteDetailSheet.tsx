@@ -57,6 +57,7 @@ import {
     parseNoteStickerPlacements,
     saveNoteStickerPlacementsWithAssets,
     clearNoteStickers,
+    setStickerPlacementOutlineEnabled,
     type NoteStickerPlacement,
     updateStickerPlacementTransform,
 } from '../services/noteStickers';
@@ -895,7 +896,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setStickerModeEnabled((current) => !current);
     }, [dismissPastePrompt, isEditing, note]);
     const handleStickerAction = useCallback(
-        (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove') => {
+        (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove' | 'outline-toggle') => {
             if (!selectedStickerId) {
                 return;
             }
@@ -906,6 +907,15 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 nextPlacements = duplicateStickerPlacement(editStickerPlacements, selectedStickerId);
             } else if (action === 'front') {
                 nextPlacements = bringStickerPlacementToFront(editStickerPlacements, selectedStickerId);
+            } else if (action === 'outline-toggle') {
+                const selectedPlacement = editStickerPlacements.find((placement) => placement.id === selectedStickerId);
+                nextPlacements = selectedPlacement
+                    ? setStickerPlacementOutlineEnabled(
+                        editStickerPlacements,
+                        selectedStickerId,
+                        selectedPlacement.outlineEnabled === false
+                    )
+                    : editStickerPlacements;
             } else if (action === 'remove') {
                 nextPlacements = editStickerPlacements.filter((placement) => placement.id !== selectedStickerId);
                 setSelectedStickerId(null);
@@ -1277,6 +1287,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         });
         const displayedDoodleStrokes = isEditing ? editDoodleStrokes : parsedNoteDoodleStrokes;
         const displayedStickerPlacements = isEditing ? editStickerPlacements : parsedNoteStickerPlacements;
+        const selectedStickerPlacement =
+            displayedStickerPlacements.find((placement) => placement.id === selectedStickerId) ?? null;
+        const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
 
         return (
             <KeyboardAvoidingView
@@ -1423,6 +1436,29 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                         ]}
                                                     >
                                                         <Ionicons name="add-outline" size={14} color="#FFFFFF" />
+                                                    </Pressable>
+                                                    <Pressable
+                                                        testID="note-detail-sticker-outline-toggle"
+                                                        accessibilityLabel={
+                                                            selectedStickerOutlineEnabled
+                                                                ? t('capture.stickerOutlineDisable', 'Turn off outline')
+                                                                : t('capture.stickerOutlineEnable', 'Turn on outline')
+                                                        }
+                                                        onPress={() => handleStickerAction('outline-toggle')}
+                                                        disabled={!selectedStickerId}
+                                                        style={[
+                                                            styles.textCardActionPill,
+                                                            selectedStickerOutlineEnabled && selectedStickerId
+                                                                ? styles.textCardActionPillActive
+                                                                : null,
+                                                            !selectedStickerId ? styles.textCardActionDisabled : null,
+                                                        ]}
+                                                    >
+                                                        <Ionicons
+                                                            name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
+                                                            size={14}
+                                                            color="#FFFFFF"
+                                                        />
                                                     </Pressable>
                                                     <Pressable
                                                         testID="note-detail-sticker-remove"
@@ -1599,6 +1635,29 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                             ]}
                                                         >
                                                             <Ionicons name="add-outline" size={14} color="#FFFFFF" />
+                                                        </Pressable>
+                                                        <Pressable
+                                                            testID="note-detail-sticker-outline-toggle"
+                                                            accessibilityLabel={
+                                                                selectedStickerOutlineEnabled
+                                                                    ? t('capture.stickerOutlineDisable', 'Turn off outline')
+                                                                    : t('capture.stickerOutlineEnable', 'Turn on outline')
+                                                            }
+                                                            onPress={() => handleStickerAction('outline-toggle')}
+                                                            disabled={!selectedStickerId}
+                                                            style={[
+                                                                styles.textCardActionPill,
+                                                                selectedStickerOutlineEnabled && selectedStickerId
+                                                                    ? styles.textCardActionPillActive
+                                                                    : null,
+                                                                !selectedStickerId ? styles.textCardActionDisabled : null,
+                                                            ]}
+                                                        >
+                                                            <Ionicons
+                                                                name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
+                                                                size={14}
+                                                                color="#FFFFFF"
+                                                            />
                                                         </Pressable>
                                                         <Pressable
                                                             testID="note-detail-sticker-remove"
@@ -2014,6 +2073,10 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.14)',
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.18)',
+    },
+    textCardActionPillActive: {
+        backgroundColor: 'rgba(255,255,255,0.24)',
+        borderColor: 'rgba(255,255,255,0.28)',
     },
     textCardActionDisabled: {
         opacity: 0.45,

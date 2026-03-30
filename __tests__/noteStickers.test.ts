@@ -12,6 +12,7 @@ import {
   duplicateStickerPlacement,
   normalizeStickerPlacements,
   parseNoteStickerPlacements,
+  setStickerPlacementOutlineEnabled,
   updateStickerPlacementTransform,
   type StickerAsset,
 } from '../services/noteStickers';
@@ -61,5 +62,13 @@ describe('noteStickers helpers', () => {
     expect(normalized.find((placement) => placement.id === firstPlacement.id)?.scale).toBe(1.8);
     expect(normalized.find((placement) => placement.id === firstPlacement.id)?.rotation).toBe(30);
     expect(normalized[normalized.length - 1]?.id).toBe(firstPlacement.id);
+  });
+
+  it('lets stickers disable the generated outline explicitly', () => {
+    const placement = createStickerPlacement(baseAsset);
+    const toggled = setStickerPlacementOutlineEnabled([placement], placement.id, false);
+
+    expect(toggled[0]?.outlineEnabled).toBe(false);
+    expect(parseNoteStickerPlacements(JSON.stringify(toggled))[0]?.outlineEnabled).toBe(false);
   });
 });

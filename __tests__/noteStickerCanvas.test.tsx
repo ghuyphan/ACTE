@@ -41,4 +41,12 @@ describe('NoteStickerCanvas', () => {
 
     expect(getByTestId('note-sticker-outline-placement-1')).toBeTruthy();
   });
+
+  it('skips the generated outline when a sticker disables it', () => {
+    const { queryByTestId } = render(
+      <NoteStickerCanvas placements={[{ ...stickerPlacement, outlineEnabled: false }]} />
+    );
+
+    expect(queryByTestId('note-sticker-outline-placement-1')).toBeNull();
+  });
 });
