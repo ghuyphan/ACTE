@@ -86,6 +86,7 @@ export default function MapScreenIOS() {
     initialRegion,
     visibleRegion,
     setVisibleRegion,
+    setProgrammaticVisibleRegion,
     selectedGroupId,
     selectedGroup,
     selectedNoteIndex,
@@ -420,14 +421,14 @@ export default function MapScreenIOS() {
       };
 
       mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
-      setVisibleRegion(nextRegion);
+      setProgrammaticVisibleRegion(nextRegion);
     },
     [
       initialRegion,
       nearbyItems,
       notesPreviewDismissed,
       reduceMotionEnabled,
-      setVisibleRegion,
+      setProgrammaticVisibleRegion,
       showFriendsPreview,
       visibleRegion,
     ]
@@ -601,7 +602,6 @@ export default function MapScreenIOS() {
         onLeafPress={handleLeafPress}
         onClusterPress={handleClusterPress}
         onFriendPress={handleFriendMarkerPress}
-        preferLiteMarkers={isAndroid}
         colors={colors}
       />
 
@@ -899,7 +899,7 @@ const styles = StyleSheet.create({
   friendsChipLabel: {
     fontSize: 12,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   friendsChipActiveDot: {
     width: 6,

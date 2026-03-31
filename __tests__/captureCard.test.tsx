@@ -773,6 +773,24 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
+  it('hides the inline paste action when decorate is opened', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('capture-inline-paste-sticker')).toBeTruthy();
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-decorate-toggle'));
+    });
+
+    expect(queryByTestId('capture-inline-paste-sticker')).toBeNull();
+  });
+
   it('shows a paste popover on photo-card long press and pastes after confirmation', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockClipboardHasImageAsync.mockResolvedValue(true);

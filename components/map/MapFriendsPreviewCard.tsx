@@ -346,18 +346,18 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 12,
     fontWeight: '500',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   title: {
     fontSize: 17,
     fontWeight: '700',
     marginBottom: 3,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   content: {
     fontSize: 13,
     lineHeight: 17,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   footer: {
     flexDirection: 'row',
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
   indexText: {
     fontSize: 12,
     fontWeight: '500',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   actionButton: {
     paddingHorizontal: 13,
@@ -382,6 +382,6 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 13,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

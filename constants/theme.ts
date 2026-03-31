@@ -72,6 +72,7 @@ export const Sheet = {
     headerTopPadding: 20,
     headerBottomSpacing: 16,
     bottomPadding: 36,
+    comfortBottomPadding: 12,
     floatingHorizontalInset: 12,
     radius: 28,
     handleWidth: 42,
@@ -83,52 +84,52 @@ export const Typography = {
   screenTitle: {
     fontSize: 22,
     fontWeight: '700' as const,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   heroTitle: {
     fontSize: 48,
     fontWeight: '900' as const,
     letterSpacing: 2,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   heroSubtitle: {
     fontSize: 18,
     fontWeight: '500' as const,
     lineHeight: 26,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   body: {
     fontSize: 16,
     lineHeight: 24,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   button: {
     fontSize: 17,
     fontWeight: '700' as const,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   pill: {
     fontSize: 15,
     fontWeight: '600' as const,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 } as const;
 
 export const Fonts = Platform.select({
   ios: {
-    sans: 'system-ui',
+    sans: 'Noto Sans',
     serif: 'ui-serif',
     rounded: 'ui-rounded',
     mono: 'ui-monospace',
   },
   default: {
-    sans: 'normal',
+    sans: 'Noto Sans',
     serif: 'serif',
     rounded: 'normal',
     mono: 'monospace',
   },
   web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    sans: "'Noto Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
     serif: "Georgia, 'Times New Roman', serif",
     rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",

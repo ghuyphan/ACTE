@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     textAlign: 'center',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   backButton: {
     paddingVertical: 8,
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   infoCard: {
     marginTop: 24,
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     lineHeight: 22,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   deleteButton: {
     marginTop: 18,
@@ -221,6 +221,6 @@ const styles = StyleSheet.create({
   deleteLabel: {
     fontSize: 15,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

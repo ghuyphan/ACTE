@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
   stackHeaderTitle: {
     fontSize: 20,
     fontWeight: '600',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   content: {
     paddingHorizontal: Layout.screenPadding,
@@ -466,7 +466,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.3,
     marginLeft: 4,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   card: {
     borderRadius: 28,
@@ -493,18 +493,18 @@ const styles = StyleSheet.create({
     fontSize: 28,
     lineHeight: 34,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   heroEmail: {
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '500',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   heroDescription: {
     fontSize: 14,
     lineHeight: 20,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   membershipBadge: {
     alignSelf: 'flex-start',
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.2,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   row: {
     minHeight: 76,
@@ -545,12 +545,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
     fontWeight: '600',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   rowSubtitle: {
     fontSize: 13,
     lineHeight: 18,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   rowTrailing: {
     maxWidth: 132,
@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '600',
     textAlign: 'right',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   cardDivider: {
     height: StyleSheet.hairlineWidth,
@@ -598,7 +598,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   buttonPressed: {
     opacity: 0.88,
@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     fontWeight: '700',
     textAlign: 'center',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   emptyBody: {
     marginTop: 10,
@@ -629,6 +629,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     textAlign: 'center',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

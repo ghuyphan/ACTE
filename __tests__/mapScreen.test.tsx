@@ -400,6 +400,31 @@ describe('MapScreen', () => {
     expect(queryByText('Map is temporarily unavailable on Android')).toBeNull();
   });
 
+  it('renders custom note markers on Android instead of lite pins', async () => {
+    setPlatformOS('android');
+
+    const { getByTestId } = render(<MapScreen />);
+
+    await waitFor(() => {
+      expect(getByTestId('leaf-marker-10.76000:106.66000')).toBeTruthy();
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    });
+  });
+
   it('renders nearby mode in preview and opens the tapped preview card', async () => {
     const { getByTestId, queryByTestId } = render(<MapScreen />);
 
@@ -441,6 +466,10 @@ describe('MapScreen', () => {
           },
         },
       });
+    });
+
+    await waitFor(() => {
+      expect(String(getByTestId('map-preview-index').props.children)).toBe('2/2');
     });
 
     fireEvent.press(getByTestId('map-preview-item-photo-1'));

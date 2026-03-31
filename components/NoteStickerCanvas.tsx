@@ -75,6 +75,17 @@ function EditableSticker({
   const livePlacementRef = useRef(placement);
   const activeGestureCountRef = useRef(0);
   const [dragPlacement, setDragPlacement] = useState(placement);
+  const activePlacement = editable ? dragPlacement : placement;
+  const normalizedScale = clampStickerScale(activePlacement.scale);
+  const baseDimensions = getStickerDimensions(
+    { ...activePlacement, scale: 1 },
+    layout,
+    sizeMultiplier,
+    minimumBaseSize
+  );
+  const outlineSize = getStickerOutlineSize(baseDimensions.width, baseDimensions.height);
+  const frameWidth = baseDimensions.width + outlineSize * 2;
+  const frameHeight = baseDimensions.height + outlineSize * 2;
 
   useEffect(() => {
     livePlacementRef.current = placement;
@@ -205,19 +216,13 @@ function EditableSticker({
         }),
     [beginGesture, editable, finalizeGesture, updateLivePlacement]
   );
-
-  const activePlacement = editable ? dragPlacement : placement;
-  const dimensions = getStickerDimensions(activePlacement, layout, sizeMultiplier, minimumBaseSize);
-  const outlineSize = getStickerOutlineSize(dimensions.width, dimensions.height);
-  const frameWidth = dimensions.width + outlineSize * 2;
-  const frameHeight = dimensions.height + outlineSize * 2;
   const showOutline = activePlacement.outlineEnabled !== false;
   const outlineOffsets = getStickerOutlineOffsets(outlineSize, {
     preferContinuous: PREFER_CONTINUOUS_OUTLINE,
   });
   const stickerFrameStyle = {
-    width: dimensions.width,
-    height: dimensions.height,
+    width: baseDimensions.width,
+    height: baseDimensions.height,
     top: outlineSize,
     left: outlineSize,
   } as const;
@@ -225,6 +230,7 @@ function EditableSticker({
   return (
     <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture)}>
       <View
+        testID={`note-sticker-wrap-${placement.id}`}
         style={[
           styles.stickerWrap,
           {
@@ -234,7 +240,7 @@ function EditableSticker({
             top: activePlacement.y * layout.height - frameHeight / 2,
             zIndex: activePlacement.zIndex,
             opacity: activePlacement.opacity,
-            transform: [{ rotate: `${activePlacement.rotation}deg` }],
+            transform: [{ scale: normalizedScale }, { rotate: `${activePlacement.rotation}deg` }],
           },
         ]}
       >
@@ -274,10 +280,11 @@ function EditableSticker({
               </View>
             ) : null}
             <Image
+              testID={`note-sticker-image-${placement.id}`}
               source={{ uri: activePlacement.asset.localUri }}
               style={[styles.stickerLayerImage, stickerFrameStyle]}
               contentFit="contain"
-              transition={120}
+              transition={editable ? 0 : 120}
             />
           </View>
         </Pressable>

@@ -622,14 +622,24 @@ private struct LocketWidgetEntryView: View {
         return "A quiet reminder from here."
     }
 
+    private var shouldHidePhotoBodyText: Bool {
+        !payload.isIdleState &&
+        payload.noteType == "photo" &&
+        hasPhotoBackground
+    }
+
     private var shouldHideSharedBodyText: Bool {
         payload.isSharedContent &&
         !payload.isIdleState &&
-        (hasPhotoBackground || shouldShowDoodleOverlay || shouldShowStickerOverlay)
+        (shouldHidePhotoBodyText || shouldShowDoodleOverlay || shouldShowStickerOverlay)
+    }
+
+    private var shouldHideBodyText: Bool {
+        shouldHidePhotoBodyText || shouldHideSharedBodyText
     }
 
     private var contentDisplayText: String {
-        shouldHideSharedBodyText ? "" : displayText
+        shouldHideBodyText ? "" : displayText
     }
 
     private var hasLocationEyebrow: Bool {

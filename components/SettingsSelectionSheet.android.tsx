@@ -70,7 +70,7 @@ export default function SettingsSelectionSheetAndroid({
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: Sheet.android.bottomPadding + 12,
+    paddingBottom: Sheet.android.bottomPadding + Sheet.android.comfortBottomPadding,
   },
   option: {
     minHeight: 60,
@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
   optionLabel: {
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   divider: {
     height: StyleSheet.hairlineWidth,

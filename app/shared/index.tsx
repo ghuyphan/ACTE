@@ -133,13 +133,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     textAlign: 'center',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   emptyBody: {
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   signInButton: {
     marginTop: 8,
@@ -154,6 +154,6 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     fontSize: 15,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

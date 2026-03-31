@@ -23,6 +23,32 @@ const iosGoogleServicesFile = existsSync(rootGoogleServiceInfoPlist)
 const googleIosUrlScheme = googleIosClientId
   ? `com.googleusercontent.apps.${googleIosClientId.replace(/\.apps\.googleusercontent\.com$/i, '')}`
   : '';
+const notoSansFontDefinitions = [
+  {
+    path: './node_modules/@expo-google-fonts/noto-sans/400Regular/NotoSans_400Regular.ttf',
+    weight: 400,
+  },
+  {
+    path: './node_modules/@expo-google-fonts/noto-sans/500Medium/NotoSans_500Medium.ttf',
+    weight: 500,
+  },
+  {
+    path: './node_modules/@expo-google-fonts/noto-sans/600SemiBold/NotoSans_600SemiBold.ttf',
+    weight: 600,
+  },
+  {
+    path: './node_modules/@expo-google-fonts/noto-sans/700Bold/NotoSans_700Bold.ttf',
+    weight: 700,
+  },
+  {
+    path: './node_modules/@expo-google-fonts/noto-sans/800ExtraBold/NotoSans_800ExtraBold.ttf',
+    weight: 800,
+  },
+  {
+    path: './node_modules/@expo-google-fonts/noto-sans/900Black/NotoSans_900Black.ttf',
+    weight: 900,
+  },
+] as const;
 
 const config = {
   name: 'Noto',
@@ -161,7 +187,22 @@ const config = {
         },
       },
     ],
-    'expo-font',
+    [
+      'expo-font',
+      {
+        ios: {
+          fonts: notoSansFontDefinitions.map((font) => font.path),
+        },
+        android: {
+          fonts: [
+            {
+              fontFamily: 'Noto Sans',
+              fontDefinitions: notoSansFontDefinitions,
+            },
+          ],
+        },
+      },
+    ],
     'expo-image',
     'expo-web-browser',
   ].filter(Boolean),

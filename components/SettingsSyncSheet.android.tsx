@@ -66,7 +66,7 @@ export default function SettingsSyncSheetAndroid({
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: Sheet.android.bottomPadding + 12,
+    paddingBottom: Sheet.android.bottomPadding + Sheet.android.comfortBottomPadding,
   },
   row: {
     minHeight: 60,
@@ -82,19 +82,19 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   hint: {
     fontSize: 13,
     lineHeight: 18,
     marginTop: 4,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   footnote: {
     fontSize: 13,
     lineHeight: 19,
     marginTop: 16,
     paddingHorizontal: Sheet.android.horizontalPadding,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

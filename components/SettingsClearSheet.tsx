@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
         fontSize: 22,
         fontWeight: '800',
         marginBottom: 20,
-        fontFamily: 'System',
+        fontFamily: 'Noto Sans',
     },
     primaryButton: {
         padding: 16,
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 17,
         fontWeight: '700',
-        fontFamily: 'System',
+        fontFamily: 'Noto Sans',
     },
     secondaryButton: {
         padding: 16,
@@ -70,6 +70,6 @@ const styles = StyleSheet.create({
     secondaryButtonText: {
         fontSize: 17,
         fontWeight: '600',
-        fontFamily: 'System',
+        fontFamily: 'Noto Sans',
     },
 });

@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     skipText: {
         fontSize: 16,
         fontWeight: '600',
-        fontFamily: 'System',
+        fontFamily: 'Noto Sans',
     },
     skipPlaceholder: {
         height: 48,

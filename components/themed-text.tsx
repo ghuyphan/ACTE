@@ -37,28 +37,28 @@ const styles = StyleSheet.create({
   default: {
     fontSize: 16,
     lineHeight: 24,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   defaultSemiBold: {
     fontSize: 16,
     lineHeight: 24,
     fontWeight: '600',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
     lineHeight: 32,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   subtitle: {
     fontSize: 20,
     fontWeight: '600',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   link: {
     lineHeight: 30,
     fontSize: 16,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

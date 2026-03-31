@@ -767,6 +767,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     captureMode === 'text' &&
     noteText.length === 0 &&
     !isNoteInputFocused &&
+    !decorateMenuExpanded &&
     !doodleModeEnabled &&
     !stickerModeEnabled &&
     !interactionsDisabled &&
@@ -1152,10 +1153,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       : ENABLE_PHOTO_STICKERS
         ? TOP_CONTROL_HEIGHT * 2 + 8
         : TOP_CONTROL_HEIGHT;
+  const textTopControlsDockWidth =
+    showDecorateControls
+      ? decorateControlsTargetWidth
+      : showInlinePasteButton
+        ? TOP_CONTROL_HEIGHT
+        : 0;
   const animatedDecorateControlsStyle = useAnimatedStyle(() => ({
     opacity: decorateProgress.value,
-    width: decorateControlsTargetWidth * decorateProgress.value,
-    marginLeft: 8 * decorateProgress.value,
     transform: [
       { translateX: (1 - decorateProgress.value) * -10 },
       { scale: 0.97 + decorateProgress.value * 0.03 },
@@ -1163,8 +1168,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   }));
   const animatedInlinePasteButtonStyle = useAnimatedStyle(() => ({
     opacity: 1 - decorateProgress.value,
-    width: TOP_CONTROL_HEIGHT * (1 - decorateProgress.value),
-    marginLeft: 8 * (1 - decorateProgress.value),
     transform: [
       { translateX: decorateProgress.value * -8 },
       { scale: 1 - decorateProgress.value * 0.06 },
@@ -1613,10 +1616,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
     if (isPhotoDoodleSurface) {
       setPhotoStickerModeEnabled(false);
+      setPhotoDecorateMenuExpanded(false);
       return;
     }
 
     setTextStickerModeEnabled(false);
+    setTextDecorateMenuExpanded(false);
   }, [
     dismissPastePrompt,
     handleSelectSticker,
@@ -1891,6 +1896,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       />
                     </Reanimated.View>
                   </CaptureAnimatedPressable>
+                  {textTopControlsDockWidth > 0 ? (
+                    <View
+                      pointerEvents="box-none"
+                      style={[styles.textTopControlsDock, { width: textTopControlsDockWidth }]}
+                    >
                   {captureMode === 'text' ? (
                     <Reanimated.View
                       pointerEvents={
@@ -1900,7 +1910,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                             : 'auto'
                           : 'none'
                       }
-                      style={[styles.inlinePasteStickerWrap, animatedInlinePasteButtonStyle]}
+                      style={[
+                        styles.inlinePasteStickerWrap,
+                        styles.textTopControlsLayer,
+                        animatedInlinePasteButtonStyle,
+                      ]}
                     >
                       {showInlinePasteButton ? (
                         inlinePasteLoading ? (
@@ -1961,7 +1975,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   ) : null}
                   <Reanimated.View
                     pointerEvents={showDecorateControls ? 'auto' : 'none'}
-                    style={[styles.decorateControlsWrap, animatedDecorateControlsStyle]}
+                    style={[
+                      styles.decorateControlsWrap,
+                      styles.textTopControlsLayer,
+                      animatedDecorateControlsStyle,
+                    ]}
                   >
                     <View style={styles.decorateControlsInline}>
                       {doodleModeEnabled ? (
@@ -2200,6 +2218,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       )}
                     </View>
                   </Reanimated.View>
+                    </View>
+                  ) : null}
                 </View>
               </View>
 
@@ -3185,7 +3205,7 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     width: '100%',
     textShadowRadius: 6,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
     maxHeight: 260,
   },
   cardTextCenter: {
@@ -3202,6 +3222,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     height: TOP_CONTROL_HEIGHT,
     justifyContent: 'center',
+    alignItems: 'flex-start',
   },
   inlinePasteStickerIconButton: {
     width: TOP_CONTROL_HEIGHT,
@@ -3224,6 +3245,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     gap: 8,
+  },
+  textTopControlsDock: {
+    height: TOP_CONTROL_HEIGHT,
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  textTopControlsLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
   cardTopOverlayRowWrap: {
     flexWrap: 'wrap',
@@ -3465,7 +3496,7 @@ const styles = StyleSheet.create({
   cameraZoomBadgeText: {
     fontSize: 12,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   cameraUnavailableState: {
     ...StyleSheet.absoluteFill,
@@ -3483,7 +3514,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 13,
     fontWeight: '500',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
     lineHeight: 18,
   },
   cameraRetryButton: {
@@ -3622,7 +3653,7 @@ const styles = StyleSheet.create({
   },
   noteColorSheet: {
     gap: 12,
-    paddingBottom: Sheet.android.bottomPadding + 12,
+    paddingBottom: Sheet.android.bottomPadding + Sheet.android.comfortBottomPadding,
   },
   noteColorPreviewHint: {
     marginTop: 12,
@@ -3633,7 +3664,7 @@ const styles = StyleSheet.create({
   },
   radiusSheet: {
     gap: 12,
-    paddingBottom: Sheet.android.bottomPadding + 12,
+    paddingBottom: Sheet.android.bottomPadding + Sheet.android.comfortBottomPadding,
   },
   radiusSheetRow: {
     minHeight: 60,
@@ -3649,7 +3680,7 @@ const styles = StyleSheet.create({
   radiusSheetLabel: {
     fontSize: 16,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   radiusSheetDivider: {
     height: StyleSheet.hairlineWidth,

@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   },
   title: {
     textAlign: 'center',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   titleIOS: {
     fontSize: 16,
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     textAlign: 'center',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   subtitleIOS: {
     fontSize: 13,
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   clearFiltersText: {
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   clearFiltersTextIOS: {
     fontSize: 15,

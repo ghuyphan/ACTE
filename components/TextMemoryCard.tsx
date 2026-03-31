@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { memo, useEffect, useMemo, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import React, { memo, useMemo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { STICKER_ARTBOARD_FRAME } from '../constants/doodleLayout';
 import { Layout, Shadows } from '../constants/theme';
 import {
@@ -28,133 +28,6 @@ interface TextMemoryCardProps {
     remoteBucket?: string;
     isActive?: boolean;
     debugTiltOverride?: SharedValue<DebugTiltState>;
-}
-
-function WaterCardOverlay() {
-    const drift = useRef(new Animated.Value(0)).current;
-    const pulse = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => {
-        const driftAnimation = Animated.loop(
-            Animated.sequence([
-                Animated.timing(drift, {
-                    toValue: 1,
-                    duration: 4600,
-                    easing: Easing.inOut(Easing.sin),
-                    useNativeDriver: true,
-                }),
-                Animated.timing(drift, {
-                    toValue: 0,
-                    duration: 4600,
-                    easing: Easing.inOut(Easing.sin),
-                    useNativeDriver: true,
-                }),
-            ])
-        );
-        const pulseAnimation = Animated.loop(
-            Animated.sequence([
-                Animated.timing(pulse, {
-                    toValue: 1,
-                    duration: 2800,
-                    easing: Easing.inOut(Easing.quad),
-                    useNativeDriver: true,
-                }),
-                Animated.timing(pulse, {
-                    toValue: 0,
-                    duration: 2800,
-                    easing: Easing.inOut(Easing.quad),
-                    useNativeDriver: true,
-                }),
-            ])
-        );
-
-        driftAnimation.start();
-        pulseAnimation.start();
-
-        return () => {
-            driftAnimation.stop();
-            pulseAnimation.stop();
-            drift.stopAnimation();
-            pulse.stopAnimation();
-        };
-    }, [drift, pulse]);
-
-    const driftStyle = {
-        opacity: pulse.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0.14, 0.22],
-        }),
-        transform: [
-            {
-                translateX: drift.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-18, 22],
-                }),
-            },
-            {
-                translateY: drift.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-12, 16],
-                }),
-            },
-            {
-                rotate: drift.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['-8deg', '6deg'],
-                }),
-            },
-            {
-                scale: pulse.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.96, 1.04],
-                }),
-            },
-        ],
-    };
-
-    const shimmerStyle = {
-        opacity: pulse.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0.06, 0.1],
-        }),
-        transform: [
-            {
-                translateX: drift.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [12, -10],
-                }),
-            },
-            {
-                translateY: drift.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [10, -8],
-                }),
-            },
-        ],
-    };
-
-    return (
-        <>
-            <View pointerEvents="none" style={styles.waterBaseGlow} />
-            <Animated.View
-                pointerEvents="none"
-                testID="text-memory-card-water-overlay"
-                style={[styles.waterDriftOverlay, driftStyle]}
-            >
-                <LinearGradient
-                    colors={[
-                        'rgba(255,255,255,0.36)',
-                        'rgba(255,255,255,0.12)',
-                        'rgba(255,255,255,0)',
-                    ]}
-                    start={{ x: 0, y: 0.15 }}
-                    end={{ x: 1, y: 0.85 }}
-                    style={StyleSheet.absoluteFill}
-                />
-            </Animated.View>
-            <Animated.View pointerEvents="none" style={[styles.waterShimmer, shimmerStyle]} />
-        </>
-    );
 }
 
 function TextMemoryCard({
@@ -198,7 +71,6 @@ function TextMemoryCard({
                 style={styles.gradient}
             >
                 <PremiumNoteFinishOverlay noteColor={noteColor} />
-                {stickerMotionVariant === 'water' ? <WaterCardOverlay /> : null}
                 {stickerPlacements.length > 0 ? (
                     <View
                         pointerEvents={__DEV__ && isActive ? 'box-none' : 'none'}
@@ -250,28 +122,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    waterBaseGlow: {
-        position: 'absolute',
-        inset: 0,
-        backgroundColor: 'rgba(214, 243, 255, 0.08)',
-    },
-    waterDriftOverlay: {
-        position: 'absolute',
-        width: '145%',
-        height: '72%',
-        top: '-6%',
-        left: '-18%',
-        borderRadius: 999,
-    },
-    waterShimmer: {
-        position: 'absolute',
-        width: '68%',
-        height: '32%',
-        right: '-6%',
-        bottom: '12%',
-        borderRadius: 999,
-        backgroundColor: 'rgba(255,255,255,0.08)',
-    },
     doodleOverlay: {
         position: 'absolute',
         ...STICKER_ARTBOARD_FRAME,
@@ -290,7 +140,7 @@ const styles = StyleSheet.create({
         letterSpacing: -0.5,
         textAlign: 'center',
         lineHeight: 32,
-        fontFamily: 'System',
+        fontFamily: 'Noto Sans',
         textShadowColor: 'rgba(0,0,0,0.2)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 4,

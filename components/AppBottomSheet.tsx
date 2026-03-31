@@ -15,6 +15,7 @@ export default function AppBottomSheet({
   onClose,
   topInset = 0,
   visible,
+  wrapContentInView = true,
 }: {
   children: React.ReactNode;
   contentContainerStyle?: StyleProp<ViewStyle>;
@@ -23,6 +24,7 @@ export default function AppBottomSheet({
   onClose: () => void;
   topInset?: number;
   visible: boolean;
+  wrapContentInView?: boolean;
 }) {
   const modalRef = useRef<BottomSheetModal>(null);
   const { colors } = useTheme();
@@ -90,7 +92,11 @@ export default function AppBottomSheet({
       onDismiss={onClose}
       style={detached ? styles.detached : styles.edge}
     >
-      <BottomSheetView style={contentContainerStyle}>{children}</BottomSheetView>
+      {wrapContentInView ? (
+        <BottomSheetView style={contentContainerStyle}>{children}</BottomSheetView>
+      ) : (
+        children
+      )}
     </BottomSheetModal>
   );
 }

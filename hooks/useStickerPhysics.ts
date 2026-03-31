@@ -80,6 +80,8 @@ type StickerMotionProfile = {
   buoyancyStrength: number;
   downwardTiltMultiplier: number;
   upwardTiltMultiplier: number;
+  waterBandHeight: number;
+  surfaceDriftAmplitude: number;
 };
 
 const MAX_FRAME_DELTA_MS = 32;
@@ -130,6 +132,8 @@ const PHYSICS_PROFILE: StickerMotionProfile = {
   buoyancyStrength: 0,
   downwardTiltMultiplier: 1,
   upwardTiltMultiplier: 1,
+  waterBandHeight: 0,
+  surfaceDriftAmplitude: 0,
 };
 
 const WATER_PROFILE: StickerMotionProfile = {
@@ -162,6 +166,8 @@ const WATER_PROFILE: StickerMotionProfile = {
   buoyancyStrength: 460,
   downwardTiltMultiplier: 0.28,
   upwardTiltMultiplier: 0.72,
+  waterBandHeight: 26,
+  surfaceDriftAmplitude: 10,
 };
 
 function getMotionProfile(motionVariant: StickerMotionVariant) {
@@ -172,13 +178,23 @@ function getMotionProfile(motionVariant: StickerMotionVariant) {
 export function getStickerRestAnchorY(
   anchorY: number,
   layoutHeight: number,
-  motionVariant: StickerMotionVariant
+  motionVariant: StickerMotionVariant,
+  anchorX = 0
 ) {
   'worklet';
   const profile = motionVariant === 'water' ? WATER_PROFILE : PHYSICS_PROFILE;
+  if (motionVariant !== 'water') {
+    return anchorY;
+  }
+
   const surfaceY = layoutHeight * profile.waterLineRatio;
+  const surfaceDrift =
+    Math.sin(anchorX * 0.019) * profile.surfaceDriftAmplitude +
+    Math.cos(anchorX * 0.008) * profile.surfaceDriftAmplitude * 0.35;
   const restingAnchorY =
-    motionVariant === 'water' ? Math.min(anchorY, surfaceY) : anchorY;
+    anchorY <= surfaceY
+      ? anchorY + surfaceDrift * 0.3
+      : surfaceY + Math.min((anchorY - surfaceY) * 0.22, profile.waterBandHeight) + surfaceDrift;
 
   return restingAnchorY - profile.floatLift;
 }
@@ -406,7 +422,8 @@ export function useStickerPhysics({
             profile.bobAmplitude
           : 0;
       const targetAnchorY =
-        getStickerRestAnchorY(sticker.anchorY, layout.height, motionVariant) + bobOffsetY;
+        getStickerRestAnchorY(sticker.anchorY, layout.height, motionVariant, sticker.anchorX) +
+        bobOffsetY;
       const restoreFactor = Math.max(profile.minimumRestoreFactor, flatRestoreFactor);
       const restoreX =
         (sticker.anchorX - sticker.x) * profile.restoreAcceleration * restoreFactor;

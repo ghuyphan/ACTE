@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   sharedAvatarLabel: {
     fontSize: 12,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   metadataPill: {
     minHeight: 36,
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
   metadataPillDate: {
     fontSize: 13,
     fontWeight: '500',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   metadataPillDot: {
     width: 4,

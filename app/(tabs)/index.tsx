@@ -1625,6 +1625,7 @@ export default function HomeScreen() {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           setIsFriendsFilterEnabled(nextFilter === 'friends');
         }}
+        hasFriendsForFilter={friends.length > 0}
         onToggleCaptureMode={handleToggleCaptureMode}
         captureMode={captureMode}
         colors={colors}
@@ -1717,12 +1718,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     marginTop: 12,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   emptySubtitle: {
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

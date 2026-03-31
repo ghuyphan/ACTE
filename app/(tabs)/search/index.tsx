@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     paddingHorizontal: 8,
     textAlign: 'center',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
     textShadowColor: 'rgba(0,0,0,0.25)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
@@ -291,12 +291,12 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 17,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   contentText: {
     fontSize: 14,
     lineHeight: 20,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   metaRow: {
     marginTop: 10,
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 12,
     fontWeight: '500',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   metaDot: {
     width: 4,
@@ -351,14 +351,14 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 22,
     fontWeight: '600',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
     textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
     marginTop: 8,
     maxWidth: 240,
   },

@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
   stackHeaderTitle: {
     fontSize: 20,
     fontWeight: '600',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   section: {
     marginTop: 24,
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     marginBottom: 10,
     marginLeft: 2,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   card: {
     borderWidth: 1,
@@ -417,14 +417,14 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   rowValue: {
     fontSize: 14,
     fontWeight: '500',
     maxWidth: 140,
     textAlign: 'right',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   cardDivider: {
     height: StyleSheet.hairlineWidth,
@@ -444,20 +444,20 @@ const styles = StyleSheet.create({
   footerAppName: {
     fontSize: 14,
     fontWeight: '600',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   footerTagline: {
     fontSize: 13,
     lineHeight: 18,
     marginTop: 6,
     textAlign: 'center',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   footerVersion: {
     fontSize: 13,
     lineHeight: 18,
     marginTop: 6,
     opacity: 0.72,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

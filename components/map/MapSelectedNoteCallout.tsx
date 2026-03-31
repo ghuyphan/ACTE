@@ -170,13 +170,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 16,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
     marginBottom: 2,
   },
   text: {
     fontSize: 11,
     lineHeight: 14,
     fontWeight: '500',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

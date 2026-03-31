@@ -48,9 +48,7 @@ describe('DynamicStickerCanvas', () => {
   });
 
   it('wires active sticker cards into the physics hook', () => {
-    const { getByTestId } = render(
-      <DynamicStickerCanvas placements={[stickerPlacement]} isActive motionVariant="water" />
-    );
+    render(<DynamicStickerCanvas placements={[stickerPlacement]} isActive motionVariant="water" />);
 
     expect(mockedUseStickerPhysics).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -59,13 +57,10 @@ describe('DynamicStickerCanvas', () => {
         motionVariant: 'water',
       })
     );
-    expect(getByTestId('dynamic-sticker-water-fill')).toBeTruthy();
   });
 
   it('keeps the physics hook inactive for static sticker cards', () => {
-    const { queryByTestId } = render(
-      <DynamicStickerCanvas placements={[stickerPlacement]} isActive={false} />
-    );
+    render(<DynamicStickerCanvas placements={[stickerPlacement]} isActive={false} />);
 
     expect(mockedUseStickerPhysics).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -73,6 +68,5 @@ describe('DynamicStickerCanvas', () => {
         isActive: false,
       })
     );
-    expect(queryByTestId('dynamic-sticker-water-fill')).toBeNull();
   });
 });

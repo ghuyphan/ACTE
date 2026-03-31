@@ -16,6 +16,7 @@ export interface AppSheetProps {
   onClose: () => void;
   dismissible?: boolean;
   androidPresentation?: AppSheetAndroidPresentation;
+  androidScrollable?: boolean;
   fitToContents?: boolean;
   iosColorScheme?: 'light' | 'dark';
   iosContentType?: IOSContentType;
@@ -30,6 +31,7 @@ export default function AppSheet({
   onClose,
   dismissible = true,
   androidPresentation = 'edge',
+  androidScrollable = false,
   fitToContents = true,
   iosColorScheme,
   iosContentType = 'react-native',
@@ -48,6 +50,7 @@ export default function AppSheet({
         dismissible={dismissible}
         detached={androidPresentation === 'floating'}
         topInset={topInset}
+        wrapContentInView={!androidScrollable}
       >
         {children}
       </AppBottomSheet>

@@ -538,18 +538,18 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 12,
     fontWeight: '500',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   title: {
     fontSize: 17,
     fontWeight: '700',
     marginBottom: 3,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   content: {
     fontSize: 13,
     lineHeight: 17,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   footer: {
     marginTop: 8,
@@ -563,6 +563,6 @@ const styles = StyleSheet.create({
   indexText: {
     fontSize: 12,
     fontWeight: '500',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

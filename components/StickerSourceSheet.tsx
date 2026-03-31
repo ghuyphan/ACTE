@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   footer: {
     alignItems: 'flex-end',
     marginTop: 8,
-    paddingBottom: 12,
+    paddingBottom: Sheet.android.comfortBottomPadding,
   },
   footerIOS: {
     alignItems: 'stretch',
@@ -175,6 +175,6 @@ const styles = StyleSheet.create({
   cancelActionLabel: {
     fontSize: 15,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

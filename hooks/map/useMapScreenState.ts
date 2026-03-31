@@ -50,6 +50,7 @@ export function useMapScreenState({
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [selectedNoteIndex, setSelectedNoteIndex] = useState(0);
   const [visibleRegion, setVisibleRegion] = useState<Region | null>(null);
+  const [nearbyBrowseRegion, setNearbyBrowseRegion] = useState<Region | null>(null);
   const [allowOffscreenResults, setAllowOffscreenResults] = useState(false);
   const lastMarkerTapAtRef = useRef(0);
   const visibleRegionRef = useRef<Region | null>(null);
@@ -85,6 +86,7 @@ export function useMapScreenState({
   );
 
   const selectedNote = selectedGroup?.notes[selectedNoteIndex] ?? null;
+  const nearbyReferenceRegion = nearbyBrowseRegion ?? visibleRegion;
 
   const nearbyAnchor = useMemo(() => {
     if (location) {
@@ -94,12 +96,12 @@ export function useMapScreenState({
       };
     }
 
-    if (visibleRegion) {
-      return getRegionCenter(visibleRegion);
+    if (nearbyReferenceRegion) {
+      return getRegionCenter(nearbyReferenceRegion);
     }
 
     return getRegionCenter(initialRegion);
-  }, [initialRegion, location, visibleRegion]);
+  }, [initialRegion, location, nearbyReferenceRegion]);
 
   const notesInVisibleRegion = useMemo(() => {
     if (!enableHeavyCalculations) {
@@ -113,17 +115,29 @@ export function useMapScreenState({
     return getNotesInRegion(filteredNotes, visibleRegion);
   }, [enableHeavyCalculations, filteredNotes, visibleRegion]);
 
-  const nearbyCandidates = useMemo(() => {
-    if (!visibleRegion) {
+  const nearbyNotesInBrowseRegion = useMemo(() => {
+    if (!enableHeavyCalculations) {
+      return [];
+    }
+
+    if (!nearbyReferenceRegion) {
       return filteredNotes;
     }
 
-    if (notesInVisibleRegion.length > 0) {
-      return notesInVisibleRegion;
+    return getNotesInRegion(filteredNotes, nearbyReferenceRegion);
+  }, [enableHeavyCalculations, filteredNotes, nearbyReferenceRegion]);
+
+  const nearbyCandidates = useMemo(() => {
+    if (!nearbyReferenceRegion) {
+      return filteredNotes;
+    }
+
+    if (nearbyNotesInBrowseRegion.length > 0) {
+      return nearbyNotesInBrowseRegion;
     }
 
     return allowOffscreenResults ? filteredNotes : [];
-  }, [allowOffscreenResults, filteredNotes, notesInVisibleRegion, visibleRegion]);
+  }, [allowOffscreenResults, filteredNotes, nearbyNotesInBrowseRegion, nearbyReferenceRegion]);
 
   const nearbyItems = useMemo(
     () => (enableHeavyCalculations ? getNearbyNoteItems(nearbyCandidates, nearbyAnchor, 30) : []),
@@ -172,6 +186,16 @@ export function useMapScreenState({
   }, []);
 
   const updateVisibleRegion = useCallback((region: Region) => {
+    if (areRegionsEquivalent(visibleRegionRef.current, region)) {
+      return;
+    }
+
+    setVisibleRegion(region);
+    setNearbyBrowseRegion(region);
+    setAllowOffscreenResults(false);
+  }, []);
+
+  const setProgrammaticVisibleRegion = useCallback((region: Region) => {
     if (areRegionsEquivalent(visibleRegionRef.current, region)) {
       return;
     }
@@ -255,6 +279,7 @@ export function useMapScreenState({
     initialRegion,
     visibleRegion,
     setVisibleRegion: updateVisibleRegion,
+    setProgrammaticVisibleRegion,
     showAllFilteredResults,
     selectedGroupId,
     selectedGroup,

@@ -27,6 +27,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import { Sheet } from '../../constants/theme';
 import { isIOS26OrNewer } from '../../utils/platform';
 import GlassHeader from '../ui/GlassHeader';
 
@@ -50,6 +51,7 @@ interface HomeHeaderSearchProps {
   sharedButtonActive?: boolean;
   sharedFilterValue?: 'all' | 'friends';
   onChangeSharedFilter?: (nextFilter: 'all' | 'friends') => void;
+  hasFriendsForFilter?: boolean;
   onToggleCaptureMode: () => void;
   captureMode: 'text' | 'camera';
   colors: {
@@ -80,6 +82,7 @@ export default function HomeHeaderSearch({
   sharedButtonActive = false,
   sharedFilterValue = 'all',
   onChangeSharedFilter,
+  hasFriendsForFilter = true,
   onToggleCaptureMode,
   captureMode,
   colors,
@@ -327,7 +330,8 @@ export default function HomeHeaderSearch({
           ? t('home.friendsFilterActive', 'Friends filter on')
           : t('home.friendsFilterInactive', 'Filter by friends')
         : sharedLabel;
-    const canShowFilterMenu = sharedButtonMode === 'filter' && Boolean(onChangeSharedFilter);
+    const canShowFilterMenu =
+      sharedButtonMode === 'filter' && Boolean(onChangeSharedFilter) && hasFriendsForFilter;
     const sharedSystemName =
       sharedButtonMode === 'filter' && sharedButtonActive ? 'person.2.fill' : 'person.2';
     const sharedAndroidIcon =
@@ -414,7 +418,14 @@ export default function HomeHeaderSearch({
             accessibilityRole="button"
             accessibilityLabel={sharedA11yLabel}
             hitSlop={HEADER_BUTTON_HIT_SLOP}
-            onPress={() => setShowAndroidSharedFilterSheet(true)}
+            onPress={() => {
+              if (hasFriendsForFilter) {
+                setShowAndroidSharedFilterSheet(true);
+                return;
+              }
+
+              onOpenShared();
+            }}
             pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
             style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
           >
@@ -657,11 +668,10 @@ export default function HomeHeaderSearch({
       </Animated.View>
       </GlassHeader>
 
-      {Platform.OS === 'android' && sharedButtonMode === 'filter' && onChangeSharedFilter ? (
+      {Platform.OS === 'android' && sharedButtonMode === 'filter' && onChangeSharedFilter && hasFriendsForFilter ? (
         <AppSheet
           visible={showAndroidSharedFilterSheet}
           onClose={() => setShowAndroidSharedFilterSheet(false)}
-          androidPresentation="floating"
           topInset={topInset}
         >
           <AppSheetScaffold
@@ -669,16 +679,9 @@ export default function HomeHeaderSearch({
             title={t('shared.manageTitle', 'Friends')}
             subtitle={t('home.feedFilterHint', 'Choose what kind of posts you want to see in Home.')}
             contentContainerStyle={styles.sharedFilterSheet}
+            useHorizontalPadding={false}
           >
-            <View
-              style={[
-                styles.sharedFilterSheetCard,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
+            <View>
               {(['all', 'friends'] as const).map((option, index) => {
                 const isSelected = sharedFilterValue === option;
                 const label =
@@ -710,6 +713,7 @@ export default function HomeHeaderSearch({
                   </View>
                 );
               })}
+              <View style={[styles.sharedFilterDivider, { backgroundColor: colors.border }]} />
             </View>
             <Pressable
               accessibilityRole="button"
@@ -717,14 +721,7 @@ export default function HomeHeaderSearch({
                 setShowAndroidSharedFilterSheet(false);
                 onOpenShared?.();
               }}
-              style={({ pressed }) => [
-                styles.sharedManageRow,
-                {
-                  backgroundColor: `${colors.primary}10`,
-                  borderColor: `${colors.primary}24`,
-                  opacity: pressed ? 0.92 : 1,
-                },
-              ]}
+              style={({ pressed }) => [styles.sharedManageRow, pressed ? styles.sharedManageRowPressed : null]}
             >
               <Ionicons name="people-outline" size={16} color={colors.primary} />
               <Text style={[styles.sharedManageLabel, { color: colors.primary }]}>
@@ -756,7 +753,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 1,
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   katakanaText: {
     fontSize: 10,
@@ -823,7 +820,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     width: '100%',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   detachedBrandWrap: {
     position: 'absolute',
@@ -864,15 +861,11 @@ const styles = StyleSheet.create({
   },
   sharedFilterSheet: {
     gap: 12,
-  },
-  sharedFilterSheetCard: {
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
+    paddingBottom: Sheet.android.bottomPadding + Sheet.android.comfortBottomPadding,
   },
   sharedFilterRow: {
     minHeight: 60,
-    paddingHorizontal: 18,
+    paddingHorizontal: Sheet.android.horizontalPadding,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -883,25 +876,26 @@ const styles = StyleSheet.create({
   sharedFilterLabel: {
     fontSize: 16,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   sharedFilterDivider: {
     height: StyleSheet.hairlineWidth,
-    marginLeft: 18,
+    marginLeft: Sheet.android.horizontalPadding,
   },
   sharedManageRow: {
-    minHeight: 50,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 16,
+    minHeight: 60,
+    paddingHorizontal: Sheet.android.horizontalPadding,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: 8,
+  },
+  sharedManageRowPressed: {
+    opacity: 0.9,
   },
   sharedManageLabel: {
     fontSize: 14,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

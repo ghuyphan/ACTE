@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
   countText: {
     fontSize: 15,
     fontWeight: '600',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   row: {
     flexDirection: 'row',
@@ -324,6 +324,6 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 12,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

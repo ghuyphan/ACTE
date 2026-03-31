@@ -77,6 +77,6 @@ const styles = StyleSheet.create({
   },
   label: {
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
 });

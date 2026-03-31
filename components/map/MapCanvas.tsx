@@ -492,12 +492,15 @@ function MapCanvas({
   preferLiteMarkers = false,
   colors,
 }: MapCanvasProps) {
+  const isAndroid = Platform.OS === 'android';
   const palette = useMemo(() => getMapPalette(colors, isDark), [colors, isDark]);
   const [detachedSelectedMarker, setDetachedSelectedMarker] = useState<DetachedSelectedMarker | null>(null);
   const [detachedSelectedMarkerVisible, setDetachedSelectedMarkerVisible] = useState(false);
+  const [androidShouldTrackMarkerViews, setAndroidShouldTrackMarkerViews] = useState(isAndroid);
   const detachedSelectedMarkerExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const androidMarkerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Android applies map color scheme only from initial props, so remount on theme flips.
-  const mapViewKey = Platform.OS === 'android' ? `map-${isDark ? 'dark' : 'light'}` : 'map';
+  const mapViewKey = isAndroid ? `map-${isDark ? 'dark' : 'light'}` : 'map';
 
   const markerRenderItems = useMemo(
     () =>
@@ -565,8 +568,39 @@ function MapCanvas({
       if (detachedSelectedMarkerExitTimerRef.current) {
         clearTimeout(detachedSelectedMarkerExitTimerRef.current);
       }
+      if (androidMarkerRefreshTimerRef.current) {
+        clearTimeout(androidMarkerRefreshTimerRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (!isAndroid || preferLiteMarkers) {
+      setAndroidShouldTrackMarkerViews(false);
+      return;
+    }
+
+    setAndroidShouldTrackMarkerViews(true);
+
+    if (androidMarkerRefreshTimerRef.current) {
+      clearTimeout(androidMarkerRefreshTimerRef.current);
+    }
+
+    androidMarkerRefreshTimerRef.current = setTimeout(() => {
+      setAndroidShouldTrackMarkerViews(false);
+      androidMarkerRefreshTimerRef.current = null;
+    }, reduceMotionEnabled ? 120 : 320);
+  }, [
+    currentZoom,
+    friendMarkers,
+    isAndroid,
+    isDark,
+    markerNodes,
+    preferLiteMarkers,
+    reduceMotionEnabled,
+    selectedFriendPostId,
+    selectedGroupId,
+  ]);
 
   useEffect(() => {
     if (preferLiteMarkers) {
@@ -681,7 +715,7 @@ function MapCanvas({
               testID={node.isCluster ? `cluster-marker-${node.id}` : `leaf-marker-${node.groupId ?? node.id}`}
               coordinate={{ latitude: node.latitude, longitude: node.longitude }}
               anchor={{ x: 0.5, y: 0.5 }}
-              tracksViewChanges={pulseActive || isSelected || reduceMotionEnabled}
+              tracksViewChanges={androidShouldTrackMarkerViews || pulseActive || isSelected || reduceMotionEnabled}
               onPress={(event) => {
                 event.stopPropagation?.();
                 if (node.isCluster) {
@@ -742,7 +776,7 @@ function MapCanvas({
             longitude: detachedSelectedMarker.longitude,
           }}
           anchor={{ x: 0.5, y: 30 / 136 }}
-          tracksViewChanges={detachedSelectedMarkerVisible || reduceMotionEnabled}
+          tracksViewChanges={androidShouldTrackMarkerViews || detachedSelectedMarkerVisible || reduceMotionEnabled}
           zIndex={40}
           onPress={(event) => {
             event.stopPropagation?.();
@@ -781,7 +815,7 @@ function MapCanvas({
               testID={`friend-marker-${post.id}`}
               coordinate={{ latitude: post.latitude, longitude: post.longitude }}
               anchor={{ x: 0.5, y: 0.5 }}
-              tracksViewChanges={isSelected || reduceMotionEnabled}
+              tracksViewChanges={androidShouldTrackMarkerViews || isSelected || reduceMotionEnabled}
               zIndex={isSelected ? 20 : 10}
               onPress={(event) => {
                 event.stopPropagation?.();
@@ -870,7 +904,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: '800',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   groupMarker: {
     minWidth: 44,
@@ -892,7 +926,7 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: '800',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   photoMarker: {
     overflow: 'hidden',
@@ -984,14 +1018,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 16,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
     marginBottom: 2,
   },
   richMarkerText: {
     fontSize: 11,
     lineHeight: 14,
     fontWeight: '500',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   markerCountBadge: {
     position: 'absolute',
@@ -1011,7 +1045,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 11,
     fontWeight: '800',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   stackMarkerWrap: {
     alignItems: 'center',
@@ -1049,7 +1083,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 13,
     fontWeight: '700',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   stackMarkerBadge: {
     position: 'absolute',
@@ -1069,7 +1103,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 10,
     fontWeight: '800',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   singleMarker: {
     width: 38,
@@ -1112,7 +1146,7 @@ const styles = StyleSheet.create({
   friendInitial: {
     fontSize: 12,
     fontWeight: '800',
-    fontFamily: 'System',
+    fontFamily: 'Noto Sans',
   },
   friendBadge: {
     position: 'absolute',

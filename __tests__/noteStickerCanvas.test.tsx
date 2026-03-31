@@ -60,4 +60,19 @@ describe('NoteStickerCanvas', () => {
 
     expect(onPressCanvas).toHaveBeenCalledTimes(1);
   });
+
+  it('uses transform-based scaling and disables image transition while editable', () => {
+    const { getByTestId } = render(
+      <NoteStickerCanvas placements={[{ ...stickerPlacement, scale: 1.8, rotation: 12 }]} editable />
+    );
+
+    expect(getByTestId('note-sticker-wrap-placement-1').props.style).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          transform: [{ scale: 1.8 }, { rotate: '12deg' }],
+        }),
+      ])
+    );
+    expect(getByTestId('note-sticker-image-placement-1').props.transition).toBe(0);
+  });
 });
