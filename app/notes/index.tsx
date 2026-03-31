@@ -22,8 +22,8 @@ import { useFeedFocus } from '../../hooks/useFeedFocus';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
+import DynamicStickerCanvas from '../../components/DynamicStickerCanvas';
 import NoteDoodleCanvas from '../../components/NoteDoodleCanvas';
-import NoteStickerCanvas from '../../components/NoteStickerCanvas';
 import { getTextNoteCardGradient } from '../../services/noteAppearance';
 import { parseNoteDoodleStrokes } from '../../services/noteDoodles';
 import { parseNoteStickerPlacements } from '../../services/noteStickers';
@@ -37,8 +37,7 @@ type NoteGridItem =
   | { id: string; kind: 'shared-post'; createdAt: string; post: SharedPost };
 
 const GRID_DOODLE_STROKE_WIDTH = 4.5;
-const GRID_STICKER_SIZE_MULTIPLIER = 0.82;
-const GRID_STICKER_MIN_SIZE = 52;
+const GRID_STICKER_MIN_SIZE = 0;
 
 const GridTile = memo(function GridTile({
   item,
@@ -171,11 +170,10 @@ const GridTile = memo(function GridTile({
             />
             {stickerPlacements.length > 0 ? (
               <View pointerEvents="none" style={styles.tileDoodleOverlay}>
-                <NoteStickerCanvas
+                <DynamicStickerCanvas
                   placements={stickerPlacements}
                   remoteBucket={item.kind === 'shared-post' ? SHARED_POST_MEDIA_BUCKET : undefined}
                   sharedCache={item.kind === 'shared-post'}
-                  sizeMultiplier={GRID_STICKER_SIZE_MULTIPLIER}
                   minimumBaseSize={GRID_STICKER_MIN_SIZE}
                 />
               </View>
@@ -213,11 +211,10 @@ const GridTile = memo(function GridTile({
           <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.tileTextFill}>
             {stickerPlacements.length > 0 ? (
               <View pointerEvents="none" style={[styles.tileDoodleOverlay, styles.tileTextStickerOverlay]}>
-                <NoteStickerCanvas
+                <DynamicStickerCanvas
                   placements={stickerPlacements}
                   remoteBucket={item.kind === 'shared-post' ? SHARED_POST_MEDIA_BUCKET : undefined}
                   sharedCache={item.kind === 'shared-post'}
-                  sizeMultiplier={GRID_STICKER_SIZE_MULTIPLIER}
                   minimumBaseSize={GRID_STICKER_MIN_SIZE}
                 />
               </View>

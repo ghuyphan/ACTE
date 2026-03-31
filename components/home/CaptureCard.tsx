@@ -1,5 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView } from 'expo-camera';
+import {
+  ClipboardPasteButton,
+  isPasteButtonAvailable,
+  type PasteEventPayload,
+} from 'expo-clipboard';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,7 +44,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showAppAlert } from '../../utils/alert';
-import { DOODLE_ARTBOARD_FRAME } from '../../constants/doodleLayout';
+import { STICKER_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { ENABLE_PHOTO_STICKERS } from '../../constants/experiments';
 import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadius';
 import { Layout, Radii, Shadows, Sheet, Typography } from '../../constants/theme';
@@ -66,6 +71,7 @@ import {
   ClipboardStickerError,
   hasClipboardStickerImage,
   importStickerAssetFromClipboard,
+  importStickerAssetFromClipboardImageData,
 } from '../../utils/stickerClipboard';
 import AppSheet from '../AppSheet';
 import AppSheetScaffold from '../AppSheetScaffold';
@@ -156,6 +162,47 @@ function getStickerImportErrorMessage(t: TFunction, error: unknown) {
   return error instanceof Error
     ? error.message
     : t('capture.photoImportFailed', 'We could not import that photo right now.');
+}
+
+function getClipboardStickerMessages(t: TFunction) {
+  return {
+    requiresUpdate: t(
+      'capture.clipboardStickerRequiresUpdateMsg',
+      'Clipboard sticker paste needs the latest app build. Restart the iOS app after rebuilding to use this.'
+    ),
+    unavailable: t(
+      'capture.clipboardStickerUnavailableMsg',
+      'Copy a transparent sticker image first, then try again.'
+    ),
+    unsupported: t(
+      'capture.clipboardStickerUnsupported',
+      'We could not read that clipboard image right now.'
+    ),
+    storageUnavailable: t(
+      'capture.clipboardStickerStorageUnavailable',
+      'Sticker storage is unavailable on this device.'
+    ),
+    permissionDenied: t(
+      'capture.clipboardStickerPermissionDeniedMsg',
+      'This device will not let Noto read that clipboard image right now. Try copying it again, or import it from Photos instead.'
+    ),
+  };
+}
+
+function getClipboardStickerAlertTitle(t: TFunction, error: unknown) {
+  if (error instanceof ClipboardStickerError && error.code === 'unavailable') {
+    return t('capture.clipboardStickerUnavailableTitle', 'No sticker to paste');
+  }
+
+  if (error instanceof ClipboardStickerError && error.code === 'requires-update') {
+    return t('capture.clipboardStickerRequiresUpdateTitle', 'Update required');
+  }
+
+  if (error instanceof ClipboardStickerError && error.code === 'permission-denied') {
+    return t('capture.clipboardStickerPermissionDeniedTitle', 'Paste blocked');
+  }
+
+  return t('capture.error', 'Error');
 }
 
 export interface CaptureCardHandle {
@@ -647,6 +694,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
   const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<'photos' | null>(null);
   const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
+  const [inlinePasteLoading, setInlinePasteLoading] = useState(false);
   const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
   const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
   const [isNoteInputFocused, setIsNoteInputFocused] = useState(false);
@@ -714,6 +762,19 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const isSaveBusy = saving || saveState === 'saving';
   const isSaveSuccessful = saveState === 'success';
   const interactionsDisabled = isSaveBusy || isSaveSuccessful;
+  const showInlinePasteButton =
+    ENABLE_PHOTO_STICKERS &&
+    captureMode === 'text' &&
+    noteText.length === 0 &&
+    !isNoteInputFocused &&
+    !doodleModeEnabled &&
+    !stickerModeEnabled &&
+    !interactionsDisabled &&
+    (!importingSticker || inlinePasteLoading);
+  const useNativeInlinePasteButton =
+    showInlinePasteButton &&
+    Platform.OS === 'ios' &&
+    isPasteButtonAvailable;
   const canShowLiveCameraPreview =
     captureMode === 'camera' && !capturedPhoto && permissionGranted && shouldRenderCameraPreview;
   const saveIdleBackground = isCameraSaveMode ? colors.primary : colors.captureButtonBg;
@@ -1100,6 +1161,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       { scale: 0.97 + decorateProgress.value * 0.03 },
     ],
   }));
+  const animatedInlinePasteButtonStyle = useAnimatedStyle(() => ({
+    opacity: 1 - decorateProgress.value,
+    width: TOP_CONTROL_HEIGHT * (1 - decorateProgress.value),
+    marginLeft: 8 * (1 - decorateProgress.value),
+    transform: [
+      { translateX: decorateProgress.value * -8 },
+      { scale: 1 - decorateProgress.value * 0.06 },
+    ],
+  }));
   const animatedSaveInnerStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
       saveSuccessProgress.value,
@@ -1352,36 +1422,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setImportingSticker(true);
 
     try {
-      const importedAsset = await importStickerAssetFromClipboard({
-        requiresUpdate: t(
-          'capture.clipboardStickerRequiresUpdateMsg',
-          'Clipboard sticker paste needs the latest app build. Restart the iOS app after rebuilding to use this.'
-        ),
-        unavailable: t(
-          'capture.clipboardStickerUnavailableMsg',
-          'Copy a transparent sticker image first, then try again.'
-        ),
-        unsupported: t(
-          'capture.clipboardStickerUnsupported',
-          'We could not read that clipboard image right now.'
-        ),
-        storageUnavailable: t(
-          'capture.clipboardStickerStorageUnavailable',
-          'Sticker storage is unavailable on this device.'
-        ),
-      });
+      const importedAsset = await importStickerAssetFromClipboard(getClipboardStickerMessages(t));
       const nextPlacement = createStickerPlacement(importedAsset, stickerPlacements);
       applyImportedSticker(nextPlacement);
     } catch (error) {
-      console.warn('Sticker paste failed:', error);
-      const alertTitle =
-        error instanceof ClipboardStickerError && error.code === 'unavailable'
-          ? t('capture.clipboardStickerUnavailableTitle', 'No sticker to paste')
-          : error instanceof ClipboardStickerError && error.code === 'requires-update'
-            ? t('capture.clipboardStickerRequiresUpdateTitle', 'Update required')
-            : t('capture.error', 'Error');
+      if (!(error instanceof ClipboardStickerError && error.code === 'permission-denied')) {
+        console.warn('Sticker paste failed:', error);
+      }
       showAppAlert(
-        alertTitle,
+        getClipboardStickerAlertTitle(t, error),
         error instanceof Error
           ? error.message
           : t('capture.clipboardStickerFailed', 'We could not paste that sticker right now.')
@@ -1390,6 +1439,47 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       setImportingSticker(false);
     }
   }, [applyImportedSticker, dismissPastePrompt, importingSticker, stickerPlacements, t]);
+  const handleNativeInlinePasteStickerPress = useCallback(
+    async (payload: PasteEventPayload) => {
+      if (!ENABLE_PHOTO_STICKERS || importingSticker || inlinePasteLoading || payload.type !== 'image') {
+        return;
+      }
+
+      dismissPastePrompt();
+      setInlinePasteLoading(true);
+      setImportingSticker(true);
+
+      try {
+        const importedAsset = await importStickerAssetFromClipboardImageData(
+          payload.data,
+          getClipboardStickerMessages(t)
+        );
+        const nextPlacement = createStickerPlacement(importedAsset, stickerPlacements);
+        applyImportedSticker(nextPlacement);
+      } catch (error) {
+        if (!(error instanceof ClipboardStickerError && error.code === 'permission-denied')) {
+          console.warn('Sticker paste failed:', error);
+        }
+        showAppAlert(
+          getClipboardStickerAlertTitle(t, error),
+          error instanceof Error
+            ? error.message
+            : t('capture.clipboardStickerFailed', 'We could not paste that sticker right now.')
+        );
+      } finally {
+        setImportingSticker(false);
+        setInlinePasteLoading(false);
+      }
+    },
+    [
+      applyImportedSticker,
+      dismissPastePrompt,
+      importingSticker,
+      inlinePasteLoading,
+      stickerPlacements,
+      t,
+    ]
+  );
   const handleShowCardPastePrompt = useCallback(
     async (event: GestureResponderEvent) => {
       if (
@@ -1397,7 +1487,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         importingSticker ||
         doodleModeEnabled ||
         stickerModeEnabled ||
-        stickerPlacements.length > 0 ||
         interactionsDisabled
       ) {
         return;
@@ -1427,13 +1516,22 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       interactionsDisabled,
       schedulePastePromptDismiss,
       stickerModeEnabled,
-      stickerPlacements.length,
     ]
   );
   const handleConfirmPasteFromPrompt = useCallback(() => {
     dismissPastePrompt();
     void handlePasteStickerFromClipboard();
   }, [dismissPastePrompt, handlePasteStickerFromClipboard]);
+  const handleInlinePasteStickerPress = useCallback(() => {
+    if (inlinePasteLoading) {
+      return;
+    }
+
+    setInlinePasteLoading(true);
+    void handlePasteStickerFromClipboard().finally(() => {
+      setInlinePasteLoading(false);
+    });
+  }, [handlePasteStickerFromClipboard, inlinePasteLoading]);
   const handleCloseStickerSourceSheet = useCallback(() => {
     setShowStickerSourceSheet(false);
   }, []);
@@ -1765,14 +1863,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 interactive={false}
                 previewMode="editor"
               />
-              {ENABLE_PHOTO_STICKERS ? (
-                <Pressable
-                  testID="capture-card-paste-surface"
-                  style={styles.cardPasteSurface}
-                  onLongPress={handleShowCardPastePrompt}
-                  delayLongPress={320}
-                />
-              ) : null}
               <View pointerEvents="box-none" style={styles.cardTopOverlay}>
                 <View style={styles.cardTopOverlayRow}>
                   <CaptureAnimatedPressable
@@ -1801,6 +1891,74 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       />
                     </Reanimated.View>
                   </CaptureAnimatedPressable>
+                  {captureMode === 'text' ? (
+                    <Reanimated.View
+                      pointerEvents={
+                        showInlinePasteButton
+                          ? showDecorateControls
+                            ? 'none'
+                            : 'auto'
+                          : 'none'
+                      }
+                      style={[styles.inlinePasteStickerWrap, animatedInlinePasteButtonStyle]}
+                    >
+                      {showInlinePasteButton ? (
+                        inlinePasteLoading ? (
+                          <CaptureAnimatedPressable
+                            testID="capture-inline-paste-sticker"
+                            accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
+                            disabled
+                            disabledOpacity={1}
+                            style={[
+                              styles.textCardActionButton,
+                              styles.inlinePasteStickerIconButton,
+                              {
+                                backgroundColor: colors.captureGlassFill,
+                                borderColor: colors.captureGlassBorder,
+                              },
+                            ]}
+                          >
+                            <ActivityIndicator size="small" color={colors.captureGlassText} />
+                          </CaptureAnimatedPressable>
+                        ) : useNativeInlinePasteButton ? (
+                          <ClipboardPasteButton
+                            testID="capture-inline-paste-sticker"
+                            accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
+                            acceptedContentTypes={['image']}
+                            imageOptions={{ format: 'png' }}
+                            displayMode="iconOnly"
+                            cornerStyle="capsule"
+                            backgroundColor={colors.captureGlassFill}
+                            foregroundColor={colors.captureGlassText}
+                            onPress={handleNativeInlinePasteStickerPress}
+                            style={styles.nativeInlinePasteStickerButton}
+                          />
+                        ) : (
+                          <CaptureAnimatedPressable
+                            testID="capture-inline-paste-sticker"
+                            accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
+                            onPress={handleInlinePasteStickerPress}
+                            disabled={inlinePasteLoading}
+                            disabledOpacity={1}
+                            style={[
+                              styles.textCardActionButton,
+                              styles.inlinePasteStickerIconButton,
+                              {
+                                backgroundColor: colors.captureGlassFill,
+                                borderColor: colors.captureGlassBorder,
+                              },
+                            ]}
+                          >
+                            <Ionicons
+                              name="clipboard-outline"
+                              size={16}
+                              color={colors.captureGlassText}
+                            />
+                          </CaptureAnimatedPressable>
+                        )
+                      ) : null}
+                    </Reanimated.View>
+                  ) : null}
                   <Reanimated.View
                     pointerEvents={showDecorateControls ? 'auto' : 'none'}
                     style={[styles.decorateControlsWrap, animatedDecorateControlsStyle]}
@@ -2099,24 +2257,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   selectionColor={colors.captureCardText}
                 />
               </View>
-              <StickerPastePopover
-                visible={pastePrompt.visible}
-                anchor={{ x: pastePrompt.x, y: pastePrompt.y }}
-                containerWidth={CARD_SIZE}
-                containerHeight={CARD_SIZE}
-                label={t('capture.pasteStickerAction', 'Paste sticker')}
-                description={t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.')}
-                backgroundColor="rgba(255, 250, 242, 0.96)"
-                borderColor={colors.captureGlassBorder}
-                secondaryTextColor={colors.captureGlassIcon}
-                buttonBackgroundColor={colors.captureButtonBg}
-                buttonTextColor="#FFFDFC"
-                onPress={handleConfirmPasteFromPrompt}
-                onDismiss={dismissPastePrompt}
-                popoverTestID="capture-card-paste-popover"
-                actionTestID="capture-card-paste-action"
-                dismissTestID="capture-card-paste-dismiss"
-              />
             </LinearGradient>
           ) : capturedPhoto ? (
             <View style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}>
@@ -3058,6 +3198,19 @@ const styles = StyleSheet.create({
   cardTextCenterInactive: {
     zIndex: 0,
   },
+  inlinePasteStickerWrap: {
+    overflow: 'hidden',
+    height: TOP_CONTROL_HEIGHT,
+    justifyContent: 'center',
+  },
+  inlinePasteStickerIconButton: {
+    width: TOP_CONTROL_HEIGHT,
+    height: TOP_CONTROL_HEIGHT,
+  },
+  nativeInlinePasteStickerButton: {
+    width: TOP_CONTROL_HEIGHT,
+    height: TOP_CONTROL_HEIGHT,
+  },
   cardTopOverlay: {
     position: 'absolute',
     top: TOP_CONTROL_INSET,
@@ -3162,12 +3315,12 @@ const styles = StyleSheet.create({
   },
   doodleCanvasLayer: {
     ...StyleSheet.absoluteFill,
-    ...DOODLE_ARTBOARD_FRAME,
+    ...STICKER_ARTBOARD_FRAME,
     zIndex: 2,
   },
   textStickerCanvasLayer: {
     ...StyleSheet.absoluteFill,
-    ...DOODLE_ARTBOARD_FRAME,
+    ...STICKER_ARTBOARD_FRAME,
     zIndex: 0,
   },
   textStickerCanvasLayerActive: {
@@ -3469,6 +3622,7 @@ const styles = StyleSheet.create({
   },
   noteColorSheet: {
     gap: 12,
+    paddingBottom: Sheet.android.bottomPadding + 12,
   },
   noteColorPreviewHint: {
     marginTop: 12,
@@ -3479,6 +3633,7 @@ const styles = StyleSheet.create({
   },
   radiusSheet: {
     gap: 12,
+    paddingBottom: Sheet.android.bottomPadding + 12,
   },
   radiusSheetRow: {
     minHeight: 60,

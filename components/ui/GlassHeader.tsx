@@ -16,6 +16,7 @@ export default function GlassHeader({ topInset, children, style }: GlassHeaderPr
 
   return (
     <View
+      pointerEvents="box-none"
       style={[
         styles.wrapper,
         {
@@ -32,6 +33,7 @@ export default function GlassHeader({ topInset, children, style }: GlassHeaderPr
       >
         {isOlderIOS ? (
           <View
+            pointerEvents="none"
             style={[
               StyleSheet.absoluteFill,
               {

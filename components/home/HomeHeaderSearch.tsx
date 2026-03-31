@@ -30,6 +30,9 @@ import Animated, {
 import { isIOS26OrNewer } from '../../utils/platform';
 import GlassHeader from '../ui/GlassHeader';
 
+const HEADER_BUTTON_HIT_SLOP = { top: 8, right: 8, bottom: 8, left: 8 } as const;
+const HEADER_BUTTON_PRESS_RETENTION_OFFSET = { top: 14, right: 14, bottom: 14, left: 14 } as const;
+
 interface HomeHeaderSearchProps {
   topInset: number;
   isSearching: boolean;
@@ -248,7 +251,9 @@ export default function HomeHeaderSearch({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('home.searchPlaceholder', 'Search notes...')}
+          hitSlop={HEADER_BUTTON_HIT_SLOP}
           onPress={onOpenSearch}
+          pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
           style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
         >
           <Ionicons name="search" size={20} color={colors.primary} />
@@ -257,7 +262,13 @@ export default function HomeHeaderSearch({
     }
 
     return (
-      <Pressable onPress={onOpenSearch}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('home.searchPlaceholder', 'Search notes...')}
+        hitSlop={HEADER_BUTTON_HIT_SLOP}
+        onPress={onOpenSearch}
+        pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
+      >
         <Ionicons name="search" size={20} color={colors.primary} />
       </Pressable>
     );
@@ -286,7 +297,11 @@ export default function HomeHeaderSearch({
 
     return (
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={modeLabel}
+        hitSlop={HEADER_BUTTON_HIT_SLOP}
         onPress={onToggleCaptureMode}
+        pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
         style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
       >
         <Animated.View style={modeIconAnimatedStyle}>
@@ -396,8 +411,11 @@ export default function HomeHeaderSearch({
       return (
         <Animated.View style={sharedButtonContainerAnimatedStyle}>
           <Pressable
+            accessibilityRole="button"
             accessibilityLabel={sharedA11yLabel}
+            hitSlop={HEADER_BUTTON_HIT_SLOP}
             onPress={() => setShowAndroidSharedFilterSheet(true)}
+            pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
             style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
           >
             <Ionicons name={sharedAndroidIcon} size={20} color={colors.primary} />
@@ -424,8 +442,11 @@ export default function HomeHeaderSearch({
     return (
       <Animated.View style={sharedButtonContainerAnimatedStyle}>
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel={sharedA11yLabel}
+          hitSlop={HEADER_BUTTON_HIT_SLOP}
           onPress={onOpenShared}
+          pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
           style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
         >
           <Ionicons name={sharedAndroidIcon} size={20} color={colors.primary} />
@@ -468,7 +489,11 @@ export default function HomeHeaderSearch({
 
     return (
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={notesLabel}
+        hitSlop={HEADER_BUTTON_HIT_SLOP}
         onPress={onOpenNotes}
+        pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
         style={[styles.modeToggleBtn, { backgroundColor: `${colors.primary}18` }]}
       >
         <Ionicons name="grid-outline" size={20} color={colors.primary} />
@@ -619,7 +644,13 @@ export default function HomeHeaderSearch({
               returnKeyType="search"
             />
           </View>
-          <Pressable onPress={onCloseSearch}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common.close', 'Close')}
+            hitSlop={HEADER_BUTTON_HIT_SLOP}
+            onPress={onCloseSearch}
+            pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
+          >
             <Ionicons name="close-circle" size={20} color={colors.secondaryText} />
           </Pressable>
         </View>
@@ -739,9 +770,9 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   modeToggleBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },

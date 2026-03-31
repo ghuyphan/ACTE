@@ -24,13 +24,24 @@ export type ClipboardStickerMessages = {
   unavailable: string;
   unsupported: string;
   storageUnavailable: string;
+  permissionDenied: string;
 };
 
 export class ClipboardStickerError extends Error {
-  code: 'requires-update' | 'unavailable' | 'unsupported' | 'storage-unavailable';
+  code:
+    | 'requires-update'
+    | 'unavailable'
+    | 'unsupported'
+    | 'storage-unavailable'
+    | 'permission-denied';
 
   constructor(
-    code: 'requires-update' | 'unavailable' | 'unsupported' | 'storage-unavailable',
+    code:
+      | 'requires-update'
+      | 'unavailable'
+      | 'unsupported'
+      | 'storage-unavailable'
+      | 'permission-denied',
     message: string
   ) {
     super(message);
@@ -68,24 +79,26 @@ export async function hasClipboardStickerImage() {
   }
 }
 
-export async function importStickerAssetFromClipboard(
+function isClipboardPermissionDeniedError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const normalizedMessage = error.message.toLowerCase();
+  return (
+    normalizedMessage.includes('no permission to read this clipboard item') ||
+    (normalizedMessage.includes('clipboard') && normalizedMessage.includes('permission'))
+  );
+}
+
+async function importStickerAssetFromClipboardBase64(
+  base64DataUri: string,
   messages: ClipboardStickerMessages
 ): Promise<StickerAsset> {
   let clipboardTempUri: string | null = null;
 
   try {
-    const clipboardModule = await loadClipboardModule();
-    if (!clipboardModule?.hasImageAsync || !clipboardModule?.getImageAsync) {
-      throw new ClipboardStickerError('requires-update', messages.requiresUpdate);
-    }
-
-    const hasImage = await clipboardModule.hasImageAsync();
-    if (!hasImage) {
-      throw new ClipboardStickerError('unavailable', messages.unavailable);
-    }
-
-    const clipboardImage = await clipboardModule.getImageAsync({ format: 'png' });
-    const base64 = clipboardImage?.data ? getClipboardStickerBase64(clipboardImage.data) : null;
+    const base64 = getClipboardStickerBase64(base64DataUri);
     if (!base64) {
       throw new ClipboardStickerError('unsupported', messages.unsupported);
     }
@@ -109,4 +122,43 @@ export async function importStickerAssetFromClipboard(
       await deleteFileAsync(clipboardTempUri, { idempotent: true }).catch(() => undefined);
     }
   }
+}
+
+export async function importStickerAssetFromClipboardImageData(
+  base64DataUri: string,
+  messages: ClipboardStickerMessages
+): Promise<StickerAsset> {
+  return importStickerAssetFromClipboardBase64(base64DataUri, messages);
+}
+
+export async function importStickerAssetFromClipboard(
+  messages: ClipboardStickerMessages
+): Promise<StickerAsset> {
+  const clipboardModule = await loadClipboardModule();
+  if (!clipboardModule?.hasImageAsync || !clipboardModule?.getImageAsync) {
+    throw new ClipboardStickerError('requires-update', messages.requiresUpdate);
+  }
+
+  const hasImage = await clipboardModule.hasImageAsync();
+  if (!hasImage) {
+    throw new ClipboardStickerError('unavailable', messages.unavailable);
+  }
+
+  let clipboardImage: { data: string } | null = null;
+
+  try {
+    clipboardImage = await clipboardModule.getImageAsync({ format: 'png' });
+  } catch (error) {
+    if (isClipboardPermissionDeniedError(error)) {
+      throw new ClipboardStickerError('permission-denied', messages.permissionDenied);
+    }
+
+    throw error;
+  }
+
+  if (!clipboardImage?.data) {
+    throw new ClipboardStickerError('unavailable', messages.unavailable);
+  }
+
+  return importStickerAssetFromClipboardBase64(clipboardImage.data, messages);
 }

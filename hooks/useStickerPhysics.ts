@@ -7,6 +7,7 @@ import {
   type SharedValue,
 } from 'react-native-reanimated';
 import type { NoteStickerPlacement } from '../services/noteStickers';
+import type { StickerMotionVariant } from '../services/noteAppearance';
 import {
   getStickerDimensions,
   sortStickerPlacements,
@@ -39,6 +40,7 @@ interface UseStickerPhysicsParams {
   placements: NoteStickerPlacement[];
   layout: StickerCanvasLayout;
   isActive: boolean;
+  motionVariant?: StickerMotionVariant;
   sizeMultiplier?: number;
   minimumBaseSize?: number;
   debugTiltOverride?: SharedValue<{
@@ -65,8 +67,57 @@ const COLLISION_SPIN_FACTOR = 0.34;
 const BOUNDARY_SPIN_FACTOR = 0.18;
 const MAX_ANGULAR_VELOCITY = 165;
 const MAX_LINEAR_VELOCITY = 1550;
-const JELLY_RESPONSE = 0.16;
-const MAX_JELLY_STRETCH = 0.08;
+
+const PHYSICS_PROFILE = {
+  tiltAcceleration: 1510,
+  crossAcceleration: 185,
+  restoreAcceleration: 8.1,
+  linearDamping: 0.978,
+  angularDamping: 0.952,
+  rotationRestoreAcceleration: 8.5,
+  boundaryRestitution: 0.86,
+  collisionRestitution: 0.92,
+  orbitalStrength: 0.55,
+  orbitalLimit: 160,
+  jellyResponse: 0.24,
+  maxJellyStretch: 0.14,
+  jellyCompression: 0.72,
+  jellyRotationFactor: 0.00018,
+  jellyRotationResponse: 0.2,
+  velocityNormalization: 1080,
+  waveStrengthX: 0,
+  waveStrengthY: 0,
+  waveSpeedX: 0,
+  waveSpeedY: 0,
+};
+
+const WATER_PROFILE = {
+  tiltAcceleration: 980,
+  crossAcceleration: 255,
+  restoreAcceleration: 5.1,
+  linearDamping: 0.985,
+  angularDamping: 0.966,
+  rotationRestoreAcceleration: 5.7,
+  boundaryRestitution: 0.72,
+  collisionRestitution: 0.84,
+  orbitalStrength: 0.88,
+  orbitalLimit: 220,
+  jellyResponse: 0.28,
+  maxJellyStretch: 0.19,
+  jellyCompression: 0.82,
+  jellyRotationFactor: 0.00028,
+  jellyRotationResponse: 0.24,
+  velocityNormalization: 920,
+  waveStrengthX: 145,
+  waveStrengthY: 105,
+  waveSpeedX: 1.9,
+  waveSpeedY: 1.45,
+};
+
+function getMotionProfile(motionVariant: StickerMotionVariant) {
+  'worklet';
+  return motionVariant === 'water' ? WATER_PROFILE : PHYSICS_PROFILE;
+}
 
 function clamp(value: number, minValue: number, maxValue: number) {
   'worklet';
@@ -85,7 +136,11 @@ function clampVelocity(sticker: StickerPhysicsState) {
   );
 }
 
-function applyBoundaryConstraint(sticker: StickerPhysicsState, layout: StickerCanvasLayout) {
+function applyBoundaryConstraint(
+  sticker: StickerPhysicsState,
+  layout: StickerCanvasLayout,
+  boundaryRestitution: number
+) {
   'worklet';
 
   const halfWidth = sticker.width / 2;
@@ -98,13 +153,13 @@ function applyBoundaryConstraint(sticker: StickerPhysicsState, layout: StickerCa
   if (sticker.x < minX) {
     sticker.x = minX;
     if (sticker.vx < 0) {
-      sticker.vx = -sticker.vx * BOUNDARY_RESTITUTION;
+      sticker.vx = -sticker.vx * boundaryRestitution;
       sticker.angularVelocity += Math.abs(sticker.vx) * BOUNDARY_SPIN_FACTOR;
     }
   } else if (sticker.x > maxX) {
     sticker.x = maxX;
     if (sticker.vx > 0) {
-      sticker.vx = -sticker.vx * BOUNDARY_RESTITUTION;
+      sticker.vx = -sticker.vx * boundaryRestitution;
       sticker.angularVelocity -= Math.abs(sticker.vx) * BOUNDARY_SPIN_FACTOR;
     }
   }
@@ -112,19 +167,24 @@ function applyBoundaryConstraint(sticker: StickerPhysicsState, layout: StickerCa
   if (sticker.y < minY) {
     sticker.y = minY;
     if (sticker.vy < 0) {
-      sticker.vy = -sticker.vy * BOUNDARY_RESTITUTION;
+      sticker.vy = -sticker.vy * boundaryRestitution;
       sticker.angularVelocity -= Math.abs(sticker.vy) * BOUNDARY_SPIN_FACTOR;
     }
   } else if (sticker.y > maxY) {
     sticker.y = maxY;
     if (sticker.vy > 0) {
-      sticker.vy = -sticker.vy * BOUNDARY_RESTITUTION;
+      sticker.vy = -sticker.vy * boundaryRestitution;
       sticker.angularVelocity += Math.abs(sticker.vy) * BOUNDARY_SPIN_FACTOR;
     }
   }
 }
 
-function resolveStickerCollisions(stickers: StickerPhysicsState[], layout: StickerCanvasLayout) {
+function resolveStickerCollisions(
+  stickers: StickerPhysicsState[],
+  layout: StickerCanvasLayout,
+  collisionRestitution: number,
+  boundaryRestitution: number
+) {
   'worklet';
 
   for (let iteration = 0; iteration < COLLISION_ITERATIONS; iteration += 1) {
@@ -157,7 +217,7 @@ function resolveStickerCollisions(stickers: StickerPhysicsState[], layout: Stick
         const separatingVelocity = relativeVelocityX * normalX + relativeVelocityY * normalY;
 
         if (separatingVelocity < 0) {
-          const impulse = (-(1 + COLLISION_RESTITUTION) * separatingVelocity) / 2;
+          const impulse = (-(1 + collisionRestitution) * separatingVelocity) / 2;
           left.vx -= impulse * normalX;
           left.vy -= impulse * normalY;
           right.vx += impulse * normalX;
@@ -176,8 +236,8 @@ function resolveStickerCollisions(stickers: StickerPhysicsState[], layout: Stick
 
         clampVelocity(left);
         clampVelocity(right);
-        applyBoundaryConstraint(left, layout);
-        applyBoundaryConstraint(right, layout);
+        applyBoundaryConstraint(left, layout, boundaryRestitution);
+        applyBoundaryConstraint(right, layout, boundaryRestitution);
       }
     }
   }
@@ -187,6 +247,7 @@ export function useStickerPhysics({
   placements,
   layout,
   isActive,
+  motionVariant = 'physics',
   sizeMultiplier = 1,
   minimumBaseSize = 68,
   debugTiltOverride,
@@ -248,10 +309,12 @@ export function useStickerPhysics({
       return;
     }
 
+    const profile = getMotionProfile(motionVariant);
     const deltaTimeMs = frameInfo.timeSincePreviousFrame ?? 16.667;
     const dt = Math.min(deltaTimeMs, MAX_FRAME_DELTA_MS) / 1000;
-    const damping = Math.pow(LINEAR_DAMPING, dt * 60);
-    const angularDamping = Math.pow(ANGULAR_DAMPING, dt * 60);
+    const elapsedSeconds = (frameInfo.timeSinceFirstFrame ?? 0) / 1000;
+    const damping = Math.pow(profile.linearDamping, dt * 60);
+    const angularDamping = Math.pow(profile.angularDamping, dt * 60);
     const sensor = gravitySensor.sensor.value;
     const tiltOverride = debugTiltOverride?.value;
     const normalizedGravityX = clamp(
@@ -272,19 +335,40 @@ export function useStickerPhysics({
 
     for (let index = 0; index < nextStates.length; index += 1) {
       const sticker = nextStates[index];
-      const restoreX = (sticker.anchorX - sticker.x) * RESTORE_ACCELERATION * flatRestoreFactor;
-      const restoreY = (sticker.anchorY - sticker.y) * RESTORE_ACCELERATION * flatRestoreFactor;
-      const crossAxisX = normalizedGravityY * TILT_CROSS_ACCELERATION;
-      const crossAxisY = -normalizedGravityX * TILT_CROSS_ACCELERATION;
+      const restoreX =
+        (sticker.anchorX - sticker.x) * profile.restoreAcceleration * flatRestoreFactor;
+      const restoreY =
+        (sticker.anchorY - sticker.y) * profile.restoreAcceleration * flatRestoreFactor;
+      const crossAxisX = normalizedGravityY * profile.crossAcceleration;
+      const crossAxisY = -normalizedGravityX * profile.crossAcceleration;
       const stickerOffsetX = sticker.x - sticker.anchorX;
       const stickerOffsetY = sticker.y - sticker.anchorY;
-      const orbitalX = clamp(stickerOffsetY * -0.55, -160, 160);
-      const orbitalY = clamp(stickerOffsetX * 0.55, -160, 160);
+      const orbitalX = clamp(
+        stickerOffsetY * -profile.orbitalStrength,
+        -profile.orbitalLimit,
+        profile.orbitalLimit
+      );
+      const orbitalY = clamp(
+        stickerOffsetX * profile.orbitalStrength,
+        -profile.orbitalLimit,
+        profile.orbitalLimit
+      );
+      const waveSeed = index * 0.82 + sticker.anchorX * 0.0027 + sticker.anchorY * 0.0014;
+      const waveX =
+        profile.waveStrengthX > 0
+          ? Math.sin(elapsedSeconds * profile.waveSpeedX + waveSeed) * profile.waveStrengthX
+          : 0;
+      const waveY =
+        profile.waveStrengthY > 0
+          ? Math.cos(elapsedSeconds * profile.waveSpeedY + waveSeed * 1.35) * profile.waveStrengthY
+          : 0;
 
       sticker.vx +=
-        (normalizedGravityX * TILT_ACCELERATION + crossAxisX + orbitalX + restoreX) * dt;
+        (normalizedGravityX * profile.tiltAcceleration + crossAxisX + orbitalX + restoreX + waveX) *
+        dt;
       sticker.vy +=
-        (normalizedGravityY * TILT_ACCELERATION + crossAxisY + orbitalY + restoreY) * dt;
+        (normalizedGravityY * profile.tiltAcceleration + crossAxisY + orbitalY + restoreY + waveY) *
+        dt;
       sticker.vx *= damping;
       sticker.vy *= damping;
       clampVelocity(sticker);
@@ -294,7 +378,7 @@ export function useStickerPhysics({
         (normalizedGravityX * sticker.vy - normalizedGravityY * sticker.vx) * 0.0024 * dt;
       sticker.angularVelocity +=
         (sticker.baseRotation - sticker.rotation) *
-        ROTATION_RESTORE_ACCELERATION *
+        profile.rotationRestoreAcceleration *
         Math.max(0.12, flatRestoreFactor) *
         dt;
       sticker.angularVelocity += (orbitalX - orbitalY) * 0.006 * dt;
@@ -302,18 +386,31 @@ export function useStickerPhysics({
       clampVelocity(sticker);
       sticker.rotation += sticker.angularVelocity * dt;
 
-      const normalizedVx = clamp(Math.abs(sticker.vx) / 1200, 0, 1);
-      const normalizedVy = clamp(Math.abs(sticker.vy) / 1200, 0, 1);
-      const targetJellyX = 1 + normalizedVx * MAX_JELLY_STRETCH - normalizedVy * MAX_JELLY_STRETCH * 0.55;
-      const targetJellyY = 1 + normalizedVy * MAX_JELLY_STRETCH - normalizedVx * MAX_JELLY_STRETCH * 0.55;
-      const jellyStep = 1 - Math.pow(1 - JELLY_RESPONSE, dt * 60);
+      const normalizedVx = clamp(Math.abs(sticker.vx) / profile.velocityNormalization, 0, 1);
+      const normalizedVy = clamp(Math.abs(sticker.vy) / profile.velocityNormalization, 0, 1);
+      const targetJellyX =
+        1 +
+        normalizedVx * profile.maxJellyStretch -
+        normalizedVy * profile.maxJellyStretch * profile.jellyCompression;
+      const targetJellyY =
+        1 +
+        normalizedVy * profile.maxJellyStretch -
+        normalizedVx * profile.maxJellyStretch * profile.jellyCompression;
+      const jellyStep = 1 - Math.pow(1 - profile.jellyResponse, dt * 60);
       sticker.jellyScaleX += (targetJellyX - sticker.jellyScaleX) * jellyStep;
       sticker.jellyScaleY += (targetJellyY - sticker.jellyScaleY) * jellyStep;
+      sticker.rotation +=
+        (sticker.vx - sticker.vy) * profile.jellyRotationFactor * profile.jellyRotationResponse;
 
-      applyBoundaryConstraint(sticker, layout);
+      applyBoundaryConstraint(sticker, layout, profile.boundaryRestitution);
     }
 
-    resolveStickerCollisions(nextStates, layout);
+    resolveStickerCollisions(
+      nextStates,
+      layout,
+      profile.collisionRestitution,
+      profile.boundaryRestitution
+    );
     physicsState.value = nextStates;
   }, false);
 

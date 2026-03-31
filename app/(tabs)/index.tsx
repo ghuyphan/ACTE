@@ -1338,6 +1338,8 @@ export default function HomeScreen() {
     if (!useInlineHeaderSearch || !hasSearchableNotes) {
       return;
     }
+
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsSearching(true);
     searchAnim.value = withTiming(1, { duration: 250 });
     flatListRef.current?.scrollToOffset({ offset: snapHeight, animated: true });
@@ -1347,6 +1349,8 @@ export default function HomeScreen() {
     if (!useInlineHeaderSearch) {
       return;
     }
+
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Keyboard.dismiss();
     searchAnim.value = withTiming(0, { duration: 250 }, (finished) => {
       if (!finished) {
@@ -1360,11 +1364,13 @@ export default function HomeScreen() {
   }, [searchAnim, useInlineHeaderSearch]);
 
   const handleToggleCaptureMode = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     toggleCaptureMode();
   }, [toggleCaptureMode]);
 
   const handleOpenNotes = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Keyboard.dismiss();
     router.push('/notes');
   }, [router]);

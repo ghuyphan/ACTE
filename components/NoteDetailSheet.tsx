@@ -32,7 +32,7 @@ import Animated, {
     withRepeat,
     withTiming,
 } from 'react-native-reanimated';
-import { DOODLE_ARTBOARD_FRAME } from '../constants/doodleLayout';
+import { STICKER_ARTBOARD_FRAME } from '../constants/doodleLayout';
 import { ENABLE_PHOTO_STICKERS } from '../constants/experiments';
 import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../constants/noteRadius';
 import { Layout, Typography } from '../constants/theme';
@@ -80,6 +80,7 @@ import {
     importStickerAssetFromClipboard,
 } from '../utils/stickerClipboard';
 import AppSheet from './AppSheet';
+import DynamicStickerCanvas from './DynamicStickerCanvas';
 import NoteStickerCanvas from './NoteStickerCanvas';
 import NoteDoodleCanvas, { DoodleStroke } from './NoteDoodleCanvas';
 import StickerSourceSheet from './StickerSourceSheet';
@@ -824,6 +825,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     'capture.clipboardStickerStorageUnavailable',
                     'Sticker storage is unavailable on this device.'
                 ),
+                permissionDenied: t(
+                    'capture.clipboardStickerPermissionDeniedMsg',
+                    'This device will not let Noto read that clipboard image right now. Try copying it again, or import it from Photos instead.'
+                ),
             });
 
             const nextPlacement = createStickerPlacement(importedAsset, editStickerPlacements);
@@ -832,12 +837,16 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             setStickerModeEnabled(true);
             setDoodleModeEnabled(false);
         } catch (error) {
-            console.warn('Sticker paste failed:', error);
+            if (!(error instanceof ClipboardStickerError && error.code === 'permission-denied')) {
+                console.warn('Sticker paste failed:', error);
+            }
             const alertTitle =
                 error instanceof ClipboardStickerError && error.code === 'unavailable'
                     ? t('capture.clipboardStickerUnavailableTitle', 'No sticker to paste')
                     : error instanceof ClipboardStickerError && error.code === 'requires-update'
                         ? t('capture.clipboardStickerRequiresUpdateTitle', 'Update required')
+                        : error instanceof ClipboardStickerError && error.code === 'permission-denied'
+                            ? t('capture.clipboardStickerPermissionDeniedTitle', 'Paste blocked')
                         : t('capture.error', 'Error');
             showAppAlert(
                 alertTitle,
@@ -1379,14 +1388,18 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             isEditing && stickerModeEnabled ? styles.doodleOverlayActive : null,
                                         ]}
                                     >
-                                        <NoteStickerCanvas
-                                            placements={displayedStickerPlacements}
-                                            editable={isEditing && stickerModeEnabled}
-                                            onChangePlacements={setEditStickerPlacements}
-                                            selectedPlacementId={selectedStickerId}
-                                            onChangeSelectedPlacementId={setSelectedStickerId}
-                                            onPressCanvas={handlePressStickerCanvas}
-                                        />
+                                        {isEditing ? (
+                                            <NoteStickerCanvas
+                                                placements={displayedStickerPlacements}
+                                                editable={stickerModeEnabled}
+                                                onChangePlacements={setEditStickerPlacements}
+                                                selectedPlacementId={selectedStickerId}
+                                                onChangeSelectedPlacementId={setSelectedStickerId}
+                                                onPressCanvas={handlePressStickerCanvas}
+                                            />
+                                        ) : (
+                                            <DynamicStickerCanvas placements={displayedStickerPlacements} />
+                                        )}
                                     </View>
                                 ) : null}
                                 {displayedDoodleStrokes.length > 0 || isEditing ? (
@@ -1580,14 +1593,18 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                 isEditing && stickerModeEnabled ? styles.doodleOverlayActive : null,
                                             ]}
                                         >
-                                            <NoteStickerCanvas
-                                                placements={displayedStickerPlacements}
-                                                editable={isEditing && stickerModeEnabled}
-                                                onChangePlacements={setEditStickerPlacements}
-                                                selectedPlacementId={selectedStickerId}
-                                                onChangeSelectedPlacementId={setSelectedStickerId}
-                                                onPressCanvas={handlePressStickerCanvas}
-                                            />
+                                            {isEditing ? (
+                                                <NoteStickerCanvas
+                                                    placements={displayedStickerPlacements}
+                                                    editable={stickerModeEnabled}
+                                                    onChangePlacements={setEditStickerPlacements}
+                                                    selectedPlacementId={selectedStickerId}
+                                                    onChangeSelectedPlacementId={setSelectedStickerId}
+                                                    onPressCanvas={handlePressStickerCanvas}
+                                                />
+                                            ) : (
+                                                <DynamicStickerCanvas placements={displayedStickerPlacements} />
+                                            )}
                                         </View>
                                     ) : null}
                                     {displayedDoodleStrokes.length > 0 || isEditing ? (
@@ -2054,10 +2071,11 @@ const styles = StyleSheet.create({
     },
     doodleOverlay: {
         position: 'absolute',
-        ...DOODLE_ARTBOARD_FRAME,
+        ...STICKER_ARTBOARD_FRAME,
         opacity: 0.5,
     },
     textStickerOverlay: {
+        ...STICKER_ARTBOARD_FRAME,
         zIndex: 0,
     },
     textStickerOverlayActive: {

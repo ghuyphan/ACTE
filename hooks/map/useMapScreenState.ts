@@ -22,6 +22,7 @@ import {
 interface UseMapScreenStateParams {
   notes: Note[];
   location: Location.LocationObject | null;
+  enableHeavyCalculations?: boolean;
 }
 
 function areRegionsEquivalent(left: Region | null, right: Region) {
@@ -37,7 +38,11 @@ function areRegionsEquivalent(left: Region | null, right: Region) {
   );
 }
 
-export function useMapScreenState({ notes, location }: UseMapScreenStateParams) {
+export function useMapScreenState({
+  notes,
+  location,
+  enableHeavyCalculations = true,
+}: UseMapScreenStateParams) {
   const [filterState, setFilterState] = useState<MapFilterState>({
     type: 'all',
     favoritesOnly: false,
@@ -56,16 +61,22 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
     [filterState, notes]
   );
 
-  const pointGroups = useMemo<MapPointGroup[]>(() => buildMapPointGroups(filteredNotes), [filteredNotes]);
+  const pointGroups = useMemo<MapPointGroup[]>(
+    () => (enableHeavyCalculations ? buildMapPointGroups(filteredNotes) : []),
+    [enableHeavyCalculations, filteredNotes]
+  );
   const pointGroupMap = useMemo(() => getPointGroupMap(pointGroups), [pointGroups]);
 
-  const clusterIndex = useMemo(() => buildClusterIndex(pointGroups), [pointGroups]);
+  const clusterIndex = useMemo(
+    () => (enableHeavyCalculations ? buildClusterIndex(pointGroups) : null),
+    [enableHeavyCalculations, pointGroups]
+  );
 
   const clusteringRegion = visibleRegion ?? initialRegion ?? DEFAULT_REGION;
 
   const clusterNodes = useMemo(
-    () => getMapClusterNodes(clusterIndex, clusteringRegion, pointGroupMap),
-    [clusterIndex, clusteringRegion, pointGroupMap]
+    () => (enableHeavyCalculations ? getMapClusterNodes(clusterIndex, clusteringRegion, pointGroupMap) : []),
+    [clusterIndex, clusteringRegion, enableHeavyCalculations, pointGroupMap]
   );
 
   const selectedGroup = useMemo(
@@ -91,12 +102,16 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
   }, [initialRegion, location, visibleRegion]);
 
   const notesInVisibleRegion = useMemo(() => {
+    if (!enableHeavyCalculations) {
+      return [];
+    }
+
     if (!visibleRegion) {
       return filteredNotes;
     }
 
     return getNotesInRegion(filteredNotes, visibleRegion);
-  }, [filteredNotes, visibleRegion]);
+  }, [enableHeavyCalculations, filteredNotes, visibleRegion]);
 
   const nearbyCandidates = useMemo(() => {
     if (!visibleRegion) {
@@ -111,8 +126,8 @@ export function useMapScreenState({ notes, location }: UseMapScreenStateParams) 
   }, [allowOffscreenResults, filteredNotes, notesInVisibleRegion, visibleRegion]);
 
   const nearbyItems = useMemo(
-    () => getNearbyNoteItems(nearbyCandidates, nearbyAnchor, 30),
-    [nearbyAnchor, nearbyCandidates]
+    () => (enableHeavyCalculations ? getNearbyNoteItems(nearbyCandidates, nearbyAnchor, 30) : []),
+    [enableHeavyCalculations, nearbyAnchor, nearbyCandidates]
   );
 
   useEffect(() => {

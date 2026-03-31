@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -60,9 +60,46 @@ export default function MapPreviewSheet({
 }: MapPreviewSheetProps) {
   const translateY = useSharedValue(400);
   const dismissing = useSharedValue(false);
+  const closeSequenceRef = useRef(0);
+  const closeFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearCloseFallback = useCallback(() => {
+    if (closeFallbackTimerRef.current) {
+      clearTimeout(closeFallbackTimerRef.current);
+      closeFallbackTimerRef.current = null;
+    }
+  }, []);
+
+  const invalidateCloseSequence = useCallback(() => {
+    closeSequenceRef.current += 1;
+    clearCloseFallback();
+  }, [clearCloseFallback]);
+
+  const scheduleCloseFallback = useCallback(
+    (callback: () => void, delay: number) => {
+      const sequence = closeSequenceRef.current;
+      clearCloseFallback();
+      closeFallbackTimerRef.current = setTimeout(() => {
+        if (closeSequenceRef.current !== sequence) {
+          return;
+        }
+        closeSequenceRef.current += 1;
+        closeFallbackTimerRef.current = null;
+        callback();
+      }, delay);
+    },
+    [clearCloseFallback]
+  );
+
+  useEffect(() => {
+    return () => {
+      clearCloseFallback();
+    };
+  }, [clearCloseFallback]);
 
   useEffect(() => {
     if (isVisible) {
+      invalidateCloseSequence();
       dismissing.value = false;
       if (reduceMotionEnabled) {
         translateY.value = 0;
@@ -79,6 +116,9 @@ export default function MapPreviewSheet({
         if (reduceMotionEnabled) {
           scheduleOnRN(onFullyClosed);
         } else {
+          closeSequenceRef.current += 1;
+          scheduleCloseFallback(onFullyClosed, 260);
+          const sequence = closeSequenceRef.current;
           translateY.value = withSpring(
             800,
             {
@@ -87,7 +127,8 @@ export default function MapPreviewSheet({
               mass: 0.8,
             },
             (finished) => {
-              if (finished) {
+              if (finished && closeSequenceRef.current === sequence) {
+                clearCloseFallback();
                 scheduleOnRN(onFullyClosed);
               }
             }
@@ -95,11 +136,21 @@ export default function MapPreviewSheet({
         }
       }
     }
-  }, [isVisible, dismissing, onFullyClosed, reduceMotionEnabled, translateY]);
+  }, [
+    clearCloseFallback,
+    dismissing,
+    invalidateCloseSequence,
+    isVisible,
+    onFullyClosed,
+    reduceMotionEnabled,
+    scheduleCloseFallback,
+    translateY,
+  ]);
 
   const resetPosition = useCallback(
     (velocity: number = 0) => {
       cancelAnimation(translateY);
+      invalidateCloseSequence();
       dismissing.value = false;
 
       if (reduceMotionEnabled) {
@@ -114,7 +165,7 @@ export default function MapPreviewSheet({
         velocity,
       });
     },
-    [dismissing, reduceMotionEnabled, translateY]
+    [dismissing, invalidateCloseSequence, reduceMotionEnabled, translateY]
   );
 
   const finishDismiss = useCallback(
@@ -124,11 +175,15 @@ export default function MapPreviewSheet({
 
       if (reduceMotionEnabled) {
         translateY.value = 0;
-        scheduleOnRN(onDismiss);
-        scheduleOnRN(onFullyClosed);
+        onDismiss();
+        onFullyClosed();
         return;
       }
 
+      onDismiss();
+      closeSequenceRef.current += 1;
+      scheduleCloseFallback(onFullyClosed, 260);
+      const sequence = closeSequenceRef.current;
       translateY.value = withSpring(
         800, // 800 guarantees it physically falls fully out of the screen bounds
         {
@@ -138,12 +193,14 @@ export default function MapPreviewSheet({
           velocity,
         },
         (finished) => {
-          scheduleOnRN(onDismiss);
-          scheduleOnRN(onFullyClosed);
+          if (finished && closeSequenceRef.current === sequence) {
+            clearCloseFallback();
+            scheduleOnRN(onFullyClosed);
+          }
         }
       );
     },
-    [dismissing, onDismiss, onFullyClosed, reduceMotionEnabled, translateY]
+    [clearCloseFallback, dismissing, onDismiss, onFullyClosed, reduceMotionEnabled, scheduleCloseFallback, translateY]
   );
 
   const handlePressDismiss = useCallback(() => {

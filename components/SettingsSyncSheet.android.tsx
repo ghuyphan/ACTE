@@ -33,6 +33,7 @@ export default function SettingsSyncSheetAndroid({
       headerVariant="standard"
       title={t('settings.autoSync', 'Auto sync')}
       subtitle={description}
+      contentContainerStyle={styles.content}
       useHorizontalPadding={false}
     >
       <View>
@@ -64,6 +65,9 @@ export default function SettingsSyncSheetAndroid({
 }
 
 const styles = StyleSheet.create({
+  content: {
+    paddingBottom: Sheet.android.bottomPadding + 12,
+  },
   row: {
     minHeight: 60,
     flexDirection: 'row',

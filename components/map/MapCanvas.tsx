@@ -59,6 +59,7 @@ interface MapCanvasProps {
   onLeafPress: (groupId: string) => void;
   onClusterPress: (node: MapClusterNode) => void;
   onFriendPress: (postId: string) => void;
+  preferLiteMarkers?: boolean;
   colors: ThemeColors;
 }
 
@@ -488,6 +489,7 @@ function MapCanvas({
   onLeafPress,
   onClusterPress,
   onFriendPress,
+  preferLiteMarkers = false,
   colors,
 }: MapCanvasProps) {
   const palette = useMemo(() => getMapPalette(colors, isDark), [colors, isDark]);
@@ -510,6 +512,7 @@ function MapCanvas({
         const showRichPreviewMarker = false;
         const showStackPreviewMarker = false;
         const canShowPhotoThumbnail =
+          !preferLiteMarkers &&
           !showRichPreviewMarker &&
           !node.isCluster &&
           node.pointCount === 1 &&
@@ -530,26 +533,31 @@ function MapCanvas({
           showRichPreviewMarker,
           showStackPreviewMarker,
           usesFloatingLabel: showRichPreviewMarker,
-          previewNoteId: (previewNote ?? representativeNote)?.id ?? null,
-          photoNoteId: photoNote?.id ?? null,
-          photoUri: photoNote ? getNotePhotoUri(photoNote) : null,
-          previewTitle: (previewNote ?? representativeNote)?.locationName?.trim() || null,
-          previewText: previewNote ?? representativeNote ? getMarkerPreviewText(previewNote ?? representativeNote!) : null,
+          previewNoteId: !preferLiteMarkers ? (previewNote ?? representativeNote)?.id ?? null : null,
+          photoNoteId: !preferLiteMarkers ? photoNote?.id ?? null : null,
+          photoUri: !preferLiteMarkers && photoNote ? getNotePhotoUri(photoNote) : null,
+          previewTitle: !preferLiteMarkers ? (previewNote ?? representativeNote)?.locationName?.trim() || null : null,
+          previewText:
+            !preferLiteMarkers && (previewNote ?? representativeNote)
+              ? getMarkerPreviewText(previewNote ?? representativeNote!)
+              : null,
           countBadgeLabel: node.pointCount > 1 ? String(node.pointCount) : null,
         };
       }),
-    [currentZoom, markerNodes, markerPulseId, noteById, palette.photo, palette.text, selectedGroupId]
+    [currentZoom, markerNodes, markerPulseId, noteById, palette.photo, palette.text, preferLiteMarkers, selectedGroupId]
   );
   const selectedMarkerItems = useMemo(
     () =>
-      markerRenderItems.filter(
-        (item) =>
-          !item.node.isCluster &&
-          item.isSelected &&
-          item.node.pointCount === 1 &&
-          Boolean(item.previewNoteId)
-      ),
-    [markerRenderItems]
+      preferLiteMarkers
+        ? []
+        : markerRenderItems.filter(
+            (item) =>
+              !item.node.isCluster &&
+              item.isSelected &&
+              item.node.pointCount === 1 &&
+              Boolean(item.previewNoteId)
+          ),
+    [markerRenderItems, preferLiteMarkers]
   );
 
   useEffect(() => {
@@ -561,6 +569,12 @@ function MapCanvas({
   }, []);
 
   useEffect(() => {
+    if (preferLiteMarkers) {
+      setDetachedSelectedMarkerVisible(false);
+      setDetachedSelectedMarker(null);
+      return;
+    }
+
     const activeSelectedMarker = selectedMarkerItems[0];
     const activeSelectedNote = activeSelectedMarker?.previewNoteId
       ? noteById.get(activeSelectedMarker.previewNoteId) ?? null
@@ -610,7 +624,7 @@ function MapCanvas({
       setDetachedSelectedMarker(null);
       detachedSelectedMarkerExitTimerRef.current = null;
     }, DETACHED_SELECTED_MARKER_EXIT_MS);
-  }, [detachedSelectedMarker, noteById, reduceMotionEnabled, selectedMarkerItems]);
+  }, [detachedSelectedMarker, noteById, preferLiteMarkers, reduceMotionEnabled, selectedMarkerItems]);
 
   return (
     <MapView
@@ -648,64 +662,79 @@ function MapCanvas({
           detachedSelectedMarker?.groupId === node.groupId;
 
         return (
-          <Marker
-            key={node.id}
-            testID={node.isCluster ? `cluster-marker-${node.id}` : `leaf-marker-${node.groupId ?? node.id}`}
-            coordinate={{ latitude: node.latitude, longitude: node.longitude }}
-            anchor={{ x: 0.5, y: 0.5 }}
-            tracksViewChanges={pulseActive || isSelected || reduceMotionEnabled}
-            onPress={(event) => {
-              event.stopPropagation?.();
-              if (node.isCluster) {
-                onClusterPress(node);
-                return;
-              }
+          preferLiteMarkers && !node.isCluster ? (
+            <Marker
+              key={node.id}
+              testID={`leaf-marker-${node.groupId ?? node.id}`}
+              coordinate={{ latitude: node.latitude, longitude: node.longitude }}
+              pinColor={isSelected ? palette.focus : markerColor}
+              onPress={(event) => {
+                event.stopPropagation?.();
+                if (node.groupId) {
+                  onLeafPress(node.groupId);
+                }
+              }}
+            />
+          ) : (
+            <Marker
+              key={node.id}
+              testID={node.isCluster ? `cluster-marker-${node.id}` : `leaf-marker-${node.groupId ?? node.id}`}
+              coordinate={{ latitude: node.latitude, longitude: node.longitude }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              tracksViewChanges={pulseActive || isSelected || reduceMotionEnabled}
+              onPress={(event) => {
+                event.stopPropagation?.();
+                if (node.isCluster) {
+                  onClusterPress(node);
+                  return;
+                }
 
-              if (node.groupId) {
-                onLeafPress(node.groupId);
-              }
-            }}
-          >
-            <View
-              style={[
-                styles.markerWrap,
-                renderDetachedSelectedMarker ? styles.hiddenMarkerWrap : null,
-                showRichPreviewMarker ? styles.richMarkerHitArea : null,
-                showStackPreviewMarker ? styles.stackMarkerHitArea : null,
-              ]}
-              collapsable={false}
+                if (node.groupId) {
+                  onLeafPress(node.groupId);
+                }
+              }}
             >
-              {renderDetachedSelectedMarker ? null : (
-                <MarkerContent
-                  isCluster={node.isCluster}
-                  pointCount={node.pointCount}
-                  zoomLevel={currentZoom}
-                  showRichPreview={showRichPreviewMarker}
-                  showStackPreview={showStackPreviewMarker}
-                  previewNoteId={previewNoteId}
-                  showPhotoThumbnail={Boolean(photoUri)}
-                  photoNoteId={photoNoteId}
-                  photoUri={photoUri}
-                  previewTitle={previewTitle}
-                  previewText={previewText}
-                  countBadgeLabel={showRichPreviewMarker || showStackPreviewMarker ? countBadgeLabel : null}
-                  selected={isSelected}
-                  color={node.isCluster ? palette.cluster : markerColor}
-                  accentColor={palette.focus}
-                  cardBackgroundColor={palette.cardBackground}
-                  cardTextColor={palette.cardText}
-                  cardSubtextColor={palette.cardSubtext}
-                  labelShadowColor={palette.labelShadow}
-                  pulseActive={pulseActive}
-                  pulseKey={markerPulseKey}
-                  reduceMotionEnabled={reduceMotionEnabled}
-                />
-              )}
-            </View>
-          </Marker>
+              <View
+                style={[
+                  styles.markerWrap,
+                  renderDetachedSelectedMarker ? styles.hiddenMarkerWrap : null,
+                  showRichPreviewMarker ? styles.richMarkerHitArea : null,
+                  showStackPreviewMarker ? styles.stackMarkerHitArea : null,
+                ]}
+                collapsable={false}
+              >
+                {renderDetachedSelectedMarker ? null : (
+                  <MarkerContent
+                    isCluster={node.isCluster}
+                    pointCount={node.pointCount}
+                    zoomLevel={currentZoom}
+                    showRichPreview={showRichPreviewMarker}
+                    showStackPreview={showStackPreviewMarker}
+                    previewNoteId={previewNoteId}
+                    showPhotoThumbnail={Boolean(photoUri)}
+                    photoNoteId={photoNoteId}
+                    photoUri={photoUri}
+                    previewTitle={previewTitle}
+                    previewText={previewText}
+                    countBadgeLabel={showRichPreviewMarker || showStackPreviewMarker ? countBadgeLabel : null}
+                    selected={isSelected}
+                    color={node.isCluster ? palette.cluster : markerColor}
+                    accentColor={palette.focus}
+                    cardBackgroundColor={palette.cardBackground}
+                    cardTextColor={palette.cardText}
+                    cardSubtextColor={palette.cardSubtext}
+                    labelShadowColor={palette.labelShadow}
+                    pulseActive={pulseActive}
+                    pulseKey={markerPulseKey}
+                    reduceMotionEnabled={reduceMotionEnabled}
+                  />
+                )}
+              </View>
+            </Marker>
+          )
         );
       })}
-      {detachedSelectedMarker ? (
+      {!preferLiteMarkers && detachedSelectedMarker ? (
         <Marker
           key={`selected-note-${detachedSelectedMarker.groupId}`}
           coordinate={{
@@ -735,48 +764,61 @@ function MapCanvas({
         const authorLabel = post.authorDisplayName?.trim() || 'F';
 
         return (
-          <Marker
-            key={`friend-${post.id}`}
-            testID={`friend-marker-${post.id}`}
-            coordinate={{ latitude: post.latitude, longitude: post.longitude }}
-            anchor={{ x: 0.5, y: 0.5 }}
-            tracksViewChanges={isSelected || reduceMotionEnabled}
-            zIndex={isSelected ? 20 : 10}
-            onPress={(event) => {
-              event.stopPropagation?.();
-              onFriendPress(post.id);
-            }}
-          >
-            <View style={styles.markerWrap} collapsable={false}>
-              <View
-                style={[
-                  styles.friendMarker,
-                  {
-                    borderColor: isSelected ? palette.friend : '#FFFFFF',
-                    backgroundColor: isSelected ? `${palette.friend}24` : palette.friendSoft,
-                  },
-                ]}
-              >
-                {post.authorPhotoURLSnapshot ? (
-                  <Image
-                    source={{ uri: post.authorPhotoURLSnapshot }}
-                    style={styles.friendAvatar}
-                    contentFit="cover"
-                    transition={0}
-                  />
-                ) : (
-                  <View style={[styles.friendAvatar, { backgroundColor: palette.friendSoft }]}>
-                    <Text style={[styles.friendInitial, { color: palette.friend }]}>
-                      {authorLabel.charAt(0).toUpperCase()}
-                    </Text>
+          preferLiteMarkers ? (
+            <Marker
+              key={`friend-${post.id}`}
+              testID={`friend-marker-${post.id}`}
+              coordinate={{ latitude: post.latitude, longitude: post.longitude }}
+              pinColor={isSelected ? palette.friend : palette.focus}
+              onPress={(event) => {
+                event.stopPropagation?.();
+                onFriendPress(post.id);
+              }}
+            />
+          ) : (
+            <Marker
+              key={`friend-${post.id}`}
+              testID={`friend-marker-${post.id}`}
+              coordinate={{ latitude: post.latitude, longitude: post.longitude }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              tracksViewChanges={isSelected || reduceMotionEnabled}
+              zIndex={isSelected ? 20 : 10}
+              onPress={(event) => {
+                event.stopPropagation?.();
+                onFriendPress(post.id);
+              }}
+            >
+              <View style={styles.markerWrap} collapsable={false}>
+                <View
+                  style={[
+                    styles.friendMarker,
+                    {
+                      borderColor: isSelected ? palette.friend : '#FFFFFF',
+                      backgroundColor: isSelected ? `${palette.friend}24` : palette.friendSoft,
+                    },
+                  ]}
+                >
+                  {post.authorPhotoURLSnapshot ? (
+                    <Image
+                      source={{ uri: post.authorPhotoURLSnapshot }}
+                      style={styles.friendAvatar}
+                      contentFit="cover"
+                      transition={0}
+                    />
+                  ) : (
+                    <View style={[styles.friendAvatar, { backgroundColor: palette.friendSoft }]}>
+                      <Text style={[styles.friendInitial, { color: palette.friend }]}>
+                        {authorLabel.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={[styles.friendBadge, { backgroundColor: palette.friend }]}>
+                    <Ionicons name="sparkles" size={9} color="#FFFFFF" />
                   </View>
-                )}
-                <View style={[styles.friendBadge, { backgroundColor: palette.friend }]}>
-                  <Ionicons name="sparkles" size={9} color="#FFFFFF" />
                 </View>
               </View>
-            </View>
-          </Marker>
+            </Marker>
+          )
         );
       })}
     </MapView>

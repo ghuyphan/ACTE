@@ -102,6 +102,8 @@
         "clipboardStickerRequiresUpdateMsg": "Clipboard sticker paste needs the latest app build. Restart the iOS app after rebuilding to use this.",
         "clipboardStickerUnavailableTitle": "No sticker to paste",
         "clipboardStickerUnavailableMsg": "Copy a transparent sticker image first, then try again.",
+        "clipboardStickerPermissionDeniedTitle": "Paste blocked",
+        "clipboardStickerPermissionDeniedMsg": "This device will not let Noto read that clipboard image right now. Try copying it again, or import it from Photos instead.",
         "clipboardStickerUnsupported": "We could not read that clipboard image right now.",
         "clipboardStickerStorageUnavailable": "Sticker storage is unavailable on this device.",
         "clipboardStickerFailed": "We could not paste that sticker right now."

@@ -3,6 +3,9 @@ import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, TextStyle, V
 import { Layout, Shadows, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 
+const BUTTON_HIT_SLOP = { top: 6, right: 6, bottom: 6, left: 6 } as const;
+const BUTTON_PRESS_RETENTION_OFFSET = { top: 12, right: 12, bottom: 12, left: 12 } as const;
+
 type ButtonVariant = 'primary' | 'secondary' | 'neutral' | 'destructive';
 
 interface PrimaryButtonProps {
@@ -53,6 +56,9 @@ export default function PrimaryButton({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      hitSlop={BUTTON_HIT_SLOP}
+      pressRetentionOffset={BUTTON_PRESS_RETENTION_OFFSET}
       style={({ pressed }) => [
         styles.button,
         {

@@ -9,12 +9,17 @@ import {
 } from '@shopify/react-native-skia';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { Platform, StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
-import type { SharedValue } from 'react-native-reanimated';
+import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import type { DebugTiltState } from './StickerPhysicsDebugControls';
 import {
   hydrateStickerPlacements,
   type NoteStickerPlacement,
 } from '../services/noteStickers';
+import type { StickerMotionVariant } from '../services/noteAppearance';
+import {
+  useStickerPhysics,
+  type StickerPhysicsState,
+} from '../hooks/useStickerPhysics';
 import {
   getStickerDimensions,
   getStickerOutlineOffsets,
@@ -31,6 +36,7 @@ interface DynamicStickerCanvasProps {
   sizeMultiplier?: number;
   minimumBaseSize?: number;
   isActive?: boolean;
+  motionVariant?: StickerMotionVariant;
   debugTiltOverride?: SharedValue<DebugTiltState>;
 }
 
@@ -49,6 +55,7 @@ interface StickerLayerProps {
   layout: StickerCanvasLayout;
   sizeMultiplier: number;
   minimumBaseSize: number;
+  physicsState?: SharedValue<StickerPhysicsState[]>;
 }
 
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
@@ -113,11 +120,64 @@ function StickerSprite({
 
 const MemoStickerSprite = memo(StickerSprite);
 
+function PhysicsStickerSprite({
+  placement,
+  width,
+  height,
+  outlineSize,
+  physicsState,
+  layout,
+}: {
+  placement: NoteStickerPlacement;
+  width: number;
+  height: number;
+  outlineSize: number;
+  physicsState: SharedValue<StickerPhysicsState[]>;
+  layout: StickerCanvasLayout;
+}) {
+  const opacity = useDerivedValue(() => {
+    const state = physicsState.value.find((candidate) => candidate.id === placement.id);
+    return state?.opacity ?? placement.opacity;
+  }, [physicsState, placement.id, placement.opacity]);
+
+  const motionTransform = useDerivedValue(() => {
+    const state = physicsState.value.find((candidate) => candidate.id === placement.id);
+
+    return [
+      { translateX: state?.x ?? placement.x * layout.width },
+      { translateY: state?.y ?? placement.y * layout.height },
+      { rotate: ((state?.rotation ?? placement.rotation) * Math.PI) / 180 },
+    ] as Transforms3d;
+  }, [layout.height, layout.width, physicsState, placement.id, placement.rotation, placement.x, placement.y]);
+
+  const jellyTransform = useDerivedValue(() => {
+    const state = physicsState.value.find((candidate) => candidate.id === placement.id);
+
+    return [
+      { scaleX: state?.jellyScaleX ?? 1 },
+      { scaleY: state?.jellyScaleY ?? 1 },
+    ] as Transforms3d;
+  }, [physicsState, placement.id]);
+
+  return (
+    <MemoStickerSprite
+      placement={placement}
+      width={width}
+      height={height}
+      outlineSize={outlineSize}
+      opacity={opacity}
+      motionTransform={motionTransform}
+      jellyTransform={jellyTransform}
+    />
+  );
+}
+
 function StickerLayer({
   placements,
   layout,
   sizeMultiplier,
   minimumBaseSize,
+  physicsState,
 }: StickerLayerProps) {
   return (
     <>
@@ -131,7 +191,17 @@ function StickerLayer({
         ] as Transforms3d;
         const jellyTransform = [{ scaleX: 1 }, { scaleY: 1 }] as Transforms3d;
 
-        return (
+        return physicsState ? (
+          <PhysicsStickerSprite
+            key={placement.id}
+            placement={placement}
+            width={dimensions.width}
+            height={dimensions.height}
+            outlineSize={outlineSize}
+            physicsState={physicsState}
+            layout={layout}
+          />
+        ) : (
           <MemoStickerSprite
             key={placement.id}
             placement={placement}
@@ -155,6 +225,9 @@ export default function DynamicStickerCanvas({
   sharedCache = false,
   sizeMultiplier = 1,
   minimumBaseSize = 68,
+  isActive = false,
+  motionVariant = 'physics',
+  debugTiltOverride,
 }: DynamicStickerCanvasProps) {
   const [layout, setLayout] = useState<StickerCanvasLayout>({ width: 1, height: 1 });
   const [hydratedPlacements, setHydratedPlacements] = useState(placements);
@@ -182,6 +255,15 @@ export default function DynamicStickerCanvas({
     () => sortStickerPlacements(hydratedPlacements),
     [hydratedPlacements]
   );
+  const physicsState = useStickerPhysics({
+    placements: renderedPlacements,
+    layout,
+    isActive,
+    motionVariant,
+    sizeMultiplier,
+    minimumBaseSize,
+    debugTiltOverride,
+  });
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -199,6 +281,7 @@ export default function DynamicStickerCanvas({
           layout={layout}
           sizeMultiplier={sizeMultiplier}
           minimumBaseSize={minimumBaseSize}
+          physicsState={physicsState}
         />
       </Canvas>
     </View>

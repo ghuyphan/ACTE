@@ -53,8 +53,7 @@ const config = {
     googleServicesFile: androidGoogleServicesFile,
     adaptiveIcon: {
       backgroundColor: '#F7F2EB',
-      foregroundImage: './assets/images/icon/icon-default.png',
-      monochromeImage: './assets/images/icon/icon-tinted-light.png',
+      foregroundImage: './assets/images/icon/icon-android-foreground.png',
     },
     predictiveBackGestureEnabled: false,
     config: googleMapsAndroidApiKey

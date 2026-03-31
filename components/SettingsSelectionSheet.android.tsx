@@ -29,6 +29,7 @@ export default function SettingsSelectionSheetAndroid({
     <AppSheetScaffold
       headerVariant="standard"
       title={title}
+      contentContainerStyle={styles.content}
       useHorizontalPadding={false}
     >
       <View>
@@ -68,6 +69,9 @@ export default function SettingsSelectionSheetAndroid({
 }
 
 const styles = StyleSheet.create({
+  content: {
+    paddingBottom: Sheet.android.bottomPadding + 12,
+  },
   option: {
     minHeight: 60,
     paddingHorizontal: Sheet.android.horizontalPadding,

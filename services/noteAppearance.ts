@@ -6,9 +6,11 @@ import {
   NoteColorId,
   NoteColorFinish,
   NoteColorPreset,
+  type NoteColorStickerMotion,
 } from '../constants/noteColors';
 
 type GradientPair = [string, string];
+export type StickerMotionVariant = 'physics' | 'water';
 
 type NotePalette = {
   capture: GradientPair;
@@ -113,6 +115,10 @@ function hashToIndex(str: string, max: number): number {
   return Math.abs(hash) % max;
 }
 
+function clamp(value: number, minValue: number, maxValue: number) {
+  return Math.min(maxValue, Math.max(minValue, value));
+}
+
 function hashToUnit(str: string): number {
   let hash = 0;
   for (let index = 0; index < str.length; index += 1) {
@@ -147,6 +153,53 @@ function hexToRgb(value: string) {
     green: Number.isFinite(green) ? green : 0,
     blue: Number.isFinite(blue) ? blue : 0,
   };
+}
+
+function rgbToHsl(red: number, green: number, blue: number) {
+  const normalizedRed = red / 255;
+  const normalizedGreen = green / 255;
+  const normalizedBlue = blue / 255;
+  const max = Math.max(normalizedRed, normalizedGreen, normalizedBlue);
+  const min = Math.min(normalizedRed, normalizedGreen, normalizedBlue);
+  const delta = max - min;
+  const lightness = (max + min) / 2;
+
+  if (delta === 0) {
+    return { hue: 0, saturation: 0, lightness };
+  }
+
+  const saturation =
+    lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+
+  let hue = 0;
+  switch (max) {
+    case normalizedRed:
+      hue = (normalizedGreen - normalizedBlue) / delta + (normalizedGreen < normalizedBlue ? 6 : 0);
+      break;
+    case normalizedGreen:
+      hue = (normalizedBlue - normalizedRed) / delta + 2;
+      break;
+    default:
+      hue = (normalizedRed - normalizedGreen) / delta + 4;
+      break;
+  }
+
+  return {
+    hue: hue * 60,
+    saturation,
+    lightness,
+  };
+}
+
+function getWaterColorScore(color: string) {
+  const { red, green, blue } = hexToRgb(color);
+  const { hue, saturation, lightness } = rgbToHsl(red, green, blue);
+  const hueDistance = Math.min(Math.abs(hue - 205), 360 - Math.abs(hue - 205));
+  const hueScore = clamp(1 - hueDistance / 55, 0, 1);
+  const coolBias = clamp(((blue + green * 0.45) - red) / 135, 0, 1);
+  const softLightness = 1 - Math.abs(lightness - 0.72) / 0.38;
+
+  return hueScore * 0.58 + saturation * 0.17 + coolBias * 0.17 + clamp(softLightness, 0, 1) * 0.08;
 }
 
 function mixChannel(source: number, target: number, amount: number) {
@@ -240,6 +293,10 @@ export function getNoteColorCardGradient(noteColor?: string | null): GradientPai
   return getNoteColorPreset(noteColor)?.card ?? null;
 }
 
+export function getNoteColorStickerMotion(noteColor?: string | null): NoteColorStickerMotion | null {
+  return getNoteColorPreset(noteColor)?.stickerMotion ?? null;
+}
+
 export function normalizeSavedTextNoteColor(noteColor?: string | null): NoteColorId {
   return getNoteColorPreset(noteColor)?.id ?? DEFAULT_NOTE_COLOR_ID;
 }
@@ -255,6 +312,16 @@ export function getCaptureNoteGradient(options?: {
   }
 
   return DEFAULT_CAPTURE_GRADIENT;
+}
+
+export function getGradientStickerMotionVariant(
+  gradient: readonly [string, string]
+): StickerMotionVariant {
+  const averageScore =
+    gradient.reduce((total, color) => total + getWaterColorScore(color), 0) / gradient.length;
+  const bothStopsFeelWatery = gradient.every((color) => getWaterColorScore(color) >= 0.48);
+
+  return averageScore >= 0.53 || bothStopsFeelWatery ? 'water' : 'physics';
 }
 
 export function getTextNoteCardGradient(options: {

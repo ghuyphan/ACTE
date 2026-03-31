@@ -71,7 +71,7 @@ export const Sheet = {
     horizontalPadding: 20,
     headerTopPadding: 20,
     headerBottomSpacing: 16,
-    bottomPadding: 24,
+    bottomPadding: 36,
     floatingHorizontalInset: 12,
     radius: 28,
     handleWidth: 42,

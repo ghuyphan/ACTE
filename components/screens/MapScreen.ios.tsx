@@ -32,12 +32,14 @@ import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
 import type { SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
+import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
 const MIN_ZOOM_DELTA = 0.002;
 
 type OverlayState = 'content' | 'no-filter-results' | 'no-notes' | 'no-area-results';
 
 export default function MapScreenIOS() {
+  const isAndroid = Platform.OS === 'android';
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -56,8 +58,25 @@ export default function MapScreenIOS() {
   const [markerPulseKey, setMarkerPulseKey] = useState(0);
   const [showFriendsPreview, setShowFriendsPreview] = useState(false);
   const [activeFriendPostId, setActiveFriendPostId] = useState<string | null>(null);
+  const [androidMapUiReady, setAndroidMapUiReady] = useState(!isAndroid);
+  const [keepNotePreviewMounted, setKeepNotePreviewMounted] = useState(false);
   const hasCenteredRef = useRef(false);
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!isAndroid) {
+      return;
+    }
+
+    const idleHandle = scheduleOnIdle(() => {
+      setAndroidMapUiReady(true);
+    }, { timeout: 250 });
+
+    return () => {
+      idleHandle.cancel();
+    };
+  }, [isAndroid]);
 
   const {
     filterState,
@@ -82,7 +101,11 @@ export default function MapScreenIOS() {
     showingAllFilteredResults,
     hasActiveFilters,
     showAllFilteredResults,
-  } = useMapScreenState({ notes, location });
+  } = useMapScreenState({
+    notes,
+    location,
+    enableHeavyCalculations: androidMapUiReady,
+  });
 
   const previewBottomOffset = insets.bottom + 12;
   const previewMode = selectedGroup ? 'group' : 'nearby';
@@ -97,32 +120,43 @@ export default function MapScreenIOS() {
   );
   const friendMarkerPosts = useMemo(
     () =>
-      friendPosts.filter(
-        (post): post is SharedPost & { latitude: number; longitude: number } =>
-          typeof post.latitude === 'number' &&
-          Number.isFinite(post.latitude) &&
-          typeof post.longitude === 'number' &&
-          Number.isFinite(post.longitude)
-      ),
-    [friendPosts]
+      androidMapUiReady
+        ? friendPosts.filter(
+            (post): post is SharedPost & { latitude: number; longitude: number } =>
+              typeof post.latitude === 'number' &&
+              Number.isFinite(post.latitude) &&
+              typeof post.longitude === 'number' &&
+              Number.isFinite(post.longitude)
+          )
+        : [],
+    [androidMapUiReady, friendPosts]
   );
   const friendsPreviewVisible = showFriendsPreview && friendPosts.length > 0;
   const hasFriendLayer = sharedEnabled && friendPosts.length > 0;
   const hasMapContent = notes.length > 0 || friendMarkerPosts.length > 0;
   const overlayState: OverlayState =
-    !hasMapContent
+    !androidMapUiReady
+      ? 'content'
+      : !hasMapContent
       ? 'no-notes'
       : notes.length > 0 && filteredCount === 0
         ? 'no-filter-results'
         : notes.length > 0 && visibleAreaCount === 0 && !showingAllFilteredResults
           ? 'no-area-results'
           : 'content';
-  const previewVisible = overlayState === 'content' && nearbyItems.length > 0 && !notesPreviewDismissed;
+  const previewVisible =
+    androidMapUiReady &&
+    overlayState === 'content' &&
+    nearbyItems.length > 0 &&
+    !notesPreviewDismissed;
 
   useEffect(() => {
     return () => {
       if (markerPulseTimerRef.current) {
         clearTimeout(markerPulseTimerRef.current);
+      }
+      if (previewRestoreTimerRef.current) {
+        clearTimeout(previewRestoreTimerRef.current);
       }
     };
   }, []);
@@ -196,11 +230,38 @@ export default function MapScreenIOS() {
     if (showFriendsPreview) {
       setShowFriendsPreview(false);
     }
+    const shouldRestoreNearbyPreview =
+      !notesPreviewDismissed &&
+      Boolean(selectedGroup) &&
+      nearbyItems.length > 0;
+
+    if (previewRestoreTimerRef.current) {
+      clearTimeout(previewRestoreTimerRef.current);
+      previewRestoreTimerRef.current = null;
+    }
+
     if (!notesPreviewDismissed) {
       setNotesPreviewDismissed(true);
     }
+
     handleMapPress();
-  }, [handleMapPress, notesPreviewDismissed, showFriendsPreview]);
+
+    if (shouldRestoreNearbyPreview) {
+      setKeepNotePreviewMounted(true);
+      if (reduceMotionEnabled) {
+        setNotesPreviewDismissed(false);
+        setKeepNotePreviewMounted(false);
+      } else {
+        previewRestoreTimerRef.current = setTimeout(() => {
+          setNotesPreviewDismissed(false);
+          setKeepNotePreviewMounted(false);
+          previewRestoreTimerRef.current = null;
+        }, 180);
+      }
+    } else {
+      setKeepNotePreviewMounted(false);
+    }
+  }, [handleMapPress, nearbyItems.length, notesPreviewDismissed, reduceMotionEnabled, selectedGroup, showFriendsPreview]);
 
   const handleChangeFilterType = useCallback(
     (nextType: Parameters<typeof setFilterType>[0]) => {
@@ -457,7 +518,7 @@ export default function MapScreenIOS() {
   );
 
   useEffect(() => {
-    if (!isMapReady || hasCenteredRef.current || !mapRef.current) {
+    if (!androidMapUiReady || !isMapReady || hasCenteredRef.current || !mapRef.current) {
       return;
     }
 
@@ -490,7 +551,7 @@ export default function MapScreenIOS() {
     }
 
     hasCenteredRef.current = true;
-  }, [friendMarkerPosts, isMapReady, location, notes]);
+  }, [androidMapUiReady, friendMarkerPosts, isMapReady, location, notes]);
 
   const countLabel = useMemo(() => {
     const base = `${filteredCount} ${filteredCount === 1 ? t('map.note', 'note') : t('map.notes', 'notes')}`;
@@ -540,6 +601,7 @@ export default function MapScreenIOS() {
         onLeafPress={handleLeafPress}
         onClusterPress={handleClusterPress}
         onFriendPress={handleFriendMarkerPress}
+        preferLiteMarkers={isAndroid}
         colors={colors}
       />
 
@@ -684,8 +746,8 @@ export default function MapScreenIOS() {
         </Pressable>
       </View>
 
-      {notes.length > 0 && !friendsPreviewVisible ? (
-          <MapPreviewCard
+      {androidMapUiReady && notes.length > 0 && !friendsPreviewVisible && (previewVisible || keepNotePreviewMounted) ? (
+        <MapPreviewCard
           previewMode={previewMode}
           visible={previewVisible}
           selectedGroup={selectedGroup}
@@ -702,7 +764,7 @@ export default function MapScreenIOS() {
         />
       ) : null}
 
-      {friendsPreviewVisible ? (
+      {androidMapUiReady && friendsPreviewVisible ? (
         <MapFriendsPreviewCard
           visible={friendsPreviewVisible}
           posts={friendPosts}

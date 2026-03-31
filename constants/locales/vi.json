@@ -102,6 +102,8 @@
         "clipboardStickerRequiresUpdateMsg": "Tính năng dán sticker từ khay nhớ tạm cần phiên bản ứng dụng mới nhất. Hãy build lại rồi mở lại ứng dụng iOS để dùng.",
         "clipboardStickerUnavailableTitle": "Không có sticker để dán",
         "clipboardStickerUnavailableMsg": "Hãy sao chép một ảnh sticker trong suốt trước rồi thử lại.",
+        "clipboardStickerPermissionDeniedTitle": "Bị chặn dán",
+        "clipboardStickerPermissionDeniedMsg": "Thiết bị hiện không cho Noto đọc ảnh đó từ khay nhớ tạm. Hãy thử sao chép lại, hoặc nhập từ Ảnh thay thế.",
         "clipboardStickerUnsupported": "Hiện chưa thể đọc ảnh đó từ khay nhớ tạm.",
         "clipboardStickerStorageUnavailable": "Bộ nhớ sticker hiện không khả dụng trên thiết bị này.",
         "clipboardStickerFailed": "Hiện chưa thể dán sticker đó."

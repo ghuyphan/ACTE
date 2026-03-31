@@ -5,7 +5,6 @@ import {
 } from '@gorhom/bottom-sheet';
 import { useEffect, useRef } from 'react';
 import { BackHandler, Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { Sheet } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 
 export default function AppBottomSheet({
@@ -64,7 +63,6 @@ export default function AppBottomSheet({
     <BottomSheetModal
       ref={modalRef}
       index={0}
-      animateOnMount={false}
       detached={detached}
       bottomInset={detached ? 16 : 0}
       topInset={topInset}
@@ -72,7 +70,6 @@ export default function AppBottomSheet({
       enableOverDrag={false}
       enablePanDownToClose={dismissible}
       android_keyboardInputMode="adjustResize"
-      maxDynamicContentSize={Sheet.maxHeight}
       backgroundStyle={[
         detached ? styles.detachedBackground : styles.edgeBackground,
         {

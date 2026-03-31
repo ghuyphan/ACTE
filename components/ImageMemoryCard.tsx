@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import React, { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { DOODLE_ARTBOARD_FRAME } from '../constants/doodleLayout';
+import { STICKER_ARTBOARD_FRAME } from '../constants/doodleLayout';
 import { Layout, Shadows } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import NoteDoodleCanvas from './NoteDoodleCanvas';
@@ -49,7 +49,7 @@ function ImageMemoryCard({
             {stickerPlacements.length > 0 ? (
                 <View
                     pointerEvents={__DEV__ && isActive ? 'box-none' : 'none'}
-                    style={styles.doodleOverlay}
+                    style={styles.stickerOverlay}
                 >
                     <DynamicStickerCanvas
                         placements={stickerPlacements}
@@ -85,7 +85,12 @@ const styles = StyleSheet.create({
     },
     doodleOverlay: {
         position: 'absolute',
-        ...DOODLE_ARTBOARD_FRAME,
+        ...STICKER_ARTBOARD_FRAME,
+        opacity: 0.82,
+    },
+    stickerOverlay: {
+        position: 'absolute',
+        ...STICKER_ARTBOARD_FRAME,
         opacity: 0.82,
     },
 });

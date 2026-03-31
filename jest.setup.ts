@@ -147,8 +147,13 @@ jest.mock('@shopify/react-native-skia', () => {
 
   return {
     Canvas: ({ children, ...props }: any) => React.createElement(View, props, children),
+    Group: ({ children, ...props }: any) => React.createElement(View, props, children),
+    Image: ({ children, ...props }: any) => React.createElement(View, props, children),
+    Paint: ({ children, ...props }: any) => React.createElement(View, props, children),
+    BlendColor: ({ children, ...props }: any) => React.createElement(View, props, children),
     Path: () => null,
     Circle: () => null,
+    useImage: () => ({ width: 1, height: 1 }),
     usePathValue: () => createPath(),
     Skia: {
       Path: {
@@ -168,6 +173,17 @@ jest.mock('react-native-reanimated', () => {
   Reanimated.CurvedTransition.easingY = () => Reanimated.CurvedTransition;
   Reanimated.CurvedTransition.easingWidth = () => Reanimated.CurvedTransition;
   Reanimated.CurvedTransition.easingHeight = () => Reanimated.CurvedTransition;
+  Reanimated.SensorType = {
+    GRAVITY: 'GRAVITY',
+  };
+  Reanimated.useAnimatedSensor = () => ({
+    sensor: {
+      value: { x: 0, y: 0, z: 0 },
+    },
+  });
+  Reanimated.useFrameCallback = () => ({
+    setActive: () => undefined,
+  });
 
   return Reanimated;
 });

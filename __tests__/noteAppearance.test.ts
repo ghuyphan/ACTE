@@ -1,4 +1,9 @@
-import { getCaptureNoteGradient, getTextNoteCardGradient } from '../services/noteAppearance';
+import {
+  getCaptureNoteGradient,
+  getGradientStickerMotionVariant,
+  getNoteColorStickerMotion,
+  getTextNoteCardGradient,
+} from '../services/noteAppearance';
 
 describe('noteAppearance', () => {
   it('keeps saved text-note gradients stable for the same note', () => {
@@ -29,5 +34,35 @@ describe('noteAppearance', () => {
     expect(getTextNoteCardGradient({ text: 'Just a quiet note', noteId: 'note-123' })).toEqual(
       getTextNoteCardGradient({ text: 'Just a quiet note', noteId: 'note-123' })
     );
+  });
+
+  it('marks blue card gradients as water motion', () => {
+    expect(
+      getGradientStickerMotionVariant(getTextNoteCardGradient({
+        text: 'Ocean day',
+        noteId: 'note-water',
+        noteColor: 'sky-blue',
+      }))
+    ).toBe('water');
+  });
+
+  it('exposes explicit water motion for blue preset cards', () => {
+    expect(getNoteColorStickerMotion('sky-blue')).toBe('water');
+    expect(getNoteColorStickerMotion('pool-teal')).toBe('water');
+    expect(getNoteColorStickerMotion('periwinkle-ink')).toBe('water');
+  });
+
+  it('keeps warm card gradients on the default physics motion', () => {
+    expect(
+      getGradientStickerMotionVariant(getTextNoteCardGradient({
+        text: 'Sunset cafe',
+        noteId: 'note-physics',
+        noteColor: 'sunset-coral',
+      }))
+    ).toBe('physics');
+  });
+
+  it('leaves non-blue preset cards on the default motion unless inferred otherwise', () => {
+    expect(getNoteColorStickerMotion('sunset-coral')).toBeNull();
   });
 });

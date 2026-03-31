@@ -25,6 +25,26 @@ const STICKER_OUTLINE_OFFSETS_FULL: StickerOutlineOffset[] = [
   { x: 0.82, y: 0.82 },
 ];
 
+// Android benefits from a denser ring so curved sticker edges don't read as an octagon.
+const STICKER_OUTLINE_OFFSETS_CONTINUOUS: StickerOutlineOffset[] = [
+  { x: -1, y: 0 },
+  { x: -0.92, y: -0.38 },
+  { x: -0.71, y: -0.71 },
+  { x: -0.38, y: -0.92 },
+  { x: 0, y: -1 },
+  { x: 0.38, y: -0.92 },
+  { x: 0.71, y: -0.71 },
+  { x: 0.92, y: -0.38 },
+  { x: 1, y: 0 },
+  { x: 0.92, y: 0.38 },
+  { x: 0.71, y: 0.71 },
+  { x: 0.38, y: 0.92 },
+  { x: 0, y: 1 },
+  { x: -0.38, y: 0.92 },
+  { x: -0.71, y: 0.71 },
+  { x: -0.92, y: 0.38 },
+];
+
 export function clampStickerScale(value: number) {
   return Math.max(0.35, Math.min(value, 3));
 }
@@ -61,7 +81,9 @@ export function getStickerOutlineOffsets(
     preferContinuous?: boolean;
   } = {}
 ) {
-  return !options.preferContinuous && outlineSize <= 4.75
-    ? STICKER_OUTLINE_OFFSETS_ORTHOGONAL
-    : STICKER_OUTLINE_OFFSETS_FULL;
+  if (options.preferContinuous) {
+    return STICKER_OUTLINE_OFFSETS_CONTINUOUS;
+  }
+
+  return outlineSize <= 4.75 ? STICKER_OUTLINE_OFFSETS_ORTHOGONAL : STICKER_OUTLINE_OFFSETS_FULL;
 }

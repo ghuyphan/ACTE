@@ -150,6 +150,7 @@ const styles = StyleSheet.create({
   footer: {
     alignItems: 'flex-end',
     marginTop: 8,
+    paddingBottom: 12,
   },
   footerIOS: {
     alignItems: 'stretch',
