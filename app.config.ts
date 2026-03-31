@@ -3,6 +3,8 @@ import type { ExpoConfig } from 'expo/config';
 
 const googleMapsAndroidApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY;
 const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() ?? '';
+const easAndroidGoogleServicesFile = process.env.GOOGLE_SERVICES_JSON?.trim();
+const easIosGoogleServicesFile = process.env.GOOGLE_SERVICE_INFO_PLIST?.trim();
 const easProjectId =
   process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ?? '82e9519b-f89b-466e-af4d-697349535c13';
 const easUpdateUrl = `https://u.expo.dev/${easProjectId}`;
@@ -10,16 +12,20 @@ const rootGoogleServicesFile = './google-services.json';
 const nativeAndroidGoogleServicesFile = './android/app/google-services.json';
 const rootGoogleServiceInfoPlist = './GoogleService-Info.plist';
 const nativeIosGoogleServiceInfoPlist = './ios/Noto/GoogleService-Info.plist';
-const androidGoogleServicesFile = existsSync(rootGoogleServicesFile)
-  ? rootGoogleServicesFile
-  : existsSync(nativeAndroidGoogleServicesFile)
-    ? nativeAndroidGoogleServicesFile
-    : undefined;
-const iosGoogleServicesFile = existsSync(rootGoogleServiceInfoPlist)
-  ? rootGoogleServiceInfoPlist
-  : existsSync(nativeIosGoogleServiceInfoPlist)
-    ? nativeIosGoogleServiceInfoPlist
-    : undefined;
+const androidGoogleServicesFile = easAndroidGoogleServicesFile
+  ? easAndroidGoogleServicesFile
+  : existsSync(rootGoogleServicesFile)
+    ? rootGoogleServicesFile
+    : existsSync(nativeAndroidGoogleServicesFile)
+      ? nativeAndroidGoogleServicesFile
+      : undefined;
+const iosGoogleServicesFile = easIosGoogleServicesFile
+  ? easIosGoogleServicesFile
+  : existsSync(rootGoogleServiceInfoPlist)
+    ? rootGoogleServiceInfoPlist
+    : existsSync(nativeIosGoogleServiceInfoPlist)
+      ? nativeIosGoogleServiceInfoPlist
+      : undefined;
 const googleIosUrlScheme = googleIosClientId
   ? `com.googleusercontent.apps.${googleIosClientId.replace(/\.apps\.googleusercontent\.com$/i, '')}`
   : '';
