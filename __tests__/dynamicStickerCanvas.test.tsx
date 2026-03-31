@@ -4,6 +4,15 @@ import DynamicStickerCanvas from '../components/DynamicStickerCanvas';
 import type { NoteStickerPlacement } from '../services/noteStickers';
 import { useStickerPhysics } from '../hooks/useStickerPhysics';
 
+jest.mock('expo-linear-gradient', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  return {
+    LinearGradient: ({ children, ...props }: any) => <View {...props}>{children}</View>,
+  };
+});
+
 jest.mock('../hooks/useStickerPhysics', () => ({
   useStickerPhysics: jest.fn(() => ({ value: [] })),
 }));
@@ -39,7 +48,9 @@ describe('DynamicStickerCanvas', () => {
   });
 
   it('wires active sticker cards into the physics hook', () => {
-    render(<DynamicStickerCanvas placements={[stickerPlacement]} isActive motionVariant="water" />);
+    const { getByTestId } = render(
+      <DynamicStickerCanvas placements={[stickerPlacement]} isActive motionVariant="water" />
+    );
 
     expect(mockedUseStickerPhysics).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -48,10 +59,13 @@ describe('DynamicStickerCanvas', () => {
         motionVariant: 'water',
       })
     );
+    expect(getByTestId('dynamic-sticker-water-fill')).toBeTruthy();
   });
 
   it('keeps the physics hook inactive for static sticker cards', () => {
-    render(<DynamicStickerCanvas placements={[stickerPlacement]} isActive={false} />);
+    const { queryByTestId } = render(
+      <DynamicStickerCanvas placements={[stickerPlacement]} isActive={false} />
+    );
 
     expect(mockedUseStickerPhysics).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -59,5 +73,6 @@ describe('DynamicStickerCanvas', () => {
         isActive: false,
       })
     );
+    expect(queryByTestId('dynamic-sticker-water-fill')).toBeNull();
   });
 });

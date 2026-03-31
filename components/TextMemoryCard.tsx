@@ -133,27 +133,6 @@ function WaterCardOverlay() {
         ],
     };
 
-    const waterLineStyle = {
-        opacity: pulse.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0.24, 0.34],
-        }),
-        transform: [
-            {
-                translateX: drift.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-10, 12],
-                }),
-            },
-            {
-                translateY: pulse.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-2, 2],
-                }),
-            },
-        ],
-    };
-
     return (
         <>
             <View pointerEvents="none" style={styles.waterBaseGlow} />
@@ -171,24 +150,6 @@ function WaterCardOverlay() {
                     start={{ x: 0, y: 0.15 }}
                     end={{ x: 1, y: 0.85 }}
                     style={StyleSheet.absoluteFill}
-                />
-            </Animated.View>
-            <Animated.View
-                pointerEvents="none"
-                testID="text-memory-card-water-line"
-                style={[styles.waterLineWrap, waterLineStyle]}
-            >
-                <LinearGradient
-                    colors={[
-                        'rgba(255,255,255,0)',
-                        'rgba(255,255,255,0.12)',
-                        'rgba(255,255,255,0.4)',
-                        'rgba(255,255,255,0.12)',
-                        'rgba(255,255,255,0)',
-                    ]}
-                    start={{ x: 0, y: 0.5 }}
-                    end={{ x: 1, y: 0.5 }}
-                    style={styles.waterLine}
                 />
             </Animated.View>
             <Animated.View pointerEvents="none" style={[styles.waterShimmer, shimmerStyle]} />
@@ -310,18 +271,6 @@ const styles = StyleSheet.create({
         bottom: '12%',
         borderRadius: 999,
         backgroundColor: 'rgba(255,255,255,0.08)',
-    },
-    waterLineWrap: {
-        position: 'absolute',
-        left: '-7%',
-        right: '-7%',
-        top: '54%',
-        height: 10,
-        justifyContent: 'center',
-    },
-    waterLine: {
-        height: 3,
-        borderRadius: 999,
     },
     doodleOverlay: {
         position: 'absolute',

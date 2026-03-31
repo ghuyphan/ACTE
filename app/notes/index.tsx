@@ -24,7 +24,12 @@ import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
 import DynamicStickerCanvas from '../../components/DynamicStickerCanvas';
 import NoteDoodleCanvas from '../../components/NoteDoodleCanvas';
-import { getTextNoteCardGradient } from '../../services/noteAppearance';
+import {
+  getGradientStickerMotionVariant,
+  getNoteColorStickerMotion,
+  getTextNoteCardGradient,
+  type StickerMotionVariant,
+} from '../../services/noteAppearance';
 import { parseNoteDoodleStrokes } from '../../services/noteDoodles';
 import { parseNoteStickerPlacements } from '../../services/noteStickers';
 import { getNotePhotoUri } from '../../services/photoStorage';
@@ -139,6 +144,14 @@ const GridTile = memo(function GridTile({
       }),
     [item, text]
   );
+  const stickerMotionVariant = useMemo<StickerMotionVariant>(() => {
+    if (isPhotoTile) {
+      return 'physics';
+    }
+
+    const noteColor = item.kind === 'note' ? item.note.noteColor : item.post.noteColor;
+    return getNoteColorStickerMotion(noteColor) ?? getGradientStickerMotionVariant(textGradient);
+  }, [isPhotoTile, item, textGradient]);
   const tileText = text || (isPhotoTile ? photoFallbackLabel : '');
   const showPhotoPlaceholder = item.kind === 'shared-post' && item.post.type === 'photo' && !imageUri;
   const sharedTransitionTag = item.kind === 'note' ? `feed-note-card-${item.note.id}` : undefined;
@@ -175,6 +188,7 @@ const GridTile = memo(function GridTile({
                   remoteBucket={item.kind === 'shared-post' ? SHARED_POST_MEDIA_BUCKET : undefined}
                   sharedCache={item.kind === 'shared-post'}
                   minimumBaseSize={GRID_STICKER_MIN_SIZE}
+                  motionVariant={stickerMotionVariant}
                 />
               </View>
             ) : null}
@@ -216,6 +230,7 @@ const GridTile = memo(function GridTile({
                   remoteBucket={item.kind === 'shared-post' ? SHARED_POST_MEDIA_BUCKET : undefined}
                   sharedCache={item.kind === 'shared-post'}
                   minimumBaseSize={GRID_STICKER_MIN_SIZE}
+                  motionVariant={stickerMotionVariant}
                 />
               </View>
             ) : null}

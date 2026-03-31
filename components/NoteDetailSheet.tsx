@@ -45,6 +45,8 @@ import { useSubscription } from '../hooks/useSubscription';
 import { useTheme } from '../hooks/useTheme';
 import { Note } from '../services/database';
 import {
+    getGradientStickerMotionVariant,
+    getNoteColorStickerMotion,
     getTextNoteCardGradient,
     normalizeSavedTextNoteColor,
     PREMIUM_NOTE_COLOR_IDS,
@@ -1343,6 +1345,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             emoji: note.moodEmoji,
             noteColor: isEditing ? editNoteColor : note.noteColor,
         });
+        const textStickerMotionVariant =
+            getNoteColorStickerMotion(isEditing ? editNoteColor : note.noteColor) ??
+            getGradientStickerMotionVariant(gradient);
         const displayedDoodleStrokes = isEditing ? editDoodleStrokes : parsedNoteDoodleStrokes;
         const displayedStickerPlacements = isEditing ? editStickerPlacements : parsedNoteStickerPlacements;
         const selectedStickerPlacement =
@@ -1398,7 +1403,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                 onPressCanvas={handlePressStickerCanvas}
                                             />
                                         ) : (
-                                            <DynamicStickerCanvas placements={displayedStickerPlacements} />
+                                            <DynamicStickerCanvas
+                                                placements={displayedStickerPlacements}
+                                                motionVariant={textStickerMotionVariant}
+                                            />
                                         )}
                                     </View>
                                 ) : null}

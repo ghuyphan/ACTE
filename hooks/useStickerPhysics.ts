@@ -50,6 +50,38 @@ interface UseStickerPhysicsParams {
   }>;
 }
 
+type StickerMotionProfile = {
+  tiltAcceleration: number;
+  crossAcceleration: number;
+  restoreAcceleration: number;
+  minimumRestoreFactor: number;
+  linearDamping: number;
+  angularDamping: number;
+  rotationRestoreAcceleration: number;
+  boundaryRestitution: number;
+  collisionRestitution: number;
+  orbitalStrength: number;
+  orbitalLimit: number;
+  jellyResponse: number;
+  maxJellyStretch: number;
+  jellyCompression: number;
+  jellyRotationFactor: number;
+  jellyRotationResponse: number;
+  velocityNormalization: number;
+  minJellyScale: number;
+  floatLift: number;
+  bobAmplitude: number;
+  bobSpeed: number;
+  waveStrengthX: number;
+  waveStrengthY: number;
+  waveSpeedX: number;
+  waveSpeedY: number;
+  waterLineRatio: number;
+  buoyancyStrength: number;
+  downwardTiltMultiplier: number;
+  upwardTiltMultiplier: number;
+};
+
 const MAX_FRAME_DELTA_MS = 32;
 const TILT_ACCELERATION = 1510;
 const TILT_CROSS_ACCELERATION = 185;
@@ -68,10 +100,11 @@ const BOUNDARY_SPIN_FACTOR = 0.18;
 const MAX_ANGULAR_VELOCITY = 165;
 const MAX_LINEAR_VELOCITY = 1550;
 
-const PHYSICS_PROFILE = {
+const PHYSICS_PROFILE: StickerMotionProfile = {
   tiltAcceleration: 1510,
   crossAcceleration: 185,
   restoreAcceleration: 8.1,
+  minimumRestoreFactor: 0,
   linearDamping: 0.978,
   angularDamping: 0.952,
   rotationRestoreAcceleration: 8.5,
@@ -85,38 +118,69 @@ const PHYSICS_PROFILE = {
   jellyRotationFactor: 0.00018,
   jellyRotationResponse: 0.2,
   velocityNormalization: 1080,
+  minJellyScale: 0.92,
+  floatLift: 0,
+  bobAmplitude: 0,
+  bobSpeed: 0,
   waveStrengthX: 0,
   waveStrengthY: 0,
   waveSpeedX: 0,
   waveSpeedY: 0,
+  waterLineRatio: 1,
+  buoyancyStrength: 0,
+  downwardTiltMultiplier: 1,
+  upwardTiltMultiplier: 1,
 };
 
-const WATER_PROFILE = {
-  tiltAcceleration: 980,
-  crossAcceleration: 255,
-  restoreAcceleration: 5.1,
-  linearDamping: 0.985,
+const WATER_PROFILE: StickerMotionProfile = {
+  tiltAcceleration: 520,
+  crossAcceleration: 150,
+  restoreAcceleration: 6.4,
+  minimumRestoreFactor: 0.58,
+  linearDamping: 0.988,
   angularDamping: 0.966,
   rotationRestoreAcceleration: 5.7,
   boundaryRestitution: 0.72,
   collisionRestitution: 0.84,
-  orbitalStrength: 0.88,
-  orbitalLimit: 220,
-  jellyResponse: 0.28,
-  maxJellyStretch: 0.19,
-  jellyCompression: 0.82,
-  jellyRotationFactor: 0.00028,
-  jellyRotationResponse: 0.24,
+  orbitalStrength: 0.62,
+  orbitalLimit: 150,
+  jellyResponse: 0.22,
+  maxJellyStretch: 0.09,
+  jellyCompression: 0.42,
+  jellyRotationFactor: 0.00014,
+  jellyRotationResponse: 0.18,
   velocityNormalization: 920,
-  waveStrengthX: 145,
-  waveStrengthY: 105,
-  waveSpeedX: 1.9,
-  waveSpeedY: 1.45,
+  minJellyScale: 0.985,
+  floatLift: 16,
+  bobAmplitude: 9,
+  bobSpeed: 1.5,
+  waveStrengthX: 58,
+  waveStrengthY: 36,
+  waveSpeedX: 1.45,
+  waveSpeedY: 1.2,
+  waterLineRatio: 0.56,
+  buoyancyStrength: 460,
+  downwardTiltMultiplier: 0.28,
+  upwardTiltMultiplier: 0.72,
 };
 
 function getMotionProfile(motionVariant: StickerMotionVariant) {
   'worklet';
   return motionVariant === 'water' ? WATER_PROFILE : PHYSICS_PROFILE;
+}
+
+export function getStickerRestAnchorY(
+  anchorY: number,
+  layoutHeight: number,
+  motionVariant: StickerMotionVariant
+) {
+  'worklet';
+  const profile = motionVariant === 'water' ? WATER_PROFILE : PHYSICS_PROFILE;
+  const surfaceY = layoutHeight * profile.waterLineRatio;
+  const restingAnchorY =
+    motionVariant === 'water' ? Math.min(anchorY, surfaceY) : anchorY;
+
+  return restingAnchorY - profile.floatLift;
 }
 
 function clamp(value: number, minValue: number, maxValue: number) {
@@ -335,10 +399,19 @@ export function useStickerPhysics({
 
     for (let index = 0; index < nextStates.length; index += 1) {
       const sticker = nextStates[index];
+      const surfaceY = layout.height * profile.waterLineRatio;
+      const bobOffsetY =
+        profile.bobAmplitude > 0
+          ? Math.sin(elapsedSeconds * profile.bobSpeed + index * 0.9 + sticker.anchorX * 0.003) *
+            profile.bobAmplitude
+          : 0;
+      const targetAnchorY =
+        getStickerRestAnchorY(sticker.anchorY, layout.height, motionVariant) + bobOffsetY;
+      const restoreFactor = Math.max(profile.minimumRestoreFactor, flatRestoreFactor);
       const restoreX =
-        (sticker.anchorX - sticker.x) * profile.restoreAcceleration * flatRestoreFactor;
+        (sticker.anchorX - sticker.x) * profile.restoreAcceleration * restoreFactor;
       const restoreY =
-        (sticker.anchorY - sticker.y) * profile.restoreAcceleration * flatRestoreFactor;
+        (targetAnchorY - sticker.y) * profile.restoreAcceleration * restoreFactor;
       const crossAxisX = normalizedGravityY * profile.crossAcceleration;
       const crossAxisY = -normalizedGravityX * profile.crossAcceleration;
       const stickerOffsetX = sticker.x - sticker.anchorX;
@@ -362,13 +435,28 @@ export function useStickerPhysics({
         profile.waveStrengthY > 0
           ? Math.cos(elapsedSeconds * profile.waveSpeedY + waveSeed * 1.35) * profile.waveStrengthY
           : 0;
+      const verticalTiltMultiplier =
+        normalizedGravityY >= 0
+          ? profile.downwardTiltMultiplier
+          : profile.upwardTiltMultiplier;
+      const submergedDepth = Math.max(sticker.y - surfaceY, 0);
+      const buoyancyY =
+        motionVariant === 'water'
+          ? -submergedDepth * (profile.buoyancyStrength / Math.max(layout.height, 1))
+          : 0;
 
       sticker.vx +=
         (normalizedGravityX * profile.tiltAcceleration + crossAxisX + orbitalX + restoreX + waveX) *
         dt;
       sticker.vy +=
-        (normalizedGravityY * profile.tiltAcceleration + crossAxisY + orbitalY + restoreY + waveY) *
-        dt;
+        (
+          normalizedGravityY * profile.tiltAcceleration * verticalTiltMultiplier +
+          crossAxisY +
+          orbitalY +
+          restoreY +
+          waveY +
+          buoyancyY
+        ) * dt;
       sticker.vx *= damping;
       sticker.vy *= damping;
       clampVelocity(sticker);
@@ -389,13 +477,21 @@ export function useStickerPhysics({
       const normalizedVx = clamp(Math.abs(sticker.vx) / profile.velocityNormalization, 0, 1);
       const normalizedVy = clamp(Math.abs(sticker.vy) / profile.velocityNormalization, 0, 1);
       const targetJellyX =
-        1 +
-        normalizedVx * profile.maxJellyStretch -
-        normalizedVy * profile.maxJellyStretch * profile.jellyCompression;
+        clamp(
+          1 +
+            normalizedVx * profile.maxJellyStretch -
+            normalizedVy * profile.maxJellyStretch * profile.jellyCompression,
+          profile.minJellyScale,
+          1 + profile.maxJellyStretch
+        );
       const targetJellyY =
-        1 +
-        normalizedVy * profile.maxJellyStretch -
-        normalizedVx * profile.maxJellyStretch * profile.jellyCompression;
+        clamp(
+          1 +
+            normalizedVy * profile.maxJellyStretch -
+            normalizedVx * profile.maxJellyStretch * profile.jellyCompression,
+          profile.minJellyScale,
+          1 + profile.maxJellyStretch
+        );
       const jellyStep = 1 - Math.pow(1 - profile.jellyResponse, dt * 60);
       sticker.jellyScaleX += (targetJellyX - sticker.jellyScaleX) * jellyStep;
       sticker.jellyScaleY += (targetJellyY - sticker.jellyScaleY) * jellyStep;

@@ -7,6 +7,7 @@ import {
   type Transforms3d,
   useImage,
 } from '@shopify/react-native-skia';
+import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { Platform, StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
@@ -60,6 +61,29 @@ interface StickerLayerProps {
 
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
 const PREFER_CONTINUOUS_OUTLINE = Platform.OS === 'android';
+const WATER_LAYER_SURFACE_RATIO = 0.56;
+
+function WaterLayer() {
+  return (
+    <>
+      <View pointerEvents="none" testID="dynamic-sticker-water-fill" style={styles.waterFill}>
+        <LinearGradient
+          colors={[
+            'rgba(180, 228, 255, 0)',
+            'rgba(180, 228, 255, 0.1)',
+            'rgba(126, 196, 255, 0.22)',
+            'rgba(101, 177, 242, 0.3)',
+          ]}
+          locations={[0, 0.18, 0.56, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
+      <View pointerEvents="none" style={styles.waterSurfaceGlow} />
+    </>
+  );
+}
 
 function StickerSprite({
   placement,
@@ -275,6 +299,7 @@ export default function DynamicStickerCanvas({
 
   return (
     <View style={[styles.canvasWrap, style]} onLayout={handleLayout}>
+      {motionVariant === 'water' ? <WaterLayer /> : null}
       <Canvas pointerEvents="none" style={styles.canvas}>
         <StickerLayer
           placements={renderedPlacements}
@@ -296,5 +321,22 @@ const styles = StyleSheet.create({
   canvas: {
     width: '100%',
     height: '100%',
+  },
+  waterFill: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: `${WATER_LAYER_SURFACE_RATIO * 100 - 4}%`,
+    bottom: 0,
+  },
+  waterSurfaceGlow: {
+    position: 'absolute',
+    left: '10%',
+    right: '10%',
+    top: `${WATER_LAYER_SURFACE_RATIO * 100 - 5}%`,
+    height: 22,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    zIndex: 1,
   },
 });

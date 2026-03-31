@@ -43,7 +43,6 @@ describe('TextMemoryCard', () => {
     );
 
     expect(getByTestId('text-memory-card-water-overlay')).toBeTruthy();
-    expect(getByTestId('text-memory-card-water-line')).toBeTruthy();
   });
 
   it('does not render the water overlay for standard warm presets', () => {
@@ -52,6 +51,5 @@ describe('TextMemoryCard', () => {
     );
 
     expect(queryByTestId('text-memory-card-water-overlay')).toBeNull();
-    expect(queryByTestId('text-memory-card-water-line')).toBeNull();
   });
 });
