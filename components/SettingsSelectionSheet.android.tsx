@@ -1,6 +1,7 @@
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Sheet } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import AppSheetScaffold from './AppSheetScaffold';
 
@@ -28,6 +29,7 @@ export default function SettingsSelectionSheetAndroid({
     <AppSheetScaffold
       headerVariant="standard"
       title={title}
+      useHorizontalPadding={false}
     >
       <View>
         {options.map((option) => {
@@ -68,7 +70,7 @@ export default function SettingsSelectionSheetAndroid({
 const styles = StyleSheet.create({
   option: {
     minHeight: 60,
-    paddingHorizontal: 4,
+    paddingHorizontal: Sheet.android.horizontalPadding,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -83,6 +85,6 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: StyleSheet.hairlineWidth,
-    marginLeft: 4,
+    marginLeft: Sheet.android.horizontalPadding,
   },
 });

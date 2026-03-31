@@ -23,6 +23,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
   Easing,
   FadeInLeft,
@@ -36,10 +37,12 @@ import Reanimated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { showAppAlert } from '../../utils/alert';
 import { DOODLE_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { ENABLE_PHOTO_STICKERS } from '../../constants/experiments';
 import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadius';
-import { Layout, Radii, Shadows, Typography } from '../../constants/theme';
+import { Layout, Radii, Shadows, Sheet, Typography } from '../../constants/theme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import type { ThemeColors } from '../../hooks/useTheme';
 import {
@@ -88,6 +91,11 @@ const SIDE_ACTION_SIZE = 46;
 const SHUTTER_SIDE_ACTION_OFFSET = SHUTTER_OUTER_SIZE / 2 + 12 + SIDE_ACTION_SIZE;
 const STICKER_SOURCE_SHEET_DISMISS_DELAY_MS = 250;
 const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
+const CAMERA_AUTO_RECOVERY_ATTEMPTS = 1;
+const CAMERA_START_TIMEOUT_MS = 2400;
+const CAMERA_ZOOM_PAN_RANGE = 0.9;
+const CAMERA_ZOOM_PINCH_RANGE = 0.45;
+const CAMERA_ZOOM_LABEL_VISIBLE_MS = 1100;
 const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad) };
 const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
 const CAPTURE_BUTTON_STATE_IN = { duration: 160, easing: Easing.out(Easing.cubic) };
@@ -115,6 +123,10 @@ function getCaptureTextPlaceholderVariants(t: TFunction) {
 
 function getUniqueColors(colors: string[]) {
   return colors.filter((color, index) => colors.indexOf(color) === index);
+}
+
+function clamp(value: number, minValue: number, maxValue: number) {
+  return Math.min(maxValue, Math.max(minValue, value));
 }
 
 function getStickerImportErrorMessage(t: TFunction, error: unknown) {
@@ -615,6 +627,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [showRadiusSheet, setShowRadiusSheet] = useState(false);
   const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
   const [cameraRetryNonce, setCameraRetryNonce] = useState(0);
+  const [cameraZoom, setCameraZoom] = useState(0);
+  const [showCameraZoomBadge, setShowCameraZoomBadge] = useState(false);
   const [textDoodleModeEnabled, setTextDoodleModeEnabled] = useState(false);
   const [photoDoodleModeEnabled, setPhotoDoodleModeEnabled] = useState(false);
   const [textDecorateMenuExpanded, setTextDecorateMenuExpanded] = useState(false);
@@ -638,6 +652,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [isNoteInputFocused, setIsNoteInputFocused] = useState(false);
   const [isRestaurantInputFocused, setIsRestaurantInputFocused] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const cameraAutoRecoveryCountRef = useRef(0);
+  const cameraZoomRef = useRef(0);
+  const cameraPanZoomStartRef = useRef(0);
+  const cameraPinchZoomStartRef = useRef(0);
+  const cameraZoomBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPhotoDoodleSurface = captureMode === 'camera' && Boolean(capturedPhoto);
   const doodleModeEnabled = isPhotoDoodleSurface ? photoDoodleModeEnabled : textDoodleModeEnabled;
   const doodleStrokes = isPhotoDoodleSurface ? photoDoodleStrokes : textDoodleStrokes;
@@ -695,14 +714,81 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const isSaveBusy = saving || saveState === 'saving';
   const isSaveSuccessful = saveState === 'success';
   const interactionsDisabled = isSaveBusy || isSaveSuccessful;
+  const canShowLiveCameraPreview =
+    captureMode === 'camera' && !capturedPhoto && permissionGranted && shouldRenderCameraPreview;
   const saveIdleBackground = isCameraSaveMode ? colors.primary : colors.captureButtonBg;
   const disableAndroidTextTransforms = Platform.OS === 'android' && captureMode === 'text' && isNoteInputFocused;
   const decorateProgress = useSharedValue(showDecorateControls ? 1 : 0);
   const keyboardLift = useSharedValue(0);
   const isTextEntryFocused = captureMode === 'text' && (isNoteInputFocused || isRestaurantInputFocused);
 
+  const clearCameraZoomBadgeTimeout = useCallback(() => {
+    if (cameraZoomBadgeTimeoutRef.current) {
+      clearTimeout(cameraZoomBadgeTimeoutRef.current);
+      cameraZoomBadgeTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleHideCameraZoomBadge = useCallback(() => {
+    clearCameraZoomBadgeTimeout();
+    cameraZoomBadgeTimeoutRef.current = setTimeout(() => {
+      setShowCameraZoomBadge(false);
+      cameraZoomBadgeTimeoutRef.current = null;
+    }, CAMERA_ZOOM_LABEL_VISIBLE_MS);
+  }, [clearCameraZoomBadgeTimeout]);
+
+  const updateCameraZoom = useCallback(
+    (nextZoom: number) => {
+      const clampedZoom = clamp(nextZoom, 0, 1);
+      cameraZoomRef.current = clampedZoom;
+      setCameraZoom((current) => (Math.abs(current - clampedZoom) < 0.001 ? current : clampedZoom));
+      setShowCameraZoomBadge(true);
+      scheduleHideCameraZoomBadge();
+    },
+    [scheduleHideCameraZoomBadge]
+  );
+
+  const resetCameraZoom = useCallback(() => {
+    clearCameraZoomBadgeTimeout();
+    cameraZoomRef.current = 0;
+    setCameraZoom(0);
+    setShowCameraZoomBadge(false);
+  }, [clearCameraZoomBadgeTimeout]);
+
+  const restartCameraPreview = useCallback((manual = false) => {
+    if (manual) {
+      cameraAutoRecoveryCountRef.current = 0;
+    }
+
+    setCameraUnavailable(false);
+    setCameraIssueDetail(null);
+    setIsCameraReady(false);
+    setCameraRetryNonce((current) => current + 1);
+  }, []);
+
+  const handleCameraStartupFailure = useCallback(
+    (detail?: string | null) => {
+      if (cameraAutoRecoveryCountRef.current < CAMERA_AUTO_RECOVERY_ATTEMPTS) {
+        cameraAutoRecoveryCountRef.current += 1;
+        restartCameraPreview();
+        return;
+      }
+
+      setCameraUnavailable(true);
+      setCameraIssueDetail(
+        detail?.trim() ||
+          t(
+            'capture.cameraUnavailableTimeoutHint',
+            'The camera preview took too long to start. Try again to restart the camera session.'
+          )
+      );
+      setIsCameraReady(false);
+    },
+    [restartCameraPreview, t]
+  );
+
   useEffect(() => {
-    if (captureMode === 'camera' && !capturedPhoto && permissionGranted && shouldRenderCameraPreview) {
+    if (canShowLiveCameraPreview) {
       setIsCameraReady(false);
       setCameraUnavailable(false);
       setCameraIssueDetail(null);
@@ -712,12 +798,24 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setIsCameraReady(true);
     setCameraUnavailable(false);
     setCameraIssueDetail(null);
-  }, [captureMode, capturedPhoto, permissionGranted, cameraSessionKey, cameraRetryNonce, shouldRenderCameraPreview]);
+  }, [cameraSessionKey, cameraRetryNonce, canShowLiveCameraPreview]);
+
+  useEffect(() => {
+    cameraAutoRecoveryCountRef.current = 0;
+  }, [cameraSessionKey, captureMode, facing, permissionGranted, shouldRenderCameraPreview, capturedPhoto]);
+
+  useEffect(() => {
+    if (captureMode !== 'camera') {
+      resetCameraZoom();
+    }
+  }, [captureMode, resetCameraZoom]);
+
+  useEffect(() => () => clearCameraZoomBadgeTimeout(), [clearCameraZoomBadgeTimeout]);
 
   useEffect(() => {
     let cancelled = false;
 
-    if (captureMode !== 'camera' || capturedPhoto || !permissionGranted || !shouldRenderCameraPreview) {
+    if (!canShowLiveCameraPreview) {
       return () => {
         cancelled = true;
       };
@@ -739,7 +837,19 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     return () => {
       cancelled = true;
     };
-  }, [captureMode, capturedPhoto, permissionGranted, cameraSessionKey, cameraRetryNonce, shouldRenderCameraPreview]);
+  }, [cameraRetryNonce, canShowLiveCameraPreview]);
+
+  useEffect(() => {
+    if (!canShowLiveCameraPreview || isCameraReady || cameraUnavailable) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      handleCameraStartupFailure();
+    }, CAMERA_START_TIMEOUT_MS);
+
+    return () => clearTimeout(timer);
+  }, [cameraRetryNonce, canShowLiveCameraPreview, cameraUnavailable, handleCameraStartupFailure, isCameraReady]);
 
   useEffect(() => {
     decorateProgress.value = withTiming(showDecorateControls ? 1 : 0, {
@@ -1037,8 +1147,51 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const cameraUnavailableDetail =
     cameraIssueDetail?.trim() || t(
       'capture.cameraUnavailableHint',
-      'This can happen on a simulator or when the camera session gets stuck. Try again or use a physical device.'
+      'The camera session may have stalled. Try again to restart the preview.'
     );
+  const cameraZoomGesturesEnabled =
+    canShowLiveCameraPreview && !showCameraUnavailableState && !interactionsDisabled;
+  const cameraZoomLabel = `${Math.round(cameraZoom * 100)}%`;
+  const cameraZoomGesture = useMemo(
+    () =>
+      Gesture.Simultaneous(
+        Gesture.Pan()
+          .enabled(cameraZoomGesturesEnabled)
+          .runOnJS(true)
+          .maxPointers(1)
+          .activeOffsetY([-10, 10])
+          .failOffsetX([-48, 48])
+          .shouldCancelWhenOutside(false)
+          .onBegin(() => {
+            cameraPanZoomStartRef.current = cameraZoomRef.current;
+          })
+          .onUpdate((event) => {
+            const nextZoom =
+              cameraPanZoomStartRef.current -
+              (event.translationY / Math.max(CARD_SIZE, 1)) * CAMERA_ZOOM_PAN_RANGE;
+            updateCameraZoom(nextZoom);
+          })
+          .onEnd(() => {
+            scheduleHideCameraZoomBadge();
+          }),
+        Gesture.Pinch()
+          .enabled(cameraZoomGesturesEnabled)
+          .runOnJS(true)
+          .shouldCancelWhenOutside(false)
+          .onBegin(() => {
+            cameraPinchZoomStartRef.current = cameraZoomRef.current;
+          })
+          .onUpdate((event) => {
+            const nextZoom =
+              cameraPinchZoomStartRef.current + (event.scale - 1) * CAMERA_ZOOM_PINCH_RANGE;
+            updateCameraZoom(nextZoom);
+          })
+          .onEnd(() => {
+            scheduleHideCameraZoomBadge();
+          })
+      ),
+    [cameraZoomGesturesEnabled, scheduleHideCameraZoomBadge, updateCameraZoom]
+  );
   const handleToggleDecorateMenu = useCallback(() => {
     dismissPastePrompt();
 
@@ -1133,7 +1286,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     }
 
     if (mediaPermission.status !== 'granted') {
-      Alert.alert(
+      showAppAlert(
         t('capture.photoLibraryPermissionTitle', 'Photo access needed'),
         mediaPermission.canAskAgain === false
           ? t(
@@ -1170,7 +1323,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       applyImportedSticker(nextPlacement);
     } catch (error) {
       console.warn('Sticker import failed:', error);
-      Alert.alert(
+      showAppAlert(
         t('capture.error', 'Error'),
         getStickerImportErrorMessage(t, error)
       );
@@ -1227,7 +1380,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           : error instanceof ClipboardStickerError && error.code === 'requires-update'
             ? t('capture.clipboardStickerRequiresUpdateTitle', 'Update required')
             : t('capture.error', 'Error');
-      Alert.alert(
+      showAppAlert(
         alertTitle,
         error instanceof Error
           ? error.message
@@ -1538,6 +1691,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         'Pick how close you need to be.'
       )}
       contentContainerStyle={styles.radiusSheet}
+      useHorizontalPadding={false}
     >
       <View>
         {NOTE_RADIUS_OPTIONS.map((option, index) => {
@@ -1927,7 +2081,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               >
                 <TextInput
                   testID="capture-note-input"
-                  key={`note-text-${isSearching}`}
                   style={[
                     styles.textInput,
                     { color: colors.captureCardText },
@@ -2371,10 +2524,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     label={t('capture.cameraTryAgain', 'Try Again')}
                     variant="secondary"
                     onPress={() => {
-                      setCameraUnavailable(false);
-                      setCameraIssueDetail(null);
-                      setIsCameraReady(false);
-                      setCameraRetryNonce((current) => current + 1);
+                      restartCameraPreview(true);
                     }}
                     style={styles.cameraRetryButton}
                   />
@@ -2382,26 +2532,38 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               ) : (
                 <>
                   {captureMode === 'camera' && shouldRenderCameraPreview ? (
-                    <CameraView
-                      key={`camera-session-${cameraSessionKey}-${cameraRetryNonce}-${facing}`}
-                      style={styles.cameraPreview}
-                      facing={facing}
-                      ref={cameraRef}
-                      onCameraReady={() => {
-                        setCameraUnavailable(false);
-                        setCameraIssueDetail(null);
-                        setIsCameraReady(true);
-                      }}
-                      onMountError={(error) => {
-                        setCameraUnavailable(true);
-                        setCameraIssueDetail(error.message);
-                        setIsCameraReady(false);
-                      }}
-                    />
+                    <GestureDetector gesture={cameraZoomGesture}>
+                      <View style={styles.cameraGestureLayer}>
+                        <CameraView
+                          key={`camera-session-${cameraSessionKey}-${cameraRetryNonce}-${facing}`}
+                          style={styles.cameraPreview}
+                          facing={facing}
+                          zoom={cameraZoom}
+                          active={canShowLiveCameraPreview}
+                          ref={cameraRef}
+                          onCameraReady={() => {
+                            cameraAutoRecoveryCountRef.current = 0;
+                            setCameraUnavailable(false);
+                            setCameraIssueDetail(null);
+                            setIsCameraReady(true);
+                          }}
+                          onMountError={(error) => {
+                            handleCameraStartupFailure(error.message);
+                          }}
+                        />
+                      </View>
+                    </GestureDetector>
                   ) : null}
                   {shouldRenderCameraPreview && !isCameraReady ? (
                     <View pointerEvents="none" style={styles.cameraLoadingOverlay}>
                       <ActivityIndicator size="small" color={colors.captureCameraOverlayText} />
+                    </View>
+                  ) : null}
+                  {showCameraZoomBadge && shouldRenderCameraPreview ? (
+                    <View pointerEvents="none" style={styles.cameraZoomBadge}>
+                      <Text style={[styles.cameraZoomBadgeText, { color: colors.captureCameraOverlayText }]}>
+                        {cameraZoomLabel}
+                      </Text>
                     </View>
                   ) : null}
                 </>
@@ -2483,7 +2645,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     />
                     <TextInput
                       testID="capture-restaurant-input"
-                      key={`restaurant-${isSearching}`}
                       style={[styles.cardRestaurantInput, styles.cardRestaurantInputCompact, { color: colors.captureGlassText }]}
                       placeholder={t('capture.restaurantPlaceholder', 'Restaurant name (e.g. Phở Hòa)')}
                       placeholderTextColor={colors.captureGlassPlaceholder}
@@ -3124,11 +3285,34 @@ const styles = StyleSheet.create({
   cameraPreview: {
     ...StyleSheet.absoluteFill,
   },
+  cameraGestureLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
   cameraLoadingOverlay: {
     ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1,
+  },
+  cameraZoomBadge: {
+    position: 'absolute',
+    top: TOP_CONTROL_INSET,
+    right: 16,
+    minWidth: 58,
+    minHeight: TOP_CONTROL_HEIGHT,
+    paddingHorizontal: 12,
+    borderRadius: TOP_CONTROL_RADIUS,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(28,28,30,0.52)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+    zIndex: 10,
+  },
+  cameraZoomBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: 'System',
   },
   cameraUnavailableState: {
     ...StyleSheet.absoluteFill,
@@ -3298,7 +3482,7 @@ const styles = StyleSheet.create({
   },
   radiusSheetRow: {
     minHeight: 60,
-    paddingHorizontal: 4,
+    paddingHorizontal: Sheet.android.horizontalPadding,
     paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
@@ -3314,6 +3498,6 @@ const styles = StyleSheet.create({
   },
   radiusSheetDivider: {
     height: StyleSheet.hairlineWidth,
-    marginLeft: 4,
+    marginLeft: Sheet.android.horizontalPadding,
   },
 });

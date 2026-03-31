@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
+import { showAppAlert } from '../utils/alert';
 import {
-  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -83,7 +83,7 @@ export default function PlusScreen() {
 
     const result = await purchasePackage(pkg);
     if (result.status === 'success') {
-      Alert.alert(t('plus.upgradeSuccessTitle', 'Plus unlocked'), successMessage);
+      showAppAlert(t('plus.upgradeSuccessTitle', 'Plus unlocked'), successMessage);
       return;
     }
 
@@ -91,7 +91,7 @@ export default function PlusScreen() {
       return;
     }
 
-    Alert.alert(
+    showAppAlert(
       t('plus.upgradeUnavailableTitle', 'Plus unavailable'),
       result.message ??
         t(
@@ -104,7 +104,7 @@ export default function PlusScreen() {
   const handlePresentPaywall = async () => {
     const result = await presentPaywall();
     if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
-      Alert.alert(
+      showAppAlert(
         t('plus.upgradeSuccessTitle', 'Plus unlocked'),
         t(
           'plus.upgradeSuccessMessage',
@@ -121,14 +121,14 @@ export default function PlusScreen() {
 
     const result = await restorePurchases();
     if (result.status === 'success') {
-      Alert.alert(
+      showAppAlert(
         t('plus.restoreSuccessTitle', 'Restored'),
         t('plus.restoreSuccessMessage', 'Plus is active on this device.')
       );
       return;
     }
 
-    Alert.alert(
+    showAppAlert(
       t('plus.restoreFailedTitle', 'Restore failed'),
       result.message ??
         t('plus.restoreFailedMessage', "Couldn't restore purchases right now.")

@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert } from 'react-native';
+import { showAppAlert } from '../utils/alert';
 import { useAuth } from './useAuth';
 import { useSharedFeedStore } from './useSharedFeed';
 import { getSharedFeedErrorMessage } from '../services/sharedFeedService';
@@ -33,7 +33,7 @@ export function useFriendInviteJoin({
       const normalizedValue = value.trim();
 
       if (!normalizedValue) {
-        Alert.alert(
+        showAppAlert(
           t('shared.joinErrorTitle', 'Invite needed'),
           t('shared.joinErrorBody', 'Paste a valid invite link to connect.')
         );
@@ -52,14 +52,14 @@ export function useFriendInviteJoin({
         await acceptFriendInvite(normalizedValue);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         onBeforeSuccessAlert?.(normalizedValue);
-        Alert.alert(
+        showAppAlert(
           t('shared.joinSuccessTitle', "You're connected"),
           t('shared.joinSuccessBody', 'You can now share notes with this friend from Home.')
         );
         onJoined?.(normalizedValue);
         return true;
       } catch (error) {
-        Alert.alert(t('shared.joinFailedTitle', 'Could not join'), getSharedFeedErrorMessage(error));
+        showAppAlert(t('shared.joinFailedTitle', 'Could not join'), getSharedFeedErrorMessage(error));
         return false;
       } finally {
         setJoining(false);

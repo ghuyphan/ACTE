@@ -9,9 +9,8 @@ import {
 } from '@shopify/react-native-skia';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
-import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
 import type { DebugTiltState } from './StickerPhysicsDebugControls';
-import { useStickerPhysics, type StickerPhysicsState } from '../hooks/useStickerPhysics';
 import {
   hydrateStickerPlacements,
   type NoteStickerPlacement,
@@ -50,25 +49,9 @@ interface StickerLayerProps {
   layout: StickerCanvasLayout;
   sizeMultiplier: number;
   minimumBaseSize: number;
-  isActive: boolean;
-  debugTiltOverride?: SharedValue<DebugTiltState>;
-}
-
-interface PhysicsStickerSpriteProps {
-  placement: NoteStickerPlacement;
-  index: number;
-  physicsState: SharedValue<StickerPhysicsState[]>;
-  layout: StickerCanvasLayout;
-  sizeMultiplier: number;
-  minimumBaseSize: number;
 }
 
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
-
-function clamp(value: number, minValue: number, maxValue: number) {
-  'worklet';
-  return Math.min(maxValue, Math.max(minValue, value));
-}
 
 function StickerSprite({
   placement,
@@ -127,90 +110,34 @@ function StickerSprite({
 
 const MemoStickerSprite = memo(StickerSprite);
 
-function PhysicsStickerSprite({
-  placement,
-  index,
-  physicsState,
-  layout,
-  sizeMultiplier,
-  minimumBaseSize,
-}: PhysicsStickerSpriteProps) {
-  const dimensions = getStickerDimensions(placement, layout, sizeMultiplier, minimumBaseSize);
-  const outlineSize = getStickerOutlineSize(dimensions.width, dimensions.height);
-  const motionTransform = useDerivedValue<Transforms3d>(() => {
-    const state = physicsState.value[index];
-    if (!state) {
-      return [
-        { translateX: placement.x * layout.width },
-        { translateY: placement.y * layout.height },
-        { rotate: (placement.rotation * Math.PI) / 180 },
-      ] as Transforms3d;
-    }
-
-    return [
-      { translateX: state.x },
-      { translateY: state.y },
-      { rotate: (state.rotation * Math.PI) / 180 },
-    ] as Transforms3d;
-  }, [index, layout.height, layout.width, placement.rotation, placement.x, placement.y]);
-  const jellyTransform = useDerivedValue<Transforms3d>(() => {
-    const state = physicsState.value[index];
-    if (!state) {
-      return [{ scaleX: 1 }, { scaleY: 1 }] as Transforms3d;
-    }
-
-    return [
-      { scaleX: clamp(state.jellyScaleX, 0.92, 1.08) },
-      { scaleY: clamp(state.jellyScaleY, 0.92, 1.08) },
-    ] as Transforms3d;
-  }, [index]);
-  const opacity = useDerivedValue(() => physicsState.value[index]?.opacity ?? placement.opacity, [
-    index,
-    placement.opacity,
-  ]);
-
-  return (
-    <MemoStickerSprite
-      placement={placement}
-      width={dimensions.width}
-      height={dimensions.height}
-      outlineSize={outlineSize}
-      opacity={opacity}
-      motionTransform={motionTransform}
-      jellyTransform={jellyTransform}
-    />
-  );
-}
-
 function StickerLayer({
   placements,
   layout,
   sizeMultiplier,
   minimumBaseSize,
-  isActive,
-  debugTiltOverride,
 }: StickerLayerProps) {
-  const physicsState = useStickerPhysics({
-    placements,
-    layout,
-    isActive,
-    sizeMultiplier,
-    minimumBaseSize,
-    debugTiltOverride,
-  });
-
   return (
     <>
-      {placements.map((placement, index) => {
+      {placements.map((placement) => {
+        const dimensions = getStickerDimensions(placement, layout, sizeMultiplier, minimumBaseSize);
+        const outlineSize = getStickerOutlineSize(dimensions.width, dimensions.height);
+        const motionTransform = [
+          { translateX: placement.x * layout.width },
+          { translateY: placement.y * layout.height },
+          { rotate: (placement.rotation * Math.PI) / 180 },
+        ] as Transforms3d;
+        const jellyTransform = [{ scaleX: 1 }, { scaleY: 1 }] as Transforms3d;
+
         return (
-          <PhysicsStickerSprite
+          <MemoStickerSprite
             key={placement.id}
             placement={placement}
-            index={index}
-            physicsState={physicsState}
-            layout={layout}
-            sizeMultiplier={sizeMultiplier}
-            minimumBaseSize={minimumBaseSize}
+            width={dimensions.width}
+            height={dimensions.height}
+            outlineSize={outlineSize}
+            opacity={placement.opacity}
+            motionTransform={motionTransform}
+            jellyTransform={jellyTransform}
           />
         );
       })}
@@ -225,8 +152,6 @@ export default function DynamicStickerCanvas({
   sharedCache = false,
   sizeMultiplier = 1,
   minimumBaseSize = 68,
-  isActive = false,
-  debugTiltOverride,
 }: DynamicStickerCanvasProps) {
   const [layout, setLayout] = useState<StickerCanvasLayout>({ width: 1, height: 1 });
   const [hydratedPlacements, setHydratedPlacements] = useState(placements);
@@ -271,8 +196,6 @@ export default function DynamicStickerCanvas({
           layout={layout}
           sizeMultiplier={sizeMultiplier}
           minimumBaseSize={minimumBaseSize}
-          isActive={isActive}
-          debugTiltOverride={debugTiltOverride}
         />
       </Canvas>
     </View>

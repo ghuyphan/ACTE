@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
-import { useEffect } from 'react';
 import { Dimensions, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { Layout, Typography } from '../../constants/theme';
@@ -10,7 +9,7 @@ import { getNotePhotoUri } from '../../services/photoStorage';
 import { SharedPost } from '../../services/sharedFeedService';
 import { formatDate } from '../../utils/dateUtils';
 import ImageMemoryCard from '../ImageMemoryCard';
-import StickerPhysicsDebugControls, {
+import {
   DEFAULT_DEBUG_TILT_STATE,
   type DebugTiltState,
 } from '../StickerPhysicsDebugControls';
@@ -61,15 +60,6 @@ export function NoteMemoryCard({
 }: NoteMemoryCardProps) {
   const dateStr = formatDate(note.createdAt, 'short');
   const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
-  const showDebugControls = __DEV__ && isActive && Boolean(note.hasStickers || note.stickerPlacementsJson);
-
-  useEffect(() => {
-    if (showDebugControls) {
-      return;
-    }
-
-    debugTiltOverride.value = DEFAULT_DEBUG_TILT_STATE;
-  }, [debugTiltOverride, showDebugControls]);
 
   const content = (
     <View style={[styles.cardRoot, containerStyle, { width: cardSize }]}>
@@ -119,15 +109,6 @@ export function NoteMemoryCard({
           ) : null}
         </InfoPill>
       </View>
-      <View
-        pointerEvents="box-none"
-        style={[styles.debugControlsOverlay, { top: cardSize + 72, width: cardSize }]}
-      >
-        <StickerPhysicsDebugControls
-          debugTiltOverride={debugTiltOverride}
-          visible={showDebugControls}
-        />
-      </View>
     </View>
   );
 
@@ -150,15 +131,6 @@ export function SharedPostMemoryCard({
   const authorLabel = post.authorDisplayName ?? t('shared.someone', 'Someone');
   const dateStr = formatDate(post.createdAt, 'short');
   const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
-  const showDebugControls = __DEV__ && isActive && Boolean(post.hasStickers || post.stickerPlacementsJson);
-
-  useEffect(() => {
-    if (showDebugControls) {
-      return;
-    }
-
-    debugTiltOverride.value = DEFAULT_DEBUG_TILT_STATE;
-  }, [debugTiltOverride, showDebugControls]);
 
   const content = (
     <View style={[styles.cardRoot, containerStyle, { width: cardSize }]}>
@@ -198,15 +170,6 @@ export function SharedPostMemoryCard({
             <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
           </InfoPill>
         </View>
-      </View>
-      <View
-        pointerEvents="box-none"
-        style={[styles.debugControlsOverlay, { top: cardSize + 72, width: cardSize }]}
-      >
-        <StickerPhysicsDebugControls
-          debugTiltOverride={debugTiltOverride}
-          visible={showDebugControls}
-        />
       </View>
     </View>
   );
@@ -293,11 +256,5 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     marginHorizontal: 2,
-  },
-  debugControlsOverlay: {
-    position: 'absolute',
-    left: 0,
-    alignSelf: 'center',
-    zIndex: 20,
   },
 });

@@ -3,7 +3,7 @@ import * as FileSystem from '../../utils/fileSystem';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert } from 'react-native';
+import { showAppAlert } from '../../utils/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotes } from '../../hooks/useNotes';
@@ -71,7 +71,7 @@ export function useProfileScreenModel() {
 
   const handleSignOut = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
+    showAppAlert(
       t('profile.logoutConfirmTitle', 'Log out of Noto?'),
       t('profile.logoutConfirmMsg', 'Your notes will remain safely synced. You can sign back in anytime.'),
       [
@@ -92,7 +92,7 @@ export function useProfileScreenModel() {
 
     const deletingUserScope = user.uid;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    Alert.alert(
+    showAppAlert(
       t('profile.deleteAccountConfirmTitle', 'Delete your Noto account?'),
       t(
         'profile.deleteAccountConfirmMsg',
@@ -110,7 +110,7 @@ export function useProfileScreenModel() {
 
               if (result.status !== 'success') {
                 if (hasAccountDeletionLink()) {
-                  Alert.alert(
+                  showAppAlert(
                     t('profile.deleteAccountNeedsSupportTitle', 'Need help deleting your account?'),
                     result.message ??
                       t(
@@ -128,7 +128,7 @@ export function useProfileScreenModel() {
                     ]
                   );
                 } else {
-                  Alert.alert(
+                  showAppAlert(
                     t('profile.deleteAccountFailedTitle', 'Could not delete account'),
                     result.message ??
                       t(
@@ -162,7 +162,7 @@ export function useProfileScreenModel() {
               await clearGeofenceRegions().catch(() => undefined);
               await refreshNotes(false).catch(() => undefined);
               router.replace('/settings');
-              Alert.alert(
+              showAppAlert(
                 t('profile.deleteAccountSuccessTitle', 'Account deleted'),
                 t(
                   'profile.deleteAccountSuccessMsg',

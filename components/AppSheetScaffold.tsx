@@ -26,6 +26,7 @@ export interface AppSheetScaffoldProps {
   headerTop?: ReactNode;
   contentContainerStyle?: React.ComponentProps<typeof View>['style'];
   style?: React.ComponentProps<typeof View>['style'];
+  useHorizontalPadding?: boolean;
 }
 
 function HeaderActionButton({ action }: { action?: AppSheetHeaderAction }) {
@@ -74,6 +75,7 @@ export default function AppSheetScaffold({
   headerTop,
   contentContainerStyle,
   style,
+  useHorizontalPadding = true,
 }: AppSheetScaffoldProps) {
   const { colors } = useTheme();
   const isAndroid = Platform.OS === 'android';
@@ -94,7 +96,7 @@ export default function AppSheetScaffold({
       contentContainerStyle={[
         styles.scrollContent,
         {
-          paddingHorizontal: horizontalPadding,
+          paddingHorizontal: useHorizontalPadding ? horizontalPadding : 0,
           paddingBottom: footer ? 12 : bottomPadding,
         },
         contentContainerStyle,
@@ -107,7 +109,7 @@ export default function AppSheetScaffold({
       style={[
         styles.body,
         {
-          paddingHorizontal: horizontalPadding,
+          paddingHorizontal: useHorizontalPadding ? horizontalPadding : 0,
           paddingBottom: footer ? 12 : bottomPadding,
         },
         contentContainerStyle,

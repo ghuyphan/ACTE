@@ -760,7 +760,7 @@ export default function LoginScreen() {
       ) : (
         <KeyboardAvoidingView
           style={StyleSheet.absoluteFill}
-          behavior="padding"
+          behavior={undefined}
           pointerEvents="box-none"
         >
           <Animated.View

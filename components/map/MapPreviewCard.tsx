@@ -277,7 +277,10 @@ export default function MapPreviewCard({
       <View
         style={[
           styles.inner,
-          { borderColor: getOverlayBorderColor(isDark) },
+          {
+            borderColor: getOverlayBorderColor(isDark),
+            backgroundColor: getOverlayFallbackColor(isDark),
+          },
         ]}
         pointerEvents={pointerEvents}
       >

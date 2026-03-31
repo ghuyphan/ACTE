@@ -33,6 +33,7 @@ import { useCaptureFlow } from '../../hooks/useCaptureFlow';
 import { useFeedFocus } from '../../hooks/useFeedFocus';
 import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
+import { showAppAlert } from '../../utils/alert';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
@@ -501,22 +502,16 @@ export default function HomeScreen() {
     }
 
     let cancelled = false;
-    let previewTimeout: ReturnType<typeof setTimeout> | null = null;
     const idleHandle = scheduleOnIdle(() => {
-      previewTimeout = setTimeout(() => {
-        if (!cancelled) {
-          setCameraPreviewReady(true);
-        }
-      }, 180);
+      if (!cancelled) {
+        setCameraPreviewReady(true);
+      }
     });
 
     return () => {
       cancelled = true;
       setCameraPreviewReady(false);
       idleHandle.cancel();
-      if (previewTimeout) {
-        clearTimeout(previewTimeout);
-      }
     };
   }, [appState, captureMode, isScreenFocused]);
 
@@ -974,7 +969,7 @@ export default function HomeScreen() {
         resolve(value);
       };
 
-      Alert.alert(
+      showAppAlert(
         t('plus.hologramSaveTitle', 'Save this hologram card with Plus'),
         t(
           'plus.hologramSaveMessage',
@@ -999,7 +994,7 @@ export default function HomeScreen() {
             onPress: () => {
               void (async () => {
                 if (!isPurchaseAvailable) {
-                  Alert.alert(
+                  showAppAlert(
                     t('plus.upgradeUnavailableTitle', 'Plus unavailable'),
                     t(
                       'plus.upgradeUnavailableMessage',
@@ -1021,7 +1016,7 @@ export default function HomeScreen() {
                   return;
                 }
 
-                Alert.alert(
+                showAppAlert(
                   t('plus.upgradeUnavailableTitle', 'Plus unavailable'),
                   t(
                     'plus.upgradeUnavailableMessage',
@@ -1472,7 +1467,7 @@ export default function HomeScreen() {
         url: invite.url,
       });
     } catch (error) {
-      Alert.alert(
+      showAppAlert(
         t('shared.inviteFailedTitle', 'Could not prepare invite'),
         getSharedFeedErrorMessage(error)
       );
@@ -1490,7 +1485,7 @@ export default function HomeScreen() {
       await revokeFriendInvite(activeInvite.id);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      Alert.alert(
+      showAppAlert(
         t('shared.inviteFailedTitle', 'Could not prepare invite'),
         getSharedFeedErrorMessage(error)
       );
@@ -1499,7 +1494,7 @@ export default function HomeScreen() {
 
   const handleRemoveFriend = useCallback(
     (friendUid: string) => {
-      Alert.alert(
+      showAppAlert(
         t('shared.removeFriendTitle', 'Remove friend'),
         t(
           'shared.removeFriendBody',
@@ -1520,7 +1515,7 @@ export default function HomeScreen() {
                   void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 })
                 .catch((error) => {
-                  Alert.alert(
+                  showAppAlert(
                     t('shared.removeFriendTitle', 'Remove friend'),
                     getSharedFeedErrorMessage(error)
                   );

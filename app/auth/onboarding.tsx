@@ -1,7 +1,7 @@
 import { GlassView } from '../../components/ui/GlassView';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -13,8 +13,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
+import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
-import { setPersistentItem } from '../../utils/appStorage';
+import { getPersistentItem, setPersistentItem } from '../../utils/appStorage';
 import { isOlderIOS } from '../../utils/platform';
 
 const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
@@ -63,17 +64,39 @@ function PaginationDot({ activeColor, inactiveColor, isActive }: PaginationDotPr
 export default function OnboardingScreen() {
     const { t } = useTranslation();
     const { colors, isDark } = useTheme();
+    const { user } = useAuth();
     const router = useRouter();
     const [step, setStep] = useState(0);
     const [isCompleting, setIsCompleting] = useState(false);
 
-    const completeOnboarding = () => {
+    useEffect(() => {
+        let cancelled = false;
+
+        if (user) {
+            router.replace('/');
+            return;
+        }
+
+        void getPersistentItem(HAS_LAUNCHED_KEY)
+            .then((hasLaunched) => {
+                if (!cancelled && hasLaunched === 'true') {
+                    router.replace('/');
+                }
+            })
+            .catch(() => undefined);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [router, user]);
+
+    const completeOnboarding = async () => {
         if (isCompleting) {
             return;
         }
 
         setIsCompleting(true);
-        void setPersistentItem(HAS_LAUNCHED_KEY, 'true').catch((error) => {
+        await setPersistentItem(HAS_LAUNCHED_KEY, 'true').catch((error) => {
             console.warn('Failed to persist onboarding state:', error);
         });
 
@@ -93,7 +116,7 @@ export default function OnboardingScreen() {
         if (step < SLIDES.length - 1) {
             setStep(step + 1);
         } else {
-            completeOnboarding();
+            void completeOnboarding();
         }
     };
 
@@ -169,7 +192,9 @@ export default function OnboardingScreen() {
                 {/* Skip */}
                 <View style={styles.skipContainer}>
                     {step < SLIDES.length - 1 ? (
-                        <Pressable disabled={isCompleting} onPress={completeOnboarding} style={({ pressed }) => [
+                        <Pressable disabled={isCompleting} onPress={() => {
+                            void completeOnboarding();
+                        }} style={({ pressed }) => [
                             styles.skipButton,
                             isCompleting && { opacity: 0.5 },
                             pressed && !isCompleting && { opacity: 0.7 }

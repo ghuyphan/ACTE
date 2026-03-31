@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { showAppAlert } from '../utils/alert';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SharedPostMemoryCard } from './home/MemoryCardPrimitives';
 import { Layout } from '../constants/theme';
@@ -55,7 +56,7 @@ export default function SharedPostDetailSheet({
       return;
     }
 
-    Alert.alert(
+    showAppAlert(
       t('shared.deleteTitle', 'Delete shared moment'),
       t('shared.deleteBody', 'This shared post will be removed for everyone in the feed.'),
       [
@@ -72,7 +73,7 @@ export default function SharedPostDetailSheet({
                 handleDismiss();
               })
               .catch((error) => {
-                Alert.alert(
+                showAppAlert(
                   t('shared.deleteTitle', 'Delete shared moment'),
                   error instanceof Error ? error.message : t('shared.genericError', 'Something went wrong.')
                 );

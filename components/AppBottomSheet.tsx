@@ -4,7 +4,7 @@ import {
   BottomSheetView,
 } from '@gorhom/bottom-sheet';
 import { useEffect, useRef } from 'react';
-import { Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { BackHandler, Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 
 export default function AppBottomSheet({
@@ -39,6 +39,21 @@ export default function AppBottomSheet({
 
     modalRef.current?.dismiss();
   }, [visible]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !visible || !dismissible) {
+      return;
+    }
+
+    const backAction = () => {
+      onClose();
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+
+    return () => backHandler.remove();
+  }, [visible, dismissible, onClose]);
 
   if (Platform.OS !== 'android') {
     return null;
@@ -85,7 +100,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 0,
   },
   detached: {
-    marginHorizontal: 16,
+    marginHorizontal: 0,
   },
   edgeBackground: {
     borderTopLeftRadius: 28,

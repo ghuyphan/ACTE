@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Typography } from '../constants/theme';
+import { Sheet, Typography } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import AppSheet from './AppSheet';
 import AppSheetScaffold from './AppSheetScaffold';
@@ -38,6 +38,7 @@ function StickerSourceSheetBody({
       headerVariant="standard"
       title={title}
       subtitle={canPasteFromClipboard ? pasteLabel : photoLabel}
+      useHorizontalPadding={false}
       footer={(
         <View style={styles.footer}>
           <Pressable
@@ -120,7 +121,7 @@ export default function StickerSourceSheet({
 const styles = StyleSheet.create({
   optionRow: {
     minHeight: 68,
-    paddingHorizontal: 4,
+    paddingHorizontal: Sheet.android.horizontalPadding,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
@@ -142,7 +143,7 @@ const styles = StyleSheet.create({
   },
   optionDivider: {
     height: StyleSheet.hairlineWidth,
-    marginLeft: 58,
+    marginLeft: Sheet.android.horizontalPadding + 54, // Icon (40) + Gap (14)
   },
   footer: {
     alignItems: 'flex-end',
@@ -150,7 +151,7 @@ const styles = StyleSheet.create({
   },
   cancelAction: {
     minHeight: 40,
-    paddingHorizontal: 12,
+    paddingHorizontal: Sheet.android.horizontalPadding,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',

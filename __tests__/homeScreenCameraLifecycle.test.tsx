@@ -105,6 +105,13 @@ jest.mock('../hooks/useAppSheetAlert', () => ({
   }),
 }));
 
+jest.mock('../hooks/useActiveFeedTarget', () => ({
+  useActiveFeedTarget: () => ({
+    setActiveFeedTarget: jest.fn(),
+    clearActiveFeedTarget: jest.fn(),
+  }),
+}));
+
 jest.mock('../hooks/useNoteDetailSheet', () => ({
   useNoteDetailSheet: () => ({
     openNoteDetail: jest.fn(),

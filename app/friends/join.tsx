@@ -136,7 +136,7 @@ export default function FriendJoinScreen() {
         scheduleDismiss(40);
       }}
     >
-      <KeyboardAvoidingView behavior="padding">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <AppSheetScaffold
           headerVariant="action"
           title={t('shared.joinTitle', 'Join a friend')}

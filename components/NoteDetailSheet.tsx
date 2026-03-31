@@ -3,10 +3,11 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BottomSheetView, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { showAppAlert } from '../utils/alert';
 import {
-    Alert,
     Dimensions,
     type GestureResponderEvent,
     Keyboard,
@@ -370,7 +371,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             onPress: () => {
                 void (async () => {
                     const result = await restorePurchases();
-                    Alert.alert(
+                    showAppAlert(
                         result.status === 'success'
                             ? t('plus.restoreSuccessTitle', 'Purchases restored')
                             : t('plus.restoreFailedTitle', 'Could not restore purchases'),
@@ -405,7 +406,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                             result === PAYWALL_RESULT.PURCHASED ||
                             result === PAYWALL_RESULT.RESTORED
                         ) {
-                            Alert.alert(
+                            showAppAlert(
                                 t('plus.upgradeSuccessTitle', 'Noto Plus is ready'),
                                 t(
                                     'plus.upgradeSuccessMessage',
@@ -418,7 +419,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             });
         }
 
-        Alert.alert(
+        showAppAlert(
             t('plus.colorTitle', 'Premium card finishes'),
             t(
                 'plus.colorMessage',
@@ -440,7 +441,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 resolve(value);
             };
 
-            Alert.alert(
+            showAppAlert(
                 t('plus.hologramSaveTitle', 'Save this hologram card with Plus'),
                 t(
                     'plus.hologramSaveMessage',
@@ -465,7 +466,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                         onPress: () => {
                             void (async () => {
                                 if (!isPurchaseAvailable) {
-                                    Alert.alert(
+                                    showAppAlert(
                                         t('plus.upgradeUnavailableTitle', 'Plus unavailable'),
                                         t(
                                             'plus.upgradeUnavailableMessage',
@@ -493,7 +494,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                     return;
                                 }
 
-                                Alert.alert(
+                                showAppAlert(
                                     t('plus.upgradeUnavailableTitle', 'Plus unavailable'),
                                     t(
                                         'plus.upgradeUnavailableMessage',
@@ -736,7 +737,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
 
         if (mediaPermission.status !== 'granted') {
-            Alert.alert(
+            showAppAlert(
                 t('capture.photoLibraryPermissionTitle', 'Photo access needed'),
                 mediaPermission.canAskAgain === false
                     ? t(
@@ -777,7 +778,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             setDoodleModeEnabled(false);
         } catch (error) {
             console.warn('Sticker import failed:', error);
-            Alert.alert(
+            showAppAlert(
                 t('capture.error', 'Error'),
                 getStickerImportErrorMessage(t, error)
             );
@@ -838,7 +839,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     : error instanceof ClipboardStickerError && error.code === 'requires-update'
                         ? t('capture.clipboardStickerRequiresUpdateTitle', 'Update required')
                         : t('capture.error', 'Error');
-            Alert.alert(
+            showAppAlert(
                 alertTitle,
                 error instanceof Error
                     ? error.message
@@ -1014,7 +1015,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     await deleteSharedNote(targetNoteId);
                 } catch (error) {
                     console.error('Shared delete failed:', error);
-                    Alert.alert(
+                    showAppAlert(
                         t('noteDetail.deleteWarningTitle', 'Deleted locally'),
                         t(
                             'noteDetail.deleteWarningMsg',
@@ -1025,7 +1026,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             }
         } catch (error) {
             console.error('Delete failed:', error);
-            Alert.alert(
+            showAppAlert(
                 t('noteDetail.deleteErrorTitle', 'Delete failed'),
                 t('noteDetail.deleteErrorMsg', 'Unable to delete this note right now. Please try again.')
             );
@@ -1069,7 +1070,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     const handleDelete = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        Alert.alert(
+        showAppAlert(
             t('noteDetail.deleteTitle', 'Delete Note'),
             t('noteDetail.deleteMsg', 'This note and its geofence will be permanently removed.'),
             [
@@ -1107,7 +1108,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         } catch (error) {
             console.error('Favorite toggle failed:', error);
             setNote((prev) => (prev ? { ...prev, isFavorite: previousValue } : prev));
-            Alert.alert(
+            showAppAlert(
                 t('noteDetail.favoriteErrorTitle', 'Could not update favorite'),
                 t('noteDetail.favoriteErrorMsg', 'Please try again in a moment.')
             );
@@ -1263,7 +1264,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             if (user) {
                 void updateSharedNote(nextNote).catch((error) => {
                     console.warn('Shared note update failed:', error);
-                    Alert.alert(
+                    showAppAlert(
                         t('noteDetail.updateWarningTitle', 'Saved locally'),
                         t(
                             'noteDetail.updateWarningMsg',

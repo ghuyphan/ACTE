@@ -22,6 +22,7 @@ import { SharedFeedProvider } from '../hooks/useSharedFeed';
 import { SyncStatusProvider } from '../hooks/useSyncStatus';
 import { SubscriptionProvider } from '../hooks/useSubscription';
 import { ThemeProvider, useTheme } from '../hooks/useTheme';
+import { AppAlertProvider } from '../components/ui/AppAlertProvider';
 import { getDB } from '../services/database';
 import { syncGeofenceRegions } from '../services/geofenceService';
 import { configureNotificationChannels } from '../services/notificationService';
@@ -55,6 +56,7 @@ function AppContent() {
   const lastHandledNotificationIdRef = useRef<string | null>(null);
   const [initialUrlResolved, setInitialUrlResolved] = useState(false);
   const [hasInitialUrl, setHasInitialUrl] = useState(false);
+  const [startupRedirectHandled, setStartupRedirectHandled] = useState(false);
   const [startupTarget, setStartupTarget] = useState<string | null>(() => {
     const hasLaunched = getPersistentItemSync(HAS_LAUNCHED_KEY);
     if (hasLaunched === undefined) {
@@ -64,7 +66,11 @@ function AppContent() {
     return resolveStartupTarget(hasLaunched);
   });
   const startupRedirectPending =
-    initialUrlResolved && !hasInitialUrl && segments[0] === undefined && Boolean(startupTarget);
+    !startupRedirectHandled &&
+    initialUrlResolved &&
+    !hasInitialUrl &&
+    segments[0] === undefined &&
+    Boolean(startupTarget);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,12 +159,18 @@ function AppContent() {
   }, [startupTarget]);
 
   useEffect(() => {
-    if (!startupRedirectPending || !startupTarget) {
+    if (startupRedirectHandled || !initialUrlResolved || !startupTarget) {
       return;
     }
 
+    if (hasInitialUrl || segments[0] !== undefined) {
+      setStartupRedirectHandled(true);
+      return;
+    }
+
+    setStartupRedirectHandled(true);
     router.replace(startupTarget as '/' | '/auth/onboarding');
-  }, [router, startupRedirectPending, startupTarget]);
+  }, [hasInitialUrl, initialUrlResolved, router, segments, startupRedirectHandled, startupTarget]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -385,6 +397,7 @@ export default function RootLayout() {
                             <SharedFeedProvider>
                               <NoteDetailSheetProvider>
                                 <BottomSheetModalProvider>
+                                  <AppAlertProvider />
                                   <AppContent />
                                 </BottomSheetModalProvider>
                               </NoteDetailSheetProvider>
