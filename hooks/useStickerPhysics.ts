@@ -13,6 +13,11 @@ import {
   sortStickerPlacements,
   type StickerCanvasLayout,
 } from '../components/stickerCanvasMetrics';
+import {
+  detectRoundedStickerCollision,
+  getStickerCollisionFrame,
+  getStickerCollisionGeometry,
+} from './stickerCollision';
 
 interface StickerPhysicsDescriptor {
   id: string;
@@ -20,7 +25,10 @@ interface StickerPhysicsDescriptor {
   anchorY: number;
   width: number;
   height: number;
-  radius: number;
+  broadPhaseRadius: number;
+  coreHalfWidth: number;
+  coreHalfHeight: number;
+  cornerRadius: number;
   baseRotation: number;
   opacity: number;
 }
@@ -95,7 +103,6 @@ const BOUNDARY_RESTITUTION = 0.86;
 const COLLISION_RESTITUTION = 0.92;
 const MAX_SENSOR_COMPONENT = 1.15;
 const FLAT_RESTORE_THRESHOLD = 0.28;
-const MIN_DISTANCE_EPSILON = 0.001;
 const COLLISION_ITERATIONS = 3;
 const COLLISION_SPIN_FACTOR = 0.34;
 const BOUNDARY_SPIN_FACTOR = 0.18;
@@ -267,24 +274,24 @@ function resolveStickerCollisions(
 ) {
   'worklet';
 
+  const collisionFrames = stickers.map((sticker) => getStickerCollisionFrame(sticker.rotation));
+
   for (let iteration = 0; iteration < COLLISION_ITERATIONS; iteration += 1) {
     for (let leftIndex = 0; leftIndex < stickers.length; leftIndex += 1) {
       for (let rightIndex = leftIndex + 1; rightIndex < stickers.length; rightIndex += 1) {
         const left = stickers[leftIndex];
         const right = stickers[rightIndex];
-        const dx = right.x - left.x;
-        const dy = right.y - left.y;
-        const minDistance = left.radius + right.radius;
-        const distanceSquared = dx * dx + dy * dy;
+        const collision = detectRoundedStickerCollision(
+          left,
+          right,
+          collisionFrames[leftIndex],
+          collisionFrames[rightIndex]
+        );
 
-        if (distanceSquared >= minDistance * minDistance) {
+        if (!collision) {
           continue;
         }
-
-        const distance = Math.max(Math.sqrt(distanceSquared), MIN_DISTANCE_EPSILON);
-        const normalX = dx / distance;
-        const normalY = dy / distance;
-        const overlap = minDistance - distance;
+        const { normalX, normalY, overlap } = collision;
         const correction = overlap / 2;
 
         left.x -= normalX * correction;
@@ -341,13 +348,20 @@ export function useStickerPhysics({
     () =>
       sortStickerPlacements(placements).map((placement) => {
         const dimensions = getStickerDimensions(placement, layout, sizeMultiplier, minimumBaseSize);
+        const collisionGeometry = getStickerCollisionGeometry(
+          dimensions.width,
+          dimensions.height
+        );
         return {
           id: placement.id,
           anchorX: placement.x * layout.width,
           anchorY: placement.y * layout.height,
           width: dimensions.width,
           height: dimensions.height,
-          radius: Math.max(dimensions.width, dimensions.height) / 2,
+          broadPhaseRadius: collisionGeometry.broadPhaseRadius,
+          coreHalfWidth: collisionGeometry.coreHalfWidth,
+          coreHalfHeight: collisionGeometry.coreHalfHeight,
+          cornerRadius: collisionGeometry.cornerRadius,
           baseRotation: placement.rotation,
           opacity: placement.opacity,
         };

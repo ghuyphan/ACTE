@@ -15,6 +15,7 @@ let mockClipboardPastePayload: any = {
   data: 'data:image/png;base64,ZmFrZS1zdGlja2Vy',
   size: { width: 120, height: 120 },
 };
+let mockClipboardListeners: Array<() => void> = [];
 
 jest.mock('@expo/vector-icons', () => {
   const React = require('react');
@@ -59,6 +60,14 @@ jest.mock('expo-clipboard', () => ({
   __esModule: true,
   hasImageAsync: jest.fn(),
   getImageAsync: jest.fn(),
+  addClipboardListener: jest.fn((listener: () => void) => {
+    mockClipboardListeners.push(listener);
+    return {
+      remove: () => {
+        mockClipboardListeners = mockClipboardListeners.filter((entry) => entry !== listener);
+      },
+    };
+  }),
   ClipboardPasteButton: ({ onPress, testID, accessibilityLabel }: any) => {
     const React = require('react');
     const { Pressable } = require('react-native');
@@ -326,11 +335,13 @@ describe('CaptureCard doodle handle', () => {
     jest.clearAllMocks();
     mockClipboardPasteButtonAvailable = true;
     mockCameraViewProps = null;
+    mockClipboardListeners = [];
     mockClipboardPastePayload = {
       type: 'image',
       data: 'data:image/png;base64,ZmFrZS1zdGlja2Vy',
       size: { width: 120, height: 120 },
     };
+    mockClipboardHasImageAsync.mockResolvedValue(false);
     mockWriteAsStringAsync.mockResolvedValue(undefined);
     mockDeleteAsync.mockResolvedValue(undefined);
     mockImportStickerAsset.mockResolvedValue({
@@ -792,8 +803,9 @@ describe('CaptureCard doodle handle', () => {
     expect(queryByTestId('capture-inline-paste-sticker')).toBeNull();
   });
 
-  it('shows the inline paste action on an empty text card without pre-reading the clipboard', async () => {
+  it('shows the inline paste action on an empty text card when the clipboard has an image', async () => {
     const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
 
     const { getByTestId } = renderCaptureCard(ref, {
       noteText: '',
@@ -804,8 +816,21 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
+  it('hides the inline paste action on an empty text card when the clipboard has no image', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+
+    const { queryByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    await waitFor(() => {
+      expect(queryByTestId('capture-inline-paste-sticker')).toBeNull();
+    });
+  });
+
   it('hides the inline paste action when decorate is opened', async () => {
     const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
 
     const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
       noteText: '',
@@ -1013,14 +1038,6 @@ describe('CaptureCard doodle handle', () => {
 
     const { getByTestId, queryByTestId } = renderCaptureCard(ref);
 
-    if (queryByTestId('capture-card-paste-dismiss')) {
-      await act(async () => {
-        fireEvent.press(getByTestId('capture-card-paste-dismiss'));
-      });
-    }
-
-    mockClipboardHasImageAsync.mockClear();
-
     await act(async () => {
       fireEvent(getByTestId('capture-note-input'), 'longPress');
     });
@@ -1030,9 +1047,51 @@ describe('CaptureCard doodle handle', () => {
     expect(ref.current?.getStickerSnapshot().placements).toHaveLength(0);
   });
 
+  it('hides the inline paste affordance when the native paste control is unavailable', async () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'ios';
+
+    try {
+      const ref = React.createRef<CaptureCardHandle>();
+      mockClipboardPasteButtonAvailable = false;
+
+      const { queryByTestId } = renderCaptureCard(ref, {
+        noteText: '',
+      });
+
+      await waitFor(() => {
+        expect(queryByTestId('capture-inline-paste-sticker')).toBeNull();
+      });
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+  });
+
+  it('shows the Android fallback paste action when the native paste control is unavailable', async () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+
+    try {
+      const ref = React.createRef<CaptureCardHandle>();
+      mockClipboardPasteButtonAvailable = false;
+      mockClipboardHasImageAsync.mockResolvedValue(true);
+
+      const { getByTestId } = renderCaptureCard(ref, {
+        noteText: '',
+      });
+
+      await waitFor(() => {
+        expect(getByTestId('capture-inline-paste-sticker')).toBeTruthy();
+      });
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+  });
+
   it('keeps the inline paste action inert when the native paste control has no image payload', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    mockClipboardHasImageAsync.mockResolvedValue(true);
     mockClipboardPastePayload = null;
 
     const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
@@ -1050,5 +1109,28 @@ describe('CaptureCard doodle handle', () => {
     expect(mockImportStickerAsset).not.toHaveBeenCalled();
     expect(queryByTestId('capture-card-paste-popover')).toBeNull();
     expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('updates the inline paste action when clipboard image availability changes', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(false);
+
+    const { queryByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    await waitFor(() => {
+      expect(queryByTestId('capture-inline-paste-sticker')).toBeNull();
+    });
+
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+
+    await act(async () => {
+      mockClipboardListeners.forEach((listener) => listener());
+    });
+
+    await waitFor(() => {
+      expect(queryByTestId('capture-inline-paste-sticker')).toBeTruthy();
+    });
   });
 });

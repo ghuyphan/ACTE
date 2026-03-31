@@ -432,9 +432,10 @@ private let locketWidgetStickerOutlineOffsets: [CGPoint] = [
     CGPoint(x: -0.71, y: 0.71),
     CGPoint(x: -0.92, y: 0.38)
 ]
+private let locketWidgetStickerOutlineOpacity: Double = 0.72
 
 private func getWidgetStickerOutlineSize(width: CGFloat, height: CGFloat) -> CGFloat {
-    max(3, min(8, min(width, height) * 0.045))
+    max(2.5, min(6, min(width, height) * 0.032))
 }
 
 private struct LocketWidgetStickerOverlay: View {
@@ -489,7 +490,7 @@ private struct LocketWidgetStickerOverlay: View {
                                         .scaledToFit()
                                         .frame(width: stickerWidth, height: stickerHeight)
                                         .foregroundStyle(Color.white)
-                                        .opacity(0.92 * placement.opacity * overlayOpacity)
+                                        .opacity(locketWidgetStickerOutlineOpacity * placement.opacity * overlayOpacity)
                                         .offset(
                                             x: offset.x * outlineSize,
                                             y: offset.y * outlineSize

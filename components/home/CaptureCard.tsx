@@ -2,8 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView } from 'expo-camera';
 import {
   ClipboardPasteButton,
+  addClipboardListener,
   isPasteButtonAvailable,
   type PasteEventPayload,
+  type Subscription,
 } from 'expo-clipboard';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -694,6 +696,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
   const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<'photos' | null>(null);
   const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
+  const [inlinePasteCanPasteFromClipboard, setInlinePasteCanPasteFromClipboard] = useState(false);
   const [inlinePasteLoading, setInlinePasteLoading] = useState(false);
   const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
   const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
@@ -762,7 +765,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const isSaveBusy = saving || saveState === 'saving';
   const isSaveSuccessful = saveState === 'success';
   const interactionsDisabled = isSaveBusy || isSaveSuccessful;
-  const showInlinePasteButton =
+  const useNativeInlinePasteButton = Platform.OS === 'ios' && isPasteButtonAvailable;
+  const useFallbackInlinePasteButton = Platform.OS === 'android';
+  const shouldCheckInlinePasteClipboard =
     ENABLE_PHOTO_STICKERS &&
     captureMode === 'text' &&
     noteText.length === 0 &&
@@ -771,11 +776,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     !doodleModeEnabled &&
     !stickerModeEnabled &&
     !interactionsDisabled &&
-    (!importingSticker || inlinePasteLoading);
-  const useNativeInlinePasteButton =
-    showInlinePasteButton &&
-    Platform.OS === 'ios' &&
-    isPasteButtonAvailable;
+    (useNativeInlinePasteButton || useFallbackInlinePasteButton) &&
+    !importingSticker;
+  const showInlinePasteButton =
+    shouldCheckInlinePasteClipboard &&
+    (inlinePasteCanPasteFromClipboard || inlinePasteLoading);
   const canShowLiveCameraPreview =
     captureMode === 'camera' && !capturedPhoto && permissionGranted && shouldRenderCameraPreview;
   const saveIdleBackground = isCameraSaveMode ? colors.primary : colors.captureButtonBg;
@@ -1088,6 +1093,35 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       setShowStickerSourceSheet(false);
     }
   }, [importingSticker, interactionsDisabled]);
+
+  useEffect(() => {
+    let active = true;
+    let subscription: Subscription | null = null;
+
+    if (!shouldCheckInlinePasteClipboard) {
+      setInlinePasteCanPasteFromClipboard(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    const syncClipboardAvailability = async () => {
+      const canPasteFromClipboard = await hasClipboardStickerImage();
+      if (active) {
+        setInlinePasteCanPasteFromClipboard(canPasteFromClipboard);
+      }
+    };
+
+    void syncClipboardAvailability();
+    subscription = addClipboardListener(() => {
+      void syncClipboardAvailability();
+    });
+
+    return () => {
+      active = false;
+      subscription?.remove();
+    };
+  }, [shouldCheckInlinePasteClipboard]);
 
   const resetDoodle = useCallback(() => {
     setTextDoodleModeEnabled(false);
@@ -1445,6 +1479,41 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       setImportingSticker(false);
     }
   }, [applyImportedSticker, dismissPastePrompt, importingSticker, stickerPlacements, t]);
+  const showPastePromptAt = useCallback(
+    async (x: number, y: number) => {
+      if (
+        !ENABLE_PHOTO_STICKERS ||
+        importingSticker ||
+        doodleModeEnabled ||
+        stickerModeEnabled ||
+        interactionsDisabled
+      ) {
+        return;
+      }
+
+      const canPasteFromClipboard = await hasClipboardStickerImage();
+
+      if (!canPasteFromClipboard) {
+        dismissPastePrompt();
+        return;
+      }
+
+      setPastePrompt({
+        visible: true,
+        x,
+        y,
+      });
+      schedulePastePromptDismiss();
+    },
+    [
+      dismissPastePrompt,
+      doodleModeEnabled,
+      importingSticker,
+      interactionsDisabled,
+      schedulePastePromptDismiss,
+      stickerModeEnabled,
+    ]
+  );
   const handleNativeInlinePasteStickerPress = useCallback(
     async (payload: PasteEventPayload) => {
       if (!ENABLE_PHOTO_STICKERS || importingSticker || inlinePasteLoading || payload.type !== 'image') {
@@ -1488,41 +1557,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   );
   const handleShowCardPastePrompt = useCallback(
     async (event: GestureResponderEvent) => {
-      if (
-        !ENABLE_PHOTO_STICKERS ||
-        importingSticker ||
-        doodleModeEnabled ||
-        stickerModeEnabled ||
-        interactionsDisabled
-      ) {
-        return;
-      }
-
-      const canPasteFromClipboard = await hasClipboardStickerImage();
-
-      if (!canPasteFromClipboard) {
-        dismissPastePrompt();
-        return;
-      }
-
       const locationX = typeof event.nativeEvent.locationX === 'number' ? event.nativeEvent.locationX : CARD_SIZE / 2;
       const locationY = typeof event.nativeEvent.locationY === 'number' ? event.nativeEvent.locationY : CARD_SIZE / 2;
-
-      setPastePrompt({
-        visible: true,
-        x: locationX,
-        y: locationY,
-      });
-      schedulePastePromptDismiss();
+      await showPastePromptAt(locationX, locationY);
     },
-    [
-      dismissPastePrompt,
-      doodleModeEnabled,
-      importingSticker,
-      interactionsDisabled,
-      schedulePastePromptDismiss,
-      stickerModeEnabled,
-    ]
+    [showPastePromptAt]
   );
   const handleConfirmPasteFromPrompt = useCallback(() => {
     dismissPastePrompt();
