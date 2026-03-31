@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet, Switch, Text, View } from 'react-native';
+import { Sheet } from '../constants/theme';
 import { useSyncSheetDetails } from '../hooks/useSyncSheetDetails';
 import { useTheme } from '../hooks/useTheme';
 import AppSheetScaffold from './AppSheetScaffold';
@@ -16,9 +17,12 @@ export default function SettingsSyncSheetAndroid({
   const { colors } = useTheme();
   const {
     accountHintText,
+    blockedCount,
     canManageSync,
     description,
+    failedCount,
     isEnabled,
+    pendingCount,
     queueSummary,
     setSyncEnabled,
     statusLabel,
@@ -29,28 +33,32 @@ export default function SettingsSyncSheetAndroid({
       headerVariant="standard"
       title={t('settings.autoSync', 'Auto sync')}
       subtitle={description}
-      footer={(
-        <Pressable
-          onPress={onClose}
-          style={[styles.doneButton, { backgroundColor: colors.primary }]}
-        >
-          <Text style={[styles.doneButtonText, { color: colors.text }]}>{t('common.done', 'Done')}</Text>
-        </Pressable>
-      )}
+      useHorizontalPadding={false}
     >
-      <View style={styles.row}>
-        <View style={styles.copy}>
-          <Text style={[styles.label, { color: colors.text }]}>{t('settings.autoSync', 'Auto sync')}</Text>
-          <Text style={[styles.hint, { color: colors.secondaryText }]}>{statusLabel}</Text>
+      <View>
+        <View style={styles.row}>
+          <View style={styles.copy}>
+            <Text style={[styles.label, { color: colors.text }]}>{t('settings.autoSync', 'Auto sync')}</Text>
+            <Text style={[styles.hint, { color: colors.secondaryText }]}>{statusLabel}</Text>
+          </View>
+          {canManageSync ? (
+            <Switch
+              value={isEnabled}
+              onValueChange={setSyncEnabled}
+              trackColor={{ false: `${colors.border}`, true: `${colors.primary}66` }}
+              thumbColor={isEnabled ? colors.primary : '#f4f3f4'}
+            />
+          ) : null}
         </View>
-        {canManageSync ? <Switch value={isEnabled} onValueChange={setSyncEnabled} /> : null}
       </View>
 
       {canManageSync && accountHintText ? (
         <Text style={[styles.footnote, { color: colors.secondaryText }]}>{accountHintText}</Text>
       ) : null}
 
-      <Text style={[styles.footnote, { color: colors.secondaryText }]}>{queueSummary}</Text>
+      {(pendingCount > 0 || failedCount > 0 || blockedCount > 0) ? (
+        <Text style={[styles.footnote, { color: colors.secondaryText }]}>{queueSummary}</Text>
+      ) : null}
     </AppSheetScaffold>
   );
 }
@@ -62,13 +70,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    paddingHorizontal: 4,
+    paddingHorizontal: Sheet.android.horizontalPadding,
   },
   copy: {
     flex: 1,
   },
   label: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600',
     fontFamily: 'System',
   },
@@ -82,19 +90,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     marginTop: 16,
-    paddingHorizontal: 4,
-    fontFamily: 'System',
-  },
-  doneButton: {
-    minHeight: 50,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 20,
-  },
-  doneButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+    paddingHorizontal: Sheet.android.horizontalPadding,
     fontFamily: 'System',
   },
 });

@@ -11,6 +11,7 @@ import {
 import {
   getSupabaseErrorMessage,
   isSupabaseNetworkError,
+  isSupabaseStorageObjectMissingError,
   requireSupabase,
 } from '../utils/supabase';
 
@@ -193,6 +194,9 @@ export async function downloadPhotoFromStorage(
 
   const { data, error } = await requireSupabase().storage.from(bucket).createSignedUrl(path, 60 * 5);
   if (error) {
+    if (isSupabaseStorageObjectMissingError(error)) {
+      return null;
+    }
     throw error;
   }
 

@@ -638,13 +638,36 @@ export default function MapScreenIOS() {
           onPress={goToMyLocation}
           style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
         >
-          <View style={styles.fab}>
+          <View
+            style={[
+              styles.fab,
+              Platform.OS === 'android'
+                ? {
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: getOverlayBorderColor(isDark),
+                    backgroundColor: getOverlayFallbackColor(isDark),
+                  }
+                : null,
+            ]}
+          >
             <GlassView
               pointerEvents="none"
               style={StyleSheet.absoluteFill}
               glassEffectStyle="regular"
               colorScheme={isDark ? 'dark' : 'light'}
             />
+            {Platform.OS === 'android' ? (
+              <View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    borderRadius: 22,
+                    backgroundColor: isDark ? 'rgba(24,24,28,0.24)' : 'rgba(255,255,255,0.44)',
+                  },
+                ]}
+              />
+            ) : null}
             {isOlderIOS ? (
               <View
                 style={[

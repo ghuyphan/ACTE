@@ -3,6 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutChangeEvent,
   Pressable,
+  Platform,
   type StyleProp,
   StyleSheet,
   View,
@@ -37,6 +38,7 @@ interface NoteStickerCanvasProps {
 }
 
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
+const PREFER_CONTINUOUS_OUTLINE = Platform.OS === 'android';
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
 }
@@ -210,7 +212,9 @@ function EditableSticker({
   const frameWidth = dimensions.width + outlineSize * 2;
   const frameHeight = dimensions.height + outlineSize * 2;
   const showOutline = activePlacement.outlineEnabled !== false;
-  const outlineOffsets = getStickerOutlineOffsets(outlineSize);
+  const outlineOffsets = getStickerOutlineOffsets(outlineSize, {
+    preferContinuous: PREFER_CONTINUOUS_OUTLINE,
+  });
   const stickerFrameStyle = {
     width: dimensions.width,
     height: dimensions.height,

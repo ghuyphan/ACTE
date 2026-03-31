@@ -12,6 +12,7 @@ import {
 import {
   getSupabaseErrorMessage,
   isSupabaseNetworkError,
+  isSupabaseStorageObjectMissingError,
   requireSupabase,
 } from '../utils/supabase';
 
@@ -803,6 +804,9 @@ export async function downloadStickerAssetFromStorage(
 
   const { data, error } = await requireSupabase().storage.from(bucket).createSignedUrl(normalizedPath, 60 * 5);
   if (error) {
+    if (isSupabaseStorageObjectMissingError(error)) {
+      return null;
+    }
     throw error;
   }
 

@@ -9,6 +9,7 @@ import {
   isSupabaseNetworkError,
   isSupabasePolicyError,
   isSupabaseSchemaMismatchError,
+  isSupabaseStorageObjectMissingError,
 } from '../utils/supabase';
 import { getActiveNotesScope, Note, getAllNotes, getDB, getNoteById, upsertNote } from './database';
 import {
@@ -414,11 +415,17 @@ async function deserializeRemoteNote(
   }
 
   if (record.type === 'photo' && record.photo_path) {
-    photoLocalUri = await downloadPhotoFromStorage(
-      NOTE_MEDIA_BUCKET,
-      record.photo_path,
-      record.id
-    );
+    try {
+      photoLocalUri = await downloadPhotoFromStorage(
+        NOTE_MEDIA_BUCKET,
+        record.photo_path,
+        record.id
+      );
+    } catch (error) {
+      if (!isSupabaseStorageObjectMissingError(error)) {
+        throw error;
+      }
+    }
   }
 
   if (record.type === 'photo' && !photoLocalUri) {

@@ -336,6 +336,30 @@ jest.mock('../utils/supabase', () => ({
     )
       .toLowerCase()
       .includes('network'),
+  isSupabaseStorageObjectMissingError: (error: unknown) => {
+    const code =
+      typeof error === 'object' && error && 'code' in error
+        ? String((error as { code?: unknown }).code ?? '')
+        : '';
+    const message = String(
+      error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error && 'message' in error
+          ? (error as { message?: unknown }).message ?? ''
+          : ''
+    ).toLowerCase();
+
+    return (
+      code === '404' ||
+      code === 'NoSuchKey' ||
+      message.includes('object not found') ||
+      (message.includes('not found') &&
+        (message.includes('object') ||
+          message.includes('storage') ||
+          message.includes('bucket') ||
+          message.includes('key')))
+    );
+  },
   isSupabasePolicyError: (error: unknown) =>
     String(
       typeof error === 'object' && error && 'code' in error
@@ -565,6 +589,47 @@ describe('syncService', () => {
         id: 'note-remote',
         content: 'remote memory',
         locationName: 'Da Nang',
+      })
+    );
+  });
+
+  it('keeps incremental sync running when a remote photo object is missing', async () => {
+    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-09T00:00:00.000Z');
+    mockRemoteNotes.set('note-photo-missing', {
+      id: 'note-photo-missing',
+      user_id: 'user-1',
+      type: 'photo',
+      content: '',
+      photo_path: 'user-1/note-photo-missing',
+      has_doodle: false,
+      doodle_strokes_json: null,
+      has_stickers: false,
+      sticker_placements_json: null,
+      location_name: 'Hoi An',
+      prompt_id: null,
+      prompt_text_snapshot: null,
+      prompt_answer: null,
+      mood_emoji: null,
+      note_color: null,
+      latitude: 15.88,
+      longitude: 108.33,
+      radius: 150,
+      is_favorite: false,
+      created_at: '2026-03-10T00:00:00.000Z',
+      updated_at: '2026-03-11T00:00:00.000Z',
+      synced_at: '2026-03-11T00:00:00.000Z',
+    });
+    mockDownloadPhotoFromStorage.mockRejectedValueOnce({
+      message: 'Object not found',
+      code: '404',
+    });
+
+    const result = await syncNotes(syncUser, [], { mode: 'incremental' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        importedCount: 0,
       })
     );
   });

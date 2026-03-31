@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Stack } from 'expo-router';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import PrimaryButton from '../ui/PrimaryButton';
@@ -131,14 +132,31 @@ export default function ProfileScreenAndroid() {
     handleSignOut,
   } = useProfileScreenModel();
 
-  const contentTopInset = insets.top + 72;
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          headerTransparent: false,
+          headerShadowVisible: false,
+          title: t('profile.title', 'Profile'),
+          headerTintColor: colors.text,
+          headerTitleAlign: 'left',
+          headerStyle: {
+            backgroundColor: colors.background,
+          },
+          headerTitleStyle: [
+            styles.stackHeaderTitle,
+            {
+              color: colors.text,
+            },
+          ],
+        }}
+      />
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: contentTopInset, paddingBottom: insets.bottom + 32 },
+          { paddingTop: 16, paddingBottom: insets.bottom + 32 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -214,7 +232,7 @@ export default function ProfileScreenAndroid() {
             ) : null}
 
             <View style={styles.section}>
-              <SectionTitle colors={colors} title={t('profile.logout', 'Log out')} />
+              <SectionTitle colors={colors} title={t('profile.actionsTitle', 'Actions')} />
               <Card colors={colors}>
                 <View style={styles.actions}>
                   <PrimaryButton
@@ -269,6 +287,11 @@ export default function ProfileScreenAndroid() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  stackHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    fontFamily: 'System',
   },
   content: {
     paddingHorizontal: Layout.screenPadding,

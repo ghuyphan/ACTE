@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../ui/GlassView';
 import { ReactNode, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Reanimated, {
   interpolateColor,
   useAnimatedStyle,
@@ -175,13 +175,34 @@ export default function MapFilterBar({
 
   return (
     <View style={[styles.wrapper, top > 0 ? { marginTop: top } : null]} pointerEvents="box-none">
-      <View testID="map-top-header" style={[styles.container, { borderColor: getOverlayBorderColor(isDark) }]}>
+      <View
+        testID="map-top-header"
+        style={[
+          styles.container,
+          {
+            borderColor: getOverlayBorderColor(isDark),
+            backgroundColor: getOverlayFallbackColor(isDark),
+          },
+        ]}
+      >
         <GlassView
           pointerEvents="none"
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
           style={StyleSheet.absoluteFill}
         />
+        {Platform.OS === 'android' ? (
+          <View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              styles.androidScrim,
+              {
+                backgroundColor: isDark ? 'rgba(24,24,28,0.24)' : 'rgba(255,255,255,0.44)',
+              },
+            ]}
+          />
+        ) : null}
         {isOlderIOS ? (
           <View
             style={[
@@ -245,6 +266,9 @@ const styles = StyleSheet.create({
     minHeight: mapOverlayTokens.overlayMinHeight,
     overflow: 'hidden',
     ...mapOverlayTokens.overlayShadow,
+  },
+  androidScrim: {
+    borderRadius: mapOverlayTokens.overlayRadius,
   },
   content: {
     padding: mapOverlayTokens.overlayPadding,

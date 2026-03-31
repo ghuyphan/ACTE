@@ -134,6 +134,22 @@ export function isSupabaseNetworkError(error: unknown) {
   );
 }
 
+export function isSupabaseStorageObjectMissingError(error: unknown) {
+  const code = getSupabaseErrorCode(error);
+  const message = getSupabaseErrorMessage(error).toLowerCase();
+
+  return (
+    code === '404' ||
+    code === 'NoSuchKey' ||
+    message.includes('object not found') ||
+    (message.includes('not found') &&
+      (message.includes('object') ||
+        message.includes('storage') ||
+        message.includes('bucket') ||
+        message.includes('key')))
+  );
+}
+
 export async function getCurrentSupabaseSession(): Promise<Session | null> {
   const supabase = getSupabase();
   if (!supabase) {

@@ -116,21 +116,25 @@ export default function SettingsScreenAndroid() {
     openAccountDeletionHelpLink,
     openPlusScreen,
     openPrivacyPolicyLink,
-    openSyncScreen,
     openSupportLink,
     plusHint,
     plusValue,
     promptClearAll,
+    setShowLanguage,
+    setShowSync,
+    setShowTheme,
+    showLanguage,
     showAccountDeletionLink,
+    showSync,
     showPrivacyPolicyLink,
     showSyncEntry,
     showSupportLink,
+    showTheme,
     syncValue,
     t,
     themeLabel,
     user,
   } = useSettingsScreenModel();
-  const [sheet, setSheet] = React.useState<SheetKey>(null);
   const languageCode = i18n.resolvedLanguage?.startsWith('vi') ? 'vi' : 'en';
   const languageLabel = languageCode === 'vi' ? 'Tiếng Việt' : 'English';
   const contentTopInset = 16;
@@ -154,20 +158,21 @@ export default function SettingsScreenAndroid() {
 
   let sheetContent: React.ReactNode = null;
   const sheetPresentation = 'edge';
+  const sheet: SheetKey = showTheme ? 'theme' : showLanguage ? 'language' : showSync ? 'sync' : null;
 
   if (sheet === 'theme') {
     sheetContent = (
-      <SettingsThemeSheetAndroid onClose={() => setSheet(null)} />
+      <SettingsThemeSheetAndroid onClose={() => setShowTheme(false)} />
     );
   } else if (sheet === 'language') {
     sheetContent = (
-      <SettingsLanguageSheetAndroid onClose={() => setSheet(null)} />
+      <SettingsLanguageSheetAndroid onClose={() => setShowLanguage(false)} />
     );
   } else if (sheet === 'sync') {
     sheetContent = (
       <SettingsSyncSheetAndroid
         accountHint={accountHint}
-        onClose={() => setSheet(null)}
+        onClose={() => setShowSync(false)}
       />
     );
   }
@@ -221,7 +226,7 @@ export default function SettingsScreenAndroid() {
                   title={t('settings.autoSync', 'Auto sync')}
                   subtitle={accountHint ?? t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')}
                   value={syncValue}
-                  onPress={openSyncScreen}
+                  onPress={() => setShowSync(true)}
                 />
                 <CardDivider colors={colors} />
               </>
@@ -247,7 +252,7 @@ export default function SettingsScreenAndroid() {
               icon="language-outline"
               title={t('settings.language', 'Language')}
               value={languageLabel}
-              onPress={() => setSheet('language')}
+              onPress={() => setShowLanguage(true)}
             />
             <CardDivider colors={colors} />
             <SettingRow
@@ -255,7 +260,7 @@ export default function SettingsScreenAndroid() {
               icon="contrast-outline"
               title={t('settings.theme', 'Theme')}
               value={themeLabel}
-              onPress={() => setSheet('theme')}
+              onPress={() => setShowTheme(true)}
             />
           </SettingsCard>
         </View>
@@ -337,7 +342,11 @@ export default function SettingsScreenAndroid() {
 
       <AppSheet
         visible={sheet !== null}
-        onClose={() => setSheet(null)}
+        onClose={() => {
+          setShowTheme(false);
+          setShowLanguage(false);
+          setShowSync(false);
+        }}
         androidPresentation={sheetPresentation}
       >
         {sheetContent}

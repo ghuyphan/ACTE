@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Sheet, Typography } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import AppSheet from './AppSheet';
@@ -32,6 +32,7 @@ function StickerSourceSheetBody({
   const primaryTextColor = colors.text ?? '#2B2621';
   const secondaryTextColor = colors.secondaryText ?? primaryTextColor;
   const accentColor = colors.primary ?? '#E0B15B';
+  const isIOS = Platform.OS === 'ios';
 
   return (
     <AppSheetScaffold
@@ -40,13 +41,14 @@ function StickerSourceSheetBody({
       subtitle={canPasteFromClipboard ? pasteLabel : photoLabel}
       useHorizontalPadding={false}
       footer={(
-        <View style={styles.footer}>
+        <View style={[styles.footer, isIOS ? styles.footerIOS : null]}>
           <Pressable
             accessibilityRole="button"
             android_ripple={{ color: `${primaryTextColor}10`, borderless: false }}
             onPress={onClose}
             style={({ pressed }) => [
               styles.cancelAction,
+              isIOS ? [styles.cancelActionIOS, { borderColor }] : null,
               pressed ? styles.cancelActionPressed : null,
             ]}
             testID="sticker-source-cancel"
@@ -149,12 +151,22 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginTop: 8,
   },
+  footerIOS: {
+    alignItems: 'stretch',
+    marginTop: 16,
+  },
   cancelAction: {
     minHeight: 40,
     paddingHorizontal: Sheet.android.horizontalPadding,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  cancelActionIOS: {
+    minHeight: 52,
+    marginHorizontal: Sheet.ios.horizontalPadding,
+    borderRadius: 16,
+    borderWidth: 1,
   },
   cancelActionPressed: {
     opacity: 0.72,

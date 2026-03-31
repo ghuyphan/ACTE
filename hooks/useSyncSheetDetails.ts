@@ -30,9 +30,12 @@ export function useSyncSheetDetails(accountHint: string | null) {
 
   return {
     accountHintText: canManageSync ? accountHint : null,
+    blockedCount,
     canManageSync,
     description,
+    failedCount,
     isEnabled,
+    pendingCount,
     queueSummary,
     setSyncEnabled,
     statusLabel,

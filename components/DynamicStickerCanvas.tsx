@@ -8,7 +8,7 @@ import {
   useImage,
 } from '@shopify/react-native-skia';
 import { memo, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
 import type { DebugTiltState } from './StickerPhysicsDebugControls';
 import {
@@ -52,6 +52,7 @@ interface StickerLayerProps {
 }
 
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
+const PREFER_CONTINUOUS_OUTLINE = Platform.OS === 'android';
 
 function StickerSprite({
   placement,
@@ -63,7 +64,9 @@ function StickerSprite({
   jellyTransform,
 }: StickerSpriteProps) {
   const image = useImage(placement.asset.localUri);
-  const outlineOffsets = getStickerOutlineOffsets(outlineSize);
+  const outlineOffsets = getStickerOutlineOffsets(outlineSize, {
+    preferContinuous: PREFER_CONTINUOUS_OUTLINE,
+  });
 
   if (!image) {
     return null;

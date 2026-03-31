@@ -55,8 +55,13 @@ export function getStickerOutlineSize(width: number, height: number) {
   return Math.max(3, Math.min(8, Math.min(width, height) * 0.045));
 }
 
-export function getStickerOutlineOffsets(outlineSize: number) {
-  return outlineSize <= 4.75
+export function getStickerOutlineOffsets(
+  outlineSize: number,
+  options: {
+    preferContinuous?: boolean;
+  } = {}
+) {
+  return !options.preferContinuous && outlineSize <= 4.75
     ? STICKER_OUTLINE_OFFSETS_ORTHOGONAL
     : STICKER_OUTLINE_OFFSETS_FULL;
 }
