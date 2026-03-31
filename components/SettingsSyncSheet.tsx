@@ -14,11 +14,9 @@ export default function SettingsSyncSheet({
   const { t } = useTranslation();
   const { colors } = useTheme();
   const {
-    accountHintText,
     canManageSync,
     description,
     isEnabled,
-    queueSummary,
     setSyncEnabled,
   } = useSyncSheetDetails(accountHint);
 
@@ -48,7 +46,7 @@ export default function SettingsSyncSheet({
 
         <VStack
           modifiers={[
-            backgroundOverlay({ color: colors.primary + '10' }),
+            backgroundOverlay({ color: canManageSync && isEnabled ? colors.primary + '10' : colors.card }),
             cornerRadius(16),
             padding({ all: 16 }),
           ]}
@@ -61,28 +59,6 @@ export default function SettingsSyncSheet({
             </SwiftUIText>
           )}
         </VStack>
-
-        <SwiftUIText
-          modifiers={[
-            foregroundStyle(colors.secondaryText),
-            font({ size: 13 }),
-            padding({ top: 16 }),
-          ]}
-        >
-          {queueSummary}
-        </SwiftUIText>
-
-        {canManageSync && accountHintText && (
-          <SwiftUIText
-            modifiers={[
-              foregroundStyle(colors.secondaryText + '99'),
-              font({ size: 13 }),
-              padding({ top: 16, leading: 4, trailing: 4 }),
-            ]}
-          >
-            {accountHintText}
-          </SwiftUIText>
-        )}
       </VStack>
     </Group>
   );

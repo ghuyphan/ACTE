@@ -39,10 +39,14 @@ jest.mock('@expo/ui/swift-ui', () => {
   const { View } = require('react-native');
   return {
     BottomSheet: ({ children, isPresented, onIsPresentedChange }: any) => {
+      const wasPresentedRef = React.useRef(isPresented);
+
       React.useEffect(() => {
-        if (!isPresented) {
+        if (wasPresentedRef.current && !isPresented) {
           onIsPresentedChange?.(false);
         }
+
+        wasPresentedRef.current = isPresented;
       }, [isPresented, onIsPresentedChange]);
 
       return <View>{children}</View>;
@@ -477,6 +481,7 @@ describe('NoteDetailSheet', () => {
     });
 
     fireEvent.press(getByTestId('note-detail-edit'));
+    fireEvent.press(getByTestId('note-detail-decorate-toggle'));
     fireEvent.press(getByTestId('note-detail-doodle-toggle'));
     expect(getByTestId('mock-note-doodle-editable')).toHaveTextContent('true');
 
@@ -565,6 +570,7 @@ describe('NoteDetailSheet', () => {
     });
 
     fireEvent.press(getByTestId('note-detail-edit'));
+    fireEvent.press(getByTestId('note-detail-decorate-toggle'));
     fireEvent.press(getByTestId('note-detail-doodle-toggle'));
     expect(getByTestId('mock-note-doodle-editable')).toHaveTextContent('true');
 

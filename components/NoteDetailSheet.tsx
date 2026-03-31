@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { showAppAlert } from '../utils/alert';
@@ -98,6 +98,7 @@ const CARD_FEEDBACK_SIDE_PADDING = 34;
 const CARD_OVERLAY_TOP_INSET = 28;
 const CARD_OVERLAY_SIDE_INSET = 28;
 const STICKER_SOURCE_SHEET_DISMISS_DELAY_MS = 250;
+const SheetTextInput = Platform.OS === 'android' ? BottomSheetTextInput : TextInput;
 
 type StickerPastePromptState = {
     visible: boolean;
@@ -291,6 +292,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [editStickerPlacements, setEditStickerPlacements] = useState<NoteStickerPlacement[]>([]);
     const [doodleModeEnabled, setDoodleModeEnabled] = useState(false);
     const [stickerModeEnabled, setStickerModeEnabled] = useState(false);
+    const [decorateMenuExpanded, setDecorateMenuExpanded] = useState(false);
     const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
     const [importingSticker, setImportingSticker] = useState(false);
     const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
@@ -579,6 +581,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setEditStickerPlacements([]);
         setDoodleModeEnabled(false);
         setStickerModeEnabled(false);
+        setDecorateMenuExpanded(false);
         setSelectedStickerId(null);
         setShowStickerSourceSheet(false);
         favoriteFillProgress.value = 0;
@@ -611,6 +614,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     setEditStickerPlacements(parseNoteStickerPlacements(nextNote.stickerPlacementsJson));
                     setDoodleModeEnabled(false);
                     setStickerModeEnabled(false);
+                    setDecorateMenuExpanded(false);
                     setSelectedStickerId(null);
                 }
                 setLoading(false);
@@ -643,7 +647,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         return () => {
             cancelled = true;
         };
-    }, [cardOpacity, cardScale, editModeAnim, favoriteFillProgress, getNoteById, infoTranslateY, noteId, reduceMotionEnabled, visible]);
+    }, [getNoteById, noteId, reduceMotionEnabled, visible]);
 
     useEffect(() => {
         if (!isEditing || !note || importingSticker) {
@@ -669,6 +673,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         if (!isEditing) {
             setDoodleModeEnabled(false);
             setStickerModeEnabled(false);
+            setDecorateMenuExpanded(false);
             return;
         }
 
@@ -715,7 +720,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         dismissPastePrompt();
         Keyboard.dismiss();
+        setDecorateMenuExpanded(true);
         setStickerModeEnabled(false);
+        setSelectedStickerId(null);
         setDoodleModeEnabled((current) => !current);
     }, [dismissPastePrompt, isEditing, note]);
 
@@ -777,6 +784,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             const nextPlacement = createStickerPlacement(importedAsset, editStickerPlacements);
             setEditStickerPlacements((current) => [...current, nextPlacement]);
             setSelectedStickerId(nextPlacement.id);
+            setDecorateMenuExpanded(true);
             setStickerModeEnabled(true);
             setDoodleModeEnabled(false);
         } catch (error) {
@@ -836,6 +844,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             const nextPlacement = createStickerPlacement(importedAsset, editStickerPlacements);
             setEditStickerPlacements((current) => [...current, nextPlacement]);
             setSelectedStickerId(nextPlacement.id);
+            setDecorateMenuExpanded(true);
             setStickerModeEnabled(true);
             setDoodleModeEnabled(false);
         } catch (error) {
@@ -935,12 +944,31 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         dismissPastePrompt();
         Keyboard.dismiss();
+        setDecorateMenuExpanded(true);
         setDoodleModeEnabled(false);
         setStickerModeEnabled((current) => !current);
         if (stickerModeEnabled) {
             setSelectedStickerId(null);
         }
     }, [dismissPastePrompt, isEditing, note, stickerModeEnabled]);
+    const handleToggleDecorateMenu = useCallback(() => {
+        if (!isEditing || !note) {
+            return;
+        }
+
+        dismissPastePrompt();
+        Keyboard.dismiss();
+
+        if (doodleModeEnabled || stickerModeEnabled) {
+            setDoodleModeEnabled(false);
+            setStickerModeEnabled(false);
+            setDecorateMenuExpanded(false);
+            setSelectedStickerId(null);
+            return;
+        }
+
+        setDecorateMenuExpanded((current) => !current);
+    }, [dismissPastePrompt, doodleModeEnabled, isEditing, note, stickerModeEnabled]);
     const handlePressStickerCanvas = useCallback(() => {
         if (!stickerModeEnabled) {
             return;
@@ -954,6 +982,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
 
         setStickerModeEnabled(false);
+        setDecorateMenuExpanded(false);
     }, [dismissPastePrompt, selectedStickerId, stickerModeEnabled]);
     const handleStickerAction = useCallback(
         (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove' | 'outline-toggle') => {
@@ -1353,6 +1382,162 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         const selectedStickerPlacement =
             displayedStickerPlacements.find((placement) => placement.id === selectedStickerId) ?? null;
         const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
+        const showDecorateControls =
+            isEditing && (decorateMenuExpanded || doodleModeEnabled || stickerModeEnabled);
+        const renderEditHeader = () => (
+            <View style={styles.textEditHeader}>
+                <Text style={styles.editFieldBadge}>
+                    {t('noteDetail.contentField', 'Note')}
+                </Text>
+                <View style={styles.textEditHeaderActions}>
+                    <Pressable
+                        testID="note-detail-decorate-toggle"
+                        onPress={handleToggleDecorateMenu}
+                        style={[
+                            styles.decorateToggleButton,
+                            showDecorateControls ? styles.decorateToggleButtonActive : null,
+                        ]}
+                    >
+                        <Ionicons
+                            name={showDecorateControls ? 'color-wand' : 'color-wand-outline'}
+                            size={16}
+                            color="#FFFFFF"
+                        />
+                        <View
+                            style={[
+                                styles.decorateChevronWrap,
+                                showDecorateControls ? styles.decorateChevronWrapExpanded : null,
+                            ]}
+                        >
+                            <Ionicons name="chevron-forward" size={12} color="#FFFFFF" />
+                        </View>
+                    </Pressable>
+                    {showDecorateControls ? (
+                        <View style={styles.decorateControlsInline}>
+                            {doodleModeEnabled ? (
+                                <View style={styles.textCardActionCluster}>
+                                    <Pressable
+                                        testID="note-detail-doodle-toggle"
+                                        onPress={handleToggleDoodleMode}
+                                        style={[
+                                            styles.textCardActionButton,
+                                            styles.textCardActionButtonActive,
+                                        ]}
+                                    >
+                                        <Ionicons name="create" size={16} color="#FFFFFF" />
+                                    </Pressable>
+                                    <Pressable
+                                        testID="note-detail-doodle-undo"
+                                        onPress={handleUndoDoodle}
+                                        disabled={editDoodleStrokes.length === 0}
+                                        style={[
+                                            styles.textCardActionPill,
+                                            editDoodleStrokes.length === 0
+                                                ? styles.textCardActionDisabled
+                                                : null,
+                                        ]}
+                                    >
+                                        <Ionicons name="arrow-undo-outline" size={14} color="#FFFFFF" />
+                                    </Pressable>
+                                    <Pressable
+                                        testID="note-detail-doodle-clear"
+                                        onPress={handleClearDoodle}
+                                        disabled={editDoodleStrokes.length === 0}
+                                        style={[
+                                            styles.textCardActionPill,
+                                            editDoodleStrokes.length === 0
+                                                ? styles.textCardActionDisabled
+                                                : null,
+                                        ]}
+                                    >
+                                        <Ionicons name="close-outline" size={14} color="#FFFFFF" />
+                                    </Pressable>
+                                </View>
+                            ) : stickerModeEnabled ? (
+                                <View style={styles.textCardActionCluster}>
+                                    <Pressable
+                                        testID="note-detail-sticker-toggle"
+                                        onPress={handleToggleStickerMode}
+                                        style={[
+                                            styles.textCardActionButton,
+                                            styles.textCardActionButtonActive,
+                                        ]}
+                                    >
+                                        <Ionicons name="images" size={16} color="#FFFFFF" />
+                                    </Pressable>
+                                    <Pressable
+                                        testID="note-detail-sticker-import"
+                                        onPress={() => {
+                                            void handleShowStickerSourceOptions();
+                                        }}
+                                        disabled={importingSticker}
+                                        style={[
+                                            styles.textCardActionPill,
+                                            importingSticker ? styles.textCardActionDisabled : null,
+                                        ]}
+                                    >
+                                        <Ionicons name="add-outline" size={14} color="#FFFFFF" />
+                                    </Pressable>
+                                    <Pressable
+                                        testID="note-detail-sticker-outline-toggle"
+                                        accessibilityLabel={
+                                            selectedStickerOutlineEnabled
+                                                ? t('capture.stickerOutlineDisable', 'Turn off outline')
+                                                : t('capture.stickerOutlineEnable', 'Turn on outline')
+                                        }
+                                        onPress={() => handleStickerAction('outline-toggle')}
+                                        disabled={!selectedStickerId}
+                                        style={[
+                                            styles.textCardActionPill,
+                                            selectedStickerOutlineEnabled && selectedStickerId
+                                                ? styles.textCardActionPillActive
+                                                : null,
+                                            !selectedStickerId ? styles.textCardActionDisabled : null,
+                                        ]}
+                                    >
+                                        <Ionicons
+                                            name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
+                                            size={14}
+                                            color="#FFFFFF"
+                                        />
+                                    </Pressable>
+                                    <Pressable
+                                        testID="note-detail-sticker-remove"
+                                        onPress={() => handleStickerAction('remove')}
+                                        disabled={!selectedStickerId}
+                                        style={[
+                                            styles.textCardActionPill,
+                                            !selectedStickerId ? styles.textCardActionDisabled : null,
+                                        ]}
+                                    >
+                                        <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
+                                    </Pressable>
+                                </View>
+                            ) : (
+                                <View style={styles.textCardActionCluster}>
+                                    <Pressable
+                                        testID="note-detail-doodle-toggle"
+                                        onPress={handleToggleDoodleMode}
+                                        style={styles.textCardActionButton}
+                                    >
+                                        <Ionicons name="create-outline" size={16} color="#FFFFFF" />
+                                    </Pressable>
+                                    {ENABLE_PHOTO_STICKERS ? (
+                                        <Pressable
+                                            testID="note-detail-sticker-toggle"
+                                            onPress={handleToggleStickerMode}
+                                            style={styles.textCardActionButton}
+                                        >
+                                            <Ionicons name="images-outline" size={16} color="#FFFFFF" />
+                                        </Pressable>
+                                    ) : null}
+                                </View>
+                            )}
+                        </View>
+                    ) : null}
+                </View>
+            </View>
+        );
 
         return (
             <KeyboardAvoidingView
@@ -1432,125 +1617,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             />
                                         </View>
                                     ) : null}
-                                    {isEditing ? (
-                                        <View style={styles.textEditHeader}>
-                                            <Text style={styles.editFieldBadge}>
-                                                {t('noteDetail.contentField', 'Note')}
-                                            </Text>
-                                            <View style={styles.textCardActionCluster}>
-                                                <Pressable
-                                                    testID="note-detail-doodle-toggle"
-                                                    onPress={handleToggleDoodleMode}
-                                                    style={[
-                                                        styles.textCardActionButton,
-                                                        doodleModeEnabled ? styles.textCardActionButtonActive : null,
-                                                    ]}
-                                                >
-                                                    <Ionicons
-                                                        name={doodleModeEnabled ? 'create' : 'create-outline'}
-                                                        size={16}
-                                                        color="#FFFFFF"
-                                                    />
-                                                </Pressable>
-                                                {ENABLE_PHOTO_STICKERS ? (
-                                                    <Pressable
-                                                        testID="note-detail-sticker-toggle"
-                                                        onPress={handleToggleStickerMode}
-                                                        style={[
-                                                            styles.textCardActionButton,
-                                                            stickerModeEnabled ? styles.textCardActionButtonActive : null,
-                                                        ]}
-                                                    >
-                                                        <Ionicons
-                                                            name={stickerModeEnabled ? 'images' : 'images-outline'}
-                                                            size={16}
-                                                            color="#FFFFFF"
-                                                        />
-                                                    </Pressable>
-                                                ) : null}
-                                                {doodleModeEnabled ? (
-                                                    <View style={styles.textCardActionCluster}>
-                                                        <Pressable
-                                                            testID="note-detail-doodle-undo"
-                                                            onPress={handleUndoDoodle}
-                                                            disabled={editDoodleStrokes.length === 0}
-                                                            style={[
-                                                                styles.textCardActionPill,
-                                                                editDoodleStrokes.length === 0
-                                                                    ? styles.textCardActionDisabled
-                                                                    : null,
-                                                            ]}
-                                                        >
-                                                            <Ionicons name="arrow-undo-outline" size={14} color="#FFFFFF" />
-                                                        </Pressable>
-                                                        <Pressable
-                                                            testID="note-detail-doodle-clear"
-                                                            onPress={handleClearDoodle}
-                                                            disabled={editDoodleStrokes.length === 0}
-                                                            style={[
-                                                                styles.textCardActionPill,
-                                                                editDoodleStrokes.length === 0
-                                                                    ? styles.textCardActionDisabled
-                                                                    : null,
-                                                            ]}
-                                                        >
-                                                            <Ionicons name="close-outline" size={14} color="#FFFFFF" />
-                                                        </Pressable>
-                                                    </View>
-                                                ) : stickerModeEnabled ? (
-                                                    <View style={styles.textCardActionCluster}>
-                                                        <Pressable
-                                                            testID="note-detail-sticker-import"
-                                                            onPress={() => {
-                                                                void handleShowStickerSourceOptions();
-                                                            }}
-                                                            disabled={importingSticker}
-                                                            style={[
-                                                                styles.textCardActionPill,
-                                                                importingSticker ? styles.textCardActionDisabled : null,
-                                                            ]}
-                                                        >
-                                                            <Ionicons name="add-outline" size={14} color="#FFFFFF" />
-                                                        </Pressable>
-                                                        <Pressable
-                                                            testID="note-detail-sticker-outline-toggle"
-                                                            accessibilityLabel={
-                                                                selectedStickerOutlineEnabled
-                                                                    ? t('capture.stickerOutlineDisable', 'Turn off outline')
-                                                                    : t('capture.stickerOutlineEnable', 'Turn on outline')
-                                                            }
-                                                            onPress={() => handleStickerAction('outline-toggle')}
-                                                            disabled={!selectedStickerId}
-                                                            style={[
-                                                                styles.textCardActionPill,
-                                                                selectedStickerOutlineEnabled && selectedStickerId
-                                                                    ? styles.textCardActionPillActive
-                                                                    : null,
-                                                                !selectedStickerId ? styles.textCardActionDisabled : null,
-                                                            ]}
-                                                        >
-                                                            <Ionicons
-                                                                name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
-                                                                size={14}
-                                                                color="#FFFFFF"
-                                                            />
-                                                        </Pressable>
-                                                        <Pressable
-                                                            testID="note-detail-sticker-remove"
-                                                            onPress={() => handleStickerAction('remove')}
-                                                            disabled={!selectedStickerId}
-                                                            style={[
-                                                                styles.textCardActionPill,
-                                                                !selectedStickerId ? styles.textCardActionDisabled : null,
-                                                            ]}
-                                                        >
-                                                            <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
-                                                        </Pressable>
-                                                    </View>
-                                                ) : null}
-                                            </View>
-                                            </View>
-                                        ) : null}
+                                    {isEditing ? renderEditHeader() : null}
                                     {renderFavoriteBadge(colors.card, colors.secondaryText)}
                                     <StickerPastePopover
                                         visible={pastePrompt.visible}
@@ -1636,132 +1703,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                 />
                                             </View>
                                         ) : null}
-                                        {isEditing ? (
-                                            <View style={styles.textEditHeader}>
-                                                <Text style={styles.editFieldBadge}>
-                                                    {t('noteDetail.contentField', 'Note')}
-                                                </Text>
-                                                <View style={styles.textCardActionCluster}>
-                                                    <Pressable
-                                                        testID="note-detail-doodle-toggle"
-                                                        onPress={handleToggleDoodleMode}
-                                                        style={[
-                                                            styles.textCardActionButton,
-                                                            doodleModeEnabled ? styles.textCardActionButtonActive : null,
-                                                        ]}
-                                                    >
-                                                        <Ionicons
-                                                            name={doodleModeEnabled ? 'create' : 'create-outline'}
-                                                            size={16}
-                                                            color="#FFFFFF"
-                                                        />
-                                                    </Pressable>
-                                                    {ENABLE_PHOTO_STICKERS ? (
-                                                        <Pressable
-                                                            testID="note-detail-sticker-toggle"
-                                                            onPress={handleToggleStickerMode}
-                                                            style={[
-                                                                styles.textCardActionButton,
-                                                                stickerModeEnabled ? styles.textCardActionButtonActive : null,
-                                                            ]}
-                                                        >
-                                                            <Ionicons
-                                                                name={stickerModeEnabled ? 'images' : 'images-outline'}
-                                                                size={16}
-                                                                color="#FFFFFF"
-                                                            />
-                                                        </Pressable>
-                                                    ) : null}
-                                                    {doodleModeEnabled ? (
-                                                        <View style={styles.textCardActionCluster}>
-                                                            <Pressable
-                                                                testID="note-detail-doodle-undo"
-                                                                onPress={handleUndoDoodle}
-                                                                disabled={editDoodleStrokes.length === 0}
-                                                                style={[
-                                                                    styles.textCardActionPill,
-                                                                    editDoodleStrokes.length === 0
-                                                                        ? styles.textCardActionDisabled
-                                                                        : null,
-                                                                ]}
-                                                            >
-                                                                <Ionicons name="arrow-undo-outline" size={14} color="#FFFFFF" />
-                                                            </Pressable>
-                                                            <Pressable
-                                                                testID="note-detail-doodle-clear"
-                                                                onPress={handleClearDoodle}
-                                                                disabled={editDoodleStrokes.length === 0}
-                                                                style={[
-                                                                    styles.textCardActionPill,
-                                                                    editDoodleStrokes.length === 0
-                                                                        ? styles.textCardActionDisabled
-                                                                        : null,
-                                                                ]}
-                                                            >
-                                                                <Ionicons name="close-outline" size={14} color="#FFFFFF" />
-                                                            </Pressable>
-                                                        </View>
-                                                    ) : stickerModeEnabled ? (
-                                                        <View style={styles.textCardActionCluster}>
-                                                            <Pressable
-                                                                testID="note-detail-sticker-import"
-                                                                onPress={() => {
-                                                                    void handleShowStickerSourceOptions();
-                                                                }}
-                                                                disabled={importingSticker}
-                                                                style={[
-                                                                    styles.textCardActionPill,
-                                                                    importingSticker ? styles.textCardActionDisabled : null,
-                                                                ]}
-                                                            >
-                                                                <Ionicons name="add-outline" size={14} color="#FFFFFF" />
-                                                            </Pressable>
-                                                            <Pressable
-                                                                testID="note-detail-sticker-outline-toggle"
-                                                                accessibilityLabel={
-                                                                    selectedStickerOutlineEnabled
-                                                                        ? t('capture.stickerOutlineDisable', 'Turn off outline')
-                                                                        : t('capture.stickerOutlineEnable', 'Turn on outline')
-                                                                }
-                                                                onPress={() => handleStickerAction('outline-toggle')}
-                                                                disabled={!selectedStickerId}
-                                                                style={[
-                                                                    styles.textCardActionPill,
-                                                                    selectedStickerOutlineEnabled && selectedStickerId
-                                                                        ? styles.textCardActionPillActive
-                                                                        : null,
-                                                                    !selectedStickerId ? styles.textCardActionDisabled : null,
-                                                                ]}
-                                                            >
-                                                                <Ionicons
-                                                                    name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
-                                                                    size={14}
-                                                                    color="#FFFFFF"
-                                                                />
-                                                            </Pressable>
-                                                            <Pressable
-                                                                testID="note-detail-sticker-remove"
-                                                                onPress={() => handleStickerAction('remove')}
-                                                                disabled={!selectedStickerId}
-                                                                style={[
-                                                                    styles.textCardActionPill,
-                                                                    !selectedStickerId ? styles.textCardActionDisabled : null,
-                                                                ]}
-                                                            >
-                                                                <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
-                                                            </Pressable>
-                                                        </View>
-                                                    ) : null}
-                                                </View>
-                                            </View>
-                                        ) : (
+                                        {isEditing ? renderEditHeader() : (
                                             renderFavoriteBadge('#FFFFFF33', '#FFFFFFDD')
                                         )}
                                         <View
                                             pointerEvents={stickerModeEnabled ? 'none' : 'auto'}
                                             style={stickerModeEnabled ? styles.editTextInputWrapInactive : null}
                                         >
-                                            <TextInput
+                                            <SheetTextInput
                                                 ref={contentInputRef}
                                                 testID="note-detail-content-input"
                                                 style={[
@@ -1907,7 +1856,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                     ]}
                                 >
                                     <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
-                                    <TextInput
+                                    <SheetTextInput
                                         ref={locationInputRef}
                                         testID="note-detail-location-input"
                                         style={[styles.editLocationInput, { color: colors.text }]}
@@ -2036,125 +1985,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                         />
                                     </View>
                                 ) : null}
-                                {isEditing ? (
-                                    <View style={styles.textEditHeader}>
-                                        <Text style={styles.editFieldBadge}>
-                                            {t('noteDetail.contentField', 'Note')}
-                                        </Text>
-                                        <View style={styles.textCardActionCluster}>
-                                            <Pressable
-                                                testID="note-detail-doodle-toggle"
-                                                onPress={handleToggleDoodleMode}
-                                                style={[
-                                                    styles.textCardActionButton,
-                                                    doodleModeEnabled ? styles.textCardActionButtonActive : null,
-                                                ]}
-                                            >
-                                                <Ionicons
-                                                    name={doodleModeEnabled ? 'create' : 'create-outline'}
-                                                    size={16}
-                                                    color="#FFFFFF"
-                                                />
-                                            </Pressable>
-                                            {ENABLE_PHOTO_STICKERS ? (
-                                                <Pressable
-                                                    testID="note-detail-sticker-toggle"
-                                                    onPress={handleToggleStickerMode}
-                                                    style={[
-                                                        styles.textCardActionButton,
-                                                        stickerModeEnabled ? styles.textCardActionButtonActive : null,
-                                                    ]}
-                                                >
-                                                    <Ionicons
-                                                        name={stickerModeEnabled ? 'images' : 'images-outline'}
-                                                        size={16}
-                                                        color="#FFFFFF"
-                                                    />
-                                                </Pressable>
-                                            ) : null}
-                                            {doodleModeEnabled ? (
-                                                <View style={styles.textCardActionCluster}>
-                                                    <Pressable
-                                                        testID="note-detail-doodle-undo"
-                                                        onPress={handleUndoDoodle}
-                                                        disabled={editDoodleStrokes.length === 0}
-                                                        style={[
-                                                            styles.textCardActionPill,
-                                                            editDoodleStrokes.length === 0
-                                                                ? styles.textCardActionDisabled
-                                                                : null,
-                                                        ]}
-                                                    >
-                                                        <Ionicons name="arrow-undo-outline" size={14} color="#FFFFFF" />
-                                                    </Pressable>
-                                                    <Pressable
-                                                        testID="note-detail-doodle-clear"
-                                                        onPress={handleClearDoodle}
-                                                        disabled={editDoodleStrokes.length === 0}
-                                                        style={[
-                                                            styles.textCardActionPill,
-                                                            editDoodleStrokes.length === 0
-                                                                ? styles.textCardActionDisabled
-                                                                : null,
-                                                        ]}
-                                                    >
-                                                        <Ionicons name="close-outline" size={14} color="#FFFFFF" />
-                                                    </Pressable>
-                                                </View>
-                                            ) : stickerModeEnabled ? (
-                                                <View style={styles.textCardActionCluster}>
-                                                    <Pressable
-                                                        testID="note-detail-sticker-import"
-                                                        onPress={() => {
-                                                            void handleShowStickerSourceOptions();
-                                                        }}
-                                                        disabled={importingSticker}
-                                                        style={[
-                                                            styles.textCardActionPill,
-                                                            importingSticker ? styles.textCardActionDisabled : null,
-                                                        ]}
-                                                    >
-                                                        <Ionicons name="add-outline" size={14} color="#FFFFFF" />
-                                                    </Pressable>
-                                                    <Pressable
-                                                        testID="note-detail-sticker-outline-toggle"
-                                                        accessibilityLabel={
-                                                            selectedStickerOutlineEnabled
-                                                                ? t('capture.stickerOutlineDisable', 'Turn off outline')
-                                                                : t('capture.stickerOutlineEnable', 'Turn on outline')
-                                                        }
-                                                        onPress={() => handleStickerAction('outline-toggle')}
-                                                        disabled={!selectedStickerId}
-                                                        style={[
-                                                            styles.textCardActionPill,
-                                                            selectedStickerOutlineEnabled && selectedStickerId
-                                                                ? styles.textCardActionPillActive
-                                                                : null,
-                                                            !selectedStickerId ? styles.textCardActionDisabled : null,
-                                                        ]}
-                                                    >
-                                                        <Ionicons
-                                                            name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
-                                                            size={14}
-                                                            color="#FFFFFF"
-                                                        />
-                                                    </Pressable>
-                                                    <Pressable
-                                                        testID="note-detail-sticker-remove"
-                                                        onPress={() => handleStickerAction('remove')}
-                                                        disabled={!selectedStickerId}
-                                                        style={[
-                                                            styles.textCardActionPill,
-                                                            !selectedStickerId ? styles.textCardActionDisabled : null,
-                                                        ]}
-                                                    >
-                                                        <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
-                                                    </Pressable>
-                                                </View>
-                                            ) : null}
-                                        </View>
-                                        </View>
-                                    ) : null}
+                                {isEditing ? renderEditHeader() : null}
                                 {renderFavoriteBadge(colors.card, colors.secondaryText)}
                                 <StickerPastePopover
                                     visible={pastePrompt.visible}
@@ -2240,132 +2071,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             />
                                         </View>
                                     ) : null}
-                                    {isEditing ? (
-                                        <View style={styles.textEditHeader}>
-                                            <Text style={styles.editFieldBadge}>
-                                                {t('noteDetail.contentField', 'Note')}
-                                            </Text>
-                                            <View style={styles.textCardActionCluster}>
-                                                <Pressable
-                                                    testID="note-detail-doodle-toggle"
-                                                    onPress={handleToggleDoodleMode}
-                                                    style={[
-                                                        styles.textCardActionButton,
-                                                        doodleModeEnabled ? styles.textCardActionButtonActive : null,
-                                                    ]}
-                                                >
-                                                    <Ionicons
-                                                        name={doodleModeEnabled ? 'create' : 'create-outline'}
-                                                        size={16}
-                                                        color="#FFFFFF"
-                                                    />
-                                                </Pressable>
-                                                {ENABLE_PHOTO_STICKERS ? (
-                                                    <Pressable
-                                                        testID="note-detail-sticker-toggle"
-                                                        onPress={handleToggleStickerMode}
-                                                        style={[
-                                                            styles.textCardActionButton,
-                                                            stickerModeEnabled ? styles.textCardActionButtonActive : null,
-                                                        ]}
-                                                    >
-                                                        <Ionicons
-                                                            name={stickerModeEnabled ? 'images' : 'images-outline'}
-                                                            size={16}
-                                                            color="#FFFFFF"
-                                                        />
-                                                    </Pressable>
-                                                ) : null}
-                                                {doodleModeEnabled ? (
-                                                    <View style={styles.textCardActionCluster}>
-                                                        <Pressable
-                                                            testID="note-detail-doodle-undo"
-                                                            onPress={handleUndoDoodle}
-                                                            disabled={editDoodleStrokes.length === 0}
-                                                            style={[
-                                                                styles.textCardActionPill,
-                                                                editDoodleStrokes.length === 0
-                                                                    ? styles.textCardActionDisabled
-                                                                    : null,
-                                                            ]}
-                                                        >
-                                                            <Ionicons name="arrow-undo-outline" size={14} color="#FFFFFF" />
-                                                        </Pressable>
-                                                        <Pressable
-                                                            testID="note-detail-doodle-clear"
-                                                            onPress={handleClearDoodle}
-                                                            disabled={editDoodleStrokes.length === 0}
-                                                            style={[
-                                                                styles.textCardActionPill,
-                                                                editDoodleStrokes.length === 0
-                                                                    ? styles.textCardActionDisabled
-                                                                    : null,
-                                                            ]}
-                                                        >
-                                                            <Ionicons name="close-outline" size={14} color="#FFFFFF" />
-                                                        </Pressable>
-                                                    </View>
-                                                ) : stickerModeEnabled ? (
-                                                    <View style={styles.textCardActionCluster}>
-                                                        <Pressable
-                                                            testID="note-detail-sticker-import"
-                                                            onPress={() => {
-                                                                void handleShowStickerSourceOptions();
-                                                            }}
-                                                            disabled={importingSticker}
-                                                            style={[
-                                                                styles.textCardActionPill,
-                                                                importingSticker ? styles.textCardActionDisabled : null,
-                                                            ]}
-                                                        >
-                                                            <Ionicons name="add-outline" size={14} color="#FFFFFF" />
-                                                        </Pressable>
-                                                        <Pressable
-                                                            testID="note-detail-sticker-outline-toggle"
-                                                            accessibilityLabel={
-                                                                selectedStickerOutlineEnabled
-                                                                    ? t('capture.stickerOutlineDisable', 'Turn off outline')
-                                                                    : t('capture.stickerOutlineEnable', 'Turn on outline')
-                                                            }
-                                                            onPress={() => handleStickerAction('outline-toggle')}
-                                                            disabled={!selectedStickerId}
-                                                            style={[
-                                                                styles.textCardActionPill,
-                                                                selectedStickerOutlineEnabled && selectedStickerId
-                                                                    ? styles.textCardActionPillActive
-                                                                    : null,
-                                                                !selectedStickerId ? styles.textCardActionDisabled : null,
-                                                            ]}
-                                                        >
-                                                            <Ionicons
-                                                                name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
-                                                                size={14}
-                                                                color="#FFFFFF"
-                                                            />
-                                                        </Pressable>
-                                                        <Pressable
-                                                            testID="note-detail-sticker-remove"
-                                                            onPress={() => handleStickerAction('remove')}
-                                                            disabled={!selectedStickerId}
-                                                            style={[
-                                                                styles.textCardActionPill,
-                                                                !selectedStickerId ? styles.textCardActionDisabled : null,
-                                                            ]}
-                                                        >
-                                                            <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
-                                                        </Pressable>
-                                                    </View>
-                                                ) : null}
-                                            </View>
-                                        </View>
-                                    ) : (
+                                    {isEditing ? renderEditHeader() : (
                                         renderFavoriteBadge('#FFFFFF33', '#FFFFFFDD')
                                     )}
                                     <View
                                         pointerEvents={stickerModeEnabled ? 'none' : 'auto'}
                                         style={stickerModeEnabled ? styles.editTextInputWrapInactive : null}
                                     >
-                                        <TextInput
+                                        <SheetTextInput
                                             ref={contentInputRef}
                                             testID="note-detail-content-input"
                                             style={[
@@ -2511,7 +2224,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                 ]}
                             >
                                 <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
-                                <TextInput
+                                <SheetTextInput
                                     ref={locationInputRef}
                                     testID="note-detail-location-input"
                                     style={[styles.editLocationInput, { color: colors.text }]}
@@ -2717,6 +2430,11 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         zIndex: 2,
     },
+    textEditHeaderActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
     editFieldBadge: {
         backgroundColor: 'rgba(255,255,255,0.16)',
         color: 'rgba(255,255,255,0.9)',
@@ -2736,6 +2454,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
     },
+    decorateControlsInline: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
     textCardActionButton: {
         width: 36,
         height: 36,
@@ -2749,6 +2472,32 @@ const styles = StyleSheet.create({
     textCardActionButtonActive: {
         backgroundColor: 'rgba(255,255,255,0.24)',
         borderColor: 'rgba(255,255,255,0.28)',
+    },
+    decorateToggleButton: {
+        width: 48,
+        height: 36,
+        borderRadius: 18,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        backgroundColor: 'rgba(255,255,255,0.14)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.18)',
+    },
+    decorateToggleButtonActive: {
+        backgroundColor: 'rgba(255,255,255,0.24)',
+        borderColor: 'rgba(255,255,255,0.28)',
+    },
+    decorateChevronWrap: {
+        width: 12,
+        height: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        transform: [{ rotate: '0deg' }],
+    },
+    decorateChevronWrapExpanded: {
+        transform: [{ rotate: '90deg' }],
     },
     textCardActionPill: {
         width: 32,

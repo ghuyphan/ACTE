@@ -1,4 +1,4 @@
-import { getStickerOutlineOffsets } from '../components/stickerCanvasMetrics';
+import { getStickerOutlineOffsets, getStickerPinchScale } from '../components/stickerCanvasMetrics';
 
 describe('stickerCanvasMetrics', () => {
   it('uses a lighter outline profile for smaller stickers', () => {
@@ -42,5 +42,12 @@ describe('stickerCanvasMetrics', () => {
       { x: -0.71, y: 0.71 },
       { x: -0.92, y: 0.38 },
     ]);
+  });
+
+  it('makes pinch-resize a bit more responsive without bypassing scale clamps', () => {
+    expect(getStickerPinchScale(1, 1.1)).toBeCloseTo(1.119, 3);
+    expect(getStickerPinchScale(1, 0.9)).toBeCloseTo(0.883, 3);
+    expect(getStickerPinchScale(2.9, 1.2)).toBe(3);
+    expect(getStickerPinchScale(0.4, 0.1)).toBe(0.35);
   });
 });

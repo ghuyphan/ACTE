@@ -65,6 +65,7 @@ function ProfileListItem({
   onPress,
   destructive = false,
   external = false,
+  loading = false,
 }: {
   colors: ThemeColors;
   icon: React.ComponentProps<typeof Ionicons>['name'];
@@ -74,6 +75,7 @@ function ProfileListItem({
   onPress?: () => void;
   destructive?: boolean;
   external?: boolean;
+  loading?: boolean;
 }) {
   const iconColor = destructive ? colors.danger : colors.primary;
   const rippleColor = destructive ? `${colors.danger}12` : `${colors.text}0D`;
@@ -99,14 +101,17 @@ function ProfileListItem({
         ) : null}
       </View>
 
-      {value || onPress ? (
+      {value || onPress || loading ? (
         <View style={styles.rowTrailing}>
           {value ? (
             <Text numberOfLines={1} style={[styles.rowValue, { color: colors.secondaryText }]}>
               {value}
             </Text>
           ) : null}
-          {onPress ? (
+          {loading ? (
+            <ActivityIndicator size="small" color={destructive ? colors.danger : colors.primary} />
+          ) : null}
+          {onPress && !loading ? (
             <Ionicons
               name={trailingIconName}
               size={18}
@@ -130,69 +135,6 @@ function ProfileListItem({
       style={({ pressed }) => [styles.row, pressed ? styles.rowPressed : null]}
     >
       {content}
-    </Pressable>
-  );
-}
-
-function ActionButton({
-  colors,
-  icon,
-  label,
-  onPress,
-  loading = false,
-  variant = 'tonal',
-  destructive = false,
-}: {
-  colors: ThemeColors;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  onPress: () => void;
-  loading?: boolean;
-  variant?: 'tonal' | 'text' | 'filled';
-  destructive?: boolean;
-}) {
-  const isFilled = variant === 'filled';
-  const isText = variant === 'text';
-  const backgroundColor = isText
-    ? 'transparent'
-    : destructive
-      ? `${colors.danger}12`
-      : isFilled
-        ? colors.primary
-        : colors.primarySoft;
-  const borderColor = isText ? 'transparent' : destructive ? `${colors.danger}22` : 'transparent';
-  const labelColor = destructive
-    ? colors.danger
-    : isFilled
-      ? '#1C1C1E'
-      : colors.text;
-  const rippleColor = destructive ? `${colors.danger}12` : `${colors.text}0D`;
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      android_ripple={{ color: rippleColor }}
-      disabled={loading}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionButton,
-        {
-          backgroundColor,
-          borderColor,
-          opacity: loading ? 0.72 : 1,
-        },
-        isText ? styles.actionButtonTextVariant : null,
-        pressed && styles.buttonPressed,
-      ]}
-    >
-      {loading ? (
-        <ActivityIndicator color={labelColor} />
-      ) : (
-        <View style={styles.actionButtonContent}>
-          <Ionicons name={icon} size={18} color={labelColor} />
-          <Text style={[styles.actionButtonLabel, { color: labelColor }]}>{label}</Text>
-        </View>
-      )}
     </Pressable>
   );
 }
@@ -279,20 +221,28 @@ export default function ProfileScreenAndroid() {
       >
         {user ? (
           <>
-            <SurfaceCard colors={colors} highlighted>
+            <SurfaceCard colors={colors}>
               <View style={styles.hero}>
-                <View style={[styles.avatarFrame, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}24` }]}>
+                <View
+                  style={[
+                    styles.avatarFrame,
+                    {
+                      backgroundColor: colors.primarySoft,
+                      borderColor: `${colors.primary}24`,
+                    },
+                  ]}
+                >
                   <ProfileAvatar
                     avatarLabel={avatarLabel}
                     avatarUrl={avatarUrl}
                     colors={colors}
-                    size={84}
-                    labelFontSize={30}
+                    size={56}
+                    labelFontSize={22}
                   />
                 </View>
 
                 <View style={styles.heroCopy}>
-                  <Text style={[styles.heroName, { color: colors.text }]} numberOfLines={2}>
+                  <Text style={[styles.heroName, { color: colors.text }]} numberOfLines={1}>
                     {profileName}
                   </Text>
                   {user.email ? (
@@ -300,11 +250,8 @@ export default function ProfileScreenAndroid() {
                       {user.email}
                     </Text>
                   ) : null}
-                  <MembershipBadge colors={colors} isPlus={tier === 'plus'} label={membershipLabel} />
-                  <Text style={[styles.heroDescription, { color: colors.secondaryText }]}>
-                    {t('profile.description', 'Manage the account connected to Noto.')}
-                  </Text>
                 </View>
+                <MembershipBadge colors={colors} isPlus={tier === 'plus'} label={membershipLabel} />
               </View>
             </SurfaceCard>
 
@@ -326,21 +273,6 @@ export default function ProfileScreenAndroid() {
                     value={user.email}
                   />
                 ) : null}
-                <CardDivider colors={colors} />
-                <ProfileListItem
-                  colors={colors}
-                  icon="sparkles-outline"
-                  title={t('profile.membership', 'Membership')}
-                  value={membershipLabel}
-                />
-                <CardDivider colors={colors} />
-                <ProfileListItem
-                  colors={colors}
-                  icon="cloud-done-outline"
-                  title={t('profile.sync', 'Sync')}
-                  subtitle={t('profile.autoSyncOn', 'Your notes sync automatically while you are signed in.')}
-                  value={t('profile.autoSyncShort', 'Auto sync on')}
-                />
               </SurfaceCard>
             </View>
 
@@ -353,7 +285,6 @@ export default function ProfileScreenAndroid() {
                       colors={colors}
                       icon="shield-checkmark-outline"
                       title={t('settings.privacyPolicy', 'Privacy Policy')}
-                      subtitle={t('settings.privacyPolicyHint', 'Review how Noto handles your data and permissions.')}
                       onPress={openPrivacyPolicyLink}
                       external
                     />
@@ -366,7 +297,6 @@ export default function ProfileScreenAndroid() {
                       colors={colors}
                       icon="help-circle-outline"
                       title={t('settings.support', 'Support')}
-                      subtitle={t('settings.supportHint', 'Contact support if you need help with sign-in, sync, or account issues.')}
                       onPress={openSupportLink}
                       external
                     />
@@ -377,7 +307,6 @@ export default function ProfileScreenAndroid() {
                       colors={colors}
                       icon="person-remove-outline"
                       title={t('settings.accountDeletion', 'Account deletion help')}
-                      subtitle={t('settings.accountDeletionHint', 'Open the external deletion page or support contact for your store listing.')}
                       onPress={openAccountDeletionHelpLink}
                       external
                     />
@@ -389,24 +318,22 @@ export default function ProfileScreenAndroid() {
             <View style={styles.section}>
               <SectionTitle colors={colors} title={t('profile.actionsTitle', 'Actions')} />
               <SurfaceCard colors={colors}>
-                <View style={styles.actions}>
-                  <ActionButton
-                    colors={colors}
-                    icon="log-out-outline"
-                    label={t('profile.logout', 'Log out')}
-                    onPress={handleSignOut}
-                    loading={isSigningOut && !isDeletingAccount}
-                  />
-                  <ActionButton
-                    colors={colors}
-                    icon="trash-outline"
-                    label={t('profile.deleteAccount', 'Delete account')}
-                    onPress={handleDeleteAccount}
-                    loading={isDeletingAccount}
-                    variant="text"
-                    destructive
-                  />
-                </View>
+                <ProfileListItem
+                  colors={colors}
+                  icon="log-out-outline"
+                  title={t('profile.logout', 'Log out')}
+                  onPress={handleSignOut}
+                  loading={isSigningOut && !isDeletingAccount}
+                />
+                <CardDivider colors={colors} />
+                <ProfileListItem
+                  colors={colors}
+                  icon="trash-outline"
+                  title={t('profile.deleteAccount', 'Delete account')}
+                  onPress={handleDeleteAccount}
+                  loading={isDeletingAccount}
+                  destructive
+                />
               </SurfaceCard>
             </View>
           </>
@@ -427,17 +354,18 @@ export default function ProfileScreenAndroid() {
                       'Account sign-in is unavailable right now, but your notes stay safely on this device.'
                     )}
               </Text>
-
-              {isAuthAvailable ? (
-                <ActionButton
+            </View>
+            {isAuthAvailable ? (
+              <>
+                <CardDivider colors={colors} />
+                <ProfileListItem
                   colors={colors}
                   icon="log-in-outline"
-                  label={t('settings.login', 'Sign In')}
+                  title={t('settings.login', 'Sign In')}
                   onPress={openSignIn}
-                  variant="filled"
                 />
-              ) : null}
-            </View>
+              </>
+            ) : null}
           </SurfaceCard>
         )}
       </ScrollView>
@@ -456,10 +384,10 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Layout.screenPadding,
-    gap: 24,
+    gap: 20,
   },
   section: {
-    gap: 10,
+    gap: 8,
   },
   sectionTitle: {
     fontSize: 13,
@@ -469,41 +397,39 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   card: {
-    borderRadius: 28,
+    borderRadius: 24,
     borderWidth: 1,
     overflow: 'hidden',
   },
   hero: {
-    paddingHorizontal: 20,
-    paddingVertical: 22,
-    gap: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
   },
   avatarFrame: {
-    width: 104,
-    height: 104,
+    width: 72,
+    height: 72,
     borderRadius: 36,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   heroCopy: {
-    gap: 8,
+    flex: 1,
+    gap: 4,
   },
   heroName: {
-    fontSize: 28,
-    lineHeight: 34,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
   },
   heroEmail: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '500',
-    fontFamily: 'Noto Sans',
-  },
-  heroDescription: {
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 19,
+    fontWeight: '500',
     fontFamily: 'Noto Sans',
   },
   membershipBadge: {
@@ -520,9 +446,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   row: {
-    minHeight: 76,
+    minHeight: 64,
     paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
@@ -572,60 +498,28 @@ const styles = StyleSheet.create({
     marginLeft: 72,
     marginRight: 18,
   },
-  actions: {
-    padding: 16,
-    gap: 4,
-  },
-  actionButton: {
-    minHeight: 52,
-    borderRadius: 20,
-    borderWidth: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  actionButtonTextVariant: {
-    alignSelf: 'center',
-    minHeight: 44,
-    paddingHorizontal: 12,
-  },
-  actionButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  actionButtonLabel: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
-  },
-  buttonPressed: {
-    opacity: 0.88,
-  },
   emptyState: {
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 28,
+    paddingVertical: 24,
   },
   emptyIconShell: {
-    width: 88,
-    height: 88,
-    borderRadius: 28,
+    width: 72,
+    height: 72,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyTitle: {
-    marginTop: 18,
-    fontSize: 24,
-    lineHeight: 30,
+    marginTop: 16,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: '700',
     textAlign: 'center',
     fontFamily: 'Noto Sans',
   },
   emptyBody: {
     marginTop: 10,
-    marginBottom: 20,
     fontSize: 15,
     lineHeight: 22,
     textAlign: 'center',

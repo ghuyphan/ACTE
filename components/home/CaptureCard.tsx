@@ -999,8 +999,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   }, [captureMode, noteText.length]);
 
   useEffect(() => {
-    onDoodleModeChange?.((captureMode === 'text' || Boolean(capturedPhoto)) && doodleModeEnabled);
-  }, [captureMode, capturedPhoto, doodleModeEnabled, onDoodleModeChange]);
+    onDoodleModeChange?.(
+      (captureMode === 'text' || Boolean(capturedPhoto)) &&
+      (doodleModeEnabled || stickerModeEnabled)
+    );
+  }, [captureMode, capturedPhoto, doodleModeEnabled, onDoodleModeChange, stickerModeEnabled]);
 
   useEffect(() => {
     const handleKeyboardFrame = (event: KeyboardEvent) => {
@@ -2698,8 +2701,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                           key={`camera-session-${cameraSessionKey}-${cameraRetryNonce}-${facing}`}
                           style={styles.cameraPreview}
                           facing={facing}
+                          mirror={facing === 'front'}
                           zoom={cameraZoom}
                           active={canShowLiveCameraPreview}
+                          animateShutter={false}
                           ref={cameraRef}
                           onCameraReady={() => {
                             cameraAutoRecoveryCountRef.current = 0;

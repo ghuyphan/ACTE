@@ -431,6 +431,7 @@ describe('MapScreen', () => {
     expect(queryByTestId('nearby-rail')).toBeNull();
     await waitFor(() => {
       expect(getByTestId('map-preview-list')).toBeTruthy();
+      expect(String(getByTestId('map-preview-context').props.children)).toBe('Nearby notes');
       expect(String(getByTestId('map-preview-index').props.children)).toMatch(/^1\/\d+$/);
     });
 
@@ -499,7 +500,8 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(getByTestId('map-preview-list')).toBeTruthy();
-      expect(getByText('Pinned note')).toBeTruthy();
+      expect(getByText('Saved here')).toBeTruthy();
+      expect(String(getByTestId('map-preview-context').props.children)).toBe('1 note here');
     });
     expect(mockImpactAsync).toHaveBeenCalledTimes(1);
 
@@ -509,7 +511,7 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(getByTestId('map-preview-list')).toBeTruthy();
-      expect(queryByText('Pinned note')).toBeNull();
+      expect(queryByText('Saved here')).toBeNull();
     });
 
     nowSpy.mockRestore();
@@ -674,14 +676,14 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByTestId('note-marker-text-1')).toBeTruthy();
-      expect(getByText('Pinned note')).toBeTruthy();
+      expect(getByText('Saved here')).toBeTruthy();
     });
 
     now = 1400;
     fireEvent.press(getByTestId('mock-map-press'));
 
     expect(getByTestId('note-marker-text-1')).toBeTruthy();
-    expect(getByText('Pinned note')).toBeTruthy();
+    expect(getByText('Saved here')).toBeTruthy();
 
     nowSpy.mockRestore();
   });

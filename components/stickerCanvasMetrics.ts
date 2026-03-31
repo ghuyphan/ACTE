@@ -44,9 +44,15 @@ const STICKER_OUTLINE_OFFSETS_CONTINUOUS: StickerOutlineOffset[] = [
   { x: -0.71, y: 0.71 },
   { x: -0.92, y: 0.38 },
 ];
+const STICKER_PINCH_RESPONSE = 1.18;
 
 export function clampStickerScale(value: number) {
   return Math.max(0.35, Math.min(value, 3));
+}
+
+export function getStickerPinchScale(startScale: number, pinchScale: number) {
+  const normalizedPinchScale = Number.isFinite(pinchScale) && pinchScale > 0 ? pinchScale : 1;
+  return clampStickerScale(startScale * Math.pow(normalizedPinchScale, STICKER_PINCH_RESPONSE));
 }
 
 export function sortStickerPlacements(placements: NoteStickerPlacement[]) {

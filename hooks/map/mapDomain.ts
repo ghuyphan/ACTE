@@ -12,6 +12,8 @@ export const DEFAULT_REGION: Region = {
 };
 
 const GROUP_PRECISION = 5;
+const CLUSTER_RADIUS = 48;
+const CLUSTER_MAX_ZOOM = 16;
 const MIN_LONGITUDE_DELTA = 0.000001;
 const EARTH_RADIUS_METERS = 6371000;
 
@@ -156,8 +158,8 @@ export function buildClusterIndex(groups: MapPointGroup[]): MapClusterIndex | nu
   }
 
   const index = new Supercluster<ClusterPointProperties, ClusterAggregateProperties>({
-    radius: 64,
-    maxZoom: 20,
+    radius: CLUSTER_RADIUS,
+    maxZoom: CLUSTER_MAX_ZOOM,
     minZoom: 0,
     minPoints: 2,
     map: (props) => ({

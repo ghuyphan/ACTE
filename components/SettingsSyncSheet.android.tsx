@@ -16,14 +16,9 @@ export default function SettingsSyncSheetAndroid({
   const { t } = useTranslation();
   const { colors } = useTheme();
   const {
-    accountHintText,
-    blockedCount,
     canManageSync,
     description,
-    failedCount,
     isEnabled,
-    pendingCount,
-    queueSummary,
     setSyncEnabled,
     statusLabel,
   } = useSyncSheetDetails(accountHint);
@@ -53,13 +48,6 @@ export default function SettingsSyncSheetAndroid({
         </View>
       </View>
 
-      {canManageSync && accountHintText ? (
-        <Text style={[styles.footnote, { color: colors.secondaryText }]}>{accountHintText}</Text>
-      ) : null}
-
-      {(pendingCount > 0 || failedCount > 0 || blockedCount > 0) ? (
-        <Text style={[styles.footnote, { color: colors.secondaryText }]}>{queueSummary}</Text>
-      ) : null}
     </AppSheetScaffold>
   );
 }
@@ -88,13 +76,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginTop: 4,
-    fontFamily: 'Noto Sans',
-  },
-  footnote: {
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 16,
-    paddingHorizontal: Sheet.android.horizontalPadding,
     fontFamily: 'Noto Sans',
   },
 });

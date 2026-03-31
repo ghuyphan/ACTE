@@ -92,10 +92,6 @@ export function useCaptureFlow() {
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    flashAnim.value = 1;
-    flashAnim.value = withTiming(0, {
-      duration: 400,
-    });
 
     const photo = await cameraRef.current.takePictureAsync({
       quality: 0.35,
@@ -104,7 +100,7 @@ export function useCaptureFlow() {
     if (photo?.uri) {
       setCapturedPhoto(photo.uri);
     }
-  }, [cameraRef, flashAnim, shutterScale]);
+  }, [cameraRef, shutterScale]);
 
   const resetCapture = useCallback(() => {
     setNoteText('');

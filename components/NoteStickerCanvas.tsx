@@ -16,6 +16,7 @@ import {
 } from '../services/noteStickers';
 import {
   clampStickerScale,
+  getStickerPinchScale,
   getStickerDimensions,
   getStickerOutlineOffsets,
   getStickerOutlineSize,
@@ -176,7 +177,7 @@ function EditableSticker({
             return;
           }
           updateLivePlacement({
-            scale: clampStickerScale(pinchStartScaleRef.current * event.scale),
+            scale: getStickerPinchScale(pinchStartScaleRef.current, event.scale),
           });
         })
         .onFinalize(() => {

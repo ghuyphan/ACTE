@@ -240,6 +240,7 @@ private struct LocketWidgetStickerPlacement: Identifiable {
     let rotation: Double
     let zIndex: Int
     let opacity: Double
+    let outlineEnabled: Bool
     let assetWidth: CGFloat
     let assetHeight: CGFloat
     let assetLocalUri: String
@@ -395,6 +396,7 @@ private func parseStickerPlacements(from stickerPlacementsJson: String?) -> [Loc
         let rotation = (item["rotation"] as? NSNumber)?.doubleValue ?? 0
         let zIndex = (item["zIndex"] as? NSNumber)?.intValue ?? 0
         let opacity = (item["opacity"] as? NSNumber)?.doubleValue ?? 1
+        let outlineEnabled = (item["outlineEnabled"] as? NSNumber)?.boolValue ?? true
 
         return LocketWidgetStickerPlacement(
             id: id,
@@ -404,11 +406,35 @@ private func parseStickerPlacements(from stickerPlacementsJson: String?) -> [Loc
             rotation: rotation,
             zIndex: zIndex,
             opacity: min(max(0, opacity), 1),
+            outlineEnabled: outlineEnabled,
             assetWidth: assetWidth,
             assetHeight: assetHeight,
             assetLocalUri: assetLocalUri
         )
     }
+}
+
+private let locketWidgetStickerOutlineOffsets: [CGPoint] = [
+    CGPoint(x: -1, y: 0),
+    CGPoint(x: -0.92, y: -0.38),
+    CGPoint(x: -0.71, y: -0.71),
+    CGPoint(x: -0.38, y: -0.92),
+    CGPoint(x: 0, y: -1),
+    CGPoint(x: 0.38, y: -0.92),
+    CGPoint(x: 0.71, y: -0.71),
+    CGPoint(x: 0.92, y: -0.38),
+    CGPoint(x: 1, y: 0),
+    CGPoint(x: 0.92, y: 0.38),
+    CGPoint(x: 0.71, y: 0.71),
+    CGPoint(x: 0.38, y: 0.92),
+    CGPoint(x: 0, y: 1),
+    CGPoint(x: -0.38, y: 0.92),
+    CGPoint(x: -0.71, y: 0.71),
+    CGPoint(x: -0.92, y: 0.38)
+]
+
+private func getWidgetStickerOutlineSize(width: CGFloat, height: CGFloat) -> CGFloat {
+    max(3, min(8, min(width, height) * 0.045))
 }
 
 private struct LocketWidgetStickerOverlay: View {
@@ -450,18 +476,39 @@ private struct LocketWidgetStickerOverlay: View {
                         let baseScale = baseSize / longestEdge
                         let stickerWidth = placement.assetWidth * baseScale * placement.scale
                         let stickerHeight = placement.assetHeight * baseScale * placement.scale
+                        let outlineSize = getWidgetStickerOutlineSize(width: stickerWidth, height: stickerHeight)
+                        let renderedImage = image.withRenderingMode(.alwaysOriginal)
+                        let outlineImage = image.withRenderingMode(.alwaysTemplate)
 
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: stickerWidth, height: stickerHeight)
-                            .rotationEffect(.degrees(placement.rotation))
-                            .opacity(placement.opacity * overlayOpacity)
-                            .position(
-                                x: artboardInset + (placement.x * artboardWidth),
-                                y: artboardInset + (placement.y * artboardHeight)
-                            )
-                            .zIndex(Double(placement.zIndex))
+                        ZStack {
+                            if placement.outlineEnabled {
+                                ForEach(Array(locketWidgetStickerOutlineOffsets.enumerated()), id: \.offset) { _, offset in
+                                    Image(uiImage: outlineImage)
+                                        .resizable()
+                                        .renderingMode(.template)
+                                        .scaledToFit()
+                                        .frame(width: stickerWidth, height: stickerHeight)
+                                        .foregroundStyle(Color.white)
+                                        .opacity(0.92 * placement.opacity * overlayOpacity)
+                                        .offset(
+                                            x: offset.x * outlineSize,
+                                            y: offset.y * outlineSize
+                                        )
+                                }
+                            }
+
+                            Image(uiImage: renderedImage)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: stickerWidth, height: stickerHeight)
+                                .opacity(placement.opacity * overlayOpacity)
+                        }
+                        .rotationEffect(.degrees(placement.rotation))
+                        .position(
+                            x: artboardInset + (placement.x * artboardWidth),
+                            y: artboardInset + (placement.y * artboardHeight)
+                        )
+                        .zIndex(Double(placement.zIndex))
                     }
                 }
             }

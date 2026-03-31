@@ -15,9 +15,9 @@ import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
 import { ActiveNoteProvider } from '../hooks/useActiveNote';
 import { AuthProvider, useAuth } from '../hooks/useAuth';
 import { ConnectivityProvider, useConnectivity } from '../hooks/useConnectivity';
-import { FeedFocusProvider } from '../hooks/useFeedFocus';
+import { FeedFocusProvider, useFeedFocus } from '../hooks/useFeedFocus';
 import { NotesProvider } from '../hooks/useNotes';
-import { NoteDetailSheetProvider, useNoteDetailSheet } from '../hooks/useNoteDetailSheet';
+import { NoteDetailSheetProvider } from '../hooks/useNoteDetailSheet';
 import { SharedFeedProvider } from '../hooks/useSharedFeed';
 import { SyncStatusProvider } from '../hooks/useSyncStatus';
 import { SubscriptionProvider } from '../hooks/useSubscription';
@@ -49,7 +49,7 @@ function AppContent() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { isOnline } = useConnectivity();
-  const { openNoteDetail } = useNoteDetailSheet();
+  const { requestFeedFocus } = useFeedFocus();
   const router = useRouter();
   const segments = useSegments();
   const notificationResponseListener = useRef<Notifications.EventSubscription | null>(null);
@@ -255,9 +255,13 @@ function AppContent() {
       const sharedPostId = response.notification.request.content.data?.sharedPostId;
       const route = response.notification.request.content.data?.route;
       if (noteId && typeof noteId === 'string') {
-        openNoteDetail(noteId);
+        // Match the widget flow: focus the feed item after the app tree is mounted
+        // instead of presenting a bottom sheet from the startup notification effect.
+        requestFeedFocus({ kind: 'note', id: noteId });
+        router.replace(`/widget/note/${encodeURIComponent(noteId)}` as any);
       } else if (sharedPostId && typeof sharedPostId === 'string') {
-        router.push(`/shared/${sharedPostId}` as any);
+        requestFeedFocus({ kind: 'shared-post', id: sharedPostId });
+        router.replace(`/widget/shared-post/${encodeURIComponent(sharedPostId)}` as any);
       } else if (route && typeof route === 'string') {
         router.push(route as any);
       }
@@ -268,7 +272,7 @@ function AppContent() {
         return;
       }
     },
-    [openNoteDetail, router]
+    [requestFeedFocus, router]
   );
 
   // Handle notification tap deep-link

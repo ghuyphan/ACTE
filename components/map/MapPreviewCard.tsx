@@ -258,6 +258,12 @@ export default function MapPreviewCard({
   } = renderData;
 
   const previewCountLabel = `${Math.max(renderIndex, 0) + 1}/${renderItems.length}`;
+  const previewContextLabel = isGroupMode
+    ? renderItems.length === 1
+      ? t('map.groupSummaryOne', '1 note here')
+      : t('map.groupSummaryOther', `${renderItems.length} notes here`)
+    : t('map.nearbySummary', 'Nearby notes');
+  const contextPillBackground = isGroupMode ? `${colors.primary}18` : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(28,28,30,0.06)');
   const pointerEvents = 'auto';
   // Use a stable key so re-renders from state don't break the animation sheet container
   const sheetInstanceKey = isGroupMode && renderSelectedGroup ? `group:${renderSelectedGroup.id}` : 'nearby';
@@ -335,7 +341,7 @@ export default function MapPreviewCard({
                 noteColor: item.note.noteColor,
               });
               const metaLabel = isGroupMode
-                ? t('map.singleNote', 'Pinned note')
+                ? t('map.noteAtPlace', 'Saved here')
                 : formatDistanceLabel(item.distanceMeters ?? 0);
 
               return (
@@ -433,6 +439,22 @@ export default function MapPreviewCard({
           />
 
           <View style={styles.footer}>
+            <View
+              style={[
+                styles.contextPill,
+                { backgroundColor: contextPillBackground },
+              ]}
+            >
+              <Text
+                testID="map-preview-context"
+                style={[
+                  styles.contextText,
+                  { color: isGroupMode ? colors.primary : colors.secondaryText },
+                ]}
+              >
+                {previewContextLabel}
+              </Text>
+            </View>
             <View style={styles.indexLabelWrap}>
               <Text style={[styles.indexText, { color: colors.secondaryText }]} testID="map-preview-index">
                 {previewCountLabel}
@@ -557,8 +579,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  contextPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  contextText: {
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'Noto Sans',
+  },
   indexLabelWrap: {
     minWidth: 34,
+    alignItems: 'flex-end',
   },
   indexText: {
     fontSize: 12,

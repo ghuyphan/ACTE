@@ -9,6 +9,7 @@ import CaptureCard, { type CaptureCardHandle } from '../components/home/CaptureC
 const transparentPngBase64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFAAH/e+m+7wAAAABJRU5ErkJggg==';
 let mockClipboardPasteButtonAvailable = true;
+let mockCameraViewProps: any = null;
 let mockClipboardPastePayload: any = {
   type: 'image',
   data: 'data:image/png;base64,ZmFrZS1zdGlja2Vy',
@@ -38,9 +39,21 @@ jest.mock('@expo/ui/swift-ui/modifiers', () => ({
   presentationDragIndicator: jest.fn(),
 }));
 
-jest.mock('expo-camera', () => ({
-  CameraView: () => null,
-}));
+jest.mock('expo-camera', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  const MockCameraView = (props: any) => {
+    mockCameraViewProps = props;
+    return <View testID="mock-camera-view" />;
+  };
+
+  MockCameraView.isAvailableAsync = jest.fn(async () => true);
+
+  return {
+    CameraView: MockCameraView,
+  };
+});
 
 jest.mock('expo-clipboard', () => ({
   __esModule: true,
@@ -312,6 +325,7 @@ describe('CaptureCard doodle handle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockClipboardPasteButtonAvailable = true;
+    mockCameraViewProps = null;
     mockClipboardPastePayload = {
       type: 'image',
       data: 'data:image/png;base64,ZmFrZS1zdGlja2Vy',
@@ -451,6 +465,23 @@ describe('CaptureCard doodle handle', () => {
       fireEvent.press(getByTestId('mock-doodle-commit'));
     });
     expect(ref.current?.getDoodleSnapshot().strokes).toHaveLength(2);
+  });
+
+  it('mirrors the front camera preview and disables the native shutter animation', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    renderCaptureCard(ref, {
+      captureMode: 'camera',
+      facing: 'front',
+      shouldRenderCameraPreview: true,
+    });
+
+    await waitFor(() => {
+      expect(mockCameraViewProps).toMatchObject({
+        facing: 'front',
+        mirror: true,
+        animateShutter: false,
+      });
+    });
   });
 
   it('lets you change the text-card doodle color', () => {
@@ -842,6 +873,30 @@ describe('CaptureCard doodle handle', () => {
 
     expect(getByTestId('sticker-source-option-clipboard')).toBeTruthy();
     expect(getByTestId('sticker-source-option-photos')).toBeTruthy();
+  });
+
+  it('treats sticker edit mode like doodle mode for parent scroll locking', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const onDoodleModeChange = jest.fn();
+    const { getByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+      onDoodleModeChange,
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(getByTestId('capture-sticker-toggle'));
+    });
+
+    expect(onDoodleModeChange).toHaveBeenLastCalledWith(true);
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-sticker-toggle'));
+    });
+
+    expect(onDoodleModeChange).toHaveBeenLastCalledWith(false);
   });
 
   it('clears sticker selection first, then exits sticker mode on empty-card taps', async () => {
