@@ -3,14 +3,31 @@ import * as Haptics from 'expo-haptics';
 import { useCaptureFlow } from '../hooks/useCaptureFlow';
 
 const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
-const mockTakePictureAsync = jest.fn();
+const mockTakePhoto = jest.fn();
 
-jest.mock('expo-camera', () => ({
-  CameraView: function MockCameraView() {
+jest.mock('react-native-vision-camera', () => {
+  const React = require('react');
+
+  const MockCamera = React.forwardRef((_props: any, ref: any) => {
+    React.useImperativeHandle(ref, () => ({
+      takePhoto: mockTakePhoto,
+    }));
     return null;
-  },
-  useCameraPermissions: () => [{ granted: true, canAskAgain: true }, mockRequestPermission],
-}));
+  });
+
+  MockCamera.getCameraPermissionStatus = jest.fn(() => 'granted');
+
+  return {
+    Camera: MockCamera,
+    useCameraDevice: () => ({
+      id: 'back-camera',
+      position: 'back',
+      neutralZoom: 1,
+      maxZoom: 4,
+    }),
+    useCameraPermission: () => ({ hasPermission: true, requestPermission: mockRequestPermission }),
+  };
+});
 
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),
@@ -23,7 +40,7 @@ jest.mock('expo-haptics', () => ({
 describe('useCaptureFlow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockTakePictureAsync.mockResolvedValue({ uri: 'file:///captured-photo.jpg' });
+    mockTakePhoto.mockResolvedValue({ path: '/tmp/captured-photo.jpg' });
   });
 
   it('captures a photo without triggering the custom flash overlay animation', async () => {
@@ -31,7 +48,7 @@ describe('useCaptureFlow', () => {
 
     act(() => {
       result.current.cameraRef.current = {
-        takePictureAsync: mockTakePictureAsync,
+        takePhoto: mockTakePhoto,
       } as any;
       result.current.flashAnim.value = 0;
     });
@@ -41,8 +58,8 @@ describe('useCaptureFlow', () => {
     });
 
     expect(Haptics.impactAsync).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Medium);
-    expect(mockTakePictureAsync).toHaveBeenCalledWith({ quality: 0.35 });
-    expect(result.current.capturedPhoto).toBe('file:///captured-photo.jpg');
+    expect(mockTakePhoto).toHaveBeenCalledWith({ enableShutterSound: false });
+    expect(result.current.capturedPhoto).toBe('file:///tmp/captured-photo.jpg');
     expect(result.current.flashAnim.value).toBe(0);
   });
 });

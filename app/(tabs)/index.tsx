@@ -47,6 +47,7 @@ import {
 import { DEFAULT_NOTE_COLOR_ID, PREMIUM_NOTE_COLOR_IDS } from '../../services/noteAppearance';
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { saveNoteDoodle } from '../../services/noteDoodles';
+import { renderFilteredPhotoToFile } from '../../services/photoFilters';
 import { saveNoteStickerPlacementsWithAssets } from '../../services/noteStickers';
 import { filterNotesByQuery } from '../../services/noteSearch';
 import {
@@ -189,6 +190,9 @@ export default function HomeScreen() {
     setRadius,
     facing,
     setFacing,
+    selectedPhotoFilterId,
+    setSelectedPhotoFilterId,
+    cameraDevice,
     permission,
     requestPermission,
     cameraRef,
@@ -1159,7 +1163,11 @@ export default function HomeScreen() {
           await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
           const filename = `note-${Date.now()}.jpg`;
           destinationPath = `${directory}${filename}`;
-          await FileSystem.copyAsync({ from: capturedPhoto, to: destinationPath });
+          if (selectedPhotoFilterId === 'original') {
+            await FileSystem.copyAsync({ from: capturedPhoto, to: destinationPath });
+          } else {
+            await renderFilteredPhotoToFile(capturedPhoto, destinationPath, selectedPhotoFilterId);
+          }
           content = destinationPath;
         }
 
@@ -1262,6 +1270,7 @@ export default function HomeScreen() {
     noteText,
     noteColor,
     capturedPhoto,
+    selectedPhotoFilterId,
     reverseGeocode,
     restaurantName,
     createNote,
@@ -1574,7 +1583,10 @@ export default function HomeScreen() {
         onOpenPhotoLibrary={() => {
           void handleImportPhoto();
         }}
+        selectedPhotoFilterId={selectedPhotoFilterId}
+        onChangePhotoFilter={setSelectedPhotoFilterId}
         cameraRef={cameraRef}
+        cameraDevice={cameraDevice}
         shouldRenderCameraPreview={shouldRenderCameraPreview}
         flashAnim={flashAnim}
         permissionGranted={Boolean(permission?.granted)}

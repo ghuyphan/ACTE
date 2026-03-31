@@ -1,5 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { CameraView } from 'expo-camera';
+import {
+  Canvas,
+  ColorMatrix,
+  Group,
+  Image as SkiaImage,
+  Paint,
+  useImage as useSkiaImage,
+} from '@shopify/react-native-skia';
 import {
   ClipboardPasteButton,
   addClipboardListener,
@@ -7,7 +14,6 @@ import {
   type PasteEventPayload,
   type Subscription,
 } from 'expo-clipboard';
-import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TFunction } from 'i18next';
@@ -31,6 +37,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Camera, type CameraDevice } from 'react-native-vision-camera';
 import Reanimated, {
   Easing,
   FadeInLeft,
@@ -75,6 +82,11 @@ import {
   importStickerAssetFromClipboard,
   importStickerAssetFromClipboardImageData,
 } from '../../utils/stickerClipboard';
+import {
+  getPhotoFilterPreset,
+  PHOTO_FILTER_PRESETS,
+  type PhotoFilterId,
+} from '../../services/photoFilters';
 import AppSheet from '../AppSheet';
 import AppSheetScaffold from '../AppSheetScaffold';
 import NoteDoodleCanvas, { DoodleStroke } from '../NoteDoodleCanvas';
@@ -492,6 +504,136 @@ function DoodleColorPalette({
   );
 }
 
+type FilteredPhotoCanvasProps = {
+  sourceUri: string;
+  filterId: PhotoFilterId;
+  width: number;
+  height: number;
+  style?: StyleProp<ViewStyle>;
+};
+
+function FilteredPhotoCanvas({
+  sourceUri,
+  filterId,
+  width,
+  height,
+  style,
+}: FilteredPhotoCanvasProps) {
+  const image = useSkiaImage(sourceUri);
+  const filterPreset = getPhotoFilterPreset(filterId);
+
+  if (!image) {
+    return <View style={style} />;
+  }
+
+  return (
+    <Canvas style={style}>
+      <Group
+        layer={
+          filterPreset.id === 'original'
+            ? undefined
+            : (
+              <Paint>
+                <ColorMatrix matrix={filterPreset.matrix} />
+              </Paint>
+            )
+        }
+      >
+        <SkiaImage
+          image={image}
+          x={0}
+          y={0}
+          width={width}
+          height={height}
+          fit="cover"
+        />
+      </Group>
+    </Canvas>
+  );
+}
+
+function PhotoFilterSwatch({
+  sourceUri,
+  filterId,
+}: {
+  sourceUri: string;
+  filterId: PhotoFilterId;
+}) {
+  return (
+    <FilteredPhotoCanvas
+      sourceUri={sourceUri}
+      filterId={filterId}
+      width={48}
+      height={48}
+      style={styles.photoFilterPreviewCanvas}
+    />
+  );
+}
+
+type PhotoFilterCarouselProps = {
+  sourceUri: string;
+  selectedFilterId: PhotoFilterId;
+  onSelectFilter: (filterId: PhotoFilterId) => void;
+  t: TFunction;
+  colors: Pick<ThemeColors, 'captureGlassFill' | 'captureGlassBorder' | 'captureGlassText' | 'primary'>;
+};
+
+function PhotoFilterCarousel({
+  sourceUri,
+  selectedFilterId,
+  onSelectFilter,
+  t,
+  colors,
+}: PhotoFilterCarouselProps) {
+  return (
+    <View style={styles.photoFilterTray}>
+      <Text style={[styles.photoFilterLabel, { color: colors.captureGlassText }]}>
+        {t('capture.filterLabel', 'Filter')}
+      </Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.photoFilterRow}
+      >
+        {PHOTO_FILTER_PRESETS.map((preset) => {
+          const isSelected = preset.id === selectedFilterId;
+
+          return (
+            <Pressable
+              key={preset.id}
+              testID={`capture-filter-${preset.id}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              accessibilityLabel={t(preset.labelKey, preset.defaultLabel)}
+              onPress={() => onSelectFilter(preset.id)}
+              style={[
+                styles.photoFilterButton,
+                {
+                  borderColor: isSelected ? colors.primary : colors.captureGlassBorder,
+                  backgroundColor: colors.captureGlassFill,
+                },
+              ]}
+            >
+              <View style={styles.photoFilterPreviewClip}>
+                <PhotoFilterSwatch sourceUri={sourceUri} filterId={preset.id} />
+              </View>
+              <Text
+                style={[
+                  styles.photoFilterButtonLabel,
+                  { color: colors.captureGlassText, opacity: isSelected ? 1 : 0.72 },
+                ]}
+              >
+                {t(preset.labelKey, preset.defaultLabel)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 type CaptureGlassActionButtonProps = Omit<CaptureAnimatedPressableProps, 'children'> & {
   iconName: ComponentProps<typeof Ionicons>['name'];
   iconColor: string;
@@ -595,7 +737,10 @@ interface CaptureCardProps {
   facing: 'back' | 'front';
   onToggleFacing: () => void;
   onOpenPhotoLibrary: () => void;
-  cameraRef: RefObject<CameraView | null>;
+  selectedPhotoFilterId: PhotoFilterId;
+  onChangePhotoFilter: (filterId: PhotoFilterId) => void;
+  cameraRef: RefObject<Camera | null>;
+  cameraDevice?: CameraDevice;
   shouldRenderCameraPreview: boolean;
   flashAnim: SharedValue<number>;
   permissionGranted: boolean;
@@ -646,7 +791,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   facing,
   onToggleFacing,
   onOpenPhotoLibrary,
+  selectedPhotoFilterId,
+  onChangePhotoFilter,
   cameraRef,
+  cameraDevice,
   shouldRenderCameraPreview,
   flashAnim,
   permissionGranted,
@@ -865,7 +1013,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setIsCameraReady(true);
     setCameraUnavailable(false);
     setCameraIssueDetail(null);
-  }, [cameraSessionKey, cameraRetryNonce, canShowLiveCameraPreview]);
+  }, [cameraDevice?.id, cameraSessionKey, cameraRetryNonce, canShowLiveCameraPreview]);
 
   useEffect(() => {
     cameraAutoRecoveryCountRef.current = 0;
@@ -880,33 +1028,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   useEffect(() => () => clearCameraZoomBadgeTimeout(), [clearCameraZoomBadgeTimeout]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    if (!canShowLiveCameraPreview) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    void CameraView.isAvailableAsync()
-      .then((available) => {
-        if (cancelled || available) {
-          return;
-        }
-
-        setCameraUnavailable(true);
-        setIsCameraReady(false);
-      })
-      .catch(() => {
-        // Ignore availability probe failures and rely on onMountError when available.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [cameraRetryNonce, canShowLiveCameraPreview]);
-
-  useEffect(() => {
     if (!canShowLiveCameraPreview || isCameraReady || cameraUnavailable) {
       return;
     }
@@ -916,7 +1037,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     }, CAMERA_START_TIMEOUT_MS);
 
     return () => clearTimeout(timer);
-  }, [cameraRetryNonce, canShowLiveCameraPreview, cameraUnavailable, handleCameraStartupFailure, isCameraReady]);
+  }, [cameraDevice?.id, cameraRetryNonce, canShowLiveCameraPreview, cameraUnavailable, handleCameraStartupFailure, isCameraReady]);
 
   useEffect(() => {
     decorateProgress.value = withTiming(showDecorateControls ? 1 : 0, {
@@ -1261,7 +1382,22 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     );
   const cameraZoomGesturesEnabled =
     canShowLiveCameraPreview && !showCameraUnavailableState && !interactionsDisabled;
-  const cameraZoomLabel = `${Math.round(cameraZoom * 100)}%`;
+  const maxPreviewZoomFactor = useMemo(() => {
+    if (!cameraDevice) {
+      return 1;
+    }
+
+    return Math.max(cameraDevice.neutralZoom, Math.min(cameraDevice.maxZoom, 8));
+  }, [cameraDevice]);
+  const cameraPreviewZoom = useMemo(() => {
+    if (!cameraDevice) {
+      return 1;
+    }
+
+    const zoomRange = maxPreviewZoomFactor - cameraDevice.neutralZoom;
+    return cameraDevice.neutralZoom + zoomRange * cameraZoom;
+  }, [cameraDevice, cameraZoom, maxPreviewZoomFactor]);
+  const cameraZoomLabel = `${cameraPreviewZoom.toFixed(1)}x`;
   const cameraZoomGesture = useMemo(
     () =>
       Gesture.Simultaneous(
@@ -2322,7 +2458,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             </LinearGradient>
           ) : capturedPhoto ? (
             <View style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}>
-              <Image source={{ uri: capturedPhoto }} style={styles.cameraPreview} contentFit="cover" />
+              <FilteredPhotoCanvas
+                sourceUri={capturedPhoto}
+                filterId={selectedPhotoFilterId}
+                width={CARD_SIZE}
+                height={CARD_SIZE}
+                style={styles.cameraPreview}
+              />
               {ENABLE_PHOTO_STICKERS ? (
                 <Pressable
                   testID="capture-card-paste-surface"
@@ -2736,25 +2878,29 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   {captureMode === 'camera' && shouldRenderCameraPreview ? (
                     <GestureDetector gesture={cameraZoomGesture}>
                       <View style={styles.cameraGestureLayer}>
-                        <CameraView
-                          key={`camera-session-${cameraSessionKey}-${cameraRetryNonce}-${facing}`}
-                          style={styles.cameraPreview}
-                          facing={facing}
-                          mirror={facing === 'front'}
-                          zoom={cameraZoom}
-                          active={canShowLiveCameraPreview}
-                          animateShutter={false}
-                          ref={cameraRef}
-                          onCameraReady={() => {
-                            cameraAutoRecoveryCountRef.current = 0;
-                            setCameraUnavailable(false);
-                            setCameraIssueDetail(null);
-                            setIsCameraReady(true);
-                          }}
-                          onMountError={(error) => {
-                            handleCameraStartupFailure(error.message);
-                          }}
-                        />
+                        {cameraDevice ? (
+                          <Camera
+                            key={`camera-session-${cameraSessionKey}-${cameraRetryNonce}`}
+                            style={styles.cameraPreview}
+                            device={cameraDevice}
+                            isActive={canShowLiveCameraPreview}
+                            photo
+                            isMirrored={facing === 'front'}
+                            zoom={cameraPreviewZoom}
+                            resizeMode="cover"
+                            androidPreviewViewType="texture-view"
+                            ref={cameraRef}
+                            onInitialized={() => {
+                              cameraAutoRecoveryCountRef.current = 0;
+                              setCameraUnavailable(false);
+                              setCameraIssueDetail(null);
+                              setIsCameraReady(true);
+                            }}
+                            onError={(error) => {
+                              handleCameraStartupFailure(error.message);
+                            }}
+                          />
+                        ) : null}
                       </View>
                     </GestureDetector>
                   ) : null}
@@ -3012,82 +3158,91 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               )}
             </View>
           ) : capturedPhoto ? (
-            <View style={[styles.belowCardShutterRow, styles.belowCardCapturedPhotoActions]}>
-              <CaptureGlassActionButton
-                accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
-                onPress={onOpenNotes}
-                iconName="grid-outline"
-                iconColor={colors.captureGlassText}
-                glassColorScheme={colors.captureGlassColorScheme}
-                fallbackColor={colors.card}
-                borderColor={colors.captureGlassBorder}
-                style={[
-                  styles.belowCardLeadingAction,
-                ]}
+            <View style={styles.belowCardCapturedPhotoStack}>
+              <PhotoFilterCarousel
+                sourceUri={capturedPhoto}
+                selectedFilterId={selectedPhotoFilterId}
+                onSelectFilter={onChangePhotoFilter}
+                t={t}
+                colors={colors}
               />
-              <CaptureAnimatedPressable
-                testID="capture-save-button"
-                onPress={onSaveNote}
-                onPressIn={handleSavePressIn}
-                onPressOut={handleSavePressOut}
-                disabled={isSaveBusy || isSaveSuccessful}
-                pressedScale={0.985}
-                disabledOpacity={isSaveBusy ? 0.72 : 1}
-                style={[
-                  styles.shutterOuter,
-                  {
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <Reanimated.View style={savePressAnimatedStyle}>
-                  <Reanimated.View
-                    style={[
-                      styles.shutterInner,
-                      styles.saveInner,
-                      animatedSaveInnerStyle,
-                    ]}
-                  >
+              <View style={[styles.belowCardShutterRow, styles.belowCardCapturedPhotoActions]}>
+                <CaptureGlassActionButton
+                  accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
+                  onPress={onOpenNotes}
+                  iconName="grid-outline"
+                  iconColor={colors.captureGlassText}
+                  glassColorScheme={colors.captureGlassColorScheme}
+                  fallbackColor={colors.card}
+                  borderColor={colors.captureGlassBorder}
+                  style={[
+                    styles.belowCardLeadingAction,
+                  ]}
+                />
+                <CaptureAnimatedPressable
+                  testID="capture-save-button"
+                  onPress={onSaveNote}
+                  onPressIn={handleSavePressIn}
+                  onPressOut={handleSavePressOut}
+                  disabled={isSaveBusy || isSaveSuccessful}
+                  pressedScale={0.985}
+                  disabledOpacity={isSaveBusy ? 0.72 : 1}
+                  style={[
+                    styles.shutterOuter,
+                    {
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Reanimated.View style={savePressAnimatedStyle}>
                     <Reanimated.View
-                      pointerEvents="none"
                       style={[
-                        styles.saveHalo,
-                        {
-                          backgroundColor: colors.primary,
-                        },
-                        animatedSaveHaloStyle,
+                        styles.shutterInner,
+                        styles.saveInner,
+                        animatedSaveInnerStyle,
                       ]}
-                    />
-                    {isSaveBusy ? (
-                      <ActivityIndicator size="small" color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'} />
-                    ) : (
-                      <Reanimated.View style={animatedSaveIconStyle}>
-                        <Ionicons
-                          name={isSaveSuccessful ? 'checkmark-done' : 'checkmark'}
-                          size={24}
-                          color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'}
-                        />
-                      </Reanimated.View>
-                    )}
+                    >
+                      <Reanimated.View
+                        pointerEvents="none"
+                        style={[
+                          styles.saveHalo,
+                          {
+                            backgroundColor: colors.primary,
+                          },
+                          animatedSaveHaloStyle,
+                        ]}
+                      />
+                      {isSaveBusy ? (
+                        <ActivityIndicator size="small" color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'} />
+                      ) : (
+                        <Reanimated.View style={animatedSaveIconStyle}>
+                          <Ionicons
+                            name={isSaveSuccessful ? 'checkmark-done' : 'checkmark'}
+                            size={24}
+                            color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'}
+                          />
+                        </Reanimated.View>
+                      )}
+                    </Reanimated.View>
                   </Reanimated.View>
-                </Reanimated.View>
-              </CaptureAnimatedPressable>
+                </CaptureAnimatedPressable>
 
-              <CaptureGlassActionButton
-                testID="capture-retake-button"
-                accessibilityLabel={t('capture.retake', 'Retake')}
-                onPress={onRetakePhoto}
-                disabled={isSaveBusy || isSaveSuccessful}
-                disabledOpacity={0.55}
-                iconName="refresh"
-                iconColor={colors.captureGlassText}
-                glassColorScheme={colors.captureGlassColorScheme}
-                fallbackColor={colors.card}
-                borderColor={colors.captureGlassBorder}
-                style={[
-                  styles.belowCardTrailingAction,
-                ]}
-              />
+                <CaptureGlassActionButton
+                  testID="capture-retake-button"
+                  accessibilityLabel={t('capture.retake', 'Retake')}
+                  onPress={onRetakePhoto}
+                  disabled={isSaveBusy || isSaveSuccessful}
+                  disabledOpacity={0.55}
+                  iconName="refresh"
+                  iconColor={colors.captureGlassText}
+                  glassColorScheme={colors.captureGlassColorScheme}
+                  fallbackColor={colors.card}
+                  borderColor={colors.captureGlassBorder}
+                  style={[
+                    styles.belowCardTrailingAction,
+                  ]}
+                />
+              </View>
             </View>
           ) : (
             <View style={styles.belowCardShutterRow}>
@@ -3604,6 +3759,10 @@ const styles = StyleSheet.create({
     minHeight: 52,
     justifyContent: 'center',
   },
+  belowCardCapturedPhotoStack: {
+    width: '100%',
+    gap: 12,
+  },
   captureStandaloneRadiusButton: {
     width: 38,
     height: 38,
@@ -3633,6 +3792,48 @@ const styles = StyleSheet.create({
   },
   belowCardCapturedPhotoActions: {
     minHeight: 68,
+  },
+  photoFilterTray: {
+    width: '100%',
+    gap: 10,
+  },
+  photoFilterLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    paddingHorizontal: 4,
+  },
+  photoFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 2,
+    paddingBottom: 2,
+  },
+  photoFilterButton: {
+    width: 64,
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+  },
+  photoFilterPreviewClip: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  photoFilterPreviewCanvas: {
+    width: '100%',
+    height: '100%',
+  },
+  photoFilterButtonLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    lineHeight: 12,
+    textAlign: 'center',
   },
   belowCardLeadingAction: {
     position: 'absolute',

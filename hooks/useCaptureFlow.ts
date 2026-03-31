@@ -1,10 +1,18 @@
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { AppState } from 'react-native';
+import { Camera, type CameraPermissionStatus, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import * as Haptics from 'expo-haptics';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Easing, runOnJS, useSharedValue, withTiming } from 'react-native-reanimated';
 import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
+import type { PhotoFilterId } from '../services/photoFilters';
 
 export type CaptureMode = 'text' | 'camera';
+
+type CaptureCameraPermission = {
+  granted: boolean;
+  canAskAgain: boolean;
+  status: CameraPermissionStatus;
+};
 
 export function useCaptureFlow() {
   const [captureMode, setCaptureMode] = useState<CaptureMode>('text');
@@ -20,14 +28,45 @@ export function useCaptureFlow() {
   const [hasShuffledPrompt, setHasShuffledPrompt] = useState(false);
   const [radius, setRadius] = useState(DEFAULT_NOTE_RADIUS);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
-  const [permission, requestPermission] = useCameraPermissions();
+  const [selectedPhotoFilterId, setSelectedPhotoFilterId] = useState<PhotoFilterId>('original');
+  const { hasPermission, requestPermission: requestCameraPermission } = useCameraPermission();
+  const cameraDevice = useCameraDevice(facing);
+  const [cameraPermissionStatus, setCameraPermissionStatus] = useState<CameraPermissionStatus>(() =>
+    Camera.getCameraPermissionStatus()
+  );
 
-  const cameraRef = useRef<CameraView>(null);
+  const cameraRef = useRef<Camera>(null);
   const captureOpacity = useSharedValue(1);
   const captureScale = useSharedValue(1);
   const captureTranslateY = useSharedValue(0);
   const flashAnim = useSharedValue(0);
   const shutterScale = useSharedValue(1);
+
+  useEffect(() => {
+    setCameraPermissionStatus(hasPermission ? 'granted' : Camera.getCameraPermissionStatus());
+  }, [hasPermission]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        setCameraPermissionStatus(Camera.getCameraPermissionStatus());
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    setSelectedPhotoFilterId('original');
+  }, [capturedPhoto]);
+
+  const permission = useMemo<CaptureCameraPermission>(() => ({
+    granted: hasPermission,
+    canAskAgain: cameraPermissionStatus === 'not-determined',
+    status: cameraPermissionStatus,
+  }), [cameraPermissionStatus, hasPermission]);
 
   const animateModeSwitch = useCallback((callback: () => void) => {
     captureScale.value = withTiming(0.97, { duration: 110 });
@@ -93,14 +132,20 @@ export function useCaptureFlow() {
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    const photo = await cameraRef.current.takePictureAsync({
-      quality: 0.35,
+    const photo = await cameraRef.current.takePhoto({
+      enableShutterSound: false,
     });
     shutterScale.value = 1;
-    if (photo?.uri) {
-      setCapturedPhoto(photo.uri);
+    if (photo?.path) {
+      setCapturedPhoto(photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`);
     }
   }, [cameraRef, shutterScale]);
+
+  const requestPermission = useCallback(async () => {
+    const granted = await requestCameraPermission();
+    setCameraPermissionStatus(granted ? 'granted' : Camera.getCameraPermissionStatus());
+    return granted;
+  }, [requestCameraPermission]);
 
   const resetCapture = useCallback(() => {
     setNoteText('');
@@ -143,6 +188,9 @@ export function useCaptureFlow() {
     setRadius,
     facing,
     setFacing,
+    selectedPhotoFilterId,
+    setSelectedPhotoFilterId,
+    cameraDevice,
     permission,
     requestPermission,
     cameraRef,

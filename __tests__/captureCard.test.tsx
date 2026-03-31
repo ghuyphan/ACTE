@@ -40,19 +40,29 @@ jest.mock('@expo/ui/swift-ui/modifiers', () => ({
   presentationDragIndicator: jest.fn(),
 }));
 
-jest.mock('expo-camera', () => {
+jest.mock('react-native-vision-camera', () => {
   const React = require('react');
   const { View } = require('react-native');
 
-  const MockCameraView = (props: any) => {
+  const MockCameraView = React.forwardRef((props: any, ref: any) => {
     mockCameraViewProps = props;
+    React.useImperativeHandle(ref, () => ({
+      takePhoto: jest.fn(),
+    }));
     return <View testID="mock-camera-view" />;
-  };
+  });
 
-  MockCameraView.isAvailableAsync = jest.fn(async () => true);
+  MockCameraView.getCameraPermissionStatus = jest.fn(() => 'granted');
 
   return {
-    CameraView: MockCameraView,
+    Camera: MockCameraView,
+    useCameraPermission: () => ({ hasPermission: true, requestPermission: jest.fn(async () => true) }),
+    useCameraDevice: () => ({
+      id: 'back-camera',
+      position: 'back',
+      neutralZoom: 1,
+      maxZoom: 4,
+    }),
   };
 });
 
@@ -300,7 +310,15 @@ function createCaptureCardProps(
     facing: 'back' as const,
     onToggleFacing: () => undefined,
     onOpenPhotoLibrary: () => undefined,
+    selectedPhotoFilterId: 'original' as const,
+    onChangePhotoFilter: () => undefined,
     cameraRef: { current: null },
+    cameraDevice: {
+      id: 'back-camera',
+      position: 'back',
+      neutralZoom: 1,
+      maxZoom: 4,
+    } as any,
     shouldRenderCameraPreview: false,
     flashAnim: zeroValue,
     permissionGranted: true,
@@ -488,11 +506,26 @@ describe('CaptureCard doodle handle', () => {
 
     await waitFor(() => {
       expect(mockCameraViewProps).toMatchObject({
-        facing: 'front',
-        mirror: true,
-        animateShutter: false,
+        isMirrored: true,
+        photo: true,
+        resizeMode: 'cover',
       });
     });
+  });
+
+  it('shows filter circles for captured photos and lets you choose one', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const onChangePhotoFilter = jest.fn();
+    const { getByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///captured-photo.jpg',
+      selectedPhotoFilterId: 'original',
+      onChangePhotoFilter,
+    });
+
+    fireEvent.press(getByTestId('capture-filter-vivid'));
+
+    expect(onChangePhotoFilter).toHaveBeenCalledWith('vivid');
   });
 
   it('lets you change the text-card doodle color', () => {
@@ -623,6 +656,8 @@ describe('CaptureCard doodle handle', () => {
         facing="back"
         onToggleFacing={() => undefined}
         onOpenPhotoLibrary={() => undefined}
+        selectedPhotoFilterId="original"
+        onChangePhotoFilter={() => undefined}
         cameraRef={{ current: null }}
         shouldRenderCameraPreview={false}
         flashAnim={createSharedValue(0)}

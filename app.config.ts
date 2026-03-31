@@ -164,11 +164,10 @@ const config = {
     ],
     './plugins/withCustomWidgetSwift.js',
     [
-      'expo-camera',
+      'react-native-vision-camera',
       {
-        cameraPermission: 'Allow Noto to use your camera so you can save photo memories.',
-        microphonePermission: false,
-        recordAudioAndroid: false,
+        cameraPermissionText: 'Allow Noto to use your camera so you can save photo memories.',
+        enableMicrophonePermission: false,
       },
     ],
     [

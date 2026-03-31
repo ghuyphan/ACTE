@@ -147,6 +147,7 @@ jest.mock('@shopify/react-native-skia', () => {
 
   return {
     Canvas: ({ children, ...props }: any) => React.createElement(View, props, children),
+    ColorMatrix: ({ children, ...props }: any) => React.createElement(View, props, children),
     Group: ({ children, ...props }: any) => React.createElement(View, props, children),
     Image: ({ children, ...props }: any) => React.createElement(View, props, children),
     Paint: ({ children, ...props }: any) => React.createElement(View, props, children),
