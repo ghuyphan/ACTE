@@ -10,6 +10,8 @@ const transparentPngBase64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFAAH/e+m+7wAAAABJRU5ErkJggg==';
 let mockClipboardPasteButtonAvailable = true;
 let mockCameraViewProps: any = null;
+let mockCameraMountCount = 0;
+let mockCameraUnmountCount = 0;
 let mockClipboardPastePayload: any = {
   type: 'image',
   data: 'data:image/png;base64,ZmFrZS1zdGlja2Vy',
@@ -46,6 +48,13 @@ jest.mock('react-native-vision-camera', () => {
 
   const MockCameraView = React.forwardRef((props: any, ref: any) => {
     mockCameraViewProps = props;
+    React.useEffect(() => {
+      props.onInitialized?.();
+      mockCameraMountCount += 1;
+      return () => {
+        mockCameraUnmountCount += 1;
+      };
+    }, []);
     React.useImperativeHandle(ref, () => ({
       takePhoto: jest.fn(),
     }));
@@ -319,7 +328,6 @@ function createCaptureCardProps(
       neutralZoom: 1,
       maxZoom: 4,
     } as any,
-    shouldRenderCameraPreview: false,
     isCameraPreviewActive: false,
     flashAnim: zeroValue,
     permissionGranted: true,
@@ -354,6 +362,8 @@ describe('CaptureCard doodle handle', () => {
     jest.clearAllMocks();
     mockClipboardPasteButtonAvailable = true;
     mockCameraViewProps = null;
+    mockCameraMountCount = 0;
+    mockCameraUnmountCount = 0;
     mockClipboardListeners = [];
     mockClipboardPastePayload = {
       type: 'image',
@@ -502,7 +512,6 @@ describe('CaptureCard doodle handle', () => {
     renderCaptureCard(ref, {
       captureMode: 'camera',
       facing: 'front',
-      shouldRenderCameraPreview: true,
       isCameraPreviewActive: true,
     });
 
@@ -524,7 +533,6 @@ describe('CaptureCard doodle handle', () => {
       captureMode: 'camera',
       permissionGranted: false,
       needsCameraPermission: true,
-      shouldRenderCameraPreview: false,
     });
 
     expect(view.queryByTestId('mock-camera-view')).toBeNull();
@@ -535,13 +543,61 @@ describe('CaptureCard doodle handle', () => {
           captureMode: 'camera',
           permissionGranted: true,
           needsCameraPermission: false,
-          shouldRenderCameraPreview: true,
           isCameraPreviewActive: true,
         })}
       />
     );
 
     expect(view.getByTestId('mock-camera-view')).toBeTruthy();
+  });
+
+  it('remounts the camera when the live preview becomes active again', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      permissionGranted: true,
+      needsCameraPermission: false,
+      isCameraPreviewActive: false,
+    });
+
+    expect(view.getByTestId('mock-camera-view')).toBeTruthy();
+    const initialMountCount = mockCameraMountCount;
+    const initialUnmountCount = mockCameraUnmountCount;
+    expect(mockCameraViewProps?.isActive).toBe(false);
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          captureMode: 'camera',
+          permissionGranted: true,
+          needsCameraPermission: false,
+          isCameraPreviewActive: true,
+        })}
+      />
+    );
+
+    expect(view.getByTestId('mock-camera-view')).toBeTruthy();
+    expect(mockCameraMountCount).toBeGreaterThan(initialMountCount);
+    expect(mockCameraUnmountCount).toBeGreaterThan(initialUnmountCount);
+  });
+
+  it('starts Android camera active when the preview is active', () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+
+    try {
+      const ref = React.createRef<CaptureCardHandle>();
+      renderCaptureCard(ref, {
+        captureMode: 'camera',
+        permissionGranted: true,
+        needsCameraPermission: false,
+        isCameraPreviewActive: true,
+      });
+
+      expect(mockCameraViewProps?.isActive).toBe(true);
+    } finally {
+      Platform.OS = originalPlatform;
+    }
   });
 
   it('shows filter circles for captured photos and lets you choose one', () => {
@@ -690,7 +746,6 @@ describe('CaptureCard doodle handle', () => {
         selectedPhotoFilterId="original"
         onChangePhotoFilter={() => undefined}
         cameraRef={{ current: null }}
-        shouldRenderCameraPreview={false}
         isCameraPreviewActive={false}
         flashAnim={createSharedValue(0)}
         permissionGranted
@@ -810,7 +865,7 @@ describe('CaptureCard doodle handle', () => {
 
     try {
       const ref = React.createRef<CaptureCardHandle>();
-      const { getByTestId } = renderCaptureCard(ref);
+      const { getByTestId, rerender } = renderCaptureCard(ref);
 
       const hasTransform = () =>
         getByTestId('capture-card-area').props.style.some((item: { transform?: unknown } | null) => Boolean(item?.transform));
@@ -828,6 +883,19 @@ describe('CaptureCard doodle handle', () => {
       });
 
       expect(hasTransform()).toBe(true);
+
+      rerender(
+        <CaptureCard
+          {...createCaptureCardProps(ref, {
+            captureMode: 'camera',
+            permissionGranted: true,
+            needsCameraPermission: false,
+            isCameraPreviewActive: true,
+          })}
+        />
+      );
+
+      expect(hasTransform()).toBe(false);
     } finally {
       Platform.OS = originalPlatform;
     }

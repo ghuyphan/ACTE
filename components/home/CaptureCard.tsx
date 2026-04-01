@@ -736,7 +736,6 @@ interface CaptureCardProps {
   onChangePhotoFilter: (filterId: PhotoFilterId) => void;
   cameraRef: RefObject<Camera | null>;
   cameraDevice?: CameraDevice;
-  shouldRenderCameraPreview: boolean;
   isCameraPreviewActive: boolean;
   flashAnim: SharedValue<number>;
   permissionGranted: boolean;
@@ -791,7 +790,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onChangePhotoFilter,
   cameraRef,
   cameraDevice,
-  shouldRenderCameraPreview,
   isCameraPreviewActive,
   flashAnim,
   permissionGranted,
@@ -821,6 +819,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [showRadiusSheet, setShowRadiusSheet] = useState(false);
   const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
   const [cameraRetryNonce, setCameraRetryNonce] = useState(0);
+  const [cameraActivationNonce, setCameraActivationNonce] = useState(0);
   const [cameraZoom, setCameraZoom] = useState(0);
   const [showCameraZoomBadge, setShowCameraZoomBadge] = useState(false);
   const [textDoodleModeEnabled, setTextDoodleModeEnabled] = useState(false);
@@ -929,11 +928,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const shouldPrepareCameraPreview =
     captureMode === 'camera' &&
     !capturedPhoto &&
-    permissionGranted &&
-    shouldRenderCameraPreview;
-  const canShowLiveCameraPreview = shouldPrepareCameraPreview && isCameraPreviewActive;
+    permissionGranted;
+  const shouldShowCameraCard = captureMode === 'camera' && !capturedPhoto;
+  const shouldRenderCameraPreview = shouldPrepareCameraPreview && Boolean(cameraDevice);
+  const canShowLiveCameraPreview = shouldRenderCameraPreview && isCameraPreviewActive;
+  const previousCanShowLiveCameraPreviewRef = useRef(canShowLiveCameraPreview);
   const saveIdleBackground = isCameraSaveMode ? colors.primary : colors.captureButtonBg;
-  const disableAndroidTextTransforms = Platform.OS === 'android' && captureMode === 'text' && isNoteInputFocused;
+  const disableAndroidCaptureTransforms =
+    Platform.OS === 'android' &&
+    (captureMode === 'camera' || (captureMode === 'text' && isNoteInputFocused));
   const decorateProgress = useSharedValue(showDecorateControls ? 1 : 0);
   const keyboardLift = useSharedValue(0);
   const isTextEntryFocused = captureMode === 'text' && (isNoteInputFocused || isRestaurantInputFocused);
@@ -1003,8 +1006,30 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     [restartCameraPreview, t]
   );
 
+  const handleCameraInitialized = useCallback(() => {
+    cameraAutoRecoveryCountRef.current = 0;
+    setCameraUnavailable(false);
+    setCameraIssueDetail(null);
+  }, []);
+
+  const handleCameraPreviewStarted = useCallback(() => {
+    cameraAutoRecoveryCountRef.current = 0;
+    setCameraUnavailable(false);
+    setCameraIssueDetail(null);
+    setIsCameraReady(true);
+  }, []);
+
   useEffect(() => {
-    if (!shouldPrepareCameraPreview) {
+    const previousCanShowLiveCameraPreview = previousCanShowLiveCameraPreviewRef.current;
+    previousCanShowLiveCameraPreviewRef.current = canShowLiveCameraPreview;
+
+    if (canShowLiveCameraPreview && !previousCanShowLiveCameraPreview) {
+      setCameraActivationNonce((current) => current + 1);
+    }
+  }, [canShowLiveCameraPreview]);
+
+  useEffect(() => {
+    if (!shouldRenderCameraPreview) {
       setIsCameraReady(true);
       setCameraUnavailable(false);
       setCameraIssueDetail(null);
@@ -1014,11 +1039,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setIsCameraReady(false);
     setCameraUnavailable(false);
     setCameraIssueDetail(null);
-  }, [cameraDevice?.id, cameraSessionKey, cameraRetryNonce, shouldPrepareCameraPreview]);
+  }, [cameraActivationNonce, cameraDevice?.id, cameraRetryNonce, cameraSessionKey, shouldRenderCameraPreview]);
 
   useEffect(() => {
     cameraAutoRecoveryCountRef.current = 0;
-  }, [cameraSessionKey, captureMode, facing, permissionGranted, shouldRenderCameraPreview, capturedPhoto]);
+  }, [cameraSessionKey, captureMode, facing, permissionGranted, isCameraPreviewActive, capturedPhoto]);
 
   useEffect(() => {
     if (captureMode !== 'camera') {
@@ -1026,7 +1051,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     }
   }, [captureMode, resetCameraZoom]);
 
-  useEffect(() => () => clearCameraZoomBadgeTimeout(), [clearCameraZoomBadgeTimeout]);
+  useEffect(
+    () => () => {
+      clearCameraZoomBadgeTimeout();
+    },
+    [clearCameraZoomBadgeTimeout]
+  );
 
   useEffect(() => {
     if (!canShowLiveCameraPreview || isCameraReady || cameraUnavailable) {
@@ -2025,7 +2055,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             testID="capture-card-area"
             style={[
               styles.captureArea,
-              disableAndroidTextTransforms ? null : captureAreaAnimatedStyle,
+              disableAndroidCaptureTransforms ? null : captureAreaAnimatedStyle,
             ]}
             pointerEvents={isSearching || interactionsDisabled ? 'none' : 'auto'}
           >
@@ -2839,32 +2869,35 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 />
               </View>
             </View>
-          ) : needsCameraPermission ? (
-            <View style={[styles.textCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Ionicons name="camera" size={48} color={colors.secondaryText} />
-              <Text style={[styles.permissionText, { color: colors.text }]}>
-                {cameraPermissionRequiresSettings
-                  ? t(
-                    'capture.cameraPermissionSettingsMsg',
-                    'Camera access is blocked for Noto. Open Settings to take photos.'
-                  )
-                  : t('capture.cameraPermission', 'Camera access needed')}
-              </Text>
-              <PrimaryButton
-                label={
-                  cameraPermissionRequiresSettings
-                    ? t('common.openSettings', 'Open Settings')
-                    : t('capture.grantAccess', 'Grant Access')
-                }
-                onPress={onRequestCameraPermission}
-                style={styles.permissionButton}
-              />
-            </View>
-          ) : (
+          ) : shouldShowCameraCard ? (
             <View
               style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}
               collapsable={false}
             >
+              {shouldRenderCameraPreview ? (
+                <GestureDetector gesture={cameraZoomGesture}>
+                  <View style={styles.cameraGestureLayer}>
+                    <Camera
+                      key={`camera-session-${cameraSessionKey}-${cameraRetryNonce}-${cameraActivationNonce}-${cameraDevice?.id ?? 'none'}`}
+                      style={styles.cameraPreview}
+                      device={cameraDevice!}
+                      isActive={canShowLiveCameraPreview}
+                      preview
+                      photo
+                      isMirrored={facing === 'front'}
+                      zoom={cameraPreviewZoom}
+                      resizeMode="cover"
+                      androidPreviewViewType="texture-view"
+                      ref={cameraRef}
+                      onInitialized={handleCameraInitialized}
+                      onPreviewStarted={handleCameraPreviewStarted}
+                      onError={(error) => {
+                        handleCameraStartupFailure(error.message);
+                      }}
+                    />
+                  </View>
+                </GestureDetector>
+              ) : null}
               {showCameraUnavailableState ? (
                 <View style={styles.cameraUnavailableState}>
                   <Ionicons name="camera-outline" size={42} color={colors.captureCameraOverlayText} />
@@ -2883,44 +2916,30 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     style={styles.cameraRetryButton}
                   />
                 </View>
+              ) : needsCameraPermission ? (
+                <View style={styles.cameraPermissionOverlay}>
+                  <Ionicons name="camera" size={48} color={colors.captureCameraOverlayText} />
+                  <Text style={[styles.permissionText, { color: colors.captureCameraOverlayText }]}>
+                    {cameraPermissionRequiresSettings
+                      ? t(
+                        'capture.cameraPermissionSettingsMsg',
+                        'Camera access is blocked for Noto. Open Settings to take photos.'
+                      )
+                      : t('capture.cameraPermission', 'Camera access needed')}
+                  </Text>
+                  <PrimaryButton
+                    label={
+                      cameraPermissionRequiresSettings
+                        ? t('common.openSettings', 'Open Settings')
+                        : t('capture.grantAccess', 'Grant Access')
+                    }
+                    onPress={onRequestCameraPermission}
+                    style={styles.permissionButton}
+                  />
+                </View>
               ) : (
                 <>
-                  {captureMode === 'camera' && canShowLiveCameraPreview ? (
-                    <GestureDetector gesture={cameraZoomGesture}>
-                      <View style={styles.cameraGestureLayer}>
-                        {cameraDevice ? (
-                          <Camera
-                            key={`camera-session-${cameraSessionKey}-${cameraRetryNonce}`}
-                            style={styles.cameraPreview}
-                            device={cameraDevice}
-                            isActive={canShowLiveCameraPreview}
-                            preview
-                            photo
-                            isMirrored={facing === 'front'}
-                            zoom={cameraPreviewZoom}
-                            resizeMode="cover"
-                            androidPreviewViewType="texture-view"
-                            ref={cameraRef}
-                            onInitialized={() => {
-                              cameraAutoRecoveryCountRef.current = 0;
-                              setCameraUnavailable(false);
-                              setCameraIssueDetail(null);
-                            }}
-                            onPreviewStarted={() => {
-                              cameraAutoRecoveryCountRef.current = 0;
-                              setCameraUnavailable(false);
-                              setCameraIssueDetail(null);
-                              setIsCameraReady(true);
-                            }}
-                            onError={(error) => {
-                              handleCameraStartupFailure(error.message);
-                            }}
-                          />
-                        ) : null}
-                      </View>
-                    </GestureDetector>
-                  ) : null}
-                  {shouldPrepareCameraPreview && !showCameraUnavailableState && !isCameraReady ? (
+                  {shouldRenderCameraPreview && !showCameraUnavailableState && !isCameraReady ? (
                     <View pointerEvents="none" style={styles.cameraLoadingOverlay}>
                       <ActivityIndicator size="small" color={colors.captureCameraOverlayText} />
                     </View>
@@ -2942,40 +2961,43 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   flashAnimatedStyle,
                 ]}
               />
-              <CaptureAnimatedPressable
-                style={[
-                  styles.cameraOverlayButton,
-                  styles.libraryBtn,
-                  {
-                    backgroundColor: colors.captureCameraOverlay,
-                    borderColor: colors.captureCameraOverlayBorder,
-                  },
-                ]}
-                onPress={onOpenPhotoLibrary}
-                active={importingPhoto}
-                activeScale={1.015}
-                activeTranslateY={-1}
-                contentActiveScale={1.03}
-              >
-                {importingPhoto ? (
-                  <ActivityIndicator size="small" color={colors.captureCameraOverlayText} />
-                ) : (
-                  <>
-                    <Ionicons name={libraryImportLocked ? 'sparkles' : 'images'} size={18} color={colors.captureCameraOverlayText} />
-                    <Text style={[styles.libraryBtnText, { color: colors.captureCameraOverlayText }]}>
-                      {libraryImportLocked ? t('capture.plusLibraryLocked', 'Plus') : t('capture.importPhoto', 'Photos')}
-                    </Text>
-                  </>
-                )}
-              </CaptureAnimatedPressable>
+              {!needsCameraPermission ? (
+                <CaptureAnimatedPressable
+                  style={[
+                    styles.cameraOverlayButton,
+                    styles.libraryBtn,
+                    {
+                      backgroundColor: colors.captureCameraOverlay,
+                      borderColor: colors.captureCameraOverlayBorder,
+                    },
+                  ]}
+                  onPress={onOpenPhotoLibrary}
+                  active={importingPhoto}
+                  activeScale={1.015}
+                  activeTranslateY={-1}
+                  contentActiveScale={1.03}
+                >
+                  {importingPhoto ? (
+                    <ActivityIndicator size="small" color={colors.captureCameraOverlayText} />
+                  ) : (
+                    <>
+                      <Ionicons name={libraryImportLocked ? 'sparkles' : 'images'} size={18} color={colors.captureCameraOverlayText} />
+                      <Text style={[styles.libraryBtnText, { color: colors.captureCameraOverlayText }]}>
+                        {libraryImportLocked ? t('capture.plusLibraryLocked', 'Plus') : t('capture.importPhoto', 'Photos')}
+                      </Text>
+                    </>
+                  )}
+                </CaptureAnimatedPressable>
+              ) : null}
             </View>
-          )}
+          ) : null}
+          
           </Reanimated.View>
 
           <Reanimated.View
             style={[
               styles.belowCardSection,
-              belowCardAnimatedStyle,
+              disableAndroidCaptureTransforms ? null : belowCardAnimatedStyle,
             ]}
             pointerEvents={interactionsDisabled ? 'none' : 'auto'}
           >
@@ -3713,6 +3735,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   cameraUnavailableState: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  cameraPermissionOverlay: {
     ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',

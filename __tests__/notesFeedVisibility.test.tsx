@@ -601,4 +601,106 @@ describe('NotesFeed capture visibility', () => {
       Platform.OS = originalPlatform;
     }
   });
+
+  it('re-snaps android after a note is removed while the list is between snap points', () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+    const scrollToOffset = jest.fn();
+    const flatListRef = { current: { scrollToOffset } as any };
+
+    try {
+      const initialNotes = [
+        {
+          id: 'note-1',
+          type: 'text',
+          content: 'first',
+          locationName: 'Cafe',
+          latitude: 0,
+          longitude: 0,
+          radius: 150,
+          isFavorite: false,
+          createdAt: '2026-03-19T00:00:00.000Z',
+          updatedAt: null,
+        },
+        {
+          id: 'note-2',
+          type: 'text',
+          content: 'second',
+          locationName: 'Park',
+          latitude: 0,
+          longitude: 0,
+          radius: 150,
+          isFavorite: false,
+          createdAt: '2026-03-18T00:00:00.000Z',
+          updatedAt: null,
+        },
+      ];
+
+      const { UNSAFE_getByType, rerender } = render(
+        <NotesFeed
+          flatListRef={flatListRef}
+          captureHeader={<View testID="capture-header" />}
+          captureMode="text"
+          notes={initialNotes as any}
+          sharedPosts={[]}
+          refreshing={false}
+          onRefresh={jest.fn()}
+          topInset={0}
+          snapHeight={700}
+          onOpenNote={jest.fn()}
+          onOpenSharedPost={jest.fn()}
+          colors={{
+            primary: '#FFC107',
+            text: '#1C1C1E',
+            secondaryText: '#8E8E93',
+            danger: '#FF3B30',
+            card: '#FFFFFF',
+          }}
+          t={((key: string, fallback?: string) => fallback ?? key) as any}
+        />
+      );
+
+      const list = UNSAFE_getByType(FlatList);
+
+      act(() => {
+        list.props.onScroll({
+          nativeEvent: {
+            contentOffset: { y: 1050 },
+          },
+        });
+      });
+
+      scrollToOffset.mockClear();
+
+      act(() => {
+        rerender(
+          <NotesFeed
+            flatListRef={flatListRef}
+            captureHeader={<View testID="capture-header" />}
+            captureMode="text"
+            notes={[initialNotes[0]] as any}
+            sharedPosts={[]}
+            refreshing={false}
+            onRefresh={jest.fn()}
+            topInset={0}
+            snapHeight={700}
+            onOpenNote={jest.fn()}
+            onOpenSharedPost={jest.fn()}
+            colors={{
+              primary: '#FFC107',
+              text: '#1C1C1E',
+              secondaryText: '#8E8E93',
+              danger: '#FF3B30',
+              card: '#FFFFFF',
+            }}
+            t={((key: string, fallback?: string) => fallback ?? key) as any}
+          />
+        );
+      });
+
+      expect(scrollToOffset).toHaveBeenCalledWith({ offset: 700, animated: false });
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+  });
 });

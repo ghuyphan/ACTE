@@ -287,12 +287,6 @@ export default function HomeScreen() {
     return baseNotes.filter((note) => !suppressedHomeNoteIdSet.has(note.id));
   }, [filteredNotes, isFriendsFilterActive, isSearching, notes, suppressedHomeNoteIdSet, useInlineHeaderSearch]);
   const hasSearchableNotes = notes.length > 0;
-  const shouldPauseCameraPreview = appState === 'background';
-  const shouldRenderCameraPreview =
-    captureMode === 'camera' &&
-    isScreenFocused &&
-    !shouldPauseCameraPreview &&
-    Boolean(permission?.granted);
   const isCameraPreviewActive =
     captureMode === 'camera' &&
     isScreenFocused &&
@@ -1598,7 +1592,6 @@ export default function HomeScreen() {
         onChangePhotoFilter={setSelectedPhotoFilterId}
         cameraRef={cameraRef}
         cameraDevice={cameraDevice}
-        shouldRenderCameraPreview={shouldRenderCameraPreview}
         isCameraPreviewActive={isCameraPreviewActive}
         flashAnim={flashAnim}
         permissionGranted={Boolean(permission?.granted)}

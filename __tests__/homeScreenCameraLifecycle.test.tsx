@@ -185,7 +185,7 @@ jest.mock('../components/home/CaptureCard', () => {
     __esModule: true,
     default: React.forwardRef(function MockCaptureCard(props: any, _ref: any) {
       mockCaptureCardProps = props;
-      return <Text testID="camera-preview-state">{String(props.shouldRenderCameraPreview)}</Text>;
+      return <Text testID="camera-preview-state">{String(props.isCameraPreviewActive)}</Text>;
     }),
   };
 });
@@ -300,14 +300,12 @@ describe('HomeScreen camera lifecycle', () => {
     const { getByTestId } = render(<HomeScreen />);
 
     expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
-    expect(mockCaptureCardProps?.shouldRenderCameraPreview).toBe(true);
     expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(true);
 
     fireEvent.press(getByTestId('hide-capture'));
 
     await waitFor(() => {
       expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
-      expect(mockCaptureCardProps?.shouldRenderCameraPreview).toBe(true);
       expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(true);
     });
 
@@ -315,17 +313,16 @@ describe('HomeScreen camera lifecycle', () => {
 
     await waitFor(() => {
       expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
-      expect(mockCaptureCardProps?.shouldRenderCameraPreview).toBe(true);
       expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(true);
     });
   });
 
-  it('keeps the preview renderable while the app is temporarily inactive', () => {
+  it('pauses the live preview while the app is temporarily inactive', () => {
     AppState.currentState = 'inactive';
 
     render(<HomeScreen />);
 
-    expect(mockCaptureCardProps?.shouldRenderCameraPreview).toBe(true);
+    expect(mockCaptureCardProps).toBeTruthy();
     expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(false);
   });
 

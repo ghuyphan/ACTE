@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import { TFunction } from 'i18next';
-import { ReactElement, RefObject, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactElement, RefObject, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -309,6 +309,8 @@ export default function NotesFeed({
 }: NotesFeedProps) {
   const captureVisibilityRef = useRef(true);
   const isAdjustingSnapRef = useRef(false);
+  const lastOffsetYRef = useRef(0);
+  const previousItemKeysRef = useRef<string[] | null>(null);
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null);
   const listData = useMemo<NotesFeedListItem[]>(
     () =>
@@ -327,6 +329,10 @@ export default function NotesFeed({
         })),
       ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
     [notes, sharedPosts]
+  );
+  const itemKeys = useMemo(
+    () => listData.map((item) => `${item.kind}:${item.id}`),
+    [listData]
   );
   const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
 
@@ -420,6 +426,62 @@ export default function NotesFeed({
     [getSettledItemFromOffset, onSettledArchiveItemChange]
   );
 
+  useLayoutEffect(() => {
+    if (Platform.OS !== 'android') {
+      previousItemKeysRef.current = itemKeys;
+      return;
+    }
+
+    const previousItemKeys = previousItemKeysRef.current;
+    previousItemKeysRef.current = itemKeys;
+
+    if (!previousItemKeys) {
+      return;
+    }
+
+    if (itemKeys.length >= previousItemKeys.length) {
+      return;
+    }
+
+    const nextItemKeySet = new Set(itemKeys);
+    const removedItemCount = previousItemKeys.filter((key) => !nextItemKeySet.has(key)).length;
+    if (removedItemCount === 0) {
+      return;
+    }
+
+    const currentOffset = lastOffsetYRef.current;
+    const maxSnapOffset = itemKeys.length * snapHeight;
+    const nearestSnapOffset = Math.min(
+      maxSnapOffset,
+      Math.max(0, Math.round(currentOffset / snapHeight) * snapHeight)
+    );
+
+    console.log('[NotesFeed][debug]', {
+      previousItemKeys,
+      itemKeys,
+      currentOffset,
+      maxSnapOffset,
+      nearestSnapOffset,
+    });
+
+    if (Math.abs(nearestSnapOffset - currentOffset) < 2) {
+      return;
+    }
+
+    lastOffsetYRef.current = nearestSnapOffset;
+    flatListRef.current?.scrollToOffset({ offset: nearestSnapOffset, animated: false });
+    settleCaptureVisibility(nearestSnapOffset);
+    reportActiveCard(nearestSnapOffset);
+    reportSettledArchiveItem(nearestSnapOffset);
+  }, [
+    flatListRef,
+    itemKeys,
+    reportActiveCard,
+    reportSettledArchiveItem,
+    settleCaptureVisibility,
+    snapHeight,
+  ]);
+
   const renderItem = useCallback(
     ({ item, index }: { item: NotesFeedListItem; index: number }) => {
       const isActive = activeCardKey === `${item.kind}:${item.id}`;
@@ -488,7 +550,9 @@ export default function NotesFeed({
       showsVerticalScrollIndicator={false}
       ListHeaderComponent={captureHeader}
       onScroll={(event) => {
-        reportCaptureVisibility(event.nativeEvent.contentOffset.y);
+        const offsetY = event.nativeEvent.contentOffset.y;
+        lastOffsetYRef.current = offsetY;
+        reportCaptureVisibility(offsetY);
       }}
       scrollEventThrottle={16}
       onScrollBeginDrag={() => {
@@ -498,6 +562,7 @@ export default function NotesFeed({
         const velocityY = event.nativeEvent.velocity?.y ?? 0;
         if (Math.abs(velocityY) < 0.05) {
           const offsetY = event.nativeEvent.contentOffset.y;
+          lastOffsetYRef.current = offsetY;
           settleCaptureVisibility(offsetY);
           reportActiveCard(offsetY);
           reportSettledArchiveItem(offsetY);
@@ -508,6 +573,7 @@ export default function NotesFeed({
       }}
       onMomentumScrollEnd={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
+        lastOffsetYRef.current = offsetY;
         settleCaptureVisibility(offsetY);
         settleAndroidSnap(offsetY);
         reportActiveCard(offsetY);
