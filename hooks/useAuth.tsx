@@ -127,11 +127,32 @@ function isCancelledGoogleResponse(response: unknown) {
   );
 }
 
+function getAuthErrorCode(error: unknown) {
+  if (typeof error === 'object' && error && 'code' in error) {
+    return String((error as { code?: string }).code ?? '').trim();
+  }
+
+  return '';
+}
+
+function getAuthErrorDebugSuffix(error: unknown) {
+  const code = getAuthErrorCode(error);
+  const message = getSupabaseErrorMessage(error).trim();
+  const details: string[] = [];
+
+  if (code) {
+    details.push(`code: ${code}`);
+  }
+
+  if (message && (!code || !message.toLowerCase().includes(code.toLowerCase()))) {
+    details.push(message);
+  }
+
+  return details.length > 0 ? ` (${details.join(' | ')})` : '';
+}
+
 function mapAuthErrorMessage(error: unknown) {
-  const code =
-    typeof error === 'object' && error && 'code' in error
-      ? String((error as { code?: string }).code)
-      : '';
+  const code = getAuthErrorCode(error);
   const message = getSupabaseErrorMessage(error);
   const normalizedMessage = message.toLowerCase();
 
@@ -187,14 +208,16 @@ function mapAuthErrorMessage(error: unknown) {
   }
 
   if (code === 'DEVELOPER_ERROR' || code === '10' || code === '12500') {
-    return i18n.t(
+    return (
+      i18n.t(
       'auth.errorGoogleConfig',
       'Google sign-in is not configured correctly for this build yet.'
+      ) + getAuthErrorDebugSuffix(error)
     );
   }
 
   if (message) {
-    return message;
+    return `${message}${code && !message.includes(code) ? ` (code: ${code})` : ''}`;
   }
 
   return i18n.t('auth.errorGeneric', 'Unable to sign in right now. Please try again later.');
@@ -312,7 +335,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await GoogleSignin.hasPlayServices();
           }
 
-          const response = await GoogleSignin.signIn();
+          const response = await GoogleSignin.signIn().catch((error: unknown) => {
+            console.warn('[auth] Google native sign-in failed:', {
+              platform: Platform.OS,
+              code: getAuthErrorCode(error),
+              message: getSupabaseErrorMessage(error),
+              error,
+            });
+            throw error;
+          });
           if (isCancelledGoogleResponse(response)) {
             return { status: 'cancelled' };
           }
@@ -328,11 +359,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             };
           }
 
-          const { data, error } = await supabase.auth.signInWithIdToken({
-            provider: 'google',
-            token: idToken,
-          });
+          const { data, error } = await supabase.auth
+            .signInWithIdToken({
+              provider: 'google',
+              token: idToken,
+            })
+            .catch((authError: unknown) => {
+              console.warn('[auth] Supabase Google token exchange threw:', {
+                code: getAuthErrorCode(authError),
+                message: getSupabaseErrorMessage(authError),
+                error: authError,
+              });
+              throw authError;
+            });
           if (error) {
+            console.warn('[auth] Supabase Google token exchange failed:', {
+              code: getAuthErrorCode(error),
+              message: getSupabaseErrorMessage(error),
+              error,
+            });
             throw error;
           }
 

@@ -513,6 +513,45 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
+  it('waits to mount the camera until the Android permission-settle window completes', () => {
+    jest.useFakeTimers();
+
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      permissionGranted: false,
+      needsCameraPermission: true,
+      shouldRenderCameraPreview: false,
+    });
+
+    expect(view.queryByTestId('mock-camera-view')).toBeNull();
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          captureMode: 'camera',
+          permissionGranted: true,
+          needsCameraPermission: false,
+          shouldRenderCameraPreview: true,
+        })}
+      />
+    );
+
+    expect(view.queryByTestId('mock-camera-view')).toBeNull();
+
+    act(() => {
+      jest.advanceTimersByTime(349);
+    });
+    expect(view.queryByTestId('mock-camera-view')).toBeNull();
+
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(view.getByTestId('mock-camera-view')).toBeTruthy();
+
+    jest.useRealTimers();
+  });
+
   it('shows filter circles for captured photos and lets you choose one', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const onChangePhotoFilter = jest.fn();
