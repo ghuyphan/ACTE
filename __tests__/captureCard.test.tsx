@@ -320,6 +320,7 @@ function createCaptureCardProps(
       maxZoom: 4,
     } as any,
     shouldRenderCameraPreview: false,
+    isCameraPreviewActive: false,
     flashAnim: zeroValue,
     permissionGranted: true,
     onShutterPressIn: () => undefined,
@@ -502,20 +503,22 @@ describe('CaptureCard doodle handle', () => {
       captureMode: 'camera',
       facing: 'front',
       shouldRenderCameraPreview: true,
+      isCameraPreviewActive: true,
     });
 
     await waitFor(() => {
       expect(mockCameraViewProps).toMatchObject({
+        isActive: true,
         isMirrored: true,
+        preview: true,
         photo: true,
         resizeMode: 'cover',
+        androidPreviewViewType: 'texture-view',
       });
     });
   });
 
-  it('waits to mount the camera until the Android permission-settle window completes', () => {
-    jest.useFakeTimers();
-
+  it('mounts the camera as soon as Android permission is granted', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const view = renderCaptureCard(ref, {
       captureMode: 'camera',
@@ -533,23 +536,12 @@ describe('CaptureCard doodle handle', () => {
           permissionGranted: true,
           needsCameraPermission: false,
           shouldRenderCameraPreview: true,
+          isCameraPreviewActive: true,
         })}
       />
     );
 
-    expect(view.queryByTestId('mock-camera-view')).toBeNull();
-
-    act(() => {
-      jest.advanceTimersByTime(349);
-    });
-    expect(view.queryByTestId('mock-camera-view')).toBeNull();
-
-    act(() => {
-      jest.advanceTimersByTime(1);
-    });
     expect(view.getByTestId('mock-camera-view')).toBeTruthy();
-
-    jest.useRealTimers();
   });
 
   it('shows filter circles for captured photos and lets you choose one', () => {
@@ -699,6 +691,7 @@ describe('CaptureCard doodle handle', () => {
         onChangePhotoFilter={() => undefined}
         cameraRef={{ current: null }}
         shouldRenderCameraPreview={false}
+        isCameraPreviewActive={false}
         flashAnim={createSharedValue(0)}
         permissionGranted
         onShutterPressIn={() => undefined}

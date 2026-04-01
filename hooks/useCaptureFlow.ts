@@ -38,6 +38,7 @@ export function useCaptureFlow() {
 
   const cameraRef = useRef<Camera>(null);
   const previousCameraPermissionGrantedRef = useRef(cameraPermissionGranted);
+  const previousAppStateRef = useRef(AppState.currentState);
   const captureOpacity = useSharedValue(1);
   const captureScale = useSharedValue(1);
   const captureTranslateY = useSharedValue(0);
@@ -51,17 +52,24 @@ export function useCaptureFlow() {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
+      const previousState = previousAppStateRef.current;
+      previousAppStateRef.current = state;
+
       if (state === 'active') {
         const nextStatus = Camera.getCameraPermissionStatus();
         setCameraPermissionGranted(nextStatus === 'granted');
         setCameraPermissionStatus(nextStatus);
+
+        if (captureMode === 'camera' && nextStatus === 'granted' && previousState !== 'active') {
+          setCameraSessionKey((current) => current + 1);
+        }
       }
     });
 
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [captureMode]);
 
   useEffect(() => {
     setSelectedPhotoFilterId('original');

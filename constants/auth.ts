@@ -1,11 +1,28 @@
-function readPublicEnv(name: string) {
-  const value = process.env[name]?.trim();
-  return value && !value.includes('Replace') && !value.includes('replace') ? value : '';
+function sanitizePublicEnv(value: string | undefined) {
+  const trimmedValue = value?.trim();
+  return trimmedValue && !trimmedValue.includes('Replace') && !trimmedValue.includes('replace')
+    ? trimmedValue
+    : '';
 }
 
-export const GOOGLE_WEB_CLIENT_ID = readPublicEnv('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID');
-export const GOOGLE_IOS_CLIENT_ID = readPublicEnv('EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID');
-export const GOOGLE_ANDROID_CLIENT_ID = readPublicEnv('EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID');
+function readGoogleWebClientId() {
+  const value = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  return sanitizePublicEnv(value);
+}
+
+function readGoogleIosClientId() {
+  const value = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+  return sanitizePublicEnv(value);
+}
+
+function readGoogleAndroidClientId() {
+  const value = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+  return sanitizePublicEnv(value);
+}
+
+export const GOOGLE_WEB_CLIENT_ID = readGoogleWebClientId();
+export const GOOGLE_IOS_CLIENT_ID = readGoogleIosClientId();
+export const GOOGLE_ANDROID_CLIENT_ID = readGoogleAndroidClientId();
 
 export const isGoogleSigninConfigured = Boolean(
   GOOGLE_WEB_CLIENT_ID && GOOGLE_IOS_CLIENT_ID && GOOGLE_ANDROID_CLIENT_ID

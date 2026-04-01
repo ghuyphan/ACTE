@@ -301,12 +301,14 @@ describe('HomeScreen camera lifecycle', () => {
 
     expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
     expect(mockCaptureCardProps?.shouldRenderCameraPreview).toBe(true);
+    expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(true);
 
     fireEvent.press(getByTestId('hide-capture'));
 
     await waitFor(() => {
       expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
       expect(mockCaptureCardProps?.shouldRenderCameraPreview).toBe(true);
+      expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(true);
     });
 
     fireEvent.press(getByTestId('show-capture'));
@@ -314,7 +316,17 @@ describe('HomeScreen camera lifecycle', () => {
     await waitFor(() => {
       expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
       expect(mockCaptureCardProps?.shouldRenderCameraPreview).toBe(true);
+      expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(true);
     });
+  });
+
+  it('keeps the preview renderable while the app is temporarily inactive', () => {
+    AppState.currentState = 'inactive';
+
+    render(<HomeScreen />);
+
+    expect(mockCaptureCardProps?.shouldRenderCameraPreview).toBe(true);
+    expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(false);
   });
 
   it('shows a camera permission prompt before requesting camera access', async () => {

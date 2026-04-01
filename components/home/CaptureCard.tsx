@@ -111,7 +111,6 @@ const STICKER_SOURCE_SHEET_DISMISS_DELAY_MS = 250;
 const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
 const CAMERA_AUTO_RECOVERY_ATTEMPTS = 1;
 const CAMERA_START_TIMEOUT_MS = 2400;
-const CAMERA_PERMISSION_SETTLE_DELAY_MS = 350;
 const CAMERA_ZOOM_PAN_RANGE = 0.9;
 const CAMERA_ZOOM_PINCH_RANGE = 0.45;
 const CAMERA_ZOOM_LABEL_VISIBLE_MS = 1100;
@@ -738,6 +737,7 @@ interface CaptureCardProps {
   cameraRef: RefObject<Camera | null>;
   cameraDevice?: CameraDevice;
   shouldRenderCameraPreview: boolean;
+  isCameraPreviewActive: boolean;
   flashAnim: SharedValue<number>;
   permissionGranted: boolean;
   onShutterPressIn: () => void;
@@ -792,6 +792,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   cameraRef,
   cameraDevice,
   shouldRenderCameraPreview,
+  isCameraPreviewActive,
   flashAnim,
   permissionGranted,
   onShutterPressIn,
@@ -816,7 +817,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const reduceMotionEnabled = useReducedMotion();
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
-  const [cameraPermissionSettled, setCameraPermissionSettled] = useState(permissionGranted);
   const [showNoteColorSheet, setShowNoteColorSheet] = useState(false);
   const [showRadiusSheet, setShowRadiusSheet] = useState(false);
   const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
@@ -849,8 +849,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [isRestaurantInputFocused, setIsRestaurantInputFocused] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const cameraAutoRecoveryCountRef = useRef(0);
-  const permissionSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const previousPermissionGrantedRef = useRef(permissionGranted);
   const cameraZoomRef = useRef(0);
   const cameraPanZoomStartRef = useRef(0);
   const cameraPinchZoomStartRef = useRef(0);
@@ -933,7 +931,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     !capturedPhoto &&
     permissionGranted &&
     shouldRenderCameraPreview;
-  const canShowLiveCameraPreview = shouldPrepareCameraPreview && cameraPermissionSettled;
+  const canShowLiveCameraPreview = shouldPrepareCameraPreview && isCameraPreviewActive;
   const saveIdleBackground = isCameraSaveMode ? colors.primary : colors.captureButtonBg;
   const disableAndroidTextTransforms = Platform.OS === 'android' && captureMode === 'text' && isNoteInputFocused;
   const decorateProgress = useSharedValue(showDecorateControls ? 1 : 0);
@@ -944,13 +942,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     if (cameraZoomBadgeTimeoutRef.current) {
       clearTimeout(cameraZoomBadgeTimeoutRef.current);
       cameraZoomBadgeTimeoutRef.current = null;
-    }
-  }, []);
-
-  const clearPermissionSettleTimeout = useCallback(() => {
-    if (permissionSettleTimeoutRef.current) {
-      clearTimeout(permissionSettleTimeoutRef.current);
-      permissionSettleTimeoutRef.current = null;
     }
   }, []);
 
@@ -1011,31 +1002,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     },
     [restartCameraPreview, t]
   );
-
-  useEffect(() => {
-    const previousGranted = previousPermissionGrantedRef.current;
-    previousPermissionGrantedRef.current = permissionGranted;
-
-    clearPermissionSettleTimeout();
-
-    if (!permissionGranted) {
-      setCameraPermissionSettled(false);
-      return;
-    }
-
-    if (!previousGranted && captureMode === 'camera' && !capturedPhoto) {
-      setCameraPermissionSettled(false);
-      permissionSettleTimeoutRef.current = setTimeout(() => {
-        setCameraPermissionSettled(true);
-        permissionSettleTimeoutRef.current = null;
-      }, CAMERA_PERMISSION_SETTLE_DELAY_MS);
-      return;
-    }
-
-    setCameraPermissionSettled(true);
-  }, [capturedPhoto, captureMode, clearPermissionSettleTimeout, permissionGranted]);
-
-  useEffect(() => () => clearPermissionSettleTimeout(), [clearPermissionSettleTimeout]);
 
   useEffect(() => {
     if (!shouldPrepareCameraPreview) {
@@ -2928,6 +2894,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                             style={styles.cameraPreview}
                             device={cameraDevice}
                             isActive={canShowLiveCameraPreview}
+                            preview
                             photo
                             isMirrored={facing === 'front'}
                             zoom={cameraPreviewZoom}
@@ -2935,6 +2902,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                             androidPreviewViewType="texture-view"
                             ref={cameraRef}
                             onInitialized={() => {
+                              cameraAutoRecoveryCountRef.current = 0;
+                              setCameraUnavailable(false);
+                              setCameraIssueDetail(null);
+                            }}
+                            onPreviewStarted={() => {
                               cameraAutoRecoveryCountRef.current = 0;
                               setCameraUnavailable(false);
                               setCameraIssueDetail(null);

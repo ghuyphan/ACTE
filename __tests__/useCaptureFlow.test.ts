@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 import * as Haptics from 'expo-haptics';
+import { AppState } from 'react-native';
 import { useCaptureFlow } from '../hooks/useCaptureFlow';
 
 const mockRequestPermission = jest.fn(async () => true);
@@ -56,6 +57,7 @@ describe('useCaptureFlow', () => {
     mockPermissionStatus = 'granted';
     mockHasPermission = true;
     mockPlatformOS = 'ios';
+    AppState.currentState = 'active';
   });
 
   it('captures a photo without triggering the custom flash overlay animation', async () => {
@@ -128,5 +130,30 @@ describe('useCaptureFlow', () => {
     expect(result.current.permission.granted).toBe(true);
     expect(result.current.permission.status).toBe('granted');
     expect(result.current.cameraSessionKey).toBe(sessionKeyBeforePermission + 1);
+  });
+
+  it('refreshes the camera session when returning from the permission sheet', () => {
+    AppState.currentState = 'inactive';
+    let appStateListener: ((state: 'active' | 'background' | 'inactive') => void) | null = null;
+    const remove = jest.fn();
+    const addEventListenerSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+      appStateListener = listener as (state: 'active' | 'background' | 'inactive') => void;
+      return { remove } as any;
+    });
+
+    const { result } = renderHook(() => useCaptureFlow());
+
+    act(() => {
+      result.current.toggleCaptureMode();
+    });
+
+    const sessionKeyBeforeForeground = result.current.cameraSessionKey;
+
+    act(() => {
+      appStateListener?.('active');
+    });
+
+    expect(addEventListenerSpy).toHaveBeenCalledWith('change', expect.any(Function));
+    expect(result.current.cameraSessionKey).toBe(sessionKeyBeforeForeground + 1);
   });
 });

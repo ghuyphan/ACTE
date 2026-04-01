@@ -131,7 +131,6 @@ export default function HomeScreen() {
   const [suppressedHomeNoteIds, setSuppressedHomeNoteIds] = useState<string[]>([]);
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [appState, setAppState] = useState(AppState.currentState);
-  const [cameraPreviewReady, setCameraPreviewReady] = useState(Platform.OS !== 'android');
   const [captureScrollLocked, setCaptureScrollLocked] = useState(false);
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
   const [isFriendsFilterEnabled, setIsFriendsFilterEnabled] = useState(false);
@@ -288,11 +287,17 @@ export default function HomeScreen() {
     return baseNotes.filter((note) => !suppressedHomeNoteIdSet.has(note.id));
   }, [filteredNotes, isFriendsFilterActive, isSearching, notes, suppressedHomeNoteIdSet, useInlineHeaderSearch]);
   const hasSearchableNotes = notes.length > 0;
+  const shouldPauseCameraPreview = appState === 'background';
   const shouldRenderCameraPreview =
     captureMode === 'camera' &&
     isScreenFocused &&
+    !shouldPauseCameraPreview &&
+    Boolean(permission?.granted);
+  const isCameraPreviewActive =
+    captureMode === 'camera' &&
+    isScreenFocused &&
     appState === 'active' &&
-    cameraPreviewReady;
+    Boolean(permission?.granted);
   const cameraPermissionRequiresSettings =
     captureMode === 'camera' &&
     permission?.granted === false &&
@@ -524,31 +529,6 @@ export default function HomeScreen() {
       subscription.remove();
     };
   }, []);
-
-  useEffect(() => {
-    if (Platform.OS !== 'android') {
-      setCameraPreviewReady(true);
-      return;
-    }
-
-    if (captureMode !== 'camera' || !isScreenFocused || appState !== 'active') {
-      setCameraPreviewReady(false);
-      return;
-    }
-
-    let cancelled = false;
-    const idleHandle = scheduleOnIdle(() => {
-      if (!cancelled) {
-        setCameraPreviewReady(true);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      setCameraPreviewReady(false);
-      idleHandle.cancel();
-    };
-  }, [appState, captureMode, isScreenFocused, permission?.granted]);
 
   useEffect(() => {
     if (!user) {
@@ -1619,6 +1599,7 @@ export default function HomeScreen() {
         cameraRef={cameraRef}
         cameraDevice={cameraDevice}
         shouldRenderCameraPreview={shouldRenderCameraPreview}
+        isCameraPreviewActive={isCameraPreviewActive}
         flashAnim={flashAnim}
         permissionGranted={Boolean(permission?.granted)}
         onShutterPressIn={handleShutterPressIn}
