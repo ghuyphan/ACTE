@@ -17,6 +17,7 @@ def uploadStorePassword = readEnv('ACTE_UPLOAD_STORE_PASSWORD')
 def uploadKeyAlias = readEnv('ACTE_UPLOAD_KEY_ALIAS')
 def uploadKeyPassword = readEnv('ACTE_UPLOAD_KEY_PASSWORD')
 def allowDebugSignedRelease = (readEnv('ACTE_ALLOW_DEBUG_SIGNED_RELEASE') ?: 'false').toBoolean()
+def isEasBuild = (readEnv('EAS_BUILD') ?: 'false').toBoolean()
 def releaseStoreFile = uploadStoreFilePath ? file(uploadStoreFilePath) : null
 
 if (uploadStoreFilePath && !releaseStoreFile.exists()) {
@@ -55,9 +56,11 @@ const BUILD_GRADLE_RELEASE_SNIPPET = `        release {
                 signingConfig signingConfigs.release
             } else if (allowDebugSignedRelease) {
                 signingConfig signingConfigs.debug
+            } else if (isEasBuild) {
+                logger.lifecycle("Using EAS-managed Android signing credentials for release build.")
             } else {
                 throw new GradleException(
-                    "Release signing credentials are missing. Set ACTE_UPLOAD_STORE_FILE, ACTE_UPLOAD_STORE_PASSWORD, ACTE_UPLOAD_KEY_ALIAS, and ACTE_UPLOAD_KEY_PASSWORD, or set ACTE_ALLOW_DEBUG_SIGNED_RELEASE=true for local smoke tests."
+                    "Release signing credentials are missing. Set ACTE_UPLOAD_STORE_FILE, ACTE_UPLOAD_STORE_PASSWORD, ACTE_UPLOAD_KEY_ALIAS, and ACTE_UPLOAD_KEY_PASSWORD, use EAS remote credentials, or set ACTE_ALLOW_DEBUG_SIGNED_RELEASE=true for local smoke tests."
                 )
             }`;
 

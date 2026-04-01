@@ -62,6 +62,7 @@ const notoSansFontDefinitions = [
     weight: 900,
   },
 ] as const;
+const appVersion = '1.0.0';
 
 function assertProductionConfig() {
   if (!isProductionBuild) {
@@ -102,10 +103,8 @@ assertProductionConfig();
 const config = {
   name: 'Noto',
   slug: 'noto',
-  version: '1.0.0',
-  runtimeVersion: {
-    policy: 'appVersion',
-  },
+  version: appVersion,
+  runtimeVersion: appVersion,
   orientation: 'portrait',
   icon: './assets/images/icon/icon-default.png',
   scheme: 'noto',
