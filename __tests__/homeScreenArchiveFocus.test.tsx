@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { Dimensions } from 'react-native';
+import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
 import HomeScreen from '../app/(tabs)/index';
 
 const mockConsumeFeedFocus = jest.fn();
@@ -28,6 +29,14 @@ const mockSharedFeedState = {
   ],
 };
 let latestNotesFeedProps: any = null;
+
+function renderHomeScreen() {
+  return render(
+    <ActiveFeedTargetProvider>
+      <HomeScreen />
+    </ActiveFeedTargetProvider>
+  );
+}
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -345,7 +354,7 @@ describe('HomeScreen archive focus', () => {
   it('scrolls to the matching note card when a pending note focus exists', async () => {
     mockConsumeFeedFocus.mockReturnValueOnce({ kind: 'note', id: 'note-old' });
 
-    render(<HomeScreen />);
+    renderHomeScreen();
 
     act(() => {
       jest.runAllTimers();
@@ -362,7 +371,7 @@ describe('HomeScreen archive focus', () => {
   it('scrolls to the matching shared post card when a pending shared focus exists', async () => {
     mockConsumeFeedFocus.mockReturnValueOnce({ kind: 'shared-post', id: 'shared-friend' });
 
-    render(<HomeScreen />);
+    renderHomeScreen();
 
     act(() => {
       jest.runAllTimers();
@@ -379,7 +388,7 @@ describe('HomeScreen archive focus', () => {
   it('clears a missing focus target without opening a fallback scroll', async () => {
     mockConsumeFeedFocus.mockReturnValueOnce({ kind: 'note', id: 'missing-note' });
 
-    render(<HomeScreen />);
+    renderHomeScreen();
 
     act(() => {
       jest.runAllTimers();
@@ -392,7 +401,7 @@ describe('HomeScreen archive focus', () => {
   });
 
   it('keeps the currently viewed card anchored when a friend shared post is inserted above it', async () => {
-    const { rerender } = render(<HomeScreen />);
+    const { rerender } = renderHomeScreen();
 
     act(() => {
       latestNotesFeedProps?.onSettledArchiveItemChange?.({ kind: 'note', id: 'note-old' });
@@ -411,7 +420,11 @@ describe('HomeScreen archive focus', () => {
       ...mockSharedFeedState.sharedPosts,
     ];
 
-    rerender(<HomeScreen />);
+    rerender(
+      <ActiveFeedTargetProvider>
+        <HomeScreen />
+      </ActiveFeedTargetProvider>
+    );
 
     act(() => {
       jest.runAllTimers();

@@ -60,9 +60,7 @@ const config = {
   name: 'Noto',
   slug: 'noto',
   version: '1.0.0',
-  runtimeVersion: {
-    policy: 'appVersion',
-  },
+  runtimeVersion: '1.0.0',
   orientation: 'portrait',
   icon: './assets/images/icon/icon-default.png',
   scheme: 'noto',

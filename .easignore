@@ -1,0 +1,58 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native secrets and machine-local artifacts
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+/Untitled Exports*/
+/assets/images/* Exports*/
+
+# local env files
+.env
+.env.*
+!.env.example
+/google-services.json
+/GoogleService-Info.plist
+/*firebase-adminsdk*.json
+
+# typescript
+*.tsbuildinfo
+
+app-example
+
+# Keep native folders in EAS uploads so remote builds include checked-out
+# Android and iOS widget implementations and related native config.
+
+# Exclude generated native build artifacts while keeping source native code.
+/android/.gradle
+/android/build
+/android/app/build
+/android/app/.cxx
+/android/local.properties
+/ios/Pods
+/ios/build
+/ios/*.xcworkspace
+/ios/**/xcuserdata

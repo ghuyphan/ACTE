@@ -223,7 +223,3 @@ jest.mock('expo-image-picker', () => ({
   requestMediaLibraryPermissionsAsync: jest.fn(async () => ({ status: 'granted', canAskAgain: true })),
   launchImageLibraryAsync: jest.fn(async () => ({ canceled: true, assets: null })),
 }));
-
-jest.mock('expo-document-picker', () => ({
-  getDocumentAsync: jest.fn(async () => ({ canceled: true, assets: [] })),
-}));

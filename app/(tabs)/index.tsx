@@ -311,13 +311,39 @@ export default function HomeScreen() {
   }, [friendPosts.length, isFriendsFilterEnabled]);
 
   const handleRequestCameraPermission = useCallback(async () => {
-    if (cameraPermissionRequiresSettings) {
-      await openAppSettings();
-      return;
-    }
+    showAlert({
+      variant: 'warning',
+      title: cameraPermissionRequiresSettings
+        ? t('capture.cameraPermissionBlockedTitle', 'Camera access is blocked')
+        : t('capture.cameraPermissionPromptTitle', 'Allow camera access?'),
+      message: cameraPermissionRequiresSettings
+        ? t(
+          'capture.cameraPermissionBlockedMsg',
+          'Noto cannot show the camera permission sheet again right now. Open Settings to enable camera access.'
+        )
+        : t(
+          'capture.cameraPermissionPromptMsg',
+          'Noto uses your camera so you can save photo memories.'
+        ),
+      primaryAction: {
+        label: cameraPermissionRequiresSettings
+          ? t('common.openSettings', 'Open Settings')
+          : t('common.continue', 'Continue'),
+        onPress: async () => {
+          if (cameraPermissionRequiresSettings) {
+            await openAppSettings();
+            return;
+          }
 
-    await requestPermission();
-  }, [cameraPermissionRequiresSettings, openAppSettings, requestPermission]);
+          await requestPermission();
+        },
+      },
+      secondaryAction: {
+        label: t('common.cancel', 'Cancel'),
+        variant: 'secondary',
+      },
+    });
+  }, [cameraPermissionRequiresSettings, openAppSettings, requestPermission, showAlert, t]);
 
   const resetCaptureDraft = useCallback(() => {
     resetCapture();

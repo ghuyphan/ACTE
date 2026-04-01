@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Share } from 'react-native';
+import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
 
 const mockCreateFriendInvite = jest.fn();
 let mockSharedManageSheetProps: any = null;
@@ -254,6 +255,14 @@ jest.mock('../utils/platform', () => ({
 
 import HomeScreen from '../app/(tabs)/index';
 
+function renderHomeScreen() {
+  return render(
+    <ActiveFeedTargetProvider>
+      <HomeScreen />
+    </ActiveFeedTargetProvider>
+  );
+}
+
 describe('HomeScreen share invite handoff', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -273,7 +282,7 @@ describe('HomeScreen share invite handoff', () => {
   });
 
   it('dismisses the friends sheet before opening the native share dialog', async () => {
-    const { getByTestId } = render(<HomeScreen />);
+    const { getByTestId } = renderHomeScreen();
 
     fireEvent.press(getByTestId('home-open-shared'));
 

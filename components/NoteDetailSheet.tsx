@@ -306,8 +306,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const infoTranslateY = useSharedValue(20);
     const favoriteFillProgress = useSharedValue(0);
     const editModeAnim = useSharedValue(0);
-    const contentInputRef = useRef<TextInput>(null);
-    const locationInputRef = useRef<TextInput>(null);
+    const contentInputRef = useRef<any>(null);
+    const locationInputRef = useRef<any>(null);
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingDeleteNoteIdRef = useRef<string | null>(null);

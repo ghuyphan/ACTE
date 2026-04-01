@@ -4,6 +4,18 @@ import { useCaptureFlow } from '../hooks/useCaptureFlow';
 
 const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
 const mockTakePhoto = jest.fn();
+let mockPermissionStatus: 'granted' | 'not-determined' | 'denied' | 'restricted' = 'granted';
+let mockHasPermission = true;
+let mockPlatformOS: 'ios' | 'android' = 'ios';
+
+jest.mock('react-native', () => {
+  const actual = jest.requireActual('react-native');
+  Object.defineProperty(actual.Platform, 'OS', {
+    configurable: true,
+    get: () => mockPlatformOS,
+  });
+  return actual;
+});
 
 jest.mock('react-native-vision-camera', () => {
   const React = require('react');
@@ -15,7 +27,7 @@ jest.mock('react-native-vision-camera', () => {
     return null;
   });
 
-  MockCamera.getCameraPermissionStatus = jest.fn(() => 'granted');
+  MockCamera.getCameraPermissionStatus = jest.fn(() => mockPermissionStatus);
 
   return {
     Camera: MockCamera,
@@ -25,7 +37,7 @@ jest.mock('react-native-vision-camera', () => {
       neutralZoom: 1,
       maxZoom: 4,
     }),
-    useCameraPermission: () => ({ hasPermission: true, requestPermission: mockRequestPermission }),
+    useCameraPermission: () => ({ hasPermission: mockHasPermission, requestPermission: mockRequestPermission }),
   };
 });
 
@@ -41,6 +53,9 @@ describe('useCaptureFlow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockTakePhoto.mockResolvedValue({ path: '/tmp/captured-photo.jpg' });
+    mockPermissionStatus = 'granted';
+    mockHasPermission = true;
+    mockPlatformOS = 'ios';
   });
 
   it('captures a photo without triggering the custom flash overlay animation', async () => {
@@ -61,5 +76,33 @@ describe('useCaptureFlow', () => {
     expect(mockTakePhoto).toHaveBeenCalledWith({ enableShutterSound: false });
     expect(result.current.capturedPhoto).toBe('file:///tmp/captured-photo.jpg');
     expect(result.current.flashAnim.value).toBe(0);
+  });
+
+  it('treats denied camera permission as re-requestable on Android', () => {
+    mockPlatformOS = 'android';
+    mockPermissionStatus = 'denied';
+    mockHasPermission = false;
+
+    const { result } = renderHook(() => useCaptureFlow());
+
+    expect(result.current.permission).toEqual({
+      granted: false,
+      canAskAgain: true,
+      status: 'denied',
+    });
+  });
+
+  it('treats denied camera permission as settings-only on iOS', () => {
+    mockPlatformOS = 'ios';
+    mockPermissionStatus = 'denied';
+    mockHasPermission = false;
+
+    const { result } = renderHook(() => useCaptureFlow());
+
+    expect(result.current.permission).toEqual({
+      granted: false,
+      canAskAgain: false,
+      status: 'denied',
+    });
   });
 });

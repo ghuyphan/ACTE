@@ -393,7 +393,7 @@ export default function LoginScreen() {
 
   const renderFormFields = () => (
     <>
-      <Animated.View layout={FORM_LAYOUT_TRANSITION} style={styles.formHeaderRow}>
+      <Animated.View layout={FORM_LAYOUT_TRANSITION} style={styles.formHeader}>
         <AppBackButton onPress={goBackInFlow} style={styles.formBackButton} testID="auth-form-close" />
         <View style={styles.formHeaderCopy}>
           <Text style={[styles.formTitle, { color: colors.text }]}>{formTitle}</Text>
@@ -891,9 +891,7 @@ const styles = StyleSheet.create({
   nativeFormContent: {
     paddingBottom: 24,
   },
-  formHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+  formHeader: {
     gap: 14,
     marginBottom: 8,
   },
@@ -902,8 +900,7 @@ const styles = StyleSheet.create({
     height: 44,
   },
   formHeaderCopy: {
-    flex: 1,
-    justifyContent: 'center',
+    gap: 6,
   },
   formTitle: {
     ...Typography.screenTitle,
@@ -913,7 +910,6 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 14,
     lineHeight: 20,
-    marginTop: 4,
   },
   messageCard: {
     borderRadius: 18,

@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 let mockCaptureCardProps: any = null;
 const mockOpenAppSettings = jest.fn(async () => undefined);
 const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
+const mockShowAlert = jest.fn();
 const mockUseCaptureFlow = jest.fn();
 const originalRequestAnimationFrame = global.requestAnimationFrame;
 const originalRequestIdleCallback = (global as any).requestIdleCallback;
@@ -101,7 +102,7 @@ jest.mock('../hooks/useGeofence', () => ({
 jest.mock('../hooks/useAppSheetAlert', () => ({
   useAppSheetAlert: () => ({
     alertProps: {},
-    showAlert: jest.fn(),
+    showAlert: mockShowAlert,
   }),
 }));
 
@@ -240,6 +241,7 @@ describe('HomeScreen camera lifecycle', () => {
     mockCaptureCardProps = null;
     mockOpenAppSettings.mockClear();
     mockRequestPermission.mockClear();
+    mockShowAlert.mockClear();
     mockRequestPermission.mockResolvedValue({ granted: true, canAskAgain: true });
     mockUseCaptureFlow.mockImplementation(() => {
       const createSharedValue = (value: number) => ({ value } as any);
@@ -315,7 +317,25 @@ describe('HomeScreen camera lifecycle', () => {
     });
   });
 
-  it('routes blocked camera permission requests to Settings', async () => {
+  it('shows a camera permission prompt before requesting camera access', async () => {
+    render(<HomeScreen />);
+
+    await mockCaptureCardProps.onRequestCameraPermission();
+
+    expect(mockShowAlert).toHaveBeenCalledTimes(1);
+    expect(mockShowAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Allow camera access?',
+      })
+    );
+
+    await mockShowAlert.mock.calls[0][0].primaryAction.onPress();
+
+    expect(mockRequestPermission).toHaveBeenCalledTimes(1);
+    expect(mockOpenAppSettings).not.toHaveBeenCalled();
+  });
+
+  it('shows a settings prompt when camera permission is blocked', async () => {
     mockUseCaptureFlow.mockImplementation(() => {
       const createSharedValue = (value: number) => ({ value } as any);
       return {
@@ -366,6 +386,15 @@ describe('HomeScreen camera lifecycle', () => {
     expect(mockCaptureCardProps?.cameraPermissionRequiresSettings).toBe(true);
 
     await mockCaptureCardProps.onRequestCameraPermission();
+
+    expect(mockShowAlert).toHaveBeenCalledTimes(1);
+    expect(mockShowAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Camera access is blocked',
+      })
+    );
+
+    await mockShowAlert.mock.calls[0][0].primaryAction.onPress();
 
     expect(mockOpenAppSettings).toHaveBeenCalledTimes(1);
     expect(mockRequestPermission).not.toHaveBeenCalled();

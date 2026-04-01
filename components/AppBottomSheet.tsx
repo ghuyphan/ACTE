@@ -27,7 +27,9 @@ export default function AppBottomSheet({
   wrapContentInView?: boolean;
 }) {
   const modalRef = useRef<BottomSheetModal>(null);
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const backgroundColor = detached ? colors.surface : colors.card;
+  const backdropOpacity = isDark ? 0.52 : 0.38;
 
   useEffect(() => {
     if (Platform.OS !== 'android') {
@@ -74,8 +76,10 @@ export default function AppBottomSheet({
       android_keyboardInputMode="adjustResize"
       backgroundStyle={[
         detached ? styles.detachedBackground : styles.edgeBackground,
+        isDark ? styles.darkBackground : styles.lightBackground,
         {
-          backgroundColor: detached ? colors.surface : colors.background,
+          backgroundColor,
+          borderColor: colors.border,
         },
       ]}
       handleStyle={styles.handleContainer}
@@ -85,7 +89,7 @@ export default function AppBottomSheet({
           {...props}
           appearsOnIndex={0}
           disappearsOnIndex={-1}
-          opacity={0.38}
+          opacity={backdropOpacity}
           pressBehavior={dismissible ? 'close' : 'none'}
         />
       )}
@@ -113,15 +117,30 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
-    borderWidth: 0,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   detachedBackground: {
     borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.18,
     shadowRadius: 24,
     elevation: 16,
+  },
+  lightBackground: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 12,
+  },
+  darkBackground: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.32,
+    shadowRadius: 24,
+    elevation: 24,
   },
   handleContainer: {
     paddingTop: 12,

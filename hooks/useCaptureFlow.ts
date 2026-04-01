@@ -1,4 +1,4 @@
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { Camera, type CameraPermissionStatus, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -62,11 +62,18 @@ export function useCaptureFlow() {
     setSelectedPhotoFilterId('original');
   }, [capturedPhoto]);
 
-  const permission = useMemo<CaptureCameraPermission>(() => ({
-    granted: hasPermission,
-    canAskAgain: cameraPermissionStatus === 'not-determined',
-    status: cameraPermissionStatus,
-  }), [cameraPermissionStatus, hasPermission]);
+  const permission = useMemo<CaptureCameraPermission>(() => {
+    const canAskAgain =
+      Platform.OS === 'android'
+        ? cameraPermissionStatus !== 'restricted'
+        : cameraPermissionStatus === 'not-determined';
+
+    return {
+      granted: hasPermission,
+      canAskAgain,
+      status: cameraPermissionStatus,
+    };
+  }, [cameraPermissionStatus, hasPermission]);
 
   const animateModeSwitch = useCallback((callback: () => void) => {
     captureScale.value = withTiming(0.97, { duration: 110 });

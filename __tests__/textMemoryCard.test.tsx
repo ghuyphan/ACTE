@@ -2,7 +2,7 @@ import React from 'react';
 import { render } from '@testing-library/react-native';
 import TextMemoryCard from '../components/TextMemoryCard';
 
-const mockDynamicStickerCanvas = jest.fn(() => null);
+const mockDynamicStickerCanvas = jest.fn((_props?: any) => null);
 
 jest.mock('expo-linear-gradient', () => {
   const React = require('react');

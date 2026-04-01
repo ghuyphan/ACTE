@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
 
 let mockNotes = [
   {
@@ -294,6 +295,14 @@ jest.mock('../utils/platform', () => ({
 
 import HomeScreen from '../app/(tabs)/index';
 
+function renderHomeScreen() {
+  return render(
+    <ActiveFeedTargetProvider>
+      <HomeScreen />
+    </ActiveFeedTargetProvider>
+  );
+}
+
 describe('HomeScreen search', () => {
   beforeEach(() => {
     mockNotes = [
@@ -326,7 +335,7 @@ describe('HomeScreen search', () => {
   });
 
   it('filters with shared search logic and ignores photo file uris', async () => {
-    const { getByTestId, queryByText } = render(<HomeScreen />);
+    const { getByTestId, queryByText } = renderHomeScreen();
 
     fireEvent.press(getByTestId('home-open-search'));
     fireEvent.changeText(getByTestId('home-search-input'), 'photo-1.jpg');
@@ -347,7 +356,7 @@ describe('HomeScreen search', () => {
   it('hides inline search when there are no local notes to search', () => {
     mockNotes = [];
 
-    const { queryByTestId } = render(<HomeScreen />);
+    const { queryByTestId } = renderHomeScreen();
 
     expect(queryByTestId('home-open-search')).toBeNull();
   });

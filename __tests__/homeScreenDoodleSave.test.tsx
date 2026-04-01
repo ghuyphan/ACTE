@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
 
 const mockCreateNote = jest.fn(async (input?: any) => {
   const createdNote = {
@@ -323,6 +324,14 @@ jest.mock('../utils/platform', () => ({
 
 import HomeScreen from '../app/(tabs)/index';
 
+function renderHomeScreen() {
+  return render(
+    <ActiveFeedTargetProvider>
+      <HomeScreen />
+    </ActiveFeedTargetProvider>
+  );
+}
+
 describe('HomeScreen doodle save flow', () => {
   beforeEach(() => {
     (global as any).requestIdleCallback = jest.fn((callback: any) => {
@@ -352,7 +361,7 @@ describe('HomeScreen doodle save flow', () => {
   });
 
   it('keeps Home anchored on the capture card while the local save sheet is open', async () => {
-    const { getByTestId, queryByText } = render(<HomeScreen />);
+    const { getByTestId, queryByText } = renderHomeScreen();
 
     fireEvent.press(getByTestId('capture-save-button'));
 
@@ -394,7 +403,7 @@ describe('HomeScreen doodle save flow', () => {
   });
 
   it('scrolls to the newly saved note after dismissing the local save sheet with Done', async () => {
-    const { getByTestId } = render(<HomeScreen />);
+    const { getByTestId } = renderHomeScreen();
 
     fireEvent.press(getByTestId('capture-save-button'));
 
@@ -424,7 +433,7 @@ describe('HomeScreen doodle save flow', () => {
   it('allows saving a doodle-only text note', async () => {
     mockNoteText = '';
 
-    const { getByTestId } = render(<HomeScreen />);
+    const { getByTestId } = renderHomeScreen();
 
     fireEvent.press(getByTestId('capture-save-button'));
 
@@ -452,7 +461,7 @@ describe('HomeScreen doodle save flow', () => {
     mockRemindersEnabled = true;
 
     try {
-      const { getByTestId } = render(<HomeScreen />);
+      const { getByTestId } = renderHomeScreen();
 
       fireEvent.press(getByTestId('capture-save-button'));
 
@@ -478,7 +487,7 @@ describe('HomeScreen doodle save flow', () => {
     mockRemindersEnabled = true;
 
     try {
-      const { getByTestId, queryByText } = render(<HomeScreen />);
+      const { getByTestId, queryByText } = renderHomeScreen();
 
       fireEvent.press(getByTestId('capture-save-button'));
 
@@ -510,7 +519,7 @@ describe('HomeScreen doodle save flow', () => {
         })
     );
 
-    const { getByTestId } = render(<HomeScreen />);
+    const { getByTestId } = renderHomeScreen();
 
     fireEvent.press(getByTestId('capture-save-button'));
     fireEvent.press(getByTestId('capture-save-button'));

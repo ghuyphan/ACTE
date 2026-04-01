@@ -563,8 +563,8 @@ function PhotoFilterSwatch({
     <FilteredPhotoCanvas
       sourceUri={sourceUri}
       filterId={filterId}
-      width={48}
-      height={48}
+      width={34}
+      height={34}
       style={styles.photoFilterPreviewCanvas}
     />
   );
@@ -586,10 +586,15 @@ function PhotoFilterCarousel({
   colors,
 }: PhotoFilterCarouselProps) {
   return (
-    <View style={styles.photoFilterTray}>
-      <Text style={[styles.photoFilterLabel, { color: colors.captureGlassText }]}>
-        {t('capture.filterLabel', 'Filter')}
-      </Text>
+    <View
+      style={[
+        styles.photoFilterTray,
+        {
+          borderColor: colors.captureGlassBorder,
+          backgroundColor: colors.captureGlassFill,
+        },
+      ]}
+    >
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -618,14 +623,6 @@ function PhotoFilterCarousel({
               <View style={styles.photoFilterPreviewClip}>
                 <PhotoFilterSwatch sourceUri={sourceUri} filterId={preset.id} />
               </View>
-              <Text
-                style={[
-                  styles.photoFilterButtonLabel,
-                  { color: colors.captureGlassText, opacity: isSelected ? 1 : 0.72 },
-                ]}
-              >
-                {t(preset.labelKey, preset.defaultLabel)}
-              </Text>
             </Pressable>
           );
         })}
@@ -2828,6 +2825,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 actionTestID="capture-card-paste-action"
                 dismissTestID="capture-card-paste-dismiss"
               />
+              <View pointerEvents="box-none" style={styles.cardBottomOverlay}>
+                <PhotoFilterCarousel
+                  sourceUri={capturedPhoto}
+                  selectedFilterId={selectedPhotoFilterId}
+                  onSelectFilter={onChangePhotoFilter}
+                  t={t}
+                  colors={colors}
+                />
+              </View>
             </View>
           ) : needsCameraPermission ? (
             <View style={[styles.textCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -3158,91 +3164,82 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               )}
             </View>
           ) : capturedPhoto ? (
-            <View style={styles.belowCardCapturedPhotoStack}>
-              <PhotoFilterCarousel
-                sourceUri={capturedPhoto}
-                selectedFilterId={selectedPhotoFilterId}
-                onSelectFilter={onChangePhotoFilter}
-                t={t}
-                colors={colors}
+            <View style={[styles.belowCardShutterRow, styles.belowCardCapturedPhotoActions]}>
+              <CaptureGlassActionButton
+                accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
+                onPress={onOpenNotes}
+                iconName="grid-outline"
+                iconColor={colors.captureGlassText}
+                glassColorScheme={colors.captureGlassColorScheme}
+                fallbackColor={colors.card}
+                borderColor={colors.captureGlassBorder}
+                style={[
+                  styles.belowCardLeadingAction,
+                ]}
               />
-              <View style={[styles.belowCardShutterRow, styles.belowCardCapturedPhotoActions]}>
-                <CaptureGlassActionButton
-                  accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
-                  onPress={onOpenNotes}
-                  iconName="grid-outline"
-                  iconColor={colors.captureGlassText}
-                  glassColorScheme={colors.captureGlassColorScheme}
-                  fallbackColor={colors.card}
-                  borderColor={colors.captureGlassBorder}
-                  style={[
-                    styles.belowCardLeadingAction,
-                  ]}
-                />
-                <CaptureAnimatedPressable
-                  testID="capture-save-button"
-                  onPress={onSaveNote}
-                  onPressIn={handleSavePressIn}
-                  onPressOut={handleSavePressOut}
-                  disabled={isSaveBusy || isSaveSuccessful}
-                  pressedScale={0.985}
-                  disabledOpacity={isSaveBusy ? 0.72 : 1}
-                  style={[
-                    styles.shutterOuter,
-                    {
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <Reanimated.View style={savePressAnimatedStyle}>
+              <CaptureAnimatedPressable
+                testID="capture-save-button"
+                onPress={onSaveNote}
+                onPressIn={handleSavePressIn}
+                onPressOut={handleSavePressOut}
+                disabled={isSaveBusy || isSaveSuccessful}
+                pressedScale={0.985}
+                disabledOpacity={isSaveBusy ? 0.72 : 1}
+                style={[
+                  styles.shutterOuter,
+                  {
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Reanimated.View style={savePressAnimatedStyle}>
+                  <Reanimated.View
+                    style={[
+                      styles.shutterInner,
+                      styles.saveInner,
+                      animatedSaveInnerStyle,
+                    ]}
+                  >
                     <Reanimated.View
+                      pointerEvents="none"
                       style={[
-                        styles.shutterInner,
-                        styles.saveInner,
-                        animatedSaveInnerStyle,
+                        styles.saveHalo,
+                        {
+                          backgroundColor: colors.primary,
+                        },
+                        animatedSaveHaloStyle,
                       ]}
-                    >
-                      <Reanimated.View
-                        pointerEvents="none"
-                        style={[
-                          styles.saveHalo,
-                          {
-                            backgroundColor: colors.primary,
-                          },
-                          animatedSaveHaloStyle,
-                        ]}
-                      />
-                      {isSaveBusy ? (
-                        <ActivityIndicator size="small" color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'} />
-                      ) : (
-                        <Reanimated.View style={animatedSaveIconStyle}>
-                          <Ionicons
-                            name={isSaveSuccessful ? 'checkmark-done' : 'checkmark'}
-                            size={24}
-                            color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'}
-                          />
-                        </Reanimated.View>
-                      )}
-                    </Reanimated.View>
+                    />
+                    {isSaveBusy ? (
+                      <ActivityIndicator size="small" color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'} />
+                    ) : (
+                      <Reanimated.View style={animatedSaveIconStyle}>
+                        <Ionicons
+                          name={isSaveSuccessful ? 'checkmark-done' : 'checkmark'}
+                          size={24}
+                          color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'}
+                        />
+                      </Reanimated.View>
+                    )}
                   </Reanimated.View>
-                </CaptureAnimatedPressable>
+                </Reanimated.View>
+              </CaptureAnimatedPressable>
 
-                <CaptureGlassActionButton
-                  testID="capture-retake-button"
-                  accessibilityLabel={t('capture.retake', 'Retake')}
-                  onPress={onRetakePhoto}
-                  disabled={isSaveBusy || isSaveSuccessful}
-                  disabledOpacity={0.55}
-                  iconName="refresh"
-                  iconColor={colors.captureGlassText}
-                  glassColorScheme={colors.captureGlassColorScheme}
-                  fallbackColor={colors.card}
-                  borderColor={colors.captureGlassBorder}
-                  style={[
-                    styles.belowCardTrailingAction,
-                  ]}
-                />
-              </View>
+              <CaptureGlassActionButton
+                testID="capture-retake-button"
+                accessibilityLabel={t('capture.retake', 'Retake')}
+                onPress={onRetakePhoto}
+                disabled={isSaveBusy || isSaveSuccessful}
+                disabledOpacity={0.55}
+                iconName="refresh"
+                iconColor={colors.captureGlassText}
+                glassColorScheme={colors.captureGlassColorScheme}
+                fallbackColor={colors.card}
+                borderColor={colors.captureGlassBorder}
+                style={[
+                  styles.belowCardTrailingAction,
+                ]}
+              />
             </View>
           ) : (
             <View style={styles.belowCardShutterRow}>
@@ -3438,6 +3435,14 @@ const styles = StyleSheet.create({
     right: 18,
     gap: 8,
     zIndex: 11,
+  },
+  cardBottomOverlay: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    alignItems: 'center',
+    zIndex: 12,
   },
   cardTopOverlayRow: {
     flexDirection: 'row',
@@ -3759,10 +3764,6 @@ const styles = StyleSheet.create({
     minHeight: 52,
     justifyContent: 'center',
   },
-  belowCardCapturedPhotoStack: {
-    width: '100%',
-    gap: 12,
-  },
   captureStandaloneRadiusButton: {
     width: 38,
     height: 38,
@@ -3794,46 +3795,36 @@ const styles = StyleSheet.create({
     minHeight: 68,
   },
   photoFilterTray: {
-    width: '100%',
-    gap: 10,
-  },
-  photoFilterLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    paddingHorizontal: 4,
+    maxWidth: '100%',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    overflow: 'hidden',
   },
   photoFilterRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingHorizontal: 2,
-    paddingBottom: 2,
+    alignItems: 'center',
+    gap: 8,
   },
   photoFilterButton: {
-    width: 64,
+    width: 40,
+    height: 40,
     alignItems: 'center',
-    gap: 6,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 6,
-    paddingVertical: 8,
+    justifyContent: 'center',
+    borderRadius: 20,
+    borderWidth: 2,
+    padding: 1,
   },
   photoFilterPreviewClip: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     overflow: 'hidden',
   },
   photoFilterPreviewCanvas: {
     width: '100%',
     height: '100%',
-  },
-  photoFilterButtonLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    lineHeight: 12,
-    textAlign: 'center',
   },
   belowCardLeadingAction: {
     position: 'absolute',
