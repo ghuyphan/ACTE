@@ -14,8 +14,7 @@ import {
   type StickerCanvasLayout,
 } from '../components/stickerCanvasMetrics';
 import {
-  detectRoundedStickerCollision,
-  getStickerCollisionFrame,
+  detectStickerCollision,
   getStickerCollisionGeometry,
 } from './stickerCollision';
 
@@ -25,10 +24,7 @@ interface StickerPhysicsDescriptor {
   anchorY: number;
   width: number;
   height: number;
-  broadPhaseRadius: number;
-  coreHalfWidth: number;
-  coreHalfHeight: number;
-  cornerRadius: number;
+  collisionRadius: number;
   baseRotation: number;
   opacity: number;
 }
@@ -105,9 +101,31 @@ const MAX_SENSOR_COMPONENT = 1.15;
 const FLAT_RESTORE_THRESHOLD = 0.28;
 const COLLISION_ITERATIONS = 3;
 const COLLISION_SPIN_FACTOR = 0.34;
+const COLLISION_POSITION_SLOP = 1.5;
+const COLLISION_POSITION_CORRECTION = 0.68;
+const MAX_COLLISION_POSITION_CORRECTION = 18;
+const MAX_COLLISION_IMPULSE = 420;
+const COLLISION_BOUNCE_FACTOR = 0.24;
+const COLLISION_FRICTION_FACTOR = 0.08;
+const MAX_COLLISION_FRICTION_IMPULSE = 72;
+const COLLISION_CONTACT_DAMPING = 0.9;
+const MAX_COLLISION_SPIN = 28;
 const BOUNDARY_SPIN_FACTOR = 0.18;
 const MAX_ANGULAR_VELOCITY = 165;
 const MAX_LINEAR_VELOCITY = 1550;
+const TILT_WAKE_THRESHOLD = 0.12;
+const TILT_WAKE_FULL = 0.42;
+const SHAKE_WAKE_THRESHOLD = 0.18;
+const SHAKE_WAKE_FULL = 0.95;
+const GRAVITY_DELTA_WAKE_THRESHOLD = 0.035;
+const GRAVITY_DELTA_WAKE_FULL = 0.22;
+const MOTION_ACTIVITY_DECAY = 0.924;
+const COLLISION_WAKE_THRESHOLD = 0.12;
+const REST_SNAP_ACTIVITY_THRESHOLD = 0.08;
+const REST_SNAP_DISTANCE = 0.85;
+const REST_SNAP_ROTATION_DEGREES = 0.6;
+const REST_SNAP_SPEED = 18;
+const RESTORE_SETTLE_BOOST = 1.65;
 
 const PHYSICS_PROFILE: StickerMotionProfile = {
   tiltAcceleration: 1510,
@@ -211,6 +229,37 @@ function clamp(value: number, minValue: number, maxValue: number) {
   return Math.min(maxValue, Math.max(minValue, value));
 }
 
+function normalizeWakeSignal(value: number, start: number, end: number) {
+  'worklet';
+  if (end <= start) {
+    return value > start ? 1 : 0;
+  }
+
+  return clamp((value - start) / (end - start), 0, 1);
+}
+
+export function getStickerMotionActivity(
+  tiltMagnitude: number,
+  shakeMagnitude: number,
+  gravityDelta: number,
+  currentActivity: number,
+  dt: number
+) {
+  'worklet';
+
+  const tiltWake = normalizeWakeSignal(tiltMagnitude, TILT_WAKE_THRESHOLD, TILT_WAKE_FULL);
+  const shakeWake = normalizeWakeSignal(shakeMagnitude, SHAKE_WAKE_THRESHOLD, SHAKE_WAKE_FULL);
+  const gravityDeltaWake = normalizeWakeSignal(
+    gravityDelta,
+    GRAVITY_DELTA_WAKE_THRESHOLD,
+    GRAVITY_DELTA_WAKE_FULL
+  );
+  const wakeSignal = Math.max(tiltWake, shakeWake, gravityDeltaWake);
+  const decayedActivity = currentActivity * Math.pow(MOTION_ACTIVITY_DECAY, dt * 60);
+
+  return clamp(Math.max(wakeSignal, decayedActivity), 0, 1);
+}
+
 function clampVelocity(sticker: StickerPhysicsState) {
   'worklet';
 
@@ -266,67 +315,95 @@ function applyBoundaryConstraint(
   }
 }
 
-function resolveStickerCollisions(
+export function resolveStickerCollisions(
   stickers: StickerPhysicsState[],
   layout: StickerCanvasLayout,
   collisionRestitution: number,
   boundaryRestitution: number
 ) {
   'worklet';
-
-  const collisionFrames = stickers.map((sticker) => getStickerCollisionFrame(sticker.rotation));
+  const collidedStickerIndices = stickers.map(() => false);
 
   for (let iteration = 0; iteration < COLLISION_ITERATIONS; iteration += 1) {
     for (let leftIndex = 0; leftIndex < stickers.length; leftIndex += 1) {
       for (let rightIndex = leftIndex + 1; rightIndex < stickers.length; rightIndex += 1) {
         const left = stickers[leftIndex];
         const right = stickers[rightIndex];
-        const collision = detectRoundedStickerCollision(
-          left,
-          right,
-          collisionFrames[leftIndex],
-          collisionFrames[rightIndex]
-        );
+        const collision = detectStickerCollision(left, right);
 
         if (!collision) {
           continue;
         }
+        collidedStickerIndices[leftIndex] = true;
+        collidedStickerIndices[rightIndex] = true;
         const { normalX, normalY, overlap } = collision;
-        const correction = overlap / 2;
+        const correction = clamp(
+          Math.max(overlap - COLLISION_POSITION_SLOP, 0) * COLLISION_POSITION_CORRECTION,
+          0,
+          MAX_COLLISION_POSITION_CORRECTION
+        ) / 2;
 
-        left.x -= normalX * correction;
-        left.y -= normalY * correction;
-        right.x += normalX * correction;
-        right.y += normalY * correction;
+        if (correction > 0) {
+          left.x -= normalX * correction;
+          left.y -= normalY * correction;
+          right.x += normalX * correction;
+          right.y += normalY * correction;
+        }
 
         const relativeVelocityX = right.vx - left.vx;
         const relativeVelocityY = right.vy - left.vy;
         const separatingVelocity = relativeVelocityX * normalX + relativeVelocityY * normalY;
 
         if (separatingVelocity < 0) {
-          const impulse = (-(1 + collisionRestitution) * separatingVelocity) / 2;
+          const impulse = clamp(
+            (-(1 + collisionRestitution * COLLISION_BOUNCE_FACTOR) * separatingVelocity) / 2,
+            0,
+            MAX_COLLISION_IMPULSE
+          );
           left.vx -= impulse * normalX;
           left.vy -= impulse * normalY;
           right.vx += impulse * normalX;
           right.vy += impulse * normalY;
 
-          const tangentialVelocity =
-            relativeVelocityX * -normalY + relativeVelocityY * normalX;
-          const spinImpulse = tangentialVelocity * COLLISION_SPIN_FACTOR;
+          const tangentX = -normalY;
+          const tangentY = normalX;
+          const tangentialVelocity = relativeVelocityX * tangentX + relativeVelocityY * tangentY;
+          const frictionImpulse = clamp(
+            tangentialVelocity * COLLISION_FRICTION_FACTOR,
+            -MAX_COLLISION_FRICTION_IMPULSE,
+            MAX_COLLISION_FRICTION_IMPULSE
+          );
+          left.vx += frictionImpulse * tangentX;
+          left.vy += frictionImpulse * tangentY;
+          right.vx -= frictionImpulse * tangentX;
+          right.vy -= frictionImpulse * tangentY;
+
+          const spinImpulse = clamp(
+            tangentialVelocity * COLLISION_SPIN_FACTOR,
+            -MAX_COLLISION_SPIN,
+            MAX_COLLISION_SPIN
+          );
           left.angularVelocity -= spinImpulse;
           right.angularVelocity += spinImpulse;
-          left.vx -= normalY * spinImpulse * 0.12;
-          left.vy += normalX * spinImpulse * 0.12;
-          right.vx += normalY * spinImpulse * 0.12;
-          right.vy -= normalX * spinImpulse * 0.12;
         }
 
+        left.vx *= COLLISION_CONTACT_DAMPING;
+        left.vy *= COLLISION_CONTACT_DAMPING;
+        right.vx *= COLLISION_CONTACT_DAMPING;
+        right.vy *= COLLISION_CONTACT_DAMPING;
         clampVelocity(left);
         clampVelocity(right);
-        applyBoundaryConstraint(left, layout, boundaryRestitution);
-        applyBoundaryConstraint(right, layout, boundaryRestitution);
       }
     }
+  }
+
+  for (let index = 0; index < stickers.length; index += 1) {
+    if (!collidedStickerIndices[index]) {
+      continue;
+    }
+
+    applyBoundaryConstraint(stickers[index], layout, boundaryRestitution);
+    clampVelocity(stickers[index]);
   }
 }
 
@@ -340,8 +417,15 @@ export function useStickerPhysics({
   debugTiltOverride,
 }: UseStickerPhysicsParams): SharedValue<StickerPhysicsState[]> {
   const gravitySensor = useAnimatedSensor(SensorType.GRAVITY, { interval: 'auto' });
+  const accelerometerSensor = useAnimatedSensor(SensorType.ACCELEROMETER, { interval: 'auto' });
   const activeSharedValue = useSharedValue(isActive);
   const physicsState = useSharedValue<StickerPhysicsState[]>([]);
+  const motionActivity = useSharedValue(0);
+  const previousGravity = useSharedValue({
+    initialized: false,
+    x: 0,
+    y: 0,
+  });
   const hasValidLayout = layout.width > 1 && layout.height > 1;
 
   const descriptors = useMemo<StickerPhysicsDescriptor[]>(
@@ -358,10 +442,7 @@ export function useStickerPhysics({
           anchorY: placement.y * layout.height,
           width: dimensions.width,
           height: dimensions.height,
-          broadPhaseRadius: collisionGeometry.broadPhaseRadius,
-          coreHalfWidth: collisionGeometry.coreHalfWidth,
-          coreHalfHeight: collisionGeometry.coreHalfHeight,
-          cornerRadius: collisionGeometry.cornerRadius,
+          collisionRadius: collisionGeometry.collisionRadius,
           baseRotation: placement.rotation,
           opacity: placement.opacity,
         };
@@ -371,7 +452,15 @@ export function useStickerPhysics({
 
   useEffect(() => {
     activeSharedValue.value = isActive;
-  }, [activeSharedValue, isActive]);
+    if (!isActive) {
+      motionActivity.value = 0;
+      previousGravity.value = {
+        initialized: false,
+        x: 0,
+        y: 0,
+      };
+    }
+  }, [activeSharedValue, isActive, motionActivity, previousGravity]);
 
   useEffect(() => {
     const previousStates = physicsState.value;
@@ -407,9 +496,8 @@ export function useStickerPhysics({
     const deltaTimeMs = frameInfo.timeSincePreviousFrame ?? 16.667;
     const dt = Math.min(deltaTimeMs, MAX_FRAME_DELTA_MS) / 1000;
     const elapsedSeconds = (frameInfo.timeSinceFirstFrame ?? 0) / 1000;
-    const damping = Math.pow(profile.linearDamping, dt * 60);
-    const angularDamping = Math.pow(profile.angularDamping, dt * 60);
     const sensor = gravitySensor.sensor.value;
+    const accelerometer = accelerometerSensor.sensor.value;
     const tiltOverride = debugTiltOverride?.value;
     const normalizedGravityX = clamp(
       tiltOverride?.enabled ? tiltOverride.x : sensor.x / 9.81,
@@ -424,8 +512,39 @@ export function useStickerPhysics({
     const tiltMagnitude = Math.sqrt(
       normalizedGravityX * normalizedGravityX + normalizedGravityY * normalizedGravityY
     );
+    const accelerometerMagnitude = Math.sqrt(
+      Math.pow(accelerometer.x / 9.81, 2) +
+        Math.pow(accelerometer.y / 9.81, 2) +
+        Math.pow(accelerometer.z / 9.81, 2)
+    );
+    const shakeMagnitude = Math.abs(accelerometerMagnitude - 1);
+    const previousGravityValue = previousGravity.value;
+    const gravityDelta = previousGravityValue.initialized
+      ? Math.hypot(
+          normalizedGravityX - previousGravityValue.x,
+          normalizedGravityY - previousGravityValue.y
+        )
+      : 0;
+    previousGravity.value = {
+      initialized: true,
+      x: normalizedGravityX,
+      y: normalizedGravityY,
+    };
+    motionActivity.value = getStickerMotionActivity(
+      tiltMagnitude,
+      shakeMagnitude,
+      gravityDelta,
+      motionActivity.value,
+      dt
+    );
+    const motionAmount = motionActivity.value;
     const flatRestoreFactor = clamp(1 - tiltMagnitude / FLAT_RESTORE_THRESHOLD, 0, 1);
+    const settleBoost = 1 + (1 - motionAmount) * RESTORE_SETTLE_BOOST;
+    const damping = Math.pow(profile.linearDamping, dt * 60) * (motionAmount < 0.1 ? 0.94 : 1);
+    const angularDamping =
+      Math.pow(profile.angularDamping, dt * 60) * (motionAmount < 0.1 ? 0.92 : 1);
     const nextStates = physicsState.value.map((state) => ({ ...state }));
+    let maxLinearSpeed = 0;
 
     for (let index = 0; index < nextStates.length; index += 1) {
       const sticker = nextStates[index];
@@ -433,38 +552,52 @@ export function useStickerPhysics({
       const bobOffsetY =
         profile.bobAmplitude > 0
           ? Math.sin(elapsedSeconds * profile.bobSpeed + index * 0.9 + sticker.anchorX * 0.003) *
-            profile.bobAmplitude
+            profile.bobAmplitude *
+            motionAmount
           : 0;
       const targetAnchorY =
         getStickerRestAnchorY(sticker.anchorY, layout.height, motionVariant, sticker.anchorX) +
         bobOffsetY;
-      const restoreFactor = Math.max(profile.minimumRestoreFactor, flatRestoreFactor);
+      const restoreFactor = Math.max(
+        profile.minimumRestoreFactor,
+        clamp(flatRestoreFactor + (1 - motionAmount) * 0.45, 0, 1.2)
+      );
       const restoreX =
-        (sticker.anchorX - sticker.x) * profile.restoreAcceleration * restoreFactor;
+        (sticker.anchorX - sticker.x) *
+        profile.restoreAcceleration *
+        restoreFactor *
+        settleBoost;
       const restoreY =
-        (targetAnchorY - sticker.y) * profile.restoreAcceleration * restoreFactor;
-      const crossAxisX = normalizedGravityY * profile.crossAcceleration;
-      const crossAxisY = -normalizedGravityX * profile.crossAcceleration;
+        (targetAnchorY - sticker.y) *
+        profile.restoreAcceleration *
+        restoreFactor *
+        settleBoost;
+      const crossAxisX = normalizedGravityY * profile.crossAcceleration * motionAmount;
+      const crossAxisY = -normalizedGravityX * profile.crossAcceleration * motionAmount;
       const stickerOffsetX = sticker.x - sticker.anchorX;
       const stickerOffsetY = sticker.y - sticker.anchorY;
       const orbitalX = clamp(
-        stickerOffsetY * -profile.orbitalStrength,
+        stickerOffsetY * -profile.orbitalStrength * motionAmount,
         -profile.orbitalLimit,
         profile.orbitalLimit
       );
       const orbitalY = clamp(
-        stickerOffsetX * profile.orbitalStrength,
+        stickerOffsetX * profile.orbitalStrength * motionAmount,
         -profile.orbitalLimit,
         profile.orbitalLimit
       );
       const waveSeed = index * 0.82 + sticker.anchorX * 0.0027 + sticker.anchorY * 0.0014;
       const waveX =
         profile.waveStrengthX > 0
-          ? Math.sin(elapsedSeconds * profile.waveSpeedX + waveSeed) * profile.waveStrengthX
+          ? Math.sin(elapsedSeconds * profile.waveSpeedX + waveSeed) *
+            profile.waveStrengthX *
+            motionAmount
           : 0;
       const waveY =
         profile.waveStrengthY > 0
-          ? Math.cos(elapsedSeconds * profile.waveSpeedY + waveSeed * 1.35) * profile.waveStrengthY
+          ? Math.cos(elapsedSeconds * profile.waveSpeedY + waveSeed * 1.35) *
+            profile.waveStrengthY *
+            motionAmount
           : 0;
       const verticalTiltMultiplier =
         normalizedGravityY >= 0
@@ -473,15 +606,21 @@ export function useStickerPhysics({
       const submergedDepth = Math.max(sticker.y - surfaceY, 0);
       const buoyancyY =
         motionVariant === 'water'
-          ? -submergedDepth * (profile.buoyancyStrength / Math.max(layout.height, 1))
+          ? -submergedDepth * (profile.buoyancyStrength / Math.max(layout.height, 1)) * motionAmount
           : 0;
 
       sticker.vx +=
-        (normalizedGravityX * profile.tiltAcceleration + crossAxisX + orbitalX + restoreX + waveX) *
+        (
+          normalizedGravityX * profile.tiltAcceleration * motionAmount +
+          crossAxisX +
+          orbitalX +
+          restoreX +
+          waveX
+        ) *
         dt;
       sticker.vy +=
         (
-          normalizedGravityY * profile.tiltAcceleration * verticalTiltMultiplier +
+          normalizedGravityY * profile.tiltAcceleration * verticalTiltMultiplier * motionAmount +
           crossAxisY +
           orbitalY +
           restoreY +
@@ -494,11 +633,14 @@ export function useStickerPhysics({
       sticker.x += sticker.vx * dt;
       sticker.y += sticker.vy * dt;
       sticker.angularVelocity +=
-        (normalizedGravityX * sticker.vy - normalizedGravityY * sticker.vx) * 0.0024 * dt;
+        (normalizedGravityX * sticker.vy - normalizedGravityY * sticker.vx) *
+        0.0024 *
+        motionAmount *
+        dt;
       sticker.angularVelocity +=
         (sticker.baseRotation - sticker.rotation) *
         profile.rotationRestoreAcceleration *
-        Math.max(0.12, flatRestoreFactor) *
+        Math.max(0.18, flatRestoreFactor + (1 - motionAmount) * 0.35) *
         dt;
       sticker.angularVelocity += (orbitalX - orbitalY) * 0.006 * dt;
       sticker.angularVelocity *= angularDamping;
@@ -529,15 +671,42 @@ export function useStickerPhysics({
       sticker.rotation +=
         (sticker.vx - sticker.vy) * profile.jellyRotationFactor * profile.jellyRotationResponse;
 
+      if (motionAmount < REST_SNAP_ACTIVITY_THRESHOLD) {
+        if (
+          Math.abs(sticker.x - sticker.anchorX) <= REST_SNAP_DISTANCE &&
+          Math.abs(sticker.vx) <= REST_SNAP_SPEED
+        ) {
+          sticker.x = sticker.anchorX;
+          sticker.vx = 0;
+        }
+        if (
+          Math.abs(sticker.y - targetAnchorY) <= REST_SNAP_DISTANCE &&
+          Math.abs(sticker.vy) <= REST_SNAP_SPEED
+        ) {
+          sticker.y = targetAnchorY;
+          sticker.vy = 0;
+        }
+        if (
+          Math.abs(sticker.rotation - sticker.baseRotation) <= REST_SNAP_ROTATION_DEGREES &&
+          Math.abs(sticker.angularVelocity) <= REST_SNAP_SPEED
+        ) {
+          sticker.rotation = sticker.baseRotation;
+          sticker.angularVelocity = 0;
+        }
+      }
+
       applyBoundaryConstraint(sticker, layout, profile.boundaryRestitution);
+      maxLinearSpeed = Math.max(maxLinearSpeed, Math.abs(sticker.vx), Math.abs(sticker.vy));
     }
 
-    resolveStickerCollisions(
-      nextStates,
-      layout,
-      profile.collisionRestitution,
-      profile.boundaryRestitution
-    );
+    if (motionAmount > COLLISION_WAKE_THRESHOLD || maxLinearSpeed > 44) {
+      resolveStickerCollisions(
+        nextStates,
+        layout,
+        profile.collisionRestitution,
+        profile.boundaryRestitution
+      );
+    }
     physicsState.value = nextStates;
   }, false);
 

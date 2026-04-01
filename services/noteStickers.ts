@@ -240,6 +240,29 @@ function generateStickerPlacementId() {
   return `placement-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}`;
 }
 
+const NEW_STICKER_PLACEMENT_OFFSETS = [
+  { x: 0, y: 0 },
+  { x: 0.05, y: 0.03 },
+  { x: -0.05, y: 0.03 },
+  { x: 0.04, y: -0.045 },
+  { x: -0.04, y: -0.045 },
+  { x: 0.075, y: 0 },
+  { x: -0.075, y: 0 },
+  { x: 0, y: 0.075 },
+  { x: 0, y: -0.075 },
+] as const;
+
+function getNextStickerPlacementCoordinates(existingPlacements: NoteStickerPlacement[]) {
+  const offset = NEW_STICKER_PLACEMENT_OFFSETS[
+    Math.min(existingPlacements.length, NEW_STICKER_PLACEMENT_OFFSETS.length - 1)
+  ];
+
+  return {
+    x: clamp01(0.5 + offset.x),
+    y: clamp01(0.5 + offset.y),
+  };
+}
+
 function mapStickerAsset(row: StickerAssetRow): StickerAsset {
   return {
     id: row.id,
@@ -501,12 +524,13 @@ export function createStickerPlacement(
   existingPlacements: NoteStickerPlacement[] = []
 ): NoteStickerPlacement {
   const nextZIndex = existingPlacements.reduce((maxValue, placement) => Math.max(maxValue, placement.zIndex), 0) + 1;
+  const coordinates = getNextStickerPlacementCoordinates(existingPlacements);
 
   return {
     id: generateStickerPlacementId(),
     assetId: asset.id,
-    x: 0.5,
-    y: 0.5,
+    x: coordinates.x,
+    y: coordinates.y,
     scale: 1,
     rotation: 0,
     zIndex: nextZIndex,

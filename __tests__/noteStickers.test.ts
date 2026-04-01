@@ -49,6 +49,21 @@ describe('noteStickers helpers', () => {
     expect(duplicated[1]?.y).toBeGreaterThan(firstPlacement.y);
   });
 
+  it('stagger new stickers so they do not all spawn at the exact same center point', () => {
+    const firstPlacement = createStickerPlacement(baseAsset);
+    const secondPlacement = createStickerPlacement({ ...baseAsset, id: 'sticker-2' }, [firstPlacement]);
+    const thirdPlacement = createStickerPlacement(
+      { ...baseAsset, id: 'sticker-3' },
+      [firstPlacement, secondPlacement]
+    );
+
+    expect(firstPlacement.x).toBe(0.5);
+    expect(firstPlacement.y).toBe(0.5);
+    expect(secondPlacement.x).not.toBe(firstPlacement.x);
+    expect(secondPlacement.y).not.toBe(firstPlacement.y);
+    expect(thirdPlacement.x).not.toBe(secondPlacement.x);
+  });
+
   it('updates transforms and brings stickers to front', () => {
     const firstPlacement = createStickerPlacement(baseAsset);
     const secondPlacement = createStickerPlacement({ ...baseAsset, id: 'sticker-2' }, [firstPlacement]);

@@ -768,6 +768,92 @@ describe('CaptureCard doodle handle', () => {
     expect(ref.current?.getDoodleSnapshot()).toEqual({ enabled: false, strokes: [] });
   });
 
+  it('restores text-card interactions after leaving doodle mode through a camera round-trip', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      noteText: 'Draft memory',
+    });
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-doodle-toggle'));
+    });
+
+    expect(view.getByTestId('capture-note-input').props.editable).toBe(false);
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          captureMode: 'camera',
+          permissionGranted: true,
+          needsCameraPermission: false,
+          isCameraPreviewActive: true,
+        })}
+      />
+    );
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          noteText: 'Draft memory',
+        })}
+      />
+    );
+
+    expect(view.getByTestId('capture-note-input').props.editable).toBe(true);
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-radius-toggle'));
+    });
+
+    expect(view.getByTestId('capture-radius-150')).toBeTruthy();
+  });
+
+  it('restores text-card interactions after leaving sticker mode through a camera round-trip', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      noteText: 'Draft memory',
+    });
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-sticker-toggle'));
+    });
+
+    expect(view.getByTestId('capture-note-input').props.editable).toBe(false);
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          captureMode: 'camera',
+          permissionGranted: true,
+          needsCameraPermission: false,
+          isCameraPreviewActive: true,
+        })}
+      />
+    );
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          noteText: 'Draft memory',
+        })}
+      />
+    );
+
+    expect(view.getByTestId('capture-note-input').props.editable).toBe(true);
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-radius-toggle'));
+    });
+
+    expect(view.getByTestId('capture-radius-150')).toBeTruthy();
+  });
+
   it('hides the share toggle while camera permission is required', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const { getByText, queryByTestId } = renderCaptureCard(ref, {

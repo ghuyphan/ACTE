@@ -144,29 +144,33 @@ function PhysicsStickerSprite({
   physicsState: SharedValue<StickerPhysicsState[]>;
   layout: StickerCanvasLayout;
 }) {
+  const stickerState = useDerivedValue(
+    () => physicsState.value.find((candidate) => candidate.id === placement.id) ?? null,
+    [physicsState, placement.id]
+  );
+
   const opacity = useDerivedValue(() => {
-    const state = physicsState.value.find((candidate) => candidate.id === placement.id);
-    return state?.opacity ?? placement.opacity;
-  }, [physicsState, placement.id, placement.opacity]);
+    return stickerState.value?.opacity ?? placement.opacity;
+  }, [placement.opacity, stickerState]);
 
   const motionTransform = useDerivedValue(() => {
-    const state = physicsState.value.find((candidate) => candidate.id === placement.id);
+    const state = stickerState.value;
 
     return [
       { translateX: state?.x ?? placement.x * layout.width },
       { translateY: state?.y ?? placement.y * layout.height },
       { rotate: ((state?.rotation ?? placement.rotation) * Math.PI) / 180 },
     ] as Transforms3d;
-  }, [layout.height, layout.width, physicsState, placement.id, placement.rotation, placement.x, placement.y]);
+  }, [layout.height, layout.width, placement.rotation, placement.x, placement.y, stickerState]);
 
   const jellyTransform = useDerivedValue(() => {
-    const state = physicsState.value.find((candidate) => candidate.id === placement.id);
+    const state = stickerState.value;
 
     return [
       { scaleX: state?.jellyScaleX ?? 1 },
       { scaleY: state?.jellyScaleY ?? 1 },
     ] as Transforms3d;
-  }, [physicsState, placement.id]);
+  }, [stickerState]);
 
   return (
     <MemoStickerSprite

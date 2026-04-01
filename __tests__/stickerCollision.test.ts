@@ -1,48 +1,47 @@
 import {
-  detectRoundedStickerCollision,
+  detectStickerCollision,
   getStickerCollisionGeometry,
 } from '../hooks/stickerCollision';
 
 describe('stickerCollision', () => {
-  it('uses a broad-phase radius that encloses the rotated sticker bounds', () => {
+  it('uses a simple circle radius derived from the sticker size', () => {
     const geometry = getStickerCollisionGeometry(120, 80);
 
-    expect(geometry.broadPhaseRadius).toBeCloseTo(Math.hypot(60, 40));
-    expect(geometry.cornerRadius).toBeGreaterThan(0);
-    expect(geometry.coreHalfWidth).toBeLessThan(60);
-    expect(geometry.coreHalfHeight).toBeLessThan(40);
+    expect(geometry.collisionRadius).toBeGreaterThan(0);
+    expect(geometry.collisionRadius).toBeLessThanOrEqual(40);
   });
 
-  it('catches diagonal square overlaps that a single inscribed circle would miss', () => {
+  it('detects a collision when two sticker circles overlap', () => {
     const geometry = getStickerCollisionGeometry(100, 100);
-    const collision = detectRoundedStickerCollision(
+    const collision = detectStickerCollision(
       { ...geometry, x: 0, y: 0, rotation: 0 },
-      { ...geometry, x: 86, y: 86, rotation: 0 }
+      { ...geometry, x: 60, y: 0, rotation: 0 }
     );
 
     expect(collision).not.toBeNull();
     expect(collision?.overlap ?? 0).toBeGreaterThan(0);
   });
 
-  it('keeps diagonally separated stickers from colliding once the rounded corners clear', () => {
+  it('keeps separated sticker circles from colliding', () => {
     const geometry = getStickerCollisionGeometry(100, 100);
-    const collision = detectRoundedStickerCollision(
+    const collision = detectStickerCollision(
       { ...geometry, x: 0, y: 0, rotation: 0 },
-      { ...geometry, x: 105, y: 105, rotation: 0 }
+      { ...geometry, x: 110, y: 0, rotation: 0 }
     );
 
     expect(collision).toBeNull();
   });
 
-  it('resolves rotated overlaps with a stable collision normal', () => {
+  it('uses a deterministic normal when stickers perfectly overlap', () => {
     const geometry = getStickerCollisionGeometry(120, 90);
-    const collision = detectRoundedStickerCollision(
+    const collision = detectStickerCollision(
       { ...geometry, x: 0, y: 0, rotation: 22 },
-      { ...geometry, x: 90, y: 18, rotation: -18 }
+      { ...geometry, x: 0, y: 0, rotation: -18 }
     );
 
     expect(collision).not.toBeNull();
-    expect(collision?.normalX ?? 0).toBeGreaterThan(0);
+    expect(collision?.normalX ?? 0).toBe(1);
+    expect(collision?.normalY ?? 0).toBe(0);
     expect(Math.hypot(collision?.normalX ?? 0, collision?.normalY ?? 0)).toBeCloseTo(1, 5);
   });
 });
