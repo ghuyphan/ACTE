@@ -335,7 +335,6 @@ function createCaptureCardProps(
     onShutterPressOut: () => undefined,
     onTakePicture: () => undefined,
     onSaveNote: () => undefined,
-    onOpenNotes: () => undefined,
     saving: false,
     shutterScale: animatedValue,
     cameraStatusText: null,
@@ -753,7 +752,6 @@ describe('CaptureCard doodle handle', () => {
         onShutterPressOut={() => undefined}
         onTakePicture={() => undefined}
         onSaveNote={() => undefined}
-        onOpenNotes={() => undefined}
         saving={false}
         shutterScale={createSharedValue(1)}
         cameraStatusText={null}
@@ -1107,6 +1105,147 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(getByTestId('mock-sticker-editable')).toHaveTextContent('false');
+  });
+
+  it('clears text sticker editing state when switching away to camera and back', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardGetImageAsync.mockResolvedValue({
+      data: `data:image/png;base64,${transparentPngBase64}`,
+    } as any);
+    mockImportStickerAsset.mockResolvedValue({
+      id: 'asset-1',
+      ownerUid: '__local__',
+      localUri: 'file:///documents/stickers/asset-1.png',
+      remotePath: null,
+      mimeType: 'image/png',
+      width: 120,
+      height: 120,
+      createdAt: '2026-03-27T00:00:00.000Z',
+      updatedAt: null,
+      source: 'import',
+    } as any);
+
+    const view = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    await waitFor(() => {
+      expect(view.getByTestId('capture-inline-paste-sticker')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('capture-inline-paste-sticker'));
+    });
+
+    await waitFor(() => {
+      expect(view.getByTestId('mock-sticker-selected')).toHaveTextContent('placement-1');
+      expect(view.getByTestId('mock-sticker-editable')).toHaveTextContent('true');
+    });
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          noteText: '',
+          captureMode: 'camera',
+          isCameraPreviewActive: true,
+        })}
+      />
+    );
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          noteText: '',
+          captureMode: 'text',
+        })}
+      />
+    );
+
+    await waitFor(() => {
+      expect(view.getByTestId('mock-sticker-selected')).toHaveTextContent('null');
+      expect(view.getByTestId('mock-sticker-editable')).toHaveTextContent('false');
+    });
+  });
+
+  it('does not carry text doodle state into the live camera surface', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-doodle-toggle'));
+    });
+
+    expect(view.getByTestId('mock-doodle-editable')).toHaveTextContent('true');
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          noteText: '',
+          captureMode: 'camera',
+          isCameraPreviewActive: true,
+        })}
+      />
+    );
+
+    await waitFor(() => {
+      expect(view.queryByTestId('mock-doodle-canvas')).toBeNull();
+    });
+  });
+
+  it('does not carry text sticker placements into the live camera surface', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardGetImageAsync.mockResolvedValue({
+      data: `data:image/png;base64,${transparentPngBase64}`,
+    } as any);
+    mockImportStickerAsset.mockResolvedValue({
+      id: 'asset-1',
+      ownerUid: '__local__',
+      localUri: 'file:///documents/stickers/asset-1.png',
+      remotePath: null,
+      mimeType: 'image/png',
+      width: 120,
+      height: 120,
+      createdAt: '2026-03-27T00:00:00.000Z',
+      updatedAt: null,
+      source: 'import',
+    } as any);
+
+    const view = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    await waitFor(() => {
+      expect(view.getByTestId('capture-inline-paste-sticker')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('capture-inline-paste-sticker'));
+    });
+
+    await waitFor(() => {
+      expect(view.getByTestId('mock-sticker-canvas')).toBeTruthy();
+    });
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          noteText: '',
+          captureMode: 'camera',
+          isCameraPreviewActive: true,
+        })}
+      />
+    );
+
+    await waitFor(() => {
+      expect(view.queryByTestId('mock-sticker-canvas')).toBeNull();
+    });
   });
 
   it('still offers inline paste after a sticker already exists and editing is closed', async () => {

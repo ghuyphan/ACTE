@@ -456,14 +456,6 @@ export default function NotesFeed({
       Math.max(0, Math.round(currentOffset / snapHeight) * snapHeight)
     );
 
-    console.log('[NotesFeed][debug]', {
-      previousItemKeys,
-      itemKeys,
-      currentOffset,
-      maxSnapOffset,
-      nearestSnapOffset,
-    });
-
     if (Math.abs(nearestSnapOffset - currentOffset) < 2) {
       return;
     }

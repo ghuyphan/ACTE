@@ -93,6 +93,7 @@ export default function ProfileScreenIOS() {
     handleDeleteAccount,
     handleSignOut,
   } = useProfileScreenModel();
+  const topContentPadding = 16;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -101,7 +102,7 @@ export default function ProfileScreenIOS() {
           {user ? (
             <>
               <Section>
-                <HStack modifiers={[padding({ top: 4, bottom: 4 })]}>
+                <HStack modifiers={[padding({ top: topContentPadding, bottom: 4 })]}>
                   <RNHostView matchContents>
                     <View style={styles.avatarHost}>
                       <ProfileAvatar
@@ -199,7 +200,7 @@ export default function ProfileScreenIOS() {
           ) : (
             <>
               <Section>
-                <VStack alignment="leading" modifiers={[padding({ top: 8, bottom: 8 })]}>
+                <VStack alignment="leading" modifiers={[padding({ top: topContentPadding, bottom: 8 })]}>
                   <HStack
                     modifiers={[
                       frame({ width: 48, height: 48, alignment: 'center' }),

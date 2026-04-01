@@ -198,6 +198,7 @@ export default function HomeScreen() {
     captureTranslateY,
     flashAnim,
     shutterScale,
+    isModeSwitchAnimating,
     toggleCaptureMode,
     handleShutterPressIn,
     handleShutterPressOut,
@@ -1565,6 +1566,7 @@ export default function HomeScreen() {
         cameraSessionKey={cameraSessionKey}
         captureScale={captureScale}
         captureTranslateY={captureTranslateY}
+        isModeSwitchAnimating={isModeSwitchAnimating}
         colors={colors}
         t={t}
         noteText={noteText}
@@ -1603,7 +1605,6 @@ export default function HomeScreen() {
         onSaveNote={() => {
           void saveNote();
         }}
-        onOpenNotes={handleOpenNotes}
         saving={saving}
         saveState={saveButtonState}
         shutterScale={shutterScale}

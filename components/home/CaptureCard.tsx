@@ -114,6 +114,8 @@ const CAMERA_START_TIMEOUT_MS = 2400;
 const CAMERA_ZOOM_PAN_RANGE = 0.9;
 const CAMERA_ZOOM_PINCH_RANGE = 0.45;
 const CAMERA_ZOOM_LABEL_VISIBLE_MS = 1100;
+const CAMERA_TRANSITION_FADE_IN_MS = 140;
+const CAMERA_TRANSITION_FADE_OUT_MS = 240;
 const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad) };
 const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
 const CAPTURE_BUTTON_STATE_IN = { duration: 160, easing: Easing.out(Easing.cubic) };
@@ -691,6 +693,7 @@ interface CaptureCardProps {
   cameraSessionKey: number;
   captureScale: SharedValue<number>;
   captureTranslateY: SharedValue<number>;
+  isModeSwitchAnimating?: boolean;
   colors: Pick<
     ThemeColors,
     | 'primary'
@@ -743,7 +746,6 @@ interface CaptureCardProps {
   onShutterPressOut: () => void;
   onTakePicture: () => void;
   onSaveNote: () => void;
-  onOpenNotes: () => void;
   saving: boolean;
   saveState?: 'idle' | 'saving' | 'success';
   shutterScale: SharedValue<number>;
@@ -767,6 +769,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   cameraSessionKey,
   captureScale,
   captureTranslateY,
+  isModeSwitchAnimating = false,
   colors,
   t,
   noteText,
@@ -797,7 +800,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onShutterPressOut,
   onTakePicture,
   onSaveNote,
-  onOpenNotes,
   saving,
   saveState = 'idle',
   shutterScale,
@@ -852,19 +854,20 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const cameraPanZoomStartRef = useRef(0);
   const cameraPinchZoomStartRef = useRef(0);
   const cameraZoomBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isPhotoDoodleSurface = captureMode === 'camera' && Boolean(capturedPhoto);
-  const doodleModeEnabled = isPhotoDoodleSurface ? photoDoodleModeEnabled : textDoodleModeEnabled;
-  const doodleStrokes = isPhotoDoodleSurface ? photoDoodleStrokes : textDoodleStrokes;
-  const doodleColor = isPhotoDoodleSurface ? photoDoodleColor : textDoodleColor;
-  const stickerModeEnabled = isPhotoDoodleSurface ? photoStickerModeEnabled : textStickerModeEnabled;
-  const stickerPlacements = isPhotoDoodleSurface ? photoStickerPlacements : textStickerPlacements;
-  const selectedStickerId = isPhotoDoodleSurface ? photoSelectedStickerId : textSelectedStickerId;
+  const isCameraCaptureSurface = captureMode === 'camera';
+  const isPhotoDoodleSurface = isCameraCaptureSurface && Boolean(capturedPhoto);
+  const doodleModeEnabled = isCameraCaptureSurface ? photoDoodleModeEnabled : textDoodleModeEnabled;
+  const doodleStrokes = isCameraCaptureSurface ? photoDoodleStrokes : textDoodleStrokes;
+  const doodleColor = isCameraCaptureSurface ? photoDoodleColor : textDoodleColor;
+  const stickerModeEnabled = isCameraCaptureSurface ? photoStickerModeEnabled : textStickerModeEnabled;
+  const stickerPlacements = isCameraCaptureSurface ? photoStickerPlacements : textStickerPlacements;
+  const selectedStickerId = isCameraCaptureSurface ? photoSelectedStickerId : textSelectedStickerId;
   const selectedStickerPlacement = useMemo(
     () => stickerPlacements.find((placement) => placement.id === selectedStickerId) ?? null,
     [selectedStickerId, stickerPlacements]
   );
   const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
-  const decorateMenuExpanded = isPhotoDoodleSurface ? photoDecorateMenuExpanded : textDecorateMenuExpanded;
+  const decorateMenuExpanded = isCameraCaptureSurface ? photoDecorateMenuExpanded : textDecorateMenuExpanded;
   const textDoodleColors = useMemo(
     () => getUniqueColors([colors.captureCardText, PHOTO_DOODLE_DEFAULT_COLOR, colors.primary]),
     [colors.captureCardText, colors.primary]
@@ -873,7 +876,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     () => getUniqueColors([PHOTO_DOODLE_DEFAULT_COLOR, '#1C1C1E', colors.primary]),
     [colors.primary]
   );
-  const doodleColorOptions = isPhotoDoodleSurface ? photoDoodleColors : textDoodleColors;
+  const doodleColorOptions = isCameraCaptureSurface ? photoDoodleColors : textDoodleColors;
   const isCameraSaveMode = captureMode === 'camera';
   const isSharedTarget = shareTarget === 'shared';
   const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
@@ -897,6 +900,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const saveStateScale = useSharedValue(1);
   const saveSuccessProgress = useSharedValue(saveState === 'success' ? 1 : 0);
   const savePressScale = useSharedValue(1);
+  const cameraTransitionMaskOpacity = useSharedValue(0);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
   const previousTextDoodleDefaultColorRef = useRef(colors.captureCardText);
@@ -936,6 +940,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const saveIdleBackground = isCameraSaveMode ? colors.primary : colors.captureButtonBg;
   const disableAndroidCaptureTransforms =
     Platform.OS === 'android' &&
+    !isModeSwitchAnimating &&
     (captureMode === 'camera' || (captureMode === 'text' && isNoteInputFocused));
   const decorateProgress = useSharedValue(showDecorateControls ? 1 : 0);
   const keyboardLift = useSharedValue(0);
@@ -979,11 +984,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       cameraAutoRecoveryCountRef.current = 0;
     }
 
+    cameraTransitionMaskOpacity.value = withTiming(1, {
+      duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_IN_MS,
+      easing: Easing.out(Easing.cubic),
+    });
     setCameraUnavailable(false);
     setCameraIssueDetail(null);
     setIsCameraReady(false);
     setCameraRetryNonce((current) => current + 1);
-  }, []);
+  }, [cameraTransitionMaskOpacity, reduceMotionEnabled]);
 
   const handleCameraStartupFailure = useCallback(
     (detail?: string | null) => {
@@ -1002,8 +1011,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           )
       );
       setIsCameraReady(false);
+      cameraTransitionMaskOpacity.value = withTiming(0, { duration: 0 });
     },
-    [restartCameraPreview, t]
+    [cameraTransitionMaskOpacity, restartCameraPreview, t]
   );
 
   const handleCameraInitialized = useCallback(() => {
@@ -1017,7 +1027,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setCameraUnavailable(false);
     setCameraIssueDetail(null);
     setIsCameraReady(true);
-  }, []);
+    cameraTransitionMaskOpacity.value = withTiming(0, {
+      duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_OUT_MS,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [cameraTransitionMaskOpacity, reduceMotionEnabled]);
 
   useEffect(() => {
     const previousCanShowLiveCameraPreview = previousCanShowLiveCameraPreviewRef.current;
@@ -1033,13 +1047,26 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       setIsCameraReady(true);
       setCameraUnavailable(false);
       setCameraIssueDetail(null);
+      cameraTransitionMaskOpacity.value = withTiming(0, { duration: 0 });
       return;
     }
 
+    cameraTransitionMaskOpacity.value = withTiming(1, {
+      duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_IN_MS,
+      easing: Easing.out(Easing.cubic),
+    });
     setIsCameraReady(false);
     setCameraUnavailable(false);
     setCameraIssueDetail(null);
-  }, [cameraActivationNonce, cameraDevice?.id, cameraRetryNonce, cameraSessionKey, shouldRenderCameraPreview]);
+  }, [
+    cameraActivationNonce,
+    cameraDevice?.id,
+    cameraRetryNonce,
+    cameraSessionKey,
+    cameraTransitionMaskOpacity,
+    reduceMotionEnabled,
+    shouldRenderCameraPreview,
+  ]);
 
   useEffect(() => {
     cameraAutoRecoveryCountRef.current = 0;
@@ -1118,12 +1145,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       setIsRestaurantInputFocused(false);
       setTextDoodleModeEnabled(false);
       setTextStickerModeEnabled(false);
+      setTextSelectedStickerId(null);
       setTextDecorateMenuExpanded(false);
     }
 
     if (!capturedPhoto) {
       setPhotoDoodleModeEnabled(false);
       setPhotoStickerModeEnabled(false);
+      setPhotoSelectedStickerId(null);
       setPhotoDecorateMenuExpanded(false);
     }
 
@@ -1392,6 +1421,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const flashAnimatedStyle = useAnimatedStyle(() => ({
     opacity: flashAnim.value,
   }), [flashAnim]);
+  const cameraTransitionMaskAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: cameraTransitionMaskOpacity.value,
+  }), [cameraTransitionMaskOpacity]);
   const keyboardLiftAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -keyboardLift.value }],
   }), [keyboardLift]);
@@ -1413,6 +1445,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     );
   const cameraZoomGesturesEnabled =
     canShowLiveCameraPreview && !showCameraUnavailableState && !interactionsDisabled;
+  const handleSwitchCameraPress = useCallback(() => {
+    cameraTransitionMaskOpacity.value = withTiming(1, {
+      duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_IN_MS,
+      easing: Easing.out(Easing.cubic),
+    });
+    setIsCameraReady(false);
+    onToggleFacing();
+  }, [cameraTransitionMaskOpacity, onToggleFacing, reduceMotionEnabled]);
   const maxPreviewZoomFactor = useMemo(() => {
     if (!cameraDevice) {
       return 1;
@@ -1474,12 +1514,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
     if (doodleModeEnabled || stickerModeEnabled) {
       if (isPhotoDoodleSurface) {
+        setPhotoSelectedStickerId(null);
         setPhotoDoodleModeEnabled(false);
         setPhotoStickerModeEnabled(false);
         setPhotoDecorateMenuExpanded(false);
         return;
       }
 
+      setTextSelectedStickerId(null);
       setTextDoodleModeEnabled(false);
       setTextStickerModeEnabled(false);
       setTextDecorateMenuExpanded(false);
@@ -1497,12 +1539,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     dismissPastePrompt();
 
     if (isPhotoDoodleSurface) {
+      setPhotoSelectedStickerId(null);
       setPhotoDecorateMenuExpanded(true);
       setPhotoStickerModeEnabled(false);
       setPhotoDoodleModeEnabled((current) => !current);
       return;
     }
 
+    setTextSelectedStickerId(null);
     setTextDecorateMenuExpanded(true);
     setTextStickerModeEnabled(false);
     setTextDoodleModeEnabled((current) => !current);
@@ -2898,6 +2942,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   </View>
                 </GestureDetector>
               ) : null}
+              <Reanimated.View
+                testID="camera-transition-overlay"
+                pointerEvents="none"
+                style={[
+                  styles.cameraTransitionOverlay,
+                  cameraTransitionMaskAnimatedStyle,
+                ]}
+              />
               {showCameraUnavailableState ? (
                 <View style={styles.cameraUnavailableState}>
                   <Ionicons name="camera-outline" size={42} color={colors.captureCameraOverlayText} />
@@ -2939,11 +2991,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 </View>
               ) : (
                 <>
-                  {shouldRenderCameraPreview && !showCameraUnavailableState && !isCameraReady ? (
-                    <View pointerEvents="none" style={styles.cameraLoadingOverlay}>
-                      <ActivityIndicator size="small" color={colors.captureCameraOverlayText} />
-                    </View>
-                  ) : null}
                   {showCameraZoomBadge && canShowLiveCameraPreview ? (
                     <View pointerEvents="none" style={styles.cameraZoomBadge}>
                       <Text style={[styles.cameraZoomBadgeText, { color: colors.captureCameraOverlayText }]}>
@@ -3139,22 +3186,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           </View>
           {captureMode === 'camera' && !capturedPhoto ? (
             <View style={styles.belowCardShutterRow}>
-              {permissionGranted ? (
-                <CaptureGlassActionButton
-                  accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
-                  onPress={onOpenNotes}
-                  iconName="grid-outline"
-                  iconColor={colors.captureGlassText}
-                  glassColorScheme={colors.captureGlassColorScheme}
-                  fallbackColor={colors.card}
-                  borderColor={colors.captureGlassBorder}
-                  style={[
-                    styles.belowCardLeadingAction,
-                  ]}
-                />
-              ) : (
-                <View style={[styles.belowCardSideActionSpacer, styles.belowCardLeadingAction]} />
-              )}
+              <View style={[styles.belowCardSideActionSpacer, styles.belowCardLeadingAction]} />
               {permissionGranted ? (
                 <CaptureAnimatedPressable
                   onPressIn={onShutterPressIn}
@@ -3181,7 +3213,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               {!showCameraUnavailableState && permissionGranted ? (
                 <CaptureGlassActionButton
                   accessibilityLabel={t('capture.switchCamera', 'Switch camera')}
-                  onPress={onToggleFacing}
+                  onPress={handleSwitchCameraPress}
                   iconName="camera-reverse"
                   iconColor={colors.captureGlassText}
                   glassColorScheme={colors.captureGlassColorScheme}
@@ -3197,18 +3229,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             </View>
           ) : capturedPhoto ? (
             <View style={[styles.belowCardShutterRow, styles.belowCardCapturedPhotoActions]}>
-              <CaptureGlassActionButton
-                accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
-                onPress={onOpenNotes}
-                iconName="grid-outline"
-                iconColor={colors.captureGlassText}
-                glassColorScheme={colors.captureGlassColorScheme}
-                fallbackColor={colors.card}
-                borderColor={colors.captureGlassBorder}
-                style={[
-                  styles.belowCardLeadingAction,
-                ]}
-              />
+              <View style={[styles.belowCardSideActionSpacer, styles.belowCardLeadingAction]} />
               <CaptureAnimatedPressable
                 testID="capture-save-button"
                 onPress={onSaveNote}
@@ -3275,18 +3296,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             </View>
           ) : (
             <View style={styles.belowCardShutterRow}>
-              <CaptureGlassActionButton
-                accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
-                onPress={onOpenNotes}
-                iconName="grid-outline"
-                iconColor={colors.captureGlassText}
-                glassColorScheme={colors.captureGlassColorScheme}
-                fallbackColor={colors.card}
-                borderColor={colors.captureGlassBorder}
-                style={[
-                  styles.belowCardLeadingAction,
-                ]}
-              />
+              <View style={[styles.belowCardSideActionSpacer, styles.belowCardLeadingAction]} />
               <CaptureAnimatedPressable
                 testID="capture-save-button"
                 onPress={onSaveNote}
@@ -3708,10 +3718,9 @@ const styles = StyleSheet.create({
   cameraGestureLayer: {
     ...StyleSheet.absoluteFillObject,
   },
-  cameraLoadingOverlay: {
+  cameraTransitionOverlay: {
     ...StyleSheet.absoluteFill,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#000000',
     zIndex: 1,
   },
   cameraZoomBadge: {

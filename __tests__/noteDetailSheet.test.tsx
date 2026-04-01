@@ -371,6 +371,24 @@ describe('NoteDetailSheet', () => {
     expect(mockImpactAsync).toHaveBeenCalledWith('light');
   });
 
+  it('hides the favorite action in edit mode', async () => {
+    const { getByTestId, queryByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-decorate-toggle')).toBeTruthy();
+    });
+
+    expect(queryByTestId('note-detail-favorite')).toBeNull();
+  });
+
   it('saves edited content, location, and radius', async () => {
     const { getByTestId } = render(
       <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />

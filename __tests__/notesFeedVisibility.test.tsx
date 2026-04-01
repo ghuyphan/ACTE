@@ -606,7 +606,7 @@ describe('NotesFeed capture visibility', () => {
     const originalPlatform = Platform.OS;
     Platform.OS = 'android';
     const scrollToOffset = jest.fn();
-    const flatListRef = { current: { scrollToOffset } as any };
+    const flatListRef = { current: null as any };
 
     try {
       const initialNotes = [
@@ -661,6 +661,7 @@ describe('NotesFeed capture visibility', () => {
       );
 
       const list = UNSAFE_getByType(FlatList);
+      flatListRef.current = { scrollToOffset };
 
       act(() => {
         list.props.onScroll({

@@ -189,6 +189,7 @@ export default function ProfileScreenAndroid() {
     handleDeleteAccount,
     handleSignOut,
   } = useProfileScreenModel();
+  const contentTopInset = 16;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -215,46 +216,47 @@ export default function ProfileScreenAndroid() {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: 12, paddingBottom: insets.bottom + 32 },
+          { paddingTop: contentTopInset, paddingBottom: insets.bottom + 32 },
         ]}
         showsVerticalScrollIndicator={false}
       >
         {user ? (
           <>
-            <SurfaceCard colors={colors}>
-              <View style={styles.hero}>
-                <View
-                  style={[
-                    styles.avatarFrame,
-                    {
-                      backgroundColor: colors.primarySoft,
-                      borderColor: `${colors.primary}24`,
-                    },
-                  ]}
-                >
-                  <ProfileAvatar
-                    avatarLabel={avatarLabel}
-                    avatarUrl={avatarUrl}
-                    colors={colors}
-                    size={56}
-                    labelFontSize={22}
-                  />
-                </View>
+            <View style={styles.firstSection}>
+              <SurfaceCard colors={colors}>
+                <View style={styles.hero}>
+                  <View
+                    style={[
+                      styles.avatarFrame,
+                      {
+                        backgroundColor: colors.primarySoft,
+                        borderColor: `${colors.primary}24`,
+                      },
+                    ]}
+                  >
+                    <ProfileAvatar
+                      avatarLabel={avatarLabel}
+                      avatarUrl={avatarUrl}
+                      colors={colors}
+                      size={56}
+                      labelFontSize={22}
+                    />
+                  </View>
 
-                <View style={styles.heroCopy}>
-                  <Text style={[styles.heroName, { color: colors.text }]} numberOfLines={1}>
-                    {profileName}
-                  </Text>
-                  {user.email ? (
-                    <Text style={[styles.heroEmail, { color: colors.secondaryText }]} numberOfLines={1}>
-                      {user.email}
+                  <View style={styles.heroCopy}>
+                    <Text style={[styles.heroName, { color: colors.text }]} numberOfLines={1}>
+                      {profileName}
                     </Text>
-                  ) : null}
+                    {user.email ? (
+                      <Text style={[styles.heroEmail, { color: colors.secondaryText }]} numberOfLines={1}>
+                        {user.email}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <MembershipBadge colors={colors} isPlus={tier === 'plus'} label={membershipLabel} />
                 </View>
-                <MembershipBadge colors={colors} isPlus={tier === 'plus'} label={membershipLabel} />
-              </View>
-            </SurfaceCard>
-
+              </SurfaceCard>
+            </View>
             <View style={styles.section}>
               <SectionTitle colors={colors} title={t('profile.accountTitle', 'Connected account')} />
               <SurfaceCard colors={colors}>
@@ -338,35 +340,37 @@ export default function ProfileScreenAndroid() {
             </View>
           </>
         ) : (
-          <SurfaceCard colors={colors} highlighted>
-            <View style={styles.emptyState}>
-              <View style={[styles.emptyIconShell, { backgroundColor: colors.primarySoft }]}>
-                <Ionicons name="person-outline" size={34} color={colors.primary} />
+          <View style={styles.firstSection}>
+            <SurfaceCard colors={colors} highlighted>
+              <View style={styles.emptyState}>
+                <View style={[styles.emptyIconShell, { backgroundColor: colors.primarySoft }]}>
+                  <Ionicons name="person-outline" size={34} color={colors.primary} />
+                </View>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                  {t('profile.signedOutTitle', 'No account connected')}
+                </Text>
+                <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
+                  {isAuthAvailable
+                    ? t('profile.signedOutMsg', 'Sign in to back up your notes and keep them synced across your devices.')
+                    : t(
+                        'profile.unavailableMsg',
+                        'Account sign-in is unavailable right now, but your notes stay safely on this device.'
+                      )}
+                </Text>
               </View>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                {t('profile.signedOutTitle', 'No account connected')}
-              </Text>
-              <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-                {isAuthAvailable
-                  ? t('profile.signedOutMsg', 'Sign in to back up your notes and keep them synced across your devices.')
-                  : t(
-                      'profile.unavailableMsg',
-                      'Account sign-in is unavailable right now, but your notes stay safely on this device.'
-                    )}
-              </Text>
-            </View>
-            {isAuthAvailable ? (
-              <>
-                <CardDivider colors={colors} />
-                <ProfileListItem
-                  colors={colors}
-                  icon="log-in-outline"
-                  title={t('settings.login', 'Sign In')}
-                  onPress={openSignIn}
-                />
-              </>
-            ) : null}
-          </SurfaceCard>
+              {isAuthAvailable ? (
+                <>
+                  <CardDivider colors={colors} />
+                  <ProfileListItem
+                    colors={colors}
+                    icon="log-in-outline"
+                    title={t('settings.login', 'Sign In')}
+                    onPress={openSignIn}
+                  />
+                </>
+              ) : null}
+            </SurfaceCard>
+          </View>
         )}
       </ScrollView>
     </View>
@@ -385,6 +389,9 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Layout.screenPadding,
     gap: 20,
+  },
+  firstSection: {
+    marginTop: 24,
   },
   section: {
     gap: 8,

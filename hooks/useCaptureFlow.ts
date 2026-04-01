@@ -16,6 +16,7 @@ type CaptureCameraPermission = {
 
 export function useCaptureFlow() {
   const [captureMode, setCaptureMode] = useState<CaptureMode>('text');
+  const [isModeSwitchAnimating, setIsModeSwitchAnimating] = useState(false);
   const [cameraSessionKey, setCameraSessionKey] = useState(0);
   const [restaurantName, setRestaurantName] = useState('');
   const [noteText, setNoteText] = useState('');
@@ -39,7 +40,6 @@ export function useCaptureFlow() {
   const cameraRef = useRef<Camera>(null);
   const previousCameraPermissionGrantedRef = useRef(cameraPermissionGranted);
   const previousAppStateRef = useRef(AppState.currentState);
-  const captureOpacity = useSharedValue(1);
   const captureScale = useSharedValue(1);
   const captureTranslateY = useSharedValue(0);
   const flashAnim = useSharedValue(0);
@@ -98,8 +98,15 @@ export function useCaptureFlow() {
   }, [cameraPermissionGranted, cameraPermissionStatus]);
 
   const animateModeSwitch = useCallback((callback: () => void) => {
-    captureScale.value = withTiming(0.97, { duration: 110 });
-    captureTranslateY.value = withTiming(-10, { duration: 110 }, (finished) => {
+    setIsModeSwitchAnimating(true);
+    captureScale.value = withTiming(0.97, {
+      duration: 110,
+      easing: Easing.out(Easing.cubic),
+    });
+    captureTranslateY.value = withTiming(-10, {
+      duration: 110,
+      easing: Easing.out(Easing.cubic),
+    }, (finished) => {
       if (!finished) {
         return;
       }
@@ -112,11 +119,21 @@ export function useCaptureFlow() {
       captureTranslateY.value = withTiming(0, {
         duration: 220,
         easing: Easing.out(Easing.cubic),
+      }, (settled) => {
+        if (!settled) {
+          return;
+        }
+
+        runOnJS(setIsModeSwitchAnimating)(false);
       });
     });
   }, [captureScale, captureTranslateY]);
 
   const toggleCaptureMode = useCallback(() => {
+    if (isModeSwitchAnimating) {
+      return;
+    }
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     animateModeSwitch(() => {
       setCaptureMode((mode) => {
@@ -134,7 +151,7 @@ export function useCaptureFlow() {
       setPromptExpanded(false);
       setHasShuffledPrompt(false);
     });
-  }, [animateModeSwitch]);
+  }, [animateModeSwitch, isModeSwitchAnimating]);
 
   const refreshCameraSession = useCallback(() => {
     setCameraSessionKey((current) => current + 1);
@@ -224,11 +241,11 @@ export function useCaptureFlow() {
     permission,
     requestPermission,
     cameraRef,
-    captureOpacity,
     captureScale,
     captureTranslateY,
     flashAnim,
     shutterScale,
+    isModeSwitchAnimating,
     animateModeSwitch,
     toggleCaptureMode,
     refreshCameraSession,
