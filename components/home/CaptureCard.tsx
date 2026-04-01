@@ -881,13 +881,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const isSharedTarget = shareTarget === 'shared';
   const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
   const textCardActiveIconColor = isDarkCaptureTheme ? colors.captureCardText : '#FFFFFF';
-  const sharedTargetHighlightBackground = isDarkCaptureTheme
-    ? 'rgba(255, 193, 7, 0.26)'
-    : colors.primarySoft;
-  const sharedTargetHighlightBorder = isDarkCaptureTheme
-    ? 'rgba(255, 193, 7, 0.52)'
-    : 'rgba(224, 177, 91, 0.38)';
-  const sharedTargetHighlightIcon = colors.captureCardText;
   const photoPreviewControlFill = capturedPhoto
     ? (isDarkCaptureTheme ? 'rgba(22,22,24,0.74)' : 'rgba(255,250,242,0.78)')
     : colors.captureCameraOverlay;
@@ -1234,6 +1227,23 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     clearPastePromptTimeout();
     setPastePrompt((current) => (current.visible ? { ...current, visible: false } : current));
   }, [clearPastePromptTimeout]);
+
+  useEffect(() => {
+    if (!isModeSwitchAnimating) {
+      return;
+    }
+
+    dismissPastePrompt();
+    setTextSelectedStickerId(null);
+    setPhotoSelectedStickerId(null);
+    setTextDoodleModeEnabled(false);
+    setPhotoDoodleModeEnabled(false);
+    setTextStickerModeEnabled(false);
+    setPhotoStickerModeEnabled(false);
+    setTextDecorateMenuExpanded(false);
+    setPhotoDecorateMenuExpanded(false);
+    setShowStickerSourceSheet(false);
+  }, [dismissPastePrompt, isModeSwitchAnimating]);
 
   const handleSavePressIn = useCallback(() => {
     if (isSaveBusy || isSaveSuccessful) {
@@ -3093,27 +3103,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   </View>
                   <View style={[styles.captureMetaDivider, { backgroundColor: colors.captureGlassBorder }]} />
                   <View style={styles.captureMetaActions}>
-                    <CaptureToggleIconButton
-                      testID="capture-share-target-toggle"
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isSharedTarget }}
-                      accessibilityLabel={isSharedTarget ? t('shared.captureShared', 'Friends') : t('shared.capturePrivate', 'Just me')}
-                      onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
-                      hitSlop={10}
-                      active={isSharedTarget}
-                      activeIconName="people-outline"
-                      inactiveIconName="lock-closed-outline"
-                      activeBackgroundColor={sharedTargetHighlightBackground}
-                      inactiveBackgroundColor={colors.captureGlassFill}
-                      activeBorderColor={sharedTargetHighlightBorder}
-                      inactiveBorderColor={colors.captureGlassBorder}
-                      activeIconColor={sharedTargetHighlightIcon}
-                      inactiveIconColor={colors.captureGlassText}
-                      iconSize={15}
-                      activeScale={1.015}
-                      contentActiveScale={1.03}
-                      style={styles.captureInlineShareButton}
-                    />
                     <CaptureAnimatedPressable
                       testID="capture-radius-toggle"
                       accessibilityRole="button"
@@ -3186,7 +3175,23 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           </View>
           {captureMode === 'camera' && !capturedPhoto ? (
             <View style={styles.belowCardShutterRow}>
-              <View style={[styles.belowCardSideActionSpacer, styles.belowCardLeadingAction]} />
+              {permissionGranted ? (
+                <CaptureGlassActionButton
+                  testID="capture-share-target-toggle"
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSharedTarget }}
+                  accessibilityLabel={isSharedTarget ? t('shared.captureShared', 'Friends') : t('shared.capturePrivate', 'Just me')}
+                  onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
+                  iconName={isSharedTarget ? 'people' : 'lock-closed'}
+                  iconColor={colors.captureGlassText}
+                  glassColorScheme={colors.captureGlassColorScheme}
+                  fallbackColor={colors.card}
+                  borderColor={colors.captureGlassBorder}
+                  style={[styles.belowCardLeadingAction]}
+                />
+              ) : (
+                <View style={[styles.belowCardSideActionSpacer, styles.belowCardLeadingAction]} />
+              )}
               {permissionGranted ? (
                 <CaptureAnimatedPressable
                   onPressIn={onShutterPressIn}
@@ -3229,7 +3234,19 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             </View>
           ) : capturedPhoto ? (
             <View style={[styles.belowCardShutterRow, styles.belowCardCapturedPhotoActions]}>
-              <View style={[styles.belowCardSideActionSpacer, styles.belowCardLeadingAction]} />
+              <CaptureGlassActionButton
+                testID="capture-share-target-toggle"
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSharedTarget }}
+                accessibilityLabel={isSharedTarget ? t('shared.captureShared', 'Friends') : t('shared.capturePrivate', 'Just me')}
+                onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
+                iconName={isSharedTarget ? 'people' : 'lock-closed'}
+                iconColor={colors.captureGlassText}
+                glassColorScheme={colors.captureGlassColorScheme}
+                fallbackColor={colors.card}
+                borderColor={colors.captureGlassBorder}
+                style={[styles.belowCardLeadingAction]}
+              />
               <CaptureAnimatedPressable
                 testID="capture-save-button"
                 onPress={onSaveNote}
@@ -3296,7 +3313,19 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             </View>
           ) : (
             <View style={styles.belowCardShutterRow}>
-              <View style={[styles.belowCardSideActionSpacer, styles.belowCardLeadingAction]} />
+              <CaptureGlassActionButton
+                testID="capture-share-target-toggle"
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSharedTarget }}
+                accessibilityLabel={isSharedTarget ? t('shared.captureShared', 'Friends') : t('shared.capturePrivate', 'Just me')}
+                onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
+                iconName={isSharedTarget ? 'people' : 'lock-closed'}
+                iconColor={colors.captureGlassText}
+                glassColorScheme={colors.captureGlassColorScheme}
+                fallbackColor={colors.card}
+                borderColor={colors.captureGlassBorder}
+                style={[styles.belowCardLeadingAction]}
+              />
               <CaptureAnimatedPressable
                 testID="capture-save-button"
                 onPress={onSaveNote}
@@ -3661,14 +3690,6 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginHorizontal: 5,
     opacity: 0.45,
-  },
-  captureInlineShareButton: {
-    width: 31,
-    height: 31,
-    borderRadius: 15.5,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   captureInlineRadiusButton: {
     width: 32,

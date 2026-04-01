@@ -768,16 +768,16 @@ describe('CaptureCard doodle handle', () => {
     expect(ref.current?.getDoodleSnapshot()).toEqual({ enabled: false, strokes: [] });
   });
 
-  it('hides the view-all action while camera permission is required', () => {
+  it('hides the share toggle while camera permission is required', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const { getByText, queryByText } = renderCaptureCard(ref, {
+    const { getByText, queryByTestId } = renderCaptureCard(ref, {
       captureMode: 'camera',
       needsCameraPermission: true,
       permissionGranted: false,
     });
 
     expect(getByText('Grant Access')).toBeTruthy();
-    expect(queryByText('grid-outline')).toBeNull();
+    expect(queryByTestId('capture-share-target-toggle')).toBeNull();
   });
 
   it('switches the camera permission CTA to settings when the prompt is blocked', () => {
@@ -794,7 +794,7 @@ describe('CaptureCard doodle handle', () => {
     expect(queryByText('Grant Access')).toBeNull();
   });
 
-  it('keeps the share toggle visible beside the restaurant field', () => {
+  it('lets you toggle the share target from the capture action row', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const handleChangeShareTarget = jest.fn();
     const { getByTestId } = renderCaptureCard(ref, {
@@ -1158,6 +1158,57 @@ describe('CaptureCard doodle handle', () => {
         {...createCaptureCardProps(ref, {
           noteText: '',
           captureMode: 'text',
+        })}
+      />
+    );
+
+    await waitFor(() => {
+      expect(view.getByTestId('mock-sticker-selected')).toHaveTextContent('null');
+      expect(view.getByTestId('mock-sticker-editable')).toHaveTextContent('false');
+    });
+  });
+
+  it('closes text sticker edit mode as soon as the mode-switch animation starts', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardGetImageAsync.mockResolvedValue({
+      data: `data:image/png;base64,${transparentPngBase64}`,
+    } as any);
+    mockImportStickerAsset.mockResolvedValue({
+      id: 'asset-1',
+      ownerUid: '__local__',
+      localUri: 'file:///documents/stickers/asset-1.png',
+      remotePath: null,
+      mimeType: 'image/png',
+      width: 120,
+      height: 120,
+      createdAt: '2026-03-27T00:00:00.000Z',
+      updatedAt: null,
+      source: 'import',
+    } as any);
+
+    const view = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    await waitFor(() => {
+      expect(view.getByTestId('capture-inline-paste-sticker')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('capture-inline-paste-sticker'));
+    });
+
+    await waitFor(() => {
+      expect(view.getByTestId('mock-sticker-selected')).toHaveTextContent('placement-1');
+      expect(view.getByTestId('mock-sticker-editable')).toHaveTextContent('true');
+    });
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          noteText: '',
+          isModeSwitchAnimating: true,
         })}
       />
     );

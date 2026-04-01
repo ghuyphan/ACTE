@@ -73,6 +73,9 @@ export default function AppBottomSheet({
       enableDynamicSizing
       enableOverDrag={false}
       enablePanDownToClose={dismissible}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      enableBlurKeyboardOnGesture
       android_keyboardInputMode="adjustResize"
       backgroundStyle={[
         detached ? styles.detachedBackground : styles.edgeBackground,
