@@ -571,6 +571,7 @@ export default function NoteDoodleCanvas({
   const draftVisibleValue = useSharedValue(0);
   const draftDimensionsValue = useSharedValue({ width: 1, height: 1 });
   const draftPathValue = useSharedValue<SkiaPathLike | null>(createEmptySkiaPath());
+  const canEdit = editable && Boolean(onChangeStrokes);
 
   useEffect(() => {
     draftDimensionsValue.value = { width: layout.width, height: layout.height };
@@ -794,7 +795,7 @@ export default function NoteDoodleCanvas({
     () =>
       Gesture.Pan()
         .runOnJS(false)
-        .enabled(editable && Boolean(onChangeStrokes))
+        .enabled(canEdit)
         .maxPointers(1)
         .minDistance(1)
         .shouldCancelWhenOutside(false)
@@ -867,10 +868,9 @@ export default function NoteDoodleCanvas({
       draftPathRevisionValue,
       draftPointsValue,
       draftVisibleValue,
-      editable,
+      canEdit,
       finalizeFallbackDraftStroke,
       moveFallbackDraftStroke,
-      onChangeStrokes,
       resetDraftState,
     ]
   );
@@ -879,7 +879,7 @@ export default function NoteDoodleCanvas({
     () =>
       Gesture.Tap()
         .runOnJS(false)
-        .enabled(editable && Boolean(onChangeStrokes))
+        .enabled(canEdit)
         .maxDuration(250)
         .maxDistance(8)
         .onEnd((event, success) => {
@@ -890,14 +890,14 @@ export default function NoteDoodleCanvas({
           const point = normalizeTouchPoint(event.x, event.y, draftDimensionsValue.value);
           runOnJS(commitTapDot)(point);
         }),
-    [commitTapDot, draftDimensionsValue, editable, onChangeStrokes]
+    [canEdit, commitTapDot, draftDimensionsValue]
   );
 
   useEffect(() => {
-    if (!editable) {
+    if (!canEdit) {
       resetDraftState();
     }
-  }, [editable, resetDraftState]);
+  }, [canEdit, resetDraftState]);
 
   const handleLayout = useCallback(
     (event: LayoutChangeEvent) => {
@@ -956,6 +956,14 @@ export default function NoteDoodleCanvas({
       />
     </>
   );
+
+  if (!canEdit) {
+    return (
+      <View style={[styles.canvas, style]} onLayout={handleLayout}>
+        {canvasContent}
+      </View>
+    );
+  }
 
   return (
     <GestureDetector gesture={Gesture.Exclusive(tapGesture, panGesture)}>

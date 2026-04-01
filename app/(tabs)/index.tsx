@@ -1380,6 +1380,8 @@ export default function HomeScreen() {
 
   const handleToggleCaptureMode = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    captureCardRef.current?.closeDecorateControls();
+    setCaptureScrollLocked(false);
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     toggleCaptureMode();
   }, [toggleCaptureMode]);

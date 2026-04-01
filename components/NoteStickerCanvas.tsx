@@ -228,68 +228,87 @@ function EditableSticker({
     left: outlineSize,
   } as const;
 
-  return (
-    <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture)}>
-      <View
-        testID={`note-sticker-wrap-${placement.id}`}
-        style={[
-          styles.stickerWrap,
-          {
-            width: frameWidth,
-            height: frameHeight,
-            left: activePlacement.x * layout.width - frameWidth / 2,
-            top: activePlacement.y * layout.height - frameHeight / 2,
-            zIndex: activePlacement.zIndex,
-            opacity: activePlacement.opacity,
-            transform: [{ scale: normalizedScale }, { rotate: `${activePlacement.rotation}deg` }],
-          },
-        ]}
-      >
-        {editable && selected ? <View pointerEvents="none" style={styles.selectionRing} /> : null}
+  const stickerArtwork = (
+    <View style={styles.stickerArtwork}>
+      {showOutline ? (
+        <View
+          pointerEvents="none"
+          testID={`note-sticker-outline-${placement.id}`}
+          style={styles.stickerOutlineLayer}
+        >
+          {outlineOffsets.map((offset, index) => (
+            <Image
+              key={`${placement.id}-outline-${index}`}
+              source={{ uri: activePlacement.asset.localUri }}
+              style={[
+                styles.stickerLayerImage,
+                stickerFrameStyle,
+                {
+                  tintColor: STICKER_OUTLINE_COLOR,
+                  opacity: 0.92,
+                  transform: [
+                    { translateX: offset.x * outlineSize },
+                    { translateY: offset.y * outlineSize },
+                  ],
+                },
+              ]}
+              contentFit="contain"
+              transition={0}
+            />
+          ))}
+        </View>
+      ) : null}
+      <Image
+        testID={`note-sticker-image-${placement.id}`}
+        source={{ uri: activePlacement.asset.localUri }}
+        style={[styles.stickerLayerImage, stickerFrameStyle]}
+        contentFit="contain"
+        transition={editable ? 0 : 120}
+      />
+    </View>
+  );
+
+  const stickerNode = (
+    <View
+      pointerEvents={editable ? 'auto' : 'none'}
+      testID={`note-sticker-wrap-${placement.id}`}
+      style={[
+        styles.stickerWrap,
+        {
+          width: frameWidth,
+          height: frameHeight,
+          left: activePlacement.x * layout.width - frameWidth / 2,
+          top: activePlacement.y * layout.height - frameHeight / 2,
+          zIndex: activePlacement.zIndex,
+          opacity: activePlacement.opacity,
+          transform: [{ scale: normalizedScale }, { rotate: `${activePlacement.rotation}deg` }],
+        },
+      ]}
+    >
+      {editable && selected ? <View pointerEvents="none" style={styles.selectionRing} /> : null}
+      {editable ? (
         <Pressable
-          accessibilityRole={editable ? 'button' : undefined}
-          onPress={editable ? onSelect : undefined}
+          accessibilityRole="button"
+          onPress={onSelect}
           style={styles.stickerPressable}
         >
-          <View style={styles.stickerArtwork}>
-            {showOutline ? (
-              <View
-                pointerEvents="none"
-                testID={`note-sticker-outline-${placement.id}`}
-                style={styles.stickerOutlineLayer}
-              >
-                {outlineOffsets.map((offset, index) => (
-                  <Image
-                    key={`${placement.id}-outline-${index}`}
-                    source={{ uri: activePlacement.asset.localUri }}
-                    style={[
-                      styles.stickerLayerImage,
-                      stickerFrameStyle,
-                      {
-                        tintColor: STICKER_OUTLINE_COLOR,
-                        opacity: 0.92,
-                        transform: [
-                          { translateX: offset.x * outlineSize },
-                          { translateY: offset.y * outlineSize },
-                        ],
-                      },
-                    ]}
-                    contentFit="contain"
-                    transition={0}
-                  />
-                ))}
-              </View>
-            ) : null}
-            <Image
-              testID={`note-sticker-image-${placement.id}`}
-              source={{ uri: activePlacement.asset.localUri }}
-              style={[styles.stickerLayerImage, stickerFrameStyle]}
-              contentFit="contain"
-              transition={editable ? 0 : 120}
-            />
-          </View>
+          {stickerArtwork}
         </Pressable>
-      </View>
+      ) : (
+        <View pointerEvents="none" style={styles.stickerPressable}>
+          {stickerArtwork}
+        </View>
+      )}
+    </View>
+  );
+
+  if (!editable) {
+    return stickerNode;
+  }
+
+  return (
+    <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture)}>
+      {stickerNode}
     </GestureDetector>
   );
 }

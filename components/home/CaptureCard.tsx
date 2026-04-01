@@ -116,6 +116,7 @@ const CAMERA_ZOOM_PINCH_RANGE = 0.45;
 const CAMERA_ZOOM_LABEL_VISIBLE_MS = 1100;
 const CAMERA_TRANSITION_FADE_IN_MS = 140;
 const CAMERA_TRANSITION_FADE_OUT_MS = 240;
+const DEBUG_CAPTURE_TOUCH_LAYERS = __DEV__;
 const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad) };
 const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
 const CAPTURE_BUTTON_STATE_IN = { duration: 160, easing: Easing.out(Easing.cubic) };
@@ -224,6 +225,7 @@ export interface CaptureCardHandle {
   getStickerSnapshot: () => { enabled: boolean; placements: NoteStickerPlacement[] };
   resetDoodle: () => void;
   resetStickers: () => void;
+  closeDecorateControls: () => void;
 }
 
 type StickerPastePromptState = {
@@ -232,17 +234,7 @@ type StickerPastePromptState = {
   y: number;
 };
 
-type DecorateTool = 'none' | 'doodle' | 'sticker';
 
-type DecorateSurfaceState = {
-  expanded: boolean;
-  activeTool: DecorateTool;
-};
-
-const CLOSED_DECORATE_SURFACE_STATE: DecorateSurfaceState = {
-  expanded: false,
-  activeTool: 'none',
-};
 
 type CaptureAnimatedPressableProps = Omit<PressableProps, 'children' | 'style'> & {
   children?: ReactNode;
@@ -442,6 +434,20 @@ function CaptureToggleIconButton({
         </Reanimated.View>
       </View>
     </CaptureAnimatedPressable>
+  );
+}
+
+function CaptureDebugBadge({
+  label,
+  color,
+}: {
+  label: string;
+  color: string;
+}) {
+  return (
+    <View style={[styles.captureDebugBadge, { backgroundColor: color }]}>
+      <Text style={styles.captureDebugBadgeText}>{label}</Text>
+    </View>
   );
 }
 
@@ -836,8 +842,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [cameraActivationNonce, setCameraActivationNonce] = useState(0);
   const [cameraZoom, setCameraZoom] = useState(0);
   const [showCameraZoomBadge, setShowCameraZoomBadge] = useState(false);
-  const [textDecorateState, setTextDecorateState] = useState<DecorateSurfaceState>(CLOSED_DECORATE_SURFACE_STATE);
-  const [photoDecorateState, setPhotoDecorateState] = useState<DecorateSurfaceState>(CLOSED_DECORATE_SURFACE_STATE);
+  const [decorateMenuExpanded, setDecorateMenuExpanded] = useState(false);
+  const [doodleModeEnabled, setDoodleModeEnabled] = useState(false);
+  const [stickerModeEnabled, setStickerModeEnabled] = useState(false);
   const [textDoodleStrokes, setTextDoodleStrokes] = useState<DoodleStroke[]>([]);
   const [photoDoodleStrokes, setPhotoDoodleStrokes] = useState<DoodleStroke[]>([]);
   const [textDoodleColor, setTextDoodleColor] = useState(colors.captureCardText);
@@ -864,11 +871,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const cameraZoomBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCameraCaptureSurface = captureMode === 'camera';
   const isPhotoDoodleSurface = isCameraCaptureSurface && Boolean(capturedPhoto);
-  const activeDecorateState = isCameraCaptureSurface ? photoDecorateState : textDecorateState;
-  const doodleModeEnabled = activeDecorateState.activeTool === 'doodle';
   const doodleStrokes = isCameraCaptureSurface ? photoDoodleStrokes : textDoodleStrokes;
   const doodleColor = isCameraCaptureSurface ? photoDoodleColor : textDoodleColor;
-  const stickerModeEnabled = activeDecorateState.activeTool === 'sticker';
   const stickerPlacements = isCameraCaptureSurface ? photoStickerPlacements : textStickerPlacements;
   const selectedStickerId = isCameraCaptureSurface ? photoSelectedStickerId : textSelectedStickerId;
   const selectedStickerPlacement = useMemo(
@@ -876,7 +880,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     [selectedStickerId, stickerPlacements]
   );
   const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
-  const decorateMenuExpanded = activeDecorateState.expanded;
   const textDoodleColors = useMemo(
     () => getUniqueColors([colors.captureCardText, PHOTO_DOODLE_DEFAULT_COLOR, colors.primary]),
     [colors.captureCardText, colors.primary]
@@ -947,6 +950,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const decorateProgress = useSharedValue(showDecorateControls ? 1 : 0);
   const keyboardLift = useSharedValue(0);
   const isTextEntryFocused = captureMode === 'text' && (isNoteInputFocused || isRestaurantInputFocused);
+  const debugBadgeColor = captureMode === 'text' ? 'rgba(255, 208, 0, 0.86)' : 'rgba(90, 176, 255, 0.86)';
 
   const clearCameraZoomBadgeTimeout = useCallback(() => {
     if (cameraZoomBadgeTimeoutRef.current) {
@@ -1141,38 +1145,23 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     }
   }, [isSaveBusy, isSaveSuccessful, savePressScale]);
 
-  const closeTextDecorateControls = useCallback(() => {
+  const closeDecorateControls = useCallback(() => {
+    setDecorateMenuExpanded(false);
+    setDoodleModeEnabled(false);
+    setStickerModeEnabled(false);
     setTextSelectedStickerId(null);
-    setTextDecorateState(CLOSED_DECORATE_SURFACE_STATE);
-  }, []);
-
-  const closePhotoDecorateControls = useCallback(() => {
     setPhotoSelectedStickerId(null);
-    setPhotoDecorateState(CLOSED_DECORATE_SURFACE_STATE);
   }, []);
-
-  const closeActiveDecorateControls = useCallback(() => {
-    if (isPhotoDoodleSurface) {
-      closePhotoDecorateControls();
-      return;
-    }
-
-    closeTextDecorateControls();
-  }, [closePhotoDecorateControls, closeTextDecorateControls, isPhotoDoodleSurface]);
 
   useEffect(() => {
     if (captureMode !== 'text') {
       setIsNoteInputFocused(false);
       setIsRestaurantInputFocused(false);
-      closeTextDecorateControls();
     }
 
-    if (!capturedPhoto) {
-      closePhotoDecorateControls();
-    }
-
+    closeDecorateControls();
     setShowStickerSourceSheet(false);
-  }, [captureMode, capturedPhoto, closePhotoDecorateControls, closeTextDecorateControls]);
+  }, [captureMode, capturedPhoto, closeDecorateControls]);
 
   useEffect(() => {
     const previousDefaultColor = previousTextDoodleDefaultColorRef.current;
@@ -1256,10 +1245,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     }
 
     dismissPastePrompt();
-    closeTextDecorateControls();
-    closePhotoDecorateControls();
+    closeDecorateControls();
     setShowStickerSourceSheet(false);
-  }, [closePhotoDecorateControls, closeTextDecorateControls, dismissPastePrompt, isModeSwitchAnimating]);
+  }, [closeDecorateControls, dismissPastePrompt, isModeSwitchAnimating]);
 
   const handleSavePressIn = useCallback(() => {
     if (isSaveBusy || isSaveSuccessful) {
@@ -1331,30 +1319,26 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   }, [shouldCheckInlinePasteClipboard]);
 
   const resetDoodle = useCallback(() => {
-    setTextDecorateState((current) => (
-      current.activeTool === 'doodle' ? CLOSED_DECORATE_SURFACE_STATE : current
-    ));
-    setPhotoDecorateState((current) => (
-      current.activeTool === 'doodle' ? CLOSED_DECORATE_SURFACE_STATE : current
-    ));
+    if (doodleModeEnabled) {
+      setDoodleModeEnabled(false);
+      setDecorateMenuExpanded(false);
+    }
     setTextDoodleStrokes([]);
     setPhotoDoodleStrokes([]);
     setTextDoodleColor(colors.captureCardText);
     setPhotoDoodleColor(PHOTO_DOODLE_DEFAULT_COLOR);
-  }, [colors.captureCardText]);
+  }, [colors.captureCardText, doodleModeEnabled]);
 
   const resetStickers = useCallback(() => {
-    setTextDecorateState((current) => (
-      current.activeTool === 'sticker' ? CLOSED_DECORATE_SURFACE_STATE : current
-    ));
-    setPhotoDecorateState((current) => (
-      current.activeTool === 'sticker' ? CLOSED_DECORATE_SURFACE_STATE : current
-    ));
+    if (stickerModeEnabled) {
+      setStickerModeEnabled(false);
+      setDecorateMenuExpanded(false);
+    }
     setTextStickerPlacements([]);
     setPhotoStickerPlacements([]);
     setTextSelectedStickerId(null);
     setPhotoSelectedStickerId(null);
-  }, []);
+  }, [stickerModeEnabled]);
 
   useImperativeHandle(
     ref,
@@ -1377,8 +1361,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       }),
       resetDoodle,
       resetStickers,
+      closeDecorateControls,
     }),
-    [doodleModeEnabled, doodleStrokes, resetDoodle, resetStickers, stickerModeEnabled, stickerPlacements]
+    [
+      closeDecorateControls,
+      doodleModeEnabled,
+      doodleStrokes,
+      resetDoodle,
+      resetStickers,
+      stickerModeEnabled,
+      stickerPlacements,
+    ]
   );
 
   const animatedDecorateButtonStyle = useAnimatedStyle(() => ({
@@ -1544,53 +1537,50 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     [cameraZoomGesturesEnabled, scheduleHideCameraZoomBadge, updateCameraZoom]
   );
 
-  const setActiveDecorateTool = useCallback(
-    (tool: Exclude<DecorateTool, 'none'>) => {
-      dismissPastePrompt();
-
-      if (isPhotoDoodleSurface) {
-        setPhotoSelectedStickerId(null);
-        setPhotoDecorateState((current) => ({
-          expanded: true,
-          activeTool: current.activeTool === tool ? 'none' : tool,
-        }));
-        return;
-      }
-
-      setTextSelectedStickerId(null);
-      setTextDecorateState((current) => ({
-        expanded: true,
-        activeTool: current.activeTool === tool ? 'none' : tool,
-      }));
-    },
-    [dismissPastePrompt, isPhotoDoodleSurface]
-  );
+  const dismissCaptureInputs = useCallback(() => {
+    Keyboard.dismiss();
+    setIsNoteInputFocused(false);
+    setIsRestaurantInputFocused(false);
+  }, []);
 
   const handleToggleDecorateMenu = useCallback(() => {
     dismissPastePrompt();
+    dismissCaptureInputs();
 
-    if (activeDecorateState.activeTool !== 'none') {
-      closeActiveDecorateControls();
+    if (doodleModeEnabled || stickerModeEnabled) {
+      setDoodleModeEnabled(false);
+      setStickerModeEnabled(false);
+      setDecorateMenuExpanded(false);
+      if (isPhotoDoodleSurface) {
+        setPhotoSelectedStickerId(null);
+      } else {
+        setTextSelectedStickerId(null);
+      }
       return;
     }
 
-    if (isPhotoDoodleSurface) {
-      setPhotoDecorateState((current) => ({
-        expanded: !current.expanded,
-        activeTool: 'none',
-      }));
-      return;
-    }
-
-    setTextDecorateState((current) => ({
-      expanded: !current.expanded,
-      activeTool: 'none',
-    }));
-  }, [activeDecorateState.activeTool, closeActiveDecorateControls, dismissPastePrompt, isPhotoDoodleSurface]);
+    setDecorateMenuExpanded((current) => !current);
+  }, [
+    dismissCaptureInputs,
+    dismissPastePrompt,
+    doodleModeEnabled,
+    isPhotoDoodleSurface,
+    stickerModeEnabled,
+  ]);
 
   const handleToggleDoodleMode = useCallback(() => {
-    setActiveDecorateTool('doodle');
-  }, [setActiveDecorateTool]);
+    dismissPastePrompt();
+    dismissCaptureInputs();
+    setDecorateMenuExpanded(true);
+    setStickerModeEnabled(false);
+    if (isPhotoDoodleSurface) {
+      setPhotoSelectedStickerId(null);
+    } else {
+      setTextSelectedStickerId(null);
+    }
+    setDoodleModeEnabled((current) => !current);
+  }, [dismissCaptureInputs, dismissPastePrompt, isPhotoDoodleSurface]);
+
   const handleUndoDoodle = useCallback(() => {
     if (isPhotoDoodleSurface) {
       setPhotoDoodleStrokes((current) => current.slice(0, -1));
@@ -1622,19 +1612,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     if (isPhotoDoodleSurface) {
       setPhotoStickerPlacements((current) => [...current, nextPlacement]);
       setPhotoSelectedStickerId(nextPlacement.id);
-      setPhotoDecorateState({
-        expanded: true,
-        activeTool: 'sticker',
-      });
-      return;
+    } else {
+      setTextStickerPlacements((current) => [...current, nextPlacement]);
+      setTextSelectedStickerId(nextPlacement.id);
     }
-
-    setTextStickerPlacements((current) => [...current, nextPlacement]);
-    setTextSelectedStickerId(nextPlacement.id);
-    setTextDecorateState({
-      expanded: true,
-      activeTool: 'sticker',
-    });
+    setDecorateMenuExpanded(true);
+    setStickerModeEnabled(true);
+    setDoodleModeEnabled(false);
   }, [isPhotoDoodleSurface]);
   const handleImportSticker = useCallback(async () => {
     if (!ENABLE_PHOTO_STICKERS || importingSticker) {
@@ -1856,8 +1840,24 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       return;
     }
 
-    setActiveDecorateTool('sticker');
-  }, [setActiveDecorateTool]);
+    dismissPastePrompt();
+    dismissCaptureInputs();
+    setDecorateMenuExpanded(true);
+    setDoodleModeEnabled(false);
+    setStickerModeEnabled((current) => !current);
+    if (stickerModeEnabled) {
+      if (isPhotoDoodleSurface) {
+        setPhotoSelectedStickerId(null);
+      } else {
+        setTextSelectedStickerId(null);
+      }
+    }
+  }, [
+    dismissCaptureInputs,
+    dismissPastePrompt,
+    isPhotoDoodleSurface,
+    stickerModeEnabled,
+  ]);
   const handleChangeStickerPlacements = useCallback(
     (nextPlacements: NoteStickerPlacement[]) => {
       if (isPhotoDoodleSurface) {
@@ -1892,17 +1892,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       return;
     }
 
-    closeActiveDecorateControls();
-  }, [closeActiveDecorateControls, dismissPastePrompt, handleSelectSticker, selectedStickerId, stickerModeEnabled]);
+    closeDecorateControls();
+  }, [closeDecorateControls, dismissPastePrompt, handleSelectSticker, selectedStickerId, stickerModeEnabled]);
 
-  const handlePressOutsideCard = useCallback(() => {
-    if (!showDecorateControls) {
-      return;
-    }
-
-    dismissPastePrompt();
-    closeActiveDecorateControls();
-  }, [closeActiveDecorateControls, dismissPastePrompt, showDecorateControls]);
   const handleSelectedStickerAction = useCallback(
     (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove' | 'outline-toggle') => {
       if (!selectedStickerId) {
@@ -2088,13 +2080,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   return (
     <>
       <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
-        <Pressable
-          testID="capture-decorate-dismiss-surface"
-          accessible={false}
-          pointerEvents={showDecorateControls && !interactionsDisabled ? 'auto' : 'none'}
-          style={styles.decorateDismissSurface}
-          onPress={handlePressOutsideCard}
-        />
         <Reanimated.View style={keyboardLiftAnimatedStyle}>
           <Reanimated.View
             testID="capture-card-area"
@@ -2483,10 +2468,16 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   style={[
                     styles.textStickerCanvasLayer,
                     stickerModeEnabled ? styles.textStickerCanvasLayerActive : null,
+                    DEBUG_CAPTURE_TOUCH_LAYERS
+                      ? {
+                          backgroundColor: stickerModeEnabled
+                            ? 'rgba(255, 0, 128, 0.18)'
+                            : 'rgba(255, 0, 128, 0.08)',
+                        }
+                      : null,
                   ]}
                 >
                   <NoteStickerCanvas
-                    key={`text-sticker-${textDecorateState.activeTool}-${selectedStickerId ?? 'none'}`}
                     placements={stickerPlacements}
                     editable={stickerModeEnabled}
                     onChangePlacements={handleChangeStickerPlacements}
@@ -2497,9 +2488,20 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 </View>
               ) : null}
               {textDoodleStrokes.length > 0 || doodleModeEnabled ? (
-                <View pointerEvents={doodleModeEnabled ? 'auto' : 'none'} style={styles.doodleCanvasLayer}>
+                <View
+                  pointerEvents={doodleModeEnabled ? 'auto' : 'none'}
+                  style={[
+                    styles.doodleCanvasLayer,
+                    DEBUG_CAPTURE_TOUCH_LAYERS
+                      ? {
+                          backgroundColor: doodleModeEnabled
+                            ? 'rgba(0, 212, 255, 0.18)'
+                            : 'rgba(0, 212, 255, 0.08)',
+                        }
+                      : null,
+                  ]}
+                >
                   <NoteDoodleCanvas
-                    key={`text-doodle-${textDecorateState.activeTool}`}
                     strokes={doodleStrokes}
                     editable={doodleModeEnabled}
                     activeColor={doodleColor}
@@ -2513,6 +2515,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 style={[
                   styles.cardTextCenter,
                   stickerModeEnabled ? styles.cardTextCenterInactive : null,
+                  DEBUG_CAPTURE_TOUCH_LAYERS
+                    ? {
+                        backgroundColor:
+                          doodleModeEnabled || stickerModeEnabled
+                            ? 'rgba(57, 255, 20, 0.04)'
+                            : 'rgba(57, 255, 20, 0.12)',
+                      }
+                    : null,
                 ]}
               >
                 <TextInput
@@ -2535,9 +2545,36 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   selectionColor={colors.captureCardText}
                 />
               </View>
+              {DEBUG_CAPTURE_TOUCH_LAYERS ? (
+                <View pointerEvents="none" style={styles.captureDebugPanel}>
+                  <CaptureDebugBadge label="surface:text" color={debugBadgeColor} />
+                  <CaptureDebugBadge
+                    label={`menu:${decorateMenuExpanded ? 'open' : 'closed'}`}
+                    color="rgba(255,255,255,0.86)"
+                  />
+                  <CaptureDebugBadge
+                    label={`tool:${doodleModeEnabled ? 'doodle' : stickerModeEnabled ? 'sticker' : 'none'}`}
+                    color="rgba(255,255,255,0.86)"
+                  />
+                  <CaptureDebugBadge
+                    label={`doodle:${doodleModeEnabled ? 'edit' : textDoodleStrokes.length > 0 ? 'render' : 'off'}`}
+                    color="rgba(0,212,255,0.86)"
+                  />
+                  <CaptureDebugBadge
+                    label={`stickers:${stickerModeEnabled ? 'edit' : textStickerPlacements.length > 0 ? 'render' : 'off'}`}
+                    color="rgba(255,0,128,0.86)"
+                  />
+                  <CaptureDebugBadge
+                    label={`input:${!doodleModeEnabled && !stickerModeEnabled ? 'active' : 'blocked'}`}
+                    color="rgba(57,255,20,0.86)"
+                  />
+                </View>
+              ) : null}
             </LinearGradient>
           ) : capturedPhoto ? (
-            <View style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}>
+            <View
+              style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}
+            >
               <FilteredPhotoCanvas
                 sourceUri={capturedPhoto}
                 filterId={selectedPhotoFilterId}
@@ -2863,9 +2900,20 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 </View>
               </View>
               {ENABLE_PHOTO_STICKERS && stickerPlacements.length > 0 ? (
-                <View pointerEvents={stickerModeEnabled ? 'box-none' : 'none'} style={styles.doodleCanvasLayer}>
+                <View
+                  pointerEvents={stickerModeEnabled ? 'box-none' : 'none'}
+                  style={[
+                    styles.doodleCanvasLayer,
+                    DEBUG_CAPTURE_TOUCH_LAYERS
+                      ? {
+                          backgroundColor: stickerModeEnabled
+                            ? 'rgba(255, 0, 128, 0.18)'
+                            : 'rgba(255, 0, 128, 0.08)',
+                        }
+                      : null,
+                  ]}
+                >
                   <NoteStickerCanvas
-                    key={`photo-sticker-${photoDecorateState.activeTool}-${selectedStickerId ?? 'none'}`}
                     placements={stickerPlacements}
                     editable={stickerModeEnabled}
                     onChangePlacements={handleChangeStickerPlacements}
@@ -2876,13 +2924,45 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 </View>
               ) : null}
               {photoDoodleStrokes.length > 0 || doodleModeEnabled ? (
-                <View pointerEvents={doodleModeEnabled ? 'auto' : 'none'} style={styles.doodleCanvasLayer}>
+                <View
+                  pointerEvents={doodleModeEnabled ? 'auto' : 'none'}
+                  style={[
+                    styles.doodleCanvasLayer,
+                    DEBUG_CAPTURE_TOUCH_LAYERS
+                      ? {
+                          backgroundColor: doodleModeEnabled
+                            ? 'rgba(0, 212, 255, 0.18)'
+                            : 'rgba(0, 212, 255, 0.08)',
+                        }
+                      : null,
+                  ]}
+                >
                   <NoteDoodleCanvas
-                    key={`photo-doodle-${photoDecorateState.activeTool}`}
                     strokes={doodleStrokes}
                     editable={doodleModeEnabled}
                     activeColor={doodleColor}
                     onChangeStrokes={setPhotoDoodleStrokes}
+                  />
+                </View>
+              ) : null}
+              {DEBUG_CAPTURE_TOUCH_LAYERS ? (
+                <View pointerEvents="none" style={styles.captureDebugPanel}>
+                  <CaptureDebugBadge label="surface:photo" color={debugBadgeColor} />
+                  <CaptureDebugBadge
+                    label={`menu:${decorateMenuExpanded ? 'open' : 'closed'}`}
+                    color="rgba(255,255,255,0.86)"
+                  />
+                  <CaptureDebugBadge
+                    label={`tool:${doodleModeEnabled ? 'doodle' : stickerModeEnabled ? 'sticker' : 'none'}`}
+                    color="rgba(255,255,255,0.86)"
+                  />
+                  <CaptureDebugBadge
+                    label={`doodle:${doodleModeEnabled ? 'edit' : photoDoodleStrokes.length > 0 ? 'render' : 'off'}`}
+                    color="rgba(0,212,255,0.86)"
+                  />
+                  <CaptureDebugBadge
+                    label={`stickers:${stickerModeEnabled ? 'edit' : photoStickerPlacements.length > 0 ? 'render' : 'off'}`}
+                    color="rgba(255,0,128,0.86)"
                   />
                 </View>
               ) : null}
@@ -3435,9 +3515,6 @@ const styles = StyleSheet.create({
     width,
     justifyContent: 'center',
   },
-  decorateDismissSurface: {
-    ...StyleSheet.absoluteFillObject,
-  },
   captureArea: {
     height: CARD_SIZE,
     alignItems: 'center',
@@ -3644,6 +3721,26 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     zIndex: 3,
+  },
+  captureDebugPanel: {
+    position: 'absolute',
+    left: 14,
+    right: 14,
+    bottom: 14,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    zIndex: 20,
+  },
+  captureDebugBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  captureDebugBadgeText: {
+    color: '#121212',
+    fontSize: 10,
+    fontWeight: '700',
   },
   cardRestaurantPillBelow: {
     marginTop: 0,

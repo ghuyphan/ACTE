@@ -811,6 +811,30 @@ describe('CaptureCard doodle handle', () => {
     expect(view.getByTestId('capture-radius-150')).toBeTruthy();
   });
 
+  it('fully closes doodle mode when you tap the doodle toggle again', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      noteText: 'Draft memory',
+    });
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-doodle-toggle'));
+    });
+
+    expect(view.getByTestId('mock-doodle-editable')).toHaveTextContent('true');
+    expect(view.getByTestId('capture-note-input').props.editable).toBe(false);
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-doodle-toggle'));
+    });
+
+    expect(view.queryByTestId('mock-doodle-editable')).toBeNull();
+    expect(view.getByTestId('capture-note-input').props.editable).toBe(true);
+  });
+
   it('restores text-card interactions after leaving sticker mode through a camera round-trip', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const view = renderCaptureCard(ref, {
@@ -852,6 +876,61 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(view.getByTestId('capture-radius-150')).toBeTruthy();
+  });
+
+  it('fully closes sticker mode when you tap the sticker toggle again', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      noteText: 'Draft memory',
+    });
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-sticker-toggle'));
+    });
+
+    expect(view.getByTestId('capture-sticker-import')).toBeTruthy();
+    expect(view.getByTestId('capture-note-input').props.editable).toBe(false);
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-sticker-toggle'));
+    });
+
+    expect(view.queryByTestId('capture-sticker-import')).toBeNull();
+    expect(view.getByTestId('capture-note-input').props.editable).toBe(true);
+  });
+
+  it('restores captured-photo controls after closing doodle mode', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const onChangePhotoFilter = jest.fn();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///photo.jpg',
+      onChangePhotoFilter,
+    });
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
+    });
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-doodle-toggle'));
+    });
+
+    expect(view.getByTestId('mock-doodle-editable')).toHaveTextContent('true');
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-doodle-toggle'));
+    });
+
+    expect(view.queryByTestId('mock-doodle-editable')).toBeNull();
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-filter-vivid'));
+    });
+
+    expect(onChangePhotoFilter).toHaveBeenCalledWith('vivid');
   });
 
   it('hides the share toggle while camera permission is required', () => {
@@ -1433,14 +1512,12 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(getByTestId('mock-doodle-editable')).toHaveTextContent('true');
-    expect(getByTestId('capture-decorate-dismiss-surface').props.pointerEvents).toBe('auto');
 
     act(() => {
-      fireEvent.press(getByTestId('capture-decorate-dismiss-surface'));
+      fireEvent.press(getByTestId('capture-decorate-toggle'));
     });
 
     expect(queryByTestId('mock-doodle-editable')).toBeNull();
-    expect(getByTestId('capture-decorate-dismiss-surface').props.pointerEvents).toBe('none');
   });
 
   it('keeps text-input long press native and does not paste a sticker', async () => {

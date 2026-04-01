@@ -1,7 +1,8 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { AppState } from 'react-native';
 let mockCaptureCardProps: any = null;
+let mockCaptureCardHandle: any = null;
 const mockOpenAppSettings = jest.fn(async () => undefined);
 const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
 const mockShowAlert = jest.fn();
@@ -183,8 +184,16 @@ jest.mock('../components/home/CaptureCard', () => {
   const { Text } = require('react-native');
   return {
     __esModule: true,
-    default: React.forwardRef(function MockCaptureCard(props: any, _ref: any) {
+    default: React.forwardRef(function MockCaptureCard(props: any, ref: any) {
       mockCaptureCardProps = props;
+      mockCaptureCardHandle = {
+        getDoodleSnapshot: jest.fn(() => ({ enabled: false, strokes: [] })),
+        getStickerSnapshot: jest.fn(() => ({ enabled: false, placements: [] })),
+        resetDoodle: jest.fn(),
+        resetStickers: jest.fn(),
+        closeDecorateControls: jest.fn(() => props.onDoodleModeChange?.(false)),
+      };
+      React.useImperativeHandle(ref, () => mockCaptureCardHandle, [props]);
       return <Text testID="camera-preview-state">{String(props.isCameraPreviewActive)}</Text>;
     }),
   };
@@ -192,19 +201,25 @@ jest.mock('../components/home/CaptureCard', () => {
 
 jest.mock('../components/home/HomeHeaderSearch', () => {
   const React = require('react');
-  const { View } = require('react-native');
-  return function MockHomeHeaderSearch() {
-    return <View testID="home-header-search" />;
+  const { Pressable, View } = require('react-native');
+  return function MockHomeHeaderSearch(props: any) {
+    return (
+      <View>
+        <View testID="home-header-search" />
+        <Pressable testID="toggle-capture-mode" onPress={() => props.onToggleCaptureMode?.()} />
+      </View>
+    );
   };
 });
 
 jest.mock('../components/home/NotesFeed', () => {
   const React = require('react');
-  const { Pressable, View } = require('react-native');
+  const { Pressable, Text, View } = require('react-native');
   return function MockNotesFeed(props: any) {
     return (
       <View>
         {props.captureHeader}
+        <Text testID="capture-scroll-enabled">{String(props.scrollEnabled)}</Text>
         <Pressable testID="hide-capture" onPress={() => props.onCaptureVisibilityChange?.(false)} />
         <Pressable testID="show-capture" onPress={() => props.onCaptureVisibilityChange?.(true)} />
       </View>
@@ -239,6 +254,7 @@ describe('HomeScreen camera lifecycle', () => {
     }) as typeof requestAnimationFrame;
     AppState.currentState = 'active';
     mockCaptureCardProps = null;
+    mockCaptureCardHandle = null;
     mockOpenAppSettings.mockClear();
     mockRequestPermission.mockClear();
     mockShowAlert.mockClear();
@@ -324,6 +340,23 @@ describe('HomeScreen camera lifecycle', () => {
 
     expect(mockCaptureCardProps).toBeTruthy();
     expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(false);
+  });
+
+  it('releases capture scroll lock before switching modes', () => {
+    const { getByTestId } = render(<HomeScreen />);
+
+    expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
+
+    act(() => {
+      mockCaptureCardProps?.onDoodleModeChange?.(true);
+    });
+    expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('false');
+
+    act(() => {
+      fireEvent.press(getByTestId('toggle-capture-mode'));
+    });
+
+    expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
   });
 
   it('shows a camera permission prompt before requesting camera access', async () => {
