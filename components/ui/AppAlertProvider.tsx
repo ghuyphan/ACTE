@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
-import { AlertDialog, Host } from '@expo/ui/jetpack-compose';
+import { AlertDialog, Host, Text, TextButton } from '@expo/ui/jetpack-compose';
 import { appAlertManager, AppAlertOptions } from '../../utils/alert';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../hooks/useTheme';
@@ -13,11 +13,12 @@ export function AppAlertProvider() {
   const [alertState, setAlertState] = useState<AppAlertOptions | null>(null);
   const dialogColors = useMemo(() => {
     return {
-      containerColor: colors.card,
+      containerColor: colors.background,
+      iconContentColor: colors.primary,
       titleContentColor: colors.text,
       textContentColor: colors.secondaryText,
     };
-  }, [colors.card, colors.secondaryText, colors.text]);
+  }, [colors.background, colors.primary, colors.secondaryText, colors.text]);
 
   useEffect(() => {
     appAlertManager.listener = (state) => {
@@ -56,28 +57,48 @@ export function AppAlertProvider() {
     button?.onPress?.();
   };
 
-  const dismissColor = isDark ? colors.secondaryText : colors.accent;
-  const confirmColor = confirmButton?.style === 'destructive' ? colors.danger : colors.primary;
+  const dismissButtonColors = {
+    containerColor: colors.primarySoft,
+    contentColor: colors.primary,
+  };
+  const confirmButtonColors = confirmButton?.style === 'destructive'
+    ? {
+        containerColor: colors.primary,
+        contentColor: isDark ? colors.background : '#2B2621',
+      }
+    : {
+        containerColor: colors.primary,
+        contentColor: isDark ? colors.background : '#2B2621',
+      };
 
   return (
     <Host colorScheme={isDark ? 'dark' : 'light'} matchContents>
       <AlertDialog
-        visible
-        title={alertState.title || ''}
-        text={alertState.message}
-        confirmButtonText={confirmButton?.text || defaultOkText}
-        dismissButtonText={dismissButton?.text || undefined}
-        confirmButtonColors={{ contentColor: confirmColor }}
-        dismissButtonColors={dismissButton ? { contentColor: dismissColor } : undefined}
-        onConfirmPressed={() => handlePress(confirmButton)}
-        onDismissPressed={dismissButton ? () => handlePress(dismissButton) : handleDismiss}
-        modifiers={[
-          {
-            tonalElevation: isDark ? 0 : 3,
-            backgroundColor: dialogColors.containerColor,
-          } as never,
-        ]}
-      />
+        colors={dialogColors}
+        onDismissRequest={dismissButton ? () => handlePress(dismissButton) : handleDismiss}
+        tonalElevation={0}
+      >
+        <AlertDialog.Title>
+          <Text color={colors.text}>{alertState.title || ''}</Text>
+        </AlertDialog.Title>
+        {alertState.message ? (
+          <AlertDialog.Text>
+            <Text color={colors.secondaryText}>{alertState.message}</Text>
+          </AlertDialog.Text>
+        ) : null}
+        {dismissButton ? (
+          <AlertDialog.DismissButton>
+            <TextButton colors={dismissButtonColors} onClick={() => handlePress(dismissButton)}>
+              <Text color={dismissButtonColors.contentColor}>{dismissButton.text || t('common.cancel', 'Cancel')}</Text>
+            </TextButton>
+          </AlertDialog.DismissButton>
+        ) : null}
+        <AlertDialog.ConfirmButton>
+          <TextButton colors={confirmButtonColors} onClick={() => handlePress(confirmButton)}>
+            <Text color={confirmButtonColors.contentColor}>{confirmButton?.text || defaultOkText}</Text>
+          </TextButton>
+        </AlertDialog.ConfirmButton>
+      </AlertDialog>
     </Host>
   );
 }

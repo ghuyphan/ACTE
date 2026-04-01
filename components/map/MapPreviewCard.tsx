@@ -308,17 +308,6 @@ export default function MapPreviewCard({
           />
         ) : null}
 
-        {isGroupMode ? (
-          <View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFill,
-              styles.modeHighlight,
-              { backgroundColor: `${colors.primary}14` },
-            ]}
-          />
-        ) : null}
-
         <View style={styles.cardContent}>
           <FlashList
             ref={previewListRef}
@@ -478,9 +467,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: mapOverlayTokens.overlayPadding,
     paddingTop: mapOverlayTokens.overlayPadding + 14,
     paddingBottom: mapOverlayTokens.overlayPadding,
-  },
-  modeHighlight: {
-    borderRadius: mapOverlayTokens.overlayRadius,
   },
   previewList: {
     marginBottom: 6,

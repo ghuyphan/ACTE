@@ -22,6 +22,7 @@ import Animated, {
 import AppSheet from '../AppSheet';
 import AppSheetScaffold from '../AppSheetScaffold';
 import FriendInviteJoinBody from '../FriendInviteJoinBody';
+import SheetFooterButton from '../SheetFooterButton';
 import { Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useFriendInviteJoin } from '../../hooks/useFriendInviteJoin';
@@ -401,13 +402,10 @@ export default function SharedManageSheet(props: {
           title={t('shared.manageTitle', 'Friends')}
           subtitle={t('shared.friendsCount', '{{count}} friends', { count: friends.length })}
           footer={
-            Platform.OS === 'android' ? (
-              <Pressable onPress={onClose} style={styles.closeAction}>
-                <Text style={[styles.closeText, { color: colors.secondaryText }]}>
-                  {t('common.done', 'Done')}
-                </Text>
-              </Pressable>
-            ) : null
+            <SheetFooterButton
+              label={t('common.done', 'Done')}
+              onPress={onClose}
+            />
           }
         >
           <ManageBody
@@ -635,16 +633,6 @@ const styles = StyleSheet.create({
     borderRadius: 27,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  closeAction: {
-    alignSelf: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  closeText: {
-    fontSize: 15,
-    lineHeight: 18,
-    fontWeight: '700',
   },
   joinTopRow: {
     flexDirection: 'row',

@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Sheet, Typography } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import AppSheet from './AppSheet';
 import AppSheetScaffold from './AppSheetScaffold';
+import SheetFooterButton from './SheetFooterButton';
 
 interface StickerSourceSheetProps {
   visible: boolean;
@@ -32,7 +33,6 @@ function StickerSourceSheetBody({
   const primaryTextColor = colors.text ?? '#2B2621';
   const secondaryTextColor = colors.secondaryText ?? primaryTextColor;
   const accentColor = colors.primary ?? '#E0B15B';
-  const isIOS = Platform.OS === 'ios';
 
   return (
     <AppSheetScaffold
@@ -41,20 +41,12 @@ function StickerSourceSheetBody({
       subtitle={canPasteFromClipboard ? pasteLabel : photoLabel}
       useHorizontalPadding={false}
       footer={(
-        <View style={[styles.footer, isIOS ? styles.footerIOS : null]}>
-          <Pressable
-            accessibilityRole="button"
-            android_ripple={{ color: `${primaryTextColor}10`, borderless: false }}
+        <View style={styles.footer}>
+          <SheetFooterButton
+            label={cancelLabel}
             onPress={onClose}
-            style={({ pressed }) => [
-              styles.cancelAction,
-              isIOS ? [styles.cancelActionIOS, { borderColor }] : null,
-              pressed ? styles.cancelActionPressed : null,
-            ]}
             testID="sticker-source-cancel"
-          >
-            <Text style={[styles.cancelActionLabel, { color: primaryTextColor }]}>{cancelLabel}</Text>
-          </Pressable>
+          />
         </View>
       )}
     >
@@ -148,33 +140,6 @@ const styles = StyleSheet.create({
     marginLeft: Sheet.android.horizontalPadding + 54, // Icon (40) + Gap (14)
   },
   footer: {
-    alignItems: 'flex-end',
-    marginTop: 8,
-    paddingBottom: Sheet.android.comfortBottomPadding,
-  },
-  footerIOS: {
-    alignItems: 'stretch',
     marginTop: 16,
-  },
-  cancelAction: {
-    minHeight: 40,
-    paddingHorizontal: Sheet.android.horizontalPadding,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelActionIOS: {
-    minHeight: 52,
-    marginHorizontal: Sheet.ios.horizontalPadding,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  cancelActionPressed: {
-    opacity: 0.72,
-  },
-  cancelActionLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
   },
 });

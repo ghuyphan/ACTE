@@ -673,6 +673,8 @@ function MapCanvas({
       showsCompass={false}
       showsUserLocation
       showsMyLocationButton={false}
+      toolbarEnabled={false}
+      showsIndoorLevelPicker={false}
       userInterfaceStyle={isDark ? 'dark' : 'light'}
     >
       {markerRenderItems.map(

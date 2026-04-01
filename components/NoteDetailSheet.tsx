@@ -1443,6 +1443,15 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             emoji: note.moodEmoji,
             noteColor: isEditing ? editNoteColor : note.noteColor,
         });
+        const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
+        const detailTopControlFill =
+            note.type === 'photo'
+                ? (isDarkCaptureTheme ? 'rgba(22,22,24,0.74)' : 'rgba(255,250,242,0.78)')
+                : colors.captureGlassFill;
+        const detailTopControlBorder =
+            note.type === 'photo'
+                ? (isDarkCaptureTheme ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.42)')
+                : colors.captureGlassBorder;
         const textStickerMotionVariant =
             getNoteColorStickerMotion(isEditing ? editNoteColor : note.noteColor) ??
             getGradientStickerMotionVariant(gradient);
@@ -1486,6 +1495,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             onPress={handleToggleDoodleMode}
                                             style={[
                                                 styles.textCardActionButton,
+                                                styles.topOverlayActionButton,
+                                                {
+                                                    backgroundColor: detailTopControlFill,
+                                                    borderColor: detailTopControlBorder,
+                                                },
                                                 styles.textCardActionButtonActive,
                                             ]}
                                         >
@@ -1497,6 +1511,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             disabled={editDoodleStrokes.length === 0}
                                             style={[
                                                 styles.textCardActionPill,
+                                                styles.topOverlayActionButton,
+                                                {
+                                                    backgroundColor: detailTopControlFill,
+                                                    borderColor: detailTopControlBorder,
+                                                },
                                                 editDoodleStrokes.length === 0
                                                     ? styles.textCardActionDisabled
                                                     : null,
@@ -1510,6 +1529,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             disabled={editDoodleStrokes.length === 0}
                                             style={[
                                                 styles.textCardActionPill,
+                                                styles.topOverlayActionButton,
+                                                {
+                                                    backgroundColor: detailTopControlFill,
+                                                    borderColor: detailTopControlBorder,
+                                                },
                                                 editDoodleStrokes.length === 0
                                                     ? styles.textCardActionDisabled
                                                     : null,
@@ -1525,6 +1549,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             onPress={handleToggleStickerMode}
                                             style={[
                                                 styles.textCardActionButton,
+                                                styles.topOverlayActionButton,
+                                                {
+                                                    backgroundColor: detailTopControlFill,
+                                                    borderColor: detailTopControlBorder,
+                                                },
                                                 styles.textCardActionButtonActive,
                                             ]}
                                         >
@@ -1538,6 +1567,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             disabled={importingSticker}
                                             style={[
                                                 styles.textCardActionPill,
+                                                styles.topOverlayActionButton,
+                                                {
+                                                    backgroundColor: detailTopControlFill,
+                                                    borderColor: detailTopControlBorder,
+                                                },
                                                 importingSticker ? styles.textCardActionDisabled : null,
                                             ]}
                                         >
@@ -1554,6 +1588,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             disabled={!selectedStickerId}
                                             style={[
                                                 styles.textCardActionPill,
+                                                styles.topOverlayActionButton,
+                                                {
+                                                    backgroundColor: detailTopControlFill,
+                                                    borderColor: detailTopControlBorder,
+                                                },
                                                 selectedStickerOutlineEnabled && selectedStickerId
                                                     ? styles.textCardActionPillActive
                                                     : null,
@@ -1572,6 +1611,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             disabled={!selectedStickerId}
                                             style={[
                                                 styles.textCardActionPill,
+                                                styles.topOverlayActionButton,
+                                                {
+                                                    backgroundColor: detailTopControlFill,
+                                                    borderColor: detailTopControlBorder,
+                                                },
                                                 !selectedStickerId ? styles.textCardActionDisabled : null,
                                             ]}
                                         >
@@ -1583,7 +1627,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                         <Pressable
                                             testID="note-detail-doodle-toggle"
                                             onPress={handleToggleDoodleMode}
-                                            style={styles.textCardActionButton}
+                                            style={[
+                                                styles.textCardActionButton,
+                                                styles.topOverlayActionButton,
+                                                {
+                                                    backgroundColor: detailTopControlFill,
+                                                    borderColor: detailTopControlBorder,
+                                                },
+                                            ]}
                                         >
                                             <Ionicons name="create-outline" size={16} color="#FFFFFF" />
                                         </Pressable>
@@ -1591,7 +1642,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             <Pressable
                                                 testID="note-detail-sticker-toggle"
                                                 onPress={handleToggleStickerMode}
-                                                style={styles.textCardActionButton}
+                                                style={[
+                                                    styles.textCardActionButton,
+                                                    styles.topOverlayActionButton,
+                                                    {
+                                                        backgroundColor: detailTopControlFill,
+                                                        borderColor: detailTopControlBorder,
+                                                    },
+                                                ]}
                                             >
                                                 <Ionicons name="images-outline" size={16} color="#FFFFFF" />
                                             </Pressable>
@@ -2521,6 +2579,14 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
+    },
+    topOverlayActionButton: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 4,
+        zIndex: 10,
     },
     decorateControlsInline: {
         flexDirection: 'row',
