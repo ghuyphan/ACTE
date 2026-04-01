@@ -9,6 +9,7 @@ import {
 } from '../constants/auth';
 import i18n from '../constants/i18n';
 import { LOCAL_NOTES_SCOPE, setActiveNotesScope } from '../services/database';
+import { purgeLocalAccountScope } from '../services/accountCleanup';
 import { upsertPublicUserProfile } from '../services/publicProfileService';
 import { clearSharedFeedCache } from '../services/sharedFeedCache';
 import { unregisterCurrentSocialPushToken } from '../services/socialPushService';
@@ -88,6 +89,16 @@ async function clearAuthenticatedUserState(currentUserUid: string | null, setUse
   await clearSharedFeedCache(currentUserUid).catch(() => undefined);
   setActiveNotesScope(LOCAL_NOTES_SCOPE);
   setUser(null);
+}
+
+async function purgeAndClearAuthenticatedUserState(
+  currentUserUid: string | null,
+  setUser: (nextUser: AppUser | null) => void
+) {
+  await purgeLocalAccountScope(currentUserUid).catch((error) => {
+    console.warn('[auth] Failed to purge local account data:', error);
+  });
+  await clearAuthenticatedUserState(currentUserUid, setUser);
 }
 
 function normalizeGoogleIdToken(response: unknown) {
@@ -479,7 +490,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           await supabase.auth.signOut().catch(() => undefined);
-          await clearAuthenticatedUserState(user.uid, setUser);
+          await purgeAndClearAuthenticatedUserState(user.uid, setUser);
           return { status: 'success' };
         } catch (error) {
           const message = getSupabaseErrorMessage(error);
@@ -490,6 +501,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               message: i18n.t(
                 'profile.deleteAccountNotReady',
                 'Account deletion is not configured for this build yet. Please contact support.'
+              ),
+            };
+          }
+
+          if (message.toLowerCase().includes('recent sign-in required')) {
+            return {
+              status: 'error',
+              message: i18n.t(
+                'profile.deleteAccountRecentSignIn',
+                'For your security, sign out and sign back in before deleting this account.'
               ),
             };
           }
@@ -522,7 +543,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        await clearAuthenticatedUserState(user?.uid ?? null, setUser);
+        await purgeAndClearAuthenticatedUserState(user?.uid ?? null, setUser);
       },
     }),
     [isReady, user]

@@ -117,6 +117,7 @@ interface SharedPostRow {
 }
 
 const ACTIVE_FRIEND_INVITE_QUERY_LIMIT = 50;
+const FRIEND_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const EXPIRED_SHARED_FEED_SESSION_ERROR = 'Server session unavailable. Sign in again to use shared moments.';
 const MISMATCHED_SHARED_FEED_SESSION_ERROR =
   'Signed-in session does not match this account. Sign out and sign in again.';
@@ -466,10 +467,10 @@ export async function createFriendInvite(user: AppUser): Promise<FriendInvite> {
     token: Crypto.randomUUID(),
     created_at: getNowIso(),
     revoked_at: null,
-    accepted_by_user_id: null,
-    accepted_at: null,
-    expires_at: null,
-  };
+      accepted_by_user_id: null,
+      accepted_at: null,
+      expires_at: new Date(Date.now() + FRIEND_INVITE_TTL_MS).toISOString(),
+    };
 
   const { error } = await supabase.from('friend_invites').upsert(nextInvite, {
     onConflict: 'id',

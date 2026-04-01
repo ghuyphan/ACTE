@@ -103,4 +103,51 @@ describe('syncSocialPushRegistration', () => {
     });
     expect(mockSetPersistentItem).toHaveBeenCalled();
   });
+
+  it('unregisters the previous token when the signed-in user changes', async () => {
+    mockGetPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+      canAskAgain: true,
+    });
+    mockGetPersistentItem.mockResolvedValue(
+      JSON.stringify({
+        token: 'ExponentPushToken[old]',
+        userId: 'user-1',
+      })
+    );
+
+    await syncSocialPushRegistration({
+      id: 'user-2',
+      uid: 'user-2',
+      email: 'hello@example.com',
+      displayName: 'New User',
+      photoURL: null,
+      providerData: [],
+    });
+
+    expect(rpc).toHaveBeenNthCalledWith(1, 'unregister_push_token', {
+      expo_push_token_input: 'ExponentPushToken[old]',
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, 'register_push_token', {
+      expo_push_token_input: 'ExponentPushToken[token]',
+      platform_input: 'ios',
+      app_version_input: '1.0.0',
+    });
+  });
+
+  it('unregisters and clears persisted tokens when the user signs out', async () => {
+    mockGetPersistentItem.mockResolvedValue(
+      JSON.stringify({
+        token: 'ExponentPushToken[old]',
+        userId: 'user-1',
+      })
+    );
+
+    await syncSocialPushRegistration(null);
+
+    expect(rpc).toHaveBeenCalledWith('unregister_push_token', {
+      expo_push_token_input: 'ExponentPushToken[old]',
+    });
+    expect(mockRemovePersistentItem).toHaveBeenCalled();
+  });
 });

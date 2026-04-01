@@ -402,6 +402,7 @@
         "deleteAccountFailed": "Hiện chưa thể xóa tài khoản của bạn. Vui lòng thử lại sau ít phút nữa.",
         "deleteAccountNeedsSupportTitle": "Cần hỗ trợ để xóa tài khoản?",
         "deleteAccountNeedsSupportMsg": "phiên bản này chưa thể hoàn tất việc xóa tự động. Bạn có thể tiếp tục từ trang xóa tài khoản hoặc liên hệ hỗ trợ.",
+        "deleteAccountRecentSignIn": "Để bảo mật, hãy đăng xuất rồi đăng nhập lại trước khi xóa tài khoản này.",
         "deleteAccountSuccessTitle": "Đã xóa tài khoản",
         "deleteAccountSuccessMsg": "Tài khoản Noto và dữ liệu đã đồng bộ của bạn đã được xóa khỏi thiết bị này và đám mây."
     },

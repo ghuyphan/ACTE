@@ -151,8 +151,11 @@ export function useCaptureFlow() {
   const requestPermission = useCallback(async () => {
     const granted = await requestCameraPermission();
     setCameraPermissionStatus(granted ? 'granted' : Camera.getCameraPermissionStatus());
+    if (granted && captureMode === 'camera') {
+      setCameraSessionKey((current) => current + 1);
+    }
     return granted;
-  }, [requestCameraPermission]);
+  }, [captureMode, requestCameraPermission]);
 
   const resetCapture = useCallback(() => {
     setNoteText('');

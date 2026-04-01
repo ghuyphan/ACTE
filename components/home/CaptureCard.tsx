@@ -20,7 +20,6 @@ import { TFunction } from 'i18next';
 import { type ComponentProps, forwardRef, ReactNode, RefObject, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   type GestureResponderEvent,
   Keyboard,
@@ -51,7 +50,6 @@ import Reanimated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showAppAlert } from '../../utils/alert';
 import { STICKER_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { ENABLE_PHOTO_STICKERS } from '../../constants/experiments';

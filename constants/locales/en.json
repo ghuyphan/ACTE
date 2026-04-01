@@ -402,6 +402,7 @@
         "deleteAccountFailed": "We could not delete your account right now. Please try again in a moment.",
         "deleteAccountNeedsSupportTitle": "Need help deleting your account?",
         "deleteAccountNeedsSupportMsg": "This build could not finish the deletion automatically. You can continue from our deletion page or contact support.",
+        "deleteAccountRecentSignIn": "For your security, sign out and sign back in before deleting this account.",
         "deleteAccountSuccessTitle": "Account deleted",
         "deleteAccountSuccessMsg": "Your Noto account and synced data have been deleted from this device and the cloud."
     },

@@ -39,6 +39,9 @@ function buildSession(overrides?: Partial<Session>): Session {
 }
 
 const mockUpsertPublicUserProfile = jest.fn<Promise<void>, [unknown]>(async () => undefined);
+const mockClearSharedFeedCache = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
+const mockUnregisterCurrentSocialPushToken = jest.fn<Promise<void>, []>(async () => undefined);
+const mockPurgeLocalAccountScope = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
 const mockGetSession = jest.fn(async () => ({
   data: { session: mockAuthState.initialSession },
   error: null,
@@ -113,6 +116,13 @@ const mockResetPasswordForEmail = jest.fn(async (_email?: string, _options?: unk
   return { error: null };
 });
 const mockSupabaseSignOut = jest.fn(async () => ({ error: null }));
+const mockInvokeFunction = jest.fn<
+  Promise<{ data: { success: boolean } | null; error: { message: string } | null }>,
+  [string, unknown]
+>(async () => ({
+  data: { success: true },
+  error: null,
+}));
 const mockGoogleConfigure = jest.fn();
 const mockGoogleHasPlayServices = jest.fn(async () => undefined);
 const mockGoogleSignIn = jest.fn(async () => {
@@ -140,6 +150,22 @@ jest.mock('../services/publicProfileService', () => ({
   upsertPublicUserProfile: (input: unknown) => mockUpsertPublicUserProfile(input),
 }));
 
+jest.mock('../services/sharedFeedCache', () => ({
+  clearSharedFeedCache: (userUid?: string | null) => mockClearSharedFeedCache(userUid),
+}));
+
+jest.mock('../services/socialPushService', () => ({
+  unregisterCurrentSocialPushToken: () => mockUnregisterCurrentSocialPushToken(),
+}));
+
+jest.mock('../services/accountCleanup', () => ({
+  purgeLocalAccountScope: (ownerUid?: string | null) => mockPurgeLocalAccountScope(ownerUid),
+}));
+
+jest.mock('../services/geofenceService', () => ({
+  clearGeofenceRegions: jest.fn(async () => undefined),
+}));
+
 const mockSupabaseClient = {
   auth: {
     getSession: () => mockGetSession(),
@@ -151,6 +177,9 @@ const mockSupabaseClient = {
       mockSignUp(input),
     resetPasswordForEmail: (email: string, options: unknown) => mockResetPasswordForEmail(email, options),
     signOut: () => mockSupabaseSignOut(),
+  },
+  functions: {
+    invoke: (name: string, input: unknown) => mockInvokeFunction(name, input),
   },
 };
 
@@ -204,6 +233,7 @@ describe('useAuth', () => {
     mockAuthState.initialSession = null;
     mockAuthState.webClientId = 'client-id.apps.googleusercontent.com';
     mockAuthState.iosClientId = 'ios-client-id.apps.googleusercontent.com';
+    mockInvokeFunction.mockResolvedValue({ data: { success: true }, error: null });
   });
 
   it('exposes email auth even when Google sign-in is not configured', async () => {
@@ -336,5 +366,53 @@ describe('useAuth', () => {
         status: 'unavailable',
       })
     );
+  });
+
+  it('purges local account data when signing out', async () => {
+    mockAuthState.initialSession = buildSession();
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+
+    await act(async () => {
+      await hook.result.current.signOut();
+    });
+
+    expect(mockUnregisterCurrentSocialPushToken).toHaveBeenCalled();
+    expect(mockSupabaseSignOut).toHaveBeenCalled();
+    expect(mockPurgeLocalAccountScope).toHaveBeenCalledWith('user-1');
+    expect(hook.result.current.user).toBeNull();
+  });
+
+  it('requires a recent sign-in message from delete account when the backend rejects it', async () => {
+    mockAuthState.initialSession = buildSession();
+    mockInvokeFunction.mockResolvedValue({
+      data: null,
+      error: {
+        message: 'Recent sign-in required. Sign in again before deleting your account.',
+      },
+    });
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+
+    let result!: { status: string; message?: string };
+    await act(async () => {
+      result = await hook.result.current.deleteAccount();
+    });
+
+    expect(result).toEqual({
+      status: 'error',
+      message: 'For your security, sign out and sign back in before deleting this account.',
+    });
+    expect(mockPurgeLocalAccountScope).not.toHaveBeenCalled();
   });
 });

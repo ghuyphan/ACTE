@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import * as Haptics from 'expo-haptics';
 import { useCaptureFlow } from '../hooks/useCaptureFlow';
 
-const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
+const mockRequestPermission = jest.fn(async () => true);
 const mockTakePhoto = jest.fn();
 let mockPermissionStatus: 'granted' | 'not-determined' | 'denied' | 'restricted' = 'granted';
 let mockHasPermission = true;
@@ -104,5 +104,27 @@ describe('useCaptureFlow', () => {
       canAskAgain: false,
       status: 'denied',
     });
+  });
+
+  it('refreshes the camera session after permission is granted in camera mode', async () => {
+    mockPlatformOS = 'android';
+    mockPermissionStatus = 'not-determined';
+    mockHasPermission = false;
+
+    const { result } = renderHook(() => useCaptureFlow());
+
+    act(() => {
+      result.current.toggleCaptureMode();
+    });
+
+    expect(result.current.captureMode).toBe('camera');
+    const sessionKeyBeforePermission = result.current.cameraSessionKey;
+
+    await act(async () => {
+      await result.current.requestPermission();
+    });
+
+    expect(mockRequestPermission).toHaveBeenCalledTimes(1);
+    expect(result.current.cameraSessionKey).toBe(sessionKeyBeforePermission + 1);
   });
 });

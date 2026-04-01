@@ -68,5 +68,5 @@
 ## Quality Gates
 
 - [ ] `npm run lint`
-- [ ] `npx tsc --noEmit`
+- [ ] `npm run typecheck`
 - [ ] `npm test -- --runInBand`

@@ -8,7 +8,6 @@ import { Href, useRouter } from 'expo-router';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert,
   AppState,
   Dimensions,
   Keyboard,
@@ -437,15 +436,21 @@ export default function HomeScreen() {
     [clearActiveFeedTarget, isScreenFocused, setActiveFeedTarget]
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      setActiveFeedTarget(settledArchiveItemRef.current);
+  useEffect(() => {
+    if (!isScreenFocused) {
+      clearActiveFeedTarget();
+      return;
+    }
 
-      return () => {
-        clearActiveFeedTarget();
-      };
-    }, [clearActiveFeedTarget, setActiveFeedTarget])
-  );
+    const focusTimer = setTimeout(() => {
+      setActiveFeedTarget(settledArchiveItemRef.current);
+    }, 0);
+
+    return () => {
+      clearTimeout(focusTimer);
+      clearActiveFeedTarget();
+    };
+  }, [clearActiveFeedTarget, isScreenFocused, setActiveFeedTarget]);
 
   useEffect(() => {
     if (!pendingSavedNoteScrollTargetId || suppressedHomeNoteIds.includes(pendingSavedNoteScrollTargetId)) {

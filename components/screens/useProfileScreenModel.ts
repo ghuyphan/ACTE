@@ -1,5 +1,4 @@
 import { useRouter } from 'expo-router';
-import * as FileSystem from '../../utils/fileSystem';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -9,8 +8,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { useNotes } from '../../hooks/useNotes';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
-import { deleteAllNotesForScope, getAllNotesForScope } from '../../services/database';
-import { clearGeofenceRegions } from '../../services/geofenceService';
 import {
   hasAccountDeletionLink,
   hasPrivacyPolicyLink,
@@ -19,7 +16,6 @@ import {
   openPrivacyPolicy,
   openSupport,
 } from '../../services/legalLinks';
-import { getNotePhotoUri } from '../../services/photoStorage';
 
 export function useProfileScreenModel() {
   const { t } = useTranslation();
@@ -90,7 +86,6 @@ export function useProfileScreenModel() {
       return;
     }
 
-    const deletingUserScope = user.uid;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     showAppAlert(
       t('profile.deleteAccountConfirmTitle', 'Delete your Noto account?'),
@@ -140,26 +135,6 @@ export function useProfileScreenModel() {
                 return;
               }
 
-              const scopedNotes = await getAllNotesForScope(deletingUserScope);
-              await deleteAllNotesForScope(deletingUserScope);
-
-              for (const note of scopedNotes) {
-                const photoUri = getNotePhotoUri(note);
-                if (note.type !== 'photo' || !photoUri) {
-                  continue;
-                }
-
-                try {
-                  const fileInfo = await FileSystem.getInfoAsync(photoUri);
-                  if (fileInfo.exists) {
-                    await FileSystem.deleteAsync(photoUri, { idempotent: true });
-                  }
-                } catch (error) {
-                  console.warn('Failed to delete account photo file:', error);
-                }
-              }
-
-              await clearGeofenceRegions().catch(() => undefined);
               await refreshNotes(false).catch(() => undefined);
               router.replace('/settings');
               showAppAlert(

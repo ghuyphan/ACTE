@@ -549,15 +549,16 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     }, [clearPastePromptTimeout]);
 
     useEffect(() => {
+        const activeNoteKey = activeNoteKeyRef.current;
         if (visible && noteId) {
-            setActiveNote(activeNoteKeyRef.current, noteId);
+            setActiveNote(activeNoteKey, noteId);
 
             return () => {
-                clearActiveNote(activeNoteKeyRef.current);
+                clearActiveNote(activeNoteKey);
             };
         }
 
-        clearActiveNote(activeNoteKeyRef.current);
+        clearActiveNote(activeNoteKey);
         return undefined;
     }, [clearActiveNote, noteId, setActiveNote, visible]);
 
@@ -647,7 +648,17 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         return () => {
             cancelled = true;
         };
-    }, [getNoteById, noteId, reduceMotionEnabled, visible]);
+    }, [
+        cardOpacity,
+        cardScale,
+        editModeAnim,
+        favoriteFillProgress,
+        getNoteById,
+        infoTranslateY,
+        noteId,
+        reduceMotionEnabled,
+        visible,
+    ]);
 
     useEffect(() => {
         if (!isEditing || !note || importingSticker) {

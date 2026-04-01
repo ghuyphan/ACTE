@@ -2,12 +2,19 @@ import { existsSync } from 'node:fs';
 import type { ExpoConfig } from 'expo/config';
 
 const googleMapsAndroidApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY;
+const easProjectIdFromEnv = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ?? '';
 const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() ?? '';
 const easAndroidGoogleServicesFile = process.env.GOOGLE_SERVICES_JSON?.trim();
 const easIosGoogleServicesFile = process.env.GOOGLE_SERVICE_INFO_PLIST?.trim();
-const easProjectId =
-  process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ?? '82e9519b-f89b-466e-af4d-697349535c13';
+const easProjectId = easProjectIdFromEnv || '82e9519b-f89b-466e-af4d-697349535c13';
 const easUpdateUrl = `https://u.expo.dev/${easProjectId}`;
+const supportUrl = process.env.EXPO_PUBLIC_SUPPORT_URL?.trim() ?? '';
+const supportEmail = process.env.EXPO_PUBLIC_SUPPORT_EMAIL?.trim() ?? '';
+const accountDeletionUrl = process.env.EXPO_PUBLIC_ACCOUNT_DELETION_URL?.trim() ?? '';
+const privacyPolicyUrl = process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL?.trim() ?? '';
+const buildProfile = process.env.EAS_BUILD_PROFILE?.trim() ?? '';
+const isProductionBuild = buildProfile === 'production';
+const enablePlaceReminders = process.env.EXPO_PUBLIC_ENABLE_PLACE_REMINDERS?.trim() !== 'false';
 const rootGoogleServicesFile = './google-services.json';
 const nativeAndroidGoogleServicesFile = './android/app/google-services.json';
 const rootGoogleServiceInfoPlist = './GoogleService-Info.plist';
@@ -56,11 +63,49 @@ const notoSansFontDefinitions = [
   },
 ] as const;
 
+function assertProductionConfig() {
+  if (!isProductionBuild) {
+    return;
+  }
+
+  const missingItems: string[] = [];
+
+  if (!easProjectIdFromEnv) {
+    missingItems.push('EXPO_PUBLIC_EAS_PROJECT_ID');
+  }
+
+  if (!googleMapsAndroidApiKey?.trim()) {
+    missingItems.push('EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY');
+  }
+
+  if (!privacyPolicyUrl) {
+    missingItems.push('EXPO_PUBLIC_PRIVACY_POLICY_URL');
+  }
+
+  if (!supportUrl && !supportEmail) {
+    missingItems.push('EXPO_PUBLIC_SUPPORT_URL or EXPO_PUBLIC_SUPPORT_EMAIL');
+  }
+
+  if (!accountDeletionUrl && !supportEmail) {
+    missingItems.push('EXPO_PUBLIC_ACCOUNT_DELETION_URL or EXPO_PUBLIC_SUPPORT_EMAIL');
+  }
+
+  if (missingItems.length > 0) {
+    throw new Error(
+      `Missing required production app config: ${missingItems.join(', ')}.`
+    );
+  }
+}
+
+assertProductionConfig();
+
 const config = {
   name: 'Noto',
   slug: 'noto',
   version: '1.0.0',
-  runtimeVersion: '1.0.0',
+  runtimeVersion: {
+    policy: 'appVersion',
+  },
   orientation: 'portrait',
   icon: './assets/images/icon/icon-default.png',
   scheme: 'noto',
@@ -110,8 +155,8 @@ const config = {
           'Allow Noto to use your location in the background so it can remind you when you return to saved places.',
         locationWhenInUsePermission:
           'Allow Noto to use your location so you can attach notes to the places you visit.',
-        isAndroidBackgroundLocationEnabled: true,
-        isIosBackgroundLocationEnabled: true,
+        isAndroidBackgroundLocationEnabled: enablePlaceReminders,
+        isIosBackgroundLocationEnabled: enablePlaceReminders,
       },
     ],
     [
@@ -144,6 +189,7 @@ const config = {
       },
     ],
     './plugins/withExpoWidgetsBundleFix.js',
+    './plugins/withAndroidReleaseHardening.js',
     [
       'expo-widgets',
       {

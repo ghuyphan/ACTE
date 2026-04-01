@@ -427,6 +427,7 @@ describe('sharedFeedService', () => {
     const connection = await acceptFriendInvite(friendUser, invite.url);
 
     expect(invite.url).toContain(`inviteId=${invite.id}`);
+    expect(invite.expiresAt).toMatch(/^20/);
     expect(connection.userId).toBe(ownerUser.id);
     expect(mockEnsureFriendMap(friendUser.id).get(ownerUser.id)).toEqual(
       expect.objectContaining({

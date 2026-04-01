@@ -34,7 +34,7 @@ but those native folders are generated, so the repo-root files are safer for cle
 
 ## Expo And Server Setup
 
-1. Set `EXPO_PUBLIC_EAS_PROJECT_ID` in your app environment.
+1. Set `EXPO_PUBLIC_EAS_PROJECT_ID` in your app environment. Production builds now require it.
 2. Deploy the Supabase migration for `device_push_tokens`.
 3. Deploy the `send-social-notifications` Supabase edge function.
 4. Set `EXPO_ACCESS_TOKEN` on the edge function environment if your Expo push project requires authenticated sends.
@@ -51,3 +51,4 @@ but those native folders are generated, so the repo-root files are safer for cle
 
 - `app.config.ts` now reads Firebase service files from stable repo-root paths.
 - The existing `android/app/google-services.json` appears to be placeholder data, so Android FCM should be replaced with a real Firebase config before testing push delivery.
+- The checked-in Android manifest should no longer contain a literal Maps key; keep `EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY` in environment-backed secrets only.

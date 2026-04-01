@@ -124,6 +124,9 @@ export async function syncSocialPushRegistration(user: AppUser | null) {
   const persisted = await readPersistedRegistration();
 
   if (!user) {
+    if (persisted?.token) {
+      await unregisterPushToken(persisted.token).catch(() => undefined);
+    }
     await removePersistentItem(PUSH_REGISTRATION_STORAGE_KEY).catch(() => undefined);
     return;
   }
@@ -151,7 +154,7 @@ export async function syncSocialPushRegistration(user: AppUser | null) {
     return;
   }
 
-  if (persisted?.token && persisted.token !== expoPushToken) {
+  if (persisted?.token && (persisted.token !== expoPushToken || persisted.userId !== user.uid)) {
     await unregisterPushToken(persisted.token).catch(() => undefined);
   }
 
