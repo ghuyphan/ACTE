@@ -54,15 +54,28 @@ export function useProfileScreenModel() {
   };
 
   const performSignOut = async () => {
-    setIsSigningOut(true);
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.replace('/settings');
+    if (isSigningOut) {
+      return;
+    }
 
-    setTimeout(() => {
-      signOut().catch((error) => {
-        console.warn('Sign out failed asynchronously:', error);
-      });
-    }, 150);
+    setIsSigningOut(true);
+    try {
+      await signOut();
+      await refreshNotes(false).catch(() => undefined);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace('/settings');
+    } catch (error) {
+      console.warn('Sign out failed:', error);
+      showAppAlert(
+        t('profile.logoutFailedTitle', 'Could not log out'),
+        t(
+          'profile.logoutFailed',
+          'We could not finish signing you out right now. Please try again in a moment.'
+        )
+      );
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   const handleSignOut = () => {

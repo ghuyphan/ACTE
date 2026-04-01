@@ -390,6 +390,8 @@
         "signedOutMsg": "Đăng nhập để sao lưu ghi chú và đồng bộ chúng trên các thiết bị của bạn.",
         "unavailableMsg": "Đăng nhập tài khoản hiện chưa khả dụng, nhưng ghi chú của bạn vẫn được lưu an toàn trên thiết bị này.",
         "logout": "Đăng xuất",
+        "logoutFailedTitle": "Không thể đăng xuất",
+        "logoutFailed": "Hiện chưa thể hoàn tất đăng xuất. Vui lòng thử lại sau ít phút nữa.",
         "actionsTitle": "Thao tác",
         "legalTitle": "Riêng tư & hỗ trợ",
         "deleteAccount": "Xóa tài khoản",

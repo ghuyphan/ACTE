@@ -125,6 +125,8 @@ describe('useCaptureFlow', () => {
     });
 
     expect(mockRequestPermission).toHaveBeenCalledTimes(1);
+    expect(result.current.permission.granted).toBe(true);
+    expect(result.current.permission.status).toBe('granted');
     expect(result.current.cameraSessionKey).toBe(sessionKeyBeforePermission + 1);
   });
 });

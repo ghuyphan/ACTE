@@ -8,7 +8,7 @@ const mockClearGeofenceRegions = jest.fn();
 const mockSkipImmediateReminderForNewNote = jest.fn();
 const mockUpdateWidgetData = jest.fn();
 const mockRecordChange = jest.fn();
-const mockCleanupOrphanPhotoFiles = jest.fn();
+const mockCleanupOrphanMediaFiles = jest.fn();
 const mockGetInfoAsync = jest.fn();
 const mockDeleteAsync = jest.fn();
 const mockUseAuth = jest.fn(() => ({
@@ -35,7 +35,7 @@ jest.mock('../services/widgetService', () => ({
 }));
 
 jest.mock('../services/mediaIntegrity', () => ({
-  cleanupOrphanPhotoFiles: (...args: unknown[]) => mockCleanupOrphanPhotoFiles(...args),
+  cleanupOrphanMediaFiles: (...args: unknown[]) => mockCleanupOrphanMediaFiles(...args),
 }));
 
 jest.mock('../services/syncService', () => ({
@@ -123,7 +123,7 @@ beforeEach(() => {
   mockIdCounter = 1;
   mockNotesDb = [];
   jest.clearAllMocks();
-  mockCleanupOrphanPhotoFiles.mockResolvedValue(0);
+  mockCleanupOrphanMediaFiles.mockResolvedValue(undefined);
   mockGetInfoAsync.mockResolvedValue({ exists: true });
   mockDeleteAsync.mockResolvedValue(undefined);
   mockSyncGeofenceRegions.mockResolvedValue(true);

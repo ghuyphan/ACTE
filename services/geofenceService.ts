@@ -12,6 +12,13 @@ export interface ReminderPermissionState {
   remindersEnabled: boolean;
 }
 
+export interface GeofenceSelectionSummary {
+  totalNotes: number;
+  totalPlaces: number;
+  activePlaces: number;
+  overflowPlaces: number;
+}
+
 const GEOFENCE_SIGNATURE_STORAGE_KEY = 'geofence.signature';
 const IOS_GEOFENCE_REGION_LIMIT = 20;
 const ANDROID_GEOFENCE_REGION_LIMIT = 100;
@@ -41,6 +48,18 @@ export function prioritizeNotesForGeofencing(notes: Note[], maxRegions: number) 
     .map((group) => group.representativeNote);
 }
 
+export function summarizeGeofenceSelection(notes: Note[], maxRegions: number): GeofenceSelectionSummary {
+  const totalPlaces = getReminderPlaceGroups(notes).length;
+  const activePlaces = Math.min(totalPlaces, maxRegions);
+
+  return {
+    totalNotes: notes.length,
+    totalPlaces,
+    activePlaces,
+    overflowPlaces: Math.max(0, totalPlaces - activePlaces),
+  };
+}
+
 export async function getReminderPermissionState(): Promise<ReminderPermissionState> {
   const [foregroundStatus, backgroundStatus, notificationStatus] = await Promise.all([
     Location.getForegroundPermissionsAsync(),
@@ -63,11 +82,12 @@ export async function syncGeofenceRegions(): Promise<boolean> {
 
   const notes = await getAllNotes();
   const maxRegions = getMaxGeofenceRegionCount();
+  const selectionSummary = summarizeGeofenceSelection(notes, maxRegions);
   const notesToMonitor = prioritizeNotesForGeofencing(notes, maxRegions);
 
-  if (notes.length > maxRegions) {
+  if (selectionSummary.overflowPlaces > 0) {
     console.warn(
-      `Geofencing is limited to ${maxRegions} regions on ${Platform.OS}; prioritizing favorite and recent places within that limit.`
+      `Geofencing is limited to ${maxRegions} places on ${Platform.OS}; monitoring ${selectionSummary.activePlaces} of ${selectionSummary.totalPlaces} prioritized places.`
     );
   }
 

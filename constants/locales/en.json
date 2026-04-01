@@ -390,6 +390,8 @@
         "signedOutMsg": "Sign in to back up your notes and keep them synced across your devices.",
         "unavailableMsg": "Account sign-in is unavailable right now, but your notes stay safely on this device.",
         "logout": "Log out",
+        "logoutFailedTitle": "Could not log out",
+        "logoutFailed": "We could not finish signing you out right now. Please try again in a moment.",
         "actionsTitle": "Actions",
         "legalTitle": "Privacy & support",
         "deleteAccount": "Delete account",

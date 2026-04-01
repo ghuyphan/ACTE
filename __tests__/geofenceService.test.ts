@@ -54,6 +54,7 @@ import {
   clearGeofenceRegions,
   getMaxGeofenceRegionCount,
   prioritizeNotesForGeofencing,
+  summarizeGeofenceSelection,
   syncGeofenceRegions,
 } from '../services/geofenceService';
 
@@ -150,6 +151,27 @@ describe('geofenceService', () => {
     expect(result).toBe(true);
     expect(mockStartGeofencingAsync.mock.calls[0]?.[1]).toHaveLength(maxRegions);
     expect(consoleWarnSpy).toHaveBeenCalled();
+  });
+
+  it('does not warn when many notes collapse into a small number of places', async () => {
+    const groupedNotes = Array.from({ length: 4 }, (_, index) =>
+      buildNote({
+        id: `district-1-${index + 1}`,
+        locationName: 'District 1',
+        latitude: 10.7626,
+        longitude: 106.6601,
+        createdAt: `2026-03-1${index}T10:00:00.000Z`,
+      })
+    );
+    mockGetAllNotes.mockResolvedValue(groupedNotes);
+
+    const summary = summarizeGeofenceSelection(groupedNotes, 1);
+    await syncGeofenceRegions();
+
+    expect(summary.totalNotes).toBe(4);
+    expect(summary.totalPlaces).toBe(1);
+    expect(summary.overflowPlaces).toBe(0);
+    expect(consoleWarnSpy).not.toHaveBeenCalled();
   });
 
   it('registers one region per place using the best representative note', async () => {

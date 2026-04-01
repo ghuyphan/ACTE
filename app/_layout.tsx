@@ -25,11 +25,11 @@ import { ThemeProvider, useTheme } from '../hooks/useTheme';
 import { AppAlertProvider } from '../components/ui/AppAlertProvider';
 import { getDB } from '../services/database';
 import { syncGeofenceRegions } from '../services/geofenceService';
+import { runMediaCacheEviction } from '../services/mediaCacheManager';
 import { configureNotificationChannels } from '../services/notificationService';
 import { syncSocialPushRegistration } from '../services/socialPushService';
+import { getCachedStartupRoute, loadStartupRoute } from '../services/startupRouting';
 import { updateWidgetData } from '../services/widgetService';
-import { runMediaCacheEviction } from '../services/mediaCacheManager';
-import { getPersistentItem, getPersistentItemSync } from '../utils/appStorage';
 import '../utils/backgroundGeofence';
 import { scheduleOnIdle } from '../utils/scheduleOnIdle';
 
@@ -37,12 +37,6 @@ export { ErrorBoundary } from 'expo-router';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
-
-const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
-
-function resolveStartupTarget(hasLaunched: string | null) {
-  return hasLaunched === 'true' ? '/' : '/auth/onboarding';
-}
 
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
@@ -57,14 +51,9 @@ function AppContent() {
   const [initialUrlResolved, setInitialUrlResolved] = useState(false);
   const [hasInitialUrl, setHasInitialUrl] = useState(false);
   const [startupRedirectHandled, setStartupRedirectHandled] = useState(false);
-  const [startupTarget, setStartupTarget] = useState<string | null>(() => {
-    const hasLaunched = getPersistentItemSync(HAS_LAUNCHED_KEY);
-    if (hasLaunched === undefined) {
-      return null;
-    }
-
-    return resolveStartupTarget(hasLaunched);
-  });
+  const [startupTarget, setStartupTarget] = useState<string | null>(() =>
+    getCachedStartupRoute('entry')
+  );
   const startupRedirectPending =
     !startupRedirectHandled &&
     initialUrlResolved &&
@@ -141,17 +130,11 @@ function AppContent() {
 
     let cancelled = false;
 
-    void getPersistentItem(HAS_LAUNCHED_KEY)
-      .then((hasLaunched) => {
-        if (!cancelled) {
-          setStartupTarget(resolveStartupTarget(hasLaunched));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setStartupTarget('/');
-        }
-      });
+    void loadStartupRoute('entry').then((nextTarget) => {
+      if (!cancelled) {
+        setStartupTarget(nextTarget);
+      }
+    });
 
     return () => {
       cancelled = true;

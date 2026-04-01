@@ -548,7 +548,7 @@ export default function HomeScreen() {
       setCameraPreviewReady(false);
       idleHandle.cancel();
     };
-  }, [appState, captureMode, isScreenFocused]);
+  }, [appState, captureMode, isScreenFocused, permission?.granted]);
 
   useEffect(() => {
     if (!user) {

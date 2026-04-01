@@ -1,7 +1,41 @@
 import * as FileSystem from '../utils/fileSystem';
-import { getAllNotes } from './database';
-import { getStickerAssets, cleanupUnusedSharedStickerCacheFiles, STICKER_DIRECTORY } from './noteStickers';
-import { PHOTO_DIRECTORY, getNotePhotoUri } from './photoStorage';
+import { getDB } from './database';
+import { cleanupUnusedSharedStickerCacheFiles, STICKER_DIRECTORY } from './noteStickers';
+import { PHOTO_DIRECTORY, resolveStoredPhotoUri } from './photoStorage';
+
+interface PhotoReferenceRow {
+  content: string;
+  photo_local_uri: string | null;
+}
+
+interface StickerReferenceRow {
+  local_uri: string;
+}
+
+async function getReferencedPhotoPaths() {
+  const database = await getDB();
+  const rows = await database.getAllAsync<PhotoReferenceRow>(
+    `SELECT content, photo_local_uri
+     FROM notes
+     WHERE type = 'photo'`
+  );
+
+  return new Set(
+    rows
+      .map((row) => resolveStoredPhotoUri(row.photo_local_uri ?? row.content))
+      .filter(Boolean)
+  );
+}
+
+async function getReferencedStickerPaths() {
+  const database = await getDB();
+  const rows = await database.getAllAsync<StickerReferenceRow>(
+    `SELECT local_uri
+     FROM sticker_assets`
+  );
+
+  return new Set(rows.map((row) => row.local_uri).filter(Boolean));
+}
 
 export async function cleanupOrphanPhotoFiles(): Promise<number> {
   if (!PHOTO_DIRECTORY) {
@@ -13,13 +47,7 @@ export async function cleanupOrphanPhotoFiles(): Promise<number> {
     return 0;
   }
 
-  const notes = await getAllNotes();
-  const referencedPhotoPaths = new Set(
-    notes
-      .filter((note) => note.type === 'photo')
-      .map((note) => getNotePhotoUri(note))
-      .filter(Boolean)
-  );
+  const referencedPhotoPaths = await getReferencedPhotoPaths();
 
   const filenames = await FileSystem.readDirectoryAsync(PHOTO_DIRECTORY);
   let deletedCount = 0;
@@ -51,8 +79,7 @@ export async function cleanupOrphanStickerFiles(): Promise<number> {
     return 0;
   }
 
-  const assets = await getStickerAssets();
-  const referencedStickerPaths = new Set(assets.map((asset) => asset.localUri).filter(Boolean));
+  const referencedStickerPaths = await getReferencedStickerPaths();
   const filenames = await FileSystem.readDirectoryAsync(STICKER_DIRECTORY);
   let deletedCount = 0;
 

@@ -1,22 +1,11 @@
 import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { getPersistentItem, getPersistentItemSync } from '../utils/appStorage';
-
-const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
-
-function resolveInitialRoute(hasLaunched: string | null) {
-  return hasLaunched === 'true' ? '/(tabs)' : '/auth/onboarding';
-}
+import { getCachedStartupRoute, loadStartupRoute } from '../services/startupRouting';
 
 export default function Index() {
-  const [target, setTarget] = useState<'/(tabs)' | '/auth/onboarding' | null>(() => {
-    const hasLaunched = getPersistentItemSync(HAS_LAUNCHED_KEY);
-    if (hasLaunched === undefined) {
-      return null;
-    }
-
-    return resolveInitialRoute(hasLaunched);
-  });
+  const [target, setTarget] = useState<'/(tabs)' | '/auth/onboarding' | null>(() =>
+    getCachedStartupRoute('index') as '/(tabs)' | '/auth/onboarding' | null
+  );
 
   useEffect(() => {
     if (target) {
@@ -25,17 +14,11 @@ export default function Index() {
 
     let cancelled = false;
 
-    void getPersistentItem(HAS_LAUNCHED_KEY)
-      .then((hasLaunched) => {
-        if (!cancelled) {
-          setTarget(resolveInitialRoute(hasLaunched));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setTarget('/(tabs)');
-        }
-      });
+    void loadStartupRoute('index').then((nextTarget) => {
+      if (!cancelled) {
+        setTarget(nextTarget as '/(tabs)' | '/auth/onboarding');
+      }
+    });
 
     return () => {
       cancelled = true;

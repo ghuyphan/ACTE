@@ -31,11 +31,13 @@ export function useCaptureFlow() {
   const [selectedPhotoFilterId, setSelectedPhotoFilterId] = useState<PhotoFilterId>('original');
   const { hasPermission, requestPermission: requestCameraPermission } = useCameraPermission();
   const cameraDevice = useCameraDevice(facing);
+  const [cameraPermissionGranted, setCameraPermissionGranted] = useState(() => hasPermission);
   const [cameraPermissionStatus, setCameraPermissionStatus] = useState<CameraPermissionStatus>(() =>
     Camera.getCameraPermissionStatus()
   );
 
   const cameraRef = useRef<Camera>(null);
+  const previousCameraPermissionGrantedRef = useRef(cameraPermissionGranted);
   const captureOpacity = useSharedValue(1);
   const captureScale = useSharedValue(1);
   const captureTranslateY = useSharedValue(0);
@@ -43,13 +45,16 @@ export function useCaptureFlow() {
   const shutterScale = useSharedValue(1);
 
   useEffect(() => {
+    setCameraPermissionGranted(hasPermission);
     setCameraPermissionStatus(hasPermission ? 'granted' : Camera.getCameraPermissionStatus());
   }, [hasPermission]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        setCameraPermissionStatus(Camera.getCameraPermissionStatus());
+        const nextStatus = Camera.getCameraPermissionStatus();
+        setCameraPermissionGranted(nextStatus === 'granted');
+        setCameraPermissionStatus(nextStatus);
       }
     });
 
@@ -62,6 +67,15 @@ export function useCaptureFlow() {
     setSelectedPhotoFilterId('original');
   }, [capturedPhoto]);
 
+  useEffect(() => {
+    const previousGranted = previousCameraPermissionGrantedRef.current;
+    previousCameraPermissionGrantedRef.current = cameraPermissionGranted;
+
+    if (!previousGranted && cameraPermissionGranted && captureMode === 'camera') {
+      setCameraSessionKey((current) => current + 1);
+    }
+  }, [cameraPermissionGranted, captureMode]);
+
   const permission = useMemo<CaptureCameraPermission>(() => {
     const canAskAgain =
       Platform.OS === 'android'
@@ -69,11 +83,11 @@ export function useCaptureFlow() {
         : cameraPermissionStatus === 'not-determined';
 
     return {
-      granted: hasPermission,
+      granted: cameraPermissionGranted,
       canAskAgain,
       status: cameraPermissionStatus,
     };
-  }, [cameraPermissionStatus, hasPermission]);
+  }, [cameraPermissionGranted, cameraPermissionStatus]);
 
   const animateModeSwitch = useCallback((callback: () => void) => {
     captureScale.value = withTiming(0.97, { duration: 110 });
@@ -150,12 +164,10 @@ export function useCaptureFlow() {
 
   const requestPermission = useCallback(async () => {
     const granted = await requestCameraPermission();
+    setCameraPermissionGranted(granted);
     setCameraPermissionStatus(granted ? 'granted' : Camera.getCameraPermissionStatus());
-    if (granted && captureMode === 'camera') {
-      setCameraSessionKey((current) => current + 1);
-    }
     return granted;
-  }, [captureMode, requestCameraPermission]);
+  }, [requestCameraPermission]);
 
   const resetCapture = useCallback(() => {
     setNoteText('');
