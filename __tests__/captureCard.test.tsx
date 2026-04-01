@@ -397,7 +397,7 @@ describe('CaptureCard doodle handle', () => {
 
   it('tracks local doodle state through the imperative handle', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const { getByTestId } = renderCaptureCard(ref, {
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
       noteText: '',
     });
 
@@ -440,7 +440,7 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(ref.current?.getDoodleSnapshot()).toEqual({ enabled: false, strokes: [] });
-    expect(getByTestId('mock-doodle-editable')).toHaveTextContent('false');
+    expect(queryByTestId('mock-doodle-editable')).toBeNull();
   });
 
   it('keeps the raw draft value so typing spaces is not rewritten away', () => {
@@ -1423,7 +1423,7 @@ describe('CaptureCard doodle handle', () => {
 
   it('closes decorate mode from an outside-card tap', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const { getByTestId } = renderCaptureCard(ref);
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref);
 
     act(() => {
       fireEvent.press(getByTestId('capture-decorate-toggle'));
@@ -1439,7 +1439,7 @@ describe('CaptureCard doodle handle', () => {
       fireEvent.press(getByTestId('capture-decorate-dismiss-surface'));
     });
 
-    expect(getByTestId('mock-doodle-editable')).toHaveTextContent('false');
+    expect(queryByTestId('mock-doodle-editable')).toBeNull();
     expect(getByTestId('capture-decorate-dismiss-surface').props.pointerEvents).toBe('none');
   });
 
