@@ -1412,8 +1412,6 @@ export default function HomeScreen() {
 
   const handleCaptureTargetChange = useCallback(
     (nextTarget: 'private' | 'shared') => {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
       if (nextTarget === 'shared') {
         if (!sharedEnabled || !isAuthAvailable) {
           showSharedUnavailableSheet();

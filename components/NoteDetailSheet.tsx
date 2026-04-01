@@ -26,7 +26,6 @@ import Animated, {
     cancelAnimation,
     Easing,
     interpolate,
-    interpolateColor,
     useAnimatedStyle,
     useSharedValue,
     withDelay,
@@ -293,7 +292,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [editStickerPlacements, setEditStickerPlacements] = useState<NoteStickerPlacement[]>([]);
     const [doodleModeEnabled, setDoodleModeEnabled] = useState(false);
     const [stickerModeEnabled, setStickerModeEnabled] = useState(false);
-    const [decorateMenuExpanded, setDecorateMenuExpanded] = useState(false);
     const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
     const [importingSticker, setImportingSticker] = useState(false);
     const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
@@ -307,8 +305,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const infoTranslateY = useSharedValue(20);
     const favoriteFillProgress = useSharedValue(0);
     const editModeAnim = useSharedValue(0);
-    const decorateProgress = useSharedValue(0);
-    const decorateDockWidth = useSharedValue(0);
     const contentInputRef = useRef<any>(null);
     const locationInputRef = useRef<any>(null);
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -332,17 +328,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         return PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS;
     }, [editNoteColor, note, tier]);
-    const showDecorateControlsState =
-        isEditing && (decorateMenuExpanded || doodleModeEnabled || stickerModeEnabled);
-    const decorateControlsDockTargetWidth = showDecorateControlsState
-        ? doodleModeEnabled
-            ? 116
-            : stickerModeEnabled
-                ? 148
-                : ENABLE_PHOTO_STICKERS
-                    ? 80
-                    : 36
-        : 0;
     const cardAnimatedStyle = useAnimatedStyle(() => ({
         opacity: cardOpacity.value,
         transform: [{ scale: cardScale.value }],
@@ -365,31 +350,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const saveIconAnimatedStyle = useAnimatedStyle(() => ({
         opacity: interpolate(editModeAnim.value, [0, 1], [0, 1]),
         transform: [{ scale: interpolate(editModeAnim.value, [0, 1], [0.72, 1]) }],
-    }));
-    const animatedDecorateButtonStyle = useAnimatedStyle(() => ({
-        backgroundColor: interpolateColor(
-            decorateProgress.value,
-            [0, 1],
-            ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.24)']
-        ),
-        borderColor: interpolateColor(
-            decorateProgress.value,
-            [0, 1],
-            ['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.28)']
-        ),
-    }));
-    const animatedDecorateChevronStyle = useAnimatedStyle(() => ({
-        transform: [{ rotate: `${decorateProgress.value * 180}deg` }],
-    }));
-    const animatedDecorateControlsStyle = useAnimatedStyle(() => ({
-        opacity: decorateProgress.value,
-        transform: [
-            { translateX: (1 - decorateProgress.value) * -10 },
-            { scale: 0.97 + decorateProgress.value * 0.03 },
-        ],
-    }));
-    const animatedDecorateDockStyle = useAnimatedStyle(() => ({
-        width: decorateDockWidth.value,
     }));
     const editingHintAnimatedStyle = useAnimatedStyle(() => ({
         opacity: editModeAnim.value,
@@ -621,7 +581,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setEditStickerPlacements([]);
         setDoodleModeEnabled(false);
         setStickerModeEnabled(false);
-        setDecorateMenuExpanded(false);
         setSelectedStickerId(null);
         setShowStickerSourceSheet(false);
         favoriteFillProgress.value = 0;
@@ -629,7 +588,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         cardOpacity.value = 0;
         infoTranslateY.value = 12;
         editModeAnim.value = 0;
-        decorateDockWidth.value = 0;
 
         getNoteById(noteId)
             .then((nextNote) => {
@@ -655,7 +613,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     setEditStickerPlacements(parseNoteStickerPlacements(nextNote.stickerPlacementsJson));
                     setDoodleModeEnabled(false);
                     setStickerModeEnabled(false);
-                    setDecorateMenuExpanded(false);
                     setSelectedStickerId(null);
                 }
                 setLoading(false);
@@ -691,7 +648,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     }, [
         cardOpacity,
         cardScale,
-        decorateDockWidth,
         editModeAnim,
         favoriteFillProgress,
         getNoteById,
@@ -722,27 +678,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     }, [editModeAnim, isEditing, reduceMotionEnabled]);
 
     useEffect(() => {
-        decorateProgress.value = withTiming(showDecorateControlsState ? 1 : 0, {
-            duration: reduceMotionEnabled ? 100 : 180,
-            easing: Easing.out(Easing.cubic),
-        });
-        decorateDockWidth.value = withTiming(decorateControlsDockTargetWidth, {
-            duration: reduceMotionEnabled ? 100 : 180,
-            easing: Easing.out(Easing.cubic),
-        });
-    }, [
-        decorateControlsDockTargetWidth,
-        decorateDockWidth,
-        decorateProgress,
-        reduceMotionEnabled,
-        showDecorateControlsState,
-    ]);
-
-    useEffect(() => {
         if (!isEditing) {
             setDoodleModeEnabled(false);
             setStickerModeEnabled(false);
-            setDecorateMenuExpanded(false);
             return;
         }
 
@@ -789,7 +727,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         dismissPastePrompt();
         Keyboard.dismiss();
-        setDecorateMenuExpanded(true);
         setStickerModeEnabled(false);
         setSelectedStickerId(null);
         setDoodleModeEnabled((current) => !current);
@@ -853,7 +790,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             const nextPlacement = createStickerPlacement(importedAsset, editStickerPlacements);
             setEditStickerPlacements((current) => [...current, nextPlacement]);
             setSelectedStickerId(nextPlacement.id);
-            setDecorateMenuExpanded(true);
             setStickerModeEnabled(true);
             setDoodleModeEnabled(false);
         } catch (error) {
@@ -913,7 +849,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             const nextPlacement = createStickerPlacement(importedAsset, editStickerPlacements);
             setEditStickerPlacements((current) => [...current, nextPlacement]);
             setSelectedStickerId(nextPlacement.id);
-            setDecorateMenuExpanded(true);
             setStickerModeEnabled(true);
             setDoodleModeEnabled(false);
         } catch (error) {
@@ -1013,31 +948,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         dismissPastePrompt();
         Keyboard.dismiss();
-        setDecorateMenuExpanded(true);
         setDoodleModeEnabled(false);
         setStickerModeEnabled((current) => !current);
         if (stickerModeEnabled) {
             setSelectedStickerId(null);
         }
     }, [dismissPastePrompt, isEditing, note, stickerModeEnabled]);
-    const handleToggleDecorateMenu = useCallback(() => {
-        if (!isEditing || !note) {
-            return;
-        }
-
-        dismissPastePrompt();
-        Keyboard.dismiss();
-
-        if (doodleModeEnabled || stickerModeEnabled) {
-            setDoodleModeEnabled(false);
-            setStickerModeEnabled(false);
-            setDecorateMenuExpanded(false);
-            setSelectedStickerId(null);
-            return;
-        }
-
-        setDecorateMenuExpanded((current) => !current);
-    }, [dismissPastePrompt, doodleModeEnabled, isEditing, note, stickerModeEnabled]);
     const handlePressStickerCanvas = useCallback(() => {
         if (!stickerModeEnabled) {
             return;
@@ -1051,7 +967,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
 
         setStickerModeEnabled(false);
-        setDecorateMenuExpanded(false);
     }, [dismissPastePrompt, selectedStickerId, stickerModeEnabled]);
     const handleStickerAction = useCallback(
         (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove' | 'outline-toggle') => {
@@ -1224,11 +1139,19 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
     };
 
-    const renderFavoriteBadge = (backgroundColor: string, inactiveColor: string) => (
+    const renderFavoriteBadge = (inactiveColor: string) => (
         <Pressable
             testID="note-detail-favorite"
             onPress={handleToggleFavorite}
-            style={[styles.cardFavBadge, { backgroundColor }]}
+            style={[
+                styles.cardFavBadge,
+                {
+                    backgroundColor: colors.card,
+                    borderColor: colors.captureGlassColorScheme === 'dark'
+                        ? 'rgba(255,255,255,0.12)'
+                        : 'rgba(43,38,33,0.08)',
+                },
+            ]}
         >
             <Animated.View
                 pointerEvents="none"
@@ -1245,7 +1168,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                         favoriteOutlineIconStyle,
                     ]}
                 >
-                    <Ionicons name="heart-outline" size={20} color={inactiveColor} />
+                    <Ionicons name="heart-outline" size={16} color={inactiveColor} />
                 </Animated.View>
                 <Animated.View
                     pointerEvents="none"
@@ -1254,7 +1177,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                         favoriteFilledIconStyle,
                     ]}
                 >
-                    <Ionicons name="heart" size={20} color="#FF3B30" />
+                    <Ionicons name="heart" size={16} color={colors.danger} />
                 </Animated.View>
             </View>
         </Pressable>
@@ -1444,14 +1367,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             noteColor: isEditing ? editNoteColor : note.noteColor,
         });
         const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
-        const detailTopControlFill =
-            note.type === 'photo'
-                ? (isDarkCaptureTheme ? 'rgba(22,22,24,0.74)' : 'rgba(255,250,242,0.78)')
-                : colors.captureGlassFill;
-        const detailTopControlBorder =
-            note.type === 'photo'
-                ? (isDarkCaptureTheme ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.42)')
-                : colors.captureGlassBorder;
+        const detailBadgeFill = colors.card;
+        const detailBadgeBorder = isDarkCaptureTheme
+            ? 'rgba(255,255,255,0.12)'
+            : 'rgba(43,38,33,0.08)';
+        const detailBadgeIconColor = colors.text;
+        const detailBadgeActiveIconColor = colors.primary;
         const textStickerMotionVariant =
             getNoteColorStickerMotion(isEditing ? editNoteColor : note.noteColor) ??
             getGradientStickerMotionVariant(gradient);
@@ -1462,204 +1383,153 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
         const renderEditHeader = () => (
             <View pointerEvents="box-none" style={styles.textEditHeader}>
-                <Animated.View style={[styles.decorateToggleButtonShell, animatedDecorateButtonStyle]}>
+                <View style={[styles.textCardActionCluster, styles.cardTopOverlayRowWrap]}>
                     <Pressable
-                        testID="note-detail-decorate-toggle"
-                        onPress={handleToggleDecorateMenu}
-                        style={styles.decorateToggleButton}
+                        testID="note-detail-doodle-toggle"
+                        onPress={handleToggleDoodleMode}
+                        style={[
+                            styles.textCardActionButton,
+                            styles.topOverlayActionButton,
+                            {
+                                backgroundColor: detailBadgeFill,
+                                borderColor: detailBadgeBorder,
+                            },
+                        ]}
                     >
                         <Ionicons
-                            name={showDecorateControlsState ? 'color-wand' : 'color-wand-outline'}
+                            name={doodleModeEnabled ? 'create' : 'create-outline'}
                             size={16}
-                            color="#FFFFFF"
+                            color={doodleModeEnabled ? detailBadgeActiveIconColor : detailBadgeIconColor}
                         />
-                        <Animated.View style={[styles.decorateChevronWrap, animatedDecorateChevronStyle]}>
-                            <Ionicons name="chevron-forward" size={12} color="#FFFFFF" />
-                        </Animated.View>
                     </Pressable>
-                </Animated.View>
-                <Animated.View
-                    pointerEvents="box-none"
-                    style={[styles.detailTopControlsDock, animatedDecorateDockStyle]}
-                >
-                    {decorateControlsDockTargetWidth > 0 ? (
-                        <Animated.View
-                            pointerEvents={showDecorateControlsState ? 'auto' : 'none'}
-                            style={[styles.detailTopControlsLayer, styles.decorateControlsWrap, animatedDecorateControlsStyle]}
+                    {ENABLE_PHOTO_STICKERS ? (
+                        <Pressable
+                            testID="note-detail-sticker-toggle"
+                            onPress={handleToggleStickerMode}
+                            style={[
+                                styles.textCardActionButton,
+                                styles.topOverlayActionButton,
+                                {
+                                    backgroundColor: detailBadgeFill,
+                                    borderColor: detailBadgeBorder,
+                                },
+                            ]}
                         >
-                            <View style={styles.decorateControlsInline}>
-                                {doodleModeEnabled ? (
-                                    <View style={styles.textCardActionCluster}>
-                                        <Pressable
-                                            testID="note-detail-doodle-toggle"
-                                            onPress={handleToggleDoodleMode}
-                                            style={[
-                                                styles.textCardActionButton,
-                                                styles.topOverlayActionButton,
-                                                {
-                                                    backgroundColor: detailTopControlFill,
-                                                    borderColor: detailTopControlBorder,
-                                                },
-                                                styles.textCardActionButtonActive,
-                                            ]}
-                                        >
-                                            <Ionicons name="create" size={16} color="#FFFFFF" />
-                                        </Pressable>
-                                        <Pressable
-                                            testID="note-detail-doodle-undo"
-                                            onPress={handleUndoDoodle}
-                                            disabled={editDoodleStrokes.length === 0}
-                                            style={[
-                                                styles.textCardActionPill,
-                                                styles.topOverlayActionButton,
-                                                {
-                                                    backgroundColor: detailTopControlFill,
-                                                    borderColor: detailTopControlBorder,
-                                                },
-                                                editDoodleStrokes.length === 0
-                                                    ? styles.textCardActionDisabled
-                                                    : null,
-                                            ]}
-                                        >
-                                            <Ionicons name="arrow-undo-outline" size={14} color="#FFFFFF" />
-                                        </Pressable>
-                                        <Pressable
-                                            testID="note-detail-doodle-clear"
-                                            onPress={handleClearDoodle}
-                                            disabled={editDoodleStrokes.length === 0}
-                                            style={[
-                                                styles.textCardActionPill,
-                                                styles.topOverlayActionButton,
-                                                {
-                                                    backgroundColor: detailTopControlFill,
-                                                    borderColor: detailTopControlBorder,
-                                                },
-                                                editDoodleStrokes.length === 0
-                                                    ? styles.textCardActionDisabled
-                                                    : null,
-                                            ]}
-                                        >
-                                            <Ionicons name="close-outline" size={14} color="#FFFFFF" />
-                                        </Pressable>
-                                    </View>
-                                ) : stickerModeEnabled ? (
-                                    <View style={styles.textCardActionCluster}>
-                                        <Pressable
-                                            testID="note-detail-sticker-toggle"
-                                            onPress={handleToggleStickerMode}
-                                            style={[
-                                                styles.textCardActionButton,
-                                                styles.topOverlayActionButton,
-                                                {
-                                                    backgroundColor: detailTopControlFill,
-                                                    borderColor: detailTopControlBorder,
-                                                },
-                                                styles.textCardActionButtonActive,
-                                            ]}
-                                        >
-                                            <Ionicons name="images" size={16} color="#FFFFFF" />
-                                        </Pressable>
-                                        <Pressable
-                                            testID="note-detail-sticker-import"
-                                            onPress={() => {
-                                                void handleShowStickerSourceOptions();
-                                            }}
-                                            disabled={importingSticker}
-                                            style={[
-                                                styles.textCardActionPill,
-                                                styles.topOverlayActionButton,
-                                                {
-                                                    backgroundColor: detailTopControlFill,
-                                                    borderColor: detailTopControlBorder,
-                                                },
-                                                importingSticker ? styles.textCardActionDisabled : null,
-                                            ]}
-                                        >
-                                            <Ionicons name="add-outline" size={14} color="#FFFFFF" />
-                                        </Pressable>
-                                        <Pressable
-                                            testID="note-detail-sticker-outline-toggle"
-                                            accessibilityLabel={
-                                                selectedStickerOutlineEnabled
-                                                    ? t('capture.stickerOutlineDisable', 'Turn off outline')
-                                                    : t('capture.stickerOutlineEnable', 'Turn on outline')
-                                            }
-                                            onPress={() => handleStickerAction('outline-toggle')}
-                                            disabled={!selectedStickerId}
-                                            style={[
-                                                styles.textCardActionPill,
-                                                styles.topOverlayActionButton,
-                                                {
-                                                    backgroundColor: detailTopControlFill,
-                                                    borderColor: detailTopControlBorder,
-                                                },
-                                                selectedStickerOutlineEnabled && selectedStickerId
-                                                    ? styles.textCardActionPillActive
-                                                    : null,
-                                                !selectedStickerId ? styles.textCardActionDisabled : null,
-                                            ]}
-                                        >
-                                            <Ionicons
-                                                name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
-                                                size={14}
-                                                color="#FFFFFF"
-                                            />
-                                        </Pressable>
-                                        <Pressable
-                                            testID="note-detail-sticker-remove"
-                                            onPress={() => handleStickerAction('remove')}
-                                            disabled={!selectedStickerId}
-                                            style={[
-                                                styles.textCardActionPill,
-                                                styles.topOverlayActionButton,
-                                                {
-                                                    backgroundColor: detailTopControlFill,
-                                                    borderColor: detailTopControlBorder,
-                                                },
-                                                !selectedStickerId ? styles.textCardActionDisabled : null,
-                                            ]}
-                                        >
-                                            <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
-                                        </Pressable>
-                                    </View>
-                                ) : (
-                                    <View style={styles.textCardActionCluster}>
-                                        <Pressable
-                                            testID="note-detail-doodle-toggle"
-                                            onPress={handleToggleDoodleMode}
-                                            style={[
-                                                styles.textCardActionButton,
-                                                styles.topOverlayActionButton,
-                                                {
-                                                    backgroundColor: detailTopControlFill,
-                                                    borderColor: detailTopControlBorder,
-                                                },
-                                            ]}
-                                        >
-                                            <Ionicons name="create-outline" size={16} color="#FFFFFF" />
-                                        </Pressable>
-                                        {ENABLE_PHOTO_STICKERS ? (
-                                            <Pressable
-                                                testID="note-detail-sticker-toggle"
-                                                onPress={handleToggleStickerMode}
-                                                style={[
-                                                    styles.textCardActionButton,
-                                                    styles.topOverlayActionButton,
-                                                    {
-                                                        backgroundColor: detailTopControlFill,
-                                                        borderColor: detailTopControlBorder,
-                                                    },
-                                                ]}
-                                            >
-                                                <Ionicons name="images-outline" size={16} color="#FFFFFF" />
-                                            </Pressable>
-                                        ) : null}
-                                    </View>
-                                )}
-                            </View>
-                        </Animated.View>
+                            <Ionicons
+                                name={stickerModeEnabled ? 'images' : 'images-outline'}
+                                size={16}
+                                color={stickerModeEnabled ? detailBadgeActiveIconColor : detailBadgeIconColor}
+                            />
+                        </Pressable>
                     ) : null}
-                </Animated.View>
+                    {doodleModeEnabled ? (
+                        <>
+                            <Pressable
+                                testID="note-detail-doodle-undo"
+                                onPress={handleUndoDoodle}
+                                disabled={editDoodleStrokes.length === 0}
+                                style={[
+                                    styles.textCardActionPill,
+                                    styles.topOverlayActionButton,
+                                    {
+                                        backgroundColor: detailBadgeFill,
+                                        borderColor: detailBadgeBorder,
+                                    },
+                                    editDoodleStrokes.length === 0
+                                        ? styles.textCardActionDisabled
+                                        : null,
+                                ]}
+                            >
+                                <Ionicons name="arrow-undo-outline" size={14} color={detailBadgeIconColor} />
+                            </Pressable>
+                            <Pressable
+                                testID="note-detail-doodle-clear"
+                                onPress={handleClearDoodle}
+                                disabled={editDoodleStrokes.length === 0}
+                                style={[
+                                    styles.textCardActionPill,
+                                    styles.topOverlayActionButton,
+                                    {
+                                        backgroundColor: detailBadgeFill,
+                                        borderColor: detailBadgeBorder,
+                                    },
+                                    editDoodleStrokes.length === 0
+                                        ? styles.textCardActionDisabled
+                                        : null,
+                                ]}
+                            >
+                                <Ionicons name="close-outline" size={14} color={detailBadgeIconColor} />
+                            </Pressable>
+                        </>
+                    ) : null}
+                    {stickerModeEnabled ? (
+                        <>
+                            <Pressable
+                                testID="note-detail-sticker-import"
+                                onPress={() => {
+                                    void handleShowStickerSourceOptions();
+                                }}
+                                disabled={importingSticker}
+                                style={[
+                                    styles.textCardActionPill,
+                                    styles.topOverlayActionButton,
+                                    {
+                                        backgroundColor: detailBadgeFill,
+                                        borderColor: detailBadgeBorder,
+                                    },
+                                    importingSticker ? styles.textCardActionDisabled : null,
+                                ]}
+                            >
+                                <Ionicons name="add-outline" size={14} color={detailBadgeIconColor} />
+                            </Pressable>
+                            <Pressable
+                                testID="note-detail-sticker-outline-toggle"
+                                accessibilityLabel={
+                                    selectedStickerOutlineEnabled
+                                        ? t('capture.stickerOutlineDisable', 'Turn off outline')
+                                        : t('capture.stickerOutlineEnable', 'Turn on outline')
+                                }
+                                onPress={() => handleStickerAction('outline-toggle')}
+                                disabled={!selectedStickerId}
+                                style={[
+                                    styles.textCardActionPill,
+                                    styles.topOverlayActionButton,
+                                    {
+                                        backgroundColor: detailBadgeFill,
+                                        borderColor: detailBadgeBorder,
+                                    },
+                                    !selectedStickerId ? styles.textCardActionDisabled : null,
+                                ]}
+                            >
+                                <Ionicons
+                                    name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
+                                    size={14}
+                                    color={
+                                        selectedStickerOutlineEnabled && selectedStickerId
+                                            ? detailBadgeActiveIconColor
+                                            : detailBadgeIconColor
+                                    }
+                                />
+                            </Pressable>
+                            <Pressable
+                                testID="note-detail-sticker-remove"
+                                onPress={() => handleStickerAction('remove')}
+                                disabled={!selectedStickerId}
+                                style={[
+                                    styles.textCardActionPill,
+                                    styles.topOverlayActionButton,
+                                    {
+                                        backgroundColor: detailBadgeFill,
+                                        borderColor: detailBadgeBorder,
+                                    },
+                                    !selectedStickerId ? styles.textCardActionDisabled : null,
+                                ]}
+                            >
+                                <Ionicons name="trash-outline" size={14} color={detailBadgeIconColor} />
+                            </Pressable>
+                        </>
+                    ) : null}
+                </View>
             </View>
         );
 
@@ -1742,7 +1612,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                         </View>
                                     ) : null}
                                     {isEditing ? renderEditHeader() : null}
-                                    {!isEditing ? renderFavoriteBadge(colors.card, colors.secondaryText) : null}
+                                    {!isEditing ? renderFavoriteBadge(colors.secondaryText) : null}
                                     <StickerPastePopover
                                         visible={pastePrompt.visible}
                                         anchor={{ x: pastePrompt.x, y: pastePrompt.y }}
@@ -1828,7 +1698,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             </View>
                                         ) : null}
                                         {isEditing ? renderEditHeader() : (
-                                            renderFavoriteBadge('#FFFFFF33', '#FFFFFFDD')
+                                            renderFavoriteBadge(colors.secondaryText)
                                         )}
                                         <View
                                             pointerEvents={stickerModeEnabled ? 'none' : 'auto'}
@@ -2110,7 +1980,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                     </View>
                                 ) : null}
                                 {isEditing ? renderEditHeader() : null}
-                                {!isEditing ? renderFavoriteBadge(colors.card, colors.secondaryText) : null}
+                                {!isEditing ? renderFavoriteBadge(colors.secondaryText) : null}
                                 <StickerPastePopover
                                     visible={pastePrompt.visible}
                                     anchor={{ x: pastePrompt.x, y: pastePrompt.y }}
@@ -2196,7 +2066,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                         </View>
                                     ) : null}
                                     {isEditing ? renderEditHeader() : (
-                                        renderFavoriteBadge('#FFFFFF33', '#FFFFFFDD')
+                                        renderFavoriteBadge(colors.secondaryText)
                                     )}
                                     <View
                                         pointerEvents={stickerModeEnabled ? 'none' : 'auto'}
@@ -2569,23 +2439,21 @@ const styles = StyleSheet.create({
         width: 48,
         height: 36,
         borderRadius: 18,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 3,
     },
     textCardActionCluster: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
     },
+    cardTopOverlayRowWrap: {
+        flexWrap: 'wrap',
+    },
     topOverlayActionButton: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 4,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 3,
         zIndex: 10,
     },
     decorateControlsInline: {
@@ -2604,9 +2472,9 @@ const styles = StyleSheet.create({
         borderRadius: 18,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(255,255,255,0.14)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.18)',
+        backgroundColor: '#FFFFFF',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(43,38,33,0.08)',
     },
     textCardActionButtonActive: {
         backgroundColor: 'rgba(255,255,255,0.24)',
@@ -2638,10 +2506,6 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.14)',
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.18)',
-    },
-    textCardActionPillActive: {
-        backgroundColor: 'rgba(255,255,255,0.24)',
-        borderColor: 'rgba(255,255,255,0.28)',
     },
     textCardActionDisabled: {
         opacity: 0.45,
@@ -2693,19 +2557,21 @@ const styles = StyleSheet.create({
         width: 36,
         height: 36,
         borderRadius: 18,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(255,255,255,0.35)',
         justifyContent: 'center',
         alignItems: 'center',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.15,
-        shadowRadius: 8,
-        elevation: 4,
+        shadowRadius: 4,
+        elevation: 3,
         zIndex: 10,
     },
     favoriteBadgeTint: {
         ...StyleSheet.absoluteFill,
         borderRadius: 18,
-        backgroundColor: 'rgba(255,59,48,0.16)',
+        backgroundColor: 'rgba(255,59,48,0.08)',
     },
     favoriteIconStack: {
         width: 20,

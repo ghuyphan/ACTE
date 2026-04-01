@@ -25,6 +25,8 @@ interface StickerPhysicsDescriptor {
   width: number;
   height: number;
   collisionRadius: number;
+  collisionHalfWidth: number;
+  collisionHalfHeight: number;
   baseRotation: number;
   opacity: number;
 }
@@ -106,9 +108,7 @@ const COLLISION_POSITION_CORRECTION = 0.68;
 const MAX_COLLISION_POSITION_CORRECTION = 18;
 const MAX_COLLISION_IMPULSE = 420;
 const COLLISION_BOUNCE_FACTOR = 0.24;
-const COLLISION_FRICTION_FACTOR = 0.08;
-const MAX_COLLISION_FRICTION_IMPULSE = 72;
-const COLLISION_CONTACT_DAMPING = 0.9;
+const COLLISION_CONTACT_DAMPING = 0.985;
 const MAX_COLLISION_SPIN = 28;
 const BOUNDARY_SPIN_FACTOR = 0.18;
 const MAX_ANGULAR_VELOCITY = 165;
@@ -128,24 +128,24 @@ const REST_SNAP_SPEED = 18;
 const RESTORE_SETTLE_BOOST = 1.65;
 
 const PHYSICS_PROFILE: StickerMotionProfile = {
-  tiltAcceleration: 1510,
-  crossAcceleration: 185,
-  restoreAcceleration: 8.1,
+  tiltAcceleration: 1760,
+  crossAcceleration: 255,
+  restoreAcceleration: 7.1,
   minimumRestoreFactor: 0,
-  linearDamping: 0.978,
-  angularDamping: 0.952,
-  rotationRestoreAcceleration: 8.5,
-  boundaryRestitution: 0.86,
-  collisionRestitution: 0.92,
-  orbitalStrength: 0.55,
-  orbitalLimit: 160,
-  jellyResponse: 0.24,
-  maxJellyStretch: 0.14,
-  jellyCompression: 0.72,
-  jellyRotationFactor: 0.00018,
-  jellyRotationResponse: 0.2,
-  velocityNormalization: 1080,
-  minJellyScale: 0.92,
+  linearDamping: 0.984,
+  angularDamping: 0.966,
+  rotationRestoreAcceleration: 7.2,
+  boundaryRestitution: 0.91,
+  collisionRestitution: 0.96,
+  orbitalStrength: 0.8,
+  orbitalLimit: 210,
+  jellyResponse: 0.28,
+  maxJellyStretch: 0.18,
+  jellyCompression: 0.64,
+  jellyRotationFactor: 0.00024,
+  jellyRotationResponse: 0.28,
+  velocityNormalization: 920,
+  minJellyScale: 0.9,
   floatLift: 0,
   bobAmplitude: 0,
   bobSpeed: 0,
@@ -368,16 +368,6 @@ export function resolveStickerCollisions(
           const tangentX = -normalY;
           const tangentY = normalX;
           const tangentialVelocity = relativeVelocityX * tangentX + relativeVelocityY * tangentY;
-          const frictionImpulse = clamp(
-            tangentialVelocity * COLLISION_FRICTION_FACTOR,
-            -MAX_COLLISION_FRICTION_IMPULSE,
-            MAX_COLLISION_FRICTION_IMPULSE
-          );
-          left.vx += frictionImpulse * tangentX;
-          left.vy += frictionImpulse * tangentY;
-          right.vx -= frictionImpulse * tangentX;
-          right.vy -= frictionImpulse * tangentY;
-
           const spinImpulse = clamp(
             tangentialVelocity * COLLISION_SPIN_FACTOR,
             -MAX_COLLISION_SPIN,
@@ -385,12 +375,11 @@ export function resolveStickerCollisions(
           );
           left.angularVelocity -= spinImpulse;
           right.angularVelocity += spinImpulse;
+          left.vx *= COLLISION_CONTACT_DAMPING;
+          left.vy *= COLLISION_CONTACT_DAMPING;
+          right.vx *= COLLISION_CONTACT_DAMPING;
+          right.vy *= COLLISION_CONTACT_DAMPING;
         }
-
-        left.vx *= COLLISION_CONTACT_DAMPING;
-        left.vy *= COLLISION_CONTACT_DAMPING;
-        right.vx *= COLLISION_CONTACT_DAMPING;
-        right.vy *= COLLISION_CONTACT_DAMPING;
         clampVelocity(left);
         clampVelocity(right);
       }
@@ -443,6 +432,8 @@ export function useStickerPhysics({
           width: dimensions.width,
           height: dimensions.height,
           collisionRadius: collisionGeometry.collisionRadius,
+          collisionHalfWidth: collisionGeometry.collisionHalfWidth,
+          collisionHalfHeight: collisionGeometry.collisionHalfHeight,
           baseRotation: placement.rotation,
           opacity: placement.opacity,
         };

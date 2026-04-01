@@ -16,7 +16,9 @@ function createPhysicsSticker(
     anchorY: y,
     width: 120,
     height: 90,
-    collisionRadius: 41.4,
+    collisionRadius: 41,
+    collisionHalfWidth: 56,
+    collisionHalfHeight: 41,
     baseRotation: 0,
     opacity: 1,
     x,
@@ -98,5 +100,19 @@ describe('useStickerPhysics', () => {
     expect(Math.abs(left.vx)).toBeLessThan(340);
     expect(Math.abs(right.vx)).toBeLessThan(340);
     expect(right.x - left.x).toBeGreaterThan(10);
+  });
+
+  it('does not add extra sideways drag when stickers collide edge-to-edge', () => {
+    const left = createPhysicsSticker('left', 150, 150);
+    const right = createPhysicsSticker('right', 214, 150);
+    left.vx = 240;
+    right.vx = -240;
+    left.vy = 120;
+    right.vy = -120;
+
+    resolveStickerCollisions([left, right], { width: 360, height: 320 }, 0.92, 0.86);
+
+    expect(Math.abs(left.vy)).toBeGreaterThan(100);
+    expect(Math.abs(right.vy)).toBeGreaterThan(100);
   });
 });

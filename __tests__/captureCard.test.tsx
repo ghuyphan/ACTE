@@ -404,9 +404,6 @@ describe('CaptureCard doodle handle', () => {
     expect(ref.current?.getDoodleSnapshot()).toEqual({ enabled: false, strokes: [] });
 
     act(() => {
-      fireEvent.press(getByTestId('capture-decorate-toggle'));
-    });
-    act(() => {
       fireEvent.press(getByTestId('capture-doodle-toggle'));
     });
     expect(getByTestId('mock-doodle-editable')).toHaveTextContent('true');
@@ -492,9 +489,6 @@ describe('CaptureCard doodle handle', () => {
       capturedPhoto: 'file:///photo.jpg',
     });
 
-    act(() => {
-      fireEvent.press(getByTestId('capture-decorate-toggle'));
-    });
     act(() => {
       fireEvent.press(getByTestId('capture-doodle-toggle'));
     });
@@ -621,9 +615,6 @@ describe('CaptureCard doodle handle', () => {
     });
 
     act(() => {
-      fireEvent.press(getByTestId('capture-decorate-toggle'));
-    });
-    act(() => {
       fireEvent.press(getByTestId('capture-doodle-toggle'));
     });
 
@@ -656,9 +647,6 @@ describe('CaptureCard doodle handle', () => {
     });
 
     act(() => {
-      fireEvent.press(getByTestId('capture-decorate-toggle'));
-    });
-    act(() => {
       fireEvent.press(getByTestId('capture-doodle-toggle'));
     });
 
@@ -687,9 +675,6 @@ describe('CaptureCard doodle handle', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const view = renderCaptureCard(ref);
 
-    act(() => {
-      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
-    });
     act(() => {
       fireEvent.press(view.getByTestId('capture-doodle-toggle'));
     });
@@ -775,9 +760,6 @@ describe('CaptureCard doodle handle', () => {
     });
 
     act(() => {
-      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
-    });
-    act(() => {
       fireEvent.press(view.getByTestId('capture-doodle-toggle'));
     });
 
@@ -818,9 +800,6 @@ describe('CaptureCard doodle handle', () => {
     });
 
     act(() => {
-      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
-    });
-    act(() => {
       fireEvent.press(view.getByTestId('capture-doodle-toggle'));
     });
 
@@ -841,9 +820,6 @@ describe('CaptureCard doodle handle', () => {
       noteText: 'Draft memory',
     });
 
-    act(() => {
-      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
-    });
     act(() => {
       fireEvent.press(view.getByTestId('capture-sticker-toggle'));
     });
@@ -885,9 +861,6 @@ describe('CaptureCard doodle handle', () => {
     });
 
     act(() => {
-      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
-    });
-    act(() => {
       fireEvent.press(view.getByTestId('capture-sticker-toggle'));
     });
 
@@ -911,9 +884,6 @@ describe('CaptureCard doodle handle', () => {
       onChangePhotoFilter,
     });
 
-    act(() => {
-      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
-    });
     act(() => {
       fireEvent.press(view.getByTestId('capture-doodle-toggle'));
     });
@@ -1126,7 +1096,7 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
-  it('hides the inline paste action when decorate is opened', async () => {
+  it('hides the inline paste action when doodle mode is opened', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockClipboardHasImageAsync.mockResolvedValue(true);
 
@@ -1139,7 +1109,7 @@ describe('CaptureCard doodle handle', () => {
     });
 
     act(() => {
-      fireEvent.press(getByTestId('capture-decorate-toggle'));
+      fireEvent.press(getByTestId('capture-doodle-toggle'));
     });
 
     expect(queryByTestId('capture-inline-paste-sticker')).toBeNull();
@@ -1184,9 +1154,6 @@ describe('CaptureCard doodle handle', () => {
     });
 
     act(() => {
-      fireEvent.press(getByTestId('capture-decorate-toggle'));
-    });
-    act(() => {
       fireEvent.press(getByTestId('capture-sticker-toggle'));
     });
 
@@ -1206,9 +1173,6 @@ describe('CaptureCard doodle handle', () => {
       onDoodleModeChange,
     });
 
-    act(() => {
-      fireEvent.press(getByTestId('capture-decorate-toggle'));
-    });
     act(() => {
       fireEvent.press(getByTestId('capture-sticker-toggle'));
     });
@@ -1391,9 +1355,6 @@ describe('CaptureCard doodle handle', () => {
     });
 
     act(() => {
-      fireEvent.press(view.getByTestId('capture-decorate-toggle'));
-    });
-    act(() => {
       fireEvent.press(view.getByTestId('capture-doodle-toggle'));
     });
 
@@ -1500,13 +1461,10 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
-  it('closes decorate mode from an outside-card tap', () => {
+  it('switching from doodle to sticker mode closes doodle editing', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const { getByTestId, queryByTestId } = renderCaptureCard(ref);
 
-    act(() => {
-      fireEvent.press(getByTestId('capture-decorate-toggle'));
-    });
     act(() => {
       fireEvent.press(getByTestId('capture-doodle-toggle'));
     });
@@ -1514,10 +1472,11 @@ describe('CaptureCard doodle handle', () => {
     expect(getByTestId('mock-doodle-editable')).toHaveTextContent('true');
 
     act(() => {
-      fireEvent.press(getByTestId('capture-decorate-toggle'));
+      fireEvent.press(getByTestId('capture-sticker-toggle'));
     });
 
     expect(queryByTestId('mock-doodle-editable')).toBeNull();
+    expect(getByTestId('capture-sticker-import')).toBeTruthy();
   });
 
   it('keeps text-input long press native and does not paste a sticker', async () => {

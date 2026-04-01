@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect } from 'react';
+import { memo, useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -92,7 +92,7 @@ function HoloSparkle({
   );
 }
 
-export default function PremiumNoteFinishOverlay({
+function PremiumNoteFinishOverlay({
   noteColor,
   animated = false,
   interactive = false,
@@ -379,6 +379,8 @@ export default function PremiumNoteFinishOverlay({
     </View>
   );
 }
+
+export default memo(PremiumNoteFinishOverlay);
 
 const styles = StyleSheet.create({
   sheenWrap: {

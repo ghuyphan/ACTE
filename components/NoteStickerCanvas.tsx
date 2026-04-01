@@ -217,6 +217,10 @@ function EditableSticker({
         }),
     [beginGesture, editable, finalizeGesture, updateLivePlacement]
   );
+  const combinedGesture = useMemo(
+    () => Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture),
+    [panGesture, pinchGesture, rotationGesture]
+  );
   const showOutline = activePlacement.outlineEnabled !== false;
   const outlineOffsets = getStickerOutlineOffsets(outlineSize, {
     preferContinuous: PREFER_CONTINUOUS_OUTLINE,
@@ -286,28 +290,19 @@ function EditableSticker({
       ]}
     >
       {editable && selected ? <View pointerEvents="none" style={styles.selectionRing} /> : null}
-      {editable ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onSelect}
-          style={styles.stickerPressable}
-        >
-          {stickerArtwork}
-        </Pressable>
-      ) : (
-        <View pointerEvents="none" style={styles.stickerPressable}>
-          {stickerArtwork}
-        </View>
-      )}
+      <Pressable
+        accessibilityRole="button"
+        disabled={!editable}
+        onPress={editable ? onSelect : undefined}
+        style={styles.stickerPressable}
+      >
+        {stickerArtwork}
+      </Pressable>
     </View>
   );
 
-  if (!editable) {
-    return stickerNode;
-  }
-
   return (
-    <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture)}>
+    <GestureDetector gesture={combinedGesture}>
       {stickerNode}
     </GestureDetector>
   );
@@ -315,7 +310,7 @@ function EditableSticker({
 
 const MemoEditableSticker = memo(EditableSticker);
 
-export default function NoteStickerCanvas({
+function NoteStickerCanvas({
   placements,
   editable = false,
   onChangePlacements,
@@ -400,6 +395,8 @@ export default function NoteStickerCanvas({
     </View>
   );
 }
+
+export default memo(NoteStickerCanvas);
 
 const styles = StyleSheet.create({
   canvas: {

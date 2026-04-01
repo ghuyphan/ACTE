@@ -8,7 +8,11 @@ describe('stickerCollision', () => {
     const geometry = getStickerCollisionGeometry(120, 80);
 
     expect(geometry.collisionRadius).toBeGreaterThan(0);
-    expect(geometry.collisionRadius).toBeLessThanOrEqual(40);
+    expect(geometry.collisionHalfWidth).toBeGreaterThan(geometry.collisionHalfHeight);
+    expect(geometry.collisionHalfWidth).toBeCloseTo(56, 5);
+    expect(geometry.collisionHalfHeight).toBeCloseTo(36, 5);
+    expect(geometry.collisionHalfWidth).toBeLessThanOrEqual(60);
+    expect(geometry.collisionHalfHeight).toBeLessThanOrEqual(40);
   });
 
   it('detects a collision when two sticker circles overlap', () => {
@@ -30,6 +34,16 @@ describe('stickerCollision', () => {
     );
 
     expect(collision).toBeNull();
+  });
+
+  it('matches wide stickers better on the horizontal axis than a single circle', () => {
+    const geometry = getStickerCollisionGeometry(120, 80);
+    const collision = detectStickerCollision(
+      { ...geometry, x: 0, y: 0, rotation: 0 },
+      { ...geometry, x: 96, y: 0, rotation: 0 }
+    );
+
+    expect(collision).not.toBeNull();
   });
 
   it('uses a deterministic normal when stickers perfectly overlap', () => {

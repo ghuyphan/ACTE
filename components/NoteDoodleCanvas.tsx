@@ -547,7 +547,7 @@ const DraftFallbackLayer = memo(function DraftFallbackLayer({
   );
 });
 
-export default function NoteDoodleCanvas({
+function NoteDoodleCanvas({
   strokes,
   editable = false,
   activeColor = '#1C1C1E',
@@ -892,6 +892,10 @@ export default function NoteDoodleCanvas({
         }),
     [canEdit, commitTapDot, draftDimensionsValue]
   );
+  const combinedGesture = useMemo(
+    () => Gesture.Exclusive(tapGesture, panGesture),
+    [panGesture, tapGesture]
+  );
 
   useEffect(() => {
     if (!canEdit) {
@@ -957,22 +961,16 @@ export default function NoteDoodleCanvas({
     </>
   );
 
-  if (!canEdit) {
-    return (
-      <View style={[styles.canvas, style]} onLayout={handleLayout}>
-        {canvasContent}
-      </View>
-    );
-  }
-
   return (
-    <GestureDetector gesture={Gesture.Exclusive(tapGesture, panGesture)}>
+    <GestureDetector gesture={combinedGesture}>
       <View style={[styles.canvas, style]} onLayout={handleLayout}>
         {canvasContent}
       </View>
     </GestureDetector>
   );
 }
+
+export default memo(NoteDoodleCanvas);
 
 const styles = StyleSheet.create({
   canvas: {
