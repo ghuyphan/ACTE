@@ -128,7 +128,6 @@ const CAPTURE_BUTTON_STATE_IN = { duration: 160, easing: Easing.out(Easing.cubic
 const CAPTURE_BUTTON_STATE_OUT = { duration: 210, easing: Easing.out(Easing.cubic) };
 const LIVE_PHOTO_RING_SIZE = SHUTTER_OUTER_SIZE;
 const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
-const LIVE_PHOTO_CAPTURE_VIDEO_BIT_RATE = Platform.OS === 'android' ? 'low' : 'normal';
 const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
 const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Note about this place...',
@@ -2900,7 +2899,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       preview
                       photo
                       video
-                      videoBitRate={LIVE_PHOTO_CAPTURE_VIDEO_BIT_RATE}
                       photoQualityBalance="speed"
                       isMirrored={facing === 'front'}
                       zoom={cameraPreviewZoom}
