@@ -8,7 +8,7 @@ const mockRouterPush = jest.fn();
 const mockRequestFeedFocus = jest.fn();
 const mockDownloadPhotoFromStorage = jest.fn();
 
-const mockNotes = [
+const mockNotes: any[] = [
   {
     id: 'note-1',
     type: 'text',
@@ -64,7 +64,26 @@ jest.mock('expo-router', () => ({
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, fallback?: string) => fallback ?? _key,
+    t: (_key: string, defaultValueOrOptions?: unknown, maybeOptions?: { defaultValue?: string }) => {
+      if (typeof defaultValueOrOptions === 'string') {
+        return defaultValueOrOptions;
+      }
+
+      if (
+        defaultValueOrOptions &&
+        typeof defaultValueOrOptions === 'object' &&
+        'defaultValue' in defaultValueOrOptions
+      ) {
+        return String((defaultValueOrOptions as { defaultValue?: string }).defaultValue ?? _key);
+      }
+
+      if (maybeOptions?.defaultValue) {
+        return maybeOptions.defaultValue;
+      }
+
+      return _key;
+    },
+    i18n: { language: 'en' },
   }),
 }));
 
@@ -93,6 +112,10 @@ jest.mock('../services/remoteMedia', () => ({
   downloadPhotoFromStorage: (...args: unknown[]) => mockDownloadPhotoFromStorage(...args),
 }));
 
+jest.mock('../utils/dateUtils', () => ({
+  formatDate: () => 'Mar 11, 12:00 AM',
+}));
+
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
     user: { uid: 'me' },
@@ -102,12 +125,15 @@ jest.mock('../hooks/useAuth', () => ({
 jest.mock('../hooks/useTheme', () => ({
   CardGradients: [['#333333', '#555555']],
   useTheme: () => ({
+    isDark: false,
     colors: {
       background: '#FAF9F6',
+      surface: '#F7F4EF',
       card: '#FFFFFF',
       border: '#E5E5EA',
       primary: '#FFC107',
       primarySoft: '#FFF3CD',
+      accent: '#D97706',
       text: '#1C1C1E',
       secondaryText: '#8E8E93',
     },
@@ -149,6 +175,24 @@ describe('NotesIndexScreen', () => {
         longitude: 106.6,
         radius: 150,
         isFavorite: false,
+        hasStickers: true,
+        stickerPlacementsJson: JSON.stringify([
+          {
+            id: 'placement-1',
+            assetId: 'asset-1',
+            x: 0.5,
+            y: 0.5,
+            scale: 1,
+            rotation: 0,
+            zIndex: 1,
+            opacity: 1,
+            asset: {
+              id: 'asset-1',
+              localUri: 'file:///sticker-1.png',
+              mimeType: 'image/png',
+            },
+          },
+        ]),
         createdAt: '2026-03-11T00:00:00.000Z',
         updatedAt: null,
       }
@@ -181,11 +225,113 @@ describe('NotesIndexScreen', () => {
     mockNotes.splice(0, mockNotes.length);
     mockSharedPosts.splice(0, mockSharedPosts.length);
 
-    const { getByTestId, getByText } = render(<NotesIndexScreen />);
+    const { getByTestId, getByText, queryByTestId } = render(<NotesIndexScreen />);
 
     expect(getByTestId('notes-empty-state')).toBeTruthy();
     expect(getByText('document-text-outline')).toBeTruthy();
     expect(getByText('No notes yet')).toBeTruthy();
+  });
+
+  it('switches into recap mode for personal notes and shows the monthly summary', () => {
+    const { getByTestId, getByText, queryByText } = render(<NotesIndexScreen />);
+
+    fireEvent.press(getByTestId('notes-mode-recap'));
+
+    expect(getByTestId('notes-recap-mode')).toBeTruthy();
+    expect(getByText('March 2026')).toBeTruthy();
+    expect(getByTestId('notes-recap-sticker-pile')).toBeTruthy();
+    expect(getByText('Used this month')).toBeTruthy();
+    expect(queryByText('Shared memory')).toBeNull();
+  });
+
+  it('shows month items by default, filters to a tapped day, and clears when tapped again', () => {
+    const { getByTestId, getByText, queryByText } = render(<NotesIndexScreen />);
+
+    fireEvent.press(getByTestId('notes-mode-recap'));
+
+    expect(getByText('Used this month')).toBeTruthy();
+
+    fireEvent.press(getByText('11'));
+
+    expect(getByText('Mar 11')).toBeTruthy();
+    expect(queryByText('Used this month')).toBeNull();
+
+    fireEvent.press(getByText('11'));
+
+    expect(getByText('Used this month')).toBeTruthy();
+    expect(queryByText('Mar 11')).toBeNull();
+  });
+
+  it('lets the user switch recap months from the header', () => {
+    mockNotes.splice(
+      0,
+      mockNotes.length,
+      {
+        id: 'note-april',
+        type: 'text',
+        content: 'April note',
+        locationName: 'District 1',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-04-02T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'note-march',
+        type: 'text',
+        content: 'March note',
+        locationName: 'District 3',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      }
+    );
+
+    const { getByTestId, getByText, queryByTestId } = render(<NotesIndexScreen />);
+
+    fireEvent.press(getByTestId('notes-mode-recap'));
+
+    expect(getByText('April 2026')).toBeTruthy();
+
+    fireEvent.press(getByTestId('notes-recap-previous-month'));
+
+    expect(getByText('March 2026')).toBeTruthy();
+
+    fireEvent.press(getByTestId('notes-recap-next-month'));
+
+    expect(getByText('April 2026')).toBeTruthy();
+  });
+
+  it('lets the user go to an empty previous month even when notes only exist in the current month', () => {
+    mockNotes.splice(
+      0,
+      mockNotes.length,
+      {
+        id: 'note-april-only',
+        type: 'text',
+        content: 'April only note',
+        locationName: 'District 1',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-04-02T00:00:00.000Z',
+        updatedAt: null,
+      }
+    );
+
+    const { getByTestId, getByText, queryByTestId } = render(<NotesIndexScreen />);
+
+    fireEvent.press(getByTestId('notes-mode-recap'));
+    fireEvent.press(getByTestId('notes-recap-previous-month'));
+
+    expect(getByText('March 2026')).toBeTruthy();
+    expect(queryByTestId('notes-recap-sticker-pile')).toBeTruthy();
   });
 
   it('queues a note focus request and returns to Home instead of pushing note detail', () => {

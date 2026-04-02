@@ -9,6 +9,7 @@ import Reanimated from 'react-native-reanimated';
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -24,12 +25,22 @@ import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
 import DynamicStickerCanvas from '../../components/notes/DynamicStickerCanvas';
 import NoteDoodleCanvas from '../../components/notes/NoteDoodleCanvas';
+import RecapCalendarGrid, {
+  type RecapCalendarDay,
+} from '../../components/notes/recap/RecapCalendarGrid';
+import RecapModeSwitch, {
+  type RecapMode,
+} from '../../components/notes/recap/RecapModeSwitch';
+import RecapMonthPicker from '../../components/notes/recap/RecapMonthPicker';
+import RecapStickerPile from '../../components/notes/recap/RecapStickerPile';
 import {
   getGradientStickerMotionVariant,
   getNoteColorStickerMotion,
   getTextNoteCardGradient,
   type StickerMotionVariant,
 } from '../../services/noteAppearance';
+import { buildMonthlyRecap } from '../../services/monthlyRecap';
+import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { parseNoteDoodleStrokes } from '../../services/noteDoodles';
 import { parseNoteStickerPlacements } from '../../services/noteStickers';
 import { getNotePhotoUri } from '../../services/photoStorage';
@@ -265,6 +276,451 @@ const GridTile = memo(function GridTile({
       : false)
 ));
 
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function shiftMonth(date: Date, offset: number) {
+  return new Date(date.getFullYear(), date.getMonth() + offset, 1);
+}
+
+function getRecapLocale(language: string) {
+  if (language === 'vi') {
+    return 'vi-VN';
+  }
+
+  if (language === 'en') {
+    return 'en-US';
+  }
+
+  return language;
+}
+
+function formatRecapMonthLabel(date: Date, locale: string) {
+  return new Intl.DateTimeFormat(locale, {
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+}
+
+function formatRecapDayLabel(date: Date, locale: string) {
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
+}
+
+function buildWeekdayLabels(locale: string) {
+  const formatter = new Intl.DateTimeFormat(locale, { weekday: 'narrow' });
+  const sunday = new Date(2026, 2, 1);
+
+  return Array.from({ length: 7 }, (_, index) =>
+    formatter.format(new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + index))
+  );
+}
+
+function formatCountLabel(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function buildPhotoPileItemsFromNotes(notes: Note[], keyPrefix: string) {
+  return notes
+    .filter((note) => note.type === 'photo')
+    .map((note) => {
+      const previewUri = getNotePhotoUri(note);
+      return previewUri
+        ? {
+            key: `${keyPrefix}:photo:${note.id}`,
+            kind: 'photo' as const,
+            previewUri,
+            count: 1,
+            isLivePhoto: Boolean(note.isLivePhoto),
+            pairedVideoUri: note.isLivePhoto ? getNotePairedVideoUri(note) : null,
+          }
+        : null;
+    })
+    .filter((item): item is {
+      key: string;
+      kind: 'photo';
+      previewUri: string;
+      count: number;
+      isLivePhoto: boolean;
+      pairedVideoUri: string | null;
+    } => Boolean(item));
+}
+
+function buildStickerPileItemsFromNotes(notes: Note[], keyPrefix: string) {
+  const stickerUsage = new Map<
+    string,
+    {
+      assetId: string;
+      previewUri: string;
+      count: number;
+    }
+  >();
+
+  for (const note of notes) {
+    const placements = parseNoteStickerPlacements(note.stickerPlacementsJson ?? null);
+
+    for (const placement of placements) {
+      const previewUri = placement.asset.localUri;
+      if (!previewUri) {
+        continue;
+      }
+
+      const current = stickerUsage.get(placement.assetId);
+      if (current) {
+        current.count += 1;
+        continue;
+      }
+
+      stickerUsage.set(placement.assetId, {
+        assetId: placement.assetId,
+        previewUri,
+        count: 1,
+      });
+    }
+  }
+
+  return Array.from(stickerUsage.values()).map((sticker) => ({
+    key: `${keyPrefix}:sticker:${sticker.assetId}`,
+    kind: 'sticker' as const,
+    previewUri: sticker.previewUri,
+    count: sticker.count,
+  }));
+}
+
+const NotesRecapView = memo(function NotesRecapView({
+  notes,
+  contentTopInset,
+  bottomInset,
+  onChangeMode,
+}: {
+  notes: Note[];
+  contentTopInset: number;
+  bottomInset: number;
+  onChangeMode: (mode: RecapMode) => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const { colors } = useTheme();
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [activeMonthKey, setActiveMonthKey] = useState<string | null>(null);
+  const locale = useMemo(() => getRecapLocale(i18n.language), [i18n.language]);
+  const timeZone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
+    []
+  );
+  const weekDayLabels = useMemo(() => buildWeekdayLabels(locale), [locale]);
+  const monthDates = useMemo(() => {
+    let latestMonth: Date | null = null;
+    let earliestMonth: Date | null = null;
+
+    for (const note of notes) {
+      const timestamp = new Date(note.createdAt);
+      if (Number.isNaN(timestamp.getTime())) {
+        continue;
+      }
+
+      const monthDate = startOfMonth(timestamp);
+      if (!latestMonth || !earliestMonth) {
+        latestMonth = monthDate;
+        earliestMonth = monthDate;
+        continue;
+      }
+
+      if (monthDate.getTime() > latestMonth.getTime()) {
+        latestMonth = monthDate;
+      }
+
+      if (monthDate.getTime() < earliestMonth.getTime()) {
+        earliestMonth = monthDate;
+      }
+    }
+
+    if (!latestMonth || !earliestMonth) {
+      return [];
+    }
+
+    const minimumWindowStart = shiftMonth(latestMonth, -11);
+    if (minimumWindowStart.getTime() < earliestMonth.getTime()) {
+      earliestMonth = minimumWindowStart;
+    }
+
+    const months: Date[] = [];
+    let cursor = startOfMonth(latestMonth);
+
+    while (cursor.getTime() >= earliestMonth.getTime()) {
+      months.push(cursor);
+      cursor = shiftMonth(cursor, -1);
+    }
+
+    return months;
+  }, [notes]);
+  const recaps = useMemo(
+    () =>
+      monthDates.map((monthDate) =>
+        buildMonthlyRecap(notes, {
+          year: monthDate.getFullYear(),
+          month: monthDate.getMonth(),
+          timeZone,
+        })
+      ),
+    [monthDates, notes, timeZone]
+  );
+
+  useEffect(() => {
+    const availableDayKeys = new Set(
+      recaps.flatMap((recap) => recap.days.filter((day) => day.noteCount > 0).map((day) => day.dateKey))
+    );
+
+    if (selectedDayKey && !availableDayKeys.has(selectedDayKey)) {
+      setSelectedDayKey(null);
+    }
+  }, [recaps, selectedDayKey]);
+
+  useEffect(() => {
+    const firstMonthKey = recaps[0]?.month.monthKey ?? null;
+    const monthKeys = new Set(recaps.map((recap) => recap.month.monthKey));
+
+    if (activeMonthKey && monthKeys.has(activeMonthKey)) {
+      return;
+    }
+
+    if (firstMonthKey !== activeMonthKey) {
+      setActiveMonthKey(firstMonthKey);
+    }
+  }, [activeMonthKey, recaps]);
+
+  const noteById = useMemo(
+    () => new Map(notes.map((note) => [note.id, note] as const)),
+    [notes]
+  );
+  const activeRecap = useMemo(
+    () => recaps.find((recap) => recap.month.monthKey === activeMonthKey) ?? recaps[0] ?? null,
+    [activeMonthKey, recaps]
+  );
+  const activeMonthIndex = useMemo(
+    () => recaps.findIndex((recap) => recap.month.monthKey === activeMonthKey),
+    [activeMonthKey, recaps]
+  );
+  const handleChangeMonth = useCallback(
+    (direction: 'previous' | 'next') => {
+      if (activeMonthIndex < 0) {
+        return;
+      }
+
+      const targetIndex = direction === 'previous' ? activeMonthIndex + 1 : activeMonthIndex - 1;
+      const targetRecap = recaps[targetIndex];
+
+      if (!targetRecap) {
+        return;
+      }
+
+      setActiveMonthKey(targetRecap.month.monthKey);
+      setSelectedDayKey(null);
+    },
+    [activeMonthIndex, recaps]
+  );
+
+  return (
+    <View
+      testID="notes-recap-mode"
+      style={[
+        styles.recapScreen,
+        {
+        paddingTop: contentTopInset,
+        paddingHorizontal: Layout.screenPadding,
+        },
+      ]}
+    >
+      <View style={styles.recapPinnedHeader}>
+        <RecapModeSwitch
+          value="recap"
+          onChange={onChangeMode}
+          allLabel={t('notes.recap.allLabel', 'All')}
+          recapLabel={t('notes.recap.recapLabel', 'Calendar')}
+        />
+        {activeRecap ? (
+          <View style={styles.recapMonthHeader}>
+            <RecapMonthPicker
+              label={formatRecapMonthLabel(activeRecap.month.start, locale)}
+              onPrevious={() => handleChangeMonth('previous')}
+              onNext={() => handleChangeMonth('next')}
+              previousDisabled={activeMonthIndex >= recaps.length - 1}
+              nextDisabled={activeMonthIndex <= 0}
+              previousAccessibilityLabel={t('notes.recap.previousMonth', 'Previous month')}
+              nextAccessibilityLabel={t('notes.recap.nextMonth', 'Next month')}
+            />
+          </View>
+        ) : null}
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingBottom: bottomInset + 28,
+        }}
+      >
+        <View style={styles.recapContent}>
+          {recaps.length === 0 ? (
+            <View
+              testID="notes-recap-empty-state"
+              style={[styles.recapEmptyState, { borderColor: colors.border, backgroundColor: colors.card }]}
+            >
+              <Ionicons name="calendar-clear-outline" size={30} color={colors.secondaryText} />
+              <Text style={[styles.recapEmptyTitle, { color: colors.text }]}>
+                {t('notes.recap.emptyTitle', 'No memories this month')}
+              </Text>
+              <Text style={[styles.recapEmptyBody, { color: colors.secondaryText }]}>
+                {t(
+                  'notes.recap.emptyBody',
+                  'Try another month or save a new note to start this recap.'
+                )}
+              </Text>
+            </View>
+          ) : (
+            <>
+              {(activeRecap ? [activeRecap] : []).map((recap) => {
+              const placeholderDays: RecapCalendarDay[] = [];
+              const firstWeekdayIndex = recap.days[0]?.weekdayIndex ?? 0;
+
+              for (let index = 0; index < firstWeekdayIndex; index += 1) {
+                placeholderDays.push({
+                  key: `${recap.month.monthKey}:empty-start:${index}`,
+                  dayNumber: null,
+                  count: 0,
+                  markers: [],
+                  disabled: true,
+                });
+              }
+
+              const mappedDays = recap.days.map((day) => {
+                const dayNotes = day.noteIds
+                  .map((noteId) => noteById.get(noteId) ?? null)
+                  .filter((note): note is Note => Boolean(note));
+                const dayPhotoPreviewUri =
+                  dayNotes
+                    .filter((note) => note.type === 'photo')
+                    .map((note) => getNotePhotoUri(note))
+                    .find((uri): uri is string => Boolean(uri)) ?? undefined;
+
+                return {
+                  key: day.dateKey,
+                  dayNumber: day.dayOfMonth,
+                  count: day.noteCount,
+                  photoPreviewUri: dayPhotoPreviewUri,
+                  markers: Array.from({ length: day.stampCount }, (_, index) => ({
+                    key: `${day.dateKey}:marker:${index}`,
+                    color:
+                      day.hasPhoto && index === 0
+                        ? colors.primary
+                        : day.hasDecorations
+                          ? colors.accent
+                          : colors.secondaryText,
+                    previewUri: day.hasPhoto && index === 0 ? dayPhotoPreviewUri : undefined,
+                    type: day.hasPhoto && index === 0 ? ('polaroid' as const) : ('stamp' as const),
+                  })),
+                  isSelected: day.dateKey === selectedDayKey,
+                  isToday:
+                    day.dateKey ===
+                    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(
+                      new Date().getDate()
+                    ).padStart(2, '0')}`,
+                  onPress:
+                    day.noteCount > 0
+                      ? () => {
+                          setSelectedDayKey((current) => (current === day.dateKey ? null : day.dateKey));
+                        }
+                      : undefined,
+                  accessibilityLabel:
+                    day.noteCount > 0
+                      ? `${t('notes.recap.dayMemories', 'Day memories')} ${formatRecapMonthLabel(
+                          recap.month.start,
+                          locale
+                        )} ${day.dayOfMonth}`
+                      : undefined,
+                };
+              });
+
+              const totalSlots = placeholderDays.length + mappedDays.length;
+              const trailingSlots = totalSlots % 7 === 0 ? 0 : 7 - (totalSlots % 7);
+              const trailingDays = Array.from({ length: trailingSlots }, (_, index) => ({
+                key: `${recap.month.monthKey}:empty-end:${index}`,
+                dayNumber: null,
+                count: 0,
+                markers: [],
+                disabled: true,
+              }));
+              const monthNotes = recap.days
+                .flatMap((day) => day.noteIds)
+                .map((noteId) => noteById.get(noteId) ?? null)
+                .filter((note): note is Note => Boolean(note));
+              const selectedRecapDay =
+                selectedDayKey ? recap.days.find((day) => day.dateKey === selectedDayKey) ?? null : null;
+              const selectedDayNotes = selectedRecapDay
+                ? selectedRecapDay.noteIds
+                    .map((noteId) => noteById.get(noteId) ?? null)
+                    .filter((note): note is Note => Boolean(note))
+                : [];
+              const pileSourceNotes = selectedRecapDay ? selectedDayNotes : monthNotes;
+              const pileKeyPrefix = selectedRecapDay?.dateKey ?? recap.month.monthKey;
+              const photoPileItems = buildPhotoPileItemsFromNotes(pileSourceNotes, pileKeyPrefix).slice(0, 8);
+              const stickerPileItems = buildStickerPileItemsFromNotes(pileSourceNotes, pileKeyPrefix);
+              const prioritizedPhotoItems =
+                stickerPileItems.length > 0 ? photoPileItems.slice(0, 5) : photoPileItems.slice(0, 8);
+              const pileItems = [...prioritizedPhotoItems, ...stickerPileItems].slice(0, 8);
+              const selectedDayLabel = selectedRecapDay
+                ? formatRecapDayLabel(
+                    new Date(
+                      recap.month.start.getFullYear(),
+                      recap.month.start.getMonth(),
+                      selectedRecapDay.dayOfMonth
+                    ),
+                    locale
+                  )
+                : null;
+
+              return (
+                <View
+                  key={recap.month.monthKey}
+                  style={styles.recapMonthSection}
+                >
+                  <RecapStickerPile
+                    title={
+                      selectedDayLabel
+                        ? selectedDayLabel
+                        : photoPileItems.length > 0
+                          ? t('notes.recap.photoPileTitle', 'Saved this month')
+                          : t('notes.recap.stickerTrayTitle', 'Used this month')
+                    }
+                    items={pileItems}
+                  />
+
+                  <View
+                    style={[
+                      styles.recapCalendarShell,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.card,
+                      },
+                    ]}
+                  >
+                    <RecapCalendarGrid
+                      days={[...placeholderDays, ...mappedDays, ...trailingDays]}
+                      weekDayLabels={weekDayLabels}
+                    />
+                  </View>
+                </View>
+              );
+              })}
+            </>
+          )}
+        </View>
+      </ScrollView>
+    </View>
+  );
+});
+
 export default function NotesIndexScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -275,6 +731,7 @@ export default function NotesIndexScreen() {
   const { requestFeedFocus } = useFeedFocus();
   const { notes, loading } = useNotesStore();
   const { sharedPosts, loading: sharedLoading } = useSharedFeedStore();
+  const [mode, setMode] = useState<RecapMode>('all');
 
   const friendPosts = useMemo(
     () => sharedPosts.filter((post) => post.authorUid !== user?.uid),
@@ -303,6 +760,13 @@ export default function NotesIndexScreen() {
   const gridSize = Math.floor((width - Layout.screenPadding * 2 - gridGap * 2) / 3);
   const contentTopInset = insets.top + 72;
   const isLoading = loading || (sharedLoading && items.length === 0);
+  const hasRecapNotes = notes.length > 0;
+
+  useEffect(() => {
+    if (!hasRecapNotes && mode === 'recap') {
+      setMode('all');
+    }
+  }, [hasRecapNotes, mode]);
 
   const openItem = useCallback(
     (item: NoteGridItem) => {
@@ -317,6 +781,16 @@ export default function NotesIndexScreen() {
     },
     [requestFeedFocus, router]
   );
+  const modeSwitch = hasRecapNotes ? (
+    <View style={styles.modeSwitchWrap}>
+      <RecapModeSwitch
+        value={mode}
+        onChange={setMode}
+        allLabel={t('notes.recap.allLabel', 'All')}
+        recapLabel={t('notes.recap.recapLabel', 'Calendar')}
+      />
+    </View>
+  ) : null;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -337,6 +811,13 @@ export default function NotesIndexScreen() {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
+      ) : mode === 'recap' && hasRecapNotes ? (
+        <NotesRecapView
+          notes={notes}
+          contentTopInset={contentTopInset}
+          bottomInset={insets.bottom}
+          onChangeMode={setMode}
+        />
       ) : items.length === 0 ? (
         <View
           testID="notes-empty-state"
@@ -367,6 +848,7 @@ export default function NotesIndexScreen() {
           keyExtractor={(item) => item.id}
           getItemType={(item) => `${item.kind}:${item.kind === 'note' ? item.note.type : item.post.type}`}
           drawDistance={gridSize * 4}
+          ListHeaderComponent={modeSwitch}
           renderItem={({ item, index }) => (
             <GridTile
               item={item}
@@ -402,6 +884,68 @@ const styles = StyleSheet.create({
   },
   emptyScreen: {
     paddingHorizontal: Layout.screenPadding,
+  },
+  modeSwitchWrap: {
+    paddingBottom: 18,
+  },
+  recapScreen: {
+    flex: 1,
+  },
+  recapPinnedHeader: {
+    gap: 18,
+    paddingBottom: 18,
+  },
+  recapContent: {
+    gap: 18,
+  },
+  recapMonthSection: {
+    gap: 14,
+  },
+  recapMonthHeader: {
+    gap: 2,
+  },
+  recapMonthTitle: {
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  recapMonthMeta: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'Noto Sans',
+  },
+  recapCalendarShell: {
+    borderRadius: 30,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 10,
+  },
+  recapEmptyState: {
+    minHeight: 220,
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+  },
+  recapEmptyTitle: {
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans',
+  },
+  recapEmptyBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    fontFamily: 'Noto Sans',
+    maxWidth: 260,
   },
   tilePressable: {
     borderRadius: 24,

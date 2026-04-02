@@ -216,7 +216,32 @@
     },
     "notes": {
         "viewAllTitle": "Tất cả ghi chú",
-        "viewAllButton": "Xem tất cả ghi chú"
+        "viewAllButton": "Xem tất cả ghi chú",
+        "recap": {
+            "allLabel": "Tất cả",
+            "recapLabel": "Lịch",
+            "badge": "Tóm tắt tháng",
+            "title": "Tóm tắt kỷ niệm",
+            "subtitle": "Một cách nhìn ấm áp hơn về những nơi và ngày bạn đã lưu lại.",
+            "heroFallback": "Một tháng với những ký ức nhỏ rất đáng giữ.",
+            "emptyTitle": "Tháng này chưa có kỷ niệm",
+            "emptyBody": "Thử tháng khác hoặc lưu một ghi chú mới để bắt đầu bản tóm tắt này.",
+            "previousMonth": "Tháng trước",
+            "nextMonth": "Tháng sau",
+            "highlightsTitle": "Điểm nhấn",
+            "placesTitle": "Địa điểm",
+            "dayMemories": "Kỷ niệm trong ngày",
+            "textNote": "Ghi chú chữ",
+            "postcard": "Bưu thiếp",
+            "polaroid": "Polaroid",
+            "noteSingular": "ghi chú",
+            "notePlural": "ghi chú",
+            "photoPileTitle": "Lưu trong tháng này",
+            "stickerTrayTitle": "Dùng trong tháng này",
+            "notesStat": "Ghi chú",
+            "placesStat": "Địa điểm",
+            "daysStat": "Ngày"
+        }
     },
     "shared": {
         "sectionEyebrow": "Bạn bè",

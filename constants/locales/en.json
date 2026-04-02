@@ -216,7 +216,32 @@
     },
     "notes": {
         "viewAllTitle": "All notes",
-        "viewAllButton": "View all notes"
+        "viewAllButton": "View all notes",
+        "recap": {
+            "allLabel": "All",
+            "recapLabel": "Calendar",
+            "badge": "Monthly recap",
+            "title": "Memory recap",
+            "subtitle": "A warmer look at the places and days you saved.",
+            "heroFallback": "A month of little memories worth keeping.",
+            "emptyTitle": "No memories this month",
+            "emptyBody": "Try another month or save a new note to start this recap.",
+            "previousMonth": "Previous month",
+            "nextMonth": "Next month",
+            "highlightsTitle": "Highlights",
+            "placesTitle": "Places",
+            "dayMemories": "Day memories",
+            "textNote": "Text note",
+            "postcard": "Postcard",
+            "polaroid": "Polaroid",
+            "noteSingular": "note",
+            "notePlural": "notes",
+            "photoPileTitle": "Saved this month",
+            "stickerTrayTitle": "Used this month",
+            "notesStat": "Notes",
+            "placesStat": "Places",
+            "daysStat": "Days"
+        }
     },
     "shared": {
         "sectionEyebrow": "Friends",
