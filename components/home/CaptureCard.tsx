@@ -925,6 +925,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const isCameraSaveMode = captureMode === 'camera';
   const isSharedTarget = shareTarget === 'shared';
   const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
+  const showCameraInstructionHint = Boolean(cameraInstructionText) && !capturedPhoto;
   const textCardActiveIconColor = isDarkCaptureTheme ? colors.captureCardText : '#FFFFFF';
   const photoPreviewControlFill = capturedPhoto
     ? (isDarkCaptureTheme ? 'rgba(22,22,24,0.74)' : 'rgba(255,250,242,0.78)')
@@ -938,6 +939,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const hasLivePhotoMotion = Boolean(capturedPairedVideo);
   const saveStateScale = useSharedValue(1);
   const saveSuccessProgress = useSharedValue(saveState === 'success' ? 1 : 0);
+  const cameraHintVisibility = useSharedValue(showCameraInstructionHint ? 1 : 0);
   const savePressScale = useSharedValue(1);
   const cameraTransitionMaskOpacity = useSharedValue(0);
   const livePhotoVisualProgress = useSharedValue(isLivePhotoCaptureInProgress ? 1 : 0);
@@ -1177,6 +1179,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       easing: Easing.out(Easing.cubic),
     });
   }, [reduceMotionEnabled, saveState, saveStateScale, saveSuccessProgress]);
+
+  useEffect(() => {
+    cameraHintVisibility.value = withTiming(showCameraInstructionHint ? 1 : 0, {
+      duration: reduceMotionEnabled ? 0 : 180,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [cameraHintVisibility, reduceMotionEnabled, showCameraInstructionHint]);
 
   useEffect(() => {
     if (isSaveDisabled) {
@@ -1454,6 +1463,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       { scale: captureScale.value },
     ],
   }), [captureScale, captureTranslateY]);
+  const cameraHintAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: cameraHintVisibility.value,
+    transform: [{ scale: 0.985 + cameraHintVisibility.value * 0.015 }],
+  }), [cameraHintVisibility]);
+  const cameraRadiusAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: 1 - cameraHintVisibility.value,
+    transform: [{ scale: 1 - cameraHintVisibility.value * 0.015 }],
+  }), [cameraHintVisibility]);
   const flashAnimatedStyle = useAnimatedStyle(() => ({
     opacity: flashAnim.value,
   }), [flashAnim]);
@@ -3114,63 +3131,84 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     ) : null}
                   </View>
                 </View>
-              ) : cameraInstructionText && !capturedPhoto ? (
-                <View style={[styles.cameraHintPill, { borderColor: colors.captureGlassBorder }]}>
-                  {isOlderIOS ? (
-                    <View
+              ) : (
+                <View style={styles.cameraMetaSlot}>
+                  {cameraInstructionText ? (
+                    <Reanimated.View
+                      pointerEvents={showCameraInstructionHint ? 'auto' : 'none'}
+                      style={[styles.cameraMetaHintLayer, cameraHintAnimatedStyle]}
+                    >
+                      <View
+                        accessibilityRole="text"
+                        accessibilityLabel={cameraInstructionText}
+                        style={[styles.cameraHintPill, { borderColor: colors.captureGlassBorder }]}
+                      >
+                        {isOlderIOS ? (
+                          <View
+                            style={[
+                              StyleSheet.absoluteFill,
+                              {
+                                backgroundColor: colors.captureGlassFill,
+                                borderRadius: Radii.pill,
+                              },
+                            ]}
+                          />
+                        ) : null}
+                        {!isOlderIOS ? (
+                          <GlassView
+                            pointerEvents="none"
+                            style={StyleSheet.absoluteFill}
+                            glassEffectStyle="regular"
+                            colorScheme={colors.captureGlassColorScheme}
+                          />
+                        ) : null}
+                        <View style={styles.cameraHintContent}>
+                          <Ionicons name="sparkles-outline" size={12} color={colors.captureGlassIcon} />
+                          <Text numberOfLines={1} style={[styles.cameraHintText, { color: colors.captureGlassIcon }]}>
+                            {t('capture.livePhotoCoachPhotoHint', 'Tap for photo')}
+                            <Text style={[styles.cameraHintSeparator, { color: colors.captureGlassBorder }]}>  •  </Text>
+                            <Text style={[styles.cameraHintAccentText, { color: colors.captureGlassText }]}>
+                              {t('capture.livePhotoCoachLiveHint', 'Hold for Live')}
+                            </Text>
+                          </Text>
+                        </View>
+                      </View>
+                    </Reanimated.View>
+                  ) : null}
+                  <Reanimated.View
+                    pointerEvents={showCameraInstructionHint ? 'none' : 'auto'}
+                    style={[styles.cameraMetaButtonLayer, cameraRadiusAnimatedStyle]}
+                  >
+                    <CaptureAnimatedPressable
+                      testID="capture-radius-toggle"
+                      accessibilityRole="button"
+                      accessibilityLabel={`${t('capture.radiusLabel', 'Reminder radius')}: ${formatRadiusLabel(radius)}`}
+                      accessibilityElementsHidden={showCameraInstructionHint}
+                      importantForAccessibility={showCameraInstructionHint ? 'no-hide-descendants' : 'auto'}
+                      disabled={showCameraInstructionHint}
+                      onPress={handleOpenRadiusSheet}
+                      hitSlop={10}
+                      childrenContainerStyle={styles.captureStandaloneRadiusButtonContent}
                       style={[
-                        StyleSheet.absoluteFill,
+                        styles.captureStandaloneRadiusButton,
                         {
-                          backgroundColor: colors.captureGlassFill,
-                          borderRadius: Radii.pill,
+                          borderColor: colors.captureGlassBorder,
+                          backgroundColor: isOlderIOS ? colors.captureGlassFill : 'transparent',
                         },
                       ]}
-                    />
-                  ) : null}
-                  {!isOlderIOS ? (
-                    <GlassView
-                      pointerEvents="none"
-                      style={StyleSheet.absoluteFill}
-                      glassEffectStyle="regular"
-                      colorScheme={colors.captureGlassColorScheme}
-                    />
-                  ) : null}
-                  <View style={styles.cameraHintContent}>
-                    <Ionicons name="sparkles-outline" size={14} color={colors.captureGlassIcon} />
-                    <Text
-                      numberOfLines={2}
-                      style={[styles.cameraHintText, { color: colors.captureGlassText }]}
                     >
-                      {cameraInstructionText}
-                    </Text>
-                  </View>
+                      {!isOlderIOS ? (
+                        <GlassView
+                          pointerEvents="none"
+                          style={StyleSheet.absoluteFill}
+                          glassEffectStyle="regular"
+                          colorScheme={colors.captureGlassColorScheme}
+                        />
+                      ) : null}
+                      <Ionicons name="radio-outline" size={16} color={colors.captureGlassIcon} />
+                    </CaptureAnimatedPressable>
+                  </Reanimated.View>
                 </View>
-              ) : (
-                <CaptureAnimatedPressable
-                  testID="capture-radius-toggle"
-                  accessibilityRole="button"
-                  accessibilityLabel={`${t('capture.radiusLabel', 'Reminder radius')}: ${formatRadiusLabel(radius)}`}
-                  onPress={handleOpenRadiusSheet}
-                  hitSlop={10}
-                  childrenContainerStyle={styles.captureStandaloneRadiusButtonContent}
-                  style={[
-                    styles.captureStandaloneRadiusButton,
-                    {
-                      borderColor: colors.captureGlassBorder,
-                      backgroundColor: isOlderIOS ? colors.captureGlassFill : 'transparent',
-                    },
-                  ]}
-                >
-                  {!isOlderIOS ? (
-                    <GlassView
-                      pointerEvents="none"
-                      style={StyleSheet.absoluteFill}
-                      glassEffectStyle="regular"
-                      colorScheme={colors.captureGlassColorScheme}
-                    />
-                  ) : null}
-                  <Ionicons name="radio-outline" size={16} color={colors.captureGlassIcon} />
-                </CaptureAnimatedPressable>
               )}
             </View>
           </View>
@@ -3913,25 +3951,52 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
   },
-  cameraHintPill: {
+  cameraMetaSlot: {
     width: '100%',
-    minHeight: 42,
+    minHeight: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cameraMetaHintLayer: {
+    position: 'absolute',
+    alignSelf: 'center',
+  },
+  cameraMetaButtonLayer: {
+    position: 'absolute',
+    alignSelf: 'center',
+  },
+  cameraHintPill: {
+    minHeight: 34,
+    maxWidth: '100%',
     borderRadius: Radii.pill,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     justifyContent: 'center',
-    paddingHorizontal: 14,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   cameraHintContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
   },
   cameraHintText: {
     ...Typography.pill,
-    flexShrink: 1,
+    fontSize: 13,
+    lineHeight: 16,
     textAlign: 'center',
+  },
+  cameraHintSeparator: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  cameraHintAccentText: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '600',
+    fontFamily: 'Noto Sans',
   },
   belowCardShutterRow: {
     flexDirection: 'row',

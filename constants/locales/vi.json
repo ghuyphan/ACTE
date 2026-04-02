@@ -75,6 +75,8 @@
         "livePhoto": "Chuyển động",
         "livePhotoReady": "Live",
         "livePhotoCaptureHint": "Chạm để chụp ảnh. Giữ để chụp live photo.",
+        "livePhotoCoachPhotoHint": "Chạm để chụp",
+        "livePhotoCoachLiveHint": "Giữ để chụp Live",
         "livePhotoCapturingHint": "Thả tay để hoàn tất live photo.",
         "livePhotoPreparingHint": "Đang chuẩn bị live photo...",
         "livePhotoHint": "Nhấn giữ trên thẻ để phát đoạn chuyển động.",

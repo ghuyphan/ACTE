@@ -75,6 +75,8 @@
         "livePhoto": "Motion",
         "livePhotoReady": "Live",
         "livePhotoCaptureHint": "Tap for a photo. Hold for a live photo.",
+        "livePhotoCoachPhotoHint": "Tap for photo",
+        "livePhotoCoachLiveHint": "Hold for Live",
         "livePhotoCapturingHint": "Release to finish the live photo.",
         "livePhotoPreparingHint": "Preparing live photo...",
         "livePhotoHint": "Press and hold on cards to play the motion clip.",

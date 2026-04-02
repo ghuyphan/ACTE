@@ -165,17 +165,9 @@ export default function HomeScreen() {
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveInFlightRef = useRef(false);
-  const livePhotoCameraHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settledArchiveItemRef = useRef<{ id: string; kind: 'note' | 'shared-post' } | null>(null);
   const previousVisibleSharedPostIdsRef = useRef<string[]>([]);
   useScrollToTop(flatListRef);
-
-  const clearLivePhotoCameraHintTimeout = useCallback(() => {
-    if (livePhotoCameraHintTimeoutRef.current) {
-      clearTimeout(livePhotoCameraHintTimeoutRef.current);
-      livePhotoCameraHintTimeoutRef.current = null;
-    }
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -190,9 +182,8 @@ export default function HomeScreen() {
 
     return () => {
       cancelled = true;
-      clearLivePhotoCameraHintTimeout();
     };
-  }, [clearLivePhotoCameraHintTimeout]);
+  }, []);
 
   const dismissSharedManageSheet = useCallback(() => {
     setShowSharedManageSheet(false);
@@ -298,35 +289,35 @@ export default function HomeScreen() {
     return null;
   }, [remainingPhotoSlots, t, tier]);
   useEffect(() => {
-    const canShowFirstTimeHint =
+    const isCameraHintEligible =
       captureMode === 'camera' &&
       !capturedPhoto &&
-      hasSeenLivePhotoCameraHint === false &&
       !(tier !== 'plus' && remainingPhotoSlots === 0);
 
-    if (!canShowFirstTimeHint) {
+    if (hasSeenLivePhotoCameraHint !== false) {
       setShowLivePhotoCameraHint(false);
-      clearLivePhotoCameraHintTimeout();
       return;
     }
 
-    setShowLivePhotoCameraHint(true);
-    setHasSeenLivePhotoCameraHint(true);
-    void setPersistentItem(LIVE_PHOTO_CAMERA_HINT_SEEN_KEY, '1');
-
-    livePhotoCameraHintTimeoutRef.current = setTimeout(() => {
-      setShowLivePhotoCameraHint(false);
-    }, reduceMotionEnabled ? 2200 : 3200);
-
-    return clearLivePhotoCameraHintTimeout;
+    setShowLivePhotoCameraHint(isCameraHintEligible);
   }, [
     captureMode,
     capturedPhoto,
-    clearLivePhotoCameraHintTimeout,
     hasSeenLivePhotoCameraHint,
-    reduceMotionEnabled,
     remainingPhotoSlots,
     tier,
+  ]);
+
+  useEffect(() => {
+    if (hasSeenLivePhotoCameraHint !== false || !capturedPhoto) {
+      return;
+    }
+
+    setHasSeenLivePhotoCameraHint(true);
+    void setPersistentItem(LIVE_PHOTO_CAMERA_HINT_SEEN_KEY, '1');
+  }, [
+    capturedPhoto,
+    hasSeenLivePhotoCameraHint,
   ]);
   const suppressedHomeNoteIdSet = useMemo(
     () => new Set(suppressedHomeNoteIds),

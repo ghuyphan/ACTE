@@ -692,14 +692,15 @@ describe('CaptureCard doodle handle', () => {
     expect(queryByTestId('capture-card-paste-surface')).toBeNull();
   });
 
-  it('shows the first-time live photo hint below the shutter controls', () => {
+  it('shows the first-time live photo hint without removing the footer controls', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const { getByText } = renderCaptureCard(ref, {
+    const { UNSAFE_getByProps, getByLabelText } = renderCaptureCard(ref, {
       captureMode: 'camera',
       cameraInstructionText: 'Tap for a photo. Hold for a live photo.',
     });
 
-    expect(getByText('Tap for a photo. Hold for a live photo.')).toBeTruthy();
+    expect(getByLabelText('Tap for a photo. Hold for a live photo.')).toBeTruthy();
+    expect(UNSAFE_getByProps({ testID: 'capture-radius-toggle' })).toBeTruthy();
   });
 
   it('lets you change the text-card doodle color', () => {

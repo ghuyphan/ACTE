@@ -7,6 +7,8 @@ const mockOpenAppSettings = jest.fn(async () => undefined);
 const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
 const mockShowAlert = jest.fn();
 const mockUseCaptureFlow = jest.fn();
+const mockGetPersistentItem = jest.fn(async (_key: string) => null);
+const mockSetPersistentItem = jest.fn(async (_key: string, _value: string) => undefined);
 const originalRequestAnimationFrame = global.requestAnimationFrame;
 const originalRequestIdleCallback = (global as any).requestIdleCallback;
 const originalCancelIdleCallback = (global as any).cancelIdleCallback;
@@ -128,6 +130,11 @@ jest.mock('../hooks/state/useFeedFocus', () => ({
 
 jest.mock('../hooks/useCaptureFlow', () => ({
   useCaptureFlow: (...args: any[]) => mockUseCaptureFlow(...args),
+}));
+
+jest.mock('../utils/appStorage', () => ({
+  getPersistentItem: (key: string) => mockGetPersistentItem(key),
+  setPersistentItem: (key: string, value: string) => mockSetPersistentItem(key, value),
 }));
 
 jest.mock('../hooks/useNotes', () => ({
@@ -258,7 +265,10 @@ describe('HomeScreen camera lifecycle', () => {
     mockOpenAppSettings.mockClear();
     mockRequestPermission.mockClear();
     mockShowAlert.mockClear();
+    mockGetPersistentItem.mockReset();
+    mockSetPersistentItem.mockClear();
     mockRequestPermission.mockResolvedValue({ granted: true, canAskAgain: true });
+    mockGetPersistentItem.mockResolvedValue(null);
     mockUseCaptureFlow.mockImplementation(() => {
       const createSharedValue = (value: number) => ({ value } as any);
       return {
@@ -440,5 +450,75 @@ describe('HomeScreen camera lifecycle', () => {
 
     expect(mockOpenAppSettings).toHaveBeenCalledTimes(1);
     expect(mockRequestPermission).not.toHaveBeenCalled();
+  });
+
+  it('keeps the first-time live photo hint visible until a capture exists', async () => {
+    let currentCapturedPhoto: string | null = null;
+
+    mockUseCaptureFlow.mockImplementation(() => {
+      const createSharedValue = (value: number) => ({ value } as any);
+      return {
+        captureScale: createSharedValue(1),
+        captureTranslateY: createSharedValue(0),
+        flashAnim: createSharedValue(0),
+        shutterScale: createSharedValue(1),
+        captureMode: 'camera',
+        cameraSessionKey: 1,
+        setCaptureMode: jest.fn(),
+        restaurantName: '',
+        setRestaurantName: jest.fn(),
+        noteText: '',
+        setNoteText: jest.fn(),
+        capturedPhoto: currentCapturedPhoto,
+        setCapturedPhoto: jest.fn(),
+        selectedPromptId: 'photo-moment',
+        setSelectedPromptId: jest.fn(),
+        selectedPromptText: 'What made this moment worth keeping?',
+        setSelectedPromptText: jest.fn(),
+        promptAnswer: '',
+        setPromptAnswer: jest.fn(),
+        moodEmoji: null,
+        setMoodEmoji: jest.fn(),
+        promptExpanded: false,
+        setPromptExpanded: jest.fn(),
+        hasShuffledPrompt: false,
+        setHasShuffledPrompt: jest.fn(),
+        radius: 150,
+        setRadius: jest.fn(),
+        facing: 'back',
+        setFacing: jest.fn(),
+        permission: { granted: true, canAskAgain: true },
+        requestPermission: mockRequestPermission,
+        cameraRef: { current: null },
+        animateModeSwitch: jest.fn(),
+        toggleCaptureMode: jest.fn(),
+        handleShutterPressIn: jest.fn(),
+        handleShutterPressOut: jest.fn(),
+        takePicture: jest.fn(),
+        needsCameraPermission: false,
+        resetCapture: jest.fn(),
+      };
+    });
+
+    const { rerender } = render(<HomeScreen />);
+
+    await waitFor(() => {
+      expect(mockCaptureCardProps?.cameraInstructionText).toBe(
+        'Tap for a photo. Hold for a live photo.'
+      );
+    });
+
+    expect(mockSetPersistentItem).not.toHaveBeenCalled();
+
+    currentCapturedPhoto = 'file:///documents/captured-photo.jpg';
+    rerender(<HomeScreen />);
+
+    await waitFor(() => {
+      expect(mockSetPersistentItem).toHaveBeenCalledWith(
+        'noto.capture.live-photo-hint-seen.v1',
+        '1'
+      );
+      expect(mockCaptureCardProps?.cameraInstructionText).toBeNull();
+    });
   });
 });
