@@ -16,13 +16,19 @@ import {
   updateNote as dbUpdate,
 } from '../services/database';
 import {
+  prependNote,
+  removeNoteFromCollection,
+  replaceNoteInCollection,
+  updateNoteInCollection,
+} from '../services/noteMutationHelpers';
+import {
   clearGeofenceRegions,
   skipImmediateReminderForNewNote,
   syncGeofenceRegions,
 } from '../services/geofenceService';
 import { cleanupOrphanMediaFiles } from '../services/mediaIntegrity';
 import { getNotePhotoUri } from '../services/photoStorage';
-import { getSyncService } from '../services/syncService';
+import { getSyncService, type SyncChange } from '../services/syncService';
 import { updateWidgetData } from '../services/widgetService';
 
 interface NotesStoreValue {
@@ -65,6 +71,41 @@ function useNotesStoreValue(): NotesStoreValue {
         includeLocationLookup: true,
       });
     }, delay);
+  }, []);
+
+  const commitNotes = useCallback(
+    (nextNotes: Note[]) => {
+      notesRef.current = nextNotes;
+      setNotes(nextNotes);
+      scheduleWidgetUpdate(nextNotes);
+    },
+    [scheduleWidgetUpdate]
+  );
+
+  const recordNoteChange = useCallback(
+    (change: Omit<SyncChange, 'timestamp'>) => {
+      void syncService.recordChange({
+        ...change,
+        timestamp: new Date().toISOString(),
+      });
+    },
+    [syncService]
+  );
+
+  const deletePhotoFileIfPresent = useCallback(async (note: Note | null | undefined) => {
+    const photoUri = getNotePhotoUri(note);
+    if (note?.type !== 'photo' || !photoUri) {
+      return;
+    }
+
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(photoUri);
+      if (fileInfo.exists) {
+        await FileSystem.deleteAsync(photoUri, { idempotent: true });
+      }
+    } catch (error) {
+      console.warn('Failed to delete photo file:', error);
+    }
   }, []);
 
   const refreshNotes = useCallback(async (showLoading = true) => {
@@ -134,113 +175,60 @@ function useNotesStoreValue(): NotesStoreValue {
   const createNote = useCallback(
     async (input: CreateNoteInput): Promise<Note> => {
       const note = await dbCreate(input);
-      const nextNotes = [note, ...notesRef.current];
-      notesRef.current = nextNotes;
-      setNotes(nextNotes);
+      const nextNotes = prependNote(notesRef.current, note);
+      commitNotes(nextNotes);
 
-      scheduleWidgetUpdate(nextNotes);
       await skipImmediateReminderForNewNote(note.id);
       void syncGeofenceRegions();
-      void syncService.recordChange({
+      recordNoteChange({
         type: 'create',
         entity: 'note',
         entityId: note.id,
         payload: input,
-        timestamp: new Date().toISOString(),
       });
 
       return note;
     },
-    [scheduleWidgetUpdate, syncService]
+    [commitNotes, recordNoteChange]
   );
 
   const updateNote = useCallback(
     async (id: string, updates: NoteUpdates) => {
       await dbUpdate(id, updates);
-      const nextNotes = notesRef.current.map((n) =>
-        n.id === id
-          ? {
-              ...n,
-              ...updates,
-              content:
-                n.type === 'photo'
-                  ? getNotePhotoUri({
-                      ...n,
-                      ...updates,
-                      type: n.type,
-                    })
-                  : updates.content ?? n.content,
-              photoLocalUri:
-                n.type === 'photo'
-                  ? getNotePhotoUri({
-                      ...n,
-                      ...updates,
-                      type: n.type,
-                    }) || null
-                  : null,
-              promptId: updates.promptId !== undefined ? updates.promptId : n.promptId ?? null,
-              promptTextSnapshot:
-                updates.promptTextSnapshot !== undefined
-                  ? updates.promptTextSnapshot
-                  : n.promptTextSnapshot ?? null,
-              promptAnswer:
-                updates.promptAnswer !== undefined ? updates.promptAnswer : n.promptAnswer ?? null,
-              moodEmoji: updates.moodEmoji !== undefined ? updates.moodEmoji : n.moodEmoji ?? null,
-              noteColor: updates.noteColor !== undefined ? updates.noteColor : n.noteColor ?? null,
-              hasDoodle: updates.hasDoodle !== undefined ? updates.hasDoodle : n.hasDoodle ?? false,
-              doodleStrokesJson:
-                updates.doodleStrokesJson !== undefined
-                  ? updates.doodleStrokesJson
-                  : n.doodleStrokesJson ?? null,
-              hasStickers:
-                updates.hasStickers !== undefined ? updates.hasStickers : n.hasStickers ?? false,
-              stickerPlacementsJson:
-                updates.stickerPlacementsJson !== undefined
-                  ? updates.stickerPlacementsJson
-                  : n.stickerPlacementsJson ?? null,
-              updatedAt: new Date().toISOString(),
-            }
-          : n
-      );
-      notesRef.current = nextNotes;
-      setNotes(nextNotes);
+      const nextNotes = updateNoteInCollection(notesRef.current, id, updates);
+      commitNotes(nextNotes);
 
-      scheduleWidgetUpdate(nextNotes);
       if (updates.radius !== undefined) {
         void syncGeofenceRegions();
       }
-      void syncService.recordChange({
+      recordNoteChange({
         type: 'update',
         entity: 'note',
         entityId: id,
         payload: updates,
-        timestamp: new Date().toISOString(),
       });
     },
-    [scheduleWidgetUpdate, syncService]
+    [commitNotes, recordNoteChange]
   );
 
   const toggleFavorite = useCallback(
     async (id: string) => {
       const newValue = await dbToggleFav(id);
-      const nextNotes = notesRef.current.map((n) =>
-        n.id === id ? { ...n, isFavorite: newValue } : n
-      );
-      notesRef.current = nextNotes;
-      setNotes(nextNotes);
-
-      scheduleWidgetUpdate(nextNotes);
+      const nextNotes = replaceNoteInCollection(notesRef.current, id, (note) => ({
+        ...note,
+        isFavorite: newValue,
+      }));
+      commitNotes(nextNotes);
       void syncGeofenceRegions();
-      void syncService.recordChange({
+      recordNoteChange({
         type: 'update',
         entity: 'note',
         entityId: id,
         payload: { isFavorite: newValue },
-        timestamp: new Date().toISOString(),
       });
       return newValue;
     },
-    [scheduleWidgetUpdate, syncService]
+    [commitNotes, recordNoteChange]
   );
 
   const searchNotes = useCallback(async (query: string) => {
@@ -252,64 +240,37 @@ function useNotesStoreValue(): NotesStoreValue {
       const note = await dbGetById(id);
 
       await dbDelete(id);
-      const nextNotes = notesRef.current.filter((n) => n.id !== id);
-      notesRef.current = nextNotes;
-      setNotes(nextNotes);
+      const nextNotes = removeNoteFromCollection(notesRef.current, id);
+      commitNotes(nextNotes);
 
-      const photoUri = getNotePhotoUri(note);
-      if (note?.type === 'photo' && photoUri) {
-        try {
-          const fileInfo = await FileSystem.getInfoAsync(photoUri);
-          if (fileInfo.exists) {
-            await FileSystem.deleteAsync(photoUri, { idempotent: true });
-          }
-        } catch (error) {
-          console.warn('Failed to delete photo file:', error);
-        }
-      }
+      await deletePhotoFileIfPresent(note);
 
-      scheduleWidgetUpdate(nextNotes);
       void syncGeofenceRegions();
-      void syncService.recordChange({
+      recordNoteChange({
         type: 'delete',
         entity: 'note',
         entityId: id,
-        timestamp: new Date().toISOString(),
       });
     },
-    [scheduleWidgetUpdate, syncService]
+    [commitNotes, deletePhotoFileIfPresent, recordNoteChange]
   );
 
   const deleteAllNotes = useCallback(async () => {
     const allNotes = await getAllNotes();
 
     await dbDeleteAll();
-    notesRef.current = [];
-    setNotes([]);
+    commitNotes([]);
 
     for (const note of allNotes) {
-      const photoUri = getNotePhotoUri(note);
-      if (note.type !== 'photo' || !photoUri) {
-        continue;
-      }
-      try {
-        const fileInfo = await FileSystem.getInfoAsync(photoUri);
-        if (fileInfo.exists) {
-          await FileSystem.deleteAsync(photoUri, { idempotent: true });
-        }
-      } catch (error) {
-        console.warn('Failed to delete photo file:', error);
-      }
+      await deletePhotoFileIfPresent(note);
     }
 
     await clearGeofenceRegions();
-    scheduleWidgetUpdate([]);
-    void syncService.recordChange({
+    recordNoteChange({
       type: 'deleteAll',
       entity: 'note',
-      timestamp: new Date().toISOString(),
     });
-  }, [scheduleWidgetUpdate, syncService]);
+  }, [commitNotes, deletePhotoFileIfPresent, recordNoteChange]);
 
   const getNoteById = useCallback(async (id: string) => {
     const inMemory = notesRef.current.find((n) => n.id === id);

@@ -19,6 +19,7 @@ import {
   openPrivacyPolicy,
   openSupport,
 } from '../../services/legalLinks';
+import { getThemeLabel } from '../settings/settingsSelectionOptions';
 
 export function useSettingsScreenModel() {
   const { t, i18n } = useTranslation();
@@ -84,12 +85,7 @@ export function useSettingsScreenModel() {
     void openAccountDeletionHelp();
   };
 
-  const themeLabel =
-    theme === 'system'
-      ? t('settings.system', 'System')
-      : theme === 'dark'
-        ? t('settings.dark', 'Dark')
-        : t('settings.light', 'Light');
+  const themeLabel = getThemeLabel(theme, t);
 
   const accountValue = useMemo(() => {
     if (user) {

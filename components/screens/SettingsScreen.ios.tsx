@@ -23,9 +23,9 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import AppSheet from '../AppSheet';
 import AppSheetAlert from '../AppSheetAlert';
-import SettingsLanguageSheet from '../SettingsLanguageSheet';
+import SettingsLanguageSheet from '../settings/SettingsLanguageSheet';
 import SettingsSyncSheet from '../SettingsSyncSheet';
-import SettingsThemeSheet from '../SettingsThemeSheet';
+import SettingsThemeSheet from '../settings/SettingsThemeSheet';
 import { Layout } from '../../constants/theme';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
 

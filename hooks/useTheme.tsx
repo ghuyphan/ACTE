@@ -7,10 +7,6 @@ export type ThemeType = 'light' | 'dark' | 'system';
 type ResolvedColorScheme = 'light' | 'dark';
 type NativeColorScheme = ReturnType<typeof Appearance.getColorScheme>;
 
-type NativeAppearanceModule = {
-    getColorScheme?: () => NativeColorScheme;
-} | null;
-
 export interface ThemeColors {
     background: string;
     surface: string;
@@ -117,10 +113,6 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = 'settings.theme';
 const VALID_THEMES: ThemeType[] = ['light', 'dark', 'system'];
-const nativeAppearance: NativeAppearanceModule =
-    Platform.OS === 'ios'
-        ? (require('react-native/Libraries/Utilities/NativeAppearance').default as NativeAppearanceModule)
-        : null;
 
 function normalizeTheme(value: string | null): ThemeType {
     if (value && VALID_THEMES.includes(value as ThemeType)) {
@@ -141,12 +133,7 @@ export function normalizeSystemColorScheme(
 }
 
 function readSystemColorScheme(fallback: ResolvedColorScheme = 'light'): ResolvedColorScheme {
-    const colorScheme =
-        Platform.OS === 'ios'
-            ? nativeAppearance?.getColorScheme?.() ?? Appearance.getColorScheme()
-            : Appearance.getColorScheme();
-
-    return normalizeSystemColorScheme(colorScheme, fallback);
+    return normalizeSystemColorScheme(Appearance.getColorScheme(), fallback);
 }
 
 export function resolveThemePreference(

@@ -1,37 +1,31 @@
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
-import * as Linking from 'expo-linking';
-import * as Notifications from 'expo-notifications';
 import * as SystemUI from 'expo-system-ui';
-import { SplashScreen, Stack, useRouter, useSegments } from 'expo-router';
+import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation, I18nextProvider } from 'react-i18next';
-import { AppState, View } from 'react-native';
+import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import i18n, { i18nReady } from '../constants/i18n';
 import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
 import { ActiveNoteProvider } from '../hooks/useActiveNote';
-import { AuthProvider, useAuth } from '../hooks/useAuth';
-import { ConnectivityProvider, useConnectivity } from '../hooks/useConnectivity';
-import { FeedFocusProvider, useFeedFocus } from '../hooks/useFeedFocus';
+import { AuthProvider } from '../hooks/useAuth';
+import { ConnectivityProvider } from '../hooks/useConnectivity';
+import { FeedFocusProvider } from '../hooks/useFeedFocus';
 import { NotesProvider } from '../hooks/useNotes';
 import { NoteDetailSheetProvider } from '../hooks/useNoteDetailSheet';
 import { SharedFeedProvider } from '../hooks/useSharedFeed';
 import { SyncStatusProvider } from '../hooks/useSyncStatus';
 import { SubscriptionProvider } from '../hooks/useSubscription';
 import { ThemeProvider, useTheme } from '../hooks/useTheme';
+import { useAppNotificationRouting } from '../hooks/app/useAppNotificationRouting';
+import { useAppStartupBootstrap } from '../hooks/app/useAppStartupBootstrap';
+import { useAppWidgetRefresh } from '../hooks/app/useAppWidgetRefresh';
+import { useSocialPushRegistration } from '../hooks/app/useSocialPushRegistration';
 import { AppAlertProvider } from '../components/ui/AppAlertProvider';
-import { getDB } from '../services/database';
-import { syncGeofenceRegions } from '../services/geofenceService';
-import { runMediaCacheEviction } from '../services/mediaCacheManager';
-import { configureNotificationChannels } from '../services/notificationService';
-import { syncSocialPushRegistration } from '../services/socialPushService';
-import { getCachedStartupRoute, loadStartupRoute } from '../services/startupRouting';
-import { updateWidgetData } from '../services/widgetService';
 import '../utils/backgroundGeofence';
-import { scheduleOnIdle } from '../utils/scheduleOnIdle';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -41,157 +35,10 @@ SplashScreen.preventAutoHideAsync();
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
   const { t } = useTranslation();
-  const { user } = useAuth();
-  const { isOnline } = useConnectivity();
-  const { requestFeedFocus } = useFeedFocus();
-  const router = useRouter();
-  const segments = useSegments();
-  const notificationResponseListener = useRef<Notifications.EventSubscription | null>(null);
-  const lastHandledNotificationIdRef = useRef<string | null>(null);
-  const [initialUrlResolved, setInitialUrlResolved] = useState(false);
-  const [hasInitialUrl, setHasInitialUrl] = useState(false);
-  const [startupRedirectHandled, setStartupRedirectHandled] = useState(false);
-  const [startupTarget, setStartupTarget] = useState<string | null>(() =>
-    getCachedStartupRoute('entry')
-  );
-  const startupRedirectPending =
-    !startupRedirectHandled &&
-    initialUrlResolved &&
-    !hasInitialUrl &&
-    segments[0] === undefined &&
-    Boolean(startupTarget);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void Linking.getInitialURL()
-      .then((initialUrl) => {
-        if (cancelled) {
-          return;
-        }
-
-        setHasInitialUrl(Boolean(initialUrl));
-        setInitialUrlResolved(true);
-      })
-      .catch(() => {
-        if (cancelled) {
-          return;
-        }
-
-        setHasInitialUrl(false);
-        setInitialUrlResolved(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (segments[0] === undefined || !hasInitialUrl) {
-      return;
-    }
-
-    setHasInitialUrl(false);
-  }, [hasInitialUrl, segments]);
-
-  useEffect(() => {
-    let startupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
-    let startupTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    void configureNotificationChannels();
-
-    getDB()
-      .then(() => {
-        startupIdleHandle = scheduleOnIdle(() => {
-          startupTimeout = setTimeout(() => {
-            updateWidgetData().catch((err) => console.warn('Widget init failed:', err));
-            syncGeofenceRegions().catch((err) => console.warn('Geofence sync failed:', err));
-            runMediaCacheEviction().catch((err) => console.warn('Cache eviction failed:', err));
-          }, 400);
-        });
-      })
-      .catch((err) => {
-        console.error('Database init failed:', err);
-      });
-
-    return () => {
-      startupIdleHandle?.cancel();
-      if (startupTimeout) {
-        clearTimeout(startupTimeout);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (startupTarget) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void loadStartupRoute('entry').then((nextTarget) => {
-      if (!cancelled) {
-        setStartupTarget(nextTarget);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [startupTarget]);
-
-  useEffect(() => {
-    if (startupRedirectHandled || !initialUrlResolved || !startupTarget) {
-      return;
-    }
-
-    if (hasInitialUrl || segments[0] !== undefined) {
-      setStartupRedirectHandled(true);
-      return;
-    }
-
-    setStartupRedirectHandled(true);
-    router.replace(startupTarget as '/' | '/auth/onboarding');
-  }, [hasInitialUrl, initialUrlResolved, router, segments, startupRedirectHandled, startupTarget]);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active') {
-        return;
-      }
-
-      updateWidgetData({
-        includeLocationLookup: true,
-        includeSharedRefresh: Boolean(user && isOnline),
-      }).catch((err) => console.warn('Widget background update failed:', err));
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [isOnline, user]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    updateWidgetData({
-      includeLocationLookup: true,
-      includeSharedRefresh: isOnline,
-    }).catch((err) => console.warn('Widget data update failed:', err));
-  }, [isOnline, user]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    syncSocialPushRegistration(user).catch((error) => {
-      console.warn('[social-push] Registration failed:', error);
-    });
-  }, [user]);
+  const { initialUrlResolved, startupTarget } = useAppStartupBootstrap();
+  useAppWidgetRefresh();
+  useAppNotificationRouting();
+  useSocialPushRegistration();
 
   useEffect(() => {
     void i18nReady
@@ -200,13 +47,12 @@ function AppContent() {
       });
   }, []);
 
-  // Handle splash screen
   useEffect(() => {
     void SystemUI.setBackgroundColorAsync(colors.background);
   }, [colors.background]);
 
   useEffect(() => {
-    if (!themeReady || !startupTarget || !initialUrlResolved || startupRedirectPending) {
+    if (!themeReady || !startupTarget || !initialUrlResolved) {
       return;
     }
 
@@ -220,72 +66,22 @@ function AppContent() {
     return () => {
       cancelled = true;
     };
-  }, [initialUrlResolved, startupRedirectPending, startupTarget, themeReady]);
+  }, [initialUrlResolved, startupTarget, themeReady]);
 
-  const handleNotificationResponse = useCallback(
-    async (response: Notifications.NotificationResponse | null) => {
-      if (!response) {
-        return;
-      }
-
-      const notificationId = response.notification.request.identifier;
-      if (lastHandledNotificationIdRef.current === notificationId) {
-        return;
-      }
-      lastHandledNotificationIdRef.current = notificationId;
-
-      const noteId = response.notification.request.content.data?.noteId;
-      const sharedPostId = response.notification.request.content.data?.sharedPostId;
-      const route = response.notification.request.content.data?.route;
-      if (noteId && typeof noteId === 'string') {
-        // Match the widget flow: focus the feed item after the app tree is mounted
-        // instead of presenting a bottom sheet from the startup notification effect.
-        requestFeedFocus({ kind: 'note', id: noteId });
-        router.replace(`/widget/note/${encodeURIComponent(noteId)}` as any);
-      } else if (sharedPostId && typeof sharedPostId === 'string') {
-        requestFeedFocus({ kind: 'shared-post', id: sharedPostId });
-        router.replace(`/widget/shared-post/${encodeURIComponent(sharedPostId)}` as any);
-      } else if (route && typeof route === 'string') {
-        router.push(route as any);
-      }
-
-      try {
-        await Notifications.clearLastNotificationResponseAsync();
-      } catch {
-        return;
-      }
-    },
-    [requestFeedFocus, router]
-  );
-
-  // Handle notification tap deep-link
-  useEffect(() => {
-    let cancelled = false;
-
-    void Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (!cancelled) {
-        void handleNotificationResponse(response);
-      }
-    });
-
-    notificationResponseListener.current =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        void handleNotificationResponse(response);
-      });
-
-    return () => {
-      cancelled = true;
-      notificationResponseListener.current?.remove();
+  const navTheme = useMemo(() => {
+    const baseTheme = isDark ? DarkTheme : DefaultTheme;
+    return {
+      ...baseTheme,
+      colors: {
+        ...baseTheme.colors,
+        background: colors.background,
+        card: colors.card,
+        text: colors.text,
+        border: colors.border,
+        primary: colors.primary,
+      },
     };
-  }, [handleNotificationResponse]);
-
-  const navTheme = isDark ? DarkTheme : DefaultTheme;
-  // Override background colors to match our exact theme
-  navTheme.colors.background = colors.background;
-  navTheme.colors.card = colors.card;
-  navTheme.colors.text = colors.text;
-  navTheme.colors.border = colors.border;
-  navTheme.colors.primary = colors.primary;
+  }, [colors.background, colors.border, colors.card, colors.primary, colors.text, isDark]);
 
   return (
     <NavThemeProvider value={navTheme}>
@@ -360,7 +156,6 @@ function AppContent() {
               animation: 'none',
             }}
           />
-
         </Stack>
       </View>
     </NavThemeProvider>
