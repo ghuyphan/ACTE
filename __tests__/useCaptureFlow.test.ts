@@ -186,7 +186,7 @@ describe('useCaptureFlow', () => {
     }
   });
 
-  it('keeps a live photo recording active for a minimum capture window after release', async () => {
+  it('keeps a live photo recording active only briefly after release', async () => {
     jest.useFakeTimers();
     const { result } = renderHook(() => useCaptureFlow());
 
@@ -206,14 +206,14 @@ describe('useCaptureFlow', () => {
 
       act(() => {
         result.current.handleShutterPressOut();
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(100);
       });
 
       expect(mockStopRecording).not.toHaveBeenCalled();
       expect(result.current.isLivePhotoCaptureInProgress).toBe(true);
 
       act(() => {
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(100);
       });
 
       await act(async () => {

@@ -560,7 +560,8 @@
         "accessoryOpenApp": "Mở Noto",
         "accessoryAddLabel": "Thêm",
         "accessorySavedLabel": "Đã lưu",
-        "accessoryNearLabel": "Gần"
+        "accessoryNearLabel": "Gần",
+        "livePhotoBadge": "Live"
     },
     "feedback": {
         "favorited": "Đã yêu thích",

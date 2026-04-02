@@ -21,6 +21,7 @@ interface WidgetProps {
     date: string;
     noteCount: number;
     nearbyPlacesCount: number;
+    isLivePhoto: boolean;
     backgroundImageUrl?: string; // Currently not supported natively by expo-widgets JS side
     backgroundImageBase64?: string;
     backgroundGradientStartColor?: string;
@@ -41,6 +42,7 @@ interface WidgetProps {
     accessoryAddLabelText: string;
     accessorySavedLabelText: string;
     accessoryNearLabelText: string;
+    livePhotoBadgeText: string;
     isSharedContent: boolean;
     authorDisplayName: string;
     authorInitials: string;
@@ -116,6 +118,8 @@ const LocketWidget = (props: { props: WidgetProps }) => {
         accessoryAddLabelText,
         accessorySavedLabelText,
         accessoryNearLabelText,
+        isLivePhoto,
+        livePhotoBadgeText,
         isSharedContent,
         authorDisplayName,
         authorInitials,
@@ -136,6 +140,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
     const showIdle = safeNoteCount <= 0 || (isIdleState && !safeText && !hasImage);
     const isTextNote = !showIdle && !hasImage && safeText.length > 0;
     const isPhoto = !showIdle && hasImage;
+    const showLivePhotoBadge = isPhoto && Boolean(isLivePhoto);
     const bodyText = showIdle
         ? asString(idleText) || 'The right note will appear when you are nearby.'
         : safeText || asString(memoryReminderText) || 'A quiet reminder from here.';
@@ -183,6 +188,7 @@ const LocketWidget = (props: { props: WidgetProps }) => {
     const showAuthorChip = Boolean(isSharedContent && (safeAuthorInitials || compactAuthorName));
     const authorChipBackground = hasImage ? 'rgba(16,12,10,0.32)' : 'rgba(255,249,243,0.82)';
     const authorChipForeground = hasImage ? '#FFF8F0' : '#2A1A11';
+    const livePhotoText = asString(livePhotoBadgeText) || 'Live';
 
     if (isAccessoryInline) {
         return (
@@ -352,30 +358,54 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                     frame({ maxWidth: 9999, maxHeight: 9999 }),
                 ]}
             >
-                {showAuthorChip ? (
+                {showAuthorChip || showLivePhotoBadge ? (
                     <HStack
                         modifiers={[
                             frame({ maxWidth: 9999 }),
                             padding({ bottom: isLarge ? 8 : 4 }),
                         ]}
                     >
-                        <HStack
-                            modifiers={[
-                                backgroundOverlay({ color: authorChipBackground }),
-                                cornerRadius(999),
-                                padding({ horizontal: 8, vertical: 5 }),
-                            ]}
-                        >
-                            <Text
+                        {showAuthorChip ? (
+                            <HStack
                                 modifiers={[
-                                    font({ weight: 'bold', size: 10, design: 'rounded' }),
-                                    foregroundStyle(authorChipForeground),
-                                    lineLimit(1),
+                                    backgroundOverlay({ color: authorChipBackground }),
+                                    cornerRadius(999),
+                                    padding({ horizontal: 8, vertical: 5 }),
                                 ]}
                             >
-                                {safeAuthorInitials}
-                            </Text>
-                            {compactAuthorName ? (
+                                <Text
+                                    modifiers={[
+                                        font({ weight: 'bold', size: 10, design: 'rounded' }),
+                                        foregroundStyle(authorChipForeground),
+                                        lineLimit(1),
+                                    ]}
+                                >
+                                    {safeAuthorInitials}
+                                </Text>
+                                {compactAuthorName ? (
+                                    <Text
+                                        modifiers={[
+                                            font({ weight: 'medium', size: 10, design: 'default' }),
+                                            foregroundStyle(authorChipForeground),
+                                            lineLimit(1),
+                                            padding({ leading: 5 }),
+                                        ]}
+                                    >
+                                        {compactAuthorName}
+                                    </Text>
+                                ) : null}
+                            </HStack>
+                        ) : null}
+                        <Spacer />
+                        {showLivePhotoBadge ? (
+                            <HStack
+                                modifiers={[
+                                    backgroundOverlay({ color: authorChipBackground }),
+                                    cornerRadius(999),
+                                    padding({ horizontal: 8, vertical: 5 }),
+                                ]}
+                            >
+                                <SwiftUIImage systemName="livephoto" color={authorChipForeground} size={11} />
                                 <Text
                                     modifiers={[
                                         font({ weight: 'medium', size: 10, design: 'default' }),
@@ -384,11 +414,10 @@ const LocketWidget = (props: { props: WidgetProps }) => {
                                         padding({ leading: 5 }),
                                     ]}
                                 >
-                                    {compactAuthorName}
+                                    {livePhotoText}
                                 </Text>
-                            ) : null}
-                        </HStack>
-                        <Spacer />
+                            </HStack>
+                        ) : null}
                     </HStack>
                 ) : null}
 

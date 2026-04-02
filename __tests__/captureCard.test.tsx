@@ -567,6 +567,7 @@ describe('CaptureCard doodle handle', () => {
     expect(onStartLivePhotoCapture).toHaveBeenCalledTimes(1);
     expect(onShutterPressOut).toHaveBeenCalledTimes(1);
     expect(onTakePicture).not.toHaveBeenCalled();
+    expect(shutter.props.hitSlop).toBe(12);
   });
 
   it('mounts the camera as soon as Android permission is granted', () => {

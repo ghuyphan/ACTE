@@ -124,10 +124,11 @@ const config = {
   },
   android: {
     package: 'com.acte.app',
+    icon: './assets/images/icon/icon-small-default.png',
     googleServicesFile: androidGoogleServicesFile,
     adaptiveIcon: {
       backgroundColor: '#F7F2EB',
-      foregroundImage: './assets/images/icon/icon-android-foreground.png',
+      foregroundImage: './assets/images/icon/icon-small-default.png',
     },
     predictiveBackGestureEnabled: false,
     config: googleMapsAndroidApiKey

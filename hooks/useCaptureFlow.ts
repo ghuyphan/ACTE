@@ -10,7 +10,7 @@ import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../services/livePhotoProcessing
 export type CaptureMode = 'text' | 'camera';
 const LIVE_PHOTO_SETTLE_MS = 450;
 const LIVE_PHOTO_SAVE_GUARD_MS = 900;
-const LIVE_PHOTO_MIN_CAPTURE_MS = 900;
+const LIVE_PHOTO_RELEASE_BUFFER_MS = 180;
 
 type CaptureCameraPermission = {
   granted: boolean;
@@ -342,8 +342,8 @@ export function useCaptureFlow() {
     });
     if (livePhotoRecordingActiveRef.current) {
       const startedAt = livePhotoRecordingStartedAtRef.current;
-      const elapsedMs = startedAt ? Date.now() - startedAt : LIVE_PHOTO_MIN_CAPTURE_MS;
-      const remainingMs = LIVE_PHOTO_MIN_CAPTURE_MS - elapsedMs;
+      const elapsedMs = startedAt ? Date.now() - startedAt : LIVE_PHOTO_RELEASE_BUFFER_MS;
+      const remainingMs = LIVE_PHOTO_RELEASE_BUFFER_MS - elapsedMs;
 
       if (remainingMs > 0) {
         clearLivePhotoMinimumDurationTimeout();

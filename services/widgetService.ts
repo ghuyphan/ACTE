@@ -26,6 +26,7 @@ export interface WidgetProps {
     date: string;
     noteCount: number;
     nearbyPlacesCount: number;
+    isLivePhoto: boolean;
     backgroundImageUrl?: string; // local file uri
     backgroundImageBase64?: string;
     backgroundGradientStartColor?: string;
@@ -46,6 +47,7 @@ export interface WidgetProps {
     accessoryAddLabelText: string;
     accessorySavedLabelText: string;
     accessoryNearLabelText: string;
+    livePhotoBadgeText: string;
     isSharedContent: boolean;
     authorDisplayName: string;
     authorInitials: string;
@@ -108,6 +110,7 @@ interface WidgetCandidate {
     text: string;
     photoPath: string | null;
     photoLocalUri: string | null;
+    isLivePhoto: boolean;
     locationName: string | null;
     latitude: number | null;
     longitude: number | null;
@@ -493,6 +496,7 @@ function getTranslatedWidgetStrings(
         accessoryAddLabelText: i18n.t('widget.accessoryAddLabel'),
         accessorySavedLabelText: i18n.t('widget.accessorySavedLabel'),
         accessoryNearLabelText: i18n.t('widget.accessoryNearLabel'),
+        livePhotoBadgeText: i18n.t('widget.livePhotoBadge'),
     };
 }
 
@@ -504,6 +508,7 @@ function buildIdleWidgetProps(noteCount: number, selectionMode: WidgetSelectionM
         date: '',
         noteCount,
         nearbyPlacesCount: 0,
+        isLivePhoto: false,
         backgroundGradientStartColor: undefined,
         backgroundGradientEndColor: undefined,
         hasDoodle: false,
@@ -742,6 +747,7 @@ function createPersonalWidgetCandidate(note: Note): WidgetCandidate {
         text: note.content,
         photoPath: null,
         photoLocalUri: getNotePhotoUri(note),
+        isLivePhoto: Boolean(note.type === 'photo' && note.isLivePhoto),
         locationName: note.locationName,
         latitude: note.latitude,
         longitude: note.longitude,
@@ -769,6 +775,7 @@ function createSharedWidgetCandidate(post: SharedPost): WidgetCandidate {
         text: post.text,
         photoPath: post.photoPath ?? null,
         photoLocalUri: post.photoLocalUri,
+        isLivePhoto: Boolean(post.type === 'photo' && post.isLivePhoto),
         locationName: post.placeName,
         latitude: null,
         longitude: null,
@@ -1476,6 +1483,7 @@ async function buildWidgetPropsFromSelection(
         date: dateStr,
         noteCount,
         nearbyPlacesCount: resolvedNearbyPlacesCount,
+        isLivePhoto: selectedNote.isLivePhoto,
         backgroundGradientStartColor: textNoteGradient?.[0],
         backgroundGradientEndColor: textNoteGradient?.[1],
         hasDoodle: selectedNote.hasDoodle,

@@ -560,7 +560,8 @@
         "accessoryOpenApp": "Open Noto",
         "accessoryAddLabel": "Add",
         "accessorySavedLabel": "Saved",
-        "accessoryNearLabel": "Near"
+        "accessoryNearLabel": "Near",
+        "livePhotoBadge": "Live"
     },
     "feedback": {
         "favorited": "Favorited",

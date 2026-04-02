@@ -90,6 +90,9 @@ jest.mock('../constants/i18n', () => {
     if (key === 'widget.accessoryNearLabel') {
       return currentLanguage === 'vi' ? 'Gan' : 'Near';
     }
+    if (key === 'widget.livePhotoBadge') {
+      return 'Live';
+    }
     if (key === 'capture.unknownPlace') {
       return currentLanguage === 'vi' ? 'Khong ro dia diem' : 'Unknown Place';
     }
@@ -951,6 +954,8 @@ describe('widgetService', () => {
         type: 'photo',
         content: 'file:///mock-documents/photos/latest.jpg',
         isFavorite: true,
+        isLivePhoto: true,
+        pairedVideoLocalUri: 'file:///mock-documents/photos/latest.motion.mov',
         locationName: 'Photo Place',
       }),
     ]);
@@ -967,11 +972,23 @@ describe('widgetService', () => {
       expect(firstImageUrl).toContain('favorite-photo');
       expect(secondImageUrl).toContain('favorite-photo');
       expect(firstImageUrl).not.toBe(secondImageUrl);
+      expect(entries[0]?.props.props).toEqual(
+        expect.objectContaining({
+          isLivePhoto: true,
+          livePhotoBadgeText: 'Live',
+        })
+      );
       return;
     }
 
     expect(firstImageBase64).toBe('base64-image-data');
     expect(secondImageBase64).toBe('base64-image-data');
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        isLivePhoto: true,
+        livePhotoBadgeText: 'Live',
+      })
+    );
   });
 
   it('formats localized widget strings inside the timeline entry payload', async () => {

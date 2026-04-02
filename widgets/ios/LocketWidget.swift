@@ -9,6 +9,7 @@ private struct LocketWidgetPayload {
     let date: String
     let noteCount: Int
     let nearbyPlacesCount: Int
+    let isLivePhoto: Bool
     let backgroundImageUrl: String?
     let backgroundImageBase64: String?
     let backgroundGradientStartColor: String?
@@ -29,6 +30,7 @@ private struct LocketWidgetPayload {
     let accessoryAddLabelText: String
     let accessorySavedLabelText: String
     let accessoryNearLabelText: String
+    let livePhotoBadgeText: String
     let isSharedContent: Bool
     let authorDisplayName: String
     let authorInitials: String
@@ -44,6 +46,7 @@ private struct LocketWidgetPayload {
         date: "",
         noteCount: 0,
         nearbyPlacesCount: 0,
+        isLivePhoto: false,
         backgroundImageUrl: nil,
         backgroundImageBase64: nil,
         backgroundGradientStartColor: nil,
@@ -64,6 +67,7 @@ private struct LocketWidgetPayload {
         accessoryAddLabelText: "Add",
         accessorySavedLabelText: "Saved",
         accessoryNearLabelText: "Near",
+        livePhotoBadgeText: "Live",
         isSharedContent: false,
         authorDisplayName: "",
         authorInitials: "",
@@ -80,6 +84,7 @@ private struct LocketWidgetPayload {
         date: String,
         noteCount: Int,
         nearbyPlacesCount: Int,
+        isLivePhoto: Bool,
         backgroundImageUrl: String?,
         backgroundImageBase64: String?,
         backgroundGradientStartColor: String?,
@@ -100,6 +105,7 @@ private struct LocketWidgetPayload {
         accessoryAddLabelText: String,
         accessorySavedLabelText: String,
         accessoryNearLabelText: String,
+        livePhotoBadgeText: String,
         isSharedContent: Bool,
         authorDisplayName: String,
         authorInitials: String,
@@ -114,6 +120,7 @@ private struct LocketWidgetPayload {
         self.date = date
         self.noteCount = noteCount
         self.nearbyPlacesCount = nearbyPlacesCount
+        self.isLivePhoto = isLivePhoto
         self.backgroundImageUrl = backgroundImageUrl
         self.backgroundImageBase64 = backgroundImageBase64
         self.backgroundGradientStartColor = backgroundGradientStartColor
@@ -134,6 +141,7 @@ private struct LocketWidgetPayload {
         self.accessoryAddLabelText = accessoryAddLabelText
         self.accessorySavedLabelText = accessorySavedLabelText
         self.accessoryNearLabelText = accessoryNearLabelText
+        self.livePhotoBadgeText = livePhotoBadgeText
         self.isSharedContent = isSharedContent
         self.authorDisplayName = authorDisplayName
         self.authorInitials = authorInitials
@@ -152,6 +160,7 @@ private struct LocketWidgetPayload {
         date = LocketWidgetPayload.stringValue(payload["date"])
         noteCount = LocketWidgetPayload.intValue(payload["noteCount"])
         nearbyPlacesCount = LocketWidgetPayload.intValue(payload["nearbyPlacesCount"])
+        isLivePhoto = LocketWidgetPayload.boolValue(payload["isLivePhoto"])
         backgroundImageUrl = LocketWidgetPayload.optionalStringValue(payload["backgroundImageUrl"])
         backgroundImageBase64 = LocketWidgetPayload.optionalStringValue(payload["backgroundImageBase64"])
         backgroundGradientStartColor = LocketWidgetPayload.optionalStringValue(payload["backgroundGradientStartColor"])
@@ -172,6 +181,7 @@ private struct LocketWidgetPayload {
         accessoryAddLabelText = LocketWidgetPayload.stringValue(payload["accessoryAddLabelText"])
         accessorySavedLabelText = LocketWidgetPayload.stringValue(payload["accessorySavedLabelText"])
         accessoryNearLabelText = LocketWidgetPayload.stringValue(payload["accessoryNearLabelText"])
+        livePhotoBadgeText = LocketWidgetPayload.stringValue(payload["livePhotoBadgeText"])
         isSharedContent = LocketWidgetPayload.boolValue(payload["isSharedContent"])
         authorDisplayName = LocketWidgetPayload.stringValue(payload["authorDisplayName"])
         authorInitials = LocketWidgetPayload.stringValue(payload["authorInitials"])
@@ -768,6 +778,14 @@ private struct LocketWidgetEntryView: View {
         )
     }
 
+    private var shouldShowLivePhotoBadge: Bool {
+        !isAccessoryFamily &&
+        !payload.isIdleState &&
+        payload.noteType == "photo" &&
+        payload.isLivePhoto &&
+        hasPhotoBackground
+    }
+
     private var noteOverlayOpacity: Double {
         payload.noteType == "photo" ? 0.92 : 0.5
     }
@@ -1139,12 +1157,17 @@ private struct LocketWidgetEntryView: View {
             }
 
             VStack(spacing: 0) {
-                if shouldShowAuthorChip || shouldPinLocationChip {
+                if shouldShowAuthorChip || shouldShowLivePhotoBadge || shouldPinLocationChip {
                     VStack(spacing: 0) {
-                        if shouldShowAuthorChip {
+                        if shouldShowAuthorChip || shouldShowLivePhotoBadge {
                             HStack {
-                                authorChip
+                                if shouldShowAuthorChip {
+                                    authorChip
+                                }
                                 Spacer(minLength: 0)
+                                if shouldShowLivePhotoBadge {
+                                    livePhotoBadge
+                                }
                             }
                         }
 
@@ -1154,7 +1177,7 @@ private struct LocketWidgetEntryView: View {
                                 floatingLocationChip
                                 Spacer(minLength: 0)
                             }
-                            .padding(.top, shouldShowAuthorChip ? 6 : 0)
+                            .padding(.top, (shouldShowAuthorChip || shouldShowLivePhotoBadge) ? 6 : 0)
                         }
                     }
                     .padding(.bottom, shouldPinLocationChip ? 10 : 6)
@@ -1200,11 +1223,19 @@ private struct LocketWidgetEntryView: View {
 
                     Spacer(minLength: 0)
 
-                    if shouldPinLocationChip {
-                        floatingLocationChip
+                    if shouldPinLocationChip || shouldShowLivePhotoBadge {
+                        HStack(spacing: 8) {
+                            if shouldPinLocationChip {
+                                floatingLocationChip
+                            }
+
+                            if shouldShowLivePhotoBadge {
+                                livePhotoBadge
+                            }
+                        }
                     }
                 }
-                .padding(.bottom, (shouldShowAuthorChip || shouldPinLocationChip) ? 10 : 0)
+                .padding(.bottom, (shouldShowAuthorChip || shouldPinLocationChip || shouldShowLivePhotoBadge) ? 10 : 0)
 
                 if hasLocationEyebrow && !shouldPinLocationChip {
                     Text(payload.locationName)
@@ -1286,7 +1317,7 @@ private struct LocketWidgetEntryView: View {
             }
 
             VStack(alignment: .leading, spacing: 0) {
-                if shouldShowAuthorChip || shouldPinLocationChip {
+                if shouldShowAuthorChip || shouldPinLocationChip || shouldShowLivePhotoBadge {
                     HStack(alignment: .top, spacing: 8) {
                         if shouldShowAuthorChip {
                             authorChip
@@ -1294,11 +1325,19 @@ private struct LocketWidgetEntryView: View {
 
                         Spacer(minLength: 0)
 
-                        if shouldPinLocationChip {
-                            floatingLocationChip
+                        if shouldPinLocationChip || shouldShowLivePhotoBadge {
+                            HStack(spacing: 8) {
+                                if shouldPinLocationChip {
+                                    floatingLocationChip
+                                }
+
+                                if shouldShowLivePhotoBadge {
+                                    livePhotoBadge
+                                }
+                            }
                         }
                     }
-                    .padding(.bottom, (shouldShowAuthorChip || shouldPinLocationChip) ? 10 : 0)
+                    .padding(.bottom, (shouldShowAuthorChip || shouldPinLocationChip || shouldShowLivePhotoBadge) ? 10 : 0)
                 }
 
                 if hasLocationEyebrow && !shouldPinLocationChip {
@@ -1469,6 +1508,29 @@ private struct LocketWidgetEntryView: View {
 
             if !compactAuthorName.isEmpty {
                 Text(compactAuthorName)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(authorChipForegroundColor)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(authorChipBackgroundColor)
+        .clipShape(Capsule())
+    }
+
+    private var livePhotoBadgeLabel: String {
+        payload.livePhotoBadgeText.isEmpty ? "Live" : payload.livePhotoBadgeText
+    }
+
+    private var livePhotoBadge: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "livephoto")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(authorChipForegroundColor)
+
+            if isMedium || isLarge {
+                Text(livePhotoBadgeLabel)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(authorChipForegroundColor)
                     .lineLimit(1)
