@@ -22,6 +22,9 @@ type NoteRecord = {
   content: string;
   photoLocalUri: string | null;
   photoRemoteBase64: string | null;
+  isLivePhoto?: boolean;
+  pairedVideoLocalUri?: string | null;
+  pairedVideoRemotePath?: string | null;
   hasDoodle?: boolean;
   doodleStrokesJson?: string | null;
   locationName: string | null;
@@ -51,10 +54,17 @@ let mockSessionUserId = 'user-1';
 const mockUploadPhotoToStorage = jest.fn<Promise<string | null>, [string, string, string | null | undefined]>(
   async (_bucket: string, path: string) => path
 );
+const mockUploadVideoToStorage = jest.fn<Promise<string | null>, [string, string, string | null | undefined]>(
+  async (_bucket: string, path: string) => path
+);
 const mockDownloadPhotoFromStorage = jest.fn<Promise<string | null>, [string, string, string]>(
   async (_bucket: string, path: string) => `file:///synced/${path}`
 );
+const mockDownloadVideoFromStorage = jest.fn<Promise<string | null>, [string, string, string]>(
+  async (_bucket: string, path: string) => `file:///synced/${path}`
+);
 const mockDeletePhotoFromStorage = jest.fn<Promise<void>, [string, string | null]>(async () => undefined);
+const mockDeleteVideoFromStorage = jest.fn<Promise<void>, [string, string | null]>(async () => undefined);
 const mockUpsertPublicProfile = jest.fn(async (input: unknown) => {
   const value = input as { userUid: string };
   mockPublicProfiles.set(value.userUid, input);
@@ -161,10 +171,16 @@ jest.mock('../services/remoteMedia', () => ({
   SHARED_POST_MEDIA_BUCKET: 'shared-post-media',
   uploadPhotoToStorage: (bucket: string, path: string, localUri?: string | null) =>
     mockUploadPhotoToStorage(bucket, path, localUri),
+  uploadPairedVideoToStorage: (bucket: string, path: string, localUri?: string | null) =>
+    mockUploadVideoToStorage(bucket, path, localUri),
   downloadPhotoFromStorage: (bucket: string, path: string, fileName: string) =>
     mockDownloadPhotoFromStorage(bucket, path, fileName),
+  downloadPairedVideoFromStorage: (bucket: string, path: string, fileName: string) =>
+    mockDownloadVideoFromStorage(bucket, path, fileName),
   deletePhotoFromStorage: (bucket: string, path: string | null) =>
     mockDeletePhotoFromStorage(bucket, path),
+  deletePairedVideoFromStorage: (bucket: string, path: string | null) =>
+    mockDeleteVideoFromStorage(bucket, path),
 }));
 
 jest.mock('../services/publicProfileService', () => ({
@@ -233,6 +249,10 @@ function mockCreateNotesQueryBuilder() {
       state.orderField = field;
       state.ascending = options?.ascending ?? true;
       return builder;
+    },
+    maybeSingle: async () => {
+      const rows = executeNotesQuery(state);
+      return { data: rows[0] ?? null, error: null };
     },
     upsert: async (value: Record<string, unknown>) => {
       if (mockNotesUpsertError) {
@@ -426,6 +446,14 @@ function createPhotoNote(id: string): NoteRecord {
   };
 }
 
+function createLivePhotoNote(id: string, extension: '.mov' | '.mp4' = '.mov'): NoteRecord {
+  return {
+    ...createPhotoNote(id),
+    isLivePhoto: true,
+    pairedVideoLocalUri: `file:///photos/${id}-motion${extension}`,
+  };
+}
+
 const syncUser = {
   id: 'user-1',
   uid: 'user-1',
@@ -552,6 +580,25 @@ describe('syncService', () => {
     expect(mockUpsertPublicProfile).toHaveBeenCalled();
   });
 
+  it('preserves the paired motion clip extension when syncing a live photo note', async () => {
+    localNotesStore = [createLivePhotoNote('note-live', '.mov')];
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'full' });
+
+    expect(result.status).toBe('success');
+    expect(mockUploadVideoToStorage).toHaveBeenCalledWith(
+      'note-media',
+      'user-1/note-live.motion.mov',
+      'file:///photos/note-live-motion.mov'
+    );
+    expect(mockRemoteNotes.get('note-live')).toEqual(
+      expect.objectContaining({
+        is_live_photo: true,
+        paired_video_path: 'user-1/note-live.motion.mov',
+      })
+    );
+  });
+
   it('imports newer remote notes during incremental sync', async () => {
     await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-09T00:00:00.000Z');
     mockRemoteNotes.set('note-remote', {
@@ -638,8 +685,10 @@ describe('syncService', () => {
     mockRemoteNotes.set('note-1', {
       id: 'note-1',
       user_id: 'user-1',
-      type: 'text',
-      content: 'stale note',
+      type: 'photo',
+      content: '',
+      photo_path: 'user-1/note-1',
+      paired_video_path: null,
       synced_at: '2026-03-09T00:00:00.000Z',
     });
     mockRemoteSharedPosts.set('shared-1', {
@@ -663,6 +712,33 @@ describe('syncService', () => {
     expect(mockRemoteSharedPosts.has('shared-1')).toBe(false);
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-1');
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('shared-post-media', 'user-1/shared-1');
+  });
+
+  it('deletes the stored paired motion path for live photo notes without assuming mp4', async () => {
+    mockRemoteNotes.set('note-live', {
+      id: 'note-live',
+      user_id: 'user-1',
+      type: 'photo',
+      content: '',
+      photo_path: 'user-1/note-live',
+      paired_video_path: 'user-1/note-live.motion.mov',
+      synced_at: '2026-03-09T00:00:00.000Z',
+    });
+
+    await getSyncService().recordChange({
+      type: 'delete',
+      entity: 'note',
+      entityId: 'note-live',
+      timestamp: '2026-03-10T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, [], { mode: 'incremental' });
+
+    expect(result.status).toBe('success');
+    expect(mockDeleteVideoFromStorage).toHaveBeenCalledWith(
+      'note-media',
+      'user-1/note-live.motion.mov'
+    );
   });
 
   it('flushes queued delete-all operations to Supabase and clears authored shared posts', async () => {

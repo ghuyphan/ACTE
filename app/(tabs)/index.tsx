@@ -47,6 +47,10 @@ import { DEFAULT_NOTE_COLOR_ID, PREMIUM_NOTE_COLOR_IDS } from '../../services/no
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { saveNoteDoodle } from '../../services/noteDoodles';
 import { renderFilteredPhotoToFile } from '../../services/photoFilters';
+import {
+  LIVE_PHOTO_MAX_DURATION_SECONDS,
+  persistLivePhotoVideo,
+} from '../../services/livePhotoProcessing';
 import { saveNoteStickerPlacementsWithAssets } from '../../services/noteStickers';
 import { filterNotesByQuery } from '../../services/noteSearch';
 import {
@@ -59,9 +63,11 @@ import { generateNoteId, type Note } from '../../services/database';
 import { getSharedFeedErrorMessage, SharedPost } from '../../services/sharedFeedService';
 import { isIOS26OrNewer } from '../../utils/platform';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
+import { getPersistentItem, setPersistentItem } from '../../utils/appStorage';
 
 const { height } = Dimensions.get('window');
 const SHARED_MANAGE_SHEET_SHARE_DELAY_MS = Platform.OS === 'ios' ? 220 : 0;
+const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -146,6 +152,8 @@ export default function HomeScreen() {
     [tier]
   );
   const [pendingSavedNoteScrollTargetId, setPendingSavedNoteScrollTargetId] = useState<string | null>(null);
+  const [hasSeenLivePhotoCameraHint, setHasSeenLivePhotoCameraHint] = useState<boolean | null>(null);
+  const [showLivePhotoCameraHint, setShowLivePhotoCameraHint] = useState(false);
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -156,9 +164,34 @@ export default function HomeScreen() {
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveInFlightRef = useRef(false);
+  const livePhotoCameraHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settledArchiveItemRef = useRef<{ id: string; kind: 'note' | 'shared-post' } | null>(null);
   const previousVisibleSharedPostIdsRef = useRef<string[]>([]);
   useScrollToTop(flatListRef);
+
+  const clearLivePhotoCameraHintTimeout = useCallback(() => {
+    if (livePhotoCameraHintTimeoutRef.current) {
+      clearTimeout(livePhotoCameraHintTimeoutRef.current);
+      livePhotoCameraHintTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void getPersistentItem(LIVE_PHOTO_CAMERA_HINT_SEEN_KEY).then((value) => {
+      if (cancelled) {
+        return;
+      }
+
+      setHasSeenLivePhotoCameraHint(Boolean(value));
+    });
+
+    return () => {
+      cancelled = true;
+      clearLivePhotoCameraHintTimeout();
+    };
+  }, [clearLivePhotoCameraHintTimeout]);
 
   const dismissSharedManageSheet = useCallback(() => {
     setShowSharedManageSheet(false);
@@ -184,6 +217,8 @@ export default function HomeScreen() {
     setNoteText,
     capturedPhoto,
     setCapturedPhoto,
+    capturedPairedVideo,
+    setCapturedPairedVideo,
     radius,
     setRadius,
     facing,
@@ -203,6 +238,10 @@ export default function HomeScreen() {
     handleShutterPressIn,
     handleShutterPressOut,
     takePicture,
+    startLivePhotoCapture,
+    isLivePhotoCaptureInProgress,
+    isLivePhotoCaptureSettling,
+    isLivePhotoSaveGuardActive,
     needsCameraPermission,
     resetCapture,
   } = useCaptureFlow();
@@ -248,15 +287,7 @@ export default function HomeScreen() {
     [photoNoteCount, tier]
   );
   const cameraStatusText = useMemo(() => {
-    if (tier === 'plus') {
-      return null;
-    }
-
-    if (remainingPhotoSlots === null) {
-      return null;
-    }
-
-    if (remainingPhotoSlots === 0) {
+    if (tier !== 'plus' && remainingPhotoSlots === 0) {
       return t(
         'capture.photoLimitReachedHint',
         'Free plan photo limit reached. Upgrade to Noto Plus to add more photo notes and import from your library.'
@@ -265,6 +296,37 @@ export default function HomeScreen() {
 
     return null;
   }, [remainingPhotoSlots, t, tier]);
+  useEffect(() => {
+    const canShowFirstTimeHint =
+      captureMode === 'camera' &&
+      !capturedPhoto &&
+      hasSeenLivePhotoCameraHint === false &&
+      !(tier !== 'plus' && remainingPhotoSlots === 0);
+
+    if (!canShowFirstTimeHint) {
+      setShowLivePhotoCameraHint(false);
+      clearLivePhotoCameraHintTimeout();
+      return;
+    }
+
+    setShowLivePhotoCameraHint(true);
+    setHasSeenLivePhotoCameraHint(true);
+    void setPersistentItem(LIVE_PHOTO_CAMERA_HINT_SEEN_KEY, '1');
+
+    livePhotoCameraHintTimeoutRef.current = setTimeout(() => {
+      setShowLivePhotoCameraHint(false);
+    }, reduceMotionEnabled ? 2200 : 3200);
+
+    return clearLivePhotoCameraHintTimeout;
+  }, [
+    captureMode,
+    capturedPhoto,
+    clearLivePhotoCameraHintTimeout,
+    hasSeenLivePhotoCameraHint,
+    reduceMotionEnabled,
+    remainingPhotoSlots,
+    tier,
+  ]);
   const suppressedHomeNoteIdSet = useMemo(
     () => new Set(suppressedHomeNoteIds),
     [suppressedHomeNoteIds]
@@ -1143,6 +1205,7 @@ export default function HomeScreen() {
       setSaveButtonState('saving');
       setSaving(true);
       let destinationPath: string | null = null;
+      let pairedVideoDestinationPath: string | null = null;
       const pendingNoteId = generateNoteId();
       setSuppressedHomeNoteIds((current) =>
         current.includes(pendingNoteId) ? current : [...current, pendingNoteId]
@@ -1176,6 +1239,12 @@ export default function HomeScreen() {
           }
           content = destinationPath;
         }
+        if (captureMode === 'camera' && capturedPairedVideo) {
+          pairedVideoDestinationPath = await persistLivePhotoVideo(
+            capturedPairedVideo,
+            `${pendingNoteId}-motion`
+          );
+        }
 
         const autoEmoji = resolveAutoNoteEmoji({
           type: captureMode === 'camera' ? 'photo' : 'text',
@@ -1188,6 +1257,9 @@ export default function HomeScreen() {
           type: captureMode === 'camera' ? 'photo' : 'text',
           content,
           photoLocalUri: captureMode === 'camera' ? content : null,
+          isLivePhoto: captureMode === 'camera' && Boolean(pairedVideoDestinationPath),
+          pairedVideoLocalUri:
+            captureMode === 'camera' ? pairedVideoDestinationPath : null,
           locationName,
           promptId: null,
           promptTextSnapshot: null,
@@ -1254,6 +1326,13 @@ export default function HomeScreen() {
             console.warn('Failed to clean up orphaned photo file:', cleanupError);
           }
         }
+        if (pairedVideoDestinationPath) {
+          try {
+            await FileSystem.deleteAsync(pairedVideoDestinationPath, { idempotent: true });
+          } catch (cleanupError) {
+            console.warn('Failed to clean up orphaned live photo motion clip:', cleanupError);
+          }
+        }
         showDoneSheet(
           'error',
           t('capture.error', 'Error'),
@@ -1276,6 +1355,7 @@ export default function HomeScreen() {
     noteText,
     noteColor,
     capturedPhoto,
+    capturedPairedVideo,
     selectedPhotoFilterId,
     reverseGeocode,
     restaurantName,
@@ -1328,14 +1408,21 @@ export default function HomeScreen() {
     setImportingPhoto(true);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: Platform.OS === 'ios' ? ['images', 'livePhotos'] : ['images'],
         allowsEditing: false,
         quality: 0.35,
         selectionLimit: 1,
       });
 
-      if (!result.canceled && result.assets?.[0]?.uri) {
-        setCapturedPhoto(result.assets[0].uri);
+      const selectedAsset = result.assets?.[0];
+      if (!result.canceled && selectedAsset?.uri) {
+        setCapturedPhoto(selectedAsset.uri);
+        setCapturedPairedVideo(
+          selectedAsset.type === 'livePhoto' ? selectedAsset.pairedVideoAsset?.uri ?? null : null
+        );
+        if (selectedAsset.type === 'livePhoto') {
+          setSelectedPhotoFilterId('original');
+        }
       }
     } catch (error) {
       console.warn('Photo import failed:', error);
@@ -1347,7 +1434,71 @@ export default function HomeScreen() {
     } finally {
       setImportingPhoto(false);
     }
-  }, [canImportFromLibrary, setCapturedPhoto, showDoneSheet, showPlusSheet, t]);
+  }, [
+    canImportFromLibrary,
+    setCapturedPairedVideo,
+    setCapturedPhoto,
+    setSelectedPhotoFilterId,
+    showDoneSheet,
+    showPlusSheet,
+    t,
+  ]);
+
+  const handleImportMotionClip = useCallback(async () => {
+    if (!canImportFromLibrary) {
+      showPlusSheet('library');
+      return;
+    }
+
+    let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (mediaPermission.status !== 'granted') {
+      mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    }
+
+    if (mediaPermission.status !== 'granted') {
+      showDoneSheet(
+        'warning',
+        t('capture.photoLibraryPermissionTitle', 'Photo access needed'),
+        mediaPermission.canAskAgain === false
+          ? t(
+              'capture.photoLibraryPermissionSettingsMsg',
+              'Photo library access is blocked for Noto. Open Settings to import from your library.'
+            )
+          : t(
+              'capture.photoLibraryPermissionMsg',
+              'Allow photo library access so you can import an image into this note.'
+            ),
+        mediaPermission.canAskAgain === false
+      );
+      return;
+    }
+
+    setImportingPhoto(true);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['videos'],
+        allowsEditing: false,
+        selectionLimit: 1,
+        videoMaxDuration: LIVE_PHOTO_MAX_DURATION_SECONDS,
+        videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+        videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setCapturedPairedVideo(result.assets[0].uri);
+        setSelectedPhotoFilterId('original');
+      }
+    } catch (error) {
+      console.warn('Live photo motion clip import failed:', error);
+      showDoneSheet(
+        'error',
+        t('capture.error', 'Error'),
+        t('capture.livePhotoImportFailed', 'We could not import that motion clip right now.')
+      );
+    } finally {
+      setImportingPhoto(false);
+    }
+  }, [canImportFromLibrary, setCapturedPairedVideo, setSelectedPhotoFilterId, showDoneSheet, showPlusSheet, t]);
 
   const handleOpenSearch = useCallback(() => {
     if (!useInlineHeaderSearch || !hasSearchableNotes) {
@@ -1579,7 +1730,15 @@ export default function HomeScreen() {
         restaurantName={restaurantName}
         onChangeRestaurantName={setRestaurantName}
         capturedPhoto={capturedPhoto}
-        onRetakePhoto={() => setCapturedPhoto(null)}
+        capturedPairedVideo={capturedPairedVideo}
+        onRetakePhoto={() => {
+          setCapturedPhoto(null);
+          setCapturedPairedVideo(null);
+        }}
+        onImportMotionClip={() => {
+          void handleImportMotionClip();
+        }}
+        onRemoveMotionClip={() => setCapturedPairedVideo(null)}
         needsCameraPermission={needsCameraPermission}
         cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
         onRequestCameraPermission={() => {
@@ -1602,13 +1761,24 @@ export default function HomeScreen() {
         onTakePicture={() => {
           void takePicture();
         }}
+        onStartLivePhotoCapture={() => {
+          void startLivePhotoCapture();
+        }}
         onSaveNote={() => {
           void saveNote();
         }}
         saving={saving}
         saveState={saveButtonState}
         shutterScale={shutterScale}
+        isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
+        isLivePhotoCaptureSettling={isLivePhotoCaptureSettling}
+        isLivePhotoSaveGuardActive={isLivePhotoSaveGuardActive}
         cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
+        cameraInstructionText={
+          captureMode === 'camera' && showLivePhotoCameraHint
+            ? t('capture.livePhotoCaptureHint', 'Tap for a photo. Hold for a live photo.')
+            : null
+        }
         remainingPhotoSlots={captureMode === 'camera' ? remainingPhotoSlots : null}
         libraryImportLocked={!canImportFromLibrary}
         importingPhoto={importingPhoto || isPurchaseInFlight}

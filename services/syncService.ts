@@ -19,12 +19,16 @@ import {
   syncStickerAssetsFromPlacements,
 } from './noteStickers';
 import {
+  deletePairedVideoFromStorage,
   deletePhotoFromStorage,
   downloadPhotoFromStorage,
+  downloadPairedVideoFromStorage,
   NOTE_MEDIA_BUCKET,
   SHARED_POST_MEDIA_BUCKET,
   uploadPhotoToStorage,
+  uploadPairedVideoToStorage,
 } from './remoteMedia';
+import { getPairedVideoFileExtension } from './livePhotoStorage';
 import { upsertPublicUserProfile } from './publicProfileService';
 
 export type SyncChangeType = 'create' | 'update' | 'delete' | 'deleteAll';
@@ -78,6 +82,10 @@ export interface SyncRepository {
   clearAll: () => Promise<void>;
 }
 
+function getRemotePairedVideoPath(basePath: string, localUri: string | null | undefined) {
+  return `${basePath}.motion${getPairedVideoFileExtension(localUri)}`;
+}
+
 export interface SyncService {
   isAvailable: boolean;
   recordChange: (change: SyncChange) => Promise<void>;
@@ -106,6 +114,8 @@ interface NoteRow {
   type: Note['type'];
   content: string;
   photo_path: string | null;
+  is_live_photo: boolean;
+  paired_video_path: string | null;
   has_doodle: boolean;
   doodle_strokes_json: string | null;
   has_stickers: boolean;
@@ -361,6 +371,15 @@ async function serializeNoteForSupabase(
           { allowOverwrite: true }
         )
       : null;
+  const pairedVideoPath =
+    note.type === 'photo' && note.isLivePhoto
+      ? await uploadPairedVideoToStorage(
+          NOTE_MEDIA_BUCKET,
+          getRemotePairedVideoPath(`${userId}/${note.id}`, note.pairedVideoLocalUri ?? null),
+          note.pairedVideoLocalUri ?? null,
+          { allowOverwrite: true }
+        )
+      : null;
   const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
   const stickerPlacementsJson =
     stickerPlacements.length > 0
@@ -373,6 +392,8 @@ async function serializeNoteForSupabase(
     type: note.type,
     content: note.type === 'text' ? note.content : '',
     photo_path: photoPath,
+    is_live_photo: Boolean(note.isLivePhoto && pairedVideoPath),
+    paired_video_path: pairedVideoPath,
     has_doodle: Boolean(note.hasDoodle && note.doodleStrokesJson),
     doodle_strokes_json: note.doodleStrokesJson ?? null,
     has_stickers: Boolean(stickerPlacementsJson),
@@ -413,6 +434,7 @@ async function deserializeRemoteNote(
   if (!photoLocalUri && existingLocalNote?.type === 'photo') {
     photoLocalUri = existingLocalNote.content;
   }
+  let pairedVideoLocalUri: string | null = existingLocalNote?.pairedVideoLocalUri ?? null;
 
   if (record.type === 'photo' && record.photo_path) {
     try {
@@ -420,6 +442,20 @@ async function deserializeRemoteNote(
         NOTE_MEDIA_BUCKET,
         record.photo_path,
         record.id
+      );
+    } catch (error) {
+      if (!isSupabaseStorageObjectMissingError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  if (record.type === 'photo' && record.is_live_photo && record.paired_video_path) {
+    try {
+      pairedVideoLocalUri = await downloadPairedVideoFromStorage(
+        NOTE_MEDIA_BUCKET,
+        record.paired_video_path,
+        `${record.id}-motion`
       );
     } catch (error) {
       if (!isSupabaseStorageObjectMissingError(error)) {
@@ -448,6 +484,9 @@ async function deserializeRemoteNote(
     content: record.type === 'photo' ? photoLocalUri ?? '' : record.content ?? '',
     photoLocalUri,
     photoRemoteBase64: null,
+    isLivePhoto: Boolean(record.is_live_photo && pairedVideoLocalUri),
+    pairedVideoLocalUri,
+    pairedVideoRemotePath: record.paired_video_path ?? null,
     locationName: record.location_name ?? null,
     promptId: record.prompt_id ?? null,
     promptTextSnapshot: record.prompt_text_snapshot ?? null,
@@ -490,17 +529,28 @@ async function deleteRemoteNote(userId: string, noteId: string) {
 
   const { data: sharedPosts, error: sharedPostsError } = await supabase
     .from('shared_posts')
-    .select('id, photo_path')
+    .select('id, photo_path, paired_video_path')
     .eq('author_user_id', userId)
     .eq('source_note_id', noteId);
   if (sharedPostsError) {
     throw sharedPostsError;
   }
 
+  const { data: existingNote, error: noteFetchError } = await supabase
+    .from('notes')
+    .select('photo_path, paired_video_path')
+    .eq('id', noteId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (noteFetchError) {
+    throw noteFetchError;
+  }
+
   await Promise.all(
-    ((sharedPosts ?? []) as Array<{ photo_path?: string | null }>).map((row) =>
-      deletePhotoFromStorage(SHARED_POST_MEDIA_BUCKET, row.photo_path ?? null).catch(() => undefined)
-    )
+    ((sharedPosts ?? []) as Array<{ photo_path?: string | null; paired_video_path?: string | null }>).flatMap((row) => [
+      deletePhotoFromStorage(SHARED_POST_MEDIA_BUCKET, row.photo_path ?? null).catch(() => undefined),
+      deletePairedVideoFromStorage(SHARED_POST_MEDIA_BUCKET, row.paired_video_path ?? null).catch(() => undefined),
+    ])
   );
   const sharedPostIds = ((sharedPosts ?? []) as Array<{ id: string }>).map((row) => row.id).filter(Boolean);
   if (sharedPostIds.length > 0) {
@@ -514,7 +564,14 @@ async function deleteRemoteNote(userId: string, noteId: string) {
     }
   }
 
-  await deletePhotoFromStorage(NOTE_MEDIA_BUCKET, `${userId}/${noteId}`).catch(() => undefined);
+  await deletePhotoFromStorage(
+    NOTE_MEDIA_BUCKET,
+    (existingNote as { photo_path?: string | null } | null)?.photo_path ?? null
+  ).catch(() => undefined);
+  await deletePairedVideoFromStorage(
+    NOTE_MEDIA_BUCKET,
+    (existingNote as { paired_video_path?: string | null } | null)?.paired_video_path ?? null
+  ).catch(() => undefined);
   const { error } = await supabase.from('notes').delete().eq('id', noteId).eq('user_id', userId);
   if (error) {
     throw error;
@@ -530,11 +587,11 @@ async function deleteAllRemoteNotesForUser(userId: string) {
   const [{ data, error }, { data: sharedPosts, error: sharedPostsError }] = await Promise.all([
     supabase
       .from('notes')
-      .select('id, photo_path')
+      .select('id, photo_path, paired_video_path')
       .eq('user_id', userId),
     supabase
       .from('shared_posts')
-      .select('id, photo_path')
+      .select('id, photo_path, paired_video_path')
       .eq('author_user_id', userId),
   ]);
   if (error) {
@@ -546,12 +603,20 @@ async function deleteAllRemoteNotesForUser(userId: string) {
 
   for (const row of data ?? []) {
     await deletePhotoFromStorage(NOTE_MEDIA_BUCKET, row.photo_path as string | null).catch(() => undefined);
+    await deletePairedVideoFromStorage(
+      NOTE_MEDIA_BUCKET,
+      (row as { paired_video_path?: string | null }).paired_video_path ?? null
+    ).catch(() => undefined);
   }
 
   for (const row of sharedPosts ?? []) {
     await deletePhotoFromStorage(
       SHARED_POST_MEDIA_BUCKET,
       (row as { photo_path?: string | null }).photo_path ?? null
+    ).catch(() => undefined);
+    await deletePairedVideoFromStorage(
+      SHARED_POST_MEDIA_BUCKET,
+      (row as { paired_video_path?: string | null }).paired_video_path ?? null
     ).catch(() => undefined);
   }
 
@@ -668,7 +733,7 @@ async function mergeRemoteNotesFromSupabase(
   let request = supabase
     .from('notes')
     .select(
-      'id, user_id, type, content, photo_path, has_doodle, doodle_strokes_json, has_stickers, sticker_placements_json, location_name, prompt_id, prompt_text_snapshot, prompt_answer, mood_emoji, note_color, latitude, longitude, radius, is_favorite, created_at, updated_at, synced_at'
+      'id, user_id, type, content, photo_path, is_live_photo, paired_video_path, has_doodle, doodle_strokes_json, has_stickers, sticker_placements_json, location_name, prompt_id, prompt_text_snapshot, prompt_answer, mood_emoji, note_color, latitude, longitude, radius, is_favorite, created_at, updated_at, synced_at'
     )
     .eq('user_id', userId)
     .order('synced_at', { ascending: true });

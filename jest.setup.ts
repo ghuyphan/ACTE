@@ -15,6 +15,28 @@ jest.mock('expo-web-browser', () => ({
   },
 }));
 
+jest.mock('expo-video', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  return {
+    VideoView: ({ children, ...props }: any) => React.createElement(View, props, children),
+    useVideoPlayer: (_source: unknown, setup?: (player: any) => void) => {
+      const player = {
+        loop: false,
+        muted: false,
+        volume: 1,
+        currentTime: 0,
+        play: jest.fn(),
+        pause: jest.fn(),
+        replay: jest.fn(),
+      };
+      setup?.(player);
+      return player;
+    },
+  };
+}, { virtual: true });
+
 jest.mock('react-native-url-polyfill/auto', () => ({}));
 
 jest.mock('@react-native-google-signin/google-signin', () => ({

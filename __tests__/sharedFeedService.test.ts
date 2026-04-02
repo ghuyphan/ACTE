@@ -186,20 +186,28 @@ function applyDelete(table: string, state: any) {
 const mockUploadPhotoToStorage = jest.fn<Promise<string | null>, [string, string, string | null | undefined]>(
   async (_bucket: string, path: string) => path
 );
+const mockUploadVideoToStorage = jest.fn<Promise<string | null>, [string, string, string | null | undefined]>(
+  async (_bucket: string, path: string) => path
+);
 const mockDownloadPhotoFromStorage = jest.fn<Promise<string | null>, [string, string, string]>(
   async (_bucket: string, path: string) => `file:///shared/${path}`
 );
 const mockDeletePhotoFromStorage = jest.fn<Promise<void>, [string, string | null]>(async () => undefined);
+const mockDeleteVideoFromStorage = jest.fn<Promise<void>, [string, string | null]>(async () => undefined);
 const mockCacheSharedFeedSnapshot = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
 const mockSendSocialNotificationEvent = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 jest.mock('../services/remoteMedia', () => ({
   SHARED_POST_MEDIA_BUCKET: 'shared-post-media',
   uploadPhotoToStorage: (bucket: string, path: string, localUri?: string | null) =>
     mockUploadPhotoToStorage(bucket, path, localUri),
+  uploadPairedVideoToStorage: (bucket: string, path: string, localUri?: string | null) =>
+    mockUploadVideoToStorage(bucket, path, localUri),
   downloadPhotoFromStorage: (bucket: string, path: string, fileName: string) =>
     mockDownloadPhotoFromStorage(bucket, path, fileName),
   deletePhotoFromStorage: (bucket: string, path: string | null) =>
     mockDeletePhotoFromStorage(bucket, path),
+  deletePairedVideoFromStorage: (bucket: string, path: string | null) =>
+    mockDeleteVideoFromStorage(bucket, path),
 }));
 
 jest.mock('../services/publicProfileService', () => ({
@@ -500,6 +508,45 @@ describe('sharedFeedService', () => {
       type: 'shared_post_created',
       postId: post.id,
     });
+  });
+
+  it('preserves the paired motion clip extension when sharing a live photo note', async () => {
+    mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
+      display_name_snapshot: friendUser.displayName,
+      photo_url_snapshot: friendUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+    mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
+      display_name_snapshot: ownerUser.displayName,
+      photo_url_snapshot: ownerUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+
+    const note = {
+      id: 'note-live',
+      type: 'photo',
+      content: 'file:///photos/note-live.jpg',
+      photoLocalUri: 'file:///photos/note-live.jpg',
+      isLivePhoto: true,
+      pairedVideoLocalUri: 'file:///photos/note-live-motion.mov',
+      doodleStrokesJson: null,
+      locationName: 'Saigon',
+      latitude: 10.77,
+      longitude: 106.69,
+      moodEmoji: null,
+    } as any;
+
+    await createSharedPost(ownerUser, note, [friendUser.id]);
+
+    expect(mockUploadVideoToStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      expect.stringMatching(new RegExp(`${ownerUser.id}/shared-post-.*\\.motion\\.mov$`)),
+      'file:///photos/note-live-motion.mov'
+    );
   });
 
   it('revokes old shared audiences and hides author-only leftovers after removing a friend', async () => {

@@ -30,6 +30,10 @@ describe('supabase migration hardening', () => {
     resolve(__dirname, '../supabase/migrations/20260329100000_add_social_push_tokens.sql'),
     'utf8'
   );
+  const livePhotoMigration = readFileSync(
+    resolve(__dirname, '../supabase/migrations/20260402093000_add_live_photo_columns.sql'),
+    'utf8'
+  );
   const normalizedRemoveStorageCleanupTriggersMigration =
     removeStorageCleanupTriggersMigration.toLowerCase();
 
@@ -67,6 +71,13 @@ describe('supabase migration hardening', () => {
     expect(noteColorMigration).toContain('alter table public.notes');
     expect(noteColorMigration).toContain('add column if not exists note_color text');
     expect(noteColorMigration).toContain('alter table public.shared_posts');
+  });
+
+  it('adds live photo columns for synced notes and shared posts', () => {
+    expect(livePhotoMigration).toContain('alter table public.notes');
+    expect(livePhotoMigration).toContain('add column if not exists is_live_photo boolean not null default false');
+    expect(livePhotoMigration).toContain('add column if not exists paired_video_path text');
+    expect(livePhotoMigration).toContain('alter table public.shared_posts');
   });
 
   it('adds shared post coordinates for map rendering', () => {

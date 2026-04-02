@@ -4,7 +4,11 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Layout } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { SharedPost } from '../../services/sharedFeedService';
-import { downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET } from '../../services/remoteMedia';
+import {
+  downloadPairedVideoFromStorage,
+  downloadPhotoFromStorage,
+  SHARED_POST_MEDIA_BUCKET,
+} from '../../services/remoteMedia';
 import ImageMemoryCard from '../notes/ImageMemoryCard';
 import type { DebugTiltState } from '../notes/StickerPhysicsDebugControls';
 import TextMemoryCard from '../notes/TextMemoryCard';
@@ -32,6 +36,20 @@ export default function SharedPostCardVisual({
   const [photoUri, setPhotoUri] = useState<string | null>(
     post.type === 'photo' ? post.photoLocalUri ?? null : null
   );
+  const [pairedVideoUri, setPairedVideoUri] = useState<string | null>(
+    post.type === 'photo' ? post.pairedVideoLocalUri ?? null : null
+  );
+
+  useEffect(() => {
+    if (post.type !== 'photo') {
+      setPhotoUri(null);
+      setPairedVideoUri(null);
+      return;
+    }
+
+    setPhotoUri(post.photoLocalUri ?? null);
+    setPairedVideoUri(post.pairedVideoLocalUri ?? null);
+  }, [post]);
 
   useEffect(() => {
     let active = true;
@@ -55,11 +73,43 @@ export default function SharedPostCardVisual({
     };
   }, [post.id, post.type, post.photoPath, photoUri]);
 
+  useEffect(() => {
+    let active = true;
+
+    if (
+      post.type !== 'photo' ||
+      !post.isLivePhoto ||
+      pairedVideoUri ||
+      !post.pairedVideoPath
+    ) {
+      return;
+    }
+
+    downloadPairedVideoFromStorage(
+      SHARED_POST_MEDIA_BUCKET,
+      post.pairedVideoPath,
+      `${post.id}-motion`
+    )
+      .then((downloadedUri) => {
+        if (active && downloadedUri) {
+          setPairedVideoUri(downloadedUri);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [pairedVideoUri, post.id, post.isLivePhoto, post.pairedVideoPath, post.type]);
+
   if (post.type === 'photo') {
     if (photoUri) {
       return (
         <ImageMemoryCard
           imageUrl={photoUri}
+          isLivePhoto={post.isLivePhoto}
+          pairedVideoUri={pairedVideoUri}
+          showLiveBadge={false}
           doodleStrokesJson={post.doodleStrokesJson}
           stickerPlacementsJson={post.stickerPlacementsJson}
           remoteBucket={SHARED_POST_MEDIA_BUCKET}

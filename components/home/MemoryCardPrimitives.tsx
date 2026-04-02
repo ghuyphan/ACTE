@@ -5,6 +5,7 @@ import { Dimensions, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } f
 import { useSharedValue } from 'react-native-reanimated';
 import { Layout, Typography } from '../../constants/theme';
 import { Note } from '../../services/database';
+import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { SharedPost } from '../../services/sharedFeedService';
 import { formatDate } from '../../utils/dateUtils';
@@ -15,6 +16,7 @@ import {
 } from '../notes/StickerPhysicsDebugControls';
 import TextMemoryCard from '../notes/TextMemoryCard';
 import InfoPill from '../ui/InfoPill';
+import LivePhotoIcon from '../ui/LivePhotoIcon';
 import SharedPostCardVisual from './SharedPostCardVisual';
 
 const { width } = Dimensions.get('window');
@@ -69,6 +71,9 @@ export function NoteMemoryCard({
           {note.type === 'photo' ? (
             <ImageMemoryCard
               imageUrl={getNotePhotoUri(note)}
+              isLivePhoto={note.isLivePhoto}
+              pairedVideoUri={getNotePairedVideoUri(note)}
+              showLiveBadge={false}
               doodleStrokesJson={note.doodleStrokesJson}
               stickerPlacementsJson={note.stickerPlacementsJson}
               isActive={isActive}
@@ -88,9 +93,18 @@ export function NoteMemoryCard({
           )}
         </View>
 
-        {note.isFavorite ? (
-          <View style={[styles.favBadge, { backgroundColor: colors.card }]}>
-            <Ionicons name="heart" size={16} color={colors.danger} />
+        {note.isFavorite || note.isLivePhoto ? (
+          <View style={styles.badgeStack}>
+            {note.isLivePhoto ? (
+              <View style={[styles.badge, { backgroundColor: colors.card }]}>
+                <LivePhotoIcon size={18} color={colors.primary} />
+              </View>
+            ) : null}
+            {note.isFavorite ? (
+              <View style={[styles.badge, { backgroundColor: colors.card }]}>
+                <Ionicons name="heart" size={16} color={colors.danger} />
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -110,11 +124,11 @@ export function NoteMemoryCard({
               pressed ? styles.metadataPressablePressed : null,
             ]}
           >
-            <InfoPill style={styles.metadataPill}>
-              <View style={styles.metadataPillContent}>
-                <View style={styles.metadataPillMain}>
-                  <Ionicons name="location" size={14} color={colors.secondaryText} />
-                  <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
+	            <InfoPill style={styles.metadataPill}>
+	              <View style={styles.metadataPillContent}>
+	                <View style={styles.metadataPillMain}>
+	                  <Ionicons name="location" size={14} color={colors.secondaryText} />
+	                  <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
                     {locationLabel}
                   </Text>
                   <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
@@ -122,19 +136,19 @@ export function NoteMemoryCard({
                   {note.hasDoodle ? (
                     <>
                       <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-                      <Ionicons name="brush-outline" size={14} color={colors.secondaryText} />
-                    </>
-                  ) : null}
-                </View>
-                <View style={styles.metadataPillAction}>
-                  <Text style={[styles.metadataActionText, { color: colors.primary }]}>
-                    {t('home.openDetails', 'Details')}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.primary} />
-                </View>
-              </View>
-            </InfoPill>
-          </Pressable>
+	                      <Ionicons name="brush-outline" size={14} color={colors.secondaryText} />
+	                    </>
+	                  ) : null}
+	                </View>
+	                <View style={styles.metadataPillAction}>
+	                  <Text style={[styles.metadataActionText, { color: colors.primary }]}>
+	                    {t('home.openDetails', 'Details')}
+	                  </Text>
+	                  <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+	                </View>
+	              </View>
+	            </InfoPill>
+	          </Pressable>
         ) : (
           <InfoPill style={styles.metadataPill}>
             <View style={styles.metadataPillContent}>
@@ -284,10 +298,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     justifyContent: 'center',
   },
-  favBadge: {
-    position: 'absolute',
-    top: 18,
-    right: 24,
+  badge: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -299,6 +310,14 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     backgroundColor: '#fff',
+  },
+  badgeStack: {
+    position: 'absolute',
+    top: 18,
+    right: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   metaContainer: {
     alignSelf: 'center',
@@ -372,12 +391,12 @@ const styles = StyleSheet.create({
   metadataPillAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
     flexShrink: 0,
   },
   metadataActionText: {
-    ...Typography.pill,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     fontFamily: 'Noto Sans',
   },
 });

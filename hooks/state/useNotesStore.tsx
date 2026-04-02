@@ -28,6 +28,7 @@ import {
 } from '../../services/geofenceService';
 import { cleanupOrphanMediaFiles } from '../../services/mediaIntegrity';
 import { getNotePhotoUri } from '../../services/photoStorage';
+import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { getSyncService, type SyncChange } from '../../services/syncService';
 import { updateWidgetData } from '../../services/widgetService';
 
@@ -94,17 +95,20 @@ function useNotesStoreValue(): NotesStoreValue {
 
   const deletePhotoFileIfPresent = useCallback(async (note: Note | null | undefined) => {
     const photoUri = getNotePhotoUri(note);
-    if (note?.type !== 'photo' || !photoUri) {
+    const pairedVideoUri = getNotePairedVideoUri(note);
+    if (note?.type !== 'photo' || (!photoUri && !pairedVideoUri)) {
       return;
     }
 
     try {
-      const fileInfo = await FileSystem.getInfoAsync(photoUri);
-      if (fileInfo.exists) {
-        await FileSystem.deleteAsync(photoUri, { idempotent: true });
+      for (const mediaUri of [photoUri, pairedVideoUri].filter(Boolean)) {
+        const fileInfo = await FileSystem.getInfoAsync(mediaUri);
+        if (fileInfo.exists) {
+          await FileSystem.deleteAsync(mediaUri, { idempotent: true });
+        }
       }
     } catch (error) {
-      console.warn('Failed to delete photo file:', error);
+      console.warn('Failed to delete local note media file:', error);
     }
   }, []);
 

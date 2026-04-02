@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Share } from 'react-native';
+import { Alert, ScrollView, Share } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockGetNoteById = jest.fn<Promise<unknown>, [string]>();
@@ -418,6 +418,39 @@ describe('NoteDetailSheet', () => {
     });
   });
 
+  it('uses keyboard-aware scrolling on iOS', async () => {
+    const { UNSAFE_getByType } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(mockGetNoteById).toHaveBeenCalledWith('note-1');
+    });
+
+    const scrollView = UNSAFE_getByType(ScrollView);
+    expect(scrollView.props.automaticallyAdjustKeyboardInsets).toBe(true);
+    expect(scrollView.props.keyboardShouldPersistTaps).toBe('handled');
+    expect(scrollView.props.keyboardDismissMode).toBe('interactive');
+  });
+
+  it('renders the location as plain text until edit mode opens', async () => {
+    const { getByText, queryByTestId, getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByText('Old place')).toBeTruthy();
+    });
+
+    expect(queryByTestId('note-detail-location-input')).toBeNull();
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-location-input')).toBeTruthy();
+    });
+  });
+
   it('shows a paste popover on card long press in edit mode and pastes a sticker', async () => {
     mockHasClipboardStickerImage.mockResolvedValue(true);
 
@@ -603,6 +636,38 @@ describe('NoteDetailSheet', () => {
         { color: '#FFFFFF', points: [0.3, 0.3, 0.4, 0.4] },
       ])
     );
+  });
+
+  it('anchors the photo location cursor at the start when edit mode opens', async () => {
+    mockGetNoteById.mockResolvedValue({
+      id: 'photo-1',
+      type: 'photo',
+      content: 'file:///photos/photo-1.jpg',
+      photoLocalUri: 'file:///photos/photo-1.jpg',
+      photoRemoteBase64: null,
+      locationName: '1, Amphitheatre Parkway, Mountain View',
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: false,
+      createdAt: '2026-03-10T00:00:00.000Z',
+      updatedAt: null,
+    });
+
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="photo-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-location-input').props.selection).toEqual({ start: 0, end: 0 });
+    });
   });
 
   it('confirms deletes before removing a note', async () => {

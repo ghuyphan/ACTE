@@ -2,6 +2,7 @@ import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
 
 const mockDownloadPhotoFromStorage = jest.fn();
+const mockDownloadVideoFromStorage = jest.fn();
 
 jest.mock('../hooks/useTheme', () => ({
   useTheme: () => ({
@@ -17,6 +18,7 @@ jest.mock('../hooks/useTheme', () => ({
 jest.mock('../services/remoteMedia', () => ({
   SHARED_POST_MEDIA_BUCKET: 'shared-posts',
   downloadPhotoFromStorage: (...args: unknown[]) => mockDownloadPhotoFromStorage(...args),
+  downloadPairedVideoFromStorage: (...args: unknown[]) => mockDownloadVideoFromStorage(...args),
 }));
 
 jest.mock('../components/notes/ImageMemoryCard', () => {

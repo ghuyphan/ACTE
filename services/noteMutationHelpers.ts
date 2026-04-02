@@ -1,5 +1,6 @@
 import { Note, NoteUpdates } from './database';
 import { getNotePhotoUri } from './photoStorage';
+import { getNotePairedVideoUri } from './livePhotoStorage';
 
 function resolveNullableValue<T>(nextValue: T | undefined, currentValue: T | null | undefined) {
   return nextValue !== undefined ? nextValue : currentValue ?? null;
@@ -31,12 +32,33 @@ export function removeNoteFromCollection(notes: Note[], id: string): Note[] {
 
 export function mergeNotePatch(note: Note, updates: NoteUpdates, updatedAt = new Date().toISOString()): Note {
   const nextPhotoUri = note.type === 'photo' ? getNotePhotoUri({ ...note, ...updates, type: note.type }) : '';
+  const nextIsLivePhoto =
+    note.type === 'photo'
+      ? updates.isLivePhoto !== undefined
+        ? updates.isLivePhoto
+        : note.isLivePhoto ?? false
+      : false;
+  const nextPairedVideoUri =
+    note.type === 'photo' && nextIsLivePhoto
+      ? getNotePairedVideoUri({
+          ...note,
+          ...updates,
+          type: note.type,
+          isLivePhoto: nextIsLivePhoto,
+        })
+      : '';
 
   return {
     ...note,
     ...updates,
     content: note.type === 'photo' ? nextPhotoUri : updates.content ?? note.content,
     photoLocalUri: note.type === 'photo' ? nextPhotoUri || null : null,
+    isLivePhoto: note.type === 'photo' ? nextIsLivePhoto : false,
+    pairedVideoLocalUri: note.type === 'photo' ? nextPairedVideoUri || null : null,
+    pairedVideoRemotePath:
+      note.type === 'photo' && nextIsLivePhoto
+        ? resolveNullableValue(updates.pairedVideoRemotePath, note.pairedVideoRemotePath)
+        : null,
     promptId: resolveNullableValue(updates.promptId, note.promptId),
     promptTextSnapshot: resolveNullableValue(updates.promptTextSnapshot, note.promptTextSnapshot),
     promptAnswer: resolveNullableValue(updates.promptAnswer, note.promptAnswer),

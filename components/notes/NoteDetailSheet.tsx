@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -65,6 +64,7 @@ import {
     type NoteStickerPlacement,
     updateStickerPlacementTransform,
 } from '../../services/noteStickers';
+import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import {
     getFallbackFreeNoteColor,
@@ -81,6 +81,7 @@ import {
     hasClipboardStickerImage,
     importStickerAssetFromClipboard,
 } from '../../utils/stickerClipboard';
+import PhotoMediaView from './PhotoMediaView';
 import AppSheet from '../sheets/AppSheet';
 import DynamicStickerCanvas from './DynamicStickerCanvas';
 import NoteStickerCanvas from './NoteStickerCanvas';
@@ -90,6 +91,7 @@ import NoteColorPicker from '../ui/NoteColorPicker';
 import PremiumNoteFinishOverlay from '../ui/PremiumNoteFinishOverlay';
 import StickerPastePopover from '../ui/StickerPastePopover';
 import TransientStatusChip from '../ui/TransientStatusChip';
+import LivePhotoIcon from '../ui/LivePhotoIcon';
 
 const { width } = Dimensions.get('window');
 const CARD_SIZE = width - Layout.screenPadding * 2;
@@ -299,6 +301,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
     const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
+    const [locationSelection, setLocationSelection] = useState<{ start: number; end: number } | undefined>(undefined);
 
     const cardScaleValue = useSharedValue(0.92);
     const cardOpacityValue = useSharedValue(0);
@@ -312,6 +315,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const editModeAnim = useRef(editModeAnimValue).current;
     const contentInputRef = useRef<any>(null);
     const locationInputRef = useRef<any>(null);
+    const scrollContainerRef = useRef<any>(null);
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingDeleteNoteIdRef = useRef<string | null>(null);
@@ -587,6 +591,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setDoodleModeEnabled(false);
         setStickerModeEnabled(false);
         setSelectedStickerId(null);
+        setLocationSelection(undefined);
         setShowStickerSourceSheet(false);
         favoriteFillProgress.value = 0;
         cardScale.value = 0.97;
@@ -686,6 +691,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         if (!isEditing) {
             setDoodleModeEnabled(false);
             setStickerModeEnabled(false);
+            setLocationSelection(undefined);
             return;
         }
 
@@ -694,6 +700,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 contentInputRef.current?.focus();
                 return;
             }
+            setLocationSelection({ start: 0, end: 0 });
             locationInputRef.current?.focus();
         }, 70);
 
@@ -744,6 +751,35 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const handleClearDoodle = useCallback(() => {
         setEditDoodleStrokes([]);
     }, []);
+
+    const handleLocationChangeText = useCallback((value: string) => {
+        if (locationSelection) {
+            setLocationSelection(undefined);
+        }
+        setEditLocation(value);
+    }, [locationSelection]);
+
+    const handleLocationSelectionChange = useCallback((event: any) => {
+        if (!locationSelection) {
+            return;
+        }
+
+        const { start, end } = event.nativeEvent.selection;
+        if (start !== locationSelection.start || end !== locationSelection.end) {
+            setLocationSelection(undefined);
+        }
+    }, [locationSelection]);
+
+    const handleLocationFocus = useCallback(() => {
+        if (!isEditing || Platform.OS !== 'ios') {
+            return;
+        }
+
+        setTimeout(() => {
+            scrollContainerRef.current?.scrollToEnd?.({ animated: true });
+        }, 120);
+    }, [isEditing]);
+
     const handleImportSticker = useCallback(async () => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
             return;
@@ -1149,6 +1185,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             testID="note-detail-favorite"
             onPress={handleToggleFavorite}
             style={[
+                styles.cardStatusBadge,
                 styles.cardFavBadge,
                 {
                     backgroundColor: colors.card,
@@ -1187,6 +1224,37 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             </View>
         </Pressable>
     );
+
+    const renderLivePhotoBadge = (inactiveColor: string) => (
+        <View
+            pointerEvents="none"
+            style={[
+                styles.cardStatusBadge,
+                styles.cardLivePhotoBadge,
+                {
+                    backgroundColor: colors.card,
+                    borderColor: colors.captureGlassColorScheme === 'dark'
+                        ? 'rgba(255,255,255,0.12)'
+                        : 'rgba(43,38,33,0.08)',
+                },
+            ]}
+        >
+            <LivePhotoIcon size={18} color={inactiveColor} />
+        </View>
+    );
+
+    const renderCardStatusBadges = (inactiveColor: string) => {
+        if (!note) {
+            return null;
+        }
+
+        return (
+            <View pointerEvents="box-none" style={styles.cardStatusBadgeRow}>
+                {note.type === 'photo' && note.isLivePhoto ? renderLivePhotoBadge(inactiveColor) : null}
+                {renderFavoriteBadge(inactiveColor)}
+            </View>
+        );
+    };
 
     const handleSaveEdit = async () => {
         if (!note || isDeleting) return;
@@ -1554,14 +1622,24 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 ) : null}
                 {Platform.OS === 'android' ? (
                     <BottomSheetScrollView
+                        ref={scrollContainerRef}
                         contentContainerStyle={styles.scrollContent}
                         showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
                     >
                         <Animated.View style={cardAnimatedStyle}>
                             {note.type === 'photo' ? (
                                 <View style={styles.photoContainer}>
                                     <View style={styles.photo}>
-                                        <Image source={{ uri: getNotePhotoUri(note) }} style={styles.photo} contentFit="cover" transition={300} />
+                                        <PhotoMediaView
+                                            imageUrl={getNotePhotoUri(note)}
+                                            isLivePhoto={note.isLivePhoto}
+                                            pairedVideoUri={getNotePairedVideoUri(note)}
+                                            showLiveBadge={false}
+                                            style={styles.photo}
+                                            imageStyle={styles.photo}
+                                            enablePlayback={!isEditing}
+                                        />
                                     </View>
                                     {isEditing && ENABLE_PHOTO_STICKERS ? (
                                         <Pressable
@@ -1617,7 +1695,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                         </View>
                                     ) : null}
                                     {isEditing ? renderEditHeader() : null}
-                                    {!isEditing ? renderFavoriteBadge(colors.secondaryText) : null}
+                                    {!isEditing ? renderCardStatusBadges(colors.secondaryText) : null}
                                     <StickerPastePopover
                                         visible={pastePrompt.visible}
                                         anchor={{ x: pastePrompt.x, y: pastePrompt.y }}
@@ -1703,7 +1781,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                             </View>
                                         ) : null}
                                         {isEditing ? renderEditHeader() : (
-                                            renderFavoriteBadge(colors.secondaryText)
+                                            renderCardStatusBadges(colors.secondaryText)
                                         )}
                                         <View
                                             pointerEvents={stickerModeEnabled ? 'none' : 'auto'}
@@ -1855,18 +1933,30 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                     ]}
                                 >
                                     <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
-                                    <SheetTextInput
-                                        ref={locationInputRef}
-                                        testID="note-detail-location-input"
-                                        style={[styles.editLocationInput, { color: colors.text }]}
-                                        value={isEditing ? editLocation : (note.locationName || t('noteDetail.unknownLocation', 'Unknown Location'))}
-                                        onChangeText={isEditing ? setEditLocation : undefined}
-                                        editable={isEditing}
-                                        placeholder={isEditing ? t('noteDetail.editLocation', 'Edit location name...') : undefined}
-                                        placeholderTextColor={colors.secondaryText}
-                                        maxLength={100}
-                                        selectionColor={colors.primary}
-                                    />
+                                    {isEditing ? (
+                                        <SheetTextInput
+                                            ref={locationInputRef}
+                                            testID="note-detail-location-input"
+                                            style={[styles.editLocationInput, { color: colors.text }]}
+                                            value={editLocation}
+                                            onChangeText={handleLocationChangeText}
+                                            onFocus={handleLocationFocus}
+                                            onSelectionChange={handleLocationSelectionChange}
+                                            editable
+                                            placeholder={t('noteDetail.editLocation', 'Edit location name...')}
+                                            placeholderTextColor={colors.secondaryText}
+                                            maxLength={100}
+                                            selectionColor={colors.primary}
+                                            selection={locationSelection}
+                                        />
+                                    ) : (
+                                        <Text
+                                            style={[styles.infoText, { color: colors.text }]}
+                                            numberOfLines={1}
+                                        >
+                                            {note.locationName || t('noteDetail.unknownLocation', 'Unknown Location')}
+                                        </Text>
+                                    )}
                                     {isEditing ? <Ionicons name="create-outline" size={16} color={colors.primary} /> : null}
                                 </View>
 
@@ -1924,12 +2014,27 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                         </Animated.View>
                     </BottomSheetScrollView>
                 ) : (
-                    <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                    <ScrollView
+                        ref={scrollContainerRef}
+                        contentContainerStyle={styles.scrollContent}
+                        showsVerticalScrollIndicator={false}
+                        automaticallyAdjustKeyboardInsets
+                        keyboardDismissMode="interactive"
+                        keyboardShouldPersistTaps="handled"
+                    >
                         <Animated.View style={cardAnimatedStyle}>
                         {note.type === 'photo' ? (
                             <View style={styles.photoContainer}>
                                 <View style={styles.photo}>
-                                    <Image source={{ uri: getNotePhotoUri(note) }} style={styles.photo} contentFit="cover" transition={300} />
+                                    <PhotoMediaView
+                                        imageUrl={getNotePhotoUri(note)}
+                                        isLivePhoto={note.isLivePhoto}
+                                        pairedVideoUri={getNotePairedVideoUri(note)}
+                                        showLiveBadge={false}
+                                        style={styles.photo}
+                                        imageStyle={styles.photo}
+                                        enablePlayback={!isEditing}
+                                    />
                                 </View>
                                 {isEditing && ENABLE_PHOTO_STICKERS ? (
                                     <Pressable
@@ -1985,7 +2090,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                     </View>
                                 ) : null}
                                 {isEditing ? renderEditHeader() : null}
-                                {!isEditing ? renderFavoriteBadge(colors.secondaryText) : null}
+                                {!isEditing ? renderCardStatusBadges(colors.secondaryText) : null}
                                 <StickerPastePopover
                                     visible={pastePrompt.visible}
                                     anchor={{ x: pastePrompt.x, y: pastePrompt.y }}
@@ -2071,7 +2176,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                         </View>
                                     ) : null}
                                     {isEditing ? renderEditHeader() : (
-                                        renderFavoriteBadge(colors.secondaryText)
+                                        renderCardStatusBadges(colors.secondaryText)
                                     )}
                                     <View
                                         pointerEvents={stickerModeEnabled ? 'none' : 'auto'}
@@ -2223,18 +2328,30 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                 ]}
                             >
                                 <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
-                                <SheetTextInput
-                                    ref={locationInputRef}
-                                    testID="note-detail-location-input"
-                                    style={[styles.editLocationInput, { color: colors.text }]}
-                                    value={isEditing ? editLocation : (note.locationName || t('noteDetail.unknownLocation', 'Unknown Location'))}
-                                    onChangeText={isEditing ? setEditLocation : undefined}
-                                    editable={isEditing}
-                                    placeholder={isEditing ? t('noteDetail.editLocation', 'Edit location name...') : undefined}
-                                    placeholderTextColor={colors.secondaryText}
-                                    maxLength={100}
-                                    selectionColor={colors.primary}
-                                />
+                                {isEditing ? (
+                                    <SheetTextInput
+                                        ref={locationInputRef}
+                                        testID="note-detail-location-input"
+                                        style={[styles.editLocationInput, { color: colors.text }]}
+                                        value={editLocation}
+                                        onChangeText={handleLocationChangeText}
+                                        onFocus={handleLocationFocus}
+                                        onSelectionChange={handleLocationSelectionChange}
+                                        editable
+                                        placeholder={t('noteDetail.editLocation', 'Edit location name...')}
+                                        placeholderTextColor={colors.secondaryText}
+                                        maxLength={100}
+                                        selectionColor={colors.primary}
+                                        selection={locationSelection}
+                                    />
+                                ) : (
+                                    <Text
+                                        style={[styles.infoText, { color: colors.text }]}
+                                        numberOfLines={1}
+                                    >
+                                        {note.locationName || t('noteDetail.unknownLocation', 'Unknown Location')}
+                                    </Text>
+                                )}
                                 {isEditing ? <Ionicons name="create-outline" size={16} color={colors.primary} /> : null}
                             </View>
 
@@ -2555,10 +2672,16 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    cardFavBadge: {
+    cardStatusBadgeRow: {
         position: 'absolute',
         top: CARD_OVERLAY_TOP_INSET,
         right: CARD_OVERLAY_SIDE_INSET,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        zIndex: 10,
+    },
+    cardStatusBadge: {
         width: 36,
         height: 36,
         borderRadius: 18,
@@ -2571,7 +2694,13 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.15,
         shadowRadius: 4,
         elevation: 3,
-        zIndex: 10,
+    },
+    cardFavBadge: {
+        overflow: 'hidden',
+    },
+    cardLivePhotoBadge: {
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     favoriteBadgeTint: {
         ...StyleSheet.absoluteFill,

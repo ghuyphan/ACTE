@@ -57,6 +57,9 @@ jest.mock('react-native-vision-camera', () => {
     }, []);
     React.useImperativeHandle(ref, () => ({
       takePhoto: jest.fn(),
+      startRecording: jest.fn(),
+      stopRecording: jest.fn(),
+      cancelRecording: jest.fn(),
     }));
     return <View testID="mock-camera-view" />;
   });
@@ -335,9 +338,11 @@ function createCaptureCardProps(
     onShutterPressIn: () => undefined,
     onShutterPressOut: () => undefined,
     onTakePicture: () => undefined,
+    onStartLivePhotoCapture: () => undefined,
     onSaveNote: () => undefined,
     saving: false,
     shutterScale: animatedValue,
+    isLivePhotoSaveGuardActive: false,
     cameraStatusText: null,
     libraryImportLocked: false,
     importingPhoto: false,
@@ -529,6 +534,31 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
+  it('uses a shutter long press for live photo capture without firing the normal photo tap', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const onTakePicture = jest.fn();
+    const onStartLivePhotoCapture = jest.fn();
+    const onShutterPressOut = jest.fn();
+    const { getByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      permissionGranted: true,
+      needsCameraPermission: false,
+      onTakePicture,
+      onStartLivePhotoCapture,
+      onShutterPressOut,
+    });
+
+    const shutter = getByTestId('capture-shutter-button');
+
+    fireEvent(shutter, 'longPress');
+    fireEvent(shutter, 'pressOut');
+    fireEvent(shutter, 'press');
+
+    expect(onStartLivePhotoCapture).toHaveBeenCalledTimes(1);
+    expect(onShutterPressOut).toHaveBeenCalledTimes(1);
+    expect(onTakePicture).not.toHaveBeenCalled();
+  });
+
   it('mounts the camera as soon as Android permission is granted', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const view = renderCaptureCard(ref, {
@@ -615,6 +645,36 @@ describe('CaptureCard doodle handle', () => {
     fireEvent.press(getByTestId('capture-filter-vivid'));
 
     expect(onChangePhotoFilter).toHaveBeenCalledWith('vivid');
+  });
+
+  it('keeps the original captured-photo controls and blocks save during the live-photo guard', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const onSaveNote = jest.fn();
+    const { getByTestId, queryByText, queryByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///captured-photo.jpg',
+      capturedPairedVideo: 'file:///captured-photo.mov',
+      isLivePhotoSaveGuardActive: true,
+      onSaveNote,
+    });
+
+    fireEvent.press(getByTestId('capture-save-button'));
+
+    expect(onSaveNote).not.toHaveBeenCalled();
+    expect(queryByText('time-outline')).toBeNull();
+    expect(getByTestId('capture-retake-button')).toBeTruthy();
+    expect(getByTestId('capture-share-target-toggle')).toBeTruthy();
+    expect(queryByTestId('capture-shutter-button')).toBeNull();
+  });
+
+  it('shows the first-time live photo hint below the shutter controls', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByText } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      cameraInstructionText: 'Tap for a photo. Hold for a live photo.',
+    });
+
+    expect(getByText('Tap for a photo. Hold for a live photo.')).toBeTruthy();
   });
 
   it('lets you change the text-card doodle color', () => {

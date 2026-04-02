@@ -5,6 +5,9 @@ import { useCaptureFlow } from '../hooks/useCaptureFlow';
 
 const mockRequestPermission = jest.fn(async () => true);
 const mockTakePhoto = jest.fn();
+const mockStartRecording = jest.fn();
+const mockStopRecording = jest.fn(async () => undefined);
+const mockCancelRecording = jest.fn(async () => undefined);
 let mockPermissionStatus: 'granted' | 'not-determined' | 'denied' | 'restricted' = 'granted';
 let mockHasPermission = true;
 let mockPlatformOS: 'ios' | 'android' = 'ios';
@@ -24,6 +27,9 @@ jest.mock('react-native-vision-camera', () => {
   const MockCamera = React.forwardRef((_props: any, ref: any) => {
     React.useImperativeHandle(ref, () => ({
       takePhoto: mockTakePhoto,
+      startRecording: mockStartRecording,
+      stopRecording: mockStopRecording,
+      cancelRecording: mockCancelRecording,
     }));
     return null;
   });
@@ -54,6 +60,11 @@ describe('useCaptureFlow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockTakePhoto.mockResolvedValue({ path: '/tmp/captured-photo.jpg' });
+    mockStartRecording.mockImplementation(({ onRecordingFinished }: any) => {
+      setTimeout(() => {
+        onRecordingFinished?.({ path: '/tmp/captured-live-photo.mov' });
+      }, 0);
+    });
     mockPermissionStatus = 'granted';
     mockHasPermission = true;
     mockPlatformOS = 'ios';
@@ -66,6 +77,9 @@ describe('useCaptureFlow', () => {
     act(() => {
       result.current.cameraRef.current = {
         takePhoto: mockTakePhoto,
+        startRecording: mockStartRecording,
+        stopRecording: mockStopRecording,
+        cancelRecording: mockCancelRecording,
       } as any;
       result.current.flashAnim.value = 0;
     });
@@ -78,6 +92,98 @@ describe('useCaptureFlow', () => {
     expect(mockTakePhoto).toHaveBeenCalledWith({ enableShutterSound: false });
     expect(result.current.capturedPhoto).toBe('file:///tmp/captured-photo.jpg');
     expect(result.current.flashAnim.value).toBe(0);
+  });
+
+  it('captures a live photo by taking a still photo and pairing it with a recorded motion clip', async () => {
+    jest.useFakeTimers();
+    const { result } = renderHook(() => useCaptureFlow());
+
+    try {
+      act(() => {
+        result.current.cameraRef.current = {
+          takePhoto: mockTakePhoto,
+          startRecording: mockStartRecording,
+          stopRecording: mockStopRecording,
+          cancelRecording: mockCancelRecording,
+        } as any;
+      });
+
+      await act(async () => {
+        await result.current.startLivePhotoCapture();
+      });
+
+      expect(mockStartRecording).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileType: 'mp4',
+          videoCodec: 'h265',
+          onRecordingFinished: expect.any(Function),
+          onRecordingError: expect.any(Function),
+        })
+      );
+      expect(mockTakePhoto).toHaveBeenCalledWith({ enableShutterSound: false });
+      expect(result.current.capturedPhoto).toBeNull();
+
+      await act(async () => {
+        const finishPromise = result.current.finishLivePhotoCapture();
+        jest.advanceTimersByTime(0);
+        await finishPromise;
+      });
+
+      expect(mockStopRecording).toHaveBeenCalledTimes(1);
+      expect(result.current.capturedPhoto).toBe('file:///tmp/captured-photo.jpg');
+      expect(result.current.capturedPairedVideo).toBe('file:///tmp/captured-live-photo.mov');
+      expect(result.current.isLivePhotoCaptureInProgress).toBe(false);
+      expect(result.current.isLivePhotoSaveGuardActive).toBe(true);
+
+      act(() => {
+        jest.advanceTimersByTime(900);
+      });
+
+      expect(result.current.isLivePhotoSaveGuardActive).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('captures a live photo on Android with the Android video codec', async () => {
+    jest.useFakeTimers();
+    mockPlatformOS = 'android';
+    const { result } = renderHook(() => useCaptureFlow());
+
+    try {
+      act(() => {
+        result.current.cameraRef.current = {
+          takePhoto: mockTakePhoto,
+          startRecording: mockStartRecording,
+          stopRecording: mockStopRecording,
+          cancelRecording: mockCancelRecording,
+        } as any;
+      });
+
+      await act(async () => {
+        await result.current.startLivePhotoCapture();
+      });
+
+      expect(mockStartRecording).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileType: 'mp4',
+          videoCodec: 'h264',
+          onRecordingFinished: expect.any(Function),
+          onRecordingError: expect.any(Function),
+        })
+      );
+
+      await act(async () => {
+        const finishPromise = result.current.finishLivePhotoCapture();
+        jest.advanceTimersByTime(0);
+        await finishPromise;
+      });
+
+      expect(result.current.capturedPhoto).toBe('file:///tmp/captured-photo.jpg');
+      expect(result.current.capturedPairedVideo).toBe('file:///tmp/captured-live-photo.mov');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('treats denied camera permission as re-requestable on Android', () => {

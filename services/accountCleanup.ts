@@ -8,6 +8,7 @@ import {
   LOCAL_NOTES_SCOPE,
 } from './database';
 import { clearGeofenceRegions } from './geofenceService';
+import { getNotePairedVideoUri } from './livePhotoStorage';
 import { parseNoteStickerPlacements } from './noteStickers';
 import { getNotePhotoUri } from './photoStorage';
 import { clearSharedFeedCache } from './sharedFeedCache';
@@ -18,6 +19,7 @@ interface StickerAssetRow {
 
 interface SharedCacheRow {
   photo_local_uri: string | null;
+  paired_video_local_uri: string | null;
   sticker_placements_json: string | null;
 }
 
@@ -51,7 +53,7 @@ export async function purgeLocalAccountScope(ownerUid: string | null | undefined
       normalizedOwnerUid
     ),
     database.getAllAsync<SharedCacheRow>(
-      `SELECT photo_local_uri, sticker_placements_json
+      `SELECT photo_local_uri, paired_video_local_uri, sticker_placements_json
        FROM shared_posts_cache
        WHERE user_uid = ?`,
       normalizedOwnerUid
@@ -63,8 +65,12 @@ export async function purgeLocalAccountScope(ownerUid: string | null | undefined
 
   for (const note of notes) {
     const photoUri = getNotePhotoUri(note);
+    const pairedVideoUri = getNotePairedVideoUri(note);
     if (photoUri) {
       localFileUris.add(photoUri);
+    }
+    if (pairedVideoUri) {
+      localFileUris.add(pairedVideoUri);
     }
 
     geofenceKeys.add(getSkipNextEnterKey(note.id));
@@ -86,6 +92,9 @@ export async function purgeLocalAccountScope(ownerUid: string | null | undefined
   for (const row of sharedCacheRows) {
     if (row.photo_local_uri?.trim()) {
       localFileUris.add(row.photo_local_uri.trim());
+    }
+    if (row.paired_video_local_uri?.trim()) {
+      localFileUris.add(row.paired_video_local_uri.trim());
     }
 
     const placements = parseNoteStickerPlacements(row.sticker_placements_json);

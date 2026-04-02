@@ -20,6 +20,9 @@ interface SharedPostRow {
   text: string;
   photo_path: string | null;
   photo_local_uri: string | null;
+  is_live_photo: number;
+  paired_video_path: string | null;
+  paired_video_local_uri: string | null;
   doodle_strokes_json: string | null;
   sticker_placements_json: string | null;
   note_color: string | null;
@@ -82,6 +85,9 @@ function rowToSharedPost(row: SharedPostRow): SharedPost {
     text: row.text,
     photoPath: row.photo_path,
     photoLocalUri: row.photo_local_uri,
+    isLivePhoto: row.is_live_photo === 1,
+    pairedVideoPath: row.paired_video_path,
+    pairedVideoLocalUri: row.paired_video_local_uri,
     doodleStrokesJson: row.doodle_strokes_json,
     hasStickers: Boolean(row.sticker_placements_json),
     stickerPlacementsJson: row.sticker_placements_json,
@@ -191,6 +197,9 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
           text,
           photo_path,
           photo_local_uri,
+          is_live_photo,
+          paired_video_path,
+          paired_video_local_uri,
           doodle_strokes_json,
           sticker_placements_json,
           note_color,
@@ -201,7 +210,7 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         userUid,
         post.id,
         post.authorUid,
@@ -212,6 +221,9 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
         post.text,
         post.photoPath,
         post.photoLocalUri,
+        post.isLivePhoto ? 1 : 0,
+        post.pairedVideoPath ?? null,
+        post.pairedVideoLocalUri ?? null,
         post.doodleStrokesJson ?? null,
         post.stickerPlacementsJson ?? null,
         post.noteColor ?? null,
@@ -375,6 +387,9 @@ export async function cacheSharedFeedSnapshot(
           text,
           photo_path,
           photo_local_uri,
+          is_live_photo,
+          paired_video_path,
+          paired_video_local_uri,
           doodle_strokes_json,
           sticker_placements_json,
           note_color,
@@ -385,7 +400,7 @@ export async function cacheSharedFeedSnapshot(
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         userUid,
         post.id,
         post.authorUid,
@@ -396,6 +411,9 @@ export async function cacheSharedFeedSnapshot(
         post.text,
         post.photoPath,
         post.photoLocalUri,
+        post.isLivePhoto ? 1 : 0,
+        post.pairedVideoPath ?? null,
+        post.pairedVideoLocalUri ?? null,
         post.doodleStrokesJson ?? null,
         post.stickerPlacementsJson ?? null,
         post.noteColor ?? null,

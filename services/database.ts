@@ -5,6 +5,7 @@ import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
 import { buildNoteSearchText, tokenizeSearchQuery } from './noteSearch';
 import { normalizeSavedTextNoteColor } from './noteAppearance';
 import { resolveStoredPhotoUri } from './photoStorage';
+import { resolveStoredPairedVideoUri } from './livePhotoStorage';
 
 // ─── Types ──────────────────────────────────────────────────────────
 export type NoteType = 'text' | 'photo';
@@ -15,6 +16,9 @@ export interface Note {
     content: string;          // text content or local photo URI
     photoLocalUri?: string | null;
     photoRemoteBase64?: string | null;
+    isLivePhoto?: boolean;
+    pairedVideoLocalUri?: string | null;
+    pairedVideoRemotePath?: string | null;
     locationName: string | null;
     promptId?: string | null;
     promptTextSnapshot?: string | null;
@@ -39,6 +43,9 @@ export interface CreateNoteInput {
     content: string;
     photoLocalUri?: string | null;
     photoRemoteBase64?: string | null;
+    isLivePhoto?: boolean;
+    pairedVideoLocalUri?: string | null;
+    pairedVideoRemotePath?: string | null;
     locationName?: string;
     promptId?: string | null;
     promptTextSnapshot?: string | null;
@@ -60,6 +67,9 @@ export type NoteUpdates = Partial<
         | 'content'
         | 'photoLocalUri'
         | 'photoRemoteBase64'
+        | 'isLivePhoto'
+        | 'pairedVideoLocalUri'
+        | 'pairedVideoRemotePath'
         | 'locationName'
         | 'promptId'
         | 'promptTextSnapshot'
@@ -82,6 +92,9 @@ interface NoteRow {
     content: string;
     photo_local_uri: string | null;
     photo_remote_base64: string | null;
+    is_live_photo: number;
+    paired_video_local_uri: string | null;
+    paired_video_remote_path: string | null;
     location_name: string | null;
     prompt_id: string | null;
     prompt_text_snapshot: string | null;
@@ -104,7 +117,7 @@ interface NoteRow {
 // ─── Database ───────────────────────────────────────────────────────
 let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-const APP_SCHEMA_VERSION = 10;
+const APP_SCHEMA_VERSION = 11;
 export const LOCAL_NOTES_SCOPE = '__local__';
 let activeNotesScope = LOCAL_NOTES_SCOPE;
 const SQLITE_LOCK_RETRY_DELAYS_MS = [30, 80, 160];
@@ -190,6 +203,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         content TEXT NOT NULL,
         photo_local_uri TEXT,
         photo_remote_base64 TEXT,
+        is_live_photo INTEGER NOT NULL DEFAULT 0,
+        paired_video_local_uri TEXT,
+        paired_video_remote_path TEXT,
         location_name TEXT,
         prompt_id TEXT,
         prompt_text_snapshot TEXT,
@@ -268,6 +284,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         text TEXT NOT NULL DEFAULT '',
         photo_path TEXT,
         photo_local_uri TEXT,
+        is_live_photo INTEGER NOT NULL DEFAULT 0,
+        paired_video_path TEXT,
+        paired_video_local_uri TEXT,
         doodle_strokes_json TEXT,
         sticker_placements_json TEXT,
         note_color TEXT,
@@ -322,6 +341,15 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 }
                 if (!columns.includes('photo_remote_base64')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_remote_base64 TEXT`);
+                }
+                if (!columns.includes('is_live_photo')) {
+                    await database.execAsync(`ALTER TABLE notes ADD COLUMN is_live_photo INTEGER NOT NULL DEFAULT 0`);
+                }
+                if (!columns.includes('paired_video_local_uri')) {
+                    await database.execAsync(`ALTER TABLE notes ADD COLUMN paired_video_local_uri TEXT`);
+                }
+                if (!columns.includes('paired_video_remote_path')) {
+                    await database.execAsync(`ALTER TABLE notes ADD COLUMN paired_video_remote_path TEXT`);
                 }
                 if (!columns.includes('search_text')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN search_text TEXT NOT NULL DEFAULT ''`);
@@ -513,6 +541,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                         text TEXT NOT NULL DEFAULT '',
                         photo_path TEXT,
                         photo_local_uri TEXT,
+                        is_live_photo INTEGER NOT NULL DEFAULT 0,
+                        paired_video_path TEXT,
+                        paired_video_local_uri TEXT,
                         doodle_strokes_json TEXT,
                         sticker_placements_json TEXT,
                         note_color TEXT,
@@ -529,6 +560,15 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     `PRAGMA table_info(shared_posts_cache)`
                 );
                 const sharedPostsCacheColumns = sharedPostsCacheInfo.map((col) => col.name);
+                if (!sharedPostsCacheColumns.includes('is_live_photo')) {
+                    await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN is_live_photo INTEGER NOT NULL DEFAULT 0`);
+                }
+                if (!sharedPostsCacheColumns.includes('paired_video_path')) {
+                    await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN paired_video_path TEXT`);
+                }
+                if (!sharedPostsCacheColumns.includes('paired_video_local_uri')) {
+                    await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN paired_video_local_uri TEXT`);
+                }
                 if (!sharedPostsCacheColumns.includes('note_color')) {
                     await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN note_color TEXT`);
                 }
@@ -685,12 +725,16 @@ async function deleteNoteSearchDocumentsForScope(
 
 function rowToNote(row: NoteRow): Note {
     const photoLocalUri = getResolvedPhotoLocalUri(row);
+    const pairedVideoLocalUri = resolveStoredPairedVideoUri(row.paired_video_local_uri);
     return {
         id: row.id,
         type: row.type as NoteType,
         content: row.type === 'photo' ? photoLocalUri ?? '' : row.content,
         photoLocalUri,
         photoRemoteBase64: row.photo_remote_base64,
+        isLivePhoto: row.is_live_photo === 1,
+        pairedVideoLocalUri,
+        pairedVideoRemotePath: row.paired_video_remote_path ?? null,
         locationName: row.location_name,
         promptId: row.prompt_id,
         promptTextSnapshot: row.prompt_text_snapshot,
@@ -722,6 +766,10 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
     const now = new Date().toISOString();
     const photoLocalUri =
         input.type === 'photo' ? resolveStoredPhotoUri(input.photoLocalUri ?? input.content) : null;
+    const pairedVideoLocalUri =
+        input.type === 'photo' && input.isLivePhoto
+            ? resolveStoredPairedVideoUri(input.pairedVideoLocalUri)
+            : null;
     const normalizedContent = input.type === 'photo' ? photoLocalUri ?? '' : input.content;
     const normalizedNoteColor =
         input.type === 'text' ? normalizeSavedTextNoteColor(input.noteColor) : null;
@@ -741,6 +789,9 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
             content,
             photo_local_uri,
             photo_remote_base64,
+            is_live_photo,
+            paired_video_local_uri,
+            paired_video_remote_path,
             location_name,
             prompt_id,
             prompt_text_snapshot,
@@ -754,13 +805,16 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
             is_favorite,
             created_at
         )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
         id,
         scope,
         input.type,
         normalizedContent,
         photoLocalUri,
         input.photoRemoteBase64 ?? null,
+        input.isLivePhoto ? 1 : 0,
+        pairedVideoLocalUri,
+        input.pairedVideoRemotePath ?? null,
         input.locationName ?? null,
         input.promptId ?? null,
         input.promptTextSnapshot ?? null,
@@ -781,6 +835,9 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         content: normalizedContent,
         photoLocalUri,
         photoRemoteBase64: input.photoRemoteBase64 ?? null,
+        isLivePhoto: Boolean(input.isLivePhoto && pairedVideoLocalUri),
+        pairedVideoLocalUri,
+        pairedVideoRemotePath: input.pairedVideoRemotePath ?? null,
         locationName: input.locationName ?? null,
         promptId: input.promptId ?? null,
         promptTextSnapshot: input.promptTextSnapshot ?? null,
@@ -847,6 +904,20 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
                 (updates.content !== undefined ? updates.content : existing.photoLocalUri ?? existing.content)
             )
             : null;
+    const nextIsLivePhoto =
+        nextType === 'photo'
+            ? updates.isLivePhoto !== undefined
+                ? updates.isLivePhoto
+                : existing.isLivePhoto ?? false
+            : false;
+    const nextPairedVideoLocalUri =
+        nextType === 'photo' && nextIsLivePhoto
+            ? resolveStoredPairedVideoUri(
+                updates.pairedVideoLocalUri !== undefined
+                    ? updates.pairedVideoLocalUri
+                    : existing.pairedVideoLocalUri ?? null
+            )
+            : null;
     const nextContent =
         nextType === 'photo'
             ? nextPhotoLocalUri ?? ''
@@ -874,6 +945,12 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         updates.photoRemoteBase64 !== undefined
             ? updates.photoRemoteBase64
             : existing.photoRemoteBase64 ?? null;
+    const nextPairedVideoRemotePath =
+        nextIsLivePhoto
+            ? updates.pairedVideoRemotePath !== undefined
+                ? updates.pairedVideoRemotePath
+                : existing.pairedVideoRemotePath ?? null
+            : null;
     const now = new Date().toISOString();
     const searchText = buildSearchText({
         type: nextType,
@@ -888,6 +965,9 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
          SET content = ?,
              photo_local_uri = ?,
              photo_remote_base64 = ?,
+             is_live_photo = ?,
+             paired_video_local_uri = ?,
+             paired_video_remote_path = ?,
              location_name = ?,
              prompt_id = ?,
              prompt_text_snapshot = ?,
@@ -901,6 +981,9 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         nextContent,
         nextPhotoLocalUri,
         nextPhotoRemoteBase64,
+        nextIsLivePhoto ? 1 : 0,
+        nextPairedVideoLocalUri,
+        nextPairedVideoRemotePath,
         nextLocationName,
         nextPromptId,
         nextPromptTextSnapshot,
@@ -1013,6 +1096,10 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         input.type === 'photo'
             ? resolveStoredPhotoUri(input.photoLocalUri ?? input.content)
             : null;
+    const pairedVideoLocalUri =
+        input.type === 'photo' && input.isLivePhoto
+            ? resolveStoredPairedVideoUri(input.pairedVideoLocalUri)
+            : null;
     const normalizedContent = input.type === 'photo' ? photoLocalUri ?? '' : input.content;
     const searchText = buildSearchText({
         type: input.type,
@@ -1030,6 +1117,9 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
             content,
             photo_local_uri,
             photo_remote_base64,
+            is_live_photo,
+            paired_video_local_uri,
+            paired_video_remote_path,
             location_name,
             prompt_id,
             prompt_text_snapshot,
@@ -1044,13 +1134,16 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
             created_at,
             updated_at
         )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
             owner_uid = excluded.owner_uid,
             type = excluded.type,
             content = excluded.content,
             photo_local_uri = excluded.photo_local_uri,
             photo_remote_base64 = excluded.photo_remote_base64,
+            is_live_photo = excluded.is_live_photo,
+            paired_video_local_uri = excluded.paired_video_local_uri,
+            paired_video_remote_path = excluded.paired_video_remote_path,
             location_name = excluded.location_name,
             prompt_id = excluded.prompt_id,
             prompt_text_snapshot = excluded.prompt_text_snapshot,
@@ -1070,6 +1163,9 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         normalizedContent,
         photoLocalUri,
         input.photoRemoteBase64 ?? null,
+        input.isLivePhoto ? 1 : 0,
+        pairedVideoLocalUri,
+        input.pairedVideoRemotePath ?? null,
         input.locationName ?? null,
         input.promptId ?? null,
         input.promptTextSnapshot ?? null,
@@ -1122,6 +1218,9 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         content: normalizedContent,
         photoLocalUri,
         photoRemoteBase64: input.photoRemoteBase64 ?? null,
+        isLivePhoto: Boolean(input.isLivePhoto && pairedVideoLocalUri),
+        pairedVideoLocalUri,
+        pairedVideoRemotePath: input.pairedVideoRemotePath ?? null,
         locationName: input.locationName ?? null,
         promptId: input.promptId ?? null,
         promptTextSnapshot: input.promptTextSnapshot ?? null,
