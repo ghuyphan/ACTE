@@ -69,7 +69,7 @@ function useNotesStoreValue(): NotesStoreValue {
       widgetSyncTimeoutRef.current = null;
       void updateWidgetData({
         notes: nextNotes,
-        includeLocationLookup: true,
+        includeLocationLookup: false,
       });
     }, delay);
   }, []);

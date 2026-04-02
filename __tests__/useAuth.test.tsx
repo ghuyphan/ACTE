@@ -42,6 +42,8 @@ const mockUpsertPublicUserProfile = jest.fn<Promise<void>, [unknown]>(async () =
 const mockClearSharedFeedCache = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
 const mockUnregisterCurrentSocialPushToken = jest.fn<Promise<void>, []>(async () => undefined);
 const mockPurgeLocalAccountScope = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
+const mockMigrateLocalNotesScopeToUser = jest.fn<Promise<void>, [string]>(async () => undefined);
+const mockSetActiveNotesScope = jest.fn<void, [string | null | undefined]>();
 const mockGetSession = jest.fn(async () => ({
   data: { session: mockAuthState.initialSession },
   error: null,
@@ -162,6 +164,12 @@ jest.mock('../services/accountCleanup', () => ({
   purgeLocalAccountScope: (ownerUid?: string | null) => mockPurgeLocalAccountScope(ownerUid),
 }));
 
+jest.mock('../services/database', () => ({
+  LOCAL_NOTES_SCOPE: '__local__',
+  migrateLocalNotesScopeToUser: (userUid: string) => mockMigrateLocalNotesScopeToUser(userUid),
+  setActiveNotesScope: (scope: string | null | undefined) => mockSetActiveNotesScope(scope),
+}));
+
 jest.mock('../services/geofenceService', () => ({
   clearGeofenceRegions: jest.fn(async () => undefined),
 }));
@@ -234,6 +242,8 @@ describe('useAuth', () => {
     mockAuthState.webClientId = 'client-id.apps.googleusercontent.com';
     mockAuthState.iosClientId = 'ios-client-id.apps.googleusercontent.com';
     mockInvokeFunction.mockResolvedValue({ data: { success: true }, error: null });
+    mockMigrateLocalNotesScopeToUser.mockClear();
+    mockSetActiveNotesScope.mockClear();
   });
 
   it('exposes email auth even when Google sign-in is not configured', async () => {
@@ -282,6 +292,21 @@ describe('useAuth', () => {
       provider: 'google',
       token: 'token-123',
     });
+  });
+
+  it('migrates anonymous notes into the signed-in scope on startup', async () => {
+    mockAuthState.initialSession = buildSession();
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+
+    expect(mockMigrateLocalNotesScopeToUser).toHaveBeenCalledWith('user-1');
+    expect(mockSetActiveNotesScope).toHaveBeenCalledWith('user-1');
+    expect(mockUpsertPublicUserProfile).toHaveBeenCalled();
   });
 
   it('creates an email account and stores the display name in Supabase metadata', async () => {

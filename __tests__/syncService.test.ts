@@ -21,9 +21,11 @@ type NoteRecord = {
   type: 'text' | 'photo';
   content: string;
   photoLocalUri: string | null;
+  photoSyncedLocalUri?: string | null;
   photoRemoteBase64: string | null;
   isLivePhoto?: boolean;
   pairedVideoLocalUri?: string | null;
+  pairedVideoSyncedLocalUri?: string | null;
   pairedVideoRemotePath?: string | null;
   hasDoodle?: boolean;
   doodleStrokesJson?: string | null;
@@ -45,6 +47,8 @@ let queueId = 1;
 let localNotesStore: NoteRecord[] = [];
 const mockRemoteNotes = new Map<string, any>();
 const mockRemoteSharedPosts = new Map<string, any>();
+const mockRemoteNoteTombstones = new Map<string, any>();
+const mockRemoteSharedPostTombstones = new Map<string, any>();
 const mockUserUsage = new Map<string, any>();
 const mockPublicProfiles = new Map<string, any>();
 let mockNotesUpsertError: unknown = null;
@@ -72,6 +76,9 @@ const mockUpsertPublicProfile = jest.fn(async (input: unknown) => {
 const mockUpsertNote = jest.fn(async (note: NoteRecord) => {
   localNotesStore = [note, ...localNotesStore.filter((item) => item.id !== note.id)];
   return note;
+});
+const mockDeleteNote = jest.fn(async (id: string) => {
+  localNotesStore = localNotesStore.filter((note) => note.id !== id);
 });
 const mockGetNoteById = jest.fn(async (id: string) => {
   return localNotesStore.find((note) => note.id === id) ?? null;
@@ -104,6 +111,16 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
     queueRows = queueRows.map((row) =>
       row.id === id && row.owner_uid === ownerUid
         ? { ...row, status: 'processing', attempts: row.attempts + 1, last_error: null, blocked_reason: null }
+        : row
+    );
+    return;
+  }
+
+  if (sql.includes("SET status = 'pending'")) {
+    const [ownerUid] = args;
+    queueRows = queueRows.map((row) =>
+      row.owner_uid === ownerUid && row.status === 'processing'
+        ? { ...row, status: 'pending', last_error: null, next_retry_at: null, blocked_reason: null }
         : row
     );
     return;
@@ -163,6 +180,7 @@ jest.mock('../services/database', () => ({
   getActiveNotesScope: () => mockActiveNotesScope,
   getAllNotes: () => mockGetAllNotes(),
   getNoteById: (id: string) => mockGetNoteById(id),
+  deleteNote: (id: string) => mockDeleteNote(id),
   upsertNote: (note: NoteRecord) => mockUpsertNote(note),
 }));
 
@@ -222,6 +240,33 @@ function executeSharedPostsQuery(state: any) {
     if (filter.type === 'in') {
       rows = rows.filter((row) => filter.values.includes(row?.[filter.field]));
     }
+  }
+
+  return rows;
+}
+
+function executeTombstoneQuery(
+  state: any,
+  store: Map<string, any>
+) {
+  let rows = Array.from(store.values());
+
+  for (const filter of state.filters) {
+    if (filter.type === 'eq') {
+      rows = rows.filter((row) => row?.[filter.field] === filter.value);
+    }
+
+    if (filter.type === 'gt') {
+      rows = rows.filter((row) => String(row?.[filter.field] ?? '') > String(filter.value ?? ''));
+    }
+  }
+
+  if (state.orderField) {
+    rows = [...rows].sort((left, right) => {
+      const leftValue = String(left?.[state.orderField!] ?? '');
+      const rightValue = String(right?.[state.orderField!] ?? '');
+      return state.ascending ? leftValue.localeCompare(rightValue) : rightValue.localeCompare(leftValue);
+    });
   }
 
   return rows;
@@ -336,6 +381,67 @@ function mockCreateSharedPostsQueryBuilder() {
   return builder;
 }
 
+function mockCreateTombstonesQueryBuilder(
+  store: Map<string, any>,
+  idField: 'note_id' | 'post_id'
+) {
+  const state = {
+    filters: [] as Array<{ type: 'eq' | 'gt'; field: string; value: unknown }>,
+    orderField: null as string | null,
+    ascending: true,
+    deleteMode: false,
+  };
+
+  const builder: any = {
+    select: () => builder,
+    eq: (field: string, value: unknown) => {
+      state.filters.push({ type: 'eq', field, value });
+      return builder;
+    },
+    gt: (field: string, value: unknown) => {
+      state.filters.push({ type: 'gt', field, value });
+      return builder;
+    },
+    order: (field: string, options?: { ascending?: boolean }) => {
+      state.orderField = field;
+      state.ascending = options?.ascending ?? true;
+      return builder;
+    },
+    upsert: async (value: Record<string, unknown> | Array<Record<string, unknown>>) => {
+      const rows = Array.isArray(value) ? value : [value];
+      for (const row of rows) {
+        store.set(String(row[idField]), row);
+      }
+      return { error: null };
+    },
+    delete: () => {
+      state.deleteMode = true;
+      return builder;
+    },
+    then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
+      try {
+        if (state.deleteMode) {
+          const rows = executeTombstoneQuery(state, store);
+          for (const row of rows) {
+            store.delete(String(row[idField]));
+          }
+          return Promise.resolve(resolve({ data: null, error: null }));
+        }
+
+        return Promise.resolve(resolve({ data: executeTombstoneQuery(state, store), error: null }));
+      } catch (error) {
+        if (reject) {
+          return Promise.resolve(reject(error));
+        }
+
+        return Promise.reject(error);
+      }
+    },
+  };
+
+  return builder;
+}
+
 jest.mock('../utils/supabase', () => ({
   getCurrentSupabaseSession: async () => ({
     user: mockSessionUserId ? { id: mockSessionUserId } : null,
@@ -387,7 +493,7 @@ jest.mock('../utils/supabase', () => ({
         : ''
     ) === '42501',
   isSupabaseSchemaMismatchError: (error: unknown) =>
-    ['PGRST204', '42703'].includes(
+    ['PGRST204', '42703', '42P01'].includes(
       String(
         typeof error === 'object' && error && 'code' in error
           ? (error as { code?: unknown }).code ?? ''
@@ -402,6 +508,14 @@ jest.mock('../utils/supabase', () => ({
 
       if (table === 'shared_posts') {
         return mockCreateSharedPostsQueryBuilder();
+      }
+
+      if (table === 'note_tombstones') {
+        return mockCreateTombstonesQueryBuilder(mockRemoteNoteTombstones, 'note_id');
+      }
+
+      if (table === 'shared_post_tombstones') {
+        return mockCreateTombstonesQueryBuilder(mockRemoteSharedPostTombstones, 'post_id');
       }
 
       if (table === 'user_usage') {
@@ -454,6 +568,37 @@ function createLivePhotoNote(id: string, extension: '.mov' | '.mp4' = '.mov'): N
   };
 }
 
+function createRemoteStickerPlacementsJson(remotePath: string) {
+  return JSON.stringify([
+    {
+      id: 'placement-1',
+      assetId: 'asset-1',
+      x: 0.5,
+      y: 0.5,
+      scale: 1,
+      rotation: 0,
+      zIndex: 1,
+      opacity: 1,
+      asset: {
+        id: 'asset-1',
+        ownerUid: 'user-1',
+        localUri: 'file:///stickers/asset-1.png',
+        remotePath,
+        mimeType: 'image/png',
+        width: 120,
+        height: 120,
+        createdAt: '2026-03-10T00:00:00.000Z',
+        updatedAt: null,
+        source: 'import',
+      },
+    },
+  ]);
+}
+
+async function setPreviouslySyncedNoteIds(ids: string[]) {
+  await AsyncStorage.setItem('sync.syncedNoteIds.user-1', JSON.stringify(ids));
+}
+
 const syncUser = {
   id: 'user-1',
   uid: 'user-1',
@@ -472,6 +617,8 @@ beforeEach(async () => {
   localNotesStore = [];
   mockRemoteNotes.clear();
   mockRemoteSharedPosts.clear();
+  mockRemoteNoteTombstones.clear();
+  mockRemoteSharedPostTombstones.clear();
   mockUserUsage.clear();
   mockPublicProfiles.clear();
 });
@@ -539,9 +686,43 @@ describe('syncService', () => {
     });
   });
 
+  it('recovers stuck processing queue items before reporting queue stats', async () => {
+    queueRows = [
+      {
+        id: 1,
+        owner_uid: mockActiveNotesScope,
+        entity: 'note',
+        entity_id: 'note-1',
+        operation: 'create',
+        payload: null,
+        status: 'processing',
+        attempts: 1,
+        last_error: 'crash',
+        next_retry_at: null,
+        terminal: 0,
+        blocked_reason: null,
+        created_at: '2026-03-10T00:00:00.000Z',
+      },
+    ];
+
+    const stats = await getSyncRepository().getStats();
+
+    expect(stats).toEqual({
+      pendingCount: 1,
+      failedCount: 0,
+      blockedCount: 0,
+    });
+    expect(queueRows[0]?.status).toBe('pending');
+  });
+
   it('uploads a full local snapshot to Supabase and stores usage totals', async () => {
     const notes = [createTextNote('note-1'), createPhotoNote('note-2')];
     localNotesStore = notes;
+    mockRemoteNoteTombstones.set('note-1', {
+      note_id: 'note-1',
+      user_id: 'user-1',
+      deleted_at: '2026-03-09T00:00:00.000Z',
+    });
 
     const result = await syncNotes(syncUser, notes, { mode: 'full' });
 
@@ -571,12 +752,19 @@ describe('syncService', () => {
       'user-1/note-2',
       'file:///photos/note-2.jpg'
     );
+    expect(mockUpsertNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'note-2',
+        photoSyncedLocalUri: 'file:///photos/note-2.jpg',
+      })
+    );
     expect(mockUserUsage.get('user-1')).toEqual(
       expect.objectContaining({
         note_count: 2,
         photo_note_count: 1,
       })
     );
+    expect(mockRemoteNoteTombstones.has('note-1')).toBe(false);
     expect(mockUpsertPublicProfile).toHaveBeenCalled();
   });
 
@@ -597,6 +785,54 @@ describe('syncService', () => {
         paired_video_path: 'user-1/note-live.motion.mov',
       })
     );
+    expect(mockUpsertNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'note-live',
+        pairedVideoSyncedLocalUri: 'file:///photos/note-live-motion.mov',
+      })
+    );
+  });
+
+  it('reuses existing synced photo and motion paths when local media did not change', async () => {
+    localNotesStore = [
+      {
+        ...createLivePhotoNote('note-stable', '.mov'),
+        photoSyncedLocalUri: 'file:///photos/note-stable.jpg',
+        pairedVideoSyncedLocalUri: 'file:///photos/note-stable-motion.mov',
+      },
+    ];
+    mockRemoteNotes.set('note-stable', {
+      id: 'note-stable',
+      user_id: 'user-1',
+      type: 'photo',
+      content: '',
+      photo_path: 'user-1/note-stable',
+      is_live_photo: true,
+      paired_video_path: 'user-1/note-stable.motion.mov',
+      has_doodle: false,
+      doodle_strokes_json: null,
+      has_stickers: false,
+      sticker_placements_json: null,
+      location_name: 'Saigon',
+      prompt_id: null,
+      prompt_text_snapshot: null,
+      prompt_answer: null,
+      mood_emoji: null,
+      note_color: null,
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      is_favorite: false,
+      created_at: '2026-03-10T00:00:00.000Z',
+      updated_at: '2026-03-10T00:00:00.000Z',
+      synced_at: '2026-03-10T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'full' });
+
+    expect(result.status).toBe('success');
+    expect(mockUploadPhotoToStorage).not.toHaveBeenCalled();
+    expect(mockUploadVideoToStorage).not.toHaveBeenCalled();
   });
 
   it('imports newer remote notes during incremental sync', async () => {
@@ -666,6 +902,30 @@ describe('syncService', () => {
       updated_at: '2026-03-11T00:00:00.000Z',
       synced_at: '2026-03-11T00:00:00.000Z',
     });
+    mockRemoteNotes.set('note-text-later', {
+      id: 'note-text-later',
+      user_id: 'user-1',
+      type: 'text',
+      content: 'later text',
+      photo_path: null,
+      has_doodle: false,
+      doodle_strokes_json: null,
+      has_stickers: false,
+      sticker_placements_json: null,
+      location_name: 'Hue',
+      prompt_id: null,
+      prompt_text_snapshot: null,
+      prompt_answer: null,
+      mood_emoji: null,
+      note_color: null,
+      latitude: 16.45,
+      longitude: 107.56,
+      radius: 150,
+      is_favorite: false,
+      created_at: '2026-03-10T01:00:00.000Z',
+      updated_at: '2026-03-12T00:00:00.000Z',
+      synced_at: '2026-03-12T00:00:00.000Z',
+    });
     mockDownloadPhotoFromStorage.mockRejectedValueOnce({
       message: 'Object not found',
       code: '404',
@@ -676,9 +936,72 @@ describe('syncService', () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
-        importedCount: 0,
+        importedCount: 1,
       })
     );
+    expect(mockUpsertNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'note-text-later',
+        content: 'later text',
+      })
+    );
+    expect(await AsyncStorage.getItem('sync.lastRemoteCursor.user-1')).toBe(
+      '2026-03-09T00:00:00.000Z'
+    );
+  });
+
+  it('removes local notes when note tombstones arrive during incremental sync', async () => {
+    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-09T00:00:00.000Z');
+    await setPreviouslySyncedNoteIds(['note-deleted']);
+    localNotesStore = [createTextNote('note-deleted')];
+    mockRemoteNoteTombstones.set('note-deleted', {
+      note_id: 'note-deleted',
+      user_id: 'user-1',
+      deleted_at: '2026-03-11T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'incremental' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        importedCount: 1,
+      })
+    );
+    expect(localNotesStore).toHaveLength(0);
+    expect(mockDeleteNote).toHaveBeenCalledWith('note-deleted');
+    expect(await AsyncStorage.getItem('sync.lastRemoteCursor.user-1')).toBe(
+      '2026-03-11T00:00:00.000Z'
+    );
+  });
+
+  it('keeps local-only notes that were never synced when full sync sees them missing remotely', async () => {
+    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-11T00:00:00.000Z');
+    await setPreviouslySyncedNoteIds([]);
+    localNotesStore = [createTextNote('note-local-only')];
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'full' });
+
+    expect(result.status).toBe('success');
+    expect(localNotesStore).toHaveLength(1);
+    expect(mockRemoteNotes.get('note-local-only')).toEqual(
+      expect.objectContaining({
+        id: 'note-local-only',
+        content: 'note note-local-only',
+      })
+    );
+  });
+
+  it('removes previously synced notes that disappeared remotely during full sync', async () => {
+    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-11T00:00:00.000Z');
+    await setPreviouslySyncedNoteIds(['note-synced']);
+    localNotesStore = [createTextNote('note-synced')];
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'full' });
+
+    expect(result.status).toBe('success');
+    expect(localNotesStore).toHaveLength(0);
+    expect(mockRemoteNotes.has('note-synced')).toBe(false);
   });
 
   it('flushes queued delete operations to Supabase', async () => {
@@ -689,6 +1012,7 @@ describe('syncService', () => {
       content: '',
       photo_path: 'user-1/note-1',
       paired_video_path: null,
+      sticker_placements_json: createRemoteStickerPlacementsJson('user-1/note-sticker-1.png'),
       synced_at: '2026-03-09T00:00:00.000Z',
     });
     mockRemoteSharedPosts.set('shared-1', {
@@ -696,6 +1020,7 @@ describe('syncService', () => {
       author_user_id: 'user-1',
       source_note_id: 'note-1',
       photo_path: 'user-1/shared-1',
+      sticker_placements_json: createRemoteStickerPlacementsJson('user-1/shared-sticker-1.png'),
     });
 
     await getSyncService().recordChange({
@@ -710,8 +1035,25 @@ describe('syncService', () => {
     expect(result.status).toBe('success');
     expect(mockRemoteNotes.has('note-1')).toBe(false);
     expect(mockRemoteSharedPosts.has('shared-1')).toBe(false);
+    expect(mockRemoteNoteTombstones.get('note-1')).toEqual(
+      expect.objectContaining({
+        note_id: 'note-1',
+        user_id: 'user-1',
+      })
+    );
+    expect(mockRemoteSharedPostTombstones.get('shared-1')).toEqual(
+      expect.objectContaining({
+        post_id: 'shared-1',
+        author_user_id: 'user-1',
+      })
+    );
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-1');
+    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-sticker-1.png');
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('shared-post-media', 'user-1/shared-1');
+    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'user-1/shared-sticker-1.png'
+    );
   });
 
   it('deletes the stored paired motion path for live photo notes without assuming mp4', async () => {
@@ -756,6 +1098,7 @@ describe('syncService', () => {
       type: 'photo',
       content: '',
       photo_path: 'user-1/note-2',
+      sticker_placements_json: createRemoteStickerPlacementsJson('user-1/note-2-sticker.png'),
       synced_at: '2026-03-09T00:00:00.000Z',
     });
     mockRemoteSharedPosts.set('shared-1', {
@@ -769,6 +1112,7 @@ describe('syncService', () => {
       author_user_id: 'user-1',
       source_note_id: 'note-2',
       photo_path: 'user-1/shared-2',
+      sticker_placements_json: createRemoteStickerPlacementsJson('user-1/shared-2-sticker.png'),
     });
     mockRemoteSharedPosts.set('shared-foreign', {
       id: 'shared-foreign',
@@ -790,8 +1134,47 @@ describe('syncService', () => {
     expect(mockRemoteSharedPosts.has('shared-1')).toBe(false);
     expect(mockRemoteSharedPosts.has('shared-2')).toBe(false);
     expect(mockRemoteSharedPosts.has('shared-foreign')).toBe(true);
+    expect(mockRemoteNoteTombstones.get('note-1')).toEqual(
+      expect.objectContaining({
+        note_id: 'note-1',
+        user_id: 'user-1',
+      })
+    );
+    expect(mockRemoteNoteTombstones.get('note-2')).toEqual(
+      expect.objectContaining({
+        note_id: 'note-2',
+        user_id: 'user-1',
+      })
+    );
+    expect(mockRemoteSharedPostTombstones.get('shared-1')).toEqual(
+      expect.objectContaining({
+        post_id: 'shared-1',
+        author_user_id: 'user-1',
+      })
+    );
+    expect(mockRemoteSharedPostTombstones.get('shared-2')).toEqual(
+      expect.objectContaining({
+        post_id: 'shared-2',
+        author_user_id: 'user-1',
+      })
+    );
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-2');
+    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-2-sticker.png');
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('shared-post-media', 'user-1/shared-2');
+    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'user-1/shared-2-sticker.png'
+    );
+  });
+
+  it('cleans up newly uploaded remote media when note upsert fails', async () => {
+    localNotesStore = [createPhotoNote('note-orphan')];
+    mockNotesUpsertError = new Error('insert failed');
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'full' });
+
+    expect(result.status).toBe('error');
+    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-orphan');
   });
 
   it('returns an actionable message when Supabase policies reject note writes', async () => {

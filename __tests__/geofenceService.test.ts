@@ -46,7 +46,7 @@ jest.mock('expo-task-manager', () => ({
 }));
 
 jest.mock('../services/database', () => ({
-  getAllNotes: (...args: unknown[]) => mockGetAllNotes(...args),
+  getNotesForReminderSelection: (...args: unknown[]) => mockGetAllNotes(...args),
 }));
 
 import type { Note } from '../services/database';

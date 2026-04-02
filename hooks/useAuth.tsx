@@ -8,7 +8,7 @@ import {
   isGoogleSigninConfigured,
 } from '../constants/auth';
 import i18n from '../constants/i18n';
-import { LOCAL_NOTES_SCOPE, setActiveNotesScope } from '../services/database';
+import { LOCAL_NOTES_SCOPE, migrateLocalNotesScopeToUser, setActiveNotesScope } from '../services/database';
 import { purgeLocalAccountScope } from '../services/accountCleanup';
 import { upsertPublicUserProfile } from '../services/publicProfileService';
 import { clearSharedFeedCache } from '../services/sharedFeedCache';
@@ -225,10 +225,18 @@ function mapAuthErrorMessage(error: unknown) {
 
 async function syncUserProfile(session: Session | null) {
   const user = mapSupabaseUser(session?.user);
-  setActiveNotesScope(user?.uid ?? LOCAL_NOTES_SCOPE);
   if (!user) {
+    setActiveNotesScope(LOCAL_NOTES_SCOPE);
     return null;
   }
+
+  try {
+    await migrateLocalNotesScopeToUser(user.uid);
+  } catch (error) {
+    console.warn('[auth] Failed to migrate local notes scope:', error);
+  }
+
+  setActiveNotesScope(user.uid);
 
   // Fire and forget profile sync to unblock the rest of the application
   upsertPublicUserProfile({

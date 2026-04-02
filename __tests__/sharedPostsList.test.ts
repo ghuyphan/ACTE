@@ -34,6 +34,14 @@ describe('supabase migration hardening', () => {
     resolve(__dirname, '../supabase/migrations/20260402093000_add_live_photo_columns.sql'),
     'utf8'
   );
+  const syncTombstonesMigration = readFileSync(
+    resolve(__dirname, '../supabase/migrations/20260402103000_add_sync_tombstones.sql'),
+    'utf8'
+  );
+  const profileInviteHardeningMigration = readFileSync(
+    resolve(__dirname, '../supabase/migrations/20260402113000_harden_profile_visibility_and_invite_tokens.sql'),
+    'utf8'
+  );
   const normalizedRemoveStorageCleanupTriggersMigration =
     removeStorageCleanupTriggersMigration.toLowerCase();
 
@@ -97,6 +105,23 @@ describe('supabase migration hardening', () => {
     expect(socialPushMigration).toContain('alter table public.device_push_tokens enable row level security;');
     expect(socialPushMigration).toContain('create or replace function public.register_push_token');
     expect(socialPushMigration).toContain('create or replace function public.unregister_push_token');
+  });
+
+  it('adds sync tombstones with RLS for note and shared post deletes', () => {
+    expect(syncTombstonesMigration).toContain('create table if not exists public.note_tombstones');
+    expect(syncTombstonesMigration).toContain('create table if not exists public.shared_post_tombstones');
+    expect(syncTombstonesMigration).toContain('alter table public.note_tombstones enable row level security;');
+    expect(syncTombstonesMigration).toContain('alter table public.shared_post_tombstones enable row level security;');
+  });
+
+  it('tightens profile reads and hashes invite tokens', () => {
+    expect(profileInviteHardeningMigration).toContain('create policy "profiles_select_self_or_friends"');
+    expect(profileInviteHardeningMigration).toContain('alter table public.friend_invites add column if not exists token_hash text;');
+    expect(profileInviteHardeningMigration).toContain('alter table public.room_invites add column if not exists token_hash text;');
+    expect(profileInviteHardeningMigration).toContain('update public.friendships');
+    expect(profileInviteHardeningMigration).toContain('set created_by_invite_token = null');
+    expect(profileInviteHardeningMigration).toContain('create or replace function public.accept_friend_invite');
+    expect(profileInviteHardeningMigration).toContain('token_hash = invite_token_hash');
   });
 
   it('removes unsupported storage cleanup triggers that delete from storage.objects directly', () => {

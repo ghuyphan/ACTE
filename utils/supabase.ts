@@ -118,8 +118,10 @@ export function isSupabaseSchemaMismatchError(error: unknown) {
 
   return (
     code === 'PGRST204' ||
+    code === '42P01' ||
     code === '42703' ||
     message.includes('schema cache') ||
+    (message.includes('relation') && message.includes('does not exist')) ||
     (message.includes('could not find the') && message.includes('column')) ||
     (message.includes('column') && message.includes('does not exist'))
   );

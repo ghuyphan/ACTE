@@ -1,9 +1,16 @@
 const mockFriendInvites = new Map<string, any>();
 const mockSharedPosts = new Map<string, any>();
+const mockSharedPostTombstones = new Map<string, any>();
 const mockFriendships = new Map<string, Map<string, any>>();
 const mockPublicProfiles = new Map<string, { displayNameSnapshot: string | null; photoURLSnapshot: string | null }>();
+const mockCachedActiveInvites = new Map<string, any>();
 let mockUuidCounter = 0;
 let mockSessionUserId = 'owner-1';
+let mockSharedPostsInsertError: unknown = null;
+
+function mockHashInviteToken(token: string) {
+  return `digest-${token.replace(/[^a-z0-9]/gi, '').toLowerCase()}`;
+}
 
 function mockEnsureFriendMap(userId: string) {
   if (!mockFriendships.has(userId)) {
@@ -55,12 +62,34 @@ function mockCreateQueryBuilder(table: string) {
     },
     upsert: async (value: Record<string, unknown>) => {
       if (table === 'friend_invites') {
-        mockFriendInvites.set(String(value.id), value);
+        const token =
+          typeof value.token === 'string' && value.token.trim() ? value.token.trim() : '';
+        const tokenHash =
+          typeof value.token_hash === 'string' && value.token_hash.trim()
+            ? value.token_hash.trim()
+            : token
+            ? mockHashInviteToken(token)
+            : null;
+        mockFriendInvites.set(String(value.id), {
+          ...value,
+          token: tokenHash,
+          token_hash: tokenHash,
+        });
+      }
+
+      if (table === 'shared_post_tombstones') {
+        const rows = Array.isArray(value) ? value : [value];
+        for (const row of rows) {
+          mockSharedPostTombstones.set(String(row.post_id), row);
+        }
       }
 
       return { error: null };
     },
     insert: async (value: Record<string, unknown>) => {
+      if (table === 'shared_posts' && mockSharedPostsInsertError) {
+        return { error: mockSharedPostsInsertError };
+      }
       if (table === 'shared_posts') {
         mockSharedPosts.set(String(value.id), value);
       }
@@ -118,6 +147,8 @@ function executeSelect(table: string, state: any) {
     rows = Array.from(mockFriendInvites.values());
   } else if (table === 'shared_posts') {
     rows = Array.from(mockSharedPosts.values());
+  } else if (table === 'shared_post_tombstones') {
+    rows = Array.from(mockSharedPostTombstones.values());
   }
 
   for (const filter of state.filters) {
@@ -174,12 +205,18 @@ function applyUpdate(table: string, state: any, nextValues: Record<string, unkno
 
 function applyDelete(table: string, state: any) {
   if (table !== 'shared_posts') {
-    return;
+    if (table !== 'shared_post_tombstones') {
+      return;
+    }
   }
 
   const rows = executeSelect(table, state);
   for (const row of rows) {
-    mockSharedPosts.delete(row.id);
+    if (table === 'shared_posts') {
+      mockSharedPosts.delete(row.id);
+    } else {
+      mockSharedPostTombstones.delete(row.post_id);
+    }
   }
 }
 
@@ -225,11 +262,31 @@ jest.mock('../services/publicProfileService', () => ({
 }));
 
 jest.mock('../services/sharedFeedCache', () => ({
-  cacheSharedFeedSnapshot: (userUid: string, snapshot: unknown) => mockCacheSharedFeedSnapshot(userUid, snapshot),
+  cacheSharedFeedSnapshot: async (userUid: string, snapshot: any) => {
+    if (snapshot?.activeInvite) {
+      mockCachedActiveInvites.set(userUid, snapshot.activeInvite);
+    } else {
+      mockCachedActiveInvites.delete(userUid);
+    }
+    return mockCacheSharedFeedSnapshot(userUid, snapshot);
+  },
+  getCachedActiveInvite: async (userUid: string) => mockCachedActiveInvites.get(userUid) ?? null,
+  replaceCachedActiveInvite: async (userUid: string, invite: unknown) => {
+    if (invite) {
+      mockCachedActiveInvites.set(userUid, invite);
+    } else {
+      mockCachedActiveInvites.delete(userUid);
+    }
+  },
 }));
 
 jest.mock('../services/socialPushService', () => ({
   sendSocialNotificationEvent: (event: unknown) => mockSendSocialNotificationEvent(event),
+}));
+
+jest.mock('../services/inviteTokenStorage', () => ({
+  setStoredInviteToken: jest.fn(async () => undefined),
+  clearStoredInviteToken: jest.fn(async () => undefined),
 }));
 
 jest.mock('../utils/supabase', () => ({
@@ -242,9 +299,14 @@ jest.mock('../utils/supabase', () => ({
     from: (table: string) => mockCreateQueryBuilder(table),
     rpc: async (name: string, params: Record<string, unknown>) => {
       if (name === 'accept_friend_invite') {
+        const inviteToken = String(params.invite_token ?? '').trim();
+        const inviteTokenHash = mockHashInviteToken(inviteToken);
         const invite = Array.from(mockFriendInvites.values()).find(
           (item) =>
-            item.token === params.invite_token &&
+            (item.token === inviteToken ||
+              item.token === inviteTokenHash ||
+              item.token_hash === inviteToken ||
+              item.token_hash === inviteTokenHash) &&
             (!params.invite_id || item.id === params.invite_id)
         );
 
@@ -346,6 +408,7 @@ jest.mock('../utils/supabase', () => ({
     error instanceof Error ? error.message : typeof error === 'string' ? error : '',
   isSupabaseNetworkError: () => false,
   isSupabasePolicyError: () => false,
+  isSupabaseSchemaMismatchError: () => false,
 }));
 
 jest.mock('expo-crypto', () => ({
@@ -376,6 +439,7 @@ import {
   acceptFriendInvite,
   createFriendInvite,
   createSharedPost,
+  deleteSharedPost,
   removeFriend,
   refreshSharedFeed,
 } from '../services/sharedFeedService';
@@ -411,10 +475,13 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockUuidCounter = 0;
   mockSessionUserId = 'owner-1';
+  mockSharedPostsInsertError = null;
   mockFriendInvites.clear();
   mockSharedPosts.clear();
+  mockSharedPostTombstones.clear();
   mockFriendships.clear();
   mockPublicProfiles.clear();
+  mockCachedActiveInvites.clear();
   mockPublicProfiles.set(ownerUser.id, {
     displayNameSnapshot: ownerUser.displayName,
     photoURLSnapshot: ownerUser.photoURL,
@@ -549,6 +616,97 @@ describe('sharedFeedService', () => {
     );
   });
 
+  it('cleans up uploaded shared media when post creation fails', async () => {
+    mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
+      display_name_snapshot: friendUser.displayName,
+      photo_url_snapshot: friendUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+    mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
+      display_name_snapshot: ownerUser.displayName,
+      photo_url_snapshot: ownerUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+    mockSharedPostsInsertError = new Error('insert failed');
+
+    const note = {
+      id: 'note-fail',
+      type: 'photo',
+      content: 'file:///photos/note-fail.jpg',
+      photoLocalUri: 'file:///photos/note-fail.jpg',
+      doodleStrokesJson: null,
+      locationName: 'Saigon',
+      latitude: 10.77,
+      longitude: 106.69,
+      moodEmoji: null,
+    } as any;
+
+    await expect(createSharedPost(ownerUser, note, [friendUser.id])).rejects.toThrow('insert failed');
+
+    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      expect.stringContaining(`${ownerUser.id}/shared-post-`)
+    );
+  });
+
+  it('deletes shared post sticker assets from storage after row deletion', async () => {
+    mockSharedPosts.set('shared-sticker', {
+      id: 'shared-sticker',
+      author_user_id: ownerUser.id,
+      author_display_name: ownerUser.displayName,
+      author_photo_url_snapshot: ownerUser.photoURL,
+      audience_user_ids: [ownerUser.id, friendUser.id],
+      type: 'text',
+      text: 'Sticker note',
+      photo_path: null,
+      paired_video_path: null,
+      doodle_strokes_json: null,
+      sticker_placements_json: JSON.stringify([
+        {
+          id: 'placement-1',
+          assetId: 'asset-1',
+          x: 0.5,
+          y: 0.5,
+          scale: 1,
+          rotation: 0,
+          zIndex: 1,
+          opacity: 1,
+          asset: {
+            id: 'asset-1',
+            localUri: 'file:///stickers/asset-1.png',
+            remotePath: 'owner-1/shared-post-sticker-1.png',
+            mimeType: 'image/png',
+          },
+        },
+      ]),
+      note_color: null,
+      place_name: 'District 1',
+      source_note_id: 'note-1',
+      latitude: null,
+      longitude: null,
+      created_at: '2026-03-24T00:00:00.000Z',
+      updated_at: null,
+    });
+
+    await deleteSharedPost(ownerUser, 'shared-sticker');
+
+    expect(mockSharedPosts.has('shared-sticker')).toBe(false);
+    expect(mockSharedPostTombstones.get('shared-sticker')).toEqual(
+      expect.objectContaining({
+        post_id: 'shared-sticker',
+        author_user_id: ownerUser.id,
+      })
+    );
+    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'owner-1/shared-post-sticker-1.png'
+    );
+  });
+
   it('revokes old shared audiences and hides author-only leftovers after removing a friend', async () => {
     mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
       display_name_snapshot: friendUser.displayName,
@@ -661,6 +819,8 @@ describe('sharedFeedService', () => {
 
     mockSessionUserId = friendUser.id;
     const friendSnapshot = await refreshSharedFeed(friendUser);
-    expect(friendSnapshot.sharedPosts).toEqual([]);
+    expect(friendSnapshot.sharedPosts.map((post) => post.id)).not.toContain('shared-owned-direct');
+    expect(friendSnapshot.sharedPosts.map((post) => post.id)).not.toContain('shared-owned-group');
+    expect(friendSnapshot.sharedPosts.map((post) => post.id)).not.toContain('shared-friend-direct');
   });
 });

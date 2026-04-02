@@ -10,6 +10,7 @@ const mockCopyAsync = jest.fn(async () => undefined);
 const mockDeleteAsync = jest.fn(async () => undefined);
 const mockMakeDirectoryAsync = jest.fn(async () => undefined);
 const mockManipulateAsync = jest.fn();
+const mockStorageUpload = jest.fn(async () => ({ error: null }));
 
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => 'test-uuid-1234'),
@@ -49,7 +50,7 @@ jest.mock('../utils/supabase', () => ({
   requireSupabase: jest.fn(() => ({
     storage: {
       from: jest.fn(() => ({
-        upload: jest.fn(async () => ({ error: null })),
+        upload: mockStorageUpload,
         createSignedUrl: jest.fn(async () => ({ data: { signedUrl: 'https://example.com/file' }, error: null })),
       })),
     },
@@ -65,6 +66,11 @@ function loadImportStickerAsset() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const module = require('../services/noteStickers');
   return module.importStickerAsset;
+}
+
+function loadNoteStickersModule() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('../services/noteStickers');
 }
 
 describe('importStickerAsset', () => {
@@ -99,6 +105,7 @@ describe('importStickerAsset', () => {
     mockManipulateAsync.mockResolvedValue({
       uri: 'file:///cache/optimized-sticker.webp',
     });
+    mockStorageUpload.mockResolvedValue({ error: null });
   });
 
   afterEach(() => {
@@ -205,5 +212,56 @@ describe('importStickerAsset', () => {
       name: 'StickerImportError',
       code: 'unsupported-format',
     });
+  });
+
+  it('reuses an existing remote sticker path when serializing shared placements', async () => {
+    const { serializeStickerPlacementsForStorage } = loadNoteStickersModule();
+
+    const placements = [
+      {
+        id: 'placement-1',
+        assetId: 'asset-1',
+        x: 0.5,
+        y: 0.5,
+        scale: 1,
+        rotation: 0,
+        zIndex: 1,
+        opacity: 1,
+        asset: {
+          id: 'asset-1',
+          ownerUid: '__local__',
+          localUri: 'file:///documents/stickers/asset-1.png',
+          remotePath: null,
+          uploadFingerprint: null,
+          mimeType: 'image/png',
+          width: 320,
+          height: 240,
+          createdAt: '2026-03-10T00:00:00.000Z',
+          updatedAt: null,
+          source: 'import',
+        },
+      },
+    ];
+
+    const serialized = await serializeStickerPlacementsForStorage(
+      placements,
+      'shared-post-media',
+      'owner-1/shared-post-1',
+      {
+        persistAssets: false,
+        existingRemoteAssetPathsById: {
+          'asset-1': 'owner-1/shared-post-1/stickers/asset-1.png',
+        },
+      }
+    );
+
+    expect(mockReadAsStringAsync).not.toHaveBeenCalledWith(
+      'file:///documents/stickers/asset-1.png',
+      expect.anything()
+    );
+    expect(mockStorageUpload).not.toHaveBeenCalled();
+    expect(JSON.parse(serialized)[0]?.asset?.remotePath).toBe(
+      'owner-1/shared-post-1/stickers/asset-1.png'
+    );
   });
 });

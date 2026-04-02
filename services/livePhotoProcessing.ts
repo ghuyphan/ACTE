@@ -4,9 +4,9 @@ import {
   getPairedVideoFileExtension,
   resolveStoredPairedVideoUri,
 } from './livePhotoStorage';
+import { normalizeLivePhotoMotionVideo } from './livePhotoMotionTranscoder';
 
 export const LIVE_PHOTO_MAX_DURATION_SECONDS = 2;
-const LIVE_PHOTO_VIDEO_MAX_SIZE = 540;
 
 async function getVideoInfo(videoUri: string) {
   const normalizedVideoUri = resolveStoredPairedVideoUri(videoUri);
@@ -25,15 +25,32 @@ async function getVideoInfo(videoUri: string) {
   };
 }
 
-export async function optimizeLivePhotoVideo(sourceUri: string) {
+export async function optimizeLivePhotoVideo(sourceUri: string, destinationBasePath: string) {
   const originalInfo = await getVideoInfo(sourceUri);
   if (!originalInfo) {
     return null;
   }
 
+  try {
+    const normalizedVideo = await normalizeLivePhotoMotionVideo(
+      originalInfo.uri,
+      destinationBasePath
+    );
+    if (normalizedVideo?.uri) {
+      return {
+        uri: normalizedVideo.uri,
+        cleanupUri: null as string | null,
+        alreadyPersisted: true,
+      };
+    }
+  } catch (error) {
+    console.warn('Failed to normalize live photo motion clip natively:', error);
+  }
+
   return {
     uri: originalInfo.uri,
     cleanupUri: null as string | null,
+    alreadyPersisted: false,
   };
 }
 
@@ -43,12 +60,17 @@ export async function persistLivePhotoVideo(sourceUri: string, fileBasename: str
     return null;
   }
 
-  const preparedVideo = await optimizeLivePhotoVideo(sourceUri);
+  const preparedVideo = await optimizeLivePhotoVideo(sourceUri, `${directory}${fileBasename}`);
   if (!preparedVideo?.uri) {
     return null;
   }
 
-  const destinationPath = `${directory}${fileBasename}${getPairedVideoFileExtension(preparedVideo.uri)}`;
+  if (preparedVideo.alreadyPersisted) {
+    return preparedVideo.uri;
+  }
+
+  const destinationPath =
+    `${directory}${fileBasename}${getPairedVideoFileExtension(preparedVideo.uri)}`;
 
   try {
     await FileSystem.copyAsync({ from: preparedVideo.uri, to: destinationPath });

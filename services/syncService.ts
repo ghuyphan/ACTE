@@ -11,7 +11,15 @@ import {
   isSupabaseSchemaMismatchError,
   isSupabaseStorageObjectMissingError,
 } from '../utils/supabase';
-import { getActiveNotesScope, Note, getAllNotes, getDB, getNoteById, upsertNote } from './database';
+import {
+  deleteNote,
+  getActiveNotesScope,
+  Note,
+  getAllNotes,
+  getDB,
+  getNoteById,
+  upsertNote,
+} from './database';
 import {
   hydrateStickerPlacements,
   parseNoteStickerPlacements,
@@ -66,6 +74,7 @@ export interface SyncRepository {
     failedCount: number;
     blockedCount: number;
   }>;
+  recoverProcessing: () => Promise<void>;
   markProcessing: (id: number) => Promise<void>;
   markFailed: (
     id: number,
@@ -84,6 +93,11 @@ export interface SyncRepository {
 
 function getRemotePairedVideoPath(basePath: string, localUri: string | null | undefined) {
   return `${basePath}.motion${getPairedVideoFileExtension(localUri)}`;
+}
+
+function normalizeMediaUri(value: string | null | undefined) {
+  const normalizedValue = typeof value === 'string' ? value.trim() : '';
+  return normalizedValue || null;
 }
 
 export interface SyncService {
@@ -135,6 +149,18 @@ interface NoteRow {
   synced_at: string;
 }
 
+interface NoteTombstoneRow {
+  note_id: string;
+  user_id: string;
+  deleted_at: string;
+}
+
+interface SharedPostTombstoneRow {
+  post_id: string;
+  author_user_id: string;
+  deleted_at: string;
+}
+
 interface QueueFlushFailure {
   itemId: number;
   error: string;
@@ -153,6 +179,13 @@ interface FlushQueueResult {
 interface RemoteMergeResult {
   importedCount: number;
   latestSyncedAt: string | null;
+  remoteNoteIds: Set<string>;
+  remoteNoteSyncMarks: Map<string, string>;
+}
+
+interface RemoteTombstoneMergeResult {
+  deletedCount: number;
+  latestDeletedAt: string | null;
 }
 
 interface QueueRow {
@@ -171,6 +204,12 @@ interface QueueRow {
   created_at: string;
 }
 
+interface RemoteArtifactSnapshot {
+  photoPath?: string | null;
+  pairedVideoPath?: string | null;
+  stickerPlacementsJson?: string | null;
+}
+
 const MAX_SYNC_ATTEMPTS = 5;
 const RETRY_DELAYS_MS = [
   5 * 60 * 1000,
@@ -180,6 +219,7 @@ const RETRY_DELAYS_MS = [
   24 * 60 * 60 * 1000,
 ];
 const REMOTE_SYNC_CURSOR_KEY_PREFIX = 'sync.lastRemoteCursor.';
+const REMOTE_SYNCED_NOTE_IDS_KEY_PREFIX = 'sync.syncedNoteIds.';
 const EXPIRED_SESSION_SYNC_ERROR = 'Server session unavailable. Sign in again to resume sync.';
 const MISMATCHED_SESSION_SYNC_ERROR =
   'Signed-in session does not match this account. Sign out and sign in again.';
@@ -305,6 +345,192 @@ function getRetryDelayMs(attemptCount: number) {
   return RETRY_DELAYS_MS[index] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
 }
 
+function normalizeRemoteArtifactPath(path: string | null | undefined) {
+  const normalizedPath = typeof path === 'string' ? path.trim() : '';
+  return normalizedPath || null;
+}
+
+function getRemoteStickerAssetPaths(stickerPlacementsJson: string | null | undefined) {
+  return Array.from(
+    new Set(
+      parseNoteStickerPlacements(stickerPlacementsJson)
+        .map((placement) => normalizeRemoteArtifactPath(placement.asset.remotePath))
+        .filter((path): path is string => Boolean(path))
+    )
+  );
+}
+
+function buildNewRemoteArtifacts(
+  next: RemoteArtifactSnapshot,
+  previous: RemoteArtifactSnapshot | null | undefined
+) {
+  const previousStickerPaths = new Set(getRemoteStickerAssetPaths(previous?.stickerPlacementsJson));
+  return {
+    photoPath:
+      normalizeRemoteArtifactPath(next.photoPath) !== normalizeRemoteArtifactPath(previous?.photoPath)
+        ? normalizeRemoteArtifactPath(next.photoPath)
+        : null,
+    pairedVideoPath:
+      normalizeRemoteArtifactPath(next.pairedVideoPath) !== normalizeRemoteArtifactPath(previous?.pairedVideoPath)
+        ? normalizeRemoteArtifactPath(next.pairedVideoPath)
+        : null,
+    stickerPaths: getRemoteStickerAssetPaths(next.stickerPlacementsJson).filter(
+      (path) => !previousStickerPaths.has(path)
+    ),
+  };
+}
+
+function buildRemovedRemoteArtifacts(
+  previous: RemoteArtifactSnapshot | null | undefined,
+  next: RemoteArtifactSnapshot | null | undefined
+) {
+  const nextStickerPaths = new Set(getRemoteStickerAssetPaths(next?.stickerPlacementsJson));
+  return {
+    photoPath:
+      normalizeRemoteArtifactPath(previous?.photoPath) !== normalizeRemoteArtifactPath(next?.photoPath)
+        ? normalizeRemoteArtifactPath(previous?.photoPath)
+        : null,
+    pairedVideoPath:
+      normalizeRemoteArtifactPath(previous?.pairedVideoPath) !==
+      normalizeRemoteArtifactPath(next?.pairedVideoPath)
+        ? normalizeRemoteArtifactPath(previous?.pairedVideoPath)
+        : null,
+    stickerPaths: getRemoteStickerAssetPaths(previous?.stickerPlacementsJson).filter(
+      (path) => !nextStickerPaths.has(path)
+    ),
+  };
+}
+
+async function cleanupRemoteArtifacts(
+  bucket: string,
+  artifacts: {
+    photoPath?: string | null;
+    pairedVideoPath?: string | null;
+    stickerPaths?: string[];
+  }
+) {
+  const removals: Promise<unknown>[] = [];
+
+  const photoPath = normalizeRemoteArtifactPath(artifacts.photoPath);
+  if (photoPath) {
+    removals.push(deletePhotoFromStorage(bucket, photoPath));
+  }
+
+  const pairedVideoPath = normalizeRemoteArtifactPath(artifacts.pairedVideoPath);
+  if (pairedVideoPath) {
+    removals.push(deletePairedVideoFromStorage(bucket, pairedVideoPath));
+  }
+
+  for (const stickerPath of artifacts.stickerPaths ?? []) {
+    removals.push(deletePhotoFromStorage(bucket, stickerPath));
+  }
+
+  if (removals.length === 0) {
+    return;
+  }
+
+  await Promise.allSettled(removals);
+}
+
+async function upsertRemoteNoteTombstones(
+  userId: string,
+  noteIds: Iterable<string>,
+  deletedAt: string
+) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Cloud sync is unavailable in this build.');
+  }
+
+  const rows = Array.from(
+    new Set(
+      Array.from(noteIds)
+        .map((noteId) => (typeof noteId === 'string' ? noteId.trim() : ''))
+        .filter(Boolean)
+    )
+  ).map((noteId) => ({
+    note_id: noteId,
+    user_id: userId,
+    deleted_at: deletedAt,
+  }));
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  const { error } = await supabase.from('note_tombstones').upsert(rows, {
+    onConflict: 'note_id',
+  });
+  if (error) {
+    if (isSupabaseSchemaMismatchError(error) || isSupabasePolicyError(error)) {
+      console.warn('[syncService] Skipping note tombstone write:', error);
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function deleteRemoteNoteTombstone(userId: string, noteId: string) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Cloud sync is unavailable in this build.');
+  }
+
+  const { error } = await supabase
+    .from('note_tombstones')
+    .delete()
+    .eq('note_id', noteId)
+    .eq('user_id', userId);
+  if (error) {
+    if (isSupabaseSchemaMismatchError(error) || isSupabasePolicyError(error)) {
+      console.warn('[syncService] Skipping note tombstone cleanup:', error);
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function upsertRemoteSharedPostTombstones(
+  userId: string,
+  postIds: Iterable<string>,
+  deletedAt: string
+) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Cloud sync is unavailable in this build.');
+  }
+
+  const rows = Array.from(
+    new Set(
+      Array.from(postIds)
+        .map((postId) => (typeof postId === 'string' ? postId.trim() : ''))
+        .filter(Boolean)
+    )
+  ).map((postId) => ({
+    post_id: postId,
+    author_user_id: userId,
+    deleted_at: deletedAt,
+  }));
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  const { error } = await supabase.from('shared_post_tombstones').upsert(rows, {
+    onConflict: 'post_id',
+  });
+  if (error) {
+    if (isSupabaseSchemaMismatchError(error) || isSupabasePolicyError(error)) {
+      console.warn('[syncService] Skipping shared post tombstone write:', error);
+      return;
+    }
+
+    throw error;
+  }
+}
+
 function getRetryMetadata(item: SyncQueueItem, error: unknown) {
   const nextAttemptCount = item.attempts + 1;
   const terminal = isTerminalSyncError(error) || nextAttemptCount >= MAX_SYNC_ATTEMPTS;
@@ -344,6 +570,44 @@ async function setLastRemoteSyncCursor(userUid: string, cursor: string) {
   await setPersistentItem(getRemoteSyncCursorKey(userUid), cursor);
 }
 
+function getSyncedNoteIdsKey(userUid: string) {
+  return `${REMOTE_SYNCED_NOTE_IDS_KEY_PREFIX}${userUid}`;
+}
+
+async function getPreviouslySyncedNoteIds(userUid: string) {
+  const rawValue = await getPersistentItem(getSyncedNoteIdsKey(userUid));
+  if (!rawValue) {
+    return new Set<string>();
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!Array.isArray(parsed)) {
+      return new Set<string>();
+    }
+
+    return new Set(
+      parsed
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter(Boolean)
+    );
+  } catch {
+    return new Set<string>();
+  }
+}
+
+async function setPreviouslySyncedNoteIds(userUid: string, noteIds: Iterable<string>) {
+  const serializedIds = Array.from(
+    new Set(
+      Array.from(noteIds)
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter(Boolean)
+    )
+  ).sort();
+
+  await setPersistentItem(getSyncedNoteIdsKey(userUid), JSON.stringify(serializedIds));
+}
+
 async function ensureSupabaseSessionMatchesUser(userId: string) {
   const session = await getCurrentSupabaseSession();
   const sessionUserId = session?.user?.id?.trim();
@@ -360,58 +624,89 @@ async function ensureSupabaseSessionMatchesUser(userId: string) {
 async function serializeNoteForSupabase(
   userId: string,
   note: Note,
-  syncedAt: string
+  syncedAt: string,
+  existingRemoteArtifacts: RemoteArtifactSnapshot | null = null
 ): Promise<NoteRow> {
-  const photoPath =
-    note.type === 'photo'
-      ? await uploadPhotoToStorage(
-          NOTE_MEDIA_BUCKET,
-          `${userId}/${note.id}`,
-          note.photoLocalUri ?? note.content,
-          { allowOverwrite: true }
-        )
-      : null;
-  const pairedVideoPath =
+  const currentPhotoUri =
+    note.type === 'photo' ? normalizeMediaUri(note.photoLocalUri ?? note.content) : null;
+  const currentPairedVideoUri =
     note.type === 'photo' && note.isLivePhoto
-      ? await uploadPairedVideoToStorage(
-          NOTE_MEDIA_BUCKET,
-          getRemotePairedVideoPath(`${userId}/${note.id}`, note.pairedVideoLocalUri ?? null),
-          note.pairedVideoLocalUri ?? null,
-          { allowOverwrite: true }
-        )
+      ? normalizeMediaUri(note.pairedVideoLocalUri ?? null)
       : null;
-  const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
-  const stickerPlacementsJson =
-    stickerPlacements.length > 0
-      ? await serializeStickerPlacementsForStorage(stickerPlacements, NOTE_MEDIA_BUCKET, userId)
-      : null;
+  let photoPath: string | null = null;
+  let pairedVideoPath: string | null = null;
+  let stickerPlacementsJson: string | null = null;
 
-  return {
-    id: note.id,
-    user_id: userId,
-    type: note.type,
-    content: note.type === 'text' ? note.content : '',
-    photo_path: photoPath,
-    is_live_photo: Boolean(note.isLivePhoto && pairedVideoPath),
-    paired_video_path: pairedVideoPath,
-    has_doodle: Boolean(note.hasDoodle && note.doodleStrokesJson),
-    doodle_strokes_json: note.doodleStrokesJson ?? null,
-    has_stickers: Boolean(stickerPlacementsJson),
-    sticker_placements_json: stickerPlacementsJson,
-    location_name: note.locationName,
-    prompt_id: note.promptId ?? null,
-    prompt_text_snapshot: note.promptTextSnapshot ?? null,
-    prompt_answer: note.promptAnswer ?? null,
-    mood_emoji: note.moodEmoji ?? null,
-    note_color: note.noteColor ?? null,
-    latitude: note.latitude,
-    longitude: note.longitude,
-    radius: note.radius,
-    is_favorite: note.isFavorite,
-    created_at: note.createdAt,
-    updated_at: note.updatedAt,
-    synced_at: syncedAt,
-  };
+  try {
+    photoPath =
+      note.type === 'photo'
+        ? existingRemoteArtifacts?.photoPath && currentPhotoUri === normalizeMediaUri(note.photoSyncedLocalUri)
+          ? existingRemoteArtifacts.photoPath
+          : await uploadPhotoToStorage(
+              NOTE_MEDIA_BUCKET,
+              `${userId}/${note.id}`,
+              currentPhotoUri,
+              { allowOverwrite: true }
+            )
+        : null;
+    pairedVideoPath =
+      note.type === 'photo' && note.isLivePhoto
+        ? existingRemoteArtifacts?.pairedVideoPath &&
+          currentPairedVideoUri === normalizeMediaUri(note.pairedVideoSyncedLocalUri)
+          ? existingRemoteArtifacts.pairedVideoPath
+          : await uploadPairedVideoToStorage(
+              NOTE_MEDIA_BUCKET,
+              getRemotePairedVideoPath(`${userId}/${note.id}`, currentPairedVideoUri),
+              currentPairedVideoUri,
+              { allowOverwrite: true }
+            )
+        : null;
+    const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
+    stickerPlacementsJson =
+      stickerPlacements.length > 0
+        ? await serializeStickerPlacementsForStorage(stickerPlacements, NOTE_MEDIA_BUCKET, userId)
+        : null;
+
+    return {
+      id: note.id,
+      user_id: userId,
+      type: note.type,
+      content: note.type === 'text' ? note.content : '',
+      photo_path: photoPath,
+      is_live_photo: Boolean(note.isLivePhoto && pairedVideoPath),
+      paired_video_path: pairedVideoPath,
+      has_doodle: Boolean(note.hasDoodle && note.doodleStrokesJson),
+      doodle_strokes_json: note.doodleStrokesJson ?? null,
+      has_stickers: Boolean(stickerPlacementsJson),
+      sticker_placements_json: stickerPlacementsJson,
+      location_name: note.locationName,
+      prompt_id: note.promptId ?? null,
+      prompt_text_snapshot: note.promptTextSnapshot ?? null,
+      prompt_answer: note.promptAnswer ?? null,
+      mood_emoji: note.moodEmoji ?? null,
+      note_color: note.noteColor ?? null,
+      latitude: note.latitude,
+      longitude: note.longitude,
+      radius: note.radius,
+      is_favorite: note.isFavorite,
+      created_at: note.createdAt,
+      updated_at: note.updatedAt,
+      synced_at: syncedAt,
+    };
+  } catch (error) {
+    await cleanupRemoteArtifacts(
+      NOTE_MEDIA_BUCKET,
+      buildNewRemoteArtifacts(
+        {
+          photoPath,
+          pairedVideoPath,
+          stickerPlacementsJson,
+        },
+        existingRemoteArtifacts
+      )
+    );
+    throw error;
+  }
 }
 
 function getSyncUserId(user: SyncUser) {
@@ -421,13 +716,13 @@ function getSyncUserId(user: SyncUser) {
 async function deserializeRemoteNote(
   record: NoteRow,
   existingLocalNote: Note | null
-): Promise<Note | null> {
+): Promise<{ note: Note | null; advanceCursor: boolean }> {
   if (record.type !== 'text' && record.type !== 'photo') {
-    return null;
+    return { note: null, advanceCursor: true };
   }
 
   if (!record.id || !record.created_at) {
-    return null;
+    return { note: null, advanceCursor: true };
   }
 
   let photoLocalUri: string | null = existingLocalNote?.photoLocalUri ?? null;
@@ -465,7 +760,10 @@ async function deserializeRemoteNote(
   }
 
   if (record.type === 'photo' && !photoLocalUri) {
-    return existingLocalNote?.type === 'photo' ? existingLocalNote : null;
+    return {
+      note: existingLocalNote?.type === 'photo' ? existingLocalNote : null,
+      advanceCursor: false,
+    };
   }
 
   const hydratedStickerPlacements = await hydrateStickerPlacements(
@@ -478,14 +776,16 @@ async function deserializeRemoteNote(
     await syncStickerAssetsFromPlacements(hydratedStickerPlacements);
   }
 
-  return {
+  const nextNote: Note = {
     id: record.id,
     type: record.type,
     content: record.type === 'photo' ? photoLocalUri ?? '' : record.content ?? '',
     photoLocalUri,
+    photoSyncedLocalUri: photoLocalUri,
     photoRemoteBase64: null,
     isLivePhoto: Boolean(record.is_live_photo && pairedVideoLocalUri),
     pairedVideoLocalUri,
+    pairedVideoSyncedLocalUri: pairedVideoLocalUri,
     pairedVideoRemotePath: record.paired_video_path ?? null,
     locationName: record.location_name ?? null,
     promptId: record.prompt_id ?? null,
@@ -504,6 +804,28 @@ async function deserializeRemoteNote(
     createdAt: record.created_at,
     updatedAt: record.updated_at ?? null,
   };
+
+  return {
+    note: nextNote,
+    advanceCursor: true,
+  };
+}
+
+function shouldIgnoreRemoteTombstone(
+  tombstone: NoteTombstoneRow,
+  remoteNoteSyncMarks: Map<string, string>,
+  localNote: Note | null
+) {
+  const remoteSyncedAt = remoteNoteSyncMarks.get(tombstone.note_id);
+  if (remoteSyncedAt && remoteSyncedAt > tombstone.deleted_at) {
+    return true;
+  }
+
+  if (localNote && getSyncTimestamp(localNote) > new Date(tombstone.deleted_at).getTime()) {
+    return true;
+  }
+
+  return false;
 }
 
 async function markItemFailed(
@@ -527,9 +849,11 @@ async function deleteRemoteNote(userId: string, noteId: string) {
     throw new Error('Cloud sync is unavailable in this build.');
   }
 
+  const deletedAt = new Date().toISOString();
+
   const { data: sharedPosts, error: sharedPostsError } = await supabase
     .from('shared_posts')
-    .select('id, photo_path, paired_video_path')
+    .select('id, photo_path, paired_video_path, sticker_placements_json')
     .eq('author_user_id', userId)
     .eq('source_note_id', noteId);
   if (sharedPostsError) {
@@ -538,7 +862,7 @@ async function deleteRemoteNote(userId: string, noteId: string) {
 
   const { data: existingNote, error: noteFetchError } = await supabase
     .from('notes')
-    .select('photo_path, paired_video_path')
+    .select('photo_path, paired_video_path, sticker_placements_json')
     .eq('id', noteId)
     .eq('user_id', userId)
     .maybeSingle();
@@ -546,12 +870,6 @@ async function deleteRemoteNote(userId: string, noteId: string) {
     throw noteFetchError;
   }
 
-  await Promise.all(
-    ((sharedPosts ?? []) as Array<{ photo_path?: string | null; paired_video_path?: string | null }>).flatMap((row) => [
-      deletePhotoFromStorage(SHARED_POST_MEDIA_BUCKET, row.photo_path ?? null).catch(() => undefined),
-      deletePairedVideoFromStorage(SHARED_POST_MEDIA_BUCKET, row.paired_video_path ?? null).catch(() => undefined),
-    ])
-  );
   const sharedPostIds = ((sharedPosts ?? []) as Array<{ id: string }>).map((row) => row.id).filter(Boolean);
   if (sharedPostIds.length > 0) {
     const { error: sharedDeleteError } = await supabase
@@ -562,20 +880,39 @@ async function deleteRemoteNote(userId: string, noteId: string) {
     if (sharedDeleteError) {
       throw sharedDeleteError;
     }
-  }
 
-  await deletePhotoFromStorage(
-    NOTE_MEDIA_BUCKET,
-    (existingNote as { photo_path?: string | null } | null)?.photo_path ?? null
-  ).catch(() => undefined);
-  await deletePairedVideoFromStorage(
-    NOTE_MEDIA_BUCKET,
-    (existingNote as { paired_video_path?: string | null } | null)?.paired_video_path ?? null
-  ).catch(() => undefined);
+    await upsertRemoteSharedPostTombstones(userId, sharedPostIds, deletedAt);
+
+    await Promise.all(
+      ((sharedPosts ?? []) as Array<RemoteArtifactSnapshot>).map((row) =>
+        cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
+          photoPath: row.photoPath ?? (row as { photo_path?: string | null }).photo_path ?? null,
+          pairedVideoPath:
+            row.pairedVideoPath ?? (row as { paired_video_path?: string | null }).paired_video_path ?? null,
+          stickerPaths: getRemoteStickerAssetPaths(
+            row.stickerPlacementsJson ??
+              (row as { sticker_placements_json?: string | null }).sticker_placements_json ??
+              null
+          ),
+        })
+      )
+    );
+  }
   const { error } = await supabase.from('notes').delete().eq('id', noteId).eq('user_id', userId);
   if (error) {
     throw error;
   }
+
+  await upsertRemoteNoteTombstones(userId, [noteId], deletedAt);
+
+  await cleanupRemoteArtifacts(NOTE_MEDIA_BUCKET, {
+    photoPath: (existingNote as { photo_path?: string | null } | null)?.photo_path ?? null,
+    pairedVideoPath:
+      (existingNote as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
+    stickerPaths: getRemoteStickerAssetPaths(
+      (existingNote as { sticker_placements_json?: string | null } | null)?.sticker_placements_json ?? null
+    ),
+  });
 }
 
 async function deleteAllRemoteNotesForUser(userId: string) {
@@ -587,11 +924,11 @@ async function deleteAllRemoteNotesForUser(userId: string) {
   const [{ data, error }, { data: sharedPosts, error: sharedPostsError }] = await Promise.all([
     supabase
       .from('notes')
-      .select('id, photo_path, paired_video_path')
+      .select('id, photo_path, paired_video_path, sticker_placements_json')
       .eq('user_id', userId),
     supabase
       .from('shared_posts')
-      .select('id, photo_path, paired_video_path')
+      .select('id, photo_path, paired_video_path, sticker_placements_json')
       .eq('author_user_id', userId),
   ]);
   if (error) {
@@ -601,35 +938,54 @@ async function deleteAllRemoteNotesForUser(userId: string) {
     throw sharedPostsError;
   }
 
-  for (const row of data ?? []) {
-    await deletePhotoFromStorage(NOTE_MEDIA_BUCKET, row.photo_path as string | null).catch(() => undefined);
-    await deletePairedVideoFromStorage(
-      NOTE_MEDIA_BUCKET,
-      (row as { paired_video_path?: string | null }).paired_video_path ?? null
-    ).catch(() => undefined);
-  }
+  const deletedAt = new Date().toISOString();
 
-  for (const row of sharedPosts ?? []) {
-    await deletePhotoFromStorage(
-      SHARED_POST_MEDIA_BUCKET,
-      (row as { photo_path?: string | null }).photo_path ?? null
-    ).catch(() => undefined);
-    await deletePairedVideoFromStorage(
-      SHARED_POST_MEDIA_BUCKET,
-      (row as { paired_video_path?: string | null }).paired_video_path ?? null
-    ).catch(() => undefined);
-  }
-
-  const [{ error: deleteSharedPostsError }, { error: deleteError }] = await Promise.all([
-    supabase.from('shared_posts').delete().eq('author_user_id', userId),
-    supabase.from('notes').delete().eq('user_id', userId),
-  ]);
+  const { error: deleteSharedPostsError } = await supabase
+    .from('shared_posts')
+    .delete()
+    .eq('author_user_id', userId);
   if (deleteSharedPostsError) {
     throw deleteSharedPostsError;
   }
+
+  await upsertRemoteSharedPostTombstones(
+    userId,
+    ((sharedPosts ?? []) as Array<{ id: string }>).map((row) => row.id),
+    deletedAt
+  );
+
+  await Promise.all(
+    ((sharedPosts ?? []) as Array<{ photo_path?: string | null; paired_video_path?: string | null; sticker_placements_json?: string | null }>).map(
+      (row) =>
+        cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
+          photoPath: row.photo_path ?? null,
+          pairedVideoPath: row.paired_video_path ?? null,
+          stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
+        })
+    )
+  );
+
+  const { error: deleteError } = await supabase.from('notes').delete().eq('user_id', userId);
   if (deleteError) {
     throw deleteError;
   }
+
+  await upsertRemoteNoteTombstones(
+    userId,
+    ((data ?? []) as Array<{ id: string }>).map((row) => row.id),
+    deletedAt
+  );
+
+  await Promise.all(
+    ((data ?? []) as Array<{ photo_path?: string | null; paired_video_path?: string | null; sticker_placements_json?: string | null }>).map(
+      (row) =>
+        cleanupRemoteArtifacts(NOTE_MEDIA_BUCKET, {
+          photoPath: row.photo_path ?? null,
+          pairedVideoPath: row.paired_video_path ?? null,
+          stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
+        })
+    )
+  );
 }
 
 async function upsertRemoteNote(userId: string, note: Note, syncMarker: string) {
@@ -638,12 +994,77 @@ async function upsertRemoteNote(userId: string, note: Note, syncMarker: string) 
     throw new Error('Cloud sync is unavailable in this build.');
   }
 
-  const serializedNote = await serializeNoteForSupabase(userId, note, syncMarker);
+  const { data: existingRemoteNote, error: fetchError } = await supabase
+    .from('notes')
+    .select('photo_path, paired_video_path, sticker_placements_json')
+    .eq('id', note.id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (fetchError) {
+    throw fetchError;
+  }
+
+  const existingArtifacts: RemoteArtifactSnapshot = {
+    photoPath: (existingRemoteNote as { photo_path?: string | null } | null)?.photo_path ?? null,
+    pairedVideoPath:
+      (existingRemoteNote as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
+    stickerPlacementsJson:
+      (existingRemoteNote as { sticker_placements_json?: string | null } | null)?.sticker_placements_json ??
+      null,
+  };
+  const serializedNote = await serializeNoteForSupabase(userId, note, syncMarker, existingArtifacts);
   const { error } = await supabase.from('notes').upsert(serializedNote, {
     onConflict: 'id',
   });
   if (error) {
+    await cleanupRemoteArtifacts(
+      NOTE_MEDIA_BUCKET,
+      buildNewRemoteArtifacts(
+        {
+          photoPath: serializedNote.photo_path,
+          pairedVideoPath: serializedNote.paired_video_path,
+          stickerPlacementsJson: serializedNote.sticker_placements_json,
+        },
+        existingArtifacts
+      )
+    );
     throw error;
+  }
+
+  let tombstoneError: unknown = null;
+  try {
+    await deleteRemoteNoteTombstone(userId, note.id);
+  } catch (error) {
+    tombstoneError = error;
+  }
+
+  await cleanupRemoteArtifacts(
+    NOTE_MEDIA_BUCKET,
+    buildRemovedRemoteArtifacts(existingArtifacts, {
+      photoPath: serializedNote.photo_path,
+      pairedVideoPath: serializedNote.paired_video_path,
+      stickerPlacementsJson: serializedNote.sticker_placements_json,
+    })
+  );
+
+  try {
+    await upsertNote({
+      ...note,
+      content: note.type === 'photo' ? normalizeMediaUri(note.photoLocalUri ?? note.content) ?? '' : note.content,
+      photoSyncedLocalUri:
+        note.type === 'photo' ? normalizeMediaUri(note.photoLocalUri ?? note.content) : null,
+      pairedVideoSyncedLocalUri:
+        note.type === 'photo' && note.isLivePhoto
+          ? normalizeMediaUri(note.pairedVideoLocalUri ?? null)
+          : null,
+      pairedVideoRemotePath: serializedNote.paired_video_path ?? null,
+    });
+  } catch (error) {
+    console.warn('Failed to persist synced media metadata locally:', error);
+  }
+
+  if (tombstoneError) {
+    throw tombstoneError;
   }
 }
 
@@ -651,7 +1072,8 @@ async function flushPendingQueueToSupabase(
   user: SyncUser,
   syncRepository: SyncRepository,
   notes: Note[],
-  syncMarker: string
+  syncMarker: string,
+  syncedNoteIds: Set<string>
 ): Promise<FlushQueueResult> {
   const pendingChanges = await syncRepository.listPending(5000);
   const noteMap = new Map(notes.map((note) => [note.id, note]));
@@ -669,6 +1091,7 @@ async function flushPendingQueueToSupabase(
     try {
       if (change.operation === 'deleteAll') {
         await deleteAllRemoteNotesForUser(userId);
+        syncedNoteIds.clear();
         await syncRepository.markDone(change.id);
         processedCount += 1;
         hadLocalWrites = true;
@@ -689,7 +1112,12 @@ async function flushPendingQueueToSupabase(
           await deleteRemoteNote(userId, change.entityId);
         } else {
           await upsertRemoteNote(userId, note, syncMarker);
+          syncedNoteIds.add(note.id);
         }
+      }
+
+      if (change.operation === 'delete') {
+        syncedNoteIds.delete(change.entityId);
       }
 
       await syncRepository.markDone(change.id);
@@ -718,6 +1146,94 @@ async function uploadLocalSnapshotToSupabase(userId: string, notes: Note[], sync
   }
 
   return notes.length;
+}
+
+async function reconcileLocallyDeletedNotes(
+  remoteNoteIds: Set<string>,
+  syncedNoteIds: Set<string>,
+  lastRemoteCursor: string | null
+) {
+  if (!lastRemoteCursor) {
+    return 0;
+  }
+
+  const cutoffTime = new Date(lastRemoteCursor).getTime();
+  if (Number.isNaN(cutoffTime)) {
+    return 0;
+  }
+
+  const localNotes = await getAllNotes();
+  const staleNotes = localNotes.filter(
+    (note) =>
+      syncedNoteIds.has(note.id) &&
+      !remoteNoteIds.has(note.id) &&
+      getSyncTimestamp(note) <= cutoffTime
+  );
+
+  for (const note of staleNotes) {
+    await deleteNote(note.id);
+    syncedNoteIds.delete(note.id);
+  }
+
+  return staleNotes.length;
+}
+
+async function mergeRemoteNoteTombstonesFromSupabase(
+  userId: string,
+  syncedNoteIds: Set<string>,
+  remoteNoteSyncMarks: Map<string, string>,
+  options: { since: string | null }
+): Promise<RemoteTombstoneMergeResult> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Cloud sync is unavailable in this build.');
+  }
+
+  let request = supabase
+    .from('note_tombstones')
+    .select('note_id, user_id, deleted_at')
+    .eq('user_id', userId)
+    .order('deleted_at', { ascending: true });
+
+  if (options.since) {
+    request = request.gt('deleted_at', options.since);
+  }
+
+  const { data, error } = await request;
+  if (error) {
+    if (isSupabaseSchemaMismatchError(error) || isSupabasePolicyError(error)) {
+      console.warn('[syncService] Skipping note tombstone merge:', error);
+      return { deletedCount: 0, latestDeletedAt: options.since };
+    }
+
+    throw error;
+  }
+
+  let deletedCount = 0;
+  let latestDeletedAt = options.since;
+
+  for (const row of (data ?? []) as NoteTombstoneRow[]) {
+    if (!row.note_id) {
+      continue;
+    }
+
+    latestDeletedAt = row.deleted_at ?? latestDeletedAt;
+    const existingLocalNote = await getNoteById(row.note_id);
+    if (shouldIgnoreRemoteTombstone(row, remoteNoteSyncMarks, existingLocalNote)) {
+      continue;
+    }
+
+    syncedNoteIds.delete(row.note_id);
+
+    if (!existingLocalNote) {
+      continue;
+    }
+
+    await deleteNote(row.note_id);
+    deletedCount += 1;
+  }
+
+  return { deletedCount, latestDeletedAt };
 }
 
 async function mergeRemoteNotesFromSupabase(
@@ -750,27 +1266,40 @@ async function mergeRemoteNotesFromSupabase(
   const localNoteMap = new Map(localNotes.map((note) => [note.id, note]));
   let importedCount = 0;
   let latestSyncedAt: string | null = options.since;
+  const remoteNoteIds = new Set<string>();
+  const remoteNoteSyncMarks = new Map<string, string>();
+  let cursorBlockedByMissingMedia = false;
 
   for (const row of (data ?? []) as NoteRow[]) {
+    remoteNoteIds.add(row.id);
+    if (row.synced_at) {
+      remoteNoteSyncMarks.set(row.id, row.synced_at);
+    }
     const existingLocalNote = localNoteMap.get(row.id) ?? (await getNoteById(row.id));
-    const nextLocalNote = await deserializeRemoteNote(row, existingLocalNote);
-    if (!nextLocalNote) {
+    const { note: nextLocalNote, advanceCursor } = await deserializeRemoteNote(row, existingLocalNote);
+    if (advanceCursor && !cursorBlockedByMissingMedia) {
       latestSyncedAt = row.synced_at ?? latestSyncedAt;
+    }
+    if (!advanceCursor) {
+      cursorBlockedByMissingMedia = true;
+    }
+    if (!nextLocalNote) {
       continue;
     }
 
     if (existingLocalNote && getSyncTimestamp(existingLocalNote) >= getSyncTimestamp(row)) {
-      latestSyncedAt = row.synced_at ?? latestSyncedAt;
       continue;
     }
 
     await upsertNote(nextLocalNote);
     localNoteMap.set(nextLocalNote.id, nextLocalNote);
     importedCount += 1;
-    latestSyncedAt = row.synced_at ?? latestSyncedAt;
+    if (!cursorBlockedByMissingMedia) {
+      latestSyncedAt = row.synced_at ?? latestSyncedAt;
+    }
   }
 
-  return { importedCount, latestSyncedAt };
+  return { importedCount, latestSyncedAt, remoteNoteIds, remoteNoteSyncMarks };
 }
 
 const sqliteSyncRepository: SyncRepository = {
@@ -824,6 +1353,20 @@ const sqliteSyncRepository: SyncRepository = {
     return rows.map(rowToQueueItem);
   },
 
+  async recoverProcessing() {
+    const db = await getDB();
+    const scope = getActiveNotesScope();
+    await db.runAsync(
+      `UPDATE sync_queue
+       SET status = 'pending',
+           last_error = NULL,
+           next_retry_at = NULL,
+           blocked_reason = NULL
+       WHERE owner_uid = ? AND status = 'processing'`,
+      scope
+    );
+  },
+
   async markProcessing(id) {
     const db = await getDB();
     const scope = getActiveNotesScope();
@@ -842,6 +1385,7 @@ const sqliteSyncRepository: SyncRepository = {
   async getStats() {
     const db = await getDB();
     const scope = getActiveNotesScope();
+    await sqliteSyncRepository.recoverProcessing();
     const row = await db.getFirstAsync<{
       pending_count: number | null;
       failed_count: number | null;
@@ -940,14 +1484,18 @@ export async function syncNotes(
     const syncRepository = getSyncRepository();
     const syncMarker = new Date().toISOString();
     const lastRemoteCursor = await getLastRemoteSyncCursor(userId);
+    const syncedNoteIds = await getPreviouslySyncedNoteIds(userId);
     const mode: SyncMode =
       requestedMode === 'full' || !lastRemoteCursor ? 'full' : 'incremental';
+
+    await syncRepository.recoverProcessing();
 
     const queueResult = await flushPendingQueueToSupabase(
       user,
       syncRepository,
       notes,
-      syncMarker
+      syncMarker,
+      syncedNoteIds
     );
     if (queueResult.failedCount > 0) {
       return {
@@ -971,19 +1519,41 @@ export async function syncNotes(
 
     if (mode === 'full') {
       const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, notes, { since: null });
-      importedCount = remoteMergeResult.importedCount;
-      const latestLocalNotes = remoteMergeResult.importedCount > 0 ? await getAllNotes() : notes;
+      const tombstoneMergeResult = await mergeRemoteNoteTombstonesFromSupabase(
+        userId,
+        syncedNoteIds,
+        remoteMergeResult.remoteNoteSyncMarks,
+        { since: null }
+      );
+      importedCount = remoteMergeResult.importedCount + tombstoneMergeResult.deletedCount;
+      await reconcileLocallyDeletedNotes(remoteMergeResult.remoteNoteIds, syncedNoteIds, lastRemoteCursor);
+      const latestLocalNotes = await getAllNotes();
       finalNoteCount = latestLocalNotes.length;
       finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
+      for (const note of latestLocalNotes) {
+        syncedNoteIds.add(note.id);
+      }
       uploadedSnapshotCount = await uploadLocalSnapshotToSupabase(userId, latestLocalNotes, syncMarker);
       nextCursor = syncMarker;
     } else {
       const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, notes, {
         since: lastRemoteCursor,
       });
-      importedCount = remoteMergeResult.importedCount;
+      const tombstoneMergeResult = await mergeRemoteNoteTombstonesFromSupabase(
+        userId,
+        syncedNoteIds,
+        remoteMergeResult.remoteNoteSyncMarks,
+        { since: lastRemoteCursor }
+      );
+      importedCount = remoteMergeResult.importedCount + tombstoneMergeResult.deletedCount;
+      for (const remoteNoteId of remoteMergeResult.remoteNoteIds) {
+        syncedNoteIds.add(remoteNoteId);
+      }
       if (remoteMergeResult.latestSyncedAt && remoteMergeResult.latestSyncedAt > nextCursor) {
         nextCursor = remoteMergeResult.latestSyncedAt;
+      }
+      if (tombstoneMergeResult.latestDeletedAt && tombstoneMergeResult.latestDeletedAt > nextCursor) {
+        nextCursor = tombstoneMergeResult.latestDeletedAt;
       }
       if (queueResult.hadLocalWrites && syncMarker > nextCursor) {
         nextCursor = syncMarker;
@@ -1015,6 +1585,7 @@ export async function syncNotes(
         photoURL: user.photoURL,
       }),
       setLastRemoteSyncCursor(userId, nextCursor),
+      setPreviouslySyncedNoteIds(userId, syncedNoteIds),
     ]);
 
     const syncedCount = queueResult.processedCount + uploadedSnapshotCount + importedCount;

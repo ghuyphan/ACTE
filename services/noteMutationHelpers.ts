@@ -53,8 +53,24 @@ export function mergeNotePatch(note: Note, updates: NoteUpdates, updatedAt = new
     ...updates,
     content: note.type === 'photo' ? nextPhotoUri : updates.content ?? note.content,
     photoLocalUri: note.type === 'photo' ? nextPhotoUri || null : null,
+    photoSyncedLocalUri:
+      note.type === 'photo'
+        ? updates.photoSyncedLocalUri !== undefined
+          ? updates.photoSyncedLocalUri
+          : (nextPhotoUri || null) === (note.photoLocalUri ?? null)
+            ? note.photoSyncedLocalUri ?? null
+            : null
+        : null,
     isLivePhoto: note.type === 'photo' ? nextIsLivePhoto : false,
     pairedVideoLocalUri: note.type === 'photo' ? nextPairedVideoUri || null : null,
+    pairedVideoSyncedLocalUri:
+      note.type === 'photo' && nextIsLivePhoto
+        ? updates.pairedVideoSyncedLocalUri !== undefined
+          ? updates.pairedVideoSyncedLocalUri
+          : (nextPairedVideoUri || null) === (note.pairedVideoLocalUri ?? null)
+            ? note.pairedVideoSyncedLocalUri ?? null
+            : null
+        : null,
     pairedVideoRemotePath:
       note.type === 'photo' && nextIsLivePhoto
         ? resolveNullableValue(updates.pairedVideoRemotePath, note.pairedVideoRemotePath)

@@ -1224,15 +1224,7 @@ private struct LocketWidgetEntryView: View {
                     Spacer(minLength: 0)
 
                     if shouldPinLocationChip || shouldShowLivePhotoBadge {
-                        HStack(spacing: 8) {
-                            if shouldPinLocationChip {
-                                floatingLocationChip
-                            }
-
-                            if shouldShowLivePhotoBadge {
-                                livePhotoBadge
-                            }
-                        }
+                        trailingOverlayChips
                     }
                 }
                 .padding(.bottom, (shouldShowAuthorChip || shouldPinLocationChip || shouldShowLivePhotoBadge) ? 10 : 0)
@@ -1326,15 +1318,7 @@ private struct LocketWidgetEntryView: View {
                         Spacer(minLength: 0)
 
                         if shouldPinLocationChip || shouldShowLivePhotoBadge {
-                            HStack(spacing: 8) {
-                                if shouldPinLocationChip {
-                                    floatingLocationChip
-                                }
-
-                                if shouldShowLivePhotoBadge {
-                                    livePhotoBadge
-                                }
-                            }
+                            trailingOverlayChips
                         }
                     }
                     .padding(.bottom, (shouldShowAuthorChip || shouldPinLocationChip || shouldShowLivePhotoBadge) ? 10 : 0)
@@ -1517,6 +1501,19 @@ private struct LocketWidgetEntryView: View {
         .padding(.vertical, 5)
         .background(authorChipBackgroundColor)
         .clipShape(Capsule())
+    }
+
+    @ViewBuilder
+    private var trailingOverlayChips: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            if shouldShowLivePhotoBadge {
+                livePhotoBadge
+            }
+
+            if shouldPinLocationChip {
+                floatingLocationChip
+            }
+        }
     }
 
     private var livePhotoBadgeLabel: String {

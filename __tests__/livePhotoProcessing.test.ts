@@ -5,6 +5,7 @@ const mockGetInfoAsync = jest.fn(async (_uri?: unknown) => ({
   isDirectory: false,
   size: 5 * 1024 * 1024,
 }));
+const mockNormalizeLivePhotoMotionVideo = jest.fn();
 
 jest.mock('../utils/fileSystem', () => ({
   documentDirectory: 'file:///current-container/Documents/',
@@ -14,14 +15,19 @@ jest.mock('../utils/fileSystem', () => ({
   getInfoAsync: (uri: string) => mockGetInfoAsync(uri),
 }));
 
+jest.mock('../services/livePhotoMotionTranscoder', () => ({
+  normalizeLivePhotoMotionVideo: (...args: unknown[]) => mockNormalizeLivePhotoMotionVideo(...args),
+}));
+
 import { persistLivePhotoVideo } from '../services/livePhotoProcessing';
 
 describe('livePhotoProcessing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockNormalizeLivePhotoMotionVideo.mockResolvedValue(null);
   });
 
-  it('persists larger live-photo motion clips locally instead of blocking note save', async () => {
+  it('falls back to copying the original motion clip when native normalization is unavailable', async () => {
     const savedUri = await persistLivePhotoVideo(
       'file:///tmp/captured-live-photo.mp4',
       'note-123-motion'
@@ -35,5 +41,25 @@ describe('livePhotoProcessing', () => {
       to: 'file:///current-container/Documents/live-photo-videos/note-123-motion.mp4',
     });
     expect(mockDeleteAsync).not.toHaveBeenCalled();
+  });
+
+  it('returns the normalized iOS motion clip directly when native export succeeds', async () => {
+    mockNormalizeLivePhotoMotionVideo.mockResolvedValue({
+      uri: 'file:///current-container/Documents/live-photo-videos/note-123-motion.mp4',
+    });
+
+    const savedUri = await persistLivePhotoVideo(
+      'file:///tmp/captured-live-photo.mov',
+      'note-123-motion'
+    );
+
+    expect(savedUri).toBe(
+      'file:///current-container/Documents/live-photo-videos/note-123-motion.mp4'
+    );
+    expect(mockNormalizeLivePhotoMotionVideo).toHaveBeenCalledWith(
+      'file:///tmp/captured-live-photo.mov',
+      'file:///current-container/Documents/live-photo-videos/note-123-motion'
+    );
+    expect(mockCopyAsync).not.toHaveBeenCalled();
   });
 });

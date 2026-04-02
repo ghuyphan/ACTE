@@ -27,6 +27,7 @@ export interface StickerAsset {
   ownerUid: string;
   localUri: string;
   remotePath: string | null;
+  uploadFingerprint?: string | null;
   mimeType: string;
   width: number;
   height: number;
@@ -73,6 +74,7 @@ interface StickerAssetRow {
   owner_uid: string;
   local_uri: string;
   remote_path: string | null;
+  upload_fingerprint: string | null;
   mime_type: string;
   width: number;
   height: number;
@@ -270,6 +272,7 @@ function mapStickerAsset(row: StickerAssetRow): StickerAsset {
     ownerUid: row.owner_uid,
     localUri: row.local_uri,
     remotePath: row.remote_path ?? null,
+    uploadFingerprint: row.upload_fingerprint ?? null,
     mimeType: row.mime_type,
     width: row.width,
     height: row.height,
@@ -302,6 +305,19 @@ async function getStickerFileInfo(uri: string) {
     width,
     height,
   };
+}
+
+async function getStickerUploadFingerprint(uri: string) {
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists || info.isDirectory) {
+    return null;
+  }
+
+  return [
+    uri.trim(),
+    typeof info.size === 'number' ? info.size : 'na',
+    typeof info.modificationTime === 'number' ? info.modificationTime : 'na',
+  ].join(':');
 }
 
 function needsStickerOptimization(
@@ -667,7 +683,7 @@ export async function getStickerAssets(): Promise<StickerAsset[]> {
   const database = await getDB();
   const ownerUid = getActiveNotesScope();
   const rows = await database.getAllAsync<StickerAssetRow>(
-    `SELECT id, owner_uid, local_uri, remote_path, mime_type, width, height, created_at, updated_at, source
+    `SELECT id, owner_uid, local_uri, remote_path, upload_fingerprint, mime_type, width, height, created_at, updated_at, source
      FROM sticker_assets
      WHERE owner_uid = ?
      ORDER BY created_at DESC`,
@@ -680,7 +696,7 @@ export async function getStickerAssets(): Promise<StickerAsset[]> {
 export async function getStickerAssetById(assetId: string): Promise<StickerAsset | null> {
   const database = await getDB();
   const row = await database.getFirstAsync<StickerAssetRow>(
-    `SELECT id, owner_uid, local_uri, remote_path, mime_type, width, height, created_at, updated_at, source
+    `SELECT id, owner_uid, local_uri, remote_path, upload_fingerprint, mime_type, width, height, created_at, updated_at, source
      FROM sticker_assets
      WHERE id = ?`,
     assetId
@@ -697,6 +713,7 @@ export async function upsertStickerAsset(asset: StickerAsset, txn?: SQLiteTransa
       owner_uid,
       local_uri,
       remote_path,
+      upload_fingerprint,
       mime_type,
       width,
       height,
@@ -704,11 +721,12 @@ export async function upsertStickerAsset(asset: StickerAsset, txn?: SQLiteTransa
       updated_at,
       source
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       owner_uid = excluded.owner_uid,
       local_uri = excluded.local_uri,
       remote_path = excluded.remote_path,
+      upload_fingerprint = excluded.upload_fingerprint,
       mime_type = excluded.mime_type,
       width = excluded.width,
       height = excluded.height,
@@ -718,6 +736,7 @@ export async function upsertStickerAsset(asset: StickerAsset, txn?: SQLiteTransa
     asset.ownerUid,
     asset.localUri,
     asset.remotePath ?? null,
+    asset.uploadFingerprint ?? null,
     asset.mimeType,
     asset.width,
     asset.height,
@@ -756,6 +775,7 @@ export async function importStickerAsset(source: StickerImportSource): Promise<S
       ownerUid: getActiveNotesScope(),
       localUri: destinationPath,
       remotePath: null,
+      uploadFingerprint: null,
       mimeType: preparedSticker.mimeType,
       width,
       height,
@@ -814,16 +834,23 @@ export async function uploadStickerAssetToStorage(
     return asset;
   }
 
+  const remotePath =
+    asset.remotePath?.trim() || `${ownerUid}/${NOTE_STICKER_MEDIA_PREFIX}/${asset.id}.${getStickerFileExtension(asset.mimeType)}`;
+  const uploadFingerprint = await getStickerUploadFingerprint(localUri);
+
+  if (asset.remotePath === remotePath && asset.uploadFingerprint && asset.uploadFingerprint === uploadFingerprint) {
+    return asset;
+  }
+
   const base64 = await FileSystem.readAsStringAsync(localUri, {
     encoding: FileSystem.EncodingType.Base64,
   });
-  const remotePath =
-    asset.remotePath?.trim() || `${ownerUid}/${NOTE_STICKER_MEDIA_PREFIX}/${asset.id}.${getStickerFileExtension(asset.mimeType)}`;
 
   await uploadStickerBytesWithRetry(bucket, remotePath, decode(base64), asset.mimeType, true);
   const nextAsset = {
     ...asset,
     remotePath,
+    uploadFingerprint,
     updatedAt: new Date().toISOString(),
   };
 
@@ -926,9 +953,11 @@ export async function serializeStickerPlacementsForStorage(
   ownerUid: string,
   options: {
     persistAssets?: boolean;
+    existingRemoteAssetPathsById?: Readonly<Record<string, string>>;
   } = {}
 ) {
   const assetsById = new Map<string, StickerAsset>();
+  const existingRemoteAssetPathsById = options.existingRemoteAssetPathsById ?? {};
 
   if (options.persistAssets === false) {
     for (const placement of placements) {
@@ -936,15 +965,19 @@ export async function serializeStickerPlacementsForStorage(
         continue;
       }
 
-      const remotePath = `${ownerUid}/${NOTE_STICKER_MEDIA_PREFIX}/${placement.asset.id}.${getStickerFileExtension(placement.asset.mimeType)}`;
-      const base64 = await FileSystem.readAsStringAsync(placement.asset.localUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      await uploadStickerBytesWithRetry(bucket, remotePath, decode(base64), placement.asset.mimeType, true);
+      const remotePath =
+        existingRemoteAssetPathsById[placement.asset.id] ??
+        `${ownerUid}/${NOTE_STICKER_MEDIA_PREFIX}/${placement.asset.id}.${getStickerFileExtension(placement.asset.mimeType)}`;
+      if (!existingRemoteAssetPathsById[placement.asset.id]) {
+        const base64 = await FileSystem.readAsStringAsync(placement.asset.localUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        await uploadStickerBytesWithRetry(bucket, remotePath, decode(base64), placement.asset.mimeType, true);
+      }
       assetsById.set(placement.asset.id, {
         ...placement.asset,
         remotePath,
-        });
+      });
     }
   } else {
     for (const placement of placements) {

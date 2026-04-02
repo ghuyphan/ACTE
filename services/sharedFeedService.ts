@@ -7,6 +7,7 @@ import {
   getSupabaseErrorMessage,
   isSupabaseNetworkError,
   isSupabasePolicyError,
+  isSupabaseSchemaMismatchError,
 } from '../utils/supabase';
 import { Note, NoteType } from './database';
 import { normalizeSavedTextNoteColor } from './noteAppearance';
@@ -21,7 +22,15 @@ import { getPairedVideoFileExtension } from './livePhotoStorage';
 import { parseNoteStickerPlacements, serializeStickerPlacementsForStorage } from './noteStickers';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getPublicUserProfile, upsertPublicUserProfile } from './publicProfileService';
-import { cacheSharedFeedSnapshot } from './sharedFeedCache';
+import {
+  cacheSharedFeedSnapshot,
+  getCachedActiveInvite,
+  replaceCachedActiveInvite,
+} from './sharedFeedCache';
+import {
+  clearStoredInviteToken,
+  setStoredInviteToken,
+} from './inviteTokenStorage';
 import { sendSocialNotificationEvent } from './socialPushService';
 
 export interface FriendConnection {
@@ -102,7 +111,7 @@ interface FriendInviteRow {
   inviter_user_id: string;
   inviter_display_name_snapshot: string | null;
   inviter_photo_url_snapshot: string | null;
-  token: string;
+  token_hash?: string | null;
   created_at: string;
   revoked_at: string | null;
   accepted_by_user_id: string | null;
@@ -132,11 +141,32 @@ interface SharedPostRow {
   updated_at: string | null;
 }
 
+interface SharedPostTombstoneRow {
+  post_id: string;
+  author_user_id: string;
+  deleted_at: string;
+}
+
+interface RemoteArtifactSnapshot {
+  photoPath?: string | null;
+  pairedVideoPath?: string | null;
+  stickerPlacementsJson?: string | null;
+}
+
 const ACTIVE_FRIEND_INVITE_QUERY_LIMIT = 50;
 const FRIEND_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const SHARED_FEED_REFRESH_DEDUPE_WINDOW_MS = 400;
 const EXPIRED_SHARED_FEED_SESSION_ERROR = 'Server session unavailable. Sign in again to use shared moments.';
 const MISMATCHED_SHARED_FEED_SESSION_ERROR =
   'Signed-in session does not match this account. Sign out and sign in again.';
+const sharedFeedRefreshState = new Map<
+  string,
+  {
+    promise: Promise<SharedFeedSnapshot> | null;
+    lastResolvedAt: number;
+    lastSnapshot: SharedFeedSnapshot | null;
+  }
+>();
 
 function requireSupabase() {
   const supabase = getSupabase();
@@ -153,6 +183,160 @@ function getNowIso() {
 
 function getDisplayName(user: AppUser) {
   return getUserDisplayName(user);
+}
+
+function normalizeRemoteArtifactPath(path: string | null | undefined) {
+  const normalizedPath = typeof path === 'string' ? path.trim() : '';
+  return normalizedPath || null;
+}
+
+function getRemoteStickerAssetPaths(stickerPlacementsJson: string | null | undefined) {
+  return Array.from(
+    new Set(
+      parseNoteStickerPlacements(stickerPlacementsJson)
+        .map((placement) => normalizeRemoteArtifactPath(placement.asset.remotePath))
+        .filter((path): path is string => Boolean(path))
+    )
+  );
+}
+
+function buildNewRemoteArtifacts(
+  next: RemoteArtifactSnapshot,
+  previous: RemoteArtifactSnapshot | null | undefined
+) {
+  const previousStickerPaths = new Set(getRemoteStickerAssetPaths(previous?.stickerPlacementsJson));
+  return {
+    photoPath:
+      normalizeRemoteArtifactPath(next.photoPath) !== normalizeRemoteArtifactPath(previous?.photoPath)
+        ? normalizeRemoteArtifactPath(next.photoPath)
+        : null,
+    pairedVideoPath:
+      normalizeRemoteArtifactPath(next.pairedVideoPath) !== normalizeRemoteArtifactPath(previous?.pairedVideoPath)
+        ? normalizeRemoteArtifactPath(next.pairedVideoPath)
+        : null,
+    stickerPaths: getRemoteStickerAssetPaths(next.stickerPlacementsJson).filter(
+      (path) => !previousStickerPaths.has(path)
+    ),
+  };
+}
+
+function buildRemovedRemoteArtifacts(
+  previous: RemoteArtifactSnapshot | null | undefined,
+  next: RemoteArtifactSnapshot | null | undefined
+) {
+  const nextStickerPaths = new Set(getRemoteStickerAssetPaths(next?.stickerPlacementsJson));
+  return {
+    photoPath:
+      normalizeRemoteArtifactPath(previous?.photoPath) !== normalizeRemoteArtifactPath(next?.photoPath)
+        ? normalizeRemoteArtifactPath(previous?.photoPath)
+        : null,
+    pairedVideoPath:
+      normalizeRemoteArtifactPath(previous?.pairedVideoPath) !==
+      normalizeRemoteArtifactPath(next?.pairedVideoPath)
+        ? normalizeRemoteArtifactPath(previous?.pairedVideoPath)
+        : null,
+    stickerPaths: getRemoteStickerAssetPaths(previous?.stickerPlacementsJson).filter(
+      (path) => !nextStickerPaths.has(path)
+    ),
+  };
+}
+
+async function cleanupRemoteArtifacts(
+  bucket: string,
+  artifacts: {
+    photoPath?: string | null;
+    pairedVideoPath?: string | null;
+    stickerPaths?: string[];
+  }
+) {
+  const removals: Promise<unknown>[] = [];
+
+  const photoPath = normalizeRemoteArtifactPath(artifacts.photoPath);
+  if (photoPath) {
+    removals.push(deletePhotoFromStorage(bucket, photoPath));
+  }
+
+  const pairedVideoPath = normalizeRemoteArtifactPath(artifacts.pairedVideoPath);
+  if (pairedVideoPath) {
+    removals.push(deletePairedVideoFromStorage(bucket, pairedVideoPath));
+  }
+
+  for (const stickerPath of artifacts.stickerPaths ?? []) {
+    removals.push(deletePhotoFromStorage(bucket, stickerPath));
+  }
+
+  if (removals.length === 0) {
+    return;
+  }
+
+  await Promise.allSettled(removals);
+}
+
+async function upsertSharedPostTombstones(
+  authorUserId: string,
+  postIds: Iterable<string>,
+  deletedAt: string
+) {
+  const rows = Array.from(
+    new Set(
+      Array.from(postIds)
+        .map((postId) => (typeof postId === 'string' ? postId.trim() : ''))
+        .filter(Boolean)
+    )
+  ).map(
+    (postId): SharedPostTombstoneRow => ({
+      post_id: postId,
+      author_user_id: authorUserId,
+      deleted_at: deletedAt,
+    })
+  );
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  const { error } = await requireSupabase().from('shared_post_tombstones').upsert(rows, {
+    onConflict: 'post_id',
+  });
+  if (error) {
+    if (isSupabaseSchemaMismatchError(error) || isSupabasePolicyError(error)) {
+      console.warn('[shared-feed] Skipping shared post tombstone write:', error);
+      return;
+    }
+
+    throw error;
+  }
+}
+
+function getRemoteStickerAssetPathMap(stickerPlacementsJson: string | null | undefined) {
+  const pathMap: Record<string, string> = {};
+
+  for (const placement of parseNoteStickerPlacements(stickerPlacementsJson)) {
+    const remotePath = placement.asset.remotePath?.trim();
+    if (!remotePath) {
+      continue;
+    }
+
+    pathMap[placement.asset.id] = remotePath;
+  }
+
+  return pathMap;
+}
+
+async function deleteSharedPostTombstone(authorUserId: string, postId: string) {
+  const { error } = await requireSupabase()
+    .from('shared_post_tombstones')
+    .delete()
+    .eq('post_id', postId)
+    .eq('author_user_id', authorUserId);
+  if (error) {
+    if (isSupabaseSchemaMismatchError(error) || isSupabasePolicyError(error)) {
+      console.warn('[shared-feed] Skipping shared post tombstone cleanup:', error);
+      return;
+    }
+
+    throw error;
+  }
 }
 
 async function ensureSupabaseSessionMatchesUser(userId: string) {
@@ -185,6 +369,18 @@ async function getFriendInviteDocumentId(userUid: string) {
   return `friend-invite-${digest.slice(0, 24)}`;
 }
 
+async function getInviteTokenHash(token: string) {
+  const normalizedToken = token.trim();
+  if (!normalizedToken) {
+    return '';
+  }
+
+  return Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    normalizedToken
+  );
+}
+
 function buildInviteUrl(inviteId: string, token: string) {
   return Linking.createURL('/friends/join', {
     queryParams: {
@@ -194,19 +390,19 @@ function buildInviteUrl(inviteId: string, token: string) {
   });
 }
 
-function mapInvite(record: FriendInviteRow): FriendInvite {
+function mapInvite(record: FriendInviteRow, token: string): FriendInvite {
   return {
     id: record.id,
     inviterUid: record.inviter_user_id,
     inviterDisplayNameSnapshot: record.inviter_display_name_snapshot ?? null,
     inviterPhotoURLSnapshot: record.inviter_photo_url_snapshot ?? null,
-    token: record.token,
+    token,
     createdAt: record.created_at,
     revokedAt: record.revoked_at ?? null,
     acceptedByUid: record.accepted_by_user_id ?? null,
     acceptedAt: record.accepted_at ?? null,
     expiresAt: record.expires_at ?? null,
-    url: buildInviteUrl(record.id, record.token),
+    url: buildInviteUrl(record.id, token),
   };
 }
 
@@ -254,6 +450,44 @@ function parseInvitePayload(rawValue: string) {
     inviteId: '',
     token: trimmed,
   };
+}
+
+function getSharedPostChangeField(
+  payload: unknown,
+  field: 'author_user_id' | 'audience_user_ids'
+) {
+  if (typeof payload !== 'object' || !payload) {
+    return null;
+  }
+
+  const eventPayload = payload as {
+    new?: Record<string, unknown> | null;
+    old?: Record<string, unknown> | null;
+  };
+
+  if (eventPayload.new && field in eventPayload.new) {
+    return eventPayload.new[field] ?? null;
+  }
+
+  if (eventPayload.old && field in eventPayload.old) {
+    return eventPayload.old[field] ?? null;
+  }
+
+  return null;
+}
+
+function shouldRefreshForSharedPostChange(payload: unknown, userId: string) {
+  const authorUserId = getSharedPostChangeField(payload, 'author_user_id');
+  if (typeof authorUserId === 'string' && authorUserId.trim() === userId) {
+    return true;
+  }
+
+  const audienceUserIds = getSharedPostChangeField(payload, 'audience_user_ids');
+  if (Array.isArray(audienceUserIds)) {
+    return audienceUserIds.some((value) => typeof value === 'string' && value.trim() === userId);
+  }
+
+  return false;
 }
 
 function mapSharedPost(record: SharedPostRow): SharedPost {
@@ -328,7 +562,7 @@ export async function getActiveFriendInvite(user: AppUser): Promise<FriendInvite
   const { data, error } = await requireSupabase()
     .from('friend_invites')
     .select(
-      'id, inviter_user_id, inviter_display_name_snapshot, inviter_photo_url_snapshot, token, created_at, revoked_at, accepted_by_user_id, accepted_at, expires_at'
+      'id, inviter_user_id, inviter_display_name_snapshot, inviter_photo_url_snapshot, created_at, revoked_at, accepted_by_user_id, accepted_at, expires_at'
     )
     .eq('inviter_user_id', user.id)
     .order('created_at', { ascending: false })
@@ -339,10 +573,23 @@ export async function getActiveFriendInvite(user: AppUser): Promise<FriendInvite
   }
 
   const invite = ((data ?? []) as FriendInviteRow[]).find((item) => isInviteActive(item));
-  return invite ? mapInvite(invite) : null;
+  if (!invite) {
+    await Promise.all([
+      clearStoredInviteToken(user.id).catch(() => undefined),
+      replaceCachedActiveInvite(user.id, null).catch(() => undefined),
+    ]);
+    return null;
+  }
+
+  const cachedInvite = await getCachedActiveInvite(user.id).catch(() => null);
+  if (!cachedInvite || cachedInvite.id !== invite.id || !cachedInvite.token.trim()) {
+    return null;
+  }
+
+  return mapInvite(invite, cachedInvite.token);
 }
 
-export async function refreshSharedFeed(user: AppUser): Promise<SharedFeedSnapshot> {
+async function performSharedFeedRefresh(user: AppUser): Promise<SharedFeedSnapshot> {
   await ensureSupabaseSessionMatchesUser(user.id);
 
   const friends = await getFriendsForUser(user.id);
@@ -380,6 +627,44 @@ export async function refreshSharedFeed(user: AppUser): Promise<SharedFeedSnapsh
   return snapshot;
 }
 
+export async function refreshSharedFeed(user: AppUser): Promise<SharedFeedSnapshot> {
+  const existingState = sharedFeedRefreshState.get(user.id);
+  if (existingState?.promise) {
+    return existingState.promise;
+  }
+
+  if (
+    existingState?.lastSnapshot &&
+    Date.now() - existingState.lastResolvedAt < SHARED_FEED_REFRESH_DEDUPE_WINDOW_MS
+  ) {
+    return existingState.lastSnapshot;
+  }
+
+  const nextState = existingState ?? {
+    promise: null,
+    lastResolvedAt: 0,
+    lastSnapshot: null,
+  };
+
+  const refreshPromise = performSharedFeedRefresh(user)
+    .then((snapshot) => {
+      nextState.promise = null;
+      nextState.lastResolvedAt = Date.now();
+      nextState.lastSnapshot = snapshot;
+      sharedFeedRefreshState.set(user.id, nextState);
+      return snapshot;
+    })
+    .catch((error) => {
+      nextState.promise = null;
+      sharedFeedRefreshState.set(user.id, nextState);
+      throw error;
+    });
+
+  nextState.promise = refreshPromise;
+  sharedFeedRefreshState.set(user.id, nextState);
+  return refreshPromise;
+}
+
 export function subscribeToSharedFeed(
   user: AppUser,
   { onSnapshot: handleSnapshot, onError }: SubscribeToSharedFeedOptions
@@ -387,13 +672,20 @@ export function subscribeToSharedFeed(
   const supabase = requireSupabase();
   let disposed = false;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let refreshInFlight: Promise<void> | null = null;
+  let refreshQueued = false;
 
   const refresh = () => {
     if (disposed) {
       return;
     }
 
-    void refreshSharedFeed(user)
+    if (refreshInFlight) {
+      refreshQueued = true;
+      return;
+    }
+
+    refreshInFlight = refreshSharedFeed(user)
       .then((snapshot) => {
         if (!disposed) {
           handleSnapshot(snapshot);
@@ -402,6 +694,13 @@ export function subscribeToSharedFeed(
       .catch((error) => {
         if (!disposed) {
           onError?.(error);
+        }
+      })
+      .finally(() => {
+        refreshInFlight = null;
+        if (!disposed && refreshQueued) {
+          refreshQueued = false;
+          scheduleRefresh();
         }
       });
   };
@@ -446,7 +745,11 @@ export function subscribeToSharedFeed(
         schema: 'public',
         table: 'shared_posts',
       },
-      scheduleRefresh
+      (payload) => {
+        if (shouldRefreshForSharedPostChange(payload, user.id)) {
+          scheduleRefresh();
+        }
+      }
     )
     .subscribe();
 
@@ -478,18 +781,20 @@ export async function createFriendInvite(user: AppUser): Promise<FriendInvite> {
   }
 
   const inviteId = await getFriendInviteDocumentId(user.id);
+  const inviteToken = Crypto.randomUUID();
+  const inviteTokenHash = await getInviteTokenHash(inviteToken);
   const nextInvite: FriendInviteRow = {
     id: inviteId,
     inviter_user_id: user.id,
     inviter_display_name_snapshot: getDisplayName(user),
     inviter_photo_url_snapshot: user.photoURL ?? null,
-    token: Crypto.randomUUID(),
+    token_hash: inviteTokenHash,
     created_at: getNowIso(),
     revoked_at: null,
-      accepted_by_user_id: null,
-      accepted_at: null,
-      expires_at: new Date(Date.now() + FRIEND_INVITE_TTL_MS).toISOString(),
-    };
+    accepted_by_user_id: null,
+    accepted_at: null,
+    expires_at: new Date(Date.now() + FRIEND_INVITE_TTL_MS).toISOString(),
+  };
 
   const { error } = await supabase.from('friend_invites').upsert(nextInvite, {
     onConflict: 'id',
@@ -498,7 +803,14 @@ export async function createFriendInvite(user: AppUser): Promise<FriendInvite> {
     throw error;
   }
 
-  return mapInvite(nextInvite);
+  await setStoredInviteToken(user.id, {
+    inviteId,
+    token: inviteToken,
+  });
+
+  const localInvite = mapInvite(nextInvite, inviteToken);
+  await replaceCachedActiveInvite(user.id, localInvite).catch(() => undefined);
+  return localInvite;
 }
 
 export async function revokeFriendInvite(user: AppUser, inviteId: string): Promise<void> {
@@ -514,6 +826,11 @@ export async function revokeFriendInvite(user: AppUser, inviteId: string): Promi
   if (error) {
     throw error;
   }
+
+  await Promise.all([
+    clearStoredInviteToken(user.id).catch(() => undefined),
+    replaceCachedActiveInvite(user.id, null).catch(() => undefined),
+  ]);
 }
 
 export async function acceptFriendInvite(
@@ -595,84 +912,97 @@ export async function createSharedPost(
 
   const postId = `shared-post-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}`;
   const now = getNowIso();
-  const photoPath =
-    note.type === 'photo'
-      ? await uploadPhotoToStorage(
-          SHARED_POST_MEDIA_BUCKET,
-          `${user.id}/${postId}`,
-          note.photoLocalUri ?? note.content
-        )
-      : null;
-  const pairedVideoPath =
-    note.type === 'photo' && note.isLivePhoto
-      ? await uploadPairedVideoToStorage(
-          SHARED_POST_MEDIA_BUCKET,
-          getRemotePairedVideoPath(`${user.id}/${postId}`, note.pairedVideoLocalUri ?? null),
-          note.pairedVideoLocalUri ?? null
-        )
-      : null;
-  const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
-  const stickerPlacementsJson =
-    stickerPlacements.length > 0
-      ? await serializeStickerPlacementsForStorage(
-          stickerPlacements,
-          SHARED_POST_MEDIA_BUCKET,
-          `${user.id}/${postId}`,
-          { persistAssets: false }
-        )
-      : null;
+  let photoPath: string | null = null;
+  let pairedVideoPath: string | null = null;
+  let stickerPlacementsJson: string | null = null;
 
-  const record: SharedPostRow = {
-    id: postId,
-    author_user_id: user.id,
-    author_display_name: getDisplayName(user),
-    author_photo_url_snapshot: user.photoURL ?? null,
-    audience_user_ids: dedupedAudience,
-    type: note.type,
-    text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
-    photo_path: photoPath ?? null,
-    is_live_photo: Boolean(note.isLivePhoto && pairedVideoPath),
-    paired_video_path: pairedVideoPath ?? null,
-    doodle_strokes_json: note.doodleStrokesJson ?? null,
-    sticker_placements_json: stickerPlacementsJson,
-    note_color: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
-    place_name: note.locationName ?? null,
-    source_note_id: note.id,
-    latitude: note.latitude,
-    longitude: note.longitude,
-    created_at: now,
-    updated_at: null,
-  };
+  try {
+    photoPath =
+      note.type === 'photo'
+        ? await uploadPhotoToStorage(
+            SHARED_POST_MEDIA_BUCKET,
+            `${user.id}/${postId}`,
+            note.photoLocalUri ?? note.content
+          )
+        : null;
+    pairedVideoPath =
+      note.type === 'photo' && note.isLivePhoto
+        ? await uploadPairedVideoToStorage(
+            SHARED_POST_MEDIA_BUCKET,
+            getRemotePairedVideoPath(`${user.id}/${postId}`, note.pairedVideoLocalUri ?? null),
+            note.pairedVideoLocalUri ?? null
+          )
+        : null;
+    const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
+    stickerPlacementsJson =
+      stickerPlacements.length > 0
+        ? await serializeStickerPlacementsForStorage(
+            stickerPlacements,
+            SHARED_POST_MEDIA_BUCKET,
+            `${user.id}/${postId}`,
+            { persistAssets: false }
+          )
+        : null;
 
-  const { error } = await supabase.from('shared_posts').insert(record);
-  if (error) {
+    const record: SharedPostRow = {
+      id: postId,
+      author_user_id: user.id,
+      author_display_name: getDisplayName(user),
+      author_photo_url_snapshot: user.photoURL ?? null,
+      audience_user_ids: dedupedAudience,
+      type: note.type,
+      text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
+      photo_path: photoPath ?? null,
+      is_live_photo: Boolean(note.isLivePhoto && pairedVideoPath),
+      paired_video_path: pairedVideoPath ?? null,
+      doodle_strokes_json: note.doodleStrokesJson ?? null,
+      sticker_placements_json: stickerPlacementsJson,
+      note_color: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
+      place_name: note.locationName ?? null,
+      source_note_id: note.id,
+      latitude: note.latitude,
+      longitude: note.longitude,
+      created_at: now,
+      updated_at: null,
+    };
+
+    const { error } = await supabase.from('shared_posts').insert(record);
+    if (error) {
+      throw error;
+    }
+
+    const friendRefs = dedupedAudience.filter((uid) => uid !== user.id);
+    if (friendRefs.length > 0) {
+      await supabase
+        .from('friendships')
+        .update({ last_shared_at: now })
+        .eq('user_id', user.id)
+        .in('friend_user_id', friendRefs);
+    }
+
+    void sendSocialNotificationEvent({
+      type: 'shared_post_created',
+      postId,
+    }).catch((error) => {
+      console.warn('[shared-feed] Failed to send shared post notification:', error);
+    });
+
+    return {
+      ...mapSharedPost(record),
+      photoLocalUri: note.type === 'photo' ? note.photoLocalUri ?? note.content : null,
+      pairedVideoLocalUri: note.type === 'photo' ? note.pairedVideoLocalUri ?? null : null,
+      hasStickers: Boolean(note.hasStickers && note.stickerPlacementsJson),
+      stickerPlacementsJson: note.stickerPlacementsJson ?? null,
+      noteColor: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
+    };
+  } catch (error) {
+    await cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
+      photoPath,
+      pairedVideoPath,
+      stickerPaths: getRemoteStickerAssetPaths(stickerPlacementsJson),
+    });
     throw error;
   }
-
-  const friendRefs = dedupedAudience.filter((uid) => uid !== user.id);
-  if (friendRefs.length > 0) {
-    await supabase
-      .from('friendships')
-      .update({ last_shared_at: now })
-      .eq('user_id', user.id)
-      .in('friend_user_id', friendRefs);
-  }
-
-  void sendSocialNotificationEvent({
-    type: 'shared_post_created',
-    postId,
-  }).catch((error) => {
-    console.warn('[shared-feed] Failed to send shared post notification:', error);
-  });
-
-  return {
-    ...mapSharedPost(record),
-    photoLocalUri: note.type === 'photo' ? note.photoLocalUri ?? note.content : null,
-    pairedVideoLocalUri: note.type === 'photo' ? note.pairedVideoLocalUri ?? null : null,
-    hasStickers: Boolean(note.hasStickers && note.stickerPlacementsJson),
-    stickerPlacementsJson: note.stickerPlacementsJson ?? null,
-    noteColor: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
-  };
 }
 
 export async function updateSharedPost(
@@ -699,41 +1029,63 @@ export async function updateSharedPost(
     throw new Error('Shared post not found.');
   }
 
-  if (current.photo_path && note.type !== 'photo') {
-    await deletePhotoFromStorage(SHARED_POST_MEDIA_BUCKET, current.photo_path).catch(() => undefined);
-  }
-  if (current.paired_video_path && (!note.isLivePhoto || note.type !== 'photo')) {
-    await deletePairedVideoFromStorage(SHARED_POST_MEDIA_BUCKET, current.paired_video_path).catch(() => undefined);
-  }
+  const currentArtifacts: RemoteArtifactSnapshot = {
+    photoPath: current.photo_path ?? null,
+    pairedVideoPath: current.paired_video_path ?? null,
+    stickerPlacementsJson: current.sticker_placements_json ?? null,
+  };
+  let nextPhotoPath: string | null = null;
+  let nextPairedVideoPath: string | null = null;
+  let nextStickerPlacementsJson: string | null = null;
 
-  const nextPhotoPath =
-    note.type === 'photo'
-      ? await uploadPhotoToStorage(
-          SHARED_POST_MEDIA_BUCKET,
-          `${user.id}/${postId}`,
-          note.photoLocalUri ?? note.content,
-          { allowOverwrite: true }
-        )
-      : null;
-  const nextPairedVideoPath =
-    note.type === 'photo' && note.isLivePhoto
-      ? await uploadPairedVideoToStorage(
-          SHARED_POST_MEDIA_BUCKET,
-          getRemotePairedVideoPath(`${user.id}/${postId}`, note.pairedVideoLocalUri ?? null),
-          note.pairedVideoLocalUri ?? null,
-          { allowOverwrite: true }
-        )
-      : null;
-  const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
-  const nextStickerPlacementsJson =
-    stickerPlacements.length > 0
-      ? await serializeStickerPlacementsForStorage(
-          stickerPlacements,
-          SHARED_POST_MEDIA_BUCKET,
-          `${user.id}/${postId}`,
-          { persistAssets: false }
-        )
-      : null;
+  try {
+    nextPhotoPath =
+      note.type === 'photo'
+        ? await uploadPhotoToStorage(
+            SHARED_POST_MEDIA_BUCKET,
+            `${user.id}/${postId}`,
+            note.photoLocalUri ?? note.content,
+            { allowOverwrite: true }
+          )
+        : null;
+    nextPairedVideoPath =
+      note.type === 'photo' && note.isLivePhoto
+        ? await uploadPairedVideoToStorage(
+            SHARED_POST_MEDIA_BUCKET,
+            getRemotePairedVideoPath(`${user.id}/${postId}`, note.pairedVideoLocalUri ?? null),
+            note.pairedVideoLocalUri ?? null,
+            { allowOverwrite: true }
+          )
+        : null;
+    const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
+    nextStickerPlacementsJson =
+      stickerPlacements.length > 0
+        ? await serializeStickerPlacementsForStorage(
+            stickerPlacements,
+            SHARED_POST_MEDIA_BUCKET,
+            `${user.id}/${postId}`,
+            {
+              persistAssets: false,
+              existingRemoteAssetPathsById: getRemoteStickerAssetPathMap(
+                current.sticker_placements_json ?? null
+              ),
+            }
+          )
+        : null;
+  } catch (error) {
+    await cleanupRemoteArtifacts(
+      SHARED_POST_MEDIA_BUCKET,
+      buildNewRemoteArtifacts(
+        {
+          photoPath: nextPhotoPath,
+          pairedVideoPath: nextPairedVideoPath,
+          stickerPlacementsJson: nextStickerPlacementsJson,
+        },
+        currentArtifacts
+      )
+    );
+    throw error;
+  }
 
   const { error } = await supabase
     .from('shared_posts')
@@ -755,8 +1107,31 @@ export async function updateSharedPost(
     .eq('author_user_id', user.id);
 
   if (error) {
+    await cleanupRemoteArtifacts(
+      SHARED_POST_MEDIA_BUCKET,
+      buildNewRemoteArtifacts(
+        {
+          photoPath: nextPhotoPath,
+          pairedVideoPath: nextPairedVideoPath,
+          stickerPlacementsJson: nextStickerPlacementsJson,
+        },
+        currentArtifacts
+      )
+    );
     throw error;
   }
+
+  await deleteSharedPostTombstone(user.id, postId);
+
+  await cleanupRemoteArtifacts(
+    SHARED_POST_MEDIA_BUCKET,
+    buildRemovedRemoteArtifacts(currentArtifacts, {
+      photoPath: nextPhotoPath,
+      pairedVideoPath: nextPairedVideoPath,
+      stickerPlacementsJson: nextStickerPlacementsJson,
+    })
+  );
+
 }
 
 export async function findOwnedSharedPostIdsForNote(
@@ -788,7 +1163,7 @@ export async function deleteOwnedSharedPostsForNotes(
   const supabase = requireSupabase();
   const { data, error } = await supabase
     .from('shared_posts')
-    .select('id, photo_path, paired_video_path')
+    .select('id, photo_path, paired_video_path, sticker_placements_json')
     .eq('author_user_id', user.id)
     .in('source_note_id', dedupedNoteIds);
 
@@ -805,14 +1180,8 @@ export async function deleteOwnedSharedPostsForNotes(
     return [];
   }
 
-  await Promise.all(
-    rows.flatMap((row) => [
-      deletePhotoFromStorage(SHARED_POST_MEDIA_BUCKET, row.photo_path ?? null).catch(() => undefined),
-      deletePairedVideoFromStorage(SHARED_POST_MEDIA_BUCKET, row.paired_video_path ?? null).catch(() => undefined),
-    ])
-  );
-
   const postIds = rows.map((row) => row.id).filter(Boolean);
+  const deletedAt = getNowIso();
   const { error: deleteError } = await supabase
     .from('shared_posts')
     .delete()
@@ -822,6 +1191,20 @@ export async function deleteOwnedSharedPostsForNotes(
   if (deleteError) {
     throw deleteError;
   }
+
+  await upsertSharedPostTombstones(user.id, postIds, deletedAt);
+
+  await Promise.all(
+    rows.map((row) =>
+      cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
+        photoPath: row.photo_path ?? null,
+        pairedVideoPath: row.paired_video_path ?? null,
+        stickerPaths: getRemoteStickerAssetPaths(
+          (row as { sticker_placements_json?: string | null }).sticker_placements_json ?? null
+        ),
+      })
+    )
+  );
 
   return postIds;
 }
@@ -833,7 +1216,7 @@ export async function deleteSharedPost(
   const supabase = requireSupabase();
   const { data: existing, error: fetchError } = await supabase
     .from('shared_posts')
-    .select('photo_path, paired_video_path')
+    .select('photo_path, paired_video_path, sticker_placements_json')
     .eq('id', postId)
     .eq('author_user_id', user.id)
     .maybeSingle();
@@ -841,15 +1224,6 @@ export async function deleteSharedPost(
   if (fetchError) {
     throw fetchError;
   }
-
-  await deletePhotoFromStorage(
-    SHARED_POST_MEDIA_BUCKET,
-    (existing as { photo_path?: string | null } | null)?.photo_path ?? null
-  ).catch(() => undefined);
-  await deletePairedVideoFromStorage(
-    SHARED_POST_MEDIA_BUCKET,
-    (existing as { paired_video_path?: string | null } | null)?.paired_video_path ?? null
-  ).catch(() => undefined);
 
   const { error } = await supabase
     .from('shared_posts')
@@ -860,4 +1234,16 @@ export async function deleteSharedPost(
   if (error) {
     throw error;
   }
+
+  await upsertSharedPostTombstones(user.id, [postId], getNowIso());
+
+  await cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
+    photoPath: (existing as { photo_path?: string | null } | null)?.photo_path ?? null,
+    pairedVideoPath:
+      (existing as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
+    stickerPaths: getRemoteStickerAssetPaths(
+      (existing as { sticker_placements_json?: string | null } | null)?.sticker_placements_json ?? null
+    ),
+  });
+
 }

@@ -6,6 +6,7 @@ type DeleteAccountResponse =
 
 type MediaRow = {
   photo_path?: string | null;
+  paired_video_path?: string | null;
   sticker_placements_json?: string | null;
 };
 
@@ -84,10 +85,13 @@ async function cleanupOwnedMedia(
     { data: sharedPosts, error: sharedPostsError },
     { data: roomPosts, error: roomPostsError },
   ] = await Promise.all([
-    adminClient.from('notes').select('photo_path, sticker_placements_json').eq('user_id', userId),
+    adminClient
+      .from('notes')
+      .select('photo_path, paired_video_path, sticker_placements_json')
+      .eq('user_id', userId),
     adminClient
       .from('shared_posts')
-      .select('photo_path, sticker_placements_json')
+      .select('photo_path, paired_video_path, sticker_placements_json')
       .eq('author_user_id', userId),
     adminClient.from('room_posts').select('photo_path').eq('author_user_id', userId),
   ]);
@@ -106,6 +110,7 @@ async function cleanupOwnedMedia(
 
   for (const row of (notes ?? []) as MediaRow[]) {
     addStoragePath(notePaths, row.photo_path);
+    addStoragePath(notePaths, row.paired_video_path);
     for (const stickerPath of collectStickerRemotePaths(row.sticker_placements_json)) {
       notePaths.add(stickerPath);
     }
@@ -113,6 +118,7 @@ async function cleanupOwnedMedia(
 
   for (const row of (sharedPosts ?? []) as MediaRow[]) {
     addStoragePath(sharedPostPaths, row.photo_path);
+    addStoragePath(sharedPostPaths, row.paired_video_path);
     for (const stickerPath of collectStickerRemotePaths(row.sticker_placements_json)) {
       sharedPostPaths.add(stickerPath);
     }

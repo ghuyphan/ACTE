@@ -15,9 +15,11 @@ export interface Note {
     type: NoteType;
     content: string;          // text content or local photo URI
     photoLocalUri?: string | null;
+    photoSyncedLocalUri?: string | null;
     photoRemoteBase64?: string | null;
     isLivePhoto?: boolean;
     pairedVideoLocalUri?: string | null;
+    pairedVideoSyncedLocalUri?: string | null;
     pairedVideoRemotePath?: string | null;
     locationName: string | null;
     promptId?: string | null;
@@ -42,9 +44,11 @@ export interface CreateNoteInput {
     type: NoteType;
     content: string;
     photoLocalUri?: string | null;
+    photoSyncedLocalUri?: string | null;
     photoRemoteBase64?: string | null;
     isLivePhoto?: boolean;
     pairedVideoLocalUri?: string | null;
+    pairedVideoSyncedLocalUri?: string | null;
     pairedVideoRemotePath?: string | null;
     locationName?: string;
     promptId?: string | null;
@@ -66,9 +70,11 @@ export type NoteUpdates = Partial<
         Note,
         | 'content'
         | 'photoLocalUri'
+        | 'photoSyncedLocalUri'
         | 'photoRemoteBase64'
         | 'isLivePhoto'
         | 'pairedVideoLocalUri'
+        | 'pairedVideoSyncedLocalUri'
         | 'pairedVideoRemotePath'
         | 'locationName'
         | 'promptId'
@@ -91,9 +97,11 @@ interface NoteRow {
     type: NoteType;
     content: string;
     photo_local_uri: string | null;
+    photo_synced_local_uri: string | null;
     photo_remote_base64: string | null;
     is_live_photo: number;
     paired_video_local_uri: string | null;
+    paired_video_synced_local_uri: string | null;
     paired_video_remote_path: string | null;
     location_name: string | null;
     prompt_id: string | null;
@@ -117,28 +125,21 @@ interface NoteRow {
 // ─── Database ───────────────────────────────────────────────────────
 let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-const APP_SCHEMA_VERSION = 11;
+let transactionQueue: Promise<void> = Promise.resolve();
+let androidDatabaseQueue: Promise<void> = Promise.resolve();
+const APP_SCHEMA_VERSION = 12;
 export const LOCAL_NOTES_SCOPE = '__local__';
 let activeNotesScope = LOCAL_NOTES_SCOPE;
 const SQLITE_LOCK_RETRY_DELAYS_MS = [30, 80, 160];
 const NOTES_FTS_TABLE = 'notes_fts';
 const NOTES_SELECT_FIELDS = `notes.*,
-      EXISTS(SELECT 1 FROM note_doodles doodles WHERE doodles.note_id = notes.id) AS has_doodle,
-      (SELECT doodles.strokes_json FROM note_doodles doodles WHERE doodles.note_id = notes.id LIMIT 1) AS doodle_strokes_json,
-      EXISTS(SELECT 1 FROM note_stickers stickers WHERE stickers.note_id = notes.id) AS has_stickers,
-      (SELECT stickers.placements_json FROM note_stickers stickers WHERE stickers.note_id = notes.id LIMIT 1) AS sticker_placements_json`;
-
-async function safelyCloseDatabase(database: SQLite.SQLiteDatabase | null) {
-    if (!database) {
-        return;
-    }
-
-    try {
-        await database.closeAsync();
-    } catch {
-        // Ignore close failures while recovering from a broken native handle.
-    }
-}
+      CASE WHEN doodles.note_id IS NOT NULL THEN 1 ELSE 0 END AS has_doodle,
+      doodles.strokes_json AS doodle_strokes_json,
+      CASE WHEN stickers.note_id IS NOT NULL THEN 1 ELSE 0 END AS has_stickers,
+      stickers.placements_json AS sticker_placements_json`;
+const NOTES_FROM_CLAUSE = `notes
+      LEFT JOIN note_doodles doodles ON doodles.note_id = notes.id
+      LEFT JOIN note_stickers stickers ON stickers.note_id = notes.id`;
 
 function getDatabaseErrorMessage(error: unknown) {
     if (error instanceof Error && error.message) {
@@ -161,6 +162,76 @@ function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function runSerializedNativeTransaction<T>(task: () => Promise<T>): Promise<T> {
+    const previous = transactionQueue.catch(() => undefined);
+    let releaseQueue!: () => void;
+    transactionQueue = new Promise<void>((resolve) => {
+        releaseQueue = resolve;
+    });
+
+    await previous;
+
+    try {
+        return await task();
+    } finally {
+        releaseQueue();
+    }
+}
+
+function runSerializedAndroidDatabaseOperation<T>(task: () => Promise<T>): Promise<T> {
+    if (Platform.OS !== 'android') {
+        return task();
+    }
+
+    const previous = androidDatabaseQueue.catch(() => undefined);
+    let releaseQueue!: () => void;
+    androidDatabaseQueue = new Promise<void>((resolve) => {
+        releaseQueue = resolve;
+    });
+
+    return previous.then(async () => {
+        try {
+            return await task();
+        } finally {
+            releaseQueue();
+        }
+    });
+}
+
+function createSerializedDatabase(database: SQLite.SQLiteDatabase): SQLite.SQLiteDatabase {
+    if (Platform.OS !== 'android') {
+        return database;
+    }
+
+    const overrides = {
+        runAsync: (...args: any[]) =>
+            runSerializedAndroidDatabaseOperation(() => (database as any).runAsync(...args)),
+        getFirstAsync: (...args: any[]) =>
+            runSerializedAndroidDatabaseOperation(() => (database as any).getFirstAsync(...args)),
+        getAllAsync: (...args: any[]) =>
+            runSerializedAndroidDatabaseOperation(() => (database as any).getAllAsync(...args)),
+        execAsync: (...args: any[]) =>
+            runSerializedAndroidDatabaseOperation(() => (database as any).execAsync(...args)),
+        withTransactionAsync: (...args: any[]) =>
+            runSerializedAndroidDatabaseOperation(() => (database as any).withTransactionAsync(...args)),
+        withExclusiveTransactionAsync: (...args: any[]) =>
+            runSerializedAndroidDatabaseOperation(() => (database as any).withExclusiveTransactionAsync(...args)),
+        isInTransactionAsync: (...args: any[]) =>
+            runSerializedAndroidDatabaseOperation(() => (database as any).isInTransactionAsync(...args)),
+    };
+
+    return new Proxy(database as object, {
+        get(target, prop, receiver) {
+            if (Reflect.has(overrides, prop)) {
+                return Reflect.get(overrides, prop, receiver);
+            }
+
+            const value = Reflect.get(target, prop, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+        },
+    }) as SQLite.SQLiteDatabase;
+}
+
 export type SQLiteTransactionExecutor = Pick<SQLite.SQLiteDatabase, 'runAsync' | 'getFirstAsync' | 'getAllAsync' | 'execAsync'>;
 
 export function getActiveNotesScope() {
@@ -171,19 +242,139 @@ export function setActiveNotesScope(scope: string | null | undefined) {
     activeNotesScope = scope?.trim() || LOCAL_NOTES_SCOPE;
 }
 
-export async function getDB(): Promise<SQLite.SQLiteDatabase> {
-    if (db) {
-        if (Platform.OS === 'android') {
-            try {
-                await db.isInTransactionAsync();
-            } catch {
-                await safelyCloseDatabase(db);
-                db = null;
-                dbInitPromise = null;
-            }
-        }
+function hasStoredDecorationPayload(payload: string | null | undefined) {
+    if (!payload) {
+        return false;
     }
 
+    try {
+        const parsed = JSON.parse(payload);
+        return Array.isArray(parsed) && parsed.length > 0;
+    } catch {
+        return false;
+    }
+}
+
+interface NoteDecorationState {
+    doodleStrokesJson: string | null;
+    stickerPlacementsJson: string | null;
+}
+
+interface ReminderSelectionRow {
+    id: string;
+    type: NoteType;
+    content: string;
+    location_name: string | null;
+    latitude: number;
+    longitude: number;
+    radius: number;
+    is_favorite: number;
+    created_at: string;
+    updated_at: string | null;
+}
+
+function resolveNoteDecorationState(input: {
+    doodleStrokesJson?: string | null;
+    stickerPlacementsJson?: string | null;
+}): NoteDecorationState {
+    return {
+        doodleStrokesJson: input.doodleStrokesJson ?? null,
+        stickerPlacementsJson: input.stickerPlacementsJson ?? null,
+    };
+}
+
+async function persistNoteDecorationRows(
+    executor: Pick<SQLite.SQLiteDatabase, 'runAsync'>,
+    noteId: string,
+    noteDecorations: NoteDecorationState,
+    updatedAt: string
+) {
+    if (hasStoredDecorationPayload(noteDecorations.doodleStrokesJson)) {
+        await executor.runAsync(
+            `INSERT INTO note_doodles (note_id, strokes_json, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(note_id) DO UPDATE SET
+                strokes_json = excluded.strokes_json,
+                updated_at = excluded.updated_at`,
+            noteId,
+            noteDecorations.doodleStrokesJson,
+            updatedAt
+        );
+    } else {
+        await executor.runAsync('DELETE FROM note_doodles WHERE note_id = ?', noteId);
+    }
+
+    if (hasStoredDecorationPayload(noteDecorations.stickerPlacementsJson)) {
+        await executor.runAsync(
+            `INSERT INTO note_stickers (note_id, placements_json, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(note_id) DO UPDATE SET
+                placements_json = excluded.placements_json,
+                updated_at = excluded.updated_at`,
+            noteId,
+            noteDecorations.stickerPlacementsJson,
+            updatedAt
+        );
+    } else {
+        await executor.runAsync('DELETE FROM note_stickers WHERE note_id = ?', noteId);
+    }
+}
+
+export async function migrateNotesScope(sourceScope: string, targetScope: string): Promise<void> {
+    const normalizedSourceScope = sourceScope.trim();
+    const normalizedTargetScope = targetScope.trim();
+
+    if (!normalizedSourceScope || !normalizedTargetScope || normalizedSourceScope === normalizedTargetScope) {
+        return;
+    }
+
+    await withDatabaseTransaction(async (txn) => {
+        await txn.runAsync(
+            'UPDATE notes SET owner_uid = ? WHERE owner_uid = ?',
+            normalizedTargetScope,
+            normalizedSourceScope
+        );
+        await txn.runAsync(
+            'UPDATE sync_queue SET owner_uid = ? WHERE owner_uid = ?',
+            normalizedTargetScope,
+            normalizedSourceScope
+        );
+        await txn.runAsync(
+            'UPDATE sticker_assets SET owner_uid = ? WHERE owner_uid = ?',
+            normalizedTargetScope,
+            normalizedSourceScope
+        );
+        await txn.runAsync(
+            'DELETE FROM note_doodles WHERE note_id NOT IN (SELECT id FROM notes)'
+        );
+        await txn.runAsync(
+            'DELETE FROM note_stickers WHERE note_id NOT IN (SELECT id FROM notes)'
+        );
+        await txn.runAsync(
+            `DELETE FROM ${NOTES_FTS_TABLE}
+             WHERE owner_uid IN (?, ?)`,
+            normalizedSourceScope,
+            normalizedTargetScope
+        );
+        await txn.runAsync(
+            `INSERT INTO ${NOTES_FTS_TABLE} (note_id, owner_uid, search_text)
+             SELECT id, owner_uid, search_text
+             FROM notes
+             WHERE owner_uid = ?`,
+            normalizedTargetScope
+        );
+        await txn.runAsync(
+            `DELETE FROM ${NOTES_FTS_TABLE}
+             WHERE note_id NOT IN (SELECT id FROM notes)`
+        );
+    });
+}
+
+export async function migrateLocalNotesScopeToUser(userUid: string): Promise<void> {
+    await migrateNotesScope(LOCAL_NOTES_SCOPE, userUid);
+}
+
+export async function getDB(): Promise<SQLite.SQLiteDatabase> {
     if (db) {
         return db;
     }
@@ -192,7 +383,13 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         dbInitPromise = (async () => {
             const database = await SQLite.openDatabaseAsync(
                 'acte_notes.db',
-                Platform.OS === 'android' ? { useNewConnection: true } : undefined
+                Platform.OS === 'android'
+                    ? {
+                        useNewConnection: true,
+                        // Work around an Expo SQLite FTS close/finalize crash on Android.
+                        finalizeUnusedStatementsBeforeClosing: false,
+                    }
+                    : undefined
             );
             await database.execAsync(`
       PRAGMA journal_mode = WAL;
@@ -202,9 +399,11 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         type TEXT NOT NULL CHECK(type IN ('text', 'photo')),
         content TEXT NOT NULL,
         photo_local_uri TEXT,
+        photo_synced_local_uri TEXT,
         photo_remote_base64 TEXT,
         is_live_photo INTEGER NOT NULL DEFAULT 0,
         paired_video_local_uri TEXT,
+        paired_video_synced_local_uri TEXT,
         paired_video_remote_path TEXT,
         location_name TEXT,
         prompt_id TEXT,
@@ -232,6 +431,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         owner_uid TEXT NOT NULL DEFAULT '__local__',
         local_uri TEXT NOT NULL,
         remote_path TEXT,
+        upload_fingerprint TEXT,
         mime_type TEXT NOT NULL,
         width REAL NOT NULL,
         height REAL NOT NULL,
@@ -339,6 +539,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_local_uri TEXT`);
                     shouldBackfillNoteMetadata = true;
                 }
+                if (!columns.includes('photo_synced_local_uri')) {
+                    await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_synced_local_uri TEXT`);
+                }
                 if (!columns.includes('photo_remote_base64')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_remote_base64 TEXT`);
                 }
@@ -347,6 +550,11 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 }
                 if (!columns.includes('paired_video_local_uri')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN paired_video_local_uri TEXT`);
+                }
+                if (!columns.includes('paired_video_synced_local_uri')) {
+                    await database.execAsync(
+                        `ALTER TABLE notes ADD COLUMN paired_video_synced_local_uri TEXT`
+                    );
                 }
                 if (!columns.includes('paired_video_remote_path')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN paired_video_remote_path TEXT`);
@@ -393,6 +601,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                         owner_uid TEXT NOT NULL DEFAULT '${LOCAL_NOTES_SCOPE}',
                         local_uri TEXT NOT NULL,
                         remote_path TEXT,
+                        upload_fingerprint TEXT,
                         mime_type TEXT NOT NULL,
                         width REAL NOT NULL,
                         height REAL NOT NULL,
@@ -404,6 +613,15 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 await database.execAsync(
                     `CREATE INDEX IF NOT EXISTS idx_sticker_assets_owner_created ON sticker_assets(owner_uid, created_at DESC)`
                 );
+                const stickerAssetInfo = await database.getAllAsync<{ name: string }>(
+                    `PRAGMA table_info(sticker_assets)`
+                );
+                const stickerAssetColumns = stickerAssetInfo.map((col) => col.name);
+                if (!stickerAssetColumns.includes('upload_fingerprint')) {
+                    await database.execAsync(
+                        `ALTER TABLE sticker_assets ADD COLUMN upload_fingerprint TEXT`
+                    );
+                }
                 await database.execAsync(
                     `CREATE TABLE IF NOT EXISTS note_stickers (
                         note_id TEXT PRIMARY KEY NOT NULL,
@@ -611,8 +829,8 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 console.warn('Migration check failed:', e);
             }
 
-            db = database;
-            return database;
+            db = createSerializedDatabase(database);
+            return db;
         })().catch((error) => {
             db = null;
             dbInitPromise = null;
@@ -636,23 +854,35 @@ export async function withDatabaseTransaction<T>(
         return result as T;
     }
 
-    for (let attempt = 0; attempt <= SQLITE_LOCK_RETRY_DELAYS_MS.length; attempt += 1) {
-        try {
-            let result: T | undefined;
-            await database.withExclusiveTransactionAsync(async (txn) => {
-                result = await task(txn);
-            });
-            return result as T;
-        } catch (error) {
-            if (!isDatabaseLockedError(error) || attempt === SQLITE_LOCK_RETRY_DELAYS_MS.length) {
-                throw error;
+    return runSerializedNativeTransaction(async () => {
+        for (let attempt = 0; attempt <= SQLITE_LOCK_RETRY_DELAYS_MS.length; attempt += 1) {
+            let transactionStarted = false;
+
+            try {
+                await database.execAsync('BEGIN IMMEDIATE');
+                transactionStarted = true;
+                const result = await task(database);
+                await database.execAsync('COMMIT');
+                return result;
+            } catch (error) {
+                if (transactionStarted) {
+                    try {
+                        await database.execAsync('ROLLBACK');
+                    } catch (rollbackError) {
+                        console.warn('Database rollback failed:', rollbackError);
+                    }
+                }
+
+                if (!isDatabaseLockedError(error) || attempt === SQLITE_LOCK_RETRY_DELAYS_MS.length) {
+                    throw error;
+                }
+
+                await sleep(SQLITE_LOCK_RETRY_DELAYS_MS[attempt] ?? 50);
             }
-
-            await sleep(SQLITE_LOCK_RETRY_DELAYS_MS[attempt] ?? 50);
         }
-    }
 
-    throw new Error('Database transaction retry failed unexpectedly.');
+        throw new Error('Database transaction retry failed unexpectedly.');
+    });
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -731,9 +961,11 @@ function rowToNote(row: NoteRow): Note {
         type: row.type as NoteType,
         content: row.type === 'photo' ? photoLocalUri ?? '' : row.content,
         photoLocalUri,
+        photoSyncedLocalUri: resolveStoredPhotoUri(row.photo_synced_local_uri),
         photoRemoteBase64: row.photo_remote_base64,
         isLivePhoto: row.is_live_photo === 1,
         pairedVideoLocalUri,
+        pairedVideoSyncedLocalUri: resolveStoredPairedVideoUri(row.paired_video_synced_local_uri),
         pairedVideoRemotePath: row.paired_video_remote_path ?? null,
         locationName: row.location_name,
         promptId: row.prompt_id,
@@ -754,21 +986,55 @@ function rowToNote(row: NoteRow): Note {
     };
 }
 
+function rowToReminderSelectionNote(row: ReminderSelectionRow): Note {
+    return {
+        id: row.id,
+        type: row.type as NoteType,
+        content: row.content,
+        photoLocalUri: null,
+        photoRemoteBase64: null,
+        isLivePhoto: false,
+        pairedVideoLocalUri: null,
+        pairedVideoRemotePath: null,
+        locationName: row.location_name,
+        promptId: null,
+        promptTextSnapshot: null,
+        promptAnswer: null,
+        moodEmoji: null,
+        noteColor: null,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        radius: row.radius,
+        isFavorite: row.is_favorite === 1,
+        hasDoodle: false,
+        doodleStrokesJson: null,
+        hasStickers: false,
+        stickerPlacementsJson: null,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+    };
+}
+
 function getCurrentScope() {
     return getActiveNotesScope();
 }
 
 // ─── CRUD Operations ────────────────────────────────────────────────
 export async function createNote(input: CreateNoteInput): Promise<Note> {
-    const database = await getDB();
     const scope = getCurrentScope();
     const id = input.id ?? generateNoteId();
     const now = new Date().toISOString();
     const photoLocalUri =
         input.type === 'photo' ? resolveStoredPhotoUri(input.photoLocalUri ?? input.content) : null;
+    const photoSyncedLocalUri =
+        input.type === 'photo' ? resolveStoredPhotoUri(input.photoSyncedLocalUri) : null;
     const pairedVideoLocalUri =
         input.type === 'photo' && input.isLivePhoto
             ? resolveStoredPairedVideoUri(input.pairedVideoLocalUri)
+            : null;
+    const pairedVideoSyncedLocalUri =
+        input.type === 'photo' && input.isLivePhoto
+            ? resolveStoredPairedVideoUri(input.pairedVideoSyncedLocalUri)
             : null;
     const normalizedContent = input.type === 'photo' ? photoLocalUri ?? '' : input.content;
     const normalizedNoteColor =
@@ -780,63 +1046,76 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         promptTextSnapshot: input.promptTextSnapshot ?? null,
         promptAnswer: input.promptAnswer ?? null,
     });
+    const noteDecorations = resolveNoteDecorationState({
+        doodleStrokesJson: input.doodleStrokesJson,
+        stickerPlacementsJson: input.stickerPlacementsJson,
+    });
 
-    await database.runAsync(
-        `INSERT INTO notes (
+    await withDatabaseTransaction(async (txn) => {
+        await txn.runAsync(
+            `INSERT INTO notes (
+                id,
+                owner_uid,
+                type,
+                content,
+                photo_local_uri,
+                photo_synced_local_uri,
+                photo_remote_base64,
+                is_live_photo,
+                paired_video_local_uri,
+                paired_video_synced_local_uri,
+                paired_video_remote_path,
+                location_name,
+                prompt_id,
+                prompt_text_snapshot,
+                prompt_answer,
+                mood_emoji,
+                note_color,
+                search_text,
+                latitude,
+                longitude,
+                radius,
+                is_favorite,
+                created_at
+            )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
             id,
-            owner_uid,
-            type,
-            content,
-            photo_local_uri,
-            photo_remote_base64,
-            is_live_photo,
-            paired_video_local_uri,
-            paired_video_remote_path,
-            location_name,
-            prompt_id,
-            prompt_text_snapshot,
-            prompt_answer,
-            mood_emoji,
-            note_color,
-            search_text,
-            latitude,
-            longitude,
-            radius,
-            is_favorite,
-            created_at
-        )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-        id,
-        scope,
-        input.type,
-        normalizedContent,
-        photoLocalUri,
-        input.photoRemoteBase64 ?? null,
-        input.isLivePhoto ? 1 : 0,
-        pairedVideoLocalUri,
-        input.pairedVideoRemotePath ?? null,
-        input.locationName ?? null,
-        input.promptId ?? null,
-        input.promptTextSnapshot ?? null,
-        input.promptAnswer ?? null,
-        input.moodEmoji ?? null,
-        normalizedNoteColor,
-        searchText,
-        input.latitude,
-        input.longitude,
-        input.radius ?? DEFAULT_NOTE_RADIUS,
-        now
-    );
-    await upsertNoteSearchDocument(database, id, scope, searchText);
+            scope,
+            input.type,
+            normalizedContent,
+            photoLocalUri,
+            photoSyncedLocalUri,
+            input.photoRemoteBase64 ?? null,
+            input.isLivePhoto ? 1 : 0,
+            pairedVideoLocalUri,
+            pairedVideoSyncedLocalUri,
+            input.pairedVideoRemotePath ?? null,
+            input.locationName ?? null,
+            input.promptId ?? null,
+            input.promptTextSnapshot ?? null,
+            input.promptAnswer ?? null,
+            input.moodEmoji ?? null,
+            normalizedNoteColor,
+            searchText,
+            input.latitude,
+            input.longitude,
+            input.radius ?? DEFAULT_NOTE_RADIUS,
+            now
+        );
+        await upsertNoteSearchDocument(txn, id, scope, searchText);
+        await persistNoteDecorationRows(txn, id, noteDecorations, now);
+    });
 
     return {
         id,
         type: input.type,
         content: normalizedContent,
         photoLocalUri,
+        photoSyncedLocalUri,
         photoRemoteBase64: input.photoRemoteBase64 ?? null,
         isLivePhoto: Boolean(input.isLivePhoto && pairedVideoLocalUri),
         pairedVideoLocalUri,
+        pairedVideoSyncedLocalUri,
         pairedVideoRemotePath: input.pairedVideoRemotePath ?? null,
         locationName: input.locationName ?? null,
         promptId: input.promptId ?? null,
@@ -848,10 +1127,10 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         longitude: input.longitude,
         radius: input.radius ?? DEFAULT_NOTE_RADIUS,
         isFavorite: false,
-        hasDoodle: input.hasDoodle ?? false,
-        doodleStrokesJson: input.doodleStrokesJson ?? null,
-        hasStickers: input.hasStickers ?? false,
-        stickerPlacementsJson: input.stickerPlacementsJson ?? null,
+        hasDoodle: hasStoredDecorationPayload(noteDecorations.doodleStrokesJson),
+        doodleStrokesJson: noteDecorations.doodleStrokesJson,
+        hasStickers: hasStoredDecorationPayload(noteDecorations.stickerPlacementsJson),
+        stickerPlacementsJson: noteDecorations.stickerPlacementsJson,
         createdAt: now,
         updatedAt: null,
     };
@@ -866,7 +1145,7 @@ export async function getAllNotesForScope(scope: string): Promise<Note[]> {
     const database = await getDB();
     const rows = await database.getAllAsync<NoteRow>(
         `SELECT ${NOTES_SELECT_FIELDS}
-         FROM notes
+         FROM ${NOTES_FROM_CLAUSE}
          WHERE owner_uid = ?
          ORDER BY created_at DESC`
         ,
@@ -880,7 +1159,7 @@ export async function getNoteById(id: string): Promise<Note | null> {
     const scope = getCurrentScope();
     const row = await database.getFirstAsync<NoteRow>(
         `SELECT ${NOTES_SELECT_FIELDS}
-         FROM notes
+         FROM ${NOTES_FROM_CLAUSE}
          WHERE id = ? AND owner_uid = ?`,
         id,
         scope
@@ -889,7 +1168,6 @@ export async function getNoteById(id: string): Promise<Note | null> {
 }
 
 export async function updateNote(id: string, updates: NoteUpdates): Promise<void> {
-    const database = await getDB();
     const scope = getCurrentScope();
     const existing = await getNoteById(id);
     if (!existing) {
@@ -904,6 +1182,16 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
                 (updates.content !== undefined ? updates.content : existing.photoLocalUri ?? existing.content)
             )
             : null;
+    const nextPhotoSyncedLocalUri =
+        nextType === 'photo'
+            ? resolveStoredPhotoUri(
+                updates.photoSyncedLocalUri !== undefined
+                    ? updates.photoSyncedLocalUri
+                    : nextPhotoLocalUri === (existing.photoLocalUri ?? null)
+                        ? existing.photoSyncedLocalUri ?? null
+                        : null
+            )
+            : null;
     const nextIsLivePhoto =
         nextType === 'photo'
             ? updates.isLivePhoto !== undefined
@@ -916,6 +1204,16 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
                 updates.pairedVideoLocalUri !== undefined
                     ? updates.pairedVideoLocalUri
                     : existing.pairedVideoLocalUri ?? null
+            )
+            : null;
+    const nextPairedVideoSyncedLocalUri =
+        nextType === 'photo' && nextIsLivePhoto
+            ? resolveStoredPairedVideoUri(
+                updates.pairedVideoSyncedLocalUri !== undefined
+                    ? updates.pairedVideoSyncedLocalUri
+                    : nextPairedVideoLocalUri === (existing.pairedVideoLocalUri ?? null)
+                        ? existing.pairedVideoSyncedLocalUri ?? null
+                        : null
             )
             : null;
     const nextContent =
@@ -959,44 +1257,57 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         promptTextSnapshot: nextPromptTextSnapshot,
         promptAnswer: nextPromptAnswer,
     });
+    const nextDecorations = resolveNoteDecorationState({
+        doodleStrokesJson:
+            updates.doodleStrokesJson !== undefined ? updates.doodleStrokesJson : existing.doodleStrokesJson,
+        stickerPlacementsJson:
+            updates.stickerPlacementsJson !== undefined ? updates.stickerPlacementsJson : existing.stickerPlacementsJson,
+    });
 
-    await database.runAsync(
-        `UPDATE notes
-         SET content = ?,
-             photo_local_uri = ?,
-             photo_remote_base64 = ?,
-             is_live_photo = ?,
-             paired_video_local_uri = ?,
-             paired_video_remote_path = ?,
-             location_name = ?,
-             prompt_id = ?,
-             prompt_text_snapshot = ?,
-             prompt_answer = ?,
-             mood_emoji = ?,
-             note_color = ?,
-             search_text = ?,
-             radius = ?,
-             updated_at = ?
-         WHERE id = ? AND owner_uid = ?`,
-        nextContent,
-        nextPhotoLocalUri,
-        nextPhotoRemoteBase64,
-        nextIsLivePhoto ? 1 : 0,
-        nextPairedVideoLocalUri,
-        nextPairedVideoRemotePath,
-        nextLocationName,
-        nextPromptId,
-        nextPromptTextSnapshot,
-        nextPromptAnswer,
-        nextMoodEmoji,
-        nextNoteColor,
-        searchText,
-        nextRadius,
-        now,
-        id,
-        scope
-    );
-    await upsertNoteSearchDocument(database, id, scope, searchText);
+    await withDatabaseTransaction(async (txn) => {
+        await txn.runAsync(
+            `UPDATE notes
+             SET content = ?,
+                 photo_local_uri = ?,
+                 photo_synced_local_uri = ?,
+                 photo_remote_base64 = ?,
+                 is_live_photo = ?,
+                 paired_video_local_uri = ?,
+                 paired_video_synced_local_uri = ?,
+                 paired_video_remote_path = ?,
+                 location_name = ?,
+                 prompt_id = ?,
+                 prompt_text_snapshot = ?,
+                 prompt_answer = ?,
+                 mood_emoji = ?,
+                 note_color = ?,
+                 search_text = ?,
+                 radius = ?,
+                 updated_at = ?
+             WHERE id = ? AND owner_uid = ?`,
+            nextContent,
+            nextPhotoLocalUri,
+            nextPhotoSyncedLocalUri,
+            nextPhotoRemoteBase64,
+            nextIsLivePhoto ? 1 : 0,
+            nextPairedVideoLocalUri,
+            nextPairedVideoSyncedLocalUri,
+            nextPairedVideoRemotePath,
+            nextLocationName,
+            nextPromptId,
+            nextPromptTextSnapshot,
+            nextPromptAnswer,
+            nextMoodEmoji,
+            nextNoteColor,
+            searchText,
+            nextRadius,
+            now,
+            id,
+            scope
+        );
+        await upsertNoteSearchDocument(txn, id, scope, searchText);
+        await persistNoteDecorationRows(txn, id, nextDecorations, now);
+    });
 }
 
 export async function toggleFavorite(id: string): Promise<boolean> {
@@ -1030,7 +1341,7 @@ export async function searchNotes(query: string): Promise<Note[]> {
 
     const rows = await database.getAllAsync<NoteRow>(
         `SELECT ${NOTES_SELECT_FIELDS}
-         FROM notes
+         FROM ${NOTES_FROM_CLAUSE}
          INNER JOIN ${NOTES_FTS_TABLE} notes_fts ON notes_fts.note_id = notes.id
          WHERE notes.owner_uid = ?
            AND notes_fts.owner_uid = ?
@@ -1041,6 +1352,29 @@ export async function searchNotes(query: string): Promise<Note[]> {
         matchExpression
     );
     return rows.map(rowToNote);
+}
+
+export async function getNotesForReminderSelection(): Promise<Note[]> {
+    const database = await getDB();
+    const scope = getCurrentScope();
+    const rows = await database.getAllAsync<ReminderSelectionRow>(
+        `SELECT
+            id,
+            type,
+            content,
+            location_name,
+            latitude,
+            longitude,
+            radius,
+            is_favorite,
+            created_at,
+            updated_at
+         FROM notes
+         WHERE owner_uid = ?
+         ORDER BY created_at DESC`,
+        scope
+    );
+    return rows.map(rowToReminderSelectionNote);
 }
 
 export async function deleteNote(id: string): Promise<void> {
@@ -1090,15 +1424,20 @@ export async function getNotesCount(): Promise<number> {
 }
 
 export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
-    const database = await getDB();
     const scope = getCurrentScope();
     const photoLocalUri =
         input.type === 'photo'
             ? resolveStoredPhotoUri(input.photoLocalUri ?? input.content)
             : null;
+    const photoSyncedLocalUri =
+        input.type === 'photo' ? resolveStoredPhotoUri(input.photoSyncedLocalUri) : null;
     const pairedVideoLocalUri =
         input.type === 'photo' && input.isLivePhoto
             ? resolveStoredPairedVideoUri(input.pairedVideoLocalUri)
+            : null;
+    const pairedVideoSyncedLocalUri =
+        input.type === 'photo' && input.isLivePhoto
+            ? resolveStoredPairedVideoUri(input.pairedVideoSyncedLocalUri)
             : null;
     const normalizedContent = input.type === 'photo' ? photoLocalUri ?? '' : input.content;
     const searchText = buildSearchText({
@@ -1108,118 +1447,104 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         promptTextSnapshot: input.promptTextSnapshot ?? null,
         promptAnswer: input.promptAnswer ?? null,
     });
+    const noteDecorations = resolveNoteDecorationState({
+        doodleStrokesJson: input.doodleStrokesJson,
+        stickerPlacementsJson: input.stickerPlacementsJson,
+    });
+    const updatedAt = input.updatedAt ?? input.createdAt;
 
-    await database.runAsync(
-        `INSERT INTO notes (
-            id,
-            owner_uid,
-            type,
-            content,
-            photo_local_uri,
-            photo_remote_base64,
-            is_live_photo,
-            paired_video_local_uri,
-            paired_video_remote_path,
-            location_name,
-            prompt_id,
-            prompt_text_snapshot,
-            prompt_answer,
-            mood_emoji,
-            note_color,
-            search_text,
-            latitude,
-            longitude,
-            radius,
-            is_favorite,
-            created_at,
-            updated_at
-        )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-            owner_uid = excluded.owner_uid,
-            type = excluded.type,
-            content = excluded.content,
-            photo_local_uri = excluded.photo_local_uri,
-            photo_remote_base64 = excluded.photo_remote_base64,
-            is_live_photo = excluded.is_live_photo,
-            paired_video_local_uri = excluded.paired_video_local_uri,
-            paired_video_remote_path = excluded.paired_video_remote_path,
-            location_name = excluded.location_name,
-            prompt_id = excluded.prompt_id,
-            prompt_text_snapshot = excluded.prompt_text_snapshot,
-            prompt_answer = excluded.prompt_answer,
-            mood_emoji = excluded.mood_emoji,
-            note_color = excluded.note_color,
-            search_text = excluded.search_text,
-            latitude = excluded.latitude,
-            longitude = excluded.longitude,
-            radius = excluded.radius,
-            is_favorite = excluded.is_favorite,
-            created_at = excluded.created_at,
-            updated_at = excluded.updated_at`,
-        input.id,
-        scope,
-        input.type,
-        normalizedContent,
-        photoLocalUri,
-        input.photoRemoteBase64 ?? null,
-        input.isLivePhoto ? 1 : 0,
-        pairedVideoLocalUri,
-        input.pairedVideoRemotePath ?? null,
-        input.locationName ?? null,
-        input.promptId ?? null,
-        input.promptTextSnapshot ?? null,
-        input.promptAnswer ?? null,
-        input.moodEmoji ?? null,
-        input.noteColor ?? null,
-        searchText,
-        input.latitude,
-        input.longitude,
-        input.radius ?? DEFAULT_NOTE_RADIUS,
-        input.isFavorite ? 1 : 0,
-        input.createdAt,
-        input.updatedAt ?? null
-    );
-    await upsertNoteSearchDocument(database, input.id, scope, searchText);
-
-    if (input.hasDoodle && input.doodleStrokesJson) {
-        await database.runAsync(
-            `INSERT INTO note_doodles (note_id, strokes_json, updated_at)
-             VALUES (?, ?, ?)
-             ON CONFLICT(note_id) DO UPDATE SET
-                strokes_json = excluded.strokes_json,
+    await withDatabaseTransaction(async (txn) => {
+        await txn.runAsync(
+            `INSERT INTO notes (
+                id,
+                owner_uid,
+                type,
+                content,
+                photo_local_uri,
+                photo_synced_local_uri,
+                photo_remote_base64,
+                is_live_photo,
+                paired_video_local_uri,
+                paired_video_synced_local_uri,
+                paired_video_remote_path,
+                location_name,
+                prompt_id,
+                prompt_text_snapshot,
+                prompt_answer,
+                mood_emoji,
+                note_color,
+                search_text,
+                latitude,
+                longitude,
+                radius,
+                is_favorite,
+                created_at,
+                updated_at
+            )
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+                owner_uid = excluded.owner_uid,
+                type = excluded.type,
+                content = excluded.content,
+                photo_local_uri = excluded.photo_local_uri,
+                photo_synced_local_uri = excluded.photo_synced_local_uri,
+                photo_remote_base64 = excluded.photo_remote_base64,
+                is_live_photo = excluded.is_live_photo,
+                paired_video_local_uri = excluded.paired_video_local_uri,
+                paired_video_synced_local_uri = excluded.paired_video_synced_local_uri,
+                paired_video_remote_path = excluded.paired_video_remote_path,
+                location_name = excluded.location_name,
+                prompt_id = excluded.prompt_id,
+                prompt_text_snapshot = excluded.prompt_text_snapshot,
+                prompt_answer = excluded.prompt_answer,
+                mood_emoji = excluded.mood_emoji,
+                note_color = excluded.note_color,
+                search_text = excluded.search_text,
+                latitude = excluded.latitude,
+                longitude = excluded.longitude,
+                radius = excluded.radius,
+                is_favorite = excluded.is_favorite,
+                created_at = excluded.created_at,
                 updated_at = excluded.updated_at`,
             input.id,
-            input.doodleStrokesJson,
-            input.updatedAt ?? input.createdAt
+            scope,
+            input.type,
+            normalizedContent,
+            photoLocalUri,
+            photoSyncedLocalUri,
+            input.photoRemoteBase64 ?? null,
+            input.isLivePhoto ? 1 : 0,
+            pairedVideoLocalUri,
+            pairedVideoSyncedLocalUri,
+            input.pairedVideoRemotePath ?? null,
+            input.locationName ?? null,
+            input.promptId ?? null,
+            input.promptTextSnapshot ?? null,
+            input.promptAnswer ?? null,
+            input.moodEmoji ?? null,
+            input.noteColor ?? null,
+            searchText,
+            input.latitude,
+            input.longitude,
+            input.radius ?? DEFAULT_NOTE_RADIUS,
+            input.isFavorite ? 1 : 0,
+            input.createdAt,
+            input.updatedAt ?? null
         );
-    } else {
-        await database.runAsync('DELETE FROM note_doodles WHERE note_id = ?', input.id);
-    }
-
-    if (input.hasStickers && input.stickerPlacementsJson) {
-        await database.runAsync(
-            `INSERT INTO note_stickers (note_id, placements_json, updated_at)
-             VALUES (?, ?, ?)
-             ON CONFLICT(note_id) DO UPDATE SET
-                placements_json = excluded.placements_json,
-                updated_at = excluded.updated_at`,
-            input.id,
-            input.stickerPlacementsJson,
-            input.updatedAt ?? input.createdAt
-        );
-    } else {
-        await database.runAsync('DELETE FROM note_stickers WHERE note_id = ?', input.id);
-    }
+        await upsertNoteSearchDocument(txn, input.id, scope, searchText);
+        await persistNoteDecorationRows(txn, input.id, noteDecorations, updatedAt);
+    });
 
     return {
         id: input.id,
         type: input.type,
         content: normalizedContent,
         photoLocalUri,
+        photoSyncedLocalUri,
         photoRemoteBase64: input.photoRemoteBase64 ?? null,
         isLivePhoto: Boolean(input.isLivePhoto && pairedVideoLocalUri),
         pairedVideoLocalUri,
+        pairedVideoSyncedLocalUri,
         pairedVideoRemotePath: input.pairedVideoRemotePath ?? null,
         locationName: input.locationName ?? null,
         promptId: input.promptId ?? null,
@@ -1231,10 +1556,10 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         longitude: input.longitude,
         radius: input.radius ?? DEFAULT_NOTE_RADIUS,
         isFavorite: Boolean(input.isFavorite),
-        hasDoodle: input.hasDoodle ?? false,
-        doodleStrokesJson: input.doodleStrokesJson ?? null,
-        hasStickers: input.hasStickers ?? false,
-        stickerPlacementsJson: input.stickerPlacementsJson ?? null,
+        hasDoodle: hasStoredDecorationPayload(noteDecorations.doodleStrokesJson),
+        doodleStrokesJson: noteDecorations.doodleStrokesJson,
+        hasStickers: hasStoredDecorationPayload(noteDecorations.stickerPlacementsJson),
+        stickerPlacementsJson: noteDecorations.stickerPlacementsJson,
         createdAt: input.createdAt,
         updatedAt: input.updatedAt ?? null,
     };

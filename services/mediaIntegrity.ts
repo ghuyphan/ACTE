@@ -113,9 +113,8 @@ export async function cleanupOrphanStickerFiles(): Promise<number> {
 }
 
 export async function cleanupOrphanMediaFiles(): Promise<void> {
-  await Promise.allSettled([
-    cleanupOrphanPhotoFiles(),
-    cleanupOrphanStickerFiles(),
-    cleanupUnusedSharedStickerCacheFiles(),
-  ]);
+  // Avoid concurrent SQLite readers on Android startup while Expo SQLite is unstable.
+  await cleanupOrphanPhotoFiles().catch(() => undefined);
+  await cleanupOrphanStickerFiles().catch(() => undefined);
+  await cleanupUnusedSharedStickerCacheFiles().catch(() => undefined);
 }

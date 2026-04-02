@@ -1,5 +1,7 @@
+import * as Linking from 'expo-linking';
 import type { FriendConnection, FriendInvite, SharedFeedSnapshot, SharedPost } from './sharedFeedService';
 import { getDB, withDatabaseTransaction } from './database';
+import { clearStoredInviteToken, getStoredInviteToken } from './inviteTokenStorage';
 
 interface FriendRow {
   friend_uid: string;
@@ -102,18 +104,20 @@ function rowToSharedPost(row: SharedPostRow): SharedPost {
 }
 
 function rowToInvite(row: InviteRow): FriendInvite {
+  const token = row.token?.trim() ?? '';
+  const url = row.url?.trim() ?? '';
   return {
     id: row.id,
     inviterUid: row.inviter_uid,
     inviterDisplayNameSnapshot: row.inviter_display_name_snapshot,
     inviterPhotoURLSnapshot: row.inviter_photo_url_snapshot,
-    token: row.token,
+    token,
     createdAt: row.created_at,
     revokedAt: row.revoked_at,
     acceptedByUid: row.accepted_by_uid,
     acceptedAt: row.accepted_at,
     expiresAt: row.expires_at,
-    url: row.url,
+    url,
   };
 }
 
@@ -256,7 +260,25 @@ export async function getCachedActiveInvite(userUid: string): Promise<FriendInvi
     userUid
   );
 
-  return row ? rowToInvite(row) : null;
+  if (!row) {
+    return null;
+  }
+
+  const storedToken = await getStoredInviteToken(userUid);
+  if (!storedToken || storedToken.inviteId !== row.id) {
+    return null;
+  }
+
+  return {
+    ...rowToInvite(row),
+    token: storedToken.token,
+    url: Linking.createURL('/friends/join', {
+      queryParams: {
+        inviteId: row.id,
+        invite: storedToken.token,
+      },
+    }),
+  };
 }
 
 export async function replaceCachedActiveInvite(
@@ -290,13 +312,13 @@ export async function replaceCachedActiveInvite(
         invite.inviterUid,
         invite.inviterDisplayNameSnapshot,
         invite.inviterPhotoURLSnapshot,
-        invite.token,
+        '',
         invite.createdAt,
         invite.revokedAt,
         invite.acceptedByUid,
         invite.acceptedAt,
         invite.expiresAt,
-        invite.url
+        ''
       );
     }
 
@@ -339,6 +361,7 @@ export async function clearSharedFeedCache(userUid?: string | null): Promise<voi
     await tx.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_feed_cache_meta WHERE user_uid = ?', userUid);
   });
+  await clearStoredInviteToken(userUid).catch(() => undefined);
 }
 
 export async function cacheSharedFeedSnapshot(
@@ -448,13 +471,13 @@ export async function cacheSharedFeedSnapshot(
         snapshot.activeInvite.inviterUid,
         snapshot.activeInvite.inviterDisplayNameSnapshot,
         snapshot.activeInvite.inviterPhotoURLSnapshot,
-        snapshot.activeInvite.token,
+        '',
         snapshot.activeInvite.createdAt,
         snapshot.activeInvite.revokedAt,
         snapshot.activeInvite.acceptedByUid,
         snapshot.activeInvite.acceptedAt,
         snapshot.activeInvite.expiresAt,
-        snapshot.activeInvite.url
+        ''
       );
     }
 
@@ -475,12 +498,10 @@ export async function getCachedSharedFeedSnapshot(userUid: string): Promise<{
   activeInvite: FriendInvite | null;
   lastUpdatedAt: string | null;
 }> {
-  const [friends, sharedPosts, activeInvite, lastUpdatedAt] = await Promise.all([
-    getCachedSharedFriends(userUid),
-    getCachedSharedPosts(userUid),
-    getCachedActiveInvite(userUid),
-    getSharedFeedCacheLastUpdatedAt(userUid),
-  ]);
+  const friends = await getCachedSharedFriends(userUid);
+  const sharedPosts = await getCachedSharedPosts(userUid);
+  const activeInvite = await getCachedActiveInvite(userUid);
+  const lastUpdatedAt = await getSharedFeedCacheLastUpdatedAt(userUid);
 
   return {
     friends,

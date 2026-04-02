@@ -48,14 +48,30 @@ const mockGetAllAsync = jest.fn<Promise<unknown[]>, [string, ...unknown[]]>(asyn
 
   return [];
 });
+let mockDatabase: {
+  execAsync: (sql: string) => Promise<void>;
+  runAsync: (sql: string, ...args: unknown[]) => Promise<void>;
+  getAllAsync: (sql: string, ...args: unknown[]) => Promise<unknown[]>;
+  getFirstAsync: (sql: string, ...args: unknown[]) => Promise<unknown | null>;
+  withExclusiveTransactionAsync: (callback: (txn: unknown) => Promise<void>) => Promise<void>;
+  withTransactionAsync: (callback: (txn: unknown) => Promise<void>) => Promise<void>;
+};
+
+mockDatabase = {
+  execAsync: (sql: string) => mockExecAsync(sql),
+  runAsync: (sql: string, ...args: unknown[]) => mockRunAsync(sql, ...args),
+  getAllAsync: (sql: string, ...args: unknown[]) => mockGetAllAsync(sql, ...args),
+  getFirstAsync: (sql: string, ...args: unknown[]) => mockGetFirstAsync(sql, ...args),
+  withExclusiveTransactionAsync: async (callback: (txn: unknown) => Promise<void>) => {
+    await callback(mockDatabase);
+  },
+  withTransactionAsync: async (callback: (txn: unknown) => Promise<void>) => {
+    await callback(mockDatabase);
+  },
+};
 
 jest.mock('expo-sqlite', () => ({
-  openDatabaseAsync: async () => ({
-    execAsync: (sql: string) => mockExecAsync(sql),
-    runAsync: (sql: string, ...args: unknown[]) => mockRunAsync(sql, ...args),
-    getAllAsync: (sql: string, ...args: unknown[]) => mockGetAllAsync(sql, ...args),
-    getFirstAsync: (sql: string, ...args: unknown[]) => mockGetFirstAsync(sql, ...args),
-  }),
+  openDatabaseAsync: async () => mockDatabase,
 }));
 
 jest.mock('expo-crypto', () => ({
@@ -219,5 +235,133 @@ describe('database migrations', () => {
       '__local__',
       expect.any(String)
     );
+  });
+
+  it('persists doodles and stickers alongside note rows and clears them when removed', async () => {
+    let getDB!: () => Promise<unknown>;
+    let createNote!: (input: Record<string, unknown>) => Promise<unknown>;
+    let updateNote!: (id: string, updates: Record<string, unknown>) => Promise<void>;
+
+    jest.isolateModules(() => {
+      ({ getDB, createNote, updateNote } = require('../services/database'));
+    });
+
+    await getDB();
+    mockRunAsync.mockClear();
+
+    await createNote({
+      id: 'note-1',
+      type: 'text',
+      content: 'Note with art',
+      locationName: 'Cafe',
+      latitude: 10.77,
+      longitude: 106.69,
+      noteColor: null,
+      hasDoodle: true,
+      doodleStrokesJson: JSON.stringify([{ color: '#ffffff', points: [0.1, 0.2] }]),
+      hasStickers: true,
+      stickerPlacementsJson: JSON.stringify([{ id: 'sticker-1' }]),
+    });
+
+    expect(mockRunAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO note_doodles'),
+      'note-1',
+      JSON.stringify([{ color: '#ffffff', points: [0.1, 0.2] }]),
+      expect.any(String)
+    );
+    expect(mockRunAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO note_stickers'),
+      'note-1',
+      JSON.stringify([{ id: 'sticker-1' }]),
+      expect.any(String)
+    );
+
+    mockRunAsync.mockClear();
+    mockGetFirstAsync.mockImplementation(async (sql: string) => {
+      if (sql.includes('PRAGMA user_version')) {
+        return { user_version: 0 };
+      }
+
+      if (sql.includes('FROM notes')) {
+        return {
+          id: 'note-1',
+          type: 'text',
+          content: 'Note with art',
+          photo_local_uri: null,
+          photo_remote_base64: null,
+          is_live_photo: 0,
+          paired_video_local_uri: null,
+          paired_video_remote_path: null,
+          location_name: 'Cafe',
+          prompt_id: null,
+          prompt_text_snapshot: null,
+          prompt_answer: null,
+          mood_emoji: null,
+          note_color: null,
+          latitude: 10.77,
+          longitude: 106.69,
+          radius: 150,
+          is_favorite: 0,
+          has_doodle: 1,
+          doodle_strokes_json: JSON.stringify([{ color: '#ffffff', points: [0.1, 0.2] }]),
+          has_stickers: 1,
+          sticker_placements_json: JSON.stringify([{ id: 'sticker-1' }]),
+          created_at: '2026-03-27T00:00:00.000Z',
+          updated_at: null,
+        };
+      }
+
+      return null;
+    });
+
+    await updateNote('note-1', {
+      hasDoodle: false,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+    });
+
+    expect(mockRunAsync).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM note_doodles'),
+      'note-1'
+    );
+    expect(mockRunAsync).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM note_stickers'),
+      'note-1'
+    );
+  });
+
+  it('uses explicit native begin/commit/rollback transactions', async () => {
+    let getDB!: () => Promise<unknown>;
+    let withDatabaseTransaction!: <T>(task: (txn: { runAsync: typeof mockRunAsync }) => Promise<T>) => Promise<T>;
+
+    jest.isolateModules(() => {
+      ({ getDB, withDatabaseTransaction } = require('../services/database'));
+    });
+
+    await getDB();
+
+    mockExecAsync.mockClear();
+    mockRunAsync.mockClear();
+
+    await withDatabaseTransaction(async (txn) => {
+      await txn.runAsync('UPDATE notes SET updated_at = ?', '2026-04-02T00:00:00.000Z');
+      return 'ok';
+    });
+
+    expect(mockExecAsync.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN IMMEDIATE', 'COMMIT']);
+
+    mockExecAsync.mockClear();
+    mockRunAsync.mockImplementationOnce(async () => {
+      throw new Error('boom');
+    });
+
+    await expect(
+      withDatabaseTransaction(async (txn) => {
+        await txn.runAsync('UPDATE notes SET updated_at = ?', '2026-04-02T00:00:00.000Z');
+      })
+    ).rejects.toThrow('boom');
+
+    expect(mockExecAsync.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN IMMEDIATE', 'ROLLBACK']);
   });
 });

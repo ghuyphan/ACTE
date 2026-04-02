@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { Note, getAllNotes } from './database';
+import { Note, getNotesForReminderSelection } from './database';
 import { getReminderPlaceGroups } from './reminderSelection';
 import { GEOFENCE_TASK_NAME } from '../utils/backgroundGeofence';
 import { getSkipNextEnterKey } from '../utils/geofenceKeys';
@@ -80,7 +80,7 @@ export async function syncGeofenceRegions(): Promise<boolean> {
     return false;
   }
 
-  const notes = await getAllNotes();
+  const notes = await getNotesForReminderSelection();
   const maxRegions = getMaxGeofenceRegionCount();
   const selectionSummary = summarizeGeofenceSelection(notes, maxRegions);
   const notesToMonitor = prioritizeNotesForGeofencing(notes, maxRegions);
