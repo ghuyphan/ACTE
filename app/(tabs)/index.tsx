@@ -137,7 +137,8 @@ export default function HomeScreen() {
   const [suppressedHomeNoteIds, setSuppressedHomeNoteIds] = useState<string[]>([]);
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [appState, setAppState] = useState(AppState.currentState);
-  const [captureScrollLocked, setCaptureScrollLocked] = useState(false);
+  const [captureEditorScrollLocked, setCaptureEditorScrollLocked] = useState(false);
+  const [captureInteractionScrollLocked, setCaptureInteractionScrollLocked] = useState(false);
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
   const [isFriendsFilterEnabled, setIsFriendsFilterEnabled] = useState(false);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
@@ -1532,7 +1533,8 @@ export default function HomeScreen() {
   const handleToggleCaptureMode = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     captureCardRef.current?.closeDecorateControls();
-    setCaptureScrollLocked(false);
+    setCaptureEditorScrollLocked(false);
+    setCaptureInteractionScrollLocked(false);
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     toggleCaptureMode();
   }, [toggleCaptureMode]);
@@ -1786,7 +1788,8 @@ export default function HomeScreen() {
         onChangeRadius={setRadius}
         shareTarget={captureTarget}
         onChangeShareTarget={handleCaptureTargetChange}
-        onDoodleModeChange={setCaptureScrollLocked}
+        onDoodleModeChange={setCaptureEditorScrollLocked}
+        onInteractionLockChange={setCaptureInteractionScrollLocked}
       />
     </View>
   );
@@ -1866,7 +1869,7 @@ export default function HomeScreen() {
         revealToken={0}
         onSettledArchiveItemChange={handleSettledArchiveItemChange}
         onCaptureVisibilityChange={setIsCaptureVisible}
-        scrollEnabled={!captureScrollLocked}
+        scrollEnabled={!captureEditorScrollLocked && !captureInteractionScrollLocked}
       />
 
       <SharedManageSheet

@@ -45,6 +45,7 @@ export interface StickerPlacement {
   zIndex: number;
   opacity: number;
   outlineEnabled?: boolean;
+  motionLocked?: boolean;
 }
 
 export interface NoteStickerPlacement extends StickerPlacement {
@@ -505,6 +506,8 @@ export function parseNoteStickerPlacements(
         typeof maybePlacement.opacity === 'number' &&
         (typeof maybePlacement.outlineEnabled === 'undefined' ||
           typeof maybePlacement.outlineEnabled === 'boolean') &&
+        (typeof maybePlacement.motionLocked === 'undefined' ||
+          typeof maybePlacement.motionLocked === 'boolean') &&
         Boolean(
           maybePlacement.asset &&
             typeof maybePlacement.asset === 'object' &&
@@ -536,6 +539,7 @@ export function createStickerPlacement(
     zIndex: nextZIndex,
     opacity: 1,
     outlineEnabled: true,
+    motionLocked: false,
     asset,
   };
 }
@@ -554,6 +558,7 @@ export function normalizeStickerPlacements(
       scale: Math.max(0.2, Math.min(placement.scale, 3)),
       opacity: clamp01(placement.opacity),
       outlineEnabled: placement.outlineEnabled !== false,
+      motionLocked: placement.motionLocked === true,
     }));
 }
 
@@ -585,6 +590,35 @@ export function setStickerPlacementOutlineEnabled(
         ? {
             ...placement,
             outlineEnabled,
+          }
+        : placement
+    )
+  );
+}
+
+export function setStickerPlacementsMotionLocked(
+  placements: NoteStickerPlacement[],
+  motionLocked: boolean
+) {
+  return normalizeStickerPlacements(
+    placements.map((placement) => ({
+      ...placement,
+      motionLocked,
+    }))
+  );
+}
+
+export function setStickerPlacementMotionLocked(
+  placements: NoteStickerPlacement[],
+  placementId: string,
+  motionLocked: boolean
+) {
+  return normalizeStickerPlacements(
+    placements.map((placement) =>
+      placement.id === placementId
+        ? {
+            ...placement,
+            motionLocked,
           }
         : placement
     )

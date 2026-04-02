@@ -59,6 +59,7 @@ import {
     parseNoteStickerPlacements,
     saveNoteStickerPlacementsWithAssets,
     clearNoteStickers,
+    setStickerPlacementMotionLocked,
     StickerImportError,
     setStickerPlacementOutlineEnabled,
     type NoteStickerPlacement,
@@ -1009,6 +1010,20 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         setStickerModeEnabled(false);
     }, [dismissPastePrompt, selectedStickerId, stickerModeEnabled]);
+    const handleToggleStickerMotionLock = useCallback(() => {
+        if (!selectedStickerId) {
+            return;
+        }
+
+        const selectedPlacement = editStickerPlacements.find((placement) => placement.id === selectedStickerId);
+        if (!selectedPlacement) {
+            return;
+        }
+
+        setEditStickerPlacements((current) =>
+            setStickerPlacementMotionLocked(current, selectedStickerId, selectedPlacement.motionLocked !== true)
+        );
+    }, [editStickerPlacements, selectedStickerId]);
     const handleStickerAction = useCallback(
         (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove' | 'outline-toggle') => {
             if (!selectedStickerId) {
@@ -1454,6 +1469,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         const selectedStickerPlacement =
             displayedStickerPlacements.find((placement) => placement.id === selectedStickerId) ?? null;
         const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
+        const selectedStickerMotionLocked = selectedStickerPlacement?.motionLocked === true;
         const renderEditHeader = () => (
             <View pointerEvents="box-none" style={styles.textEditHeader}>
                 <View style={[styles.textCardActionCluster, styles.cardTopOverlayRowWrap]}>
@@ -1492,6 +1508,33 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                 name={stickerModeEnabled ? 'images' : 'images-outline'}
                                 size={16}
                                 color={stickerModeEnabled ? detailBadgeActiveIconColor : detailBadgeIconColor}
+                            />
+                        </Pressable>
+                    ) : null}
+                    {ENABLE_PHOTO_STICKERS && (stickerModeEnabled || displayedStickerPlacements.length > 0) ? (
+                        <Pressable
+                            testID="note-detail-sticker-motion-lock"
+                            accessibilityLabel={
+                                selectedStickerMotionLocked
+                                    ? t('capture.unlockStickerMotion', 'Unlock sticker motion')
+                                    : t('capture.lockStickerMotion', 'Lock sticker motion')
+                            }
+                            onPress={handleToggleStickerMotionLock}
+                            disabled={!selectedStickerId}
+                            style={[
+                                styles.textCardActionButton,
+                                styles.topOverlayActionButton,
+                                {
+                                    backgroundColor: selectedStickerMotionLocked ? colors.primary : detailBadgeFill,
+                                    borderColor: selectedStickerMotionLocked ? colors.primary : detailBadgeBorder,
+                                },
+                                !selectedStickerId ? styles.textCardActionDisabled : null,
+                            ]}
+                        >
+                            <Ionicons
+                                name={selectedStickerMotionLocked ? 'lock-closed' : 'lock-open-outline'}
+                                size={16}
+                                color={selectedStickerMotionLocked ? colors.captureCardText : detailBadgeIconColor}
                             />
                         </Pressable>
                     ) : null}

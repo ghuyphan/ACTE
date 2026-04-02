@@ -70,6 +70,7 @@ import {
   createStickerPlacement,
   duplicateStickerPlacement,
   importStickerAsset,
+  setStickerPlacementMotionLocked,
   type NoteStickerPlacement,
   StickerImportError,
   setStickerPlacementOutlineEnabled,
@@ -795,6 +796,7 @@ interface CaptureCardProps {
   shareTarget: 'private' | 'shared';
   onChangeShareTarget: (nextTarget: 'private' | 'shared') => void;
   onDoodleModeChange?: (enabled: boolean) => void;
+  onInteractionLockChange?: (locked: boolean) => void;
   footerContent?: ReactNode;
 }
 
@@ -857,6 +859,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   shareTarget,
   onChangeShareTarget,
   onDoodleModeChange,
+  onInteractionLockChange,
   footerContent,
 }, ref) {
   const reduceMotionEnabled = useReducedMotion();
@@ -909,6 +912,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     [selectedStickerId, stickerPlacements]
   );
   const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
+  const selectedStickerMotionLocked = selectedStickerPlacement?.motionLocked === true;
   const textDoodleColors = useMemo(
     () => getUniqueColors([colors.captureCardText, PHOTO_DOODLE_DEFAULT_COLOR, colors.primary]),
     [colors.captureCardText, colors.primary]
@@ -1228,6 +1232,21 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       (doodleModeEnabled || stickerModeEnabled)
     );
   }, [captureMode, capturedPhoto, doodleModeEnabled, onDoodleModeChange, stickerModeEnabled]);
+
+  useEffect(() => {
+    onInteractionLockChange?.(
+      ((captureMode === 'text' || Boolean(capturedPhoto)) &&
+        (doodleModeEnabled || stickerModeEnabled)) ||
+      isLivePhotoCaptureInProgress
+    );
+  }, [
+    captureMode,
+    capturedPhoto,
+    doodleModeEnabled,
+    isLivePhotoCaptureInProgress,
+    onInteractionLockChange,
+    stickerModeEnabled,
+  ]);
 
   useEffect(() => {
     const handleKeyboardFrame = (event: KeyboardEvent) => {
@@ -1958,6 +1977,19 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
     closeDecorateControls();
   }, [closeDecorateControls, dismissPastePrompt, handleSelectSticker, selectedStickerId, stickerModeEnabled]);
+  const handleToggleStickerMotionLock = useCallback(() => {
+    if (!selectedStickerId) {
+      return;
+    }
+
+    handleChangeStickerPlacements(
+      setStickerPlacementMotionLocked(
+        stickerPlacements,
+        selectedStickerId,
+        !selectedStickerMotionLocked
+      )
+    );
+  }, [handleChangeStickerPlacements, selectedStickerId, selectedStickerMotionLocked, stickerPlacements]);
 
   const handleSelectedStickerAction = useCallback(
     (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove' | 'outline-toggle') => {
@@ -2232,6 +2264,43 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       style={styles.textCardActionButton}
                     />
                   ) : null}
+                  {ENABLE_PHOTO_STICKERS && (stickerModeEnabled || stickerPlacements.length > 0) ? (
+                    <CaptureAnimatedPressable
+                      testID="capture-sticker-motion-lock"
+                      accessibilityLabel={
+                        selectedStickerMotionLocked
+                          ? t('capture.unlockStickerMotion', 'Unlock sticker motion')
+                          : t('capture.lockStickerMotion', 'Lock sticker motion')
+                      }
+                      onPress={handleToggleStickerMotionLock}
+                      active={selectedStickerMotionLocked}
+                      disabled={!selectedStickerId}
+                      disabledOpacity={0.45}
+                      activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+                      activeTranslateY={0}
+                      contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+                      contentActiveTranslateY={0}
+                      style={[
+                        styles.textCardActionButton,
+                        {
+                          backgroundColor: selectedStickerMotionLocked
+                            ? colors.captureButtonBg
+                            : colors.captureGlassFill,
+                          borderColor: selectedStickerMotionLocked
+                            ? 'rgba(255,255,255,0.18)'
+                            : colors.captureGlassBorder,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={selectedStickerMotionLocked ? 'lock-closed' : 'lock-open-outline'}
+                        size={16}
+                        color={
+                          selectedStickerMotionLocked ? textCardActiveIconColor : colors.captureGlassText
+                        }
+                      />
+                    </CaptureAnimatedPressable>
+                  ) : null}
                   {doodleModeEnabled ? (
                     <>
                       <CaptureAnimatedPressable
@@ -2489,7 +2558,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   style={styles.cameraPreview}
                 />
               )}
-              {ENABLE_PHOTO_STICKERS ? (
+              {ENABLE_PHOTO_STICKERS && !hasLivePhotoMotion ? (
                 <Pressable
                   testID="capture-card-paste-surface"
                   style={styles.cardPasteSurface}
@@ -2550,6 +2619,44 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         styles.photoDoodleIconButton,
                       ]}
                     />
+                  ) : null}
+                  {ENABLE_PHOTO_STICKERS && (stickerModeEnabled || stickerPlacements.length > 0) ? (
+                    <CaptureAnimatedPressable
+                      testID="capture-sticker-motion-lock"
+                      accessibilityLabel={
+                        selectedStickerMotionLocked
+                          ? t('capture.unlockStickerMotion', 'Unlock sticker motion')
+                          : t('capture.lockStickerMotion', 'Lock sticker motion')
+                      }
+                      onPress={handleToggleStickerMotionLock}
+                      active={selectedStickerMotionLocked}
+                      disabled={!selectedStickerId}
+                      disabledOpacity={0.45}
+                      activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+                      activeTranslateY={0}
+                      contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+                      contentActiveTranslateY={0}
+                      style={[
+                        styles.cameraOverlayButton,
+                        styles.photoDoodleIconButton,
+                        {
+                          backgroundColor: selectedStickerMotionLocked
+                            ? photoPreviewActiveFill
+                            : photoPreviewControlFill,
+                          borderColor: selectedStickerMotionLocked
+                            ? photoPreviewActiveFill
+                            : photoPreviewControlBorder,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={selectedStickerMotionLocked ? 'lock-closed' : 'lock-open-outline'}
+                        size={16}
+                        color={
+                          selectedStickerMotionLocked ? photoPreviewActiveText : photoPreviewControlText
+                        }
+                      />
+                    </CaptureAnimatedPressable>
                   ) : null}
                   <CaptureAnimatedPressable
                     testID="capture-live-photo-toggle"
@@ -2792,6 +2899,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       preview
                       photo
                       video
+                      photoQualityBalance="speed"
                       isMirrored={facing === 'front'}
                       zoom={cameraPreviewZoom}
                       resizeMode="cover"
@@ -3093,7 +3201,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     onPressOut={handleShutterRelease}
                     onPress={handleShutterPress}
                     onLongPress={handleShutterLongPress}
-                    delayLongPress={220}
+                    delayLongPress={380}
                     hapticStyle={null}
                     pressedScale={0.985}
                     style={[

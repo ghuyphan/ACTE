@@ -234,6 +234,10 @@ jest.mock('../components/notes/NoteStickerCanvas', () => {
         <View testID="mock-sticker-canvas">
           <Text testID="mock-sticker-editable">{String(props.editable)}</Text>
           <Text testID="mock-sticker-selected">{String(props.selectedPlacementId ?? 'null')}</Text>
+          <Pressable
+            testID="mock-sticker-select-first"
+            onPress={() => props.onChangeSelectedPlacementId?.(props.placements?.[0]?.id ?? null)}
+          />
           <Pressable testID="mock-sticker-canvas-empty" onPress={() => props.onPressCanvas?.()} />
         </View>
       );
@@ -253,10 +257,16 @@ jest.mock('../services/noteStickers', () => ({
     zIndex: existingPlacements.length + 1,
     opacity: 1,
     outlineEnabled: true,
+    motionLocked: false,
     asset,
   })),
   duplicateStickerPlacement: jest.fn((placements: any[]) => placements),
   importStickerAsset: jest.fn(),
+  setStickerPlacementMotionLocked: jest.fn((placements: any[], placementId: string, motionLocked: boolean) =>
+    placements.map((placement) =>
+      placement.id === placementId ? { ...placement, motionLocked } : placement
+    )
+  ),
   setStickerPlacementOutlineEnabled: jest.fn((placements: any[], placementId: string, outlineEnabled: boolean) =>
     placements.map((placement) =>
       placement.id === placementId ? { ...placement, outlineEnabled } : placement
@@ -678,6 +688,7 @@ describe('CaptureCard doodle handle', () => {
 
     expect(getByLabelText('Preview live photo motion')).toBeTruthy();
     expect(queryByTestId('capture-filter-vivid')).toBeNull();
+    expect(queryByTestId('capture-card-paste-surface')).toBeNull();
   });
 
   it('shows the first-time live photo hint below the shutter controls', () => {
@@ -1225,6 +1236,39 @@ describe('CaptureCard doodle handle', () => {
     await waitFor(() => {
       expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
     });
+  });
+
+  it('locks sticker motion in the capture editor', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardGetImageAsync.mockResolvedValue({
+      data: 'data:image/png;base64,cGhvdG8tc3RpY2tlcg==',
+      size: { width: 140, height: 140 },
+    });
+
+    const { getByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///photo.jpg',
+    });
+
+    await act(async () => {
+      fireEvent(getByTestId('capture-card-paste-surface'), 'longPress', {
+        nativeEvent: { locationX: 144, locationY: 212 },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-card-paste-action'));
+    });
+
+    await waitFor(() => {
+      expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+    });
+
+    fireEvent.press(getByTestId('mock-sticker-select-first'));
+    fireEvent.press(getByTestId('capture-sticker-motion-lock'));
+
+    expect(ref.current?.getStickerSnapshot().placements[0]?.motionLocked).toBe(true);
   });
 
   it('opens the sticker source sheet from a tap on the add button', async () => {

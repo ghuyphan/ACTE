@@ -268,10 +268,18 @@ export default function DynamicStickerCanvas({
     () => sortStickerPlacements(hydratedPlacements),
     [hydratedPlacements]
   );
+  const unlockedPlacements = useMemo(
+    () => renderedPlacements.filter((placement) => placement.motionLocked !== true),
+    [renderedPlacements]
+  );
+  const lockedPlacements = useMemo(
+    () => renderedPlacements.filter((placement) => placement.motionLocked === true),
+    [renderedPlacements]
+  );
   const physicsState = useStickerPhysics({
-    placements: renderedPlacements,
+    placements: unlockedPlacements,
     layout,
-    isActive,
+    isActive: isActive && unlockedPlacements.length > 0,
     motionVariant,
     sizeMultiplier,
     minimumBaseSize,
@@ -290,7 +298,13 @@ export default function DynamicStickerCanvas({
     <View style={[styles.canvasWrap, style]} onLayout={handleLayout}>
       <Canvas pointerEvents="none" style={styles.canvas}>
         <StickerLayer
-          placements={renderedPlacements}
+          placements={lockedPlacements}
+          layout={layout}
+          sizeMultiplier={sizeMultiplier}
+          minimumBaseSize={minimumBaseSize}
+        />
+        <StickerLayer
+          placements={unlockedPlacements}
           layout={layout}
           sizeMultiplier={sizeMultiplier}
           minimumBaseSize={minimumBaseSize}

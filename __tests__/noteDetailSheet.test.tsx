@@ -8,6 +8,7 @@ const mockUpdateNote = jest.fn<Promise<void>, [string, unknown]>(async () => und
 const mockToggleFavorite = jest.fn<Promise<boolean>, [string]>(async () => true);
 const mockSaveNoteDoodle = jest.fn<Promise<void>, [string, string]>(async () => undefined);
 const mockClearNoteDoodle = jest.fn<Promise<void>, [string]>(async () => undefined);
+const mockSaveNoteStickerPlacementsWithAssets = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
 const mockHasClipboardStickerImage = jest.fn<Promise<boolean>, []>(async () => false);
 const mockImportStickerAssetFromClipboard = jest.fn<Promise<unknown>, [unknown]>(async () => ({
   id: 'detail-sticker-asset-1',
@@ -220,6 +221,7 @@ jest.mock('../services/noteStickers', () => ({
     zIndex: existingPlacements.length + 1,
     opacity: 1,
     outlineEnabled: true,
+    motionLocked: false,
     asset,
   })),
   duplicateStickerPlacement: jest.fn((placements: any[]) => placements),
@@ -231,8 +233,14 @@ jest.mock('../services/noteStickers', () => ({
 
     return JSON.parse(placementsJson);
   }),
-  saveNoteStickerPlacementsWithAssets: jest.fn(async () => undefined),
+  saveNoteStickerPlacementsWithAssets: (noteId: string, placements: unknown) =>
+    mockSaveNoteStickerPlacementsWithAssets(noteId, placements),
   clearNoteStickers: jest.fn(async () => undefined),
+  setStickerPlacementMotionLocked: jest.fn((placements: any[], placementId: string, motionLocked: boolean) =>
+    placements.map((placement: any) =>
+      placement.id === placementId ? { ...placement, motionLocked } : placement
+    )
+  ),
   setStickerPlacementOutlineEnabled: jest.fn((placements: any[], placementId: string, outlineEnabled: boolean) =>
     placements.map((placement: any) =>
       placement.id === placementId ? { ...placement, outlineEnabled } : placement
@@ -310,7 +318,7 @@ jest.mock('../components/notes/NoteDoodleCanvas', () => {
 
 jest.mock('../components/notes/NoteStickerCanvas', () => {
   const React = require('react');
-  const { Text, View } = require('react-native');
+  const { Pressable, Text, View } = require('react-native');
 
   return {
     __esModule: true,
@@ -319,6 +327,11 @@ jest.mock('../components/notes/NoteStickerCanvas', () => {
         <View testID="mock-note-sticker-canvas">
           <Text testID="mock-note-sticker-count">{String(props.placements?.length ?? 0)}</Text>
           <Text testID="mock-note-sticker-editable">{String(props.editable)}</Text>
+          <Text testID="mock-note-sticker-selected">{String(props.selectedPlacementId ?? 'null')}</Text>
+          <Pressable
+            testID="mock-note-sticker-select-first"
+            onPress={() => props.onChangeSelectedPlacementId?.(props.placements?.[0]?.id ?? null)}
+          />
         </View>
       );
     },
@@ -636,6 +649,90 @@ describe('NoteDetailSheet', () => {
         { color: '#FFFFFF', points: [0.3, 0.3, 0.4, 0.4] },
       ])
     );
+  });
+
+  it('locks sticker motion and persists it when saving edits', async () => {
+    const stickerPlacements = [
+      {
+        id: 'detail-placement-1',
+        assetId: 'detail-sticker-asset-1',
+        x: 0.5,
+        y: 0.5,
+        scale: 1,
+        rotation: 0,
+        zIndex: 1,
+        opacity: 1,
+        outlineEnabled: true,
+        asset: {
+          id: 'detail-sticker-asset-1',
+          ownerUid: '__local__',
+          localUri: 'file:///documents/stickers/detail-sticker-asset-1.png',
+          remotePath: null,
+          mimeType: 'image/png',
+          width: 120,
+          height: 120,
+          createdAt: '2026-03-27T00:00:00.000Z',
+          updatedAt: null,
+          source: 'import',
+        },
+      },
+    ];
+
+    mockGetNoteById.mockResolvedValue({
+      id: 'note-1',
+      type: 'text',
+      content: 'Original note',
+      photoLocalUri: null,
+      photoRemoteBase64: null,
+      locationName: 'Old place',
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasStickers: true,
+      stickerPlacementsJson: JSON.stringify(stickerPlacements),
+      createdAt: '2026-03-10T00:00:00.000Z',
+      updatedAt: null,
+    });
+
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+    fireEvent.press(getByTestId('note-detail-sticker-toggle'));
+    fireEvent.press(getByTestId('mock-note-sticker-select-first'));
+    await waitFor(() => {
+      expect(getByTestId('mock-note-sticker-selected')).toHaveTextContent('detail-placement-1');
+    });
+    fireEvent.press(getByTestId('note-detail-sticker-motion-lock'));
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-edit'));
+    });
+
+    expect(mockUpdateNote).toHaveBeenCalledWith(
+      'note-1',
+      expect.objectContaining({
+        hasStickers: true,
+        stickerPlacementsJson: JSON.stringify([
+          {
+            ...stickerPlacements[0],
+            motionLocked: true,
+          },
+        ]),
+      })
+    );
+    expect(mockSaveNoteStickerPlacementsWithAssets).toHaveBeenCalledWith('note-1', [
+      {
+        ...stickerPlacements[0],
+        motionLocked: true,
+      },
+    ]);
   });
 
   it('anchors the photo location cursor at the start when edit mode opens', async () => {

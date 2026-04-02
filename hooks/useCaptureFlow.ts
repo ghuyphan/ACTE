@@ -10,6 +10,7 @@ import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../services/livePhotoProcessing
 export type CaptureMode = 'text' | 'camera';
 const LIVE_PHOTO_SETTLE_MS = 450;
 const LIVE_PHOTO_SAVE_GUARD_MS = 900;
+const LIVE_PHOTO_MIN_CAPTURE_MS = 900;
 
 type CaptureCameraPermission = {
   granted: boolean;
@@ -69,7 +70,9 @@ export function useCaptureFlow() {
   const livePhotoStopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const livePhotoSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const livePhotoSaveGuardTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const livePhotoMinimumDurationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const livePhotoRecordingActiveRef = useRef(false);
+  const livePhotoRecordingStartedAtRef = useRef<number | null>(null);
   const livePhotoPhotoPromiseRef = useRef<Promise<string | null> | null>(null);
   const livePhotoVideoPromiseRef = useRef<Promise<string | null> | null>(null);
   const livePhotoVideoResolveRef = useRef<((uri: string | null) => void) | null>(null);
@@ -131,28 +134,54 @@ export function useCaptureFlow() {
     }
   }, []);
 
+  const clearLivePhotoMinimumDurationTimeout = useCallback(() => {
+    if (livePhotoMinimumDurationTimeoutRef.current) {
+      clearTimeout(livePhotoMinimumDurationTimeoutRef.current);
+      livePhotoMinimumDurationTimeoutRef.current = null;
+    }
+  }, []);
+
   const clearLivePhotoSaveGuard = useCallback(() => {
     clearLivePhotoSaveGuardTimeout();
     setIsLivePhotoSaveGuardActive(false);
   }, [clearLivePhotoSaveGuardTimeout]);
 
+  const clearLivePhotoTapSuppression = useCallback(() => {
+    suppressNextPhotoTapRef.current = false;
+  }, []);
+
   const resetLivePhotoCaptureRefs = useCallback(() => {
     clearLivePhotoStopTimeout();
     clearLivePhotoSettleTimeout();
     clearLivePhotoSaveGuardTimeout();
+    clearLivePhotoMinimumDurationTimeout();
+    clearLivePhotoTapSuppression();
+    livePhotoRecordingStartedAtRef.current = null;
     livePhotoPhotoPromiseRef.current = null;
     livePhotoVideoPromiseRef.current = null;
     livePhotoVideoResolveRef.current = null;
     livePhotoVideoRejectRef.current = null;
-  }, [clearLivePhotoSaveGuardTimeout, clearLivePhotoSettleTimeout, clearLivePhotoStopTimeout]);
+  }, [
+    clearLivePhotoSaveGuardTimeout,
+    clearLivePhotoMinimumDurationTimeout,
+    clearLivePhotoSettleTimeout,
+    clearLivePhotoStopTimeout,
+    clearLivePhotoTapSuppression,
+  ]);
 
   useEffect(
     () => () => {
       clearLivePhotoStopTimeout();
       clearLivePhotoSettleTimeout();
       clearLivePhotoSaveGuardTimeout();
+      clearLivePhotoMinimumDurationTimeout();
     },
-    [clearLivePhotoSaveGuardTimeout, clearLivePhotoSettleTimeout, clearLivePhotoStopTimeout]
+    [
+      clearLivePhotoMinimumDurationTimeout,
+      clearLivePhotoSaveGuardTimeout,
+      clearLivePhotoSettleTimeout,
+      clearLivePhotoStopTimeout,
+    ]
   );
 
   useEffect(() => {
@@ -259,6 +288,7 @@ export function useCaptureFlow() {
     }
 
     livePhotoRecordingActiveRef.current = false;
+    livePhotoRecordingStartedAtRef.current = null;
     setIsLivePhotoCaptureInProgress(false);
 
     try {
@@ -296,11 +326,13 @@ export function useCaptureFlow() {
         setIsLivePhotoSaveGuardActive(false);
         livePhotoSaveGuardTimeoutRef.current = null;
       }, LIVE_PHOTO_SAVE_GUARD_MS);
+      clearLivePhotoTapSuppression();
       return;
     }
 
     setIsLivePhotoCaptureSettling(false);
     clearLivePhotoSaveGuard();
+    clearLivePhotoTapSuppression();
   }, [cameraRef, clearLivePhotoSaveGuard, clearLivePhotoSettleTimeout, clearLivePhotoStopTimeout, resetLivePhotoCaptureRefs]);
 
   const handleShutterPressOut = useCallback(() => {
@@ -309,9 +341,22 @@ export function useCaptureFlow() {
       easing: Easing.out(Easing.cubic),
     });
     if (livePhotoRecordingActiveRef.current) {
+      const startedAt = livePhotoRecordingStartedAtRef.current;
+      const elapsedMs = startedAt ? Date.now() - startedAt : LIVE_PHOTO_MIN_CAPTURE_MS;
+      const remainingMs = LIVE_PHOTO_MIN_CAPTURE_MS - elapsedMs;
+
+      if (remainingMs > 0) {
+        clearLivePhotoMinimumDurationTimeout();
+        livePhotoMinimumDurationTimeoutRef.current = setTimeout(() => {
+          livePhotoMinimumDurationTimeoutRef.current = null;
+          void finishLivePhotoCapture();
+        }, remainingMs);
+        return;
+      }
+
       void finishLivePhotoCapture();
     }
-  }, [finishLivePhotoCapture, shutterScale]);
+  }, [clearLivePhotoMinimumDurationTimeout, finishLivePhotoCapture, shutterScale]);
 
   const takePicture = useCallback(async () => {
     if (suppressNextPhotoTapRef.current) {
@@ -350,6 +395,7 @@ export function useCaptureFlow() {
     livePhotoCaptureTokenRef.current += 1;
     const captureToken = livePhotoCaptureTokenRef.current;
     livePhotoRecordingActiveRef.current = true;
+    livePhotoRecordingStartedAtRef.current = Date.now();
     setIsLivePhotoCaptureInProgress(true);
     setIsLivePhotoCaptureSettling(false);
     setCapturedPairedVideo(null);
@@ -422,11 +468,13 @@ export function useCaptureFlow() {
         // Ignore cleanup failures after a capture error.
       }
       resetLivePhotoCaptureRefs();
+      clearLivePhotoTapSuppression();
       console.warn('Live photo capture failed:', error);
     }
   }, [
     cameraRef,
     clearLivePhotoSettleTimeout,
+    clearLivePhotoTapSuppression,
     finishLivePhotoCapture,
     isLivePhotoCaptureInProgress,
     resetLivePhotoCaptureRefs,
@@ -450,6 +498,7 @@ export function useCaptureFlow() {
     setIsLivePhotoCaptureInProgress(false);
     setIsLivePhotoCaptureSettling(false);
     setIsLivePhotoSaveGuardActive(false);
+    clearLivePhotoTapSuppression();
     setSelectedPromptId(null);
     setSelectedPromptText(null);
     setPromptAnswer('');
@@ -457,7 +506,7 @@ export function useCaptureFlow() {
     setPromptExpanded(false);
     setHasShuffledPrompt(false);
     setRadius(DEFAULT_NOTE_RADIUS);
-  }, [resetLivePhotoCaptureRefs]);
+  }, [clearLivePhotoTapSuppression, resetLivePhotoCaptureRefs]);
 
   const needsCameraPermission = captureMode === 'camera' && (!permission || !permission.granted);
 

@@ -69,4 +69,23 @@ describe('DynamicStickerCanvas', () => {
       })
     );
   });
+
+  it('keeps the physics hook inactive when sticker motion is locked', () => {
+    render(
+      <DynamicStickerCanvas
+        placements={[
+          { ...stickerPlacement, id: 'locked-placement', motionLocked: true },
+          { ...stickerPlacement, id: 'free-placement' },
+        ]}
+        isActive
+      />
+    );
+
+    expect(mockedUseStickerPhysics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        placements: [{ ...stickerPlacement, id: 'free-placement' }],
+        isActive: true,
+      })
+    );
+  });
 });

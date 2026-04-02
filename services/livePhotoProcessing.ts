@@ -2,11 +2,10 @@ import * as FileSystem from '../utils/fileSystem';
 import {
   ensureLivePhotoVideoDirectory,
   getPairedVideoFileExtension,
-  MAX_SYNCABLE_LIVE_PHOTO_VIDEO_FILE_SIZE_BYTES,
   resolveStoredPairedVideoUri,
 } from './livePhotoStorage';
 
-export const LIVE_PHOTO_MAX_DURATION_SECONDS = 3;
+export const LIVE_PHOTO_MAX_DURATION_SECONDS = 2;
 const LIVE_PHOTO_VIDEO_MAX_SIZE = 540;
 
 async function getVideoInfo(videoUri: string) {
@@ -32,17 +31,10 @@ export async function optimizeLivePhotoVideo(sourceUri: string) {
     return null;
   }
 
-  if (
-    typeof originalInfo.size === 'number' &&
-    originalInfo.size <= MAX_SYNCABLE_LIVE_PHOTO_VIDEO_FILE_SIZE_BYTES
-  ) {
-    return {
-      uri: originalInfo.uri,
-      cleanupUri: null as string | null,
-    };
-  }
-
-  throw new Error('Live photo motion clip is too large right now. Pick a shorter clip.');
+  return {
+    uri: originalInfo.uri,
+    cleanupUri: null as string | null,
+  };
 }
 
 export async function persistLivePhotoVideo(sourceUri: string, fileBasename: string) {

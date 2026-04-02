@@ -12,6 +12,7 @@ import {
   duplicateStickerPlacement,
   normalizeStickerPlacements,
   parseNoteStickerPlacements,
+  setStickerPlacementMotionLocked,
   setStickerPlacementOutlineEnabled,
   updateStickerPlacementTransform,
   type StickerAsset,
@@ -85,5 +86,34 @@ describe('noteStickers helpers', () => {
 
     expect(toggled[0]?.outlineEnabled).toBe(false);
     expect(parseNoteStickerPlacements(JSON.stringify(toggled))[0]?.outlineEnabled).toBe(false);
+  });
+
+  it('persists the sticker motion lock flag per sticker', () => {
+    const firstPlacement = {
+      ...createStickerPlacement(baseAsset),
+      id: 'placement-1',
+    };
+    const secondPlacement = {
+      ...createStickerPlacement({ ...baseAsset, id: 'sticker-2' }, [firstPlacement]),
+      id: 'placement-2',
+    };
+    const locked = setStickerPlacementMotionLocked([firstPlacement, secondPlacement], firstPlacement.id, true);
+    const parsed = parseNoteStickerPlacements(JSON.stringify(locked));
+
+    expect(parsed.find((placement) => placement.id === firstPlacement.id)?.motionLocked).toBe(true);
+    expect(parsed.find((placement) => placement.id === secondPlacement.id)?.motionLocked).toBe(false);
+  });
+
+  it('keeps new stickers unlocked by default', () => {
+    const lockedPlacement = {
+      ...createStickerPlacement(baseAsset),
+      motionLocked: true,
+    };
+    const nextPlacement = createStickerPlacement(
+      { ...baseAsset, id: 'sticker-2' },
+      [lockedPlacement]
+    );
+
+    expect(nextPlacement.motionLocked).toBe(false);
   });
 });

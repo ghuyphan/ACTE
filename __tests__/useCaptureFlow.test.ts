@@ -186,6 +186,75 @@ describe('useCaptureFlow', () => {
     }
   });
 
+  it('keeps a live photo recording active for a minimum capture window after release', async () => {
+    jest.useFakeTimers();
+    const { result } = renderHook(() => useCaptureFlow());
+
+    try {
+      act(() => {
+        result.current.cameraRef.current = {
+          takePhoto: mockTakePhoto,
+          startRecording: mockStartRecording,
+          stopRecording: mockStopRecording,
+          cancelRecording: mockCancelRecording,
+        } as any;
+      });
+
+      await act(async () => {
+        await result.current.startLivePhotoCapture();
+      });
+
+      act(() => {
+        result.current.handleShutterPressOut();
+        jest.advanceTimersByTime(500);
+      });
+
+      expect(mockStopRecording).not.toHaveBeenCalled();
+      expect(result.current.isLivePhotoCaptureInProgress).toBe(true);
+
+      act(() => {
+        jest.advanceTimersByTime(500);
+      });
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(mockStopRecording).toHaveBeenCalledTimes(1);
+      expect(result.current.isLivePhotoCaptureInProgress).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('does not suppress the next photo tap after a live photo recording fails to start', async () => {
+    mockStartRecording.mockImplementationOnce(() => {
+      throw new Error('camera unavailable');
+    });
+
+    const { result } = renderHook(() => useCaptureFlow());
+
+    act(() => {
+      result.current.cameraRef.current = {
+        takePhoto: mockTakePhoto,
+        startRecording: mockStartRecording,
+        stopRecording: mockStopRecording,
+        cancelRecording: mockCancelRecording,
+      } as any;
+    });
+
+    await act(async () => {
+      await result.current.startLivePhotoCapture();
+    });
+
+    await act(async () => {
+      await result.current.takePicture();
+    });
+
+    expect(mockTakePhoto).toHaveBeenCalledTimes(1);
+    expect(result.current.capturedPhoto).toBe('file:///tmp/captured-photo.jpg');
+  });
+
   it('treats denied camera permission as re-requestable on Android', () => {
     mockPlatformOS = 'android';
     mockPermissionStatus = 'denied';

@@ -1,7 +1,9 @@
 import { Image } from 'expo-image';
-import React, { useCallback, useEffect, useState } from 'react';
+import * as Haptics from 'expo-haptics';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   type ImageStyle,
+  type GestureResponderEvent,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -39,6 +41,7 @@ type ExpoVideoModule = {
 };
 
 let cachedExpoVideoModule: ExpoVideoModule | null | undefined;
+const LIVE_PHOTO_PREVIEW_HOLD_MS = 170;
 
 function hasExpoVideoNativeModule() {
   if (process.env.NODE_ENV === 'test') {
@@ -140,16 +143,65 @@ function NativeLivePhotoPreview({
 
   const { VideoView, useVideoPlayer } = expoVideo;
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [hasRenderedFirstFrame, setHasRenderedFirstFrame] = useState(false);
   const player = useVideoPlayer({ uri: pairedVideoUri }, (nextPlayer) => {
-    nextPlayer.loop = true;
+    nextPlayer.loop = false;
     nextPlayer.muted = true;
     nextPlayer.volume = 0;
   });
+  const activePlayerRef = useRef<ExpoVideoPlayer | null>(player);
+  const previewHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    activePlayerRef.current = player;
+
+    return () => {
+      if (activePlayerRef.current === player) {
+        activePlayerRef.current = null;
+      }
+    };
+  }, [player]);
+
+  useEffect(() => {
+    setHasRenderedFirstFrame(false);
+    setIsPreviewing(false);
+  }, [pairedVideoUri]);
+
+  useEffect(() => () => {
+    if (previewHoldTimeoutRef.current) {
+      clearTimeout(previewHoldTimeoutRef.current);
+      previewHoldTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const activePlayer = activePlayerRef.current;
+    if (activePlayer !== player) {
+      return;
+    }
+
+    if (!isPreviewing) {
+      return;
+    }
+
+    activePlayer.currentTime = 0;
+    activePlayer.play();
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [isPreviewing, player]);
 
   const stopPreview = useCallback(() => {
+    if (previewHoldTimeoutRef.current) {
+      clearTimeout(previewHoldTimeoutRef.current);
+      previewHoldTimeoutRef.current = null;
+    }
+
+    const activePlayer = activePlayerRef.current;
+    if (activePlayer === player) {
+      activePlayer.pause();
+      activePlayer.currentTime = 0;
+    }
+
     setIsPreviewing(false);
-    player.pause();
-    player.currentTime = 0;
   }, [player]);
 
   const startPreview = useCallback(() => {
@@ -158,35 +210,56 @@ function NativeLivePhotoPreview({
     }
 
     setIsPreviewing(true);
-    player.currentTime = 0;
-    player.play();
-  }, [enablePlayback, player]);
+  }, [enablePlayback]);
 
-  useEffect(() => stopPreview, [stopPreview]);
+  const handlePressIn = useCallback((_event: GestureResponderEvent) => {
+    if (!enablePlayback) {
+      return;
+    }
+
+    if (previewHoldTimeoutRef.current) {
+      clearTimeout(previewHoldTimeoutRef.current);
+    }
+
+    previewHoldTimeoutRef.current = setTimeout(() => {
+      previewHoldTimeoutRef.current = null;
+      startPreview();
+    }, LIVE_PHOTO_PREVIEW_HOLD_MS);
+  }, [enablePlayback, startPreview]);
+
+  const shouldShowVideo = isPreviewing && hasRenderedFirstFrame;
 
   return (
     <View style={style}>
+      <VideoView
+        player={isPreviewing ? player : null}
+        style={[
+          StyleSheet.absoluteFill,
+          imageStyle,
+          isPreviewing ? styles.previewVisible : styles.previewHidden,
+        ]}
+        contentFit="cover"
+        nativeControls={false}
+        pointerEvents="none"
+        surfaceType="textureView"
+        useExoShutter={false}
+        onFirstFrameRender={() => {
+          setHasRenderedFirstFrame(true);
+        }}
+      />
       <Image
         source={{ uri: imageUrl }}
-        style={imageStyle}
+        style={[
+          StyleSheet.absoluteFill,
+          imageStyle,
+          shouldShowVideo ? styles.previewHidden : styles.previewVisible,
+        ]}
         contentFit="cover"
         transition={200}
       />
-      {isPreviewing ? (
-        <VideoView
-          player={player}
-          style={[StyleSheet.absoluteFill, imageStyle]}
-          contentFit="cover"
-          nativeControls={false}
-          pointerEvents="none"
-          surfaceType="textureView"
-          useExoShutter={false}
-        />
-      ) : null}
       <Pressable
         accessibilityLabel="Preview live photo motion"
-        delayLongPress={170}
-        onLongPress={startPreview}
+        onPressIn={handlePressIn}
         onPressOut={stopPreview}
         style={StyleSheet.absoluteFill}
       >
@@ -233,6 +306,12 @@ export default function PhotoMediaView({
 }
 
 const styles = StyleSheet.create({
+  previewVisible: {
+    opacity: 1,
+  },
+  previewHidden: {
+    opacity: 0,
+  },
   liveBadge: {
     position: 'absolute',
     top: 16,
