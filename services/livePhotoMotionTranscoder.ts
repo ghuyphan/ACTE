@@ -1,5 +1,4 @@
 import { requireOptionalNativeModule } from 'expo-modules-core';
-import { Platform } from 'react-native';
 
 type NormalizeLivePhotoMotionResult = {
   uri: string;
@@ -16,9 +15,7 @@ type NativeNotoLivePhotoMotionModule = {
 };
 
 const nativeModule =
-  Platform.OS === 'ios'
-    ? requireOptionalNativeModule<NativeNotoLivePhotoMotionModule>('NotoLivePhotoMotion')
-    : null;
+  requireOptionalNativeModule<NativeNotoLivePhotoMotionModule>('NotoLivePhotoMotion');
 
 export async function normalizeLivePhotoMotionVideo(
   sourceUri: string,
