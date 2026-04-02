@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useEffect, useMemo, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -25,6 +25,7 @@ export interface RecapStickerPileItem {
 interface RecapStickerPileProps {
   title?: string;
   items: RecapStickerPileItem[];
+  deferUntilAfterInteractions?: boolean;
 }
 
 type PilePosition = {
@@ -274,10 +275,10 @@ const RecapBubble = memo(function RecapBubble({
   );
 });
 
-function RecapStickerPile({
+const RecapStickerPileContent = memo(function RecapStickerPileContent({
   title = 'Used this month',
   items,
-}: RecapStickerPileProps) {
+}: Pick<RecapStickerPileProps, 'title' | 'items'>) {
   const { colors } = useTheme();
   const displayItems = useMemo(() => items.slice(0, 8), [items]);
   const positions = useMemo(() => getPilePositions(displayItems.length), [displayItems.length]);
@@ -352,6 +353,83 @@ function RecapStickerPile({
       </View>
     </View>
   );
+});
+
+const RecapStickerPilePlaceholder = memo(function RecapStickerPilePlaceholder({
+  title = 'Used this month',
+}: Pick<RecapStickerPileProps, 'title'>) {
+  const { colors } = useTheme();
+
+  return (
+    <View
+      testID="notes-recap-sticker-pile-placeholder"
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+        },
+      ]}
+    >
+      <Text style={[styles.title, { color: colors.secondaryText }]}>{title}</Text>
+      <View style={styles.canvas}>
+        <View
+          pointerEvents="none"
+          style={[
+            styles.emptyCanvasGlow,
+            {
+              backgroundColor: colors.surface,
+              borderColor: `${colors.border}55`,
+            },
+          ]}
+        />
+      </View>
+    </View>
+  );
+});
+
+function RecapStickerPile({
+  title = 'Used this month',
+  items,
+  deferUntilAfterInteractions = false,
+}: RecapStickerPileProps) {
+  const shouldDeferMount = deferUntilAfterInteractions && process.env.NODE_ENV !== 'test';
+  const [isReady, setIsReady] = useState(!shouldDeferMount);
+
+  useEffect(() => {
+    if (!shouldDeferMount) {
+      setIsReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    let animationFrameId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    setIsReady(false);
+    animationFrameId = requestAnimationFrame(() => {
+      timeoutId = setTimeout(() => {
+        if (!cancelled) {
+          setIsReady(true);
+        }
+      }, 48);
+    });
+
+    return () => {
+      cancelled = true;
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [shouldDeferMount]);
+
+  if (!isReady) {
+    return <RecapStickerPilePlaceholder title={title} />;
+  }
+
+  return <RecapStickerPileContent title={title} items={items} />;
 }
 
 export default memo(RecapStickerPile);

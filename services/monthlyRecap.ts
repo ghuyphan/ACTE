@@ -312,15 +312,16 @@ export function getNotesForMonth(notes: Note[], range: MonthlyRecapMonth) {
   });
 }
 
-export function buildMonthObjects(notes: Note[], range?: MonthlyRecapMonth): MonthlyRecapObject[] {
-  const scopedNotes = range ? getNotesForMonth(notes, range) : [...notes];
-  return scopedNotes
-    .sort(compareNotesForRecap)
-    .map((note) => buildRecapObject(note));
+function buildMonthObjectsFromScopedNotes(scopedNotes: Note[]): MonthlyRecapObject[] {
+  return [...scopedNotes].sort(compareNotesForRecap).map((note) => buildRecapObject(note));
 }
 
-export function getMonthPlaceGroups(notes: Note[], range?: MonthlyRecapMonth): MonthlyRecapPlaceGroup[] {
-  const scopedNotes = range ? getNotesForMonth(notes, range) : [...notes];
+export function buildMonthObjects(notes: Note[], range?: MonthlyRecapMonth): MonthlyRecapObject[] {
+  const scopedNotes = range ? getNotesForMonth(notes, range) : notes;
+  return buildMonthObjectsFromScopedNotes(scopedNotes);
+}
+
+function getMonthPlaceGroupsFromScopedNotes(scopedNotes: Note[]): MonthlyRecapPlaceGroup[] {
   const groups = new Map<string, Note[]>();
 
   for (const note of scopedNotes) {
@@ -372,9 +373,13 @@ export function getMonthPlaceGroups(notes: Note[], range?: MonthlyRecapMonth): M
     });
 }
 
-export function getMonthHighlights(notes: Note[], range?: MonthlyRecapMonth) {
-  const scopedNotes = range ? getNotesForMonth(notes, range) : [...notes];
-  const placeGroups = getMonthPlaceGroups(scopedNotes);
+export function getMonthPlaceGroups(notes: Note[], range?: MonthlyRecapMonth): MonthlyRecapPlaceGroup[] {
+  const scopedNotes = range ? getNotesForMonth(notes, range) : notes;
+  return getMonthPlaceGroupsFromScopedNotes(scopedNotes);
+}
+
+function getMonthHighlightsFromScopedNotes(scopedNotes: Note[]) {
+  const placeGroups = getMonthPlaceGroupsFromScopedNotes(scopedNotes);
   const highlights: MonthlyRecapHighlightItem[] = [];
 
   for (const group of placeGroups.slice(0, 3)) {
@@ -432,29 +437,39 @@ export function getMonthHighlights(notes: Note[], range?: MonthlyRecapMonth) {
     .slice(0, 5);
 }
 
-export function buildMonthDayBuckets(notes: Note[], range: MonthlyRecapMonth) {
+export function getMonthHighlights(notes: Note[], range?: MonthlyRecapMonth) {
+  const scopedNotes = range ? getNotesForMonth(notes, range) : notes;
+  return getMonthHighlightsFromScopedNotes(scopedNotes);
+}
+
+function buildMonthDayBucketsFromScopedNotes(notes: Note[], range: MonthlyRecapMonth) {
   const daysInMonth = getDaysInMonth(range.year, range.month);
-  const scopedNotes = getNotesForMonth(notes, range);
+  const notesByDay = new Map<number, Note[]>();
 
-  const noteBuckets = new Map<string, Note[]>();
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    const dayStart = zonedTimeToUtc(range.year, range.month, day, range.timeZone);
-    const nextDayStart = zonedTimeToUtc(range.year, range.month, day + 1, range.timeZone);
-    const dateKey = `${range.year}-${String(range.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const date = dayStart;
-    const dayNotes = scopedNotes.filter((note) => {
-      const timestamp = getNoteTimestamp(note);
-      return timestamp >= dayStart.getTime() && timestamp < nextDayStart.getTime();
-    });
+  for (const note of notes) {
+    const timestamp = new Date(note.createdAt);
+    if (Number.isNaN(timestamp.getTime())) {
+      continue;
+    }
 
-    noteBuckets.set(dateKey, dayNotes);
+    const { day } = getZonedDateParts(timestamp, range.timeZone);
+    const existing = notesByDay.get(day);
+    if (existing) {
+      existing.push(note);
+      continue;
+    }
+
+    notesByDay.set(day, [note]);
   }
 
-  return Array.from(noteBuckets.entries()).map(([dateKey, dayNotes], index) => {
-    const firstNote = dayNotes.sort(compareNotesForRecap)[0] ?? null;
+  return Array.from({ length: daysInMonth }, (_, index) => {
     const day = index + 1;
+    const dayNotes = [...(notesByDay.get(day) ?? [])].sort(compareNotesForRecap);
+    const firstNote = dayNotes[0] ?? null;
     const dayStart = zonedTimeToUtc(range.year, range.month, day, range.timeZone);
     const { weekdayIndex } = getZonedDateParts(dayStart, range.timeZone);
+    const dateKey = `${range.year}-${String(range.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
     return {
       dateKey,
       dayOfMonth: day,
@@ -463,9 +478,7 @@ export function buildMonthDayBuckets(notes: Note[], range: MonthlyRecapMonth) {
       stampCount: Math.min(dayNotes.length, 3),
       overflowCount: Math.max(0, dayNotes.length - 3),
       markerKind: dayNotes.length > 0 ? ('stamp' as const) : null,
-      primaryObject: firstNote
-        ? buildRecapObject(firstNote)
-        : null,
+      primaryObject: firstNote ? buildRecapObject(firstNote) : null,
       noteIds: dayNotes.map((note) => note.id),
       hasPhoto: dayNotes.some((note) => note.type === 'photo'),
       hasDecorations: dayNotes.some((note) => hasDecoration(note)),
@@ -473,8 +486,12 @@ export function buildMonthDayBuckets(notes: Note[], range: MonthlyRecapMonth) {
   });
 }
 
-export function getMonthStats(notes: Note[], range?: MonthlyRecapMonth): MonthlyRecapStats {
-  const scopedNotes = range ? getNotesForMonth(notes, range) : [...notes];
+export function buildMonthDayBuckets(notes: Note[], range: MonthlyRecapMonth) {
+  const scopedNotes = getNotesForMonth(notes, range);
+  return buildMonthDayBucketsFromScopedNotes(scopedNotes, range);
+}
+
+function getMonthStatsFromScopedNotes(scopedNotes: Note[], range?: MonthlyRecapMonth): MonthlyRecapStats {
   const dayKeys = new Set<string>();
   const placeKeys = new Set<string>();
 
@@ -502,8 +519,12 @@ export function getMonthStats(notes: Note[], range?: MonthlyRecapMonth): Monthly
   };
 }
 
-export function getMonthStickerUsage(notes: Note[], range?: MonthlyRecapMonth): MonthlyRecapStickerUsage[] {
-  const scopedNotes = range ? getNotesForMonth(notes, range) : [...notes];
+export function getMonthStats(notes: Note[], range?: MonthlyRecapMonth): MonthlyRecapStats {
+  const scopedNotes = range ? getNotesForMonth(notes, range) : notes;
+  return getMonthStatsFromScopedNotes(scopedNotes, range);
+}
+
+function getMonthStickerUsageFromScopedNotes(scopedNotes: Note[]): MonthlyRecapStickerUsage[] {
   const usageByAssetId = new Map<string, MonthlyRecapStickerUsage>();
 
   for (const note of scopedNotes) {
@@ -535,16 +556,21 @@ export function getMonthStickerUsage(notes: Note[], range?: MonthlyRecapMonth): 
     .slice(0, 6);
 }
 
+export function getMonthStickerUsage(notes: Note[], range?: MonthlyRecapMonth): MonthlyRecapStickerUsage[] {
+  const scopedNotes = range ? getNotesForMonth(notes, range) : notes;
+  return getMonthStickerUsageFromScopedNotes(scopedNotes);
+}
+
 export function buildMonthlyRecap(notes: Note[], options: MonthlyRecapOptions): MonthlyRecap {
   const timeZone = options.timeZone ?? 'UTC';
   const month = getMonthRange(options.year, options.month, timeZone);
   const monthNotes = getNotesForMonth(notes, month);
-  const placeGroups = getMonthPlaceGroups(monthNotes, month);
-  const days = buildMonthDayBuckets(monthNotes, month);
-  const highlights = getMonthHighlights(monthNotes, month);
-  const objects = buildMonthObjects(monthNotes, month);
-  const stats = getMonthStats(monthNotes, month);
-  const stickerUsage = getMonthStickerUsage(monthNotes, month);
+  const placeGroups = getMonthPlaceGroupsFromScopedNotes(monthNotes);
+  const days = buildMonthDayBucketsFromScopedNotes(monthNotes, month);
+  const highlights = getMonthHighlightsFromScopedNotes(monthNotes);
+  const objects = buildMonthObjectsFromScopedNotes(monthNotes);
+  const stats = getMonthStatsFromScopedNotes(monthNotes, month);
+  const stickerUsage = getMonthStickerUsageFromScopedNotes(monthNotes);
   const heroPostcard = (highlights.find((highlight) => highlight.kind === 'postcard') ?? null) as MonthlyRecapHeroPostcard | null;
 
   return {

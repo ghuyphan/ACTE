@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useCallback, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Typography } from '../../../constants/theme';
@@ -13,164 +13,218 @@ export interface RecapCalendarDayMarker {
 
 export interface RecapCalendarDay {
   key: string;
+  dateKey?: string;
   dayNumber: number | null;
   count: number;
   markers: RecapCalendarDayMarker[];
   photoPreviewUri?: string;
   disabled?: boolean;
   isToday?: boolean;
-  isSelected?: boolean;
-  onPress?: () => void;
   accessibilityLabel?: string;
 }
 
 interface RecapCalendarGridProps {
   days: RecapCalendarDay[];
   weekDayLabels?: string[];
+  selectedDayKey?: string | null;
+  onSelectDay?: (dayKey: string) => void;
 }
 
 const DEFAULT_WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-function RecapCalendarGrid({ days, weekDayLabels = DEFAULT_WEEKDAY_LABELS }: RecapCalendarGridProps) {
+type CalendarPalette = {
+  card: string;
+  border: string;
+  primary: string;
+  primarySoft: string;
+  secondaryText: string;
+  text: string;
+};
+
+const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
+  day,
+  isSelected,
+  palette,
+  onSelectDay,
+}: {
+  day: RecapCalendarDay;
+  isSelected: boolean;
+  palette: CalendarPalette;
+  onSelectDay?: (dayKey: string) => void;
+}) {
+  const handlePress = useCallback(() => {
+    if (day.dateKey) {
+      onSelectDay?.(day.dateKey);
+    }
+  }, [day.dateKey, onSelectDay]);
+
+  if (day.dayNumber === null) {
+    return (
+      <View style={styles.dayPressable}>
+        <View style={styles.emptySlot} />
+      </View>
+    );
+  }
+
+  const hasPhotoPreview = Boolean(day.photoPreviewUri);
+  const isInteractive = Boolean(day.dateKey && day.count > 0 && !day.disabled);
+
+  return (
+    <Pressable
+      accessibilityRole={isInteractive ? 'button' : undefined}
+      accessibilityLabel={day.accessibilityLabel}
+      disabled={!isInteractive}
+      onPress={isInteractive ? handlePress : undefined}
+      style={({ pressed }) => [
+        styles.dayPressable,
+        pressed && isInteractive ? styles.dayPressed : null,
+      ]}
+    >
+      <View
+        style={[
+          styles.dayCard,
+          {
+            backgroundColor: hasPhotoPreview ? palette.card : isSelected ? palette.primarySoft : palette.card,
+            borderColor: isSelected ? `${palette.primary}22` : `${palette.border}88`,
+          },
+        ]}
+      >
+        {hasPhotoPreview ? (
+          <>
+            <Image
+              source={{ uri: day.photoPreviewUri }}
+              style={styles.dayPhotoFill}
+              contentFit="cover"
+            />
+            <View
+              pointerEvents="none"
+              style={[
+                styles.dayPhotoOverlay,
+                {
+                  backgroundColor: isSelected
+                    ? 'rgba(255, 243, 205, 0.28)'
+                    : 'rgba(24, 18, 14, 0.22)',
+                },
+              ]}
+            />
+          </>
+        ) : null}
+        <Text
+          style={[
+            styles.dayNumber,
+            {
+              color: hasPhotoPreview
+                ? '#FFFFFF'
+                : isSelected
+                  ? palette.primary
+                  : palette.text,
+            },
+          ]}
+          numberOfLines={1}
+        >
+          {day.dayNumber}
+        </Text>
+        <View style={styles.markerRow}>
+          {!hasPhotoPreview
+            ? day.markers.slice(0, 1).map((marker) => (
+                marker.type === 'polaroid' && marker.previewUri ? (
+                  <View
+                    key={marker.key}
+                    style={[
+                      styles.photoMarker,
+                      {
+                        borderColor: isSelected ? palette.primary : `${palette.border}AA`,
+                        backgroundColor: palette.card,
+                      },
+                    ]}
+                  >
+                    <Image
+                      source={{ uri: marker.previewUri }}
+                      style={styles.photoMarkerImage}
+                      contentFit="cover"
+                    />
+                  </View>
+                ) : (
+                  <View
+                    key={marker.key}
+                    style={[
+                      styles.marker,
+                      {
+                        backgroundColor: marker.color,
+                        borderColor: marker.color,
+                      },
+                    ]}
+                  />
+                )
+              ))
+            : null}
+          {day.count > 1 ? (
+            <View
+              style={[
+                styles.overflowBadge,
+                {
+                  backgroundColor: hasPhotoPreview ? 'rgba(255,255,255,0.9)' : palette.primarySoft,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.overflowText,
+                  { color: hasPhotoPreview ? palette.text : palette.primary },
+                ]}
+              >
+                +{day.count - 1}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </Pressable>
+  );
+}, (prevProps, nextProps) => (
+  prevProps.day === nextProps.day &&
+  prevProps.isSelected === nextProps.isSelected &&
+  prevProps.palette === nextProps.palette &&
+  prevProps.onSelectDay === nextProps.onSelectDay
+));
+
+function RecapCalendarGrid({
+  days,
+  weekDayLabels = DEFAULT_WEEKDAY_LABELS,
+  selectedDayKey = null,
+  onSelectDay,
+}: RecapCalendarGridProps) {
   const { colors } = useTheme();
+  const palette = useMemo<CalendarPalette>(
+    () => ({
+      card: colors.card,
+      border: colors.border,
+      primary: colors.primary,
+      primarySoft: colors.primarySoft,
+      secondaryText: colors.secondaryText,
+      text: colors.text,
+    }),
+    [colors.border, colors.card, colors.primary, colors.primarySoft, colors.secondaryText, colors.text]
+  );
 
   return (
     <View style={styles.section}>
       <View style={styles.weekRow}>
         {weekDayLabels.map((label, index) => (
-          <Text key={`${label}:${index}`} style={[styles.weekLabel, { color: colors.secondaryText }]}>{label}</Text>
+          <Text key={`${label}:${index}`} style={[styles.weekLabel, { color: palette.secondaryText }]}>{label}</Text>
         ))}
       </View>
 
       <View style={styles.grid}>
-        {days.map((day) => {
-          if (day.dayNumber === null) {
-            return (
-              <View key={day.key} style={styles.dayPressable}>
-                <View style={styles.emptySlot} />
-              </View>
-            );
-          }
-
-          const hasPhotoPreview = Boolean(day.photoPreviewUri);
-          const content = (
-            <View
-              style={[
-                styles.dayCard,
-                {
-                  backgroundColor: hasPhotoPreview ? colors.card : day.isSelected ? colors.primarySoft : colors.card,
-                  borderColor: day.isSelected ? `${colors.primary}22` : `${colors.border}88`,
-                },
-              ]}
-            >
-              {hasPhotoPreview ? (
-                <>
-                  <Image
-                    source={{ uri: day.photoPreviewUri }}
-                    style={styles.dayPhotoFill}
-                    contentFit="cover"
-                  />
-                  <View
-                    pointerEvents="none"
-                    style={[
-                      styles.dayPhotoOverlay,
-                      {
-                        backgroundColor: day.isSelected
-                          ? 'rgba(255, 243, 205, 0.28)'
-                          : 'rgba(24, 18, 14, 0.22)',
-                      },
-                    ]}
-                  />
-                </>
-              ) : null}
-              <Text
-                style={[
-                  styles.dayNumber,
-                  {
-                    color: hasPhotoPreview
-                      ? '#FFFFFF'
-                      : day.isSelected
-                        ? colors.primary
-                        : colors.text,
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {day.dayNumber}
-              </Text>
-              <View style={styles.markerRow}>
-                {!hasPhotoPreview
-                  ? day.markers.slice(0, 1).map((marker) => (
-                      marker.type === 'polaroid' && marker.previewUri ? (
-                        <View
-                          key={marker.key}
-                          style={[
-                            styles.photoMarker,
-                            {
-                              borderColor: day.isSelected ? colors.primary : `${colors.border}AA`,
-                              backgroundColor: colors.card,
-                            },
-                          ]}
-                        >
-                          <Image
-                            source={{ uri: marker.previewUri }}
-                            style={styles.photoMarkerImage}
-                            contentFit="cover"
-                          />
-                        </View>
-                      ) : (
-                        <View
-                          key={marker.key}
-                          style={[
-                            styles.marker,
-                            {
-                              backgroundColor: marker.color,
-                              borderColor: marker.color,
-                            },
-                          ]}
-                        />
-                      )
-                    ))
-                  : null}
-                {day.count > 1 ? (
-                  <View
-                    style={[
-                      styles.overflowBadge,
-                      {
-                        backgroundColor: hasPhotoPreview ? 'rgba(255,255,255,0.9)' : colors.primarySoft,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.overflowText,
-                        { color: hasPhotoPreview ? colors.text : colors.primary },
-                      ]}
-                    >
-                      +{day.count - 1}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-          );
-
-          return (
-            <Pressable
-              key={day.key}
-              accessibilityRole={day.onPress ? 'button' : undefined}
-              accessibilityLabel={day.accessibilityLabel}
-              disabled={day.disabled || !day.onPress}
-              onPress={day.onPress}
-              style={({ pressed }) => [
-                styles.dayPressable,
-                pressed && day.onPress && !day.disabled ? styles.dayPressed : null,
-              ]}
-            >
-              {content}
-            </Pressable>
-          );
-        })}
+        {days.map((day) => (
+          <RecapCalendarDayCell
+            key={day.key}
+            day={day}
+            isSelected={Boolean(day.dateKey && day.dateKey === selectedDayKey)}
+            palette={palette}
+            onSelectDay={onSelectDay}
+          />
+        ))}
       </View>
     </View>
   );

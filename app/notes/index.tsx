@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Href, Stack, useRouter } from 'expo-router';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Reanimated from 'react-native-reanimated';
 import {
@@ -284,6 +284,10 @@ function shiftMonth(date: Date, offset: number) {
   return new Date(date.getFullYear(), date.getMonth() + offset, 1);
 }
 
+function getMonthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
 function getRecapLocale(language: string) {
   if (language === 'vi') {
     return 'vi-VN';
@@ -411,9 +415,14 @@ const NotesRecapView = memo(function NotesRecapView({
     []
   );
   const weekDayLabels = useMemo(() => buildWeekdayLabels(locale), [locale]);
-  const monthDates = useMemo(() => {
+  const todayKey = useMemo(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  }, []);
+  const monthEntries = useMemo(() => {
     let latestMonth: Date | null = null;
     let earliestMonth: Date | null = null;
+    const notesByMonth = new Map<string, Note[]>();
 
     for (const note of notes) {
       const timestamp = new Date(note.createdAt);
@@ -422,6 +431,15 @@ const NotesRecapView = memo(function NotesRecapView({
       }
 
       const monthDate = startOfMonth(timestamp);
+      const monthKey = getMonthKey(monthDate);
+      const existingMonthNotes = notesByMonth.get(monthKey);
+
+      if (existingMonthNotes) {
+        existingMonthNotes.push(note);
+      } else {
+        notesByMonth.set(monthKey, [note]);
+      }
+
       if (!latestMonth || !earliestMonth) {
         latestMonth = monthDate;
         earliestMonth = monthDate;
@@ -446,41 +464,65 @@ const NotesRecapView = memo(function NotesRecapView({
       earliestMonth = minimumWindowStart;
     }
 
-    const months: Date[] = [];
+    const months: Array<{
+      monthDate: Date;
+      monthKey: string;
+      notes: Note[];
+    }> = [];
     let cursor = startOfMonth(latestMonth);
 
     while (cursor.getTime() >= earliestMonth.getTime()) {
-      months.push(cursor);
+      const monthKey = getMonthKey(cursor);
+      months.push({
+        monthDate: cursor,
+        monthKey,
+        notes: notesByMonth.get(monthKey) ?? [],
+      });
       cursor = shiftMonth(cursor, -1);
     }
 
     return months;
   }, [notes]);
-  const recaps = useMemo(
-    () =>
-      monthDates.map((monthDate) =>
-        buildMonthlyRecap(notes, {
-          year: monthDate.getFullYear(),
-          month: monthDate.getMonth(),
-          timeZone,
-        })
-      ),
-    [monthDates, notes, timeZone]
+
+  const noteById = useMemo(
+    () => new Map(notes.map((note) => [note.id, note] as const)),
+    [notes]
   );
+  const activeMonthIndex = useMemo(
+    () => monthEntries.findIndex((entry) => entry.monthKey === activeMonthKey),
+    [activeMonthKey, monthEntries]
+  );
+  const activeMonthEntry = useMemo(() => {
+    if (activeMonthIndex >= 0) {
+      return monthEntries[activeMonthIndex] ?? null;
+    }
+
+    return monthEntries[0] ?? null;
+  }, [activeMonthIndex, monthEntries]);
+  const activeRecap = useMemo(() => {
+    if (!activeMonthEntry) {
+      return null;
+    }
+
+    return buildMonthlyRecap(activeMonthEntry.notes, {
+      year: activeMonthEntry.monthDate.getFullYear(),
+      month: activeMonthEntry.monthDate.getMonth(),
+      timeZone,
+    });
+  }, [activeMonthEntry, timeZone]);
 
   useEffect(() => {
-    const availableDayKeys = new Set(
-      recaps.flatMap((recap) => recap.days.filter((day) => day.noteCount > 0).map((day) => day.dateKey))
-    );
-
-    if (selectedDayKey && !availableDayKeys.has(selectedDayKey)) {
+    if (
+      selectedDayKey &&
+      (!activeRecap || !activeRecap.days.some((day) => day.dateKey === selectedDayKey && day.noteCount > 0))
+    ) {
       setSelectedDayKey(null);
     }
-  }, [recaps, selectedDayKey]);
+  }, [activeRecap, selectedDayKey]);
 
   useEffect(() => {
-    const firstMonthKey = recaps[0]?.month.monthKey ?? null;
-    const monthKeys = new Set(recaps.map((recap) => recap.month.monthKey));
+    const firstMonthKey = monthEntries[0]?.monthKey ?? null;
+    const monthKeys = new Set(monthEntries.map((entry) => entry.monthKey));
 
     if (activeMonthKey && monthKeys.has(activeMonthKey)) {
       return;
@@ -489,20 +531,8 @@ const NotesRecapView = memo(function NotesRecapView({
     if (firstMonthKey !== activeMonthKey) {
       setActiveMonthKey(firstMonthKey);
     }
-  }, [activeMonthKey, recaps]);
+  }, [activeMonthKey, monthEntries]);
 
-  const noteById = useMemo(
-    () => new Map(notes.map((note) => [note.id, note] as const)),
-    [notes]
-  );
-  const activeRecap = useMemo(
-    () => recaps.find((recap) => recap.month.monthKey === activeMonthKey) ?? recaps[0] ?? null,
-    [activeMonthKey, recaps]
-  );
-  const activeMonthIndex = useMemo(
-    () => recaps.findIndex((recap) => recap.month.monthKey === activeMonthKey),
-    [activeMonthKey, recaps]
-  );
   const handleChangeMonth = useCallback(
     (direction: 'previous' | 'next') => {
       if (activeMonthIndex < 0) {
@@ -510,17 +540,150 @@ const NotesRecapView = memo(function NotesRecapView({
       }
 
       const targetIndex = direction === 'previous' ? activeMonthIndex + 1 : activeMonthIndex - 1;
-      const targetRecap = recaps[targetIndex];
+      const targetMonthEntry = monthEntries[targetIndex];
 
-      if (!targetRecap) {
+      if (!targetMonthEntry) {
         return;
       }
 
-      setActiveMonthKey(targetRecap.month.monthKey);
-      setSelectedDayKey(null);
+      startTransition(() => {
+        setActiveMonthKey(targetMonthEntry.monthKey);
+        setSelectedDayKey(null);
+      });
     },
-    [activeMonthIndex, recaps]
+    [activeMonthIndex, monthEntries]
   );
+  const handleSelectDay = useCallback((dayKey: string) => {
+    startTransition(() => {
+      setSelectedDayKey((current) => (current === dayKey ? null : dayKey));
+    });
+  }, []);
+  const activeRecapCalendarModel = useMemo(() => {
+    if (!activeRecap) {
+      return null;
+    }
+
+    const placeholderDays: RecapCalendarDay[] = [];
+    const firstWeekdayIndex = activeRecap.days[0]?.weekdayIndex ?? 0;
+
+    for (let index = 0; index < firstWeekdayIndex; index += 1) {
+      placeholderDays.push({
+        key: `${activeRecap.month.monthKey}:empty-start:${index}`,
+        dayNumber: null,
+        count: 0,
+        markers: [],
+        disabled: true,
+      });
+    }
+
+    const dayNotesByKey = new Map<string, Note[]>();
+    const dayByKey = new Map(activeRecap.days.map((day) => [day.dateKey, day] as const));
+    const monthNotes: Note[] = [];
+    const calendarDays = activeRecap.days.map((day) => {
+      const dayNotes = day.noteIds
+        .map((noteId) => noteById.get(noteId) ?? null)
+        .filter((note): note is Note => Boolean(note));
+      const dayPhotoPreviewUri =
+        dayNotes
+          .filter((note) => note.type === 'photo')
+          .map((note) => getNotePhotoUri(note))
+          .find((uri): uri is string => Boolean(uri)) ?? undefined;
+
+      dayNotesByKey.set(day.dateKey, dayNotes);
+      monthNotes.push(...dayNotes);
+
+      return {
+        key: day.dateKey,
+        dateKey: day.dateKey,
+        dayNumber: day.dayOfMonth,
+        count: day.noteCount,
+        photoPreviewUri: dayPhotoPreviewUri,
+        markers: Array.from({ length: day.stampCount }, (_, index) => ({
+          key: `${day.dateKey}:marker:${index}`,
+          color:
+            day.hasPhoto && index === 0
+              ? colors.primary
+              : day.hasDecorations
+                ? colors.accent
+                : colors.secondaryText,
+          previewUri: day.hasPhoto && index === 0 ? dayPhotoPreviewUri : undefined,
+          type: day.hasPhoto && index === 0 ? ('polaroid' as const) : ('stamp' as const),
+        })),
+        isToday: day.dateKey === todayKey,
+        disabled: day.noteCount === 0,
+        accessibilityLabel:
+          day.noteCount > 0
+            ? `${t('notes.recap.dayMemories', 'Day memories')} ${formatRecapMonthLabel(
+                activeRecap.month.start,
+                locale
+              )} ${day.dayOfMonth}`
+            : undefined,
+      } satisfies RecapCalendarDay;
+    });
+
+    const totalSlots = placeholderDays.length + calendarDays.length;
+    const trailingSlots = totalSlots % 7 === 0 ? 0 : 7 - (totalSlots % 7);
+    const trailingDays = Array.from({ length: trailingSlots }, (_, index) => ({
+      key: `${activeRecap.month.monthKey}:empty-end:${index}`,
+      dayNumber: null,
+      count: 0,
+      markers: [],
+      disabled: true,
+    } satisfies RecapCalendarDay));
+
+    return {
+      calendarDays: [...placeholderDays, ...calendarDays, ...trailingDays],
+      dayByKey,
+      dayNotesByKey,
+      monthNotes,
+    };
+  }, [
+    activeRecap,
+    colors.accent,
+    colors.primary,
+    colors.secondaryText,
+    locale,
+    noteById,
+    t,
+    todayKey,
+  ]);
+  const activeRecapPileModel = useMemo(() => {
+    if (!activeRecap || !activeRecapCalendarModel) {
+      return null;
+    }
+
+    const selectedRecapDay = selectedDayKey
+      ? activeRecapCalendarModel.dayByKey.get(selectedDayKey) ?? null
+      : null;
+    const pileSourceNotes = selectedRecapDay
+      ? activeRecapCalendarModel.dayNotesByKey.get(selectedRecapDay.dateKey) ?? []
+      : activeRecapCalendarModel.monthNotes;
+    const pileKeyPrefix = selectedRecapDay?.dateKey ?? activeRecap.month.monthKey;
+    const photoPileItems = buildPhotoPileItemsFromNotes(pileSourceNotes, pileKeyPrefix).slice(0, 8);
+    const stickerPileItems = buildStickerPileItemsFromNotes(pileSourceNotes, pileKeyPrefix);
+    const prioritizedPhotoItems =
+      stickerPileItems.length > 0 ? photoPileItems.slice(0, 5) : photoPileItems.slice(0, 8);
+    const pileItems = [...prioritizedPhotoItems, ...stickerPileItems].slice(0, 8);
+    const selectedDayLabel = selectedRecapDay
+      ? formatRecapDayLabel(
+          new Date(
+            activeRecap.month.start.getFullYear(),
+            activeRecap.month.start.getMonth(),
+            selectedRecapDay.dayOfMonth
+          ),
+          locale
+        )
+      : null;
+
+    return {
+      title: selectedDayLabel
+        ? selectedDayLabel
+        : photoPileItems.length > 0
+          ? t('notes.recap.photoPileTitle', 'Saved this month')
+          : t('notes.recap.stickerTrayTitle', 'Used this month'),
+      items: pileItems,
+    };
+  }, [activeRecap, activeRecapCalendarModel, locale, selectedDayKey, t]);
 
   return (
     <View
@@ -546,7 +709,7 @@ const NotesRecapView = memo(function NotesRecapView({
               label={formatRecapMonthLabel(activeRecap.month.start, locale)}
               onPrevious={() => handleChangeMonth('previous')}
               onNext={() => handleChangeMonth('next')}
-              previousDisabled={activeMonthIndex >= recaps.length - 1}
+              previousDisabled={activeMonthIndex >= monthEntries.length - 1}
               nextDisabled={activeMonthIndex <= 0}
               previousAccessibilityLabel={t('notes.recap.previousMonth', 'Previous month')}
               nextAccessibilityLabel={t('notes.recap.nextMonth', 'Next month')}
@@ -562,7 +725,7 @@ const NotesRecapView = memo(function NotesRecapView({
         }}
       >
         <View style={styles.recapContent}>
-          {recaps.length === 0 ? (
+          {!activeRecap ? (
             <View
               testID="notes-recap-empty-state"
               style={[styles.recapEmptyState, { borderColor: colors.border, backgroundColor: colors.card }]}
@@ -579,141 +742,33 @@ const NotesRecapView = memo(function NotesRecapView({
               </Text>
             </View>
           ) : (
-            <>
-              {(activeRecap ? [activeRecap] : []).map((recap) => {
-              const placeholderDays: RecapCalendarDay[] = [];
-              const firstWeekdayIndex = recap.days[0]?.weekdayIndex ?? 0;
+            <View
+              key={activeRecap.month.monthKey}
+              style={styles.recapMonthSection}
+            >
+              <RecapStickerPile
+                title={activeRecapPileModel?.title}
+                items={activeRecapPileModel?.items ?? []}
+                deferUntilAfterInteractions
+              />
 
-              for (let index = 0; index < firstWeekdayIndex; index += 1) {
-                placeholderDays.push({
-                  key: `${recap.month.monthKey}:empty-start:${index}`,
-                  dayNumber: null,
-                  count: 0,
-                  markers: [],
-                  disabled: true,
-                });
-              }
-
-              const mappedDays = recap.days.map((day) => {
-                const dayNotes = day.noteIds
-                  .map((noteId) => noteById.get(noteId) ?? null)
-                  .filter((note): note is Note => Boolean(note));
-                const dayPhotoPreviewUri =
-                  dayNotes
-                    .filter((note) => note.type === 'photo')
-                    .map((note) => getNotePhotoUri(note))
-                    .find((uri): uri is string => Boolean(uri)) ?? undefined;
-
-                return {
-                  key: day.dateKey,
-                  dayNumber: day.dayOfMonth,
-                  count: day.noteCount,
-                  photoPreviewUri: dayPhotoPreviewUri,
-                  markers: Array.from({ length: day.stampCount }, (_, index) => ({
-                    key: `${day.dateKey}:marker:${index}`,
-                    color:
-                      day.hasPhoto && index === 0
-                        ? colors.primary
-                        : day.hasDecorations
-                          ? colors.accent
-                          : colors.secondaryText,
-                    previewUri: day.hasPhoto && index === 0 ? dayPhotoPreviewUri : undefined,
-                    type: day.hasPhoto && index === 0 ? ('polaroid' as const) : ('stamp' as const),
-                  })),
-                  isSelected: day.dateKey === selectedDayKey,
-                  isToday:
-                    day.dateKey ===
-                    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(
-                      new Date().getDate()
-                    ).padStart(2, '0')}`,
-                  onPress:
-                    day.noteCount > 0
-                      ? () => {
-                          setSelectedDayKey((current) => (current === day.dateKey ? null : day.dateKey));
-                        }
-                      : undefined,
-                  accessibilityLabel:
-                    day.noteCount > 0
-                      ? `${t('notes.recap.dayMemories', 'Day memories')} ${formatRecapMonthLabel(
-                          recap.month.start,
-                          locale
-                        )} ${day.dayOfMonth}`
-                      : undefined,
-                };
-              });
-
-              const totalSlots = placeholderDays.length + mappedDays.length;
-              const trailingSlots = totalSlots % 7 === 0 ? 0 : 7 - (totalSlots % 7);
-              const trailingDays = Array.from({ length: trailingSlots }, (_, index) => ({
-                key: `${recap.month.monthKey}:empty-end:${index}`,
-                dayNumber: null,
-                count: 0,
-                markers: [],
-                disabled: true,
-              }));
-              const monthNotes = recap.days
-                .flatMap((day) => day.noteIds)
-                .map((noteId) => noteById.get(noteId) ?? null)
-                .filter((note): note is Note => Boolean(note));
-              const selectedRecapDay =
-                selectedDayKey ? recap.days.find((day) => day.dateKey === selectedDayKey) ?? null : null;
-              const selectedDayNotes = selectedRecapDay
-                ? selectedRecapDay.noteIds
-                    .map((noteId) => noteById.get(noteId) ?? null)
-                    .filter((note): note is Note => Boolean(note))
-                : [];
-              const pileSourceNotes = selectedRecapDay ? selectedDayNotes : monthNotes;
-              const pileKeyPrefix = selectedRecapDay?.dateKey ?? recap.month.monthKey;
-              const photoPileItems = buildPhotoPileItemsFromNotes(pileSourceNotes, pileKeyPrefix).slice(0, 8);
-              const stickerPileItems = buildStickerPileItemsFromNotes(pileSourceNotes, pileKeyPrefix);
-              const prioritizedPhotoItems =
-                stickerPileItems.length > 0 ? photoPileItems.slice(0, 5) : photoPileItems.slice(0, 8);
-              const pileItems = [...prioritizedPhotoItems, ...stickerPileItems].slice(0, 8);
-              const selectedDayLabel = selectedRecapDay
-                ? formatRecapDayLabel(
-                    new Date(
-                      recap.month.start.getFullYear(),
-                      recap.month.start.getMonth(),
-                      selectedRecapDay.dayOfMonth
-                    ),
-                    locale
-                  )
-                : null;
-
-              return (
-                <View
-                  key={recap.month.monthKey}
-                  style={styles.recapMonthSection}
-                >
-                  <RecapStickerPile
-                    title={
-                      selectedDayLabel
-                        ? selectedDayLabel
-                        : photoPileItems.length > 0
-                          ? t('notes.recap.photoPileTitle', 'Saved this month')
-                          : t('notes.recap.stickerTrayTitle', 'Used this month')
-                    }
-                    items={pileItems}
-                  />
-
-                  <View
-                    style={[
-                      styles.recapCalendarShell,
-                      {
-                        borderColor: colors.border,
-                        backgroundColor: colors.card,
-                      },
-                    ]}
-                  >
-                    <RecapCalendarGrid
-                      days={[...placeholderDays, ...mappedDays, ...trailingDays]}
-                      weekDayLabels={weekDayLabels}
-                    />
-                  </View>
-                </View>
-              );
-              })}
-            </>
+              <View
+                style={[
+                  styles.recapCalendarShell,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: colors.card,
+                  },
+                ]}
+              >
+                <RecapCalendarGrid
+                  days={activeRecapCalendarModel?.calendarDays ?? []}
+                  weekDayLabels={weekDayLabels}
+                  selectedDayKey={selectedDayKey}
+                  onSelectDay={handleSelectDay}
+                />
+              </View>
+            </View>
           )}
         </View>
       </ScrollView>
