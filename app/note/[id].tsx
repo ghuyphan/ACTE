@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import NoteDetailSheet from '../../components/NoteDetailSheet';
+import NoteDetailSheet from '../../components/notes/NoteDetailSheet';
 
 export default function NoteDetailRoute() {
     const { id } = useLocalSearchParams<{ id: string }>();

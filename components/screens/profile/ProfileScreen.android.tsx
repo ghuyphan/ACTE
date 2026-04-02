@@ -9,8 +9,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import type { ThemeColors } from '../../hooks/useTheme';
-import { Layout } from '../../constants/theme';
+import type { ThemeColors } from '../../../hooks/useTheme';
+import { Layout } from '../../../constants/theme';
 import ProfileAvatar from './ProfileAvatar';
 import { useProfileScreenModel } from './useProfileScreenModel';
 

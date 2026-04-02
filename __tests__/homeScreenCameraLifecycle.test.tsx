@@ -100,27 +100,27 @@ jest.mock('../hooks/useGeofence', () => ({
   }),
 }));
 
-jest.mock('../hooks/useAppSheetAlert', () => ({
+jest.mock('../hooks/ui/useAppSheetAlert', () => ({
   useAppSheetAlert: () => ({
     alertProps: {},
     showAlert: mockShowAlert,
   }),
 }));
 
-jest.mock('../hooks/useActiveFeedTarget', () => ({
+jest.mock('../hooks/state/useActiveFeedTarget', () => ({
   useActiveFeedTarget: () => ({
     setActiveFeedTarget: jest.fn(),
     clearActiveFeedTarget: jest.fn(),
   }),
 }));
 
-jest.mock('../hooks/useNoteDetailSheet', () => ({
+jest.mock('../hooks/ui/useNoteDetailSheet', () => ({
   useNoteDetailSheet: () => ({
     openNoteDetail: jest.fn(),
   }),
 }));
 
-jest.mock('../hooks/useFeedFocus', () => ({
+jest.mock('../hooks/state/useFeedFocus', () => ({
   useFeedFocus: () => ({
     consumeFeedFocus: jest.fn(() => null),
   }),
@@ -173,7 +173,7 @@ jest.mock('../services/sharedFeedService', () => ({
   getSharedFeedErrorMessage: jest.fn(() => 'Shared moments are unavailable right now.'),
 }));
 
-jest.mock('../components/AppSheetAlert', () => {
+jest.mock('../components/sheets/AppSheetAlert', () => {
   return function MockAppSheetAlert() {
     return null;
   };

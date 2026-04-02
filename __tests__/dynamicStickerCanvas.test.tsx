@@ -1,6 +1,6 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import DynamicStickerCanvas from '../components/DynamicStickerCanvas';
+import DynamicStickerCanvas from '../components/notes/DynamicStickerCanvas';
 import type { NoteStickerPlacement } from '../services/noteStickers';
 import { useStickerPhysics } from '../hooks/useStickerPhysics';
 

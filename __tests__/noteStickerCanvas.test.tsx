@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
-import NoteStickerCanvas from '../components/NoteStickerCanvas';
+import NoteStickerCanvas from '../components/notes/NoteStickerCanvas';
 import type { NoteStickerPlacement } from '../services/noteStickers';
 
 jest.mock('expo-image', () => {
@@ -8,7 +8,10 @@ jest.mock('expo-image', () => {
   const { Image } = require('react-native');
 
   return {
-    Image: React.forwardRef((props: any, ref: any) => <Image ref={ref} {...props} />),
+    Image: Object.assign(
+      React.forwardRef((props: any, ref: any) => <Image ref={ref} {...props} />),
+      { displayName: 'MockExpoImage' }
+    ),
   };
 });
 

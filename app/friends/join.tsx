@@ -9,8 +9,8 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import AppSheet from '../../components/AppSheet';
-import AppSheetScaffold from '../../components/AppSheetScaffold';
+import AppSheet from '../../components/sheets/AppSheet';
+import AppSheetScaffold from '../../components/sheets/AppSheetScaffold';
 import FriendInviteJoinBody from '../../components/FriendInviteJoinBody';
 import { useAuth } from '../../hooks/useAuth';
 import { useFriendInviteJoin } from '../../hooks/useFriendInviteJoin';

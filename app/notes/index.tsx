@@ -18,12 +18,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout } from '../../constants/theme';
 import { DOODLE_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { useAuth } from '../../hooks/useAuth';
-import { useFeedFocus } from '../../hooks/useFeedFocus';
+import { useFeedFocus } from '../../hooks/state/useFeedFocus';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
-import DynamicStickerCanvas from '../../components/DynamicStickerCanvas';
-import NoteDoodleCanvas from '../../components/NoteDoodleCanvas';
+import DynamicStickerCanvas from '../../components/notes/DynamicStickerCanvas';
+import NoteDoodleCanvas from '../../components/notes/NoteDoodleCanvas';
 import {
   getGradientStickerMotionVariant,
   getNoteColorStickerMotion,

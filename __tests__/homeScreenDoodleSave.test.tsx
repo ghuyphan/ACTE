@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
+import { ActiveFeedTargetProvider } from '../hooks/state/useActiveFeedTarget';
 
 const mockCreateNote = jest.fn(async (input?: any) => {
   const createdNote = {
@@ -135,20 +135,20 @@ jest.mock('../hooks/useGeofence', () => ({
   }),
 }));
 
-jest.mock('../hooks/useAppSheetAlert', () => ({
+jest.mock('../hooks/ui/useAppSheetAlert', () => ({
   useAppSheetAlert: () => ({
     alertProps: {},
     showAlert: mockShowAlert,
   }),
 }));
 
-jest.mock('../hooks/useNoteDetailSheet', () => ({
+jest.mock('../hooks/ui/useNoteDetailSheet', () => ({
   useNoteDetailSheet: () => ({
     openNoteDetail: jest.fn(),
   }),
 }));
 
-jest.mock('../hooks/useFeedFocus', () => ({
+jest.mock('../hooks/state/useFeedFocus', () => ({
   useFeedFocus: () => ({
     consumeFeedFocus: jest.fn(() => null),
   }),
@@ -251,7 +251,7 @@ jest.mock('../services/sharedFeedService', () => ({
   getSharedFeedErrorMessage: jest.fn(() => 'Shared moments are unavailable right now.'),
 }));
 
-jest.mock('../components/AppSheetAlert', () => {
+jest.mock('../components/sheets/AppSheetAlert', () => {
   return function MockAppSheetAlert() {
     return null;
   };

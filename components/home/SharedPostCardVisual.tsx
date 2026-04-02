@@ -5,9 +5,9 @@ import { Layout } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { SharedPost } from '../../services/sharedFeedService';
 import { downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET } from '../../services/remoteMedia';
-import ImageMemoryCard from '../ImageMemoryCard';
-import type { DebugTiltState } from '../StickerPhysicsDebugControls';
-import TextMemoryCard from '../TextMemoryCard';
+import ImageMemoryCard from '../notes/ImageMemoryCard';
+import type { DebugTiltState } from '../notes/StickerPhysicsDebugControls';
+import TextMemoryCard from '../notes/TextMemoryCard';
 import type { SharedValue } from 'react-native-reanimated';
 
 export default function SharedPostCardVisual({

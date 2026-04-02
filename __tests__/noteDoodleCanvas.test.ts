@@ -2,7 +2,7 @@ import {
   createRenderedStrokeCache,
   getOrCreateRenderedStroke,
   type DoodleStroke,
-} from '../components/NoteDoodleCanvas';
+} from '../components/notes/NoteDoodleCanvas';
 
 describe('NoteDoodleCanvas render cache', () => {
   it('reuses cached render data for the same stroke and size', () => {

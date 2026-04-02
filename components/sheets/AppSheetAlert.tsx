@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, View } from 'react-native';
-import { useTheme } from '../hooks/useTheme';
+import { useTheme } from '../../hooks/useTheme';
 import AppSheet from './AppSheet';
 import AppSheetScaffold from './AppSheetScaffold';
-import PrimaryButton from './ui/PrimaryButton';
+import PrimaryButton from '../ui/PrimaryButton';
 
 export type AppSheetAlertVariant = 'info' | 'success' | 'warning' | 'error';
 

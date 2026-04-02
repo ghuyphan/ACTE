@@ -2,13 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import AppSheet from '../AppSheet';
-import AppSheetAlert from '../AppSheetAlert';
-import SettingsLanguageSheetAndroid from '../settings/SettingsLanguageSheet.android';
-import SettingsSyncSheetAndroid from '../SettingsSyncSheet.android';
-import SettingsThemeSheetAndroid from '../settings/SettingsThemeSheet.android';
-import type { ThemeColors } from '../../hooks/useTheme';
-import { Layout } from '../../constants/theme';
+import AppSheet from '../../sheets/AppSheet';
+import AppSheetAlert from '../../sheets/AppSheetAlert';
+import SettingsLanguageSheetAndroid from '../../settings/SettingsLanguageSheet.android';
+import SettingsSyncSheetAndroid from '../../settings/SettingsSyncSheet.android';
+import SettingsThemeSheetAndroid from '../../settings/SettingsThemeSheet.android';
+import type { ThemeColors } from '../../../hooks/useTheme';
+import { Layout } from '../../../constants/theme';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
 
 type SheetKey = 'language' | 'theme' | 'sync' | null;
@@ -170,10 +170,7 @@ export default function SettingsScreenAndroid() {
     );
   } else if (sheet === 'sync') {
     sheetContent = (
-      <SettingsSyncSheetAndroid
-        accountHint={accountHint}
-        onClose={() => setShowSync(false)}
-      />
+      <SettingsSyncSheetAndroid accountHint={accountHint} />
     );
   }
 

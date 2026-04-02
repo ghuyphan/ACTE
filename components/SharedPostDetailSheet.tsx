@@ -10,7 +10,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useSharedFeedStore } from '../hooks/useSharedFeed';
 import { useTheme } from '../hooks/useTheme';
 import { formatDate } from '../utils/dateUtils';
-import AppSheet from './AppSheet';
+import AppSheet from './sheets/AppSheet';
 
 interface SharedPostDetailSheetProps {
   postId: string;

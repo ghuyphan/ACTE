@@ -8,12 +8,12 @@ import { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { SharedPost } from '../../services/sharedFeedService';
 import { formatDate } from '../../utils/dateUtils';
-import ImageMemoryCard from '../ImageMemoryCard';
+import ImageMemoryCard from '../notes/ImageMemoryCard';
 import {
   DEFAULT_DEBUG_TILT_STATE,
   type DebugTiltState,
-} from '../StickerPhysicsDebugControls';
-import TextMemoryCard from '../TextMemoryCard';
+} from '../notes/StickerPhysicsDebugControls';
+import TextMemoryCard from '../notes/TextMemoryCard';
 import InfoPill from '../ui/InfoPill';
 import SharedPostCardVisual from './SharedPostCardVisual';
 

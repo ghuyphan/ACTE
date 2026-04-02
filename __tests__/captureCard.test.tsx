@@ -60,6 +60,7 @@ jest.mock('react-native-vision-camera', () => {
     }));
     return <View testID="mock-camera-view" />;
   });
+  MockCameraView.displayName = 'MockCameraView';
 
   MockCameraView.getCameraPermissionStatus = jest.fn(() => 'granted');
 
@@ -169,7 +170,7 @@ jest.mock('../components/ui/PrimaryButton', () => {
   };
 });
 
-jest.mock('../components/AppBottomSheet', () => {
+jest.mock('../components/sheets/AppBottomSheet', () => {
   const React = require('react');
   const { View } = require('react-native');
   return function MockAppBottomSheet({ children, visible }: any) {
@@ -193,7 +194,7 @@ jest.mock('../utils/platform', () => ({
   isOlderIOS: false,
 }));
 
-jest.mock('../components/NoteDoodleCanvas', () => {
+jest.mock('../components/notes/NoteDoodleCanvas', () => {
   const React = require('react');
   const { Pressable, Text, View } = require('react-native');
 
@@ -219,7 +220,7 @@ jest.mock('../components/NoteDoodleCanvas', () => {
   };
 });
 
-jest.mock('../components/NoteStickerCanvas', () => {
+jest.mock('../components/notes/NoteStickerCanvas', () => {
   const React = require('react');
   const { Pressable, Text, View } = require('react-native');
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../hooks/useTheme';
-import SettingsSelectionSheetAndroid from '../SettingsSelectionSheet.android';
+import SettingsSelectionSheetAndroid from './SettingsSelectionSheet.android';
 import { getThemeOptions } from './settingsSelectionOptions';
 
 export default function SettingsThemeSheetAndroid({ onClose }: { onClose: () => void }) {

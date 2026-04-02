@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { useSettingsScreenModel } from '../components/screens/useSettingsScreenModel';
+import { useSettingsScreenModel } from '../components/screens/settings/useSettingsScreenModel';
 
 const mockRouterPush = jest.fn();
 const mockShowAlert = jest.fn();
@@ -23,7 +23,7 @@ const mockThemeState = {
 };
 
 const mockNotesState = {
-  notes: [] as Array<{ id: string }>,
+  notes: [] as { id: string }[],
   deleteAllNotes: jest.fn(async () => undefined),
 };
 
@@ -104,7 +104,7 @@ jest.mock('react-native-safe-area-context', () => ({
   }),
 }));
 
-jest.mock('../hooks/useAppSheetAlert', () => ({
+jest.mock('../hooks/ui/useAppSheetAlert', () => ({
   useAppSheetAlert: () => ({
     alertProps: null,
     showAlert: mockShowAlert,

@@ -1,4 +1,4 @@
-import { getStickerOutlineOffsets, getStickerPinchScale } from '../components/stickerCanvasMetrics';
+import { getStickerOutlineOffsets, getStickerPinchScale } from '../components/notes/stickerCanvasMetrics';
 
 describe('stickerCanvasMetrics', () => {
   it('uses a lighter outline profile for smaller stickers', () => {

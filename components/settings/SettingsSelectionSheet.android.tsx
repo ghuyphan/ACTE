@@ -1,9 +1,9 @@
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Sheet } from '../constants/theme';
-import { useTheme } from '../hooks/useTheme';
-import AppSheetScaffold from './AppSheetScaffold';
+import { Sheet } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
+import AppSheetScaffold from '../sheets/AppSheetScaffold';
 
 type SettingsSelectionOption = {
   key: string;

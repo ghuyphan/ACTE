@@ -25,7 +25,7 @@ import type { MapClusterNode } from '../../hooks/map/mapDomain';
 import { regionToZoom } from '../../hooks/map/mapDomain';
 import { useMapScreenState } from '../../hooks/map/useMapScreenState';
 import { useGeofence } from '../../hooks/useGeofence';
-import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
+import { useNoteDetailSheet } from '../../hooks/ui/useNoteDetailSheet';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';

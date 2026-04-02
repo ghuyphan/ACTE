@@ -37,14 +37,14 @@ jest.mock('../hooks/useTheme', () => ({
   }),
 }));
 
-jest.mock('../components/TextMemoryCard', () => {
+jest.mock('../components/notes/TextMemoryCard', () => {
   const React = require('react');
   return function MockTextMemoryCard(props: any) {
     return mockTextMemoryCard(props);
   };
 });
 
-jest.mock('../components/ImageMemoryCard', () => {
+jest.mock('../components/notes/ImageMemoryCard', () => {
   const React = require('react');
   const { View } = require('react-native');
   return function MockImageMemoryCard() {

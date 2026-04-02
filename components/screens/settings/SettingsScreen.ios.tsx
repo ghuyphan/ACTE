@@ -21,12 +21,12 @@ import {
 } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import AppSheet from '../AppSheet';
-import AppSheetAlert from '../AppSheetAlert';
-import SettingsLanguageSheet from '../settings/SettingsLanguageSheet';
-import SettingsSyncSheet from '../SettingsSyncSheet';
-import SettingsThemeSheet from '../settings/SettingsThemeSheet';
-import { Layout } from '../../constants/theme';
+import AppSheet from '../../sheets/AppSheet';
+import AppSheetAlert from '../../sheets/AppSheetAlert';
+import SettingsLanguageSheet from '../../settings/SettingsLanguageSheet';
+import SettingsSyncSheet from '../../settings/SettingsSyncSheet';
+import SettingsThemeSheet from '../../settings/SettingsThemeSheet';
+import { Layout } from '../../../constants/theme';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
 
 export default function SettingsScreenIOS() {

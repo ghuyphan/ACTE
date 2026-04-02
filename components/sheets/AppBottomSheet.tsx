@@ -5,7 +5,7 @@ import {
 } from '@gorhom/bottom-sheet';
 import { useEffect, useRef } from 'react';
 import { BackHandler, Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { useTheme } from '../hooks/useTheme';
+import { useTheme } from '../../hooks/useTheme';
 
 export default function AppBottomSheet({
   children,

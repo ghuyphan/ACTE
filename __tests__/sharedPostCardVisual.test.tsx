@@ -19,7 +19,7 @@ jest.mock('../services/remoteMedia', () => ({
   downloadPhotoFromStorage: (...args: unknown[]) => mockDownloadPhotoFromStorage(...args),
 }));
 
-jest.mock('../components/ImageMemoryCard', () => {
+jest.mock('../components/notes/ImageMemoryCard', () => {
   const React = require('react');
   const { Text, View } = require('react-native');
   return function MockImageMemoryCard({ isActive }: { isActive?: boolean }) {
@@ -31,7 +31,7 @@ jest.mock('../components/ImageMemoryCard', () => {
   };
 });
 
-jest.mock('../components/TextMemoryCard', () => {
+jest.mock('../components/notes/TextMemoryCard', () => {
   const React = require('react');
   const { Text } = require('react-native');
   return function MockTextMemoryCard({ text, isActive }: { text: string; isActive?: boolean }) {

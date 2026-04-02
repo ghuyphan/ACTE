@@ -2,9 +2,9 @@ import { Group, HStack, Text as SwiftUIText, Toggle, VStack } from '@expo/ui/swi
 import { backgroundOverlay, cornerRadius, font, foregroundStyle, padding } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSyncSheetDetails } from '../hooks/useSyncSheetDetails';
-import { useTheme } from '../hooks/useTheme';
-import { isOlderIOS } from '../utils/platform';
+import { useSyncSheetDetails } from '../../hooks/useSyncSheetDetails';
+import { useTheme } from '../../hooks/useTheme';
+import { isOlderIOS } from '../../utils/platform';
 
 export default function SettingsSyncSheet({
   accountHint,

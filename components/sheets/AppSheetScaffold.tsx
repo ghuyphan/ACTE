@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Sheet, Typography } from '../constants/theme';
-import { useTheme } from '../hooks/useTheme';
+import { Sheet, Typography } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 
 export type AppSheetHeaderVariant = 'standard' | 'action' | 'none';
 

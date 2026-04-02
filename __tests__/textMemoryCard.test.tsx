@@ -1,6 +1,6 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import TextMemoryCard from '../components/TextMemoryCard';
+import TextMemoryCard from '../components/notes/TextMemoryCard';
 
 const mockDynamicStickerCanvas = jest.fn((_props?: any) => null);
 
@@ -13,7 +13,7 @@ jest.mock('expo-linear-gradient', () => {
   };
 });
 
-jest.mock('../components/DynamicStickerCanvas', () => {
+jest.mock('../components/notes/DynamicStickerCanvas', () => {
   const React = require('react');
 
   return function MockDynamicStickerCanvas(props: any) {
@@ -22,7 +22,7 @@ jest.mock('../components/DynamicStickerCanvas', () => {
   };
 });
 
-jest.mock('../components/NoteDoodleCanvas', () => {
+jest.mock('../components/notes/NoteDoodleCanvas', () => {
   const React = require('react');
   const { View } = require('react-native');
 

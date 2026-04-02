@@ -136,7 +136,7 @@ jest.mock('../hooks/useReducedMotion', () => ({
   useReducedMotion: () => mockReduceMotionEnabled,
 }));
 
-jest.mock('../hooks/useNoteDetailSheet', () => ({
+jest.mock('../hooks/ui/useNoteDetailSheet', () => ({
   useNoteDetailSheet: () => ({
     openNoteDetail: (...args: unknown[]) => mockOpenNoteDetail(...args),
   }),

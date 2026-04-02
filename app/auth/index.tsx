@@ -24,7 +24,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AppSheet from '../../components/AppSheet';
+import AppSheet from '../../components/sheets/AppSheet';
 import AppBackButton from '../../components/ui/AppBackButton';
 import OfflineNotice from '../../components/ui/OfflineNotice';
 import PrimaryButton from '../../components/ui/PrimaryButton';

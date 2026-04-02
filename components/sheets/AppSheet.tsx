@@ -2,9 +2,9 @@ import type { ReactNode } from 'react';
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
 import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Sheet } from '../constants/theme';
-import { useTheme } from '../hooks/useTheme';
-import { isOlderIOS } from '../utils/platform';
+import { Sheet } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
+import { isOlderIOS } from '../../utils/platform';
 import AppBottomSheet from './AppBottomSheet';
 
 export type AppSheetAndroidPresentation = 'edge' | 'floating';

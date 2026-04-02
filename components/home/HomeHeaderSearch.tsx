@@ -13,8 +13,8 @@ import {
   padding,
   tint,
 } from '@expo/ui/swift-ui/modifiers';
-import AppSheet from '../AppSheet';
-import AppSheetScaffold from '../AppSheetScaffold';
+import AppSheet from '../sheets/AppSheet';
+import AppSheetScaffold from '../sheets/AppSheetScaffold';
 import { GlassView } from '../ui/GlassView';
 import { TFunction } from 'i18next';
 import { ComponentProps, useEffect, useRef, useState } from 'react';

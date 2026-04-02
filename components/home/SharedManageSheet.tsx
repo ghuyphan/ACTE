@@ -19,10 +19,10 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import AppSheet from '../AppSheet';
-import AppSheetScaffold from '../AppSheetScaffold';
+import AppSheet from '../sheets/AppSheet';
+import AppSheetScaffold from '../sheets/AppSheetScaffold';
 import FriendInviteJoinBody from '../FriendInviteJoinBody';
-import SheetFooterButton from '../SheetFooterButton';
+import SheetFooterButton from '../sheets/SheetFooterButton';
 import { Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useFriendInviteJoin } from '../../hooks/useFriendInviteJoin';

@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import type { ThemeColors } from '../../hooks/useTheme';
+import type { ThemeColors } from '../../../hooks/useTheme';
 
 interface ProfileAvatarProps {
   avatarLabel: string;

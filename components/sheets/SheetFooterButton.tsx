@@ -1,7 +1,7 @@
 import type { StyleProp, ViewStyle } from 'react-native';
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { Typography } from '../constants/theme';
-import { useTheme } from '../hooks/useTheme';
+import { Typography } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 
 type SheetFooterButtonVariant = 'primary' | 'secondary' | 'destructive';
 

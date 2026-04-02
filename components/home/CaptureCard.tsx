@@ -83,11 +83,11 @@ import {
   PHOTO_FILTER_PRESETS,
   type PhotoFilterId,
 } from '../../services/photoFilters';
-import AppSheet from '../AppSheet';
-import AppSheetScaffold from '../AppSheetScaffold';
-import NoteDoodleCanvas, { DoodleStroke } from '../NoteDoodleCanvas';
-import NoteStickerCanvas from '../NoteStickerCanvas';
-import StickerSourceSheet from '../StickerSourceSheet';
+import AppSheet from '../sheets/AppSheet';
+import AppSheetScaffold from '../sheets/AppSheetScaffold';
+import NoteDoodleCanvas, { DoodleStroke } from '../notes/NoteDoodleCanvas';
+import NoteStickerCanvas from '../notes/NoteStickerCanvas';
+import StickerSourceSheet from '../sheets/StickerSourceSheet';
 import { GlassView } from '../ui/GlassView';
 import NoteColorPicker from '../ui/NoteColorPicker';
 import PremiumNoteFinishOverlay from '../ui/PremiumNoteFinishOverlay';

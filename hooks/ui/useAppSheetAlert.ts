@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { AppSheetAlertAction, AppSheetAlertProps, AppSheetAlertVariant } from '../components/AppSheetAlert';
+import { AppSheetAlertAction, AppSheetAlertProps, AppSheetAlertVariant } from '../../components/sheets/AppSheetAlert';
 
 export interface ShowSheetAlertInput {
   variant?: AppSheetAlertVariant;

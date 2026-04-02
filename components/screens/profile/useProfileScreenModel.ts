@@ -2,12 +2,12 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { showAppAlert } from '../../utils/alert';
+import { showAppAlert } from '../../../utils/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuth } from '../../hooks/useAuth';
-import { useNotes } from '../../hooks/useNotes';
-import { useSubscription } from '../../hooks/useSubscription';
-import { useTheme } from '../../hooks/useTheme';
+import { useAuth } from '../../../hooks/useAuth';
+import { useNotes } from '../../../hooks/useNotes';
+import { useSubscription } from '../../../hooks/useSubscription';
+import { useTheme } from '../../../hooks/useTheme';
 import {
   hasAccountDeletionLink,
   hasPrivacyPolicyLink,
@@ -15,7 +15,7 @@ import {
   openAccountDeletionHelp,
   openPrivacyPolicy,
   openSupport,
-} from '../../services/legalLinks';
+} from '../../../services/legalLinks';
 
 export function useProfileScreenModel() {
   const { t } = useTranslation();

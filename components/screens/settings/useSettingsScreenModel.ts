@@ -3,14 +3,14 @@ import { Href, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
-import { useAuth } from '../../hooks/useAuth';
-import { useConnectivity } from '../../hooks/useConnectivity';
-import { useNotes } from '../../hooks/useNotes';
-import { useSharedFeedStore } from '../../hooks/useSharedFeed';
-import { useSubscription } from '../../hooks/useSubscription';
-import { useSyncStatus } from '../../hooks/useSyncStatus';
-import { useTheme } from '../../hooks/useTheme';
+import { useAppSheetAlert } from '../../../hooks/ui/useAppSheetAlert';
+import { useAuth } from '../../../hooks/useAuth';
+import { useConnectivity } from '../../../hooks/useConnectivity';
+import { useNotes } from '../../../hooks/useNotes';
+import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
+import { useSubscription } from '../../../hooks/useSubscription';
+import { useSyncStatus } from '../../../hooks/useSyncStatus';
+import { useTheme } from '../../../hooks/useTheme';
 import {
   hasAccountDeletionLink,
   hasPrivacyPolicyLink,
@@ -18,8 +18,8 @@ import {
   openAccountDeletionHelp,
   openPrivacyPolicy,
   openSupport,
-} from '../../services/legalLinks';
-import { getThemeLabel } from '../settings/settingsSelectionOptions';
+} from '../../../services/legalLinks';
+import { getThemeLabel } from '../../settings/settingsSelectionOptions';
 
 export function useSettingsScreenModel() {
   const { t, i18n } = useTranslation();

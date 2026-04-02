@@ -114,7 +114,7 @@ jest.mock('../hooks/useTheme', () => ({
   }),
 }));
 
-jest.mock('../hooks/useFeedFocus', () => ({
+jest.mock('../hooks/state/useFeedFocus', () => ({
   useFeedFocus: () => ({
     requestFeedFocus: (...args: unknown[]) => mockRequestFeedFocus(...args),
   }),

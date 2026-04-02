@@ -1,8 +1,8 @@
 import { Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { useActiveFeedTarget } from '../../../hooks/useActiveFeedTarget';
-import { useActiveNote } from '../../../hooks/useActiveNote';
-import { useFeedFocus } from '../../../hooks/useFeedFocus';
+import { useActiveFeedTarget } from '../../../hooks/state/useActiveFeedTarget';
+import { useActiveNote } from '../../../hooks/state/useActiveNote';
+import { useFeedFocus } from '../../../hooks/state/useFeedFocus';
 
 export default function WidgetFocusRoute() {
   const { kind, id } = useLocalSearchParams<{ kind?: string; id?: string }>();

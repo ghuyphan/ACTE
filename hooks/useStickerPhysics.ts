@@ -12,7 +12,7 @@ import {
   getStickerDimensions,
   sortStickerPlacements,
   type StickerCanvasLayout,
-} from '../components/stickerCanvasMetrics';
+} from '../components/notes/stickerCanvasMetrics';
 import {
   detectStickerCollision,
   getStickerCollisionGeometry,

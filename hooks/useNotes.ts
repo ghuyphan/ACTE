@@ -1,2 +1,1 @@
-export { NotesProvider, useNotes, useNotesStore } from './useNotesStore';
-
+export { NotesProvider, useNotes, useNotesStore } from './state/useNotes';

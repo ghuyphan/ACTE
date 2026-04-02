@@ -1,17 +1,15 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, Switch, Text, View } from 'react-native';
-import { Sheet } from '../constants/theme';
-import { useSyncSheetDetails } from '../hooks/useSyncSheetDetails';
-import { useTheme } from '../hooks/useTheme';
-import AppSheetScaffold from './AppSheetScaffold';
+import { Sheet } from '../../constants/theme';
+import { useSyncSheetDetails } from '../../hooks/useSyncSheetDetails';
+import { useTheme } from '../../hooks/useTheme';
+import AppSheetScaffold from '../sheets/AppSheetScaffold';
 
 export default function SettingsSyncSheetAndroid({
   accountHint,
-  onClose,
 }: {
   accountHint: string | null;
-  onClose: () => void;
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -47,7 +45,6 @@ export default function SettingsSyncSheetAndroid({
           ) : null}
         </View>
       </View>
-
     </AppSheetScaffold>
   );
 }

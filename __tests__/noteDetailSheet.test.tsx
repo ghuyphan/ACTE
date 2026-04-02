@@ -151,7 +151,7 @@ jest.mock('../hooks/useTheme', () => ({
   }),
 }));
 
-jest.mock('../hooks/useActiveNote', () => ({
+jest.mock('../hooks/state/useActiveNote', () => ({
   useActiveNote: () => ({
     setActiveNote: mockSetActiveNote,
     clearActiveNote: mockClearActiveNote,
@@ -274,7 +274,7 @@ jest.mock('../components/ui/TransientStatusChip', () => {
   };
 });
 
-jest.mock('../components/AppBottomSheet', () => {
+jest.mock('../components/sheets/AppBottomSheet', () => {
   const React = require('react');
   const { View } = require('react-native');
   return function MockAppBottomSheet({ children }: any) {
@@ -282,7 +282,7 @@ jest.mock('../components/AppBottomSheet', () => {
   };
 });
 
-jest.mock('../components/NoteDoodleCanvas', () => {
+jest.mock('../components/notes/NoteDoodleCanvas', () => {
   const React = require('react');
   const { Pressable, Text, View } = require('react-native');
 
@@ -308,7 +308,7 @@ jest.mock('../components/NoteDoodleCanvas', () => {
   };
 });
 
-jest.mock('../components/NoteStickerCanvas', () => {
+jest.mock('../components/notes/NoteStickerCanvas', () => {
   const React = require('react');
   const { Text, View } = require('react-native');
 
@@ -325,7 +325,7 @@ jest.mock('../components/NoteStickerCanvas', () => {
   };
 });
 
-import NoteDetailSheet from '../components/NoteDetailSheet';
+import NoteDetailSheet from '../components/notes/NoteDetailSheet';
 
 beforeEach(() => {
   jest.clearAllMocks();
