@@ -14,8 +14,8 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - `app/friends/`: Friend invite join flow.
 - `app/widget/`: Widget deep-link entry points.
 - `app/plus.tsx`: Subscription / purchase screen.
-- `components/`: Reusable UI, with most shared pieces under `home/`, `map/`, `screens/`, and `ui/`.
-- `hooks/`: Providers and shared app state such as notes, auth, theme, sync, connectivity, subscriptions, and shared feed.
+- `components/`: Reusable UI, with most feature-owned pieces under `home/`, `map/`, `notes/`, `settings/`, `sheets/`, `screens/`, and `ui/`.
+- `hooks/`: Shared hooks and providers, now grouped by concern under `app/`, `state/`, `ui/`, and top-level cross-cutting hooks.
 - `hooks/map/`: Map-only domain and screen-state logic.
 - `services/`: SQLite, sync, geofence, widget, media, search, and sharing logic.
 - `constants/`: Theme tokens, i18n setup, note color defaults, radius defaults, and subscription config.
@@ -30,7 +30,7 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 ## Important Entry Points
 
 - `package.json`: `expo-router/entry` app entry and supported scripts.
-- `app/_layout.tsx`: Root providers, DB bootstrap, splash flow, notification routing, widget refresh, and geofence startup sync.
+- `app/_layout.tsx`: Root providers, splash flow, and app-startup hook wiring.
 - `app/index.tsx`: First-launch redirect into onboarding or tabs.
 - `app/(tabs)/_layout.tsx`: Native tab layout setup.
 - `app.config.ts`: Expo config, permissions, widgets, Google Maps wiring, custom plugins, and native IDs.
@@ -39,7 +39,10 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - `services/syncService.ts`: Supabase sync pipeline.
 - `services/geofenceService.ts`: Reminder permission checks and monitored region selection.
 - `services/widgetService.ts`: Widget timeline building, candidate selection, and media bridging.
-- `hooks/useNotesStore.tsx`: The main note mutation path.
+- `hooks/app/useAppStartupBootstrap.ts`: DB bootstrap, startup sync, and early app setup.
+- `hooks/app/useAppNotificationRouting.ts`: Notification open handling and deep-link routing.
+- `hooks/app/useAppWidgetRefresh.ts`: App foreground and widget refresh wiring.
+- `hooks/state/useNotesStore.tsx`: The main note mutation path.
 - `hooks/useSharedFeedStore.tsx`: Shared feed state and sharing actions.
 - `hooks/useSubscription.tsx`: RevenueCat subscription state and purchase actions.
 - `widgets/ios/LocketWidget.swift`: Source of truth for real iOS widget rendering.
@@ -62,6 +65,7 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - Use `useTheme()` and `constants/theme.ts` rather than hardcoded colors.
 - Add user-facing copy through `react-i18next` and update both `constants/locales/en.json` and `constants/locales/vi.json`.
 - Normal note CRUD should flow through `useNotesStore`.
+- Prefer the grouped source folders (`hooks/app`, `hooks/state`, `hooks/ui`, `components/notes`, `components/settings`, `components/sheets`) when adding or moving feature code. Keep top-level wrapper exports only for compatibility.
 - Shared feed state and sharing actions should flow through `useSharedFeedStore`.
 - Subscription state should flow through `useSubscription`.
 - Widget refreshes are already wired to note mutations; preserve that behavior when adding new mutation paths.
@@ -70,8 +74,8 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 ## Where To Add New Code
 
 - New route or screen entry: `app/` in the correct route group.
-- Shared screen UI: `components/`, usually `components/ui/`, `components/home/`, `components/map/`, or `components/screens/`.
-- Reusable state/provider logic: `hooks/`.
+- Shared screen UI: `components/`, usually `components/ui/`, `components/home/`, `components/map/`, `components/notes/`, `components/settings/`, `components/sheets/`, or `components/screens/`.
+- Reusable state/provider logic: `hooks/`, with startup logic in `hooks/app/`, store/provider state in `hooks/state/`, and sheet/presentation state in `hooks/ui/`.
 - Domain or integration logic: `services/`.
 - Smaller helpers or platform utilities: `utils/`.
 - Theme/i18n/subscription constants: `constants/`.

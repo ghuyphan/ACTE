@@ -59,9 +59,10 @@ The initial migration adds these tables to the `supabase_realtime` publication:
 
 ## 5. Native Builds
 
-- The app does not use Firebase native config files.
+- Supabase auth itself does not require Firebase native config files.
 - Google sign-in is driven by OAuth client IDs.
 - The iOS URL scheme is derived from `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` in `app.config.ts`.
+- Push delivery still uses Firebase config files; see `docs/fcm-setup.md`.
 
 ## 6. Delete-Account Function
 

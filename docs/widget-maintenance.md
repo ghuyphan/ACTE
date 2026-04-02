@@ -7,7 +7,9 @@ This is the shortest path back into the widget code.
 1. `services/widgetService.ts`
 2. `widgets/LocketWidget.tsx`
 3. `widgets/ios/LocketWidget.swift`
-4. `__tests__/widgetService.test.ts`
+4. `hooks/app/useAppWidgetRefresh.ts`
+5. `hooks/state/useNotesStore.tsx`
+6. `__tests__/widgetService.test.ts`
 
 ## What Each File Owns
 
@@ -66,11 +68,12 @@ Update these tests when changing:
 
 ## Data Flow
 
-1. `app/_layout.tsx` initializes the DB and schedules a widget refresh.
-2. Note mutations in `hooks/useNotesStore.tsx` also refresh widget data.
-3. `updateWidgetData()` builds timeline props from local notes and optional shared-feed content.
-4. Expo Widgets stores the payload.
-5. `widgets/ios/LocketWidget.swift` reads the payload and renders it.
+1. `app/_layout.tsx` wires startup through `hooks/app/useAppStartupBootstrap.ts` and `hooks/app/useAppWidgetRefresh.ts`.
+2. `useAppStartupBootstrap` initializes the DB and performs the early widget-ready bootstrap work.
+3. Note mutations in `hooks/state/useNotesStore.tsx` also refresh widget data. The top-level `hooks/useNotesStore.tsx` file is just a compatibility export.
+4. `updateWidgetData()` builds timeline props from local notes and optional shared-feed content.
+5. Expo Widgets stores the payload.
+6. `widgets/ios/LocketWidget.swift` reads the payload and renders it.
 
 ## Common Change Map
 

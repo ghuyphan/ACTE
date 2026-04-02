@@ -15,11 +15,21 @@
 ├── assets/
 │   └── images/
 ├── components/
+│   ├── home/
+│   ├── map/
+│   ├── notes/
+│   ├── screens/
+│   ├── settings/
+│   ├── sheets/
+│   └── ui/
 ├── constants/
 │   └── locales/
 ├── docs/
 ├── hooks/
-│   └── map/
+│   ├── app/
+│   ├── state/
+│   ├── map/
+│   └── ui/
 ├── plugins/
 ├── services/
 ├── supabase/
@@ -39,7 +49,7 @@
 
 ## Routes
 
-- `app/_layout.tsx`: Root providers, DB bootstrap, splash handling, notifications, widget refresh, and geofence startup sync.
+- `app/_layout.tsx`: Root providers, splash handling, and app-startup hook wiring.
 - `app/index.tsx`: First-launch redirect into onboarding or the main tabs.
 - `app/(tabs)/index.tsx`: Home feed and capture flow.
 - `app/(tabs)/map.tsx`: Map screen entry point.
@@ -60,10 +70,16 @@
 
 - `components/home/`: Capture card, notes feed, shared strip, and feed item helpers.
 - `components/map/`: Map canvas, filters, cards, motion helpers, and overlay tokens.
-- `components/screens/`: Larger screen implementations with iOS and Android splits.
+- `components/notes/`: Note detail, memory-card, doodle, sticker, and note-surface primitives.
+- `components/screens/`: Larger screen implementations, grouped by feature where needed.
+- `components/settings/`: Settings-specific sheets and shared selection helpers.
+- `components/sheets/`: Shared sheet scaffolding and bottom-sheet primitives.
 - `components/ui/`: Generic building blocks such as buttons, headers, chips, and glass containers.
-- `hooks/`: Providers and reusable stateful logic for notes, auth, theme, connectivity, shared feed, subscriptions, and sync.
+- `hooks/`: Cross-cutting hooks and compatibility re-export shims.
+- `hooks/app/`: App-startup, notification routing, widget refresh, and social push registration.
 - `hooks/map/`: Map-only domain and screen-state logic.
+- `hooks/state/`: Provider-backed state like notes, active note selection, and feed focus.
+- `hooks/ui/`: Sheet and presentation helpers.
 - `services/database.ts`: SQLite schema, migrations, note CRUD, and cache tables.
 - `services/syncService.ts`: Supabase sync pipeline.
 - `services/sharedFeedService.ts`: Friend invites, shared posts, and social feed reads/writes.
@@ -84,6 +100,10 @@
 - `eslint.config.js`: Expo flat ESLint config.
 - `jest.config.js` and `jest.setup.ts`: Jest Expo config and test mocks.
 - `tsconfig.json`: Strict TypeScript config with the `@/*` alias.
+- `hooks/state/useNotesStore.tsx`: Primary note mutation pipeline.
+- `hooks/app/useAppStartupBootstrap.ts`: Startup bootstrap, sync, and notification/widget prep.
+- `hooks/app/useAppNotificationRouting.ts`: Notification tap routing.
+- `components/ui/AppAlertProvider.tsx`: Android native alert bridge.
 - `assets/images/icon/`: PNG app icon exports used by `app.config.ts` for shared, Android, and web icons.
 - `Untitled.icon`: iOS icon composer asset used by `app.config.ts`.
 

@@ -39,6 +39,12 @@ but those native folders are generated, so the repo-root files are safer for cle
 3. Deploy the `send-social-notifications` Supabase edge function.
 4. Set `EXPO_ACCESS_TOKEN` on the edge function environment if your Expo push project requires authenticated sends.
 
+Client-side registration and routing currently live in:
+
+- `hooks/app/useSocialPushRegistration.ts`
+- `hooks/app/useAppNotificationRouting.ts`
+- `app/_layout.tsx`
+
 ## Quick Verification
 
 1. Sign in on two physical devices.

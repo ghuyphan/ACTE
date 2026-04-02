@@ -72,8 +72,8 @@ Legal / support links:
 ## Repo Guide
 
 - `app/`: Expo Router routes, including tabs, auth, notes, shared, widget deep links, and the Plus screen.
-- `components/`: Shared UI, with most screen pieces under `home/`, `map/`, `screens/`, and `ui/`.
-- `hooks/`: Providers and app state such as notes, auth, sync, theme, connectivity, and shared feed.
+- `components/`: Shared UI, with most feature pieces under `home/`, `map/`, `notes/`, `settings/`, `sheets/`, `screens/`, and `ui/`.
+- `hooks/`: Providers and app state, grouped under `app/`, `state/`, `ui/`, `map/`, plus top-level cross-cutting hooks.
 - `services/`: SQLite, sync, sharing, widget, media, search, notification, and geofence logic.
 - `constants/`: Theme, i18n, note colors, radius defaults, and subscription configuration.
 - `widgets/`: Expo widget registration plus the source Swift implementation.
@@ -81,6 +81,10 @@ Legal / support links:
 - `__tests__/`: Jest coverage for hooks, services, screens, widgets, and map logic.
 
 See [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) for a fuller map.
+
+Compatibility note:
+
+- A few top-level hook and component files still exist as re-export shims while the feature folders settle. Prefer editing the grouped source files rather than adding new logic to compatibility wrappers.
 
 ## Native Notes
 
@@ -95,4 +99,5 @@ See [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) for a fuller map.
 - [docs/android-release.md](./docs/android-release.md)
 - [docs/supabase-setup.md](./docs/supabase-setup.md)
 - [docs/revenuecat-setup.md](./docs/revenuecat-setup.md)
+- [docs/fcm-setup.md](./docs/fcm-setup.md)
 - [docs/widget-maintenance.md](./docs/widget-maintenance.md)

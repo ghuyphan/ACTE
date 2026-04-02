@@ -57,6 +57,7 @@
 - [ ] iOS: widget render still matches the latest checked-in Swift implementation.
 - [ ] iOS: compact and large devices keep auth, settings, and Plus screens readable.
 - [ ] Android: capture, map, shared feed, and settings remain readable in both themes.
+- [ ] Android: native alert dialogs open and dismiss cleanly in note delete, clear-all, and permission/error flows.
 - [ ] Android: background location and notification permission recovery flows still work.
 
 ## OTA / EAS Update

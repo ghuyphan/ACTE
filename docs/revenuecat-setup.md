@@ -29,6 +29,8 @@ EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID=noto_pro
 EXPO_PUBLIC_REVENUECAT_OFFERING_ID=default
 ```
 
+`EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` is for development-only simulated purchases. Do not ship production builds with the test-store key.
+
 Also supported for backward compatibility:
 
 ```env

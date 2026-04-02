@@ -38,6 +38,7 @@ Local smoke tests can still opt into the debug keystore with `ACTE_ALLOW_DEBUG_S
 - Sharing: invite acceptance, shared feed rendering, and shared post detail.
 - Reminders: permission escalation, geofence notification, and deep-link open.
 - Settings: theme, language, account links, and delete-all flow.
+- Android native alerts: delete note, clear-all, and permission/error dialogs render without Compose bridge crashes.
 
 ## Recommended Checks
 
