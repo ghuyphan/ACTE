@@ -483,6 +483,14 @@ describe('CaptureCard doodle handle', () => {
     expect(view.getByTestId('capture-note-input').props.placeholder).not.toBe(firstPlaceholder);
   });
 
+  it('uses the accent color for capture text selections', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByTestId } = renderCaptureCard(ref);
+
+    expect(getByTestId('capture-note-input').props.selectionColor).toBe('#FFC107');
+    expect(getByTestId('capture-restaurant-input').props.selectionColor).toBe('#FFC107');
+  });
+
   it('keeps doodle editing available on captured photos', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const { getByTestId } = renderCaptureCard(ref, {

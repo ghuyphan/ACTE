@@ -2309,7 +2309,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   onFocus={() => setIsNoteInputFocused(true)}
                   onBlur={() => setIsNoteInputFocused(false)}
                   maxLength={300}
-                  selectionColor={colors.captureCardText}
+                  selectionColor={colors.primary}
                 />
               </View>
             </LinearGradient>
@@ -2744,7 +2744,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       onFocus={() => setIsRestaurantInputFocused(true)}
                       onBlur={() => setIsRestaurantInputFocused(false)}
                       maxLength={100}
-                      selectionColor={colors.captureGlassText}
+                      selectionColor={colors.primary}
                     />
                   </View>
                   <View style={[styles.captureMetaDivider, { backgroundColor: colors.captureGlassBorder }]} />

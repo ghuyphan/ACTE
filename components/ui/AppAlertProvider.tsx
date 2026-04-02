@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, processColor, type ColorValue } from 'react-native';
 import { AlertDialog, Host, Text, TextButton } from '@expo/ui/jetpack-compose';
 import { appAlertManager, AppAlertOptions } from '../../utils/alert';
 import { useTranslation } from 'react-i18next';
@@ -7,16 +7,20 @@ import { useTheme } from '../../hooks/useTheme';
 
 type AppAlertButton = NonNullable<AppAlertOptions['buttons']>[number];
 
+function toComposeColor(color: string): ColorValue {
+  return (processColor(color) ?? color) as unknown as ColorValue;
+}
+
 export function AppAlertProvider() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const [alertState, setAlertState] = useState<AppAlertOptions | null>(null);
   const dialogColors = useMemo(() => {
     return {
-      containerColor: colors.background,
-      iconContentColor: colors.primary,
-      titleContentColor: colors.text,
-      textContentColor: colors.secondaryText,
+      containerColor: toComposeColor(colors.background),
+      iconContentColor: toComposeColor(colors.primary),
+      titleContentColor: toComposeColor(colors.text),
+      textContentColor: toComposeColor(colors.secondaryText),
     };
   }, [colors.background, colors.primary, colors.secondaryText, colors.text]);
 
@@ -58,18 +62,14 @@ export function AppAlertProvider() {
   };
 
   const dismissButtonColors = {
-    containerColor: colors.primarySoft,
-    contentColor: colors.primary,
+    containerColor: toComposeColor(colors.primarySoft),
+    contentColor: toComposeColor(colors.primary),
   };
-  const confirmButtonColors = confirmButton?.style === 'destructive'
-    ? {
-        containerColor: colors.primary,
-        contentColor: isDark ? colors.background : '#2B2621',
-      }
-    : {
-        containerColor: colors.primary,
-        contentColor: isDark ? colors.background : '#2B2621',
-      };
+  const confirmButtonTextColor = isDark ? colors.background : '#2B2621';
+  const confirmButtonColors = {
+    containerColor: toComposeColor(colors.primary),
+    contentColor: toComposeColor(confirmButtonTextColor),
+  };
 
   return (
     <Host colorScheme={isDark ? 'dark' : 'light'} matchContents>
@@ -89,13 +89,13 @@ export function AppAlertProvider() {
         {dismissButton ? (
           <AlertDialog.DismissButton>
             <TextButton colors={dismissButtonColors} onClick={() => handlePress(dismissButton)}>
-              <Text color={dismissButtonColors.contentColor}>{dismissButton.text || t('common.cancel', 'Cancel')}</Text>
+              <Text color={colors.primary}>{dismissButton.text || t('common.cancel', 'Cancel')}</Text>
             </TextButton>
           </AlertDialog.DismissButton>
         ) : null}
         <AlertDialog.ConfirmButton>
           <TextButton colors={confirmButtonColors} onClick={() => handlePress(confirmButton)}>
-            <Text color={confirmButtonColors.contentColor}>{confirmButton?.text || defaultOkText}</Text>
+            <Text color={confirmButtonTextColor}>{confirmButton?.text || defaultOkText}</Text>
           </TextButton>
         </AlertDialog.ConfirmButton>
       </AlertDialog>

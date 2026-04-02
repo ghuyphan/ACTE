@@ -300,11 +300,16 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
 
-    const cardScale = useSharedValue(0.92);
-    const cardOpacity = useSharedValue(0);
-    const infoTranslateY = useSharedValue(20);
-    const favoriteFillProgress = useSharedValue(0);
-    const editModeAnim = useSharedValue(0);
+    const cardScaleValue = useSharedValue(0.92);
+    const cardOpacityValue = useSharedValue(0);
+    const infoTranslateYValue = useSharedValue(20);
+    const favoriteFillProgressValue = useSharedValue(0);
+    const editModeAnimValue = useSharedValue(0);
+    const cardScale = useRef(cardScaleValue).current;
+    const cardOpacity = useRef(cardOpacityValue).current;
+    const infoTranslateY = useRef(infoTranslateYValue).current;
+    const favoriteFillProgress = useRef(favoriteFillProgressValue).current;
+    const editModeAnim = useRef(editModeAnimValue).current;
     const contentInputRef = useRef<any>(null);
     const locationInputRef = useRef<any>(null);
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

@@ -383,7 +383,7 @@ describe('NoteDetailSheet', () => {
     fireEvent.press(getByTestId('note-detail-edit'));
 
     await waitFor(() => {
-      expect(getByTestId('note-detail-decorate-toggle')).toBeTruthy();
+      expect(getByTestId('note-detail-doodle-toggle')).toBeTruthy();
     });
 
     expect(queryByTestId('note-detail-favorite')).toBeNull();
@@ -499,7 +499,6 @@ describe('NoteDetailSheet', () => {
     });
 
     fireEvent.press(getByTestId('note-detail-edit'));
-    fireEvent.press(getByTestId('note-detail-decorate-toggle'));
     fireEvent.press(getByTestId('note-detail-doodle-toggle'));
     expect(getByTestId('mock-note-doodle-editable')).toHaveTextContent('true');
 
@@ -588,7 +587,6 @@ describe('NoteDetailSheet', () => {
     });
 
     fireEvent.press(getByTestId('note-detail-edit'));
-    fireEvent.press(getByTestId('note-detail-decorate-toggle'));
     fireEvent.press(getByTestId('note-detail-doodle-toggle'));
     expect(getByTestId('mock-note-doodle-editable')).toHaveTextContent('true');
 

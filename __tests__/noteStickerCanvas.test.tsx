@@ -7,11 +7,12 @@ jest.mock('expo-image', () => {
   const React = require('react');
   const { Image } = require('react-native');
 
+  const MockExpoImage = React.forwardRef(function MockExpoImage(props: any, ref: any) {
+    return <Image ref={ref} {...props} />;
+  });
+
   return {
-    Image: Object.assign(
-      React.forwardRef((props: any, ref: any) => <Image ref={ref} {...props} />),
-      { displayName: 'MockExpoImage' }
-    ),
+    Image: MockExpoImage,
   };
 });
 
