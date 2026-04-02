@@ -31,6 +31,7 @@ type PreviewMode = 'group' | 'nearby';
 interface MapPreviewCardProps {
   previewMode: PreviewMode;
   visible: boolean;
+  preferCurrentStateWhileHidden?: boolean;
   selectedGroup: MapPointGroup | null;
   selectedNoteIndex: number;
   nearbyItems: NearbyNoteItem[];
@@ -75,6 +76,7 @@ function getPreviewText(note: Note, photoLabel: string, noContentLabel: string) 
 export default function MapPreviewCard({
   previewMode,
   visible,
+  preferCurrentStateWhileHidden = false,
   selectedGroup,
   selectedNoteIndex,
   nearbyItems,
@@ -114,13 +116,14 @@ export default function MapPreviewCard({
     };
   }, [previewMode, selectedGroup, selectedNoteIndex, visible]);
 
-  const renderPreviewMode = visible
+  const shouldUseCurrentPreviewState = visible || preferCurrentStateWhileHidden;
+  const renderPreviewMode = shouldUseCurrentPreviewState
     ? previewMode
     : lastVisiblePreviewStateRef.current?.previewMode ?? previewMode;
-  const renderSelectedGroup = visible
+  const renderSelectedGroup = shouldUseCurrentPreviewState
     ? selectedGroup
     : lastVisiblePreviewStateRef.current?.selectedGroup ?? selectedGroup;
-  const renderSelectedNoteIndex = visible
+  const renderSelectedNoteIndex = shouldUseCurrentPreviewState
     ? selectedNoteIndex
     : lastVisiblePreviewStateRef.current?.selectedNoteIndex ?? selectedNoteIndex;
 

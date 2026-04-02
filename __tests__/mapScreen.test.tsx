@@ -425,6 +425,42 @@ describe('MapScreen', () => {
     });
   });
 
+  it('keeps the selected note callout mounted when the visible region updates on Android', async () => {
+    setPlatformOS('android');
+
+    const { getByTestId } = render(<MapScreen />);
+
+    await waitFor(() => {
+      expect(getByTestId('leaf-marker-10.76000:106.66000')).toBeTruthy();
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.7605,
+        longitude: 106.6605,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    expect(getByTestId('note-marker-text-1')).toBeTruthy();
+  });
+
   it('renders nearby mode in preview and opens the tapped preview card', async () => {
     const { getByTestId, queryByTestId } = render(<MapScreen />);
 

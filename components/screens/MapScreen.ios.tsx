@@ -60,9 +60,11 @@ export default function MapScreenIOS() {
   const [activeFriendPostId, setActiveFriendPostId] = useState<string | null>(null);
   const [androidMapUiReady, setAndroidMapUiReady] = useState(!isAndroid);
   const [keepNotePreviewMounted, setKeepNotePreviewMounted] = useState(false);
+  const [preferCurrentPreviewWhileHidden, setPreferCurrentPreviewWhileHidden] = useState(false);
   const hasCenteredRef = useRef(false);
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewHiddenStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!isAndroid) {
@@ -160,6 +162,9 @@ export default function MapScreenIOS() {
       if (previewRestoreTimerRef.current) {
         clearTimeout(previewRestoreTimerRef.current);
       }
+      if (previewHiddenStateTimerRef.current) {
+        clearTimeout(previewHiddenStateTimerRef.current);
+      }
     };
   }, []);
 
@@ -241,6 +246,10 @@ export default function MapScreenIOS() {
       clearTimeout(previewRestoreTimerRef.current);
       previewRestoreTimerRef.current = null;
     }
+    if (previewHiddenStateTimerRef.current) {
+      clearTimeout(previewHiddenStateTimerRef.current);
+      previewHiddenStateTimerRef.current = null;
+    }
 
     if (!notesPreviewDismissed) {
       setNotesPreviewDismissed(true);
@@ -250,18 +259,26 @@ export default function MapScreenIOS() {
 
     if (shouldRestoreNearbyPreview) {
       setKeepNotePreviewMounted(true);
+      setPreferCurrentPreviewWhileHidden(false);
       if (reduceMotionEnabled) {
         setNotesPreviewDismissed(false);
         setKeepNotePreviewMounted(false);
+        setPreferCurrentPreviewWhileHidden(false);
       } else {
+        previewHiddenStateTimerRef.current = setTimeout(() => {
+          setPreferCurrentPreviewWhileHidden(true);
+          previewHiddenStateTimerRef.current = null;
+        }, 90);
         previewRestoreTimerRef.current = setTimeout(() => {
           setNotesPreviewDismissed(false);
           setKeepNotePreviewMounted(false);
+          setPreferCurrentPreviewWhileHidden(false);
           previewRestoreTimerRef.current = null;
         }, 180);
       }
     } else {
       setKeepNotePreviewMounted(false);
+      setPreferCurrentPreviewWhileHidden(false);
     }
   }, [handleMapPress, nearbyItems.length, notesPreviewDismissed, reduceMotionEnabled, selectedGroup, showFriendsPreview]);
 
@@ -753,6 +770,7 @@ export default function MapScreenIOS() {
         <MapPreviewCard
           previewMode={previewMode}
           visible={previewVisible}
+          preferCurrentStateWhileHidden={preferCurrentPreviewWhileHidden}
           selectedGroup={selectedGroup}
           selectedNoteIndex={selectedNoteIndex}
           nearbyItems={nearbyItems}
