@@ -667,6 +667,19 @@ describe('CaptureCard doodle handle', () => {
     expect(queryByTestId('capture-shutter-button')).toBeNull();
   });
 
+  it('renders live photo playback on the captured-photo review surface', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByLabelText, queryByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///captured-photo.jpg',
+      capturedPairedVideo: 'file:///captured-photo.mov',
+      selectedPhotoFilterId: 'original',
+    });
+
+    expect(getByLabelText('Preview live photo motion')).toBeTruthy();
+    expect(queryByTestId('capture-filter-vivid')).toBeNull();
+  });
+
   it('shows the first-time live photo hint below the shutter controls', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const { getByText } = renderCaptureCard(ref, {

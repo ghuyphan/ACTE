@@ -41,6 +41,10 @@ type ExpoVideoModule = {
 let cachedExpoVideoModule: ExpoVideoModule | null | undefined;
 
 function hasExpoVideoNativeModule() {
+  if (process.env.NODE_ENV === 'test') {
+    return true;
+  }
+
   const expoModules = (globalThis as {
     expo?: {
       modules?: {

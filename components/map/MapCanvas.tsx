@@ -12,6 +12,7 @@ import Reanimated, {
   withTiming,
 } from 'react-native-reanimated';
 import type { MapClusterNode } from '../../hooks/map/mapDomain';
+import type { MapPointGroup } from '../../hooks/map/mapDomain';
 import type { ThemeColors } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
@@ -49,6 +50,8 @@ interface MapCanvasProps {
   friendMarkers: SharedPostWithCoordinates[];
   noteById: Map<string, Note>;
   selectedGroupId: string | null;
+  selectedGroup: MapPointGroup | null;
+  selectedNote: Note | null;
   selectedFriendPostId: string | null;
   markerPulseId: string | null;
   markerPulseKey: number;
@@ -479,6 +482,8 @@ function MapCanvas({
   friendMarkers,
   noteById,
   selectedGroupId,
+  selectedGroup,
+  selectedNote,
   selectedFriendPostId,
   markerPulseId,
   markerPulseKey,
@@ -549,18 +554,11 @@ function MapCanvas({
       }),
     [currentZoom, markerNodes, markerPulseId, noteById, palette.photo, palette.text, preferLiteMarkers, selectedGroupId]
   );
-  const selectedMarkerItems = useMemo(
-    () =>
-      preferLiteMarkers
-        ? []
-        : markerRenderItems.filter(
-            (item) =>
-              !item.node.isCluster &&
-              item.isSelected &&
-              item.node.pointCount === 1 &&
-              Boolean(item.previewNoteId)
-          ),
-    [markerRenderItems, preferLiteMarkers]
+  const shouldShowDetachedSelectedMarker = Boolean(
+    !preferLiteMarkers &&
+    selectedGroup &&
+    selectedGroup.notes.length === 1 &&
+    selectedNote
   );
 
   useEffect(() => {
@@ -609,34 +607,29 @@ function MapCanvas({
       return;
     }
 
-    const activeSelectedMarker = selectedMarkerItems[0];
-    const activeSelectedNote = activeSelectedMarker?.previewNoteId
-      ? noteById.get(activeSelectedMarker.previewNoteId) ?? null
-      : null;
-
     if (detachedSelectedMarkerExitTimerRef.current) {
       clearTimeout(detachedSelectedMarkerExitTimerRef.current);
       detachedSelectedMarkerExitTimerRef.current = null;
     }
 
-    if (activeSelectedMarker && activeSelectedMarker.node.groupId && activeSelectedNote) {
-      const nextGroupId = activeSelectedMarker.node.groupId;
+    if (shouldShowDetachedSelectedMarker && selectedGroup && selectedNote) {
+      const nextGroupId = selectedGroup.id;
       setDetachedSelectedMarker((current) => {
         if (
           current &&
           current.groupId === nextGroupId &&
-          current.note.id === activeSelectedNote.id &&
-          current.latitude === activeSelectedMarker.node.latitude &&
-          current.longitude === activeSelectedMarker.node.longitude
+          current.note.id === selectedNote.id &&
+          current.latitude === selectedGroup.latitude &&
+          current.longitude === selectedGroup.longitude
         ) {
           return current;
         }
 
         return {
           groupId: nextGroupId,
-          latitude: activeSelectedMarker.node.latitude,
-          longitude: activeSelectedMarker.node.longitude,
-          note: activeSelectedNote,
+          latitude: selectedGroup.latitude,
+          longitude: selectedGroup.longitude,
+          note: selectedNote,
         };
       });
       setDetachedSelectedMarkerVisible(true);
@@ -658,7 +651,14 @@ function MapCanvas({
       setDetachedSelectedMarker(null);
       detachedSelectedMarkerExitTimerRef.current = null;
     }, DETACHED_SELECTED_MARKER_EXIT_MS);
-  }, [detachedSelectedMarker, noteById, preferLiteMarkers, reduceMotionEnabled, selectedMarkerItems]);
+  }, [
+    detachedSelectedMarker,
+    preferLiteMarkers,
+    reduceMotionEnabled,
+    selectedGroup,
+    selectedNote,
+    shouldShowDetachedSelectedMarker,
+  ]);
 
   return (
     <MapView

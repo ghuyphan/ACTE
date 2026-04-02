@@ -89,6 +89,7 @@ export default function MapScreenIOS() {
     setProgrammaticVisibleRegion,
     selectedGroupId,
     selectedGroup,
+    selectedNote,
     selectedNoteIndex,
     handleLeafMarkerPress,
     handleClusterMarkerPress,
@@ -590,6 +591,8 @@ export default function MapScreenIOS() {
         friendMarkers={friendMarkerPosts}
         noteById={noteById}
         selectedGroupId={selectedGroupId}
+        selectedGroup={selectedGroup}
+        selectedNote={selectedNote}
         selectedFriendPostId={activeFriendPostId}
         markerPulseId={markerPulseId}
         markerPulseKey={markerPulseKey}

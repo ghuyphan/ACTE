@@ -145,6 +145,7 @@ const config = {
   plugins: [
     'expo-router',
     'expo-notifications',
+    'expo-video',
     [
       'expo-location',
       {

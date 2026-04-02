@@ -90,6 +90,7 @@ import {
 import AppSheet from '../sheets/AppSheet';
 import AppSheetScaffold from '../sheets/AppSheetScaffold';
 import NoteDoodleCanvas, { DoodleStroke } from '../notes/NoteDoodleCanvas';
+import PhotoMediaView from '../notes/PhotoMediaView';
 import NoteStickerCanvas from '../notes/NoteStickerCanvas';
 import StickerSourceSheet from '../sheets/StickerSourceSheet';
 import { GlassView } from '../ui/GlassView';
@@ -2469,13 +2470,25 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             <View
               style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}
             >
-              <FilteredPhotoCanvas
-                sourceUri={capturedPhoto}
-                filterId={selectedPhotoFilterId}
-                width={CARD_SIZE}
-                height={CARD_SIZE}
-                style={styles.cameraPreview}
-              />
+              {hasLivePhotoMotion ? (
+                <PhotoMediaView
+                  imageUrl={capturedPhoto}
+                  isLivePhoto
+                  pairedVideoUri={capturedPairedVideo}
+                  showLiveBadge={false}
+                  style={styles.cameraPreview}
+                  imageStyle={styles.cameraPreview}
+                  enablePlayback
+                />
+              ) : (
+                <FilteredPhotoCanvas
+                  sourceUri={capturedPhoto}
+                  filterId={selectedPhotoFilterId}
+                  width={CARD_SIZE}
+                  height={CARD_SIZE}
+                  style={styles.cameraPreview}
+                />
+              )}
               {ENABLE_PHOTO_STICKERS ? (
                 <Pressable
                   testID="capture-card-paste-surface"

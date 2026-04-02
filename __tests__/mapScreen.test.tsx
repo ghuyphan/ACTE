@@ -656,6 +656,42 @@ describe('MapScreen', () => {
     expect(getByTestId('note-marker-text-1')).toBeTruthy();
   });
 
+  it('keeps the selected note callout mounted after opening the note and a follow-up map update', async () => {
+    const { getByTestId } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('map-preview-item-text-1'));
+
+    await waitFor(() => {
+      expect(mockOpenNoteDetail).toHaveBeenCalledWith('text-1');
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.7626,
+        longitude: 106.6626,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    expect(getByTestId('note-marker-text-1')).toBeTruthy();
+  });
+
   it('keeps the selected marker and pinned preview visible for the start of the dismiss animation', async () => {
     const nowSpy = jest.spyOn(Date, 'now');
     let now = 1000;
