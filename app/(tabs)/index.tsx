@@ -399,6 +399,7 @@ export default function HomeScreen() {
   }, [cameraPermissionRequiresSettings, openAppSettings, requestPermission, showAlert, t]);
 
   const resetCaptureDraft = useCallback(() => {
+    captureCardRef.current?.dismissInputs?.();
     resetCapture();
     captureCardRef.current?.resetDoodle();
     captureCardRef.current?.resetStickers();

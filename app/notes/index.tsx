@@ -59,6 +59,7 @@ const GRID_DOODLE_STROKE_WIDTH = 4.5;
 const GRID_STICKER_MIN_SIZE = 0;
 const GRID_TILE_ENTRY_STAGGER_MS = 28;
 const GRID_TILE_ENTRY_ANIMATION_LIMIT = 5;
+const GRID_DECORATION_REVEAL_DELAY_MS = 180;
 const MODE_TRANSITION_DURATION_MS = 220;
 
 function triggerNotesHaptic(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
@@ -93,6 +94,7 @@ const GridTile = memo(function GridTile({
   index,
   photoFallbackLabel,
   animateOnMount,
+  showDecorations,
 }: {
   item: NoteGridItem;
   size: number;
@@ -107,6 +109,7 @@ const GridTile = memo(function GridTile({
   index: number;
   photoFallbackLabel: string;
   animateOnMount: boolean;
+  showDecorations: boolean;
 }) {
   const [sharedPhotoUri, setSharedPhotoUri] = useState(
     item.kind === 'shared-post' ? item.post.photoLocalUri ?? null : null
@@ -161,16 +164,16 @@ const GridTile = memo(function GridTile({
       ? item.note.doodleStrokesJson
       : item.post.doodleStrokesJson ?? null;
   const doodleStrokes = useMemo(
-    () => parseNoteDoodleStrokes(doodleStrokesJson),
-    [doodleStrokesJson]
+    () => (showDecorations ? parseNoteDoodleStrokes(doodleStrokesJson) : []),
+    [doodleStrokesJson, showDecorations]
   );
   const stickerPlacementsJson =
     item.kind === 'note'
       ? item.note.stickerPlacementsJson ?? null
       : item.post.stickerPlacementsJson ?? null;
   const stickerPlacements = useMemo(
-    () => parseNoteStickerPlacements(stickerPlacementsJson),
-    [stickerPlacementsJson]
+    () => (showDecorations ? parseNoteStickerPlacements(stickerPlacementsJson) : []),
+    [showDecorations, stickerPlacementsJson]
   );
   const text =
     item.kind === 'note'
@@ -321,6 +324,7 @@ export default function NotesIndexScreen() {
   const { sharedPosts, loading: sharedLoading } = useSharedFeedStore();
   const [mode, setMode] = useState<RecapMode>('all');
   const [hasMountedRecap, setHasMountedRecap] = useState(false);
+  const [showGridDecorations, setShowGridDecorations] = useState(process.env.NODE_ENV === 'test');
   const modeProgress = useSharedValue(0);
 
   const friendPosts = useMemo(
@@ -373,6 +377,34 @@ export default function NotesIndexScreen() {
       duration: MODE_TRANSITION_DURATION_MS,
     });
   }, [mode, modeProgress]);
+
+  useEffect(() => {
+    if (showGridDecorations) {
+      return;
+    }
+
+    let cancelled = false;
+    let animationFrameId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    animationFrameId = requestAnimationFrame(() => {
+      timeoutId = setTimeout(() => {
+        if (!cancelled) {
+          setShowGridDecorations(true);
+        }
+      }, GRID_DECORATION_REVEAL_DELAY_MS);
+    });
+
+    return () => {
+      cancelled = true;
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [showGridDecorations]);
 
   const allLayerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: 1 - modeProgress.value,
@@ -478,6 +510,7 @@ export default function NotesIndexScreen() {
                         colors={colors}
                         photoFallbackLabel={t('shared.photoMemory', 'Photo memory')}
                         animateOnMount={shouldAnimateGridTiles}
+                        showDecorations={showGridDecorations}
                         onPress={() => openItem(item)}
                       />
                     )}

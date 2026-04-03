@@ -240,6 +240,7 @@ export interface CaptureCardHandle {
   resetDoodle: () => void;
   resetStickers: () => void;
   closeDecorateControls: () => void;
+  dismissInputs: () => void;
 }
 
 type StickerPastePromptState = {
@@ -1429,9 +1430,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       resetDoodle,
       resetStickers,
       closeDecorateControls,
+      dismissInputs: dismissCaptureInputs,
     }),
     [
       closeDecorateControls,
+      dismissCaptureInputs,
       doodleModeEnabled,
       doodleStrokes,
       resetDoodle,
@@ -2670,6 +2673,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   onChangeText={handleChangeNoteText}
                   onFocus={() => setIsNoteInputFocused(true)}
                   onBlur={() => setIsNoteInputFocused(false)}
+                  onEndEditing={dismissCaptureInputs}
                   maxLength={300}
                   selectionColor={colors.primary}
                 />
@@ -3160,6 +3164,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       onChangeText={onChangeRestaurantName}
                       onFocus={() => setIsRestaurantInputFocused(true)}
                       onBlur={() => setIsRestaurantInputFocused(false)}
+                      onEndEditing={dismissCaptureInputs}
+                      onSubmitEditing={dismissCaptureInputs}
+                      returnKeyType="done"
                       maxLength={100}
                       selectionColor={colors.primary}
                     />
