@@ -779,13 +779,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const hasVisibleCameraStatus = captureMode === 'camera' && Boolean(cameraStatusText);
   const {
     activeTextPlaceholder,
-    dismissCaptureInputs,
+    dismissCaptureInputs: dismissCaptureInputsState,
     handleChangeNoteText,
     handleNoteInputBlur,
     handleNoteInputFocus,
     handleRestaurantInputBlur,
     handleRestaurantInputFocus,
     isNoteInputFocused,
+    isTextEntryFocused,
     keyboardLiftAnimatedStyle,
     rotatePlaceholderIfNeeded,
   } = useCaptureCardTextInputState({
@@ -795,6 +796,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     placeholderVariants,
     reduceMotionEnabled,
   });
+  const noteInputRef = useRef<TextInput | null>(null);
+  const restaurantInputRef = useRef<TextInput | null>(null);
+  const dismissCaptureInputs = useCallback(() => {
+    noteInputRef.current?.blur();
+    restaurantInputRef.current?.blur();
+    dismissCaptureInputsState();
+  }, [dismissCaptureInputsState]);
   const {
     applyImportedSticker,
     changeStickerPlacements: handleChangeStickerPlacements,
@@ -954,7 +962,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const disableAndroidCaptureTransforms =
     Platform.OS === 'android' &&
     !isModeSwitchAnimating &&
-    (captureMode === 'camera' || (captureMode === 'text' && isNoteInputFocused));
+    (captureMode === 'camera' || (captureMode === 'text' && isTextEntryFocused));
 
   useEffect(() => {
     if (saveState === 'success') {
@@ -1559,6 +1567,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 style={styles.cardTextCenter}
               >
                 <TextInput
+                  ref={noteInputRef}
                   testID="capture-note-input"
                   style={[
                     styles.textInput,
@@ -2058,6 +2067,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       color={colors.captureGlassIcon}
                     />
                     <TextInput
+                      ref={restaurantInputRef}
                       testID="capture-restaurant-input"
                       style={[styles.cardRestaurantInput, styles.cardRestaurantInputCompact, { color: colors.captureGlassText }]}
                       placeholder={t('capture.restaurantPlaceholder', 'Restaurant name (e.g. Phở Hòa)')}

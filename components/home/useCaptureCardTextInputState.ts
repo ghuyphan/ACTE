@@ -22,12 +22,14 @@ export function useCaptureCardTextInputState({
   const [isNoteInputFocused, setIsNoteInputFocused] = useState(false);
   const [isRestaurantInputFocused, setIsRestaurantInputFocused] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const keyboardLift = useSharedValue(0);
   const isTextEntryFocused = captureMode === 'text' && (isNoteInputFocused || isRestaurantInputFocused);
   const activeTextPlaceholder =
     placeholderVariants[textPlaceholderIndex % placeholderVariants.length] ?? placeholderVariants[0] ?? '';
   const resetKeyboardLift = useCallback((clearFocus = false) => {
     setKeyboardHeight(0);
+    setIsKeyboardVisible(false);
     if (clearFocus) {
       setIsNoteInputFocused(false);
       setIsRestaurantInputFocused(false);
@@ -45,8 +47,13 @@ export function useCaptureCardTextInputState({
   }, [captureMode, resetKeyboardLift]);
 
   useEffect(() => {
+    const handleKeyboardShow = (event: KeyboardEvent) => {
+      setKeyboardHeight(event.endCoordinates.height);
+      setIsKeyboardVisible(event.endCoordinates.height > 0);
+    };
     const handleKeyboardFrame = (event: KeyboardEvent) => {
       setKeyboardHeight(event.endCoordinates.height);
+      setIsKeyboardVisible(event.endCoordinates.height > 0);
     };
     const handleKeyboardHide = () => {
       resetKeyboardLift(true);
@@ -54,7 +61,7 @@ export function useCaptureCardTextInputState({
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const frameEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSubscription = Keyboard.addListener(showEvent, handleKeyboardFrame);
+    const showSubscription = Keyboard.addListener(showEvent, handleKeyboardShow);
     const frameSubscription = Keyboard.addListener(frameEvent, handleKeyboardFrame);
     const hideSubscription = Keyboard.addListener(hideEvent, handleKeyboardHide);
 
@@ -66,7 +73,7 @@ export function useCaptureCardTextInputState({
   }, [resetKeyboardLift]);
 
   useEffect(() => {
-    const nextLift = isTextEntryFocused
+    const nextLift = isTextEntryFocused && isKeyboardVisible
       ? Math.min(Math.max(keyboardHeight - 150, 0), 170)
       : 0;
 
@@ -74,7 +81,7 @@ export function useCaptureCardTextInputState({
       duration: reduceMotionEnabled ? 110 : 220,
       easing: Easing.out(Easing.cubic),
     });
-  }, [isTextEntryFocused, keyboardHeight, keyboardLift, reduceMotionEnabled]);
+  }, [isKeyboardVisible, isTextEntryFocused, keyboardHeight, keyboardLift, reduceMotionEnabled]);
 
   const keyboardLiftAnimatedStyle = useAnimatedStyle(
     () => ({
@@ -138,6 +145,7 @@ export function useCaptureCardTextInputState({
       handleRestaurantInputBlur,
       handleRestaurantInputFocus,
       isNoteInputFocused,
+      isTextEntryFocused,
       keyboardLiftAnimatedStyle,
       rotatePlaceholderIfNeeded,
     }),
@@ -150,6 +158,7 @@ export function useCaptureCardTextInputState({
       handleRestaurantInputBlur,
       handleRestaurantInputFocus,
       isNoteInputFocused,
+      isTextEntryFocused,
       keyboardLiftAnimatedStyle,
       rotatePlaceholderIfNeeded,
     ]
