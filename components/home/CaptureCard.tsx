@@ -2626,6 +2626,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   <NoteStickerCanvas
                     placements={stickerPlacements}
                     editable={stickerModeEnabled}
+                    stampShadowEnabled={false}
                     onChangePlacements={handleChangeStickerPlacements}
                     selectedPlacementId={selectedStickerId}
                     onChangeSelectedPlacementId={handleSelectSticker}
@@ -3795,7 +3796,7 @@ const styles = StyleSheet.create({
   textStickerCanvasLayer: {
     ...StyleSheet.absoluteFill,
     ...STICKER_ARTBOARD_FRAME,
-    zIndex: 2,
+    zIndex: 0,
   },
   cardRestaurantPill: {
     flexDirection: 'row',

@@ -1857,6 +1857,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                     <NoteStickerCanvas
                                                         placements={displayedStickerPlacements}
                                                         editable={stickerModeEnabled}
+                                                        stampShadowEnabled={false}
                                                         onChangePlacements={setEditStickerPlacements}
                                                         selectedPlacementId={selectedStickerId}
                                                         onChangeSelectedPlacementId={setSelectedStickerId}
@@ -2252,6 +2253,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                                 <NoteStickerCanvas
                                                     placements={displayedStickerPlacements}
                                                     editable={stickerModeEnabled}
+                                                    stampShadowEnabled={false}
                                                     onChangePlacements={setEditStickerPlacements}
                                                     selectedPlacementId={selectedStickerId}
                                                     onChangeSelectedPlacementId={setSelectedStickerId}
@@ -2623,7 +2625,7 @@ const styles = StyleSheet.create({
         zIndex: 0,
     },
     textStickerOverlayActive: {
-        zIndex: 1,
+        zIndex: 0,
     },
     doodleOverlayEditing: {
         opacity: 0.72,
@@ -2743,10 +2745,10 @@ const styles = StyleSheet.create({
         zIndex: 1,
     },
     editTextInputWrapInactive: {
-        zIndex: 0,
+        zIndex: 1,
     },
     editTextInputInactive: {
-        zIndex: 0,
+        zIndex: 1,
     },
     editTextInputActive: {
         width: '100%',

@@ -41,6 +41,7 @@ import {
 interface NoteStickerCanvasProps {
   placements: NoteStickerPlacement[];
   editable?: boolean;
+  stampShadowEnabled?: boolean;
   onChangePlacements?: (nextPlacements: NoteStickerPlacement[]) => void;
   selectedPlacementId?: string | null;
   onChangeSelectedPlacementId?: (placementId: string | null) => void;
@@ -68,11 +69,13 @@ function normalizePlacements(placements: NoteStickerPlacement[]) {
 function StampStickerArtwork({
   placementId,
   localUri,
+  stampShadowEnabled,
   width,
   height,
 }: {
   placementId: string;
   localUri: string;
+  stampShadowEnabled: boolean;
   width: number;
   height: number;
 }) {
@@ -94,10 +97,11 @@ function StampStickerArtwork({
       testID={`note-sticker-stamp-paper-${placementId}`}
       style={[
         styles.stampPaper,
+        stampShadowEnabled ? styles.stampPaperShadow : null,
         {
           width: stampMetrics.outerWidth,
           height: stampMetrics.outerHeight,
-          shadowColor: STAMP_DROP_SHADOW_COLOR,
+          shadowColor: stampShadowEnabled ? STAMP_DROP_SHADOW_COLOR : 'transparent',
         },
       ]}
     >
@@ -141,6 +145,7 @@ function EditableSticker({
   layout,
   showSelection,
   interactiveRef,
+  stampShadowEnabled,
   onChangeSelectedPlacementId,
   onCommit,
   sizeMultiplier,
@@ -150,6 +155,7 @@ function EditableSticker({
   layout: CanvasLayout;
   showSelection: boolean;
   interactiveRef: { current: boolean };
+  stampShadowEnabled: boolean;
   onChangeSelectedPlacementId?: (placementId: string | null) => void;
   onCommit: (nextPlacement: NoteStickerPlacement) => void;
   sizeMultiplier: number;
@@ -362,6 +368,7 @@ function EditableSticker({
         <MemoStampStickerArtwork
           placementId={placement.id}
           localUri={activePlacement.asset.localUri}
+          stampShadowEnabled={stampShadowEnabled}
           width={baseDimensions.width}
           height={baseDimensions.height}
         />
@@ -417,6 +424,7 @@ const MemoEditableSticker = memo(EditableSticker);
 function NoteStickerCanvas({
   placements,
   editable = false,
+  stampShadowEnabled = true,
   onChangePlacements,
   selectedPlacementId = null,
   onChangeSelectedPlacementId,
@@ -504,6 +512,7 @@ function NoteStickerCanvas({
           layout={layout}
           showSelection={editable && selectedPlacementId === placement.id}
           interactiveRef={editableRef}
+          stampShadowEnabled={stampShadowEnabled}
           onChangeSelectedPlacementId={onChangeSelectedPlacementId}
           onCommit={commitPlacement}
           sizeMultiplier={sizeMultiplier}
@@ -560,6 +569,8 @@ const styles = StyleSheet.create({
   },
   stampPaper: {
     overflow: 'visible',
+  },
+  stampPaperShadow: {
     shadowOffset: {
       width: 0,
       height: 6,
