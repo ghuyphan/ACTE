@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Typography } from '../../../constants/theme';
 import { useTheme } from '../../../hooks/useTheme';
 
@@ -24,9 +26,26 @@ function RecapMonthPicker({
   nextAccessibilityLabel = 'Next month',
 }: RecapMonthPickerProps) {
   const { colors } = useTheme();
+  const handlePrevious = () => {
+    if (previousDisabled) {
+      return;
+    }
+
+    void Haptics.selectionAsync();
+    onPrevious();
+  };
+  const handleNext = () => {
+    if (nextDisabled) {
+      return;
+    }
+
+    void Haptics.selectionAsync();
+    onNext();
+  };
 
   return (
-    <View
+    <Animated.View
+      entering={FadeIn.duration(220)}
       style={[
         styles.row,
         {
@@ -39,7 +58,7 @@ function RecapMonthPicker({
         accessibilityRole="button"
         accessibilityLabel={previousAccessibilityLabel}
         disabled={previousDisabled}
-        onPress={onPrevious}
+        onPress={handlePrevious}
         testID="notes-recap-previous-month"
         style={({ pressed }) => [
           styles.arrowButton,
@@ -53,16 +72,21 @@ function RecapMonthPicker({
       </Pressable>
 
       <View style={styles.labelWrap}>
-        <Text style={[styles.label, { color: colors.text }]} numberOfLines={1}>
+        <Animated.Text
+          key={label}
+          entering={FadeInDown.duration(220)}
+          style={[styles.label, { color: colors.text }]}
+          numberOfLines={1}
+        >
           {label}
-        </Text>
+        </Animated.Text>
       </View>
 
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={nextAccessibilityLabel}
         disabled={nextDisabled}
-        onPress={onNext}
+        onPress={handleNext}
         testID="notes-recap-next-month"
         style={({ pressed }) => [
           styles.arrowButton,
@@ -74,7 +98,7 @@ function RecapMonthPicker({
       >
         <Ionicons name="chevron-forward" size={18} color={colors.text} />
       </Pressable>
-    </View>
+    </Animated.View>
   );
 }
 

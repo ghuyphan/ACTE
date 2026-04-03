@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import React, { memo, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Platform,
   StyleSheet,
@@ -50,6 +50,7 @@ type PileItemMetrics = {
 };
 
 const RECAP_MIN_PHYSICS_BASE = 52;
+const RECAP_COLLISION_INSET = 2;
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
 const PREFER_CONTINUOUS_OUTLINE = Platform.OS === 'android';
 
@@ -105,6 +106,43 @@ function getPilePositions(count: number): PilePosition[] {
   ];
 }
 
+function clamp(value: number, minValue: number, maxValue: number) {
+  return Math.min(maxValue, Math.max(minValue, value));
+}
+
+function getPileSpreadFactor(count: number) {
+  if (count <= 1) {
+    return 1;
+  }
+
+  if (count === 2) {
+    return 2.5;
+  }
+
+  if (count === 3) {
+    return 1.55;
+  }
+
+  if (count === 4) {
+    return 1.3;
+  }
+
+  if (count <= 6) {
+    return 1.18;
+  }
+
+  return 1.08;
+}
+
+function getAdjustedPilePosition(count: number, position: PilePosition): PilePosition {
+  const spreadFactor = getPileSpreadFactor(count);
+
+  return {
+    ...position,
+    x: clamp(0.5 + (position.x - 0.5) * spreadFactor, 0.08, 0.92),
+  };
+}
+
 function getItemAssetSize(item: RecapStickerPileItem) {
   if (item.kind === 'sticker') {
     return {
@@ -117,6 +155,62 @@ function getItemAssetSize(item: RecapStickerPileItem) {
     width: 100,
     height: 100,
   };
+}
+
+function getPileCountScale(count: number) {
+  if (count <= 1) {
+    return 0.96;
+  }
+
+  if (count === 2) {
+    return 0.98;
+  }
+
+  if (count === 3) {
+    return 0.94;
+  }
+
+  if (count === 4) {
+    return 0.91;
+  }
+
+  if (count <= 6) {
+    return 0.87;
+  }
+
+  return 0.83;
+}
+
+function getPileMinimumVisualSize(count: number, item: RecapStickerPileItem) {
+  if (count <= 2) {
+    return item.kind === 'sticker' ? 104 : 94;
+  }
+
+  if (count <= 4) {
+    return item.kind === 'sticker' ? 80 : 72;
+  }
+
+  return item.kind === 'sticker' ? 60 : 54;
+}
+
+function getAdjustedPileSize(
+  count: number,
+  item: RecapStickerPileItem,
+  size: number,
+  largestSize: number
+) {
+  const countScale = getPileCountScale(count);
+  if (largestSize <= 0) {
+    return Math.max(size * countScale, getPileMinimumVisualSize(count, item));
+  }
+
+  const relativeSize = size / largestSize;
+  const hierarchyStrength = count <= 3 ? 0.02 : count <= 6 ? 0.05 : 0.08;
+  const hierarchyScale = 1 - (1 - relativeSize) * hierarchyStrength;
+  const itemKindScale = item.kind === 'sticker' ? 1.02 : 1;
+  const nextSize = size * countScale * hierarchyScale * itemKindScale;
+
+  return Math.max(nextSize, getPileMinimumVisualSize(count, item));
 }
 
 function getPileItemMetrics(item: RecapStickerPileItem, size: number): PileItemMetrics {
@@ -191,11 +285,17 @@ function buildPlacement(
 const RecapBubble = memo(function RecapBubble({
   item,
   metrics,
+  anchorX,
+  anchorY,
+  rotation,
   physicsState,
 }: {
   item: RecapStickerPileItem;
   metrics: PileItemMetrics;
-  physicsState: SharedValue<StickerPhysicsState[]>;
+  anchorX: number;
+  anchorY: number;
+  rotation: number;
+  physicsState?: SharedValue<StickerPhysicsState[]>;
 }) {
   const { colors } = useTheme();
   const outlineOffsets = useMemo(
@@ -209,11 +309,27 @@ const RecapBubble = memo(function RecapBubble({
   );
 
   const bubbleStyle = useAnimatedStyle(() => {
+    if (!physicsState) {
+      return {
+        opacity: 1,
+        transform: [
+          { translateX: anchorX - metrics.width / 2 },
+          { translateY: anchorY - metrics.height / 2 },
+          { rotate: `${rotation}deg` },
+        ],
+      };
+    }
+
     const state = physicsState.value.find((candidate: StickerPhysicsState) => candidate.id === item.key);
 
     if (!state) {
       return {
-        opacity: 0,
+        opacity: 1,
+        transform: [
+          { translateX: anchorX - metrics.width / 2 },
+          { translateY: anchorY - metrics.height / 2 },
+          { rotate: `${rotation}deg` },
+        ],
       };
     }
 
@@ -227,7 +343,7 @@ const RecapBubble = memo(function RecapBubble({
         { scaleY: state.jellyScaleY },
       ],
     };
-  }, [item.key, metrics.height, metrics.width, physicsState]);
+  }, [anchorX, anchorY, item.key, metrics.height, metrics.width, physicsState, rotation]);
 
   return (
     <>
@@ -309,21 +425,32 @@ const RecapBubble = memo(function RecapBubble({
 const RecapStickerPileContent = memo(function RecapStickerPileContent({
   title = 'Used this month',
   items,
-}: Pick<RecapStickerPileProps, 'title' | 'items'>) {
+  physicsEnabled = true,
+}: Pick<RecapStickerPileProps, 'title' | 'items'> & { physicsEnabled?: boolean }) {
   const { colors } = useTheme();
   const displayItems = useMemo(() => items.slice(0, 8), [items]);
   const positions = useMemo(() => getPilePositions(displayItems.length), [displayItems.length]);
   const [layout, setLayout] = useState({ width: 1, height: 176 });
   const displayEntries = useMemo(
-    () =>
-      displayItems.map((item, index) => {
-        const position = positions[index] ?? positions[positions.length - 1];
+    () => {
+      const largestBaseSize = positions.reduce((largest, position) => Math.max(largest, position.size), 0);
+
+      return displayItems.map((item, index) => {
+        const basePosition = positions[index] ?? positions[positions.length - 1];
+        const position = getAdjustedPilePosition(displayItems.length, basePosition);
+        const adjustedSize = getAdjustedPileSize(
+          displayItems.length,
+          item,
+          position.size,
+          largestBaseSize
+        );
         return {
           item,
           position,
-          metrics: getPileItemMetrics(item, position.size),
+          metrics: getPileItemMetrics(item, adjustedSize),
         };
-      }),
+      });
+    },
     [displayItems, positions]
   );
 
@@ -335,20 +462,26 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
     [displayEntries, layout.height, layout.width]
   );
   const physicsState = useStickerPhysics({
-    placements,
+    placements: physicsEnabled ? placements : [],
     layout,
-    isActive: displayItems.length > 0,
+    isActive: physicsEnabled && displayItems.length > 0,
     motionVariant: 'physics',
     minimumBaseSize: RECAP_MIN_PHYSICS_BASE,
+    collisionInset: RECAP_COLLISION_INSET,
   });
 
-  const handleLayout = (event: LayoutChangeEvent) => {
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
-    setLayout({
+    const nextLayout = {
       width: Math.max(width, 1),
       height: Math.max(height, 176),
-    });
-  };
+    };
+    setLayout((currentLayout) =>
+      currentLayout.width === nextLayout.width && currentLayout.height === nextLayout.height
+        ? currentLayout
+        : nextLayout
+    );
+  }, []);
 
   return (
     <View
@@ -361,39 +494,22 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
         },
       ]}
     >
-      <Text style={[styles.title, { color: colors.secondaryText }]}>{title}</Text>
+      <View style={styles.titleWrap}>
+        <Text style={[styles.title, { color: colors.secondaryText }]}>{title}</Text>
+      </View>
       <View style={styles.canvas} onLayout={handleLayout}>
-        {displayEntries.map(({ item, metrics }) => (
+        {displayEntries.map(({ item, metrics }, index) => (
           <RecapBubble
             key={item.key}
             item={item}
             metrics={metrics}
-            physicsState={physicsState}
+            anchorX={(placements[index]?.x ?? 0) * layout.width}
+            anchorY={(placements[index]?.y ?? 0) * layout.height}
+            rotation={placements[index]?.rotation ?? 0}
+            physicsState={physicsEnabled ? physicsState : undefined}
           />
         ))}
       </View>
-    </View>
-  );
-});
-
-const RecapStickerPilePlaceholder = memo(function RecapStickerPilePlaceholder({
-  title = 'Used this month',
-}: Pick<RecapStickerPileProps, 'title'>) {
-  const { colors } = useTheme();
-
-  return (
-    <View
-      testID="notes-recap-sticker-pile-placeholder"
-      style={[
-        styles.card,
-        {
-          backgroundColor: colors.card,
-          borderColor: colors.border,
-        },
-      ]}
-    >
-      <Text style={[styles.title, { color: colors.secondaryText }]}>{title}</Text>
-      <View style={styles.canvas} />
     </View>
   );
 });
@@ -435,11 +551,7 @@ function RecapStickerPile({
     };
   }, [shouldDeferMount]);
 
-  if (!isReady) {
-    return <RecapStickerPilePlaceholder title={title} />;
-  }
-
-  return <RecapStickerPileContent title={title} items={items} />;
+  return <RecapStickerPileContent title={title} items={items} physicsEnabled={isReady} />;
 }
 
 export default memo(RecapStickerPile);
@@ -451,9 +563,12 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    paddingHorizontal: 18,
     paddingTop: 14,
     paddingBottom: 12,
+  },
+  titleWrap: {
+    paddingHorizontal: 18,
+    paddingBottom: 6,
   },
   title: {
     ...Typography.pill,
@@ -463,6 +578,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 176,
     position: 'relative',
+    marginHorizontal: -6,
   },
   bubbleWrap: {
     position: 'absolute',

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import NotesIndexScreen from '../app/notes/index';
 
 const mockRouterReplace = jest.fn();
@@ -106,6 +106,20 @@ jest.mock('expo-linear-gradient', () => {
     LinearGradient: ({ children, ...props }: any) => <View {...props}>{children}</View>,
   };
 });
+
+jest.mock('expo-haptics', () => ({
+  impactAsync: jest.fn(),
+  selectionAsync: jest.fn(),
+  notificationAsync: jest.fn(),
+  ImpactFeedbackStyle: {
+    Light: 'light',
+    Medium: 'medium',
+    Heavy: 'heavy',
+  },
+  NotificationFeedbackType: {
+    Success: 'success',
+  },
+}));
 
 jest.mock('../services/remoteMedia', () => ({
   SHARED_POST_MEDIA_BUCKET: 'shared-media',
@@ -379,7 +393,9 @@ describe('NotesIndexScreen', () => {
     expect(getByTestId('shared-photo-grid-placeholder')).toBeTruthy();
     expect(queryByText('Friend photo caption')).toBeNull();
 
-    resolveDownload?.('file:///friend-photo.jpg');
+    await act(async () => {
+      resolveDownload?.('file:///friend-photo.jpg');
+    });
 
     await waitFor(() => {
       expect(queryByTestId('shared-photo-grid-placeholder')).toBeNull();

@@ -49,6 +49,7 @@ interface UseStickerPhysicsParams {
   motionVariant?: StickerMotionVariant;
   sizeMultiplier?: number;
   minimumBaseSize?: number;
+  collisionInset?: number;
   debugTiltOverride?: SharedValue<{
     enabled: boolean;
     x: number;
@@ -403,6 +404,7 @@ export function useStickerPhysics({
   motionVariant = 'physics',
   sizeMultiplier = 1,
   minimumBaseSize = 68,
+  collisionInset,
   debugTiltOverride,
 }: UseStickerPhysicsParams): SharedValue<StickerPhysicsState[]> {
   const gravitySensor = useAnimatedSensor(SensorType.GRAVITY, { interval: 'auto' });
@@ -423,7 +425,13 @@ export function useStickerPhysics({
         const dimensions = getStickerDimensions(placement, layout, sizeMultiplier, minimumBaseSize);
         const collisionGeometry = getStickerCollisionGeometry(
           dimensions.width,
-          dimensions.height
+          dimensions.height,
+          collisionInset === undefined
+            ? undefined
+            : {
+                horizontalInset: collisionInset,
+                verticalInset: collisionInset,
+              }
         );
         return {
           id: placement.id,
@@ -438,7 +446,7 @@ export function useStickerPhysics({
           opacity: placement.opacity,
         };
       }),
-    [layout, minimumBaseSize, placements, sizeMultiplier]
+    [collisionInset, layout, minimumBaseSize, placements, sizeMultiplier]
   );
 
   useEffect(() => {

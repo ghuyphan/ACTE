@@ -147,7 +147,22 @@ function AppContent() {
               animation: 'none',
             }}
           />
-          <Stack.Screen name="notes/index" />
+          <Stack.Screen
+            name="notes/index"
+            options={{
+              headerShown: true,
+              headerTransparent: false,
+              headerShadowVisible: false,
+              title: t('notes.viewAllTitle', 'All notes'),
+              headerBackTitle: t('tabs.home', 'Home'),
+              headerTintColor: colors.text,
+              headerBackButtonDisplayMode: 'minimal',
+              headerBackButtonMenuEnabled: false,
+              headerStyle: {
+                backgroundColor: colors.background,
+              },
+            }}
+          />
           <Stack.Screen name="shared/index" />
           <Stack.Screen
             name="shared/[id]"

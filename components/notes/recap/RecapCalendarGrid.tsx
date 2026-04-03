@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Image } from 'expo-image';
+import Animated, { useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
 import { Typography } from '../../../constants/theme';
 import { useTheme } from '../../../hooks/useTheme';
 
@@ -79,6 +80,36 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
 
   const hasPhotoPreview = Boolean(day.photoPreviewUri);
   const isInteractive = Boolean(day.dateKey && day.count > 0 && !day.disabled);
+  const haloAnimatedStyle = useAnimatedStyle(
+    () => ({
+      opacity: withTiming(isSelected ? 1 : 0, { duration: 180 }),
+      transform: [
+        {
+          scale: withSpring(isSelected ? 1 : 0.96, {
+            damping: 18,
+            mass: 0.7,
+            stiffness: 220,
+          }),
+        },
+      ],
+    }),
+    [isSelected]
+  );
+  const cardAnimatedStyle = useAnimatedStyle(
+    () => ({
+      transform: [
+        {
+          scale: withSpring(isSelected ? 1.03 : 1, {
+            damping: 18,
+            mass: 0.7,
+            stiffness: 220,
+          }),
+        },
+      ],
+      opacity: withTiming(day.count > 0 ? 1 : 0.86, { duration: 180 }),
+    }),
+    [day.count, isSelected]
+  );
 
   return (
     <Pressable
@@ -95,135 +126,131 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
     >
       <View
         style={[
-          styles.dayCard,
-          compact ? styles.dayCardCompact : null,
-          {
-            backgroundColor: hasPhotoPreview ? palette.card : isSelected ? palette.primarySoft : palette.card,
-            borderColor: hasPhotoPreview && isSelected ? 'transparent' : isSelected ? `${palette.primary}22` : `${palette.border}88`,
-          },
+          styles.dayFrame,
         ]}
       >
-        {isSelected ? (
-          <>
-            <View
-              pointerEvents="none"
+        <Animated.View style={cardAnimatedStyle}>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.daySelectionHalo,
+              compact ? styles.daySelectionHaloCompact : null,
+              { borderColor: palette.primary },
+              haloAnimatedStyle,
+            ]}
+          />
+          <View
+            style={[
+              styles.dayCard,
+              compact ? styles.dayCardCompact : null,
+              {
+                backgroundColor: palette.card,
+                borderColor: isSelected ? 'transparent' : `${palette.border}88`,
+              },
+            ]}
+          >
+            {hasPhotoPreview ? (
+              <>
+                <Image
+                  source={{ uri: day.photoPreviewUri }}
+                  style={styles.dayPhotoFill}
+                  contentFit="cover"
+                />
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.dayPhotoOverlay,
+                    {
+                      backgroundColor: 'rgba(24, 18, 14, 0.18)',
+                    },
+                  ]}
+                />
+              </>
+            ) : null}
+            <Text
               style={[
-                styles.selectedOutlineOuter,
-                compact ? styles.selectedOutlineOuterCompact : null,
-                { borderColor: palette.primary },
-              ]}
-            />
-            <View
-              pointerEvents="none"
-              style={[
-                styles.selectedOutlineInner,
-                compact ? styles.selectedOutlineInnerCompact : null,
-                { borderColor: hasPhotoPreview ? 'rgba(255,255,255,0.96)' : palette.card },
-              ]}
-            />
-          </>
-        ) : null}
-        {hasPhotoPreview ? (
-          <>
-            <Image
-              source={{ uri: day.photoPreviewUri }}
-              style={styles.dayPhotoFill}
-              contentFit="cover"
-            />
-            <View
-              pointerEvents="none"
-              style={[
-                styles.dayPhotoOverlay,
+                styles.dayNumber,
+                compact ? styles.dayNumberCompact : null,
                 {
-                  backgroundColor: isSelected
-                    ? 'rgba(255, 243, 205, 0.28)'
-                    : 'rgba(24, 18, 14, 0.22)',
+                  color: hasPhotoPreview
+                    ? '#FFFFFF'
+                    : isSelected
+                      ? palette.primary
+                      : palette.text,
                 },
               ]}
-            />
-          </>
-        ) : null}
-        <Text
-          style={[
-            styles.dayNumber,
-            compact ? styles.dayNumberCompact : null,
-            {
-              color: hasPhotoPreview
-                ? '#FFFFFF'
-                : isSelected
-                  ? palette.primary
-                  : palette.text,
-            },
-          ]}
-          numberOfLines={1}
-        >
-          {day.dayNumber}
-        </Text>
-        <View
-          style={[
-            styles.markerRow,
-            compact ? styles.markerRowCompact : null,
-            hasPhotoPreview ? styles.markerRowPhoto : null,
-            hasPhotoPreview && compact ? styles.markerRowPhotoCompact : null,
-          ]}
-        >
-          {!hasPhotoPreview
-            ? day.markers.slice(0, 1).map((marker) => (
-                marker.type === 'polaroid' && marker.previewUri ? (
-                  <View
-                    key={marker.key}
-                    style={[
-                      styles.photoMarker,
-                      compact ? styles.photoMarkerCompact : null,
-                      {
-                        borderColor: isSelected ? palette.primary : `${palette.border}AA`,
-                        backgroundColor: palette.card,
-                      },
-                    ]}
-                  >
-                    <Image
-                      source={{ uri: marker.previewUri }}
-                      style={styles.photoMarkerImage}
-                      contentFit="cover"
-                    />
-                  </View>
-                ) : (
-                  <View
-                    key={marker.key}
-                    style={[
-                      styles.marker,
-                      compact ? styles.markerCompact : null,
-                      {
-                        backgroundColor: marker.color,
-                        borderColor: marker.color,
-                      },
-                    ]}
-                  />
-                )
-              ))
-            : null}
-          {day.count > 1 ? (
+              numberOfLines={1}
+            >
+              {day.dayNumber}
+            </Text>
             <View
               style={[
-                styles.overflowBadge,
-                compact ? styles.overflowBadgeCompact : null,
-                {
-                  backgroundColor: hasPhotoPreview ? 'rgba(255,255,255,0.9)' : palette.primarySoft,
-                },
+                styles.markerRow,
+                compact ? styles.markerRowCompact : null,
+                hasPhotoPreview ? styles.markerRowPhoto : null,
+                hasPhotoPreview && compact ? styles.markerRowPhotoCompact : null,
               ]}
             >
-              <Text
-                style={[
-                  styles.overflowText,
-                  compact ? styles.overflowTextCompact : null,
-                  { color: hasPhotoPreview ? palette.text : palette.primary },
-                ]}
-              >
-                +{day.count - 1}
-              </Text>
+              {!hasPhotoPreview
+                ? day.markers.slice(0, 1).map((marker) => (
+                    marker.type === 'polaroid' && marker.previewUri ? (
+                      <View
+                        key={marker.key}
+                        style={[
+                          styles.photoMarker,
+                          compact ? styles.photoMarkerCompact : null,
+                          {
+                            borderColor: isSelected ? palette.primary : `${palette.border}AA`,
+                            backgroundColor: palette.card,
+                          },
+                        ]}
+                      >
+                        <Image
+                          source={{ uri: marker.previewUri }}
+                          style={styles.photoMarkerImage}
+                          contentFit="cover"
+                        />
+                      </View>
+                    ) : (
+                      <View
+                        key={marker.key}
+                        style={[
+                          styles.marker,
+                          compact ? styles.markerCompact : null,
+                          {
+                            backgroundColor: marker.color,
+                            borderColor: marker.color,
+                          },
+                        ]}
+                      />
+                    )
+                  ))
+                : null}
+              {day.count > 1 ? (
+                <View
+                  style={[
+                    styles.overflowBadge,
+                    compact ? styles.overflowBadgeCompact : null,
+                    {
+                      backgroundColor: hasPhotoPreview ? palette.card : palette.primarySoft,
+                      borderColor: hasPhotoPreview ? `${palette.border}88` : 'transparent',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.overflowText,
+                      compact ? styles.overflowTextCompact : null,
+                      { color: hasPhotoPreview ? palette.text : palette.primary },
+                    ]}
+                  >
+                    +{day.count - 1}
+                  </Text>
+                </View>
+              ) : null}
             </View>
-          ) : null}
-        </View>
+          </View>
+        </Animated.View>
       </View>
     </Pressable>
   );
@@ -231,7 +258,9 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
   prevProps.day === nextProps.day &&
   prevProps.isSelected === nextProps.isSelected &&
   prevProps.palette === nextProps.palette &&
-  prevProps.onSelectDay === nextProps.onSelectDay
+  prevProps.onSelectDay === nextProps.onSelectDay &&
+  prevProps.compact === nextProps.compact &&
+  prevProps.columnWidth === nextProps.columnWidth
 ));
 
 function RecapCalendarGrid({
@@ -258,7 +287,8 @@ function RecapCalendarGrid({
   const isCompact = compact || measuredCompact;
   const columnWidth = calendarWidth > 0 ? calendarWidth / 7 : undefined;
   const handleCalendarLayout = useCallback((event: LayoutChangeEvent) => {
-    setCalendarWidth(event.nativeEvent.layout.width);
+    const nextWidth = event.nativeEvent.layout.width;
+    setCalendarWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
   }, []);
 
   return (
@@ -321,10 +351,13 @@ const styles = StyleSheet.create({
   weekLabel: {
     ...Typography.pill,
     fontSize: 12,
-    textAlign: 'center',
+    width: '100%',
+    textAlign: 'left',
+    paddingLeft: 8,
   },
   weekLabelCompact: {
     fontSize: 11,
+    paddingLeft: 6,
   },
   grid: {
     flexDirection: 'row',
@@ -360,32 +393,27 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     gap: 4,
   },
-  selectedOutlineOuter: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 21,
-    borderWidth: 2.5,
-    zIndex: 3,
+  dayFrame: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'visible',
   },
-  selectedOutlineOuterCompact: {
-    borderRadius: 18,
-    borderWidth: 2,
-  },
-  selectedOutlineInner: {
+  daySelectionHalo: {
     position: 'absolute',
-    top: 3.5,
-    right: 3.5,
-    bottom: 3.5,
-    left: 3.5,
-    borderRadius: 17,
-    borderWidth: 1,
-    zIndex: 3,
+    top: -2.5,
+    right: -2.5,
+    bottom: -2.5,
+    left: -2.5,
+    borderRadius: 23.5,
+    borderWidth: 2.5,
   },
-  selectedOutlineInnerCompact: {
-    top: 3,
-    right: 3,
-    bottom: 3,
-    left: 3,
-    borderRadius: 14,
+  daySelectionHaloCompact: {
+    top: -2,
+    right: -2,
+    bottom: -2,
+    left: -2,
+    borderRadius: 20,
+    borderWidth: 2,
   },
   emptySlot: {
     minHeight: 56,
@@ -402,7 +430,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '800',
     fontFamily: 'Noto Sans',
-    textAlign: 'center',
+    textAlign: 'left',
     zIndex: 1,
     textShadowColor: 'rgba(0,0,0,0.16)',
     textShadowOffset: { width: 0, height: 1 },
@@ -473,6 +501,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   overflowBadgeCompact: {
     minWidth: 20,

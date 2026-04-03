@@ -28,19 +28,27 @@ function clamp(value: number, minValue: number, maxValue: number) {
 
 export function getStickerCollisionGeometry(
   width: number,
-  height: number
+  height: number,
+  options: {
+    horizontalInset?: number;
+    verticalInset?: number;
+  } = {}
 ): StickerCollisionGeometry {
   'worklet';
 
   const safeWidth = Math.max(width, 0);
   const safeHeight = Math.max(height, 0);
+  const horizontalInset =
+    typeof options.horizontalInset === 'number' ? Math.max(options.horizontalInset, 0) : COLLISION_HORIZONTAL_INSET;
+  const verticalInset =
+    typeof options.verticalInset === 'number' ? Math.max(options.verticalInset, 0) : COLLISION_VERTICAL_INSET;
   const collisionHalfWidth = clamp(
-    safeWidth / 2 - COLLISION_HORIZONTAL_INSET,
+    safeWidth / 2 - horizontalInset,
     MIN_COLLISION_RADIUS,
     safeWidth / 2
   );
   const collisionHalfHeight = clamp(
-    safeHeight / 2 - COLLISION_VERTICAL_INSET,
+    safeHeight / 2 - verticalInset,
     MIN_COLLISION_RADIUS,
     safeHeight / 2
   );

@@ -1,10 +1,16 @@
 import type { Note } from '../services/database';
 import {
+  buildMonthlyRecapDigest,
   buildMonthObjects,
   buildMonthlyRecap,
+  buildMonthlyRecapFromScopedNotes,
+  buildRecapMonthEntries,
+  deserializeMonthlyRecap,
   getMonthPlaceGroups,
   getMonthRange,
   getNotesForMonth,
+  getRecapMonthKeyForDate,
+  serializeMonthlyRecap,
 } from '../services/monthlyRecap';
 
 function buildNote(overrides: Partial<Note> = {}): Note {
@@ -143,6 +149,9 @@ describe('monthlyRecap', () => {
         count: 1,
         previewUri: 'file:///sticker-1.png',
         mimeType: 'image/png',
+        assetWidth: 100,
+        assetHeight: 100,
+        outlineEnabled: true,
       },
     ]);
     expect(recap.objects.map((object) => object.kind)).toEqual([
@@ -198,5 +207,102 @@ describe('monthlyRecap', () => {
     expect(groups[0].key).toContain('alpha');
     expect(groups[0].notes).toHaveLength(2);
     expect(groups[1].key).toContain('beta');
+  });
+
+  it('builds recap month entries using the active timezone window', () => {
+    const monthEntries = buildRecapMonthEntries(
+      [
+        buildNote({
+          id: 'late-feb-utc',
+          createdAt: '2026-02-28T18:30:00.000Z',
+        }),
+        buildNote({
+          id: 'late-march-utc',
+          createdAt: '2026-03-31T18:30:00.000Z',
+        }),
+      ],
+      { timeZone: 'Asia/Ho_Chi_Minh', monthWindow: 2 }
+    );
+
+    expect(monthEntries.map((entry) => entry.monthKey)).toEqual(['2026-04', '2026-03']);
+    expect(monthEntries[0].notes.map((note) => note.id)).toEqual(['late-march-utc']);
+    expect(monthEntries[1].notes.map((note) => note.id)).toEqual(['late-feb-utc']);
+  });
+
+  it('reuses pre-scoped month notes without changing recap output', () => {
+    const notes = [
+      buildNote({
+        id: 'march-note',
+        createdAt: '2026-03-10T10:00:00.000Z',
+        stickerPlacementsJson: JSON.stringify([
+          {
+            id: 'placement-1',
+            assetId: 'asset-1',
+            x: 0.5,
+            y: 0.5,
+            scale: 1,
+            rotation: 0,
+            zIndex: 1,
+            opacity: 1,
+            asset: {
+              id: 'asset-1',
+              localUri: 'file:///sticker-1.png',
+              mimeType: 'image/png',
+            },
+          },
+        ]),
+      }),
+      buildNote({
+        id: 'april-note',
+        createdAt: '2026-04-01T10:00:00.000Z',
+      }),
+    ];
+    const month = getMonthRange(2026, 2, 'UTC');
+    const scopedMarchNotes = getNotesForMonth(notes, month);
+    const fullRecap = buildMonthlyRecap(notes, { year: 2026, month: 2, timeZone: 'UTC' });
+    const scopedRecap = buildMonthlyRecapFromScopedNotes(scopedMarchNotes, {
+      year: 2026,
+      month: 2,
+      timeZone: 'UTC',
+    });
+
+    expect(scopedRecap).toEqual(fullRecap);
+  });
+
+  it('builds a stable recap month key and digest', () => {
+    const notes = [
+      buildNote({
+        id: 'note-a',
+        createdAt: '2026-02-28T18:30:00.000Z',
+        locationName: 'Cafe',
+      }),
+      buildNote({
+        id: 'note-b',
+        createdAt: '2026-02-28T18:40:00.000Z',
+        isFavorite: true,
+      }),
+    ];
+
+    expect(getRecapMonthKeyForDate(new Date('2026-02-28T18:30:00.000Z'), 'Asia/Ho_Chi_Minh')).toBe(
+      '2026-03'
+    );
+    expect(buildMonthlyRecapDigest(notes)).toBe(buildMonthlyRecapDigest([...notes].reverse()));
+  });
+
+  it('serializes and deserializes a monthly recap payload', () => {
+    const recap = buildMonthlyRecap(
+      [
+        buildNote({
+          id: 'note-a',
+          createdAt: '2026-03-10T10:00:00.000Z',
+        }),
+      ],
+      { year: 2026, month: 2, timeZone: 'UTC' }
+    );
+    const restored = deserializeMonthlyRecap(serializeMonthlyRecap(recap));
+
+    expect(restored).toEqual(recap);
+    expect(restored?.month.start).toBeInstanceOf(Date);
+    expect(restored?.month.endExclusive).toBeInstanceOf(Date);
   });
 });

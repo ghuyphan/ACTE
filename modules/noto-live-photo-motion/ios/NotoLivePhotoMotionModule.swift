@@ -3,6 +3,7 @@ import ExpoModulesCore
 
 public final class NotoLivePhotoMotionModule: Module {
   private let presetCandidates = [
+    AVAssetExportPreset1280x720,
     AVAssetExportPreset960x540,
     AVAssetExportPreset640x480,
     AVAssetExportPresetMediumQuality

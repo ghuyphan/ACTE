@@ -33,6 +33,6 @@ export async function normalizeLivePhotoMotionVideo(
     sourceUri,
     destinationBasePath,
     options.maxDurationSeconds ?? 2,
-    options.maxDimension ?? 540
+    options.maxDimension ?? 720
   );
 }

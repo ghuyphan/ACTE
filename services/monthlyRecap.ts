@@ -13,6 +13,12 @@ export interface MonthlyRecapMonth {
   endExclusive: Date;
 }
 
+export interface MonthlyRecapMonthEntry {
+  monthDate: Date;
+  monthKey: string;
+  notes: Note[];
+}
+
 export interface MonthlyRecapObject {
   id: string;
   kind: MonthlyRecapObjectKind;
@@ -80,6 +86,9 @@ export interface MonthlyRecapStickerUsage {
   count: number;
   previewUri: string;
   mimeType: string;
+  assetWidth: number;
+  assetHeight: number;
+  outlineEnabled: boolean;
 }
 
 export interface MonthlyRecap {
@@ -97,6 +106,16 @@ export interface MonthlyRecapOptions {
   year: number;
   month: number;
   timeZone?: string;
+}
+
+export interface CachedMonthlyRecapEntry {
+  digest: string;
+  recap: MonthlyRecap;
+}
+
+export interface BuildRecapMonthEntriesOptions {
+  timeZone?: string;
+  monthWindow?: number;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -203,6 +222,25 @@ function getDaysInMonth(year: number, month: number) {
   return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 }
 
+function getMonthIndex(year: number, month: number) {
+  return year * 12 + month;
+}
+
+function getMonthKeyFromParts(year: number, month: number) {
+  return `${year}-${String(month + 1).padStart(2, '0')}`;
+}
+
+function hashDigestValue(value: string) {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(16);
+}
+
 function getNoteTimestamp(note: Pick<Note, 'createdAt'>) {
   const timestamp = new Date(note.createdAt ?? 0).getTime();
   return Number.isFinite(timestamp) ? timestamp : 0;
@@ -300,6 +338,108 @@ export function getMonthRange(year: number, month: number, timeZone = 'UTC'): Mo
     start,
     endExclusive,
   };
+}
+
+export function getRecapMonthKeyForDate(date: Date, timeZone = 'UTC') {
+  const { year, month } = getZonedDateParts(date, timeZone);
+  return getMonthKeyFromParts(year, month - 1);
+}
+
+export function buildMonthlyRecapDigest(notes: Note[]) {
+  const normalizedNotes = [...notes].sort(compareNotesForRecap);
+  const digestSource = normalizedNotes
+    .map((note) =>
+      [
+        note.id,
+        note.type,
+        note.content,
+        note.photoLocalUri ?? '',
+        note.photoSyncedLocalUri ?? '',
+        note.photoRemoteBase64 ?? '',
+        note.isLivePhoto ? '1' : '0',
+        note.pairedVideoLocalUri ?? '',
+        note.pairedVideoSyncedLocalUri ?? '',
+        note.pairedVideoRemotePath ?? '',
+        note.locationName ?? '',
+        note.promptId ?? '',
+        note.promptTextSnapshot ?? '',
+        note.promptAnswer ?? '',
+        note.moodEmoji ?? '',
+        note.noteColor ?? '',
+        String(note.latitude),
+        String(note.longitude),
+        String(note.radius),
+        note.isFavorite ? '1' : '0',
+        note.hasDoodle ? '1' : '0',
+        note.doodleStrokesJson ?? '',
+        note.hasStickers ? '1' : '0',
+        note.stickerPlacementsJson ?? '',
+        note.createdAt,
+        note.updatedAt ?? '',
+      ].join('\u001f')
+    )
+    .join('\u001e');
+
+  return `${normalizedNotes.length}:${hashDigestValue(digestSource)}`;
+}
+
+export function buildRecapMonthEntries(
+  notes: Note[],
+  options: BuildRecapMonthEntriesOptions = {}
+): MonthlyRecapMonthEntry[] {
+  const timeZone = options.timeZone ?? 'UTC';
+  const monthWindow = Math.max(options.monthWindow ?? 12, 1);
+  let latestMonthIndex: number | null = null;
+  let earliestMonthIndex: number | null = null;
+  const notesByMonth = new Map<string, Note[]>();
+
+  for (const note of notes) {
+    const timestamp = new Date(note.createdAt);
+    if (Number.isNaN(timestamp.getTime())) {
+      continue;
+    }
+
+    const { year, month } = getZonedDateParts(timestamp, timeZone);
+    const monthIndex = getMonthIndex(year, month - 1);
+    const monthKey = getMonthKeyFromParts(year, month - 1);
+    const existingMonthNotes = notesByMonth.get(monthKey);
+
+    if (existingMonthNotes) {
+      existingMonthNotes.push(note);
+    } else {
+      notesByMonth.set(monthKey, [note]);
+    }
+
+    if (latestMonthIndex === null || monthIndex > latestMonthIndex) {
+      latestMonthIndex = monthIndex;
+    }
+
+    if (earliestMonthIndex === null || monthIndex < earliestMonthIndex) {
+      earliestMonthIndex = monthIndex;
+    }
+  }
+
+  if (latestMonthIndex === null || earliestMonthIndex === null) {
+    return [];
+  }
+
+  const minimumWindowStart = latestMonthIndex - (monthWindow - 1);
+  const firstMonthIndex = Math.min(earliestMonthIndex, minimumWindowStart);
+  const months: MonthlyRecapMonthEntry[] = [];
+
+  for (let monthIndex = latestMonthIndex; monthIndex >= firstMonthIndex; monthIndex -= 1) {
+    const year = Math.floor(monthIndex / 12);
+    const month = monthIndex - year * 12;
+    const monthKey = getMonthKeyFromParts(year, month);
+
+    months.push({
+      monthDate: new Date(year, month, 1),
+      monthKey,
+      notes: notesByMonth.get(monthKey) ?? [],
+    });
+  }
+
+  return months;
 }
 
 export function getNotesForMonth(notes: Note[], range: MonthlyRecapMonth) {
@@ -529,17 +669,26 @@ function getMonthStickerUsageFromScopedNotes(scopedNotes: Note[]): MonthlyRecapS
 
   for (const note of scopedNotes) {
     for (const placement of parseNoteStickerPlacements(note.stickerPlacementsJson)) {
+      const previewUri = placement.asset.localUri;
+      if (!previewUri) {
+        continue;
+      }
+
       const existing = usageByAssetId.get(placement.assetId);
       if (existing) {
         existing.count += 1;
+        existing.outlineEnabled = existing.outlineEnabled || placement.outlineEnabled !== false;
         continue;
       }
 
       usageByAssetId.set(placement.assetId, {
         assetId: placement.assetId,
         count: 1,
-        previewUri: placement.asset.localUri,
+        previewUri,
         mimeType: placement.asset.mimeType,
+        assetWidth: Math.max(placement.asset.width ?? 100, 1),
+        assetHeight: Math.max(placement.asset.height ?? 100, 1),
+        outlineEnabled: placement.outlineEnabled !== false,
       });
     }
   }
@@ -561,16 +710,18 @@ export function getMonthStickerUsage(notes: Note[], range?: MonthlyRecapMonth): 
   return getMonthStickerUsageFromScopedNotes(scopedNotes);
 }
 
-export function buildMonthlyRecap(notes: Note[], options: MonthlyRecapOptions): MonthlyRecap {
+export function buildMonthlyRecapFromScopedNotes(
+  scopedNotes: Note[],
+  options: MonthlyRecapOptions
+): MonthlyRecap {
   const timeZone = options.timeZone ?? 'UTC';
   const month = getMonthRange(options.year, options.month, timeZone);
-  const monthNotes = getNotesForMonth(notes, month);
-  const placeGroups = getMonthPlaceGroupsFromScopedNotes(monthNotes);
-  const days = buildMonthDayBucketsFromScopedNotes(monthNotes, month);
-  const highlights = getMonthHighlightsFromScopedNotes(monthNotes);
-  const objects = buildMonthObjectsFromScopedNotes(monthNotes);
-  const stats = getMonthStatsFromScopedNotes(monthNotes, month);
-  const stickerUsage = getMonthStickerUsageFromScopedNotes(monthNotes);
+  const placeGroups = getMonthPlaceGroupsFromScopedNotes(scopedNotes);
+  const days = buildMonthDayBucketsFromScopedNotes(scopedNotes, month);
+  const highlights = getMonthHighlightsFromScopedNotes(scopedNotes);
+  const objects = buildMonthObjectsFromScopedNotes(scopedNotes);
+  const stats = getMonthStatsFromScopedNotes(scopedNotes, month);
+  const stickerUsage = getMonthStickerUsageFromScopedNotes(scopedNotes);
   const heroPostcard = (highlights.find((highlight) => highlight.kind === 'postcard') ?? null) as MonthlyRecapHeroPostcard | null;
 
   return {
@@ -583,4 +734,45 @@ export function buildMonthlyRecap(notes: Note[], options: MonthlyRecapOptions): 
     objects,
     stickerUsage,
   };
+}
+
+export function buildMonthlyRecap(notes: Note[], options: MonthlyRecapOptions): MonthlyRecap {
+  const timeZone = options.timeZone ?? 'UTC';
+  const month = getMonthRange(options.year, options.month, timeZone);
+  const scopedNotes = getNotesForMonth(notes, month);
+
+  return buildMonthlyRecapFromScopedNotes(scopedNotes, options);
+}
+
+export function serializeMonthlyRecap(recap: MonthlyRecap): string {
+  return JSON.stringify({
+    ...recap,
+    month: {
+      ...recap.month,
+      start: recap.month.start.toISOString(),
+      endExclusive: recap.month.endExclusive.toISOString(),
+    },
+  });
+}
+
+export function deserializeMonthlyRecap(payload: string): MonthlyRecap | null {
+  try {
+    const parsed = JSON.parse(payload) as MonthlyRecap & {
+      month: MonthlyRecapMonth & {
+        start: string;
+        endExclusive: string;
+      };
+    };
+
+    return {
+      ...parsed,
+      month: {
+        ...parsed.month,
+        start: new Date(parsed.month.start),
+        endExclusive: new Date(parsed.month.endExclusive),
+      },
+    };
+  } catch {
+    return null;
+  }
 }

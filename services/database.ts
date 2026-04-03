@@ -6,6 +6,17 @@ import { buildNoteSearchText, tokenizeSearchQuery } from './noteSearch';
 import { normalizeSavedTextNoteColor } from './noteAppearance';
 import { resolveStoredPhotoUri } from './photoStorage';
 import { resolveStoredPairedVideoUri } from './livePhotoStorage';
+import {
+    buildMonthlyRecap,
+    buildMonthlyRecapDigest,
+    deserializeMonthlyRecap,
+    getMonthRange,
+    getNotesForMonth,
+    getRecapMonthKeyForDate,
+    serializeMonthlyRecap,
+    type CachedMonthlyRecapEntry,
+    type MonthlyRecap,
+} from './monthlyRecap';
 
 // ─── Types ──────────────────────────────────────────────────────────
 export type NoteType = 'text' | 'photo';
@@ -127,11 +138,12 @@ let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let transactionQueue: Promise<void> = Promise.resolve();
 let androidDatabaseQueue: Promise<void> = Promise.resolve();
-const APP_SCHEMA_VERSION = 12;
+const APP_SCHEMA_VERSION = 13;
 export const LOCAL_NOTES_SCOPE = '__local__';
 let activeNotesScope = LOCAL_NOTES_SCOPE;
 const SQLITE_LOCK_RETRY_DELAYS_MS = [30, 80, 160];
 const NOTES_FTS_TABLE = 'notes_fts';
+const MONTHLY_RECAP_CACHE_TABLE = 'monthly_recap_cache';
 const NOTES_SELECT_FIELDS = `notes.*,
       CASE WHEN doodles.note_id IS NOT NULL THEN 1 ELSE 0 END AS has_doodle,
       doodles.strokes_json AS doodle_strokes_json,
@@ -271,6 +283,15 @@ interface ReminderSelectionRow {
     is_favorite: number;
     created_at: string;
     updated_at: string | null;
+}
+
+interface MonthlyRecapCacheRow {
+    owner_uid: string;
+    month_key: string;
+    time_zone: string;
+    digest: string;
+    payload_json: string;
+    updated_at: string;
 }
 
 function resolveNoteDecorationState(input: {
@@ -517,6 +538,17 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         user_uid TEXT PRIMARY KEY NOT NULL,
         last_updated_at TEXT
       );
+      CREATE TABLE IF NOT EXISTS monthly_recap_cache (
+        owner_uid TEXT NOT NULL,
+        month_key TEXT NOT NULL,
+        time_zone TEXT NOT NULL,
+        digest TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (owner_uid, month_key, time_zone)
+      );
+      CREATE INDEX IF NOT EXISTS idx_monthly_recap_cache_owner_updated
+        ON monthly_recap_cache(owner_uid, updated_at DESC);
     `);
 
             // Migration: add missing columns for existing databases before touching dependent indexes/queries.
@@ -821,6 +853,21 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                         last_updated_at TEXT
                     )`
                 );
+                await database.execAsync(
+                    `CREATE TABLE IF NOT EXISTS monthly_recap_cache (
+                        owner_uid TEXT NOT NULL,
+                        month_key TEXT NOT NULL,
+                        time_zone TEXT NOT NULL,
+                        digest TEXT NOT NULL,
+                        payload_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        PRIMARY KEY (owner_uid, month_key, time_zone)
+                    )`
+                );
+                await database.execAsync(
+                    `CREATE INDEX IF NOT EXISTS idx_monthly_recap_cache_owner_updated
+                     ON monthly_recap_cache(owner_uid, updated_at DESC)`
+                );
 
                 if (currentUserVersion < APP_SCHEMA_VERSION) {
                     await database.execAsync(`PRAGMA user_version = ${APP_SCHEMA_VERSION}`);
@@ -1019,6 +1066,87 @@ function getCurrentScope() {
     return getActiveNotesScope();
 }
 
+function getCurrentTimeZone() {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+}
+
+function canUseSQLitePersistence() {
+    const nativeDatabase =
+        (SQLite as unknown as { NativeDatabase?: unknown }).NativeDatabase ??
+        ((SQLite as unknown as { default?: { NativeDatabase?: unknown } }).default?.NativeDatabase);
+
+    return Platform.OS === 'web' || typeof nativeDatabase === 'function';
+}
+
+function parseMonthKey(monthKey: string) {
+    const match = /^(\d{4})-(\d{2})$/.exec(monthKey);
+    if (!match) {
+        return null;
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]) - 1;
+    if (!Number.isFinite(year) || !Number.isFinite(month) || month < 0 || month > 11) {
+        return null;
+    }
+
+    return { year, month };
+}
+
+async function clearMonthlyRecapCacheForScope(scope: string) {
+    const database = await getDB();
+    await database.runAsync(
+        `DELETE FROM ${MONTHLY_RECAP_CACHE_TABLE} WHERE owner_uid = ?`,
+        scope
+    );
+}
+
+async function upsertMonthlyRecapCacheEntry(
+    recap: MonthlyRecap,
+    digest: string,
+    scope: string,
+    timeZone: string
+) {
+    const database = await getDB();
+    await database.runAsync(
+        `INSERT INTO ${MONTHLY_RECAP_CACHE_TABLE} (
+            owner_uid,
+            month_key,
+            time_zone,
+            digest,
+            payload_json,
+            updated_at
+        )
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(owner_uid, month_key, time_zone) DO UPDATE SET
+            digest = excluded.digest,
+            payload_json = excluded.payload_json,
+            updated_at = excluded.updated_at`,
+        scope,
+        recap.month.monthKey,
+        timeZone,
+        digest,
+        serializeMonthlyRecap(recap),
+        new Date().toISOString()
+    );
+}
+
+function scheduleMonthlyRecapCacheRefreshForMonthKey(
+    scope: string,
+    monthKey: string,
+    timeZone = getCurrentTimeZone()
+) {
+    void refreshCachedMonthlyRecapForMonthKey(monthKey, { scope, timeZone }).catch((error) => {
+        console.warn('[monthly-recap-cache] Failed to refresh month cache:', error);
+    });
+}
+
+function scheduleMonthlyRecapCacheClear(scope: string) {
+    void clearMonthlyRecapCacheForScope(scope).catch((error) => {
+        console.warn('[monthly-recap-cache] Failed to clear recap cache:', error);
+    });
+}
+
 // ─── CRUD Operations ────────────────────────────────────────────────
 export async function createNote(input: CreateNoteInput): Promise<Note> {
     const scope = getCurrentScope();
@@ -1106,7 +1234,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         await persistNoteDecorationRows(txn, id, noteDecorations, now);
     });
 
-    return {
+    const createdNote = {
         id,
         type: input.type,
         content: normalizedContent,
@@ -1134,6 +1262,13 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         createdAt: now,
         updatedAt: null,
     };
+
+    scheduleMonthlyRecapCacheRefreshForMonthKey(
+        scope,
+        getRecapMonthKeyForDate(new Date(createdNote.createdAt), getCurrentTimeZone())
+    );
+
+    return createdNote;
 }
 
 export async function getAllNotes(): Promise<Note[]> {
@@ -1308,6 +1443,11 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         await upsertNoteSearchDocument(txn, id, scope, searchText);
         await persistNoteDecorationRows(txn, id, nextDecorations, now);
     });
+
+    scheduleMonthlyRecapCacheRefreshForMonthKey(
+        scope,
+        getRecapMonthKeyForDate(new Date(existing.createdAt), getCurrentTimeZone())
+    );
 }
 
 export async function toggleFavorite(id: string): Promise<boolean> {
@@ -1327,6 +1467,13 @@ export async function toggleFavorite(id: string): Promise<boolean> {
         id,
         scope
     );
+    const note = await getNoteById(id);
+    if (note) {
+        scheduleMonthlyRecapCacheRefreshForMonthKey(
+            scope,
+            getRecapMonthKeyForDate(new Date(note.createdAt), getCurrentTimeZone())
+        );
+    }
     return newValue === 1;
 }
 
@@ -1380,6 +1527,7 @@ export async function getNotesForReminderSelection(): Promise<Note[]> {
 export async function deleteNote(id: string): Promise<void> {
     const database = await getDB();
     const scope = getCurrentScope();
+    const note = await getNoteById(id);
     await database.runAsync(
         'DELETE FROM note_doodles WHERE note_id IN (SELECT id FROM notes WHERE id = ? AND owner_uid = ?)',
         id,
@@ -1392,6 +1540,12 @@ export async function deleteNote(id: string): Promise<void> {
     );
     await deleteNoteSearchDocument(database, id);
     await database.runAsync('DELETE FROM notes WHERE id = ? AND owner_uid = ?', id, scope);
+    if (note) {
+        scheduleMonthlyRecapCacheRefreshForMonthKey(
+            scope,
+            getRecapMonthKeyForDate(new Date(note.createdAt), getCurrentTimeZone())
+        );
+    }
 }
 
 export async function deleteAllNotes(): Promise<void> {
@@ -1411,6 +1565,7 @@ export async function deleteAllNotesForScope(scope: string): Promise<void> {
     );
     await deleteNoteSearchDocumentsForScope(database, scope);
     await database.runAsync('DELETE FROM notes WHERE owner_uid = ?', scope);
+    scheduleMonthlyRecapCacheClear(scope);
 }
 
 export async function getNotesCount(): Promise<number> {
@@ -1421,6 +1576,96 @@ export async function getNotesCount(): Promise<number> {
         scope
     );
     return result?.count ?? 0;
+}
+
+export async function getCachedMonthlyRecaps(
+    monthKeys: string[],
+    options: {
+        scope?: string;
+        timeZone?: string;
+    } = {}
+): Promise<Map<string, CachedMonthlyRecapEntry>> {
+    if (monthKeys.length === 0 || !canUseSQLitePersistence()) {
+        return new Map();
+    }
+
+    const database = await getDB();
+    const scope = options.scope ?? getCurrentScope();
+    const timeZone = options.timeZone ?? getCurrentTimeZone();
+    const placeholders = monthKeys.map(() => '?').join(', ');
+    const rows = await database.getAllAsync<MonthlyRecapCacheRow>(
+        `SELECT owner_uid, month_key, time_zone, digest, payload_json, updated_at
+         FROM ${MONTHLY_RECAP_CACHE_TABLE}
+         WHERE owner_uid = ?
+           AND time_zone = ?
+           AND month_key IN (${placeholders})`,
+        scope,
+        timeZone,
+        ...monthKeys
+    );
+    const entries = new Map<string, CachedMonthlyRecapEntry>();
+
+    for (const row of rows) {
+        const recap = deserializeMonthlyRecap(row.payload_json);
+        if (recap) {
+            entries.set(row.month_key, {
+                digest: row.digest,
+                recap,
+            });
+        }
+    }
+
+    return entries;
+}
+
+export async function refreshCachedMonthlyRecapForMonthKey(
+    monthKey: string,
+    options: {
+        scope?: string;
+        timeZone?: string;
+    } = {}
+): Promise<CachedMonthlyRecapEntry | null> {
+    if (!canUseSQLitePersistence()) {
+        return null;
+    }
+
+    const scope = options.scope ?? getCurrentScope();
+    const timeZone = options.timeZone ?? getCurrentTimeZone();
+    const parts = parseMonthKey(monthKey);
+
+    if (!parts) {
+        return null;
+    }
+
+    const notes = await getAllNotesForScope(scope);
+    const monthRange = getMonthRange(parts.year, parts.month, timeZone);
+    const monthNotes = getNotesForMonth(notes, monthRange);
+
+    if (monthNotes.length === 0) {
+        const database = await getDB();
+        await database.runAsync(
+            `DELETE FROM ${MONTHLY_RECAP_CACHE_TABLE}
+             WHERE owner_uid = ? AND month_key = ? AND time_zone = ?`,
+            scope,
+            monthKey,
+            timeZone
+        );
+        return null;
+    }
+
+    const recap = buildMonthlyRecap(notes, {
+        year: parts.year,
+        month: parts.month,
+        timeZone,
+    });
+    const digest = buildMonthlyRecapDigest(monthNotes);
+
+    await upsertMonthlyRecapCacheEntry(recap, digest, scope, timeZone);
+
+    return {
+        digest,
+        recap,
+    };
 }
 
 export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
@@ -1535,7 +1780,7 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         await persistNoteDecorationRows(txn, input.id, noteDecorations, updatedAt);
     });
 
-    return {
+    const upsertedNote = {
         id: input.id,
         type: input.type,
         content: normalizedContent,
@@ -1563,4 +1808,11 @@ export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
         createdAt: input.createdAt,
         updatedAt: input.updatedAt ?? null,
     };
+
+    scheduleMonthlyRecapCacheRefreshForMonthKey(
+        scope,
+        getRecapMonthKeyForDate(new Date(upsertedNote.createdAt), getCurrentTimeZone())
+    );
+
+    return upsertedNote;
 }
