@@ -25,8 +25,6 @@ import {
   ActivityIndicator,
   Dimensions,
   type GestureResponderEvent,
-  Keyboard,
-  type KeyboardEvent,
   Platform,
   Pressable,
   type PressableProps,
@@ -64,17 +62,11 @@ import {
   getCaptureNoteGradient,
   getNoteColorCardGradient,
 } from '../../services/noteAppearance';
-import { applyCommittedInlineEmoji } from '../../services/noteDecorations';
 import {
-  bringStickerPlacementToFront,
   createStickerPlacement,
-  duplicateStickerPlacement,
   importStickerAsset,
-  setStickerPlacementMotionLocked,
   type NoteStickerPlacement,
   StickerImportError,
-  setStickerPlacementOutlineEnabled,
-  updateStickerPlacementTransform,
 } from '../../services/noteStickers';
 import { isOlderIOS } from '../../utils/platform';
 import {
@@ -102,6 +94,8 @@ import PrimaryButton from '../ui/PrimaryButton';
 import StickerPastePopover from '../ui/StickerPastePopover';
 import LivePhotoIcon from '../ui/LivePhotoIcon';
 import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../../services/livePhotoProcessing';
+import { useCaptureCardDecorations } from './useCaptureCardDecorations';
+import { useCaptureCardTextInputState } from './useCaptureCardTextInputState';
 
 const { width } = Dimensions.get('window');
 const HORIZONTAL_PADDING = Layout.screenPadding - 8;
@@ -150,10 +144,6 @@ function getCaptureTextPlaceholderVariants(t: TFunction) {
   return Array.isArray(translated) && translated.every((item) => typeof item === 'string')
     ? translated
     : DEFAULT_CAPTURE_TEXT_PLACEHOLDERS;
-}
-
-function getUniqueColors(colors: string[]) {
-  return colors.filter((color, index) => colors.indexOf(color) === index);
 }
 
 function clamp(value: number, minValue: number, maxValue: number) {
@@ -881,16 +871,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [cameraActivationNonce, setCameraActivationNonce] = useState(0);
   const [cameraZoom, setCameraZoom] = useState(0);
   const [showCameraZoomBadge, setShowCameraZoomBadge] = useState(false);
-  const [doodleModeEnabled, setDoodleModeEnabled] = useState(false);
-  const [stickerModeEnabled, setStickerModeEnabled] = useState(false);
-  const [textDoodleStrokes, setTextDoodleStrokes] = useState<DoodleStroke[]>([]);
-  const [photoDoodleStrokes, setPhotoDoodleStrokes] = useState<DoodleStroke[]>([]);
-  const [textDoodleColor, setTextDoodleColor] = useState(colors.captureCardText);
-  const [photoDoodleColor, setPhotoDoodleColor] = useState(PHOTO_DOODLE_DEFAULT_COLOR);
-  const [textStickerPlacements, setTextStickerPlacements] = useState<NoteStickerPlacement[]>([]);
-  const [photoStickerPlacements, setPhotoStickerPlacements] = useState<NoteStickerPlacement[]>([]);
-  const [textSelectedStickerId, setTextSelectedStickerId] = useState<string | null>(null);
-  const [photoSelectedStickerId, setPhotoSelectedStickerId] = useState<string | null>(null);
   const [importingSticker, setImportingSticker] = useState(false);
   const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
   const [showStickerActionsSheet, setShowStickerActionsSheet] = useState(false);
@@ -899,37 +879,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [inlinePasteCanPasteFromClipboard, setInlinePasteCanPasteFromClipboard] = useState(false);
   const [inlinePasteLoading, setInlinePasteLoading] = useState(false);
   const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
-  const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
-  const [isNoteInputFocused, setIsNoteInputFocused] = useState(false);
-  const [isRestaurantInputFocused, setIsRestaurantInputFocused] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const cameraAutoRecoveryCountRef = useRef(0);
   const cameraZoomRef = useRef(0);
   const cameraPanZoomStartRef = useRef(0);
   const cameraPinchZoomStartRef = useRef(0);
   const cameraZoomBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isCameraCaptureSurface = captureMode === 'camera';
-  const isPhotoDoodleSurface = isCameraCaptureSurface && Boolean(capturedPhoto);
-  const doodleStrokes = isCameraCaptureSurface ? photoDoodleStrokes : textDoodleStrokes;
-  const doodleColor = isCameraCaptureSurface ? photoDoodleColor : textDoodleColor;
-  const stickerPlacements = isCameraCaptureSurface ? photoStickerPlacements : textStickerPlacements;
-  const selectedStickerId = isCameraCaptureSurface ? photoSelectedStickerId : textSelectedStickerId;
-  const selectedStickerPlacement = useMemo(
-    () => stickerPlacements.find((placement) => placement.id === selectedStickerId) ?? null,
-    [selectedStickerId, stickerPlacements]
-  );
-  const selectedStickerIsStamp = selectedStickerPlacement?.renderMode === 'stamp';
-  const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
-  const selectedStickerMotionLocked = selectedStickerPlacement?.motionLocked === true;
-  const textDoodleColors = useMemo(
-    () => getUniqueColors([colors.captureCardText, PHOTO_DOODLE_DEFAULT_COLOR, colors.primary]),
-    [colors.captureCardText, colors.primary]
-  );
-  const photoDoodleColors = useMemo(
-    () => getUniqueColors([PHOTO_DOODLE_DEFAULT_COLOR, '#1C1C1E', colors.primary]),
-    [colors.primary]
-  );
-  const doodleColorOptions = isCameraCaptureSurface ? photoDoodleColors : textDoodleColors;
   const isCameraSaveMode = captureMode === 'camera';
   const isSharedTarget = shareTarget === 'shared';
   const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
@@ -954,12 +908,18 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const livePhotoHaloProgress = useSharedValue(0);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
-  const previousTextDoodleDefaultColorRef = useRef(colors.captureCardText);
   const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
-  const activeTextPlaceholder =
-    placeholderVariants[textPlaceholderIndex % placeholderVariants.length] ??
-    DEFAULT_CAPTURE_TEXT_PLACEHOLDERS[0];
+  const clearPastePromptTimeout = useCallback(() => {
+    if (pastePromptTimeoutRef.current) {
+      clearTimeout(pastePromptTimeoutRef.current);
+      pastePromptTimeoutRef.current = null;
+    }
+  }, []);
+  const dismissPastePrompt = useCallback(() => {
+    clearPastePromptTimeout();
+    setPastePrompt((current) => (current.visible ? { ...current, visible: false } : current));
+  }, [clearPastePromptTimeout]);
   const livePhotoProgressPath = useMemo(() => {
     const path = Skia.Path.Make();
     path.addCircle(
@@ -980,6 +940,63 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const useNativeInlinePasteButton = Platform.OS === 'ios' && isPasteButtonAvailable;
   const useFallbackInlinePasteButton = Platform.OS === 'android';
   const hasVisibleCameraStatus = captureMode === 'camera' && Boolean(cameraStatusText);
+  const {
+    activeTextPlaceholder,
+    dismissCaptureInputs,
+    handleChangeNoteText,
+    handleNoteInputBlur,
+    handleNoteInputFocus,
+    handleRestaurantInputBlur,
+    handleRestaurantInputFocus,
+    isNoteInputFocused,
+    keyboardLiftAnimatedStyle,
+    rotatePlaceholderIfNeeded,
+  } = useCaptureCardTextInputState({
+    captureMode,
+    noteText,
+    onChangeNoteText,
+    placeholderVariants,
+    reduceMotionEnabled,
+  });
+  const {
+    applyImportedSticker,
+    applySelectedStickerAction: handleSelectedStickerAction,
+    changeStickerPlacements: handleChangeStickerPlacements,
+    clearDoodle: handleClearDoodle,
+    closeDecorateControls,
+    doodleColor,
+    doodleColorOptions,
+    doodleModeEnabled,
+    doodleStrokes,
+    photoDoodleStrokes,
+    pressStickerCanvas: handlePressStickerCanvas,
+    resetDoodle,
+    resetStickers,
+    selectDoodleColor: handleSelectDoodleColor,
+    selectedStickerId,
+    selectedStickerIsStamp,
+    selectedStickerMotionLocked,
+    selectedStickerOutlineEnabled,
+    selectSticker: selectStickerPlacement,
+    stickerModeEnabled,
+    stickerPlacements,
+    textDoodleStrokes,
+    toggleDoodleMode: handleToggleDoodleMode,
+    toggleStickerMode: toggleStickerModeInternal,
+    toggleStickerMotionLock: handleToggleStickerMotionLock,
+    undoDoodle: handleUndoDoodle,
+    setPhotoDoodleStrokes,
+    setTextDoodleStrokes,
+  } = useCaptureCardDecorations({
+    captureMode,
+    capturedPhoto,
+    captureCardTextColor: colors.captureCardText,
+    photoDoodleDefaultColor: PHOTO_DOODLE_DEFAULT_COLOR,
+    primaryColor: colors.primary,
+    dismissCaptureInputs,
+    dismissPastePrompt,
+    enablePhotoStickers: ENABLE_PHOTO_STICKERS,
+  });
   const shouldCheckInlinePasteClipboard =
     ENABLE_PHOTO_STICKERS &&
     captureMode === 'text' &&
@@ -1006,8 +1023,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     Platform.OS === 'android' &&
     !isModeSwitchAnimating &&
     (captureMode === 'camera' || (captureMode === 'text' && isNoteInputFocused));
-  const keyboardLift = useSharedValue(0);
-  const isTextEntryFocused = captureMode === 'text' && (isNoteInputFocused || isRestaurantInputFocused);
   const clearCameraZoomBadgeTimeout = useCallback(() => {
     if (cameraZoomBadgeTimeoutRef.current) {
       clearTimeout(cameraZoomBadgeTimeoutRef.current);
@@ -1201,47 +1216,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     }
   }, [isSaveDisabled, savePressScale]);
 
-  const closeDecorateControls = useCallback(() => {
-    setDoodleModeEnabled(false);
-    setStickerModeEnabled(false);
-    setTextSelectedStickerId(null);
-    setPhotoSelectedStickerId(null);
-  }, []);
-
   useEffect(() => {
-    if (captureMode !== 'text') {
-      setIsNoteInputFocused(false);
-      setIsRestaurantInputFocused(false);
-    }
-
     closeDecorateControls();
     setShowStickerSourceSheet(false);
   }, [captureMode, capturedPhoto, closeDecorateControls]);
 
   useEffect(() => {
-    const previousDefaultColor = previousTextDoodleDefaultColorRef.current;
-    setTextDoodleColor((current) => (
-      current === previousDefaultColor ? colors.captureCardText : current
-    ));
-    previousTextDoodleDefaultColorRef.current = colors.captureCardText;
-  }, [colors.captureCardText]);
-
-  useEffect(() => {
-    const isTextDraftEmpty = noteText.length === 0;
     const wasTextDraftEmpty = previousTextDraftEmptyRef.current;
     const previousCaptureMode = previousCaptureModeRef.current;
-    const enteredFreshEmptyTextDraft =
-      captureMode === 'text' &&
-      isTextDraftEmpty &&
-      (!wasTextDraftEmpty || previousCaptureMode !== 'text');
-
-    if (enteredFreshEmptyTextDraft) {
-      setTextPlaceholderIndex((current) => current + 1);
-    }
-
-    previousTextDraftEmptyRef.current = isTextDraftEmpty;
+    previousTextDraftEmptyRef.current = rotatePlaceholderIfNeeded(previousCaptureMode, wasTextDraftEmpty);
     previousCaptureModeRef.current = captureMode;
-  }, [captureMode, noteText.length]);
+  }, [captureMode, rotatePlaceholderIfNeeded]);
 
   useEffect(() => {
     onDoodleModeChange?.(
@@ -1264,50 +1249,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     onInteractionLockChange,
     stickerModeEnabled,
   ]);
-
-  useEffect(() => {
-    const handleKeyboardFrame = (event: KeyboardEvent) => {
-      setKeyboardHeight(event.endCoordinates.height);
-    };
-    const handleKeyboardHide = () => {
-      setKeyboardHeight(0);
-    };
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const frameEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSubscription = Keyboard.addListener(showEvent, handleKeyboardFrame);
-    const frameSubscription = Keyboard.addListener(frameEvent, handleKeyboardFrame);
-    const hideSubscription = Keyboard.addListener(hideEvent, handleKeyboardHide);
-
-    return () => {
-      showSubscription.remove();
-      frameSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    const nextLift = isTextEntryFocused
-      ? Math.min(Math.max(keyboardHeight - 150, 0), 170)
-      : 0;
-
-    keyboardLift.value = withTiming(nextLift, {
-      duration: reduceMotionEnabled ? 110 : 220,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [isTextEntryFocused, keyboardHeight, keyboardLift, reduceMotionEnabled]);
-
-  const clearPastePromptTimeout = useCallback(() => {
-    if (pastePromptTimeoutRef.current) {
-      clearTimeout(pastePromptTimeoutRef.current);
-      pastePromptTimeoutRef.current = null;
-    }
-  }, []);
-
-  const dismissPastePrompt = useCallback(() => {
-    clearPastePromptTimeout();
-    setPastePrompt((current) => (current.visible ? { ...current, visible: false } : current));
-  }, [clearPastePromptTimeout]);
 
   useEffect(() => {
     if (!isModeSwitchAnimating) {
@@ -1388,26 +1329,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     };
   }, [shouldCheckInlinePasteClipboard]);
 
-  const resetDoodle = useCallback(() => {
-    if (doodleModeEnabled) {
-      setDoodleModeEnabled(false);
-    }
-    setTextDoodleStrokes([]);
-    setPhotoDoodleStrokes([]);
-    setTextDoodleColor(colors.captureCardText);
-    setPhotoDoodleColor(PHOTO_DOODLE_DEFAULT_COLOR);
-  }, [colors.captureCardText, doodleModeEnabled]);
-
-  const resetStickers = useCallback(() => {
-    if (stickerModeEnabled) {
-      setStickerModeEnabled(false);
-    }
-    setTextStickerPlacements([]);
-    setPhotoStickerPlacements([]);
-    setTextSelectedStickerId(null);
-    setPhotoSelectedStickerId(null);
-  }, [stickerModeEnabled]);
-
   useImperativeHandle(
     ref,
     () => ({
@@ -1487,9 +1408,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const cameraTransitionMaskAnimatedStyle = useAnimatedStyle(() => ({
     opacity: cameraTransitionMaskOpacity.value,
   }), [cameraTransitionMaskOpacity]);
-  const keyboardLiftAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -keyboardLift.value }],
-  }), [keyboardLift]);
   const shutterOuterAnimatedStyle = useAnimatedStyle(() => ({
     borderColor: interpolateColor(
       livePhotoVisualProgress.value,
@@ -1675,62 +1593,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     [cameraZoomGesturesEnabled, scheduleHideCameraZoomBadge, updateCameraZoom]
   );
 
-  const dismissCaptureInputs = useCallback(() => {
-    Keyboard.dismiss();
-    setIsNoteInputFocused(false);
-    setIsRestaurantInputFocused(false);
-  }, []);
-
-  const handleToggleDoodleMode = useCallback(() => {
-    dismissPastePrompt();
-    dismissCaptureInputs();
-    setStickerModeEnabled(false);
-    if (isPhotoDoodleSurface) {
-      setPhotoSelectedStickerId(null);
-    } else {
-      setTextSelectedStickerId(null);
-    }
-    setDoodleModeEnabled((current) => !current);
-  }, [dismissCaptureInputs, dismissPastePrompt, isPhotoDoodleSurface]);
-
-  const handleUndoDoodle = useCallback(() => {
-    if (isPhotoDoodleSurface) {
-      setPhotoDoodleStrokes((current) => current.slice(0, -1));
-      return;
-    }
-
-    setTextDoodleStrokes((current) => current.slice(0, -1));
-  }, [isPhotoDoodleSurface]);
-  const handleClearDoodle = useCallback(() => {
-    if (isPhotoDoodleSurface) {
-      setPhotoDoodleStrokes([]);
-      return;
-    }
-
-    setTextDoodleStrokes([]);
-  }, [isPhotoDoodleSurface]);
-  const handleSelectDoodleColor = useCallback(
-    (nextColor: string) => {
-      if (isPhotoDoodleSurface) {
-        setPhotoDoodleColor(nextColor);
-        return;
-      }
-
-      setTextDoodleColor(nextColor);
-    },
-    [isPhotoDoodleSurface]
-  );
-  const applyImportedSticker = useCallback((nextPlacement: NoteStickerPlacement) => {
-    if (isPhotoDoodleSurface) {
-      setPhotoStickerPlacements((current) => [...current, nextPlacement]);
-      setPhotoSelectedStickerId(nextPlacement.id);
-    } else {
-      setTextStickerPlacements((current) => [...current, nextPlacement]);
-      setTextSelectedStickerId(nextPlacement.id);
-    }
-    setStickerModeEnabled(true);
-    setDoodleModeEnabled(false);
-  }, [isPhotoDoodleSurface]);
   const handleImportSticker = useCallback(async (intent: StickerImportIntent = 'sticker') => {
     if (!ENABLE_PHOTO_STICKERS || importingSticker) {
       return;
@@ -2013,158 +1875,16 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setShowStickerActionsSheet(true);
   }, [dismissPastePrompt, selectedStickerId]);
   const handleToggleStickerMode = useCallback(() => {
-    if (!ENABLE_PHOTO_STICKERS) {
-      return;
-    }
-
-    dismissPastePrompt();
-    dismissCaptureInputs();
-    setDoodleModeEnabled(false);
     setShowStickerActionsSheet(false);
-    setStickerModeEnabled((current) => !current);
-    if (stickerModeEnabled) {
-      if (isPhotoDoodleSurface) {
-        setPhotoSelectedStickerId(null);
-      } else {
-        setTextSelectedStickerId(null);
-      }
-    }
-  }, [
-    dismissCaptureInputs,
-    dismissPastePrompt,
-    isPhotoDoodleSurface,
-    stickerModeEnabled,
-  ]);
-  const handleChangeStickerPlacements = useCallback(
-    (nextPlacements: NoteStickerPlacement[]) => {
-      if (isPhotoDoodleSurface) {
-        setPhotoStickerPlacements(nextPlacements);
-        return;
-      }
-
-      setTextStickerPlacements(nextPlacements);
-    },
-    [isPhotoDoodleSurface]
-  );
-  const handleSelectSticker = useCallback(
-    (nextId: string | null) => {
-      if (!nextId) {
-        setShowStickerActionsSheet(false);
-      }
-
-      if (isPhotoDoodleSurface) {
-        setPhotoSelectedStickerId(nextId);
-        return;
-      }
-
-      setTextSelectedStickerId(nextId);
-    },
-    [isPhotoDoodleSurface]
-  );
-  const handlePressStickerCanvas = useCallback(() => {
-    if (!stickerModeEnabled) {
-      return;
+    toggleStickerModeInternal();
+  }, [toggleStickerModeInternal]);
+  const handleSelectSticker = useCallback((nextId: string | null) => {
+    if (!nextId) {
+      setShowStickerActionsSheet(false);
     }
 
-    dismissPastePrompt();
-
-    if (selectedStickerId) {
-      handleSelectSticker(null);
-      return;
-    }
-
-    closeDecorateControls();
-  }, [closeDecorateControls, dismissPastePrompt, handleSelectSticker, selectedStickerId, stickerModeEnabled]);
-  const handleToggleStickerMotionLock = useCallback(() => {
-    if (!selectedStickerId) {
-      return;
-    }
-
-    handleChangeStickerPlacements(
-      setStickerPlacementMotionLocked(
-        stickerPlacements,
-        selectedStickerId,
-        !selectedStickerMotionLocked
-      )
-    );
-  }, [handleChangeStickerPlacements, selectedStickerId, selectedStickerMotionLocked, stickerPlacements]);
-
-  const handleSelectedStickerAction = useCallback(
-    (
-      action:
-        | 'rotate-left'
-        | 'rotate-right'
-        | 'smaller'
-        | 'larger'
-        | 'duplicate'
-        | 'front'
-        | 'remove'
-        | 'outline-toggle'
-    ) => {
-      if (!selectedStickerId) {
-        return;
-      }
-
-      const currentPlacements = stickerPlacements;
-      let nextPlacements = currentPlacements;
-
-      if (action === 'duplicate') {
-        nextPlacements = duplicateStickerPlacement(currentPlacements, selectedStickerId);
-      } else if (action === 'front') {
-        nextPlacements = bringStickerPlacementToFront(currentPlacements, selectedStickerId);
-      } else if (action === 'outline-toggle') {
-        const selectedPlacement = currentPlacements.find((placement) => placement.id === selectedStickerId);
-        nextPlacements = selectedPlacement
-          && selectedPlacement.renderMode !== 'stamp'
-          ? setStickerPlacementOutlineEnabled(
-            currentPlacements,
-            selectedStickerId,
-            selectedPlacement.outlineEnabled === false
-            )
-          : currentPlacements;
-      } else if (action === 'remove') {
-        nextPlacements = currentPlacements.filter((placement) => placement.id !== selectedStickerId);
-        handleSelectSticker(null);
-      } else if (action === 'rotate-left') {
-        const selectedPlacement = currentPlacements.find((placement) => placement.id === selectedStickerId);
-        nextPlacements = selectedPlacement
-          ? updateStickerPlacementTransform(currentPlacements, selectedStickerId, {
-            rotation: selectedPlacement.rotation - 15,
-          })
-          : currentPlacements;
-      } else if (action === 'rotate-right') {
-        const selectedPlacement = currentPlacements.find((placement) => placement.id === selectedStickerId);
-        nextPlacements = selectedPlacement
-          ? updateStickerPlacementTransform(currentPlacements, selectedStickerId, {
-            rotation: selectedPlacement.rotation + 15,
-          })
-          : currentPlacements;
-      } else if (action === 'smaller') {
-        const selectedPlacement = currentPlacements.find((placement) => placement.id === selectedStickerId);
-        nextPlacements = selectedPlacement
-          ? updateStickerPlacementTransform(currentPlacements, selectedStickerId, {
-            scale: selectedPlacement.scale - 0.12,
-          })
-          : currentPlacements;
-      } else if (action === 'larger') {
-        const selectedPlacement = currentPlacements.find((placement) => placement.id === selectedStickerId);
-        nextPlacements = selectedPlacement
-          ? updateStickerPlacementTransform(currentPlacements, selectedStickerId, {
-            scale: selectedPlacement.scale + 0.12,
-          })
-          : currentPlacements;
-      }
-
-      handleChangeStickerPlacements(nextPlacements);
-    },
-    [handleChangeStickerPlacements, handleSelectSticker, selectedStickerId, stickerPlacements]
-  );
-  const handleChangeNoteText = useCallback(
-    (nextText: string) => {
-      onChangeNoteText(applyCommittedInlineEmoji(noteText, nextText));
-    },
-    [noteText, onChangeNoteText]
-  );
+    selectStickerPlacement(nextId);
+  }, [selectStickerPlacement]);
   const captureGradient = getCaptureNoteGradient({ noteColor });
   const inlineColorGradient =
     getNoteColorCardGradient(noteColor ?? DEFAULT_NOTE_COLOR_ID) ??
@@ -2671,8 +2391,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   // so decoration-mode toggles do not force the input to reconfigure and flash.
                   editable={!interactionsDisabled}
                   onChangeText={handleChangeNoteText}
-                  onFocus={() => setIsNoteInputFocused(true)}
-                  onBlur={() => setIsNoteInputFocused(false)}
+                  onFocus={handleNoteInputFocus}
+                  onBlur={handleNoteInputBlur}
                   onEndEditing={dismissCaptureInputs}
                   maxLength={300}
                   selectionColor={colors.primary}
@@ -3162,8 +2882,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       placeholderTextColor={colors.captureGlassPlaceholder}
                       value={restaurantName}
                       onChangeText={onChangeRestaurantName}
-                      onFocus={() => setIsRestaurantInputFocused(true)}
-                      onBlur={() => setIsRestaurantInputFocused(false)}
+                      onFocus={handleRestaurantInputFocus}
+                      onBlur={handleRestaurantInputBlur}
                       onEndEditing={dismissCaptureInputs}
                       onSubmitEditing={dismissCaptureInputs}
                       returnKeyType="done"
