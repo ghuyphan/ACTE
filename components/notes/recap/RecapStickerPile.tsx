@@ -1,3 +1,10 @@
+import {
+  Canvas,
+  Group,
+  Image as SkiaImage,
+  Path,
+  useImage,
+} from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -12,11 +19,17 @@ import { Radii, Typography } from '../../../constants/theme';
 import { useStickerPhysics, type StickerPhysicsState } from '../../../hooks/useStickerPhysics';
 import { useTheme } from '../../../hooks/useTheme';
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
+import LivePhotoIcon from '../../ui/LivePhotoIcon';
 import {
   getStickerOutlineOffsets,
   getStickerOutlineSize,
 } from '../stickerCanvasMetrics';
-import LivePhotoIcon from '../../ui/LivePhotoIcon';
+import {
+  createStampFramePath,
+  getStampFrameMetrics,
+  STAMP_OUTLINE_COLOR,
+  STAMP_PAPER_BORDER_COLOR,
+} from '../stampFrameMetrics';
 
 export interface RecapStickerPileItem {
   key: string;
@@ -26,6 +39,7 @@ export interface RecapStickerPileItem {
   assetWidth?: number;
   assetHeight?: number;
   outlineEnabled?: boolean;
+  renderMode?: 'default' | 'stamp';
   isLivePhoto?: boolean;
   pairedVideoUri?: string | null;
 }
@@ -34,6 +48,7 @@ interface RecapStickerPileProps {
   title?: string;
   items: RecapStickerPileItem[];
   deferUntilAfterInteractions?: boolean;
+  physicsEnabled?: boolean;
 }
 
 type PilePosition = {
@@ -128,7 +143,7 @@ function getPileSpreadFactor(count: number) {
   }
 
   if (count <= 6) {
-    return 1.18;
+    return 1.3;
   }
 
   return 1.08;
@@ -266,6 +281,7 @@ function buildPlacement(
     opacity: 1,
     outlineEnabled: item.kind === 'photo' ? false : item.outlineEnabled !== false,
     motionLocked: false,
+    renderMode: item.kind === 'photo' ? 'default' : item.renderMode === 'stamp' ? 'stamp' : 'default',
     asset: {
       id: `${item.key}:asset`,
       ownerUid: 'recap',
@@ -298,15 +314,26 @@ const RecapBubble = memo(function RecapBubble({
   physicsState?: SharedValue<StickerPhysicsState[]>;
 }) {
   const { colors } = useTheme();
+  const stampImage = useImage(item.previewUri);
+  const stampMetrics =
+    item.kind === 'sticker' && item.renderMode === 'stamp'
+      ? getStampFrameMetrics(metrics.width, metrics.height)
+      : null;
+  const stampPath = useMemo(
+    () => (stampMetrics ? createStampFramePath(stampMetrics) : null),
+    [stampMetrics]
+  );
   const outlineOffsets = useMemo(
     () =>
-      item.kind === 'sticker' && item.outlineEnabled !== false
+      item.kind === 'sticker' && item.renderMode !== 'stamp' && item.outlineEnabled !== false
         ? getStickerOutlineOffsets(metrics.outlineSize, {
             preferContinuous: PREFER_CONTINUOUS_OUTLINE,
           })
         : [],
-    [item.kind, item.outlineEnabled, metrics.outlineSize]
+    [item.kind, item.outlineEnabled, item.renderMode, metrics.outlineSize]
   );
+  const stampOutlineWidth = stampMetrics ? Math.max(2.2, stampMetrics.perforationRadius * 0.62) : 0;
+  const stampBorderWidth = stampMetrics ? Math.max(1, stampMetrics.perforationRadius * 0.18) : 0;
 
   const bubbleStyle = useAnimatedStyle(() => {
     if (!physicsState) {
@@ -385,7 +412,7 @@ const RecapBubble = memo(function RecapBubble({
             ]}
           >
             <View style={styles.stickerInner}>
-              {item.outlineEnabled !== false ? (
+              {item.renderMode !== 'stamp' && item.outlineEnabled !== false ? (
                 <View pointerEvents="none" style={styles.stickerOutlineLayer}>
                   {outlineOffsets.map((offset, index) => (
                     <Image
@@ -408,7 +435,45 @@ const RecapBubble = memo(function RecapBubble({
                   ))}
                 </View>
               ) : null}
-              <Image source={{ uri: item.previewUri }} style={styles.stickerImage} contentFit="contain" />
+              {stampMetrics && stampPath ? (
+                <View style={styles.stampArtwork}>
+                  <Canvas style={styles.stampArtwork}>
+                    {stampImage ? (
+                      <Group
+                        clip={stampPath}
+                      >
+                        <SkiaImage
+                          image={stampImage}
+                          fit="cover"
+                          x={0}
+                          y={0}
+                          width={stampMetrics.outerWidth}
+                          height={stampMetrics.outerHeight}
+                        />
+                      </Group>
+                    ) : null}
+                    <Path
+                      path={stampPath}
+                      color={STAMP_OUTLINE_COLOR}
+                      style="stroke"
+                      strokeWidth={stampOutlineWidth}
+                    />
+                    <Path
+                      path={stampPath}
+                      color={STAMP_PAPER_BORDER_COLOR}
+                      style="stroke"
+                      strokeWidth={stampBorderWidth}
+                    />
+                  </Canvas>
+                </View>
+              ) : (
+                <Image
+                  source={{ uri: item.previewUri }}
+                  style={styles.stickerImage}
+                  contentFit="contain"
+                  transition={0}
+                />
+              )}
             </View>
             {item.count > 1 ? (
               <View style={[styles.countBadge, { backgroundColor: colors.primarySoft }]}>
@@ -465,6 +530,8 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
     placements: physicsEnabled ? placements : [],
     layout,
     isActive: physicsEnabled && displayItems.length > 0,
+    sensorDriven: true,
+    collisionResponse: 'gentle',
     motionVariant: 'physics',
     minimumBaseSize: RECAP_MIN_PHYSICS_BASE,
     collisionInset: RECAP_COLLISION_INSET,
@@ -518,6 +585,7 @@ function RecapStickerPile({
   title = 'Used this month',
   items,
   deferUntilAfterInteractions = false,
+  physicsEnabled = true,
 }: RecapStickerPileProps) {
   const shouldDeferMount = deferUntilAfterInteractions && process.env.NODE_ENV !== 'test';
   const [isReady, setIsReady] = useState(!shouldDeferMount);
@@ -551,7 +619,13 @@ function RecapStickerPile({
     };
   }, [shouldDeferMount]);
 
-  return <RecapStickerPileContent title={title} items={items} physicsEnabled={isReady} />;
+  return (
+    <RecapStickerPileContent
+      title={title}
+      items={items}
+      physicsEnabled={physicsEnabled && isReady}
+    />
+  );
 }
 
 export default memo(RecapStickerPile);
@@ -624,6 +698,23 @@ const styles = StyleSheet.create({
   },
   stickerImage: {
     ...StyleSheet.absoluteFillObject,
+  },
+  stampArtwork: {
+    width: '100%',
+    height: '100%',
+    overflow: 'visible',
+  },
+  stampPerforation: {
+    position: 'absolute',
+  },
+  stampPaper: {
+    position: 'absolute',
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  stampPhotoImage: {
+    position: 'absolute',
+    borderWidth: StyleSheet.hairlineWidth,
   },
   countBadge: {
     position: 'absolute',

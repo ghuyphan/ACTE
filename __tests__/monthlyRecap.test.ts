@@ -62,6 +62,7 @@ describe('monthlyRecap', () => {
             rotation: 0,
             zIndex: 1,
             opacity: 1,
+            renderMode: 'stamp',
             asset: {
               id: 'asset-1',
               localUri: 'file:///sticker-1.png',
@@ -152,6 +153,7 @@ describe('monthlyRecap', () => {
         assetWidth: 100,
         assetHeight: 100,
         outlineEnabled: true,
+        renderMode: 'stamp',
       },
     ]);
     expect(recap.objects.map((object) => object.kind)).toEqual([

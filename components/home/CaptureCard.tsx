@@ -90,6 +90,7 @@ import {
 } from '../../services/photoFilters';
 import AppSheet from '../sheets/AppSheet';
 import AppSheetScaffold from '../sheets/AppSheetScaffold';
+import SheetFooterButton from '../sheets/SheetFooterButton';
 import NoteDoodleCanvas, { DoodleStroke } from '../notes/NoteDoodleCanvas';
 import PhotoMediaView from '../notes/PhotoMediaView';
 import NoteStickerCanvas from '../notes/NoteStickerCanvas';
@@ -128,6 +129,8 @@ const CAPTURE_BUTTON_STATE_IN = { duration: 160, easing: Easing.out(Easing.cubic
 const CAPTURE_BUTTON_STATE_OUT = { duration: 210, easing: Easing.out(Easing.cubic) };
 const LIVE_PHOTO_RING_SIZE = SHUTTER_OUTER_SIZE;
 const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
+const SHEET_HORIZONTAL_PADDING =
+  Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
 const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
 const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Note about this place...',
@@ -166,7 +169,7 @@ function getStickerImportErrorMessage(t: TFunction, error: unknown) {
     if (error.code === 'unsupported-format') {
       return t(
         'capture.stickerUnsupportedFormat',
-        'Please import a transparent PNG or WebP sticker.'
+        'Please import a PNG, WebP, JPEG, or HEIC image.'
       );
     }
 
@@ -180,7 +183,7 @@ function getStickerImportErrorMessage(t: TFunction, error: unknown) {
     if (error.code === 'missing-transparency') {
       return t(
         'capture.stickerMissingTransparency',
-        'This image does not include transparency. Import a transparent PNG or WebP sticker.'
+        'If you want a floating sticker, use a transparent PNG or WebP. Regular photos will import as stamps.'
       );
     }
   }
@@ -198,7 +201,7 @@ function getClipboardStickerMessages(t: TFunction) {
     ),
     unavailable: t(
       'capture.clipboardStickerUnavailableMsg',
-      'Copy a transparent sticker image first, then try again.'
+      'Copy an image first, then try again.'
     ),
     unsupported: t(
       'capture.clipboardStickerUnsupported',
@@ -244,6 +247,8 @@ type StickerPastePromptState = {
   x: number;
   y: number;
 };
+
+type StickerImportIntent = 'sticker' | 'stamp';
 
 
 
@@ -887,7 +892,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [photoSelectedStickerId, setPhotoSelectedStickerId] = useState<string | null>(null);
   const [importingSticker, setImportingSticker] = useState(false);
   const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
-  const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<'photos' | null>(null);
+  const [showStickerActionsSheet, setShowStickerActionsSheet] = useState(false);
+  const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<StickerImportIntent | null>(null);
   const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
   const [inlinePasteCanPasteFromClipboard, setInlinePasteCanPasteFromClipboard] = useState(false);
   const [inlinePasteLoading, setInlinePasteLoading] = useState(false);
@@ -911,6 +917,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     () => stickerPlacements.find((placement) => placement.id === selectedStickerId) ?? null,
     [selectedStickerId, stickerPlacements]
   );
+  const selectedStickerIsStamp = selectedStickerPlacement?.renderMode === 'stamp';
   const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
   const selectedStickerMotionLocked = selectedStickerPlacement?.motionLocked === true;
   const textDoodleColors = useMemo(
@@ -1721,7 +1728,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setStickerModeEnabled(true);
     setDoodleModeEnabled(false);
   }, [isPhotoDoodleSurface]);
-  const handleImportSticker = useCallback(async () => {
+  const handleImportSticker = useCallback(async (intent: StickerImportIntent = 'sticker') => {
     if (!ENABLE_PHOTO_STICKERS || importingSticker) {
       return;
     }
@@ -1766,8 +1773,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         uri: result.assets[0].uri,
         mimeType: result.assets[0].mimeType,
         name: result.assets[0].fileName,
-      });
-      const nextPlacement = createStickerPlacement(importedAsset, stickerPlacements);
+      }, intent === 'sticker' ? { requiresTransparency: true } : undefined);
+      const nextPlacement = createStickerPlacement(
+        importedAsset,
+        stickerPlacements,
+        intent === 'stamp' ? { renderMode: 'stamp' } : undefined
+      );
       applyImportedSticker(nextPlacement);
     } catch (error) {
       console.warn('Sticker import failed:', error);
@@ -1780,13 +1791,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     }
   }, [applyImportedSticker, dismissPastePrompt, importingSticker, stickerPlacements, t]);
   useEffect(() => {
-    if (showStickerSourceSheet || pendingStickerSourceAction !== 'photos') {
+    if (showStickerSourceSheet || !pendingStickerSourceAction) {
       return;
     }
 
     const timer = setTimeout(() => {
+      const nextAction = pendingStickerSourceAction;
       setPendingStickerSourceAction(null);
-      void handleImportSticker();
+      void handleImportSticker(nextAction);
     }, STICKER_SOURCE_SHEET_DISMISS_DELAY_MS);
 
     return () => clearTimeout(timer);
@@ -1918,12 +1930,19 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const handleCloseStickerSourceSheet = useCallback(() => {
     setShowStickerSourceSheet(false);
   }, []);
+  const handleCloseStickerActionsSheet = useCallback(() => {
+    setShowStickerActionsSheet(false);
+  }, []);
   const handleSelectStickerSourceClipboard = useCallback(() => {
     setShowStickerSourceSheet(false);
     void handlePasteStickerFromClipboard();
   }, [handlePasteStickerFromClipboard]);
-  const handleSelectStickerSourcePhotos = useCallback(() => {
-    setPendingStickerSourceAction('photos');
+  const handleSelectStickerSourceSticker = useCallback(() => {
+    setPendingStickerSourceAction('sticker');
+    setShowStickerSourceSheet(false);
+  }, []);
+  const handleSelectStickerSourceStamp = useCallback(() => {
+    setPendingStickerSourceAction('stamp');
     setShowStickerSourceSheet(false);
   }, []);
   const handleShowStickerSourceOptions = useCallback(async () => {
@@ -1936,6 +1955,60 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setStickerSourceCanPasteFromClipboard(canPasteFromClipboard);
     setShowStickerSourceSheet(true);
   }, [dismissPastePrompt, importingSticker]);
+  const stickerSourceActions = useMemo(() => {
+    const actions: Array<{
+      key: string;
+      iconName: 'images-outline' | 'pricetag-outline' | 'clipboard-outline';
+      label: string;
+      description: string;
+      onPress: () => void;
+      testID: string;
+    }> = [
+      {
+        key: 'create-sticker',
+        iconName: 'images-outline',
+        label: t('capture.createStickerLabel', 'Create sticker'),
+        description: t('capture.createStickerDescription', 'Transparent PNG or WebP'),
+        onPress: handleSelectStickerSourceSticker,
+        testID: 'sticker-source-option-create-sticker',
+      },
+      {
+        key: 'create-stamp',
+        iconName: 'pricetag-outline',
+        label: t('capture.createStampLabel', 'Create stamp'),
+        description: t('capture.createStampDescription', 'Turn any photo into a perforated stamp'),
+        onPress: handleSelectStickerSourceStamp,
+        testID: 'sticker-source-option-create-stamp',
+      },
+    ];
+
+    if (stickerSourceCanPasteFromClipboard) {
+      actions.push({
+        key: 'paste-sticker',
+        iconName: 'clipboard-outline',
+        label: t('capture.pasteStickerFromClipboard', 'Paste from Clipboard'),
+        description: t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.'),
+        onPress: handleSelectStickerSourceClipboard,
+        testID: 'sticker-source-option-clipboard',
+      });
+    }
+
+    return actions;
+  }, [
+    handleSelectStickerSourceClipboard,
+    handleSelectStickerSourceStamp,
+    handleSelectStickerSourceSticker,
+    stickerSourceCanPasteFromClipboard,
+    t,
+  ]);
+  const handleShowStickerActions = useCallback(() => {
+    if (!selectedStickerId) {
+      return;
+    }
+
+    dismissPastePrompt();
+    setShowStickerActionsSheet(true);
+  }, [dismissPastePrompt, selectedStickerId]);
   const handleToggleStickerMode = useCallback(() => {
     if (!ENABLE_PHOTO_STICKERS) {
       return;
@@ -1944,6 +2017,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     dismissPastePrompt();
     dismissCaptureInputs();
     setDoodleModeEnabled(false);
+    setShowStickerActionsSheet(false);
     setStickerModeEnabled((current) => !current);
     if (stickerModeEnabled) {
       if (isPhotoDoodleSurface) {
@@ -1971,6 +2045,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   );
   const handleSelectSticker = useCallback(
     (nextId: string | null) => {
+      if (!nextId) {
+        setShowStickerActionsSheet(false);
+      }
+
       if (isPhotoDoodleSurface) {
         setPhotoSelectedStickerId(nextId);
         return;
@@ -2009,7 +2087,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   }, [handleChangeStickerPlacements, selectedStickerId, selectedStickerMotionLocked, stickerPlacements]);
 
   const handleSelectedStickerAction = useCallback(
-    (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove' | 'outline-toggle') => {
+    (
+      action:
+        | 'rotate-left'
+        | 'rotate-right'
+        | 'smaller'
+        | 'larger'
+        | 'duplicate'
+        | 'front'
+        | 'remove'
+        | 'outline-toggle'
+    ) => {
       if (!selectedStickerId) {
         return;
       }
@@ -2024,11 +2112,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       } else if (action === 'outline-toggle') {
         const selectedPlacement = currentPlacements.find((placement) => placement.id === selectedStickerId);
         nextPlacements = selectedPlacement
+          && selectedPlacement.renderMode !== 'stamp'
           ? setStickerPlacementOutlineEnabled(
             currentPlacements,
             selectedStickerId,
             selectedPlacement.outlineEnabled === false
-          )
+            )
           : currentPlacements;
       } else if (action === 'remove') {
         nextPlacements = currentPlacements.filter((placement) => placement.id !== selectedStickerId);
@@ -2207,6 +2296,89 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       </View>
     </AppSheetScaffold>
   );
+  const stickerActionsSheetBody = selectedStickerId ? (
+    <AppSheetScaffold
+      headerVariant="none"
+      contentContainerStyle={styles.stickerActionsSheet}
+      useHorizontalPadding={false}
+      contentBottomPaddingWhenFooter={0}
+      footerTopSpacing={0}
+      footer={(
+        <View style={styles.stickerActionsSheetFooter}>
+          <SheetFooterButton
+            label={t('capture.cancel', 'Cancel')}
+            onPress={handleCloseStickerActionsSheet}
+            testID="capture-sticker-sheet-cancel"
+          />
+        </View>
+      )}
+    >
+      <View style={styles.stickerActionsSheetHeader}>
+        <Text style={[styles.stickerActionsSheetTitle, { color: colors.text }]}>
+          {selectedStickerIsStamp
+            ? t('capture.stampOptionsTitle', 'Stamp options')
+            : t('capture.stickerOptionsTitle', 'Sticker options')}
+        </Text>
+      </View>
+      <View style={styles.stickerActionsSheetList}>
+        {[
+          {
+            key: 'motion-lock',
+            testID: 'capture-sticker-sheet-motion-lock',
+            label: selectedStickerMotionLocked
+              ? t('capture.unlockStickerMotion', 'Unlock sticker motion')
+              : t('capture.lockStickerMotion', 'Lock sticker motion'),
+            icon: selectedStickerMotionLocked ? 'lock-closed' : 'lock-open-outline',
+            active: selectedStickerMotionLocked,
+            onPress: handleToggleStickerMotionLock,
+          },
+          ...(!selectedStickerIsStamp ? [{
+            key: 'outline-toggle',
+            testID: 'capture-sticker-sheet-outline-toggle',
+            label: selectedStickerOutlineEnabled
+              ? t('capture.stickerOutlineDisable', 'Turn off outline')
+              : t('capture.stickerOutlineEnable', 'Turn on outline'),
+            icon: selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline',
+            active: selectedStickerOutlineEnabled,
+            onPress: () => handleSelectedStickerAction('outline-toggle'),
+          }] : []),
+        ].map((item, index, items) => (
+          <View key={item.key}>
+            <Pressable
+              testID={item.testID}
+              accessibilityRole="button"
+              onPress={() => {
+                item.onPress();
+                handleCloseStickerActionsSheet();
+              }}
+              style={({ pressed }) => [
+                styles.stickerActionsSheetRow,
+                pressed ? styles.stickerActionsSheetRowPressed : null,
+              ]}
+            >
+              <View style={styles.stickerActionsSheetRowContent}>
+                <View style={[styles.stickerActionsSheetIconBadge, { backgroundColor: `${colors.primary}18` }]}>
+                  <Ionicons name={item.icon as any} size={18} color={colors.primary} />
+                </View>
+                <Text
+                  style={[
+                    styles.stickerActionsSheetLabel,
+                    { color: colors.text },
+                  ]}
+                >
+                  {item.label}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
+              </View>
+            </Pressable>
+            {index < items.length - 1 ? (
+              <View style={[styles.stickerActionsSheetDivider, { backgroundColor: colors.border }]} />
+            ) : null}
+          </View>
+        ))}
+      </View>
+    </AppSheetScaffold>
+  ) : null;
   return (
     <>
       <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
@@ -2281,43 +2453,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       style={styles.textCardActionButton}
                     />
                   ) : null}
-                  {ENABLE_PHOTO_STICKERS && (stickerModeEnabled || stickerPlacements.length > 0) ? (
-                    <CaptureAnimatedPressable
-                      testID="capture-sticker-motion-lock"
-                      accessibilityLabel={
-                        selectedStickerMotionLocked
-                          ? t('capture.unlockStickerMotion', 'Unlock sticker motion')
-                          : t('capture.lockStickerMotion', 'Lock sticker motion')
-                      }
-                      onPress={handleToggleStickerMotionLock}
-                      active={selectedStickerMotionLocked}
-                      disabled={!selectedStickerId}
-                      disabledOpacity={0.45}
-                      activeScale={DECORATE_OPTION_ACTIVE_SCALE}
-                      activeTranslateY={0}
-                      contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
-                      contentActiveTranslateY={0}
-                      style={[
-                        styles.textCardActionButton,
-                        {
-                          backgroundColor: selectedStickerMotionLocked
-                            ? colors.captureButtonBg
-                            : colors.captureGlassFill,
-                          borderColor: selectedStickerMotionLocked
-                            ? 'rgba(255,255,255,0.18)'
-                            : colors.captureGlassBorder,
-                        },
-                      ]}
-                    >
-                      <Ionicons
-                        name={selectedStickerMotionLocked ? 'lock-closed' : 'lock-open-outline'}
-                        size={16}
-                        color={
-                          selectedStickerMotionLocked ? textCardActiveIconColor : colors.captureGlassText
-                        }
-                      />
-                    </CaptureAnimatedPressable>
-                  ) : null}
                   {doodleModeEnabled ? (
                     <>
                       <CaptureAnimatedPressable
@@ -2327,6 +2462,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         disabledOpacity={0.45}
                         style={[
                           styles.textCardActionPill,
+                          styles.captureActionTextPill,
                           {
                             backgroundColor: colors.captureGlassFill,
                             borderColor: colors.captureGlassBorder,
@@ -2381,40 +2517,30 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       >
                         <Ionicons name="add-outline" size={14} color={colors.captureGlassText} />
                       </CaptureAnimatedPressable>
-                      <CaptureAnimatedPressable
-                        testID="capture-sticker-outline-toggle"
-                        accessibilityLabel={
-                          selectedStickerOutlineEnabled
-                            ? t('capture.stickerOutlineDisable', 'Turn off outline')
-                            : t('capture.stickerOutlineEnable', 'Turn on outline')
-                        }
-                        onPress={() => handleSelectedStickerAction('outline-toggle')}
-                        disabled={!selectedStickerId}
-                        disabledOpacity={0.45}
-                        style={[
-                          styles.textCardActionPill,
-                          {
-                            backgroundColor:
-                              selectedStickerId && selectedStickerOutlineEnabled
-                                ? colors.captureButtonBg
-                                : colors.captureGlassFill,
-                            borderColor:
-                              selectedStickerId && selectedStickerOutlineEnabled
-                                ? 'rgba(255,255,255,0.18)'
-                                : colors.captureGlassBorder,
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
-                          size={14}
-                          color={
-                            selectedStickerId && selectedStickerOutlineEnabled
-                              ? textCardActiveIconColor
-                              : colors.captureGlassText
+                      {selectedStickerId ? (
+                        <CaptureAnimatedPressable
+                          testID="capture-sticker-more"
+                          accessibilityLabel={
+                            selectedStickerIsStamp
+                              ? t('capture.stampMore', 'More stamp options')
+                              : t('capture.stickerMore', 'More sticker options')
                           }
-                        />
-                      </CaptureAnimatedPressable>
+                          onPress={handleShowStickerActions}
+                          style={[
+                            styles.textCardActionPill,
+                            {
+                              backgroundColor: colors.captureGlassFill,
+                              borderColor: colors.captureGlassBorder,
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name="ellipsis-horizontal"
+                            size={14}
+                            color={colors.captureGlassText}
+                          />
+                        </CaptureAnimatedPressable>
+                      ) : null}
                       <CaptureAnimatedPressable
                         testID="capture-sticker-remove"
                         onPress={() => handleSelectedStickerAction('remove')}
@@ -2492,13 +2618,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 </View>
               </View>
 
-              {ENABLE_PHOTO_STICKERS && stickerPlacements.length > 0 ? (
+              {ENABLE_PHOTO_STICKERS && (stickerPlacements.length > 0 || stickerModeEnabled) ? (
                 <View
                   pointerEvents={stickerModeEnabled ? 'box-none' : 'none'}
-                  style={[
-                    styles.textStickerCanvasLayer,
-                    stickerModeEnabled ? styles.textStickerCanvasLayerActive : null,
-                  ]}
+                  style={styles.textStickerCanvasLayer}
                 >
                   <NoteStickerCanvas
                     placements={stickerPlacements}
@@ -2525,11 +2648,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               ) : null}
 
               <View
-                pointerEvents={stickerModeEnabled ? 'none' : 'auto'}
-                style={[
-                  styles.cardTextCenter,
-                  stickerModeEnabled ? styles.cardTextCenterInactive : null,
-                ]}
+                pointerEvents={doodleModeEnabled || stickerModeEnabled ? 'none' : 'auto'}
+                style={styles.cardTextCenter}
               >
                 <TextInput
                   testID="capture-note-input"
@@ -2543,7 +2663,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   placeholderTextColor={colors.captureCardPlaceholder}
                   multiline
                   value={noteText}
-                  editable={!doodleModeEnabled && !stickerModeEnabled}
+                  // Keep the native text field editable and block interaction at the wrapper layer
+                  // so decoration-mode toggles do not force the input to reconfigure and flash.
+                  editable={!interactionsDisabled}
                   onChangeText={handleChangeNoteText}
                   onFocus={() => setIsNoteInputFocused(true)}
                   onBlur={() => setIsNoteInputFocused(false)}
@@ -2637,44 +2759,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       ]}
                     />
                   ) : null}
-                  {ENABLE_PHOTO_STICKERS && (stickerModeEnabled || stickerPlacements.length > 0) ? (
-                    <CaptureAnimatedPressable
-                      testID="capture-sticker-motion-lock"
-                      accessibilityLabel={
-                        selectedStickerMotionLocked
-                          ? t('capture.unlockStickerMotion', 'Unlock sticker motion')
-                          : t('capture.lockStickerMotion', 'Lock sticker motion')
-                      }
-                      onPress={handleToggleStickerMotionLock}
-                      active={selectedStickerMotionLocked}
-                      disabled={!selectedStickerId}
-                      disabledOpacity={0.45}
-                      activeScale={DECORATE_OPTION_ACTIVE_SCALE}
-                      activeTranslateY={0}
-                      contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
-                      contentActiveTranslateY={0}
-                      style={[
-                        styles.cameraOverlayButton,
-                        styles.photoDoodleIconButton,
-                        {
-                          backgroundColor: selectedStickerMotionLocked
-                            ? photoPreviewActiveFill
-                            : photoPreviewControlFill,
-                          borderColor: selectedStickerMotionLocked
-                            ? photoPreviewActiveFill
-                            : photoPreviewControlBorder,
-                        },
-                      ]}
-                    >
-                      <Ionicons
-                        name={selectedStickerMotionLocked ? 'lock-closed' : 'lock-open-outline'}
-                        size={16}
-                        color={
-                          selectedStickerMotionLocked ? photoPreviewActiveText : photoPreviewControlText
-                        }
-                      />
-                    </CaptureAnimatedPressable>
-                  ) : null}
                   <CaptureAnimatedPressable
                     testID="capture-live-photo-toggle"
                     accessibilityLabel={
@@ -2723,6 +2807,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         style={[
                           styles.cameraOverlayButton,
                           styles.textCardActionPill,
+                          styles.captureActionTextPill,
                           {
                             backgroundColor: photoPreviewControlFill,
                             borderColor: photoPreviewControlBorder,
@@ -2779,41 +2864,31 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       >
                         <Ionicons name="add-outline" size={14} color={photoPreviewControlText} />
                       </CaptureAnimatedPressable>
-                      <CaptureAnimatedPressable
-                        testID="capture-sticker-outline-toggle"
-                        accessibilityLabel={
-                          selectedStickerOutlineEnabled
-                            ? t('capture.stickerOutlineDisable', 'Turn off outline')
-                            : t('capture.stickerOutlineEnable', 'Turn on outline')
-                        }
-                        onPress={() => handleSelectedStickerAction('outline-toggle')}
-                        disabled={!selectedStickerId}
-                        disabledOpacity={0.45}
-                        style={[
-                          styles.cameraOverlayButton,
-                          styles.textCardActionPill,
-                          {
-                            backgroundColor:
-                              selectedStickerId && selectedStickerOutlineEnabled
-                                ? photoPreviewActiveFill
-                                : photoPreviewControlFill,
-                            borderColor:
-                              selectedStickerId && selectedStickerOutlineEnabled
-                                ? photoPreviewActiveFill
-                                : photoPreviewControlBorder,
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
-                          size={14}
-                          color={
-                            selectedStickerId && selectedStickerOutlineEnabled
-                              ? photoPreviewActiveText
-                              : photoPreviewControlText
+                      {selectedStickerId ? (
+                        <CaptureAnimatedPressable
+                          testID="capture-sticker-more"
+                          accessibilityLabel={
+                            selectedStickerIsStamp
+                              ? t('capture.stampMore', 'More stamp options')
+                              : t('capture.stickerMore', 'More sticker options')
                           }
-                        />
-                      </CaptureAnimatedPressable>
+                          onPress={handleShowStickerActions}
+                          style={[
+                            styles.cameraOverlayButton,
+                            styles.textCardActionPill,
+                            {
+                              backgroundColor: photoPreviewControlFill,
+                              borderColor: photoPreviewControlBorder,
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name="ellipsis-horizontal"
+                            size={14}
+                            color={photoPreviewControlText}
+                          />
+                        </CaptureAnimatedPressable>
+                      ) : null}
                       <CaptureAnimatedPressable
                         testID="capture-sticker-remove"
                         onPress={() => handleSelectedStickerAction('remove')}
@@ -2834,7 +2909,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   ) : null}
                 </View>
               </View>
-              {ENABLE_PHOTO_STICKERS && stickerPlacements.length > 0 ? (
+              {ENABLE_PHOTO_STICKERS && (stickerPlacements.length > 0 || stickerModeEnabled) ? (
                 <View
                   pointerEvents={stickerModeEnabled ? 'box-none' : 'none'}
                   style={styles.doodleCanvasLayer}
@@ -3460,13 +3535,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       </View>
       <StickerSourceSheet
         visible={showStickerSourceSheet}
-        canPasteFromClipboard={stickerSourceCanPasteFromClipboard}
         title={t('capture.addStickerTitle', 'Add sticker')}
-        pasteLabel={t('capture.pasteStickerFromClipboard', 'Paste from Clipboard')}
-        photoLabel={t('capture.chooseStickerFromPhotos', 'Choose from Photos')}
+        subtitle={t('capture.addStickerHint', 'Choose a floating sticker or a photo stamp.')}
         cancelLabel={t('common.cancel', 'Cancel')}
-        onSelectClipboard={handleSelectStickerSourceClipboard}
-        onSelectPhotos={handleSelectStickerSourcePhotos}
+        actions={stickerSourceActions}
         onClose={handleCloseStickerSourceSheet}
       />
       {noteColorSheetBody ? (
@@ -3478,6 +3550,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           {noteColorSheetBody}
         </AppSheet>
       ) : null}
+      <AppSheet
+        visible={showStickerActionsSheet}
+        onClose={handleCloseStickerActionsSheet}
+        iosColorScheme={colors.captureGlassColorScheme}
+      >
+        {stickerActionsSheetBody}
+      </AppSheet>
       <AppSheet
         visible={showRadiusSheet}
         onClose={handleCloseRadiusSheet}
@@ -3556,9 +3635,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     zIndex: 1,
-  },
-  cardTextCenterInactive: {
-    zIndex: 0,
   },
   inlinePasteStickerWrap: {
     overflow: 'hidden',
@@ -3667,6 +3743,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+  captureActionTextPill: {
+    width: 'auto',
+    minWidth: 58,
+    paddingHorizontal: 12,
+  },
+  captureActionPillLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
   livePhotoTogglePill: {
     width: 'auto',
     minWidth: 102,
@@ -3710,9 +3795,6 @@ const styles = StyleSheet.create({
   textStickerCanvasLayer: {
     ...StyleSheet.absoluteFill,
     ...STICKER_ARTBOARD_FRAME,
-    zIndex: 0,
-  },
-  textStickerCanvasLayerActive: {
     zIndex: 2,
   },
   cardRestaurantPill: {
@@ -4151,6 +4233,52 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
+  },
+  stickerActionsSheet: {
+    paddingTop: 6,
+  },
+  stickerActionsSheetHeader: {
+    paddingHorizontal: SHEET_HORIZONTAL_PADDING,
+    paddingBottom: 10,
+  },
+  stickerActionsSheetTitle: {
+    ...Typography.screenTitle,
+    textAlign: 'left',
+  },
+  stickerActionsSheetList: {
+    paddingBottom: 0,
+  },
+  stickerActionsSheetFooter: {
+    marginTop: 0,
+  },
+  stickerActionsSheetRow: {
+    minHeight: 68,
+    paddingHorizontal: SHEET_HORIZONTAL_PADDING,
+    justifyContent: 'center',
+  },
+  stickerActionsSheetRowPressed: {
+    opacity: 0.82,
+  },
+  stickerActionsSheetRowContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  stickerActionsSheetIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stickerActionsSheetLabel: {
+    ...Typography.body,
+    flex: 1,
+    fontWeight: '600',
+  },
+  stickerActionsSheetDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: SHEET_HORIZONTAL_PADDING + 54,
   },
   radiusSheetDivider: {
     height: StyleSheet.hairlineWidth,

@@ -247,7 +247,7 @@ jest.mock('../components/notes/NoteStickerCanvas', () => {
 
 jest.mock('../services/noteStickers', () => ({
   bringStickerPlacementToFront: jest.fn((placements: any[]) => placements),
-  createStickerPlacement: jest.fn((asset: any, existingPlacements: any[] = []) => ({
+  createStickerPlacement: jest.fn((asset: any, existingPlacements: any[] = [], options?: any) => ({
     id: `placement-${existingPlacements.length + 1}`,
     assetId: asset.id,
     x: 0.5,
@@ -258,6 +258,7 @@ jest.mock('../services/noteStickers', () => ({
     opacity: 1,
     outlineEnabled: true,
     motionLocked: false,
+    renderMode: options?.renderMode ?? (asset.suggestedRenderMode === 'stamp' ? 'stamp' : 'default'),
     asset,
   })),
   duplicateStickerPlacement: jest.fn((placements: any[]) => placements),
@@ -265,6 +266,11 @@ jest.mock('../services/noteStickers', () => ({
   setStickerPlacementMotionLocked: jest.fn((placements: any[], placementId: string, motionLocked: boolean) =>
     placements.map((placement) =>
       placement.id === placementId ? { ...placement, motionLocked } : placement
+    )
+  ),
+  setStickerPlacementRenderMode: jest.fn((placements: any[], placementId: string, renderMode: 'default' | 'stamp') =>
+    placements.map((placement) =>
+      placement.id === placementId ? { ...placement, renderMode } : placement
     )
   ),
   setStickerPlacementOutlineEnabled: jest.fn((placements: any[], placementId: string, outlineEnabled: boolean) =>
@@ -280,6 +286,11 @@ const mockClipboardGetImageAsync = getImageAsync as jest.MockedFunction<typeof g
 const mockWriteAsStringAsync = writeAsStringAsync as jest.MockedFunction<typeof writeAsStringAsync>;
 const mockDeleteAsync = deleteAsync as jest.MockedFunction<typeof deleteAsync>;
 const mockImportStickerAsset = importStickerAsset as jest.MockedFunction<typeof importStickerAsset>;
+const mockImagePicker = jest.requireMock('expo-image-picker') as {
+  getMediaLibraryPermissionsAsync: jest.Mock;
+  requestMediaLibraryPermissionsAsync: jest.Mock;
+  launchImageLibraryAsync: jest.Mock;
+};
 const createSharedValue = (initialValue: number) => ({ value: initialValue } as any);
 
 function createCaptureCardProps(
@@ -388,6 +399,18 @@ describe('CaptureCard doodle handle', () => {
     mockClipboardHasImageAsync.mockResolvedValue(false);
     mockWriteAsStringAsync.mockResolvedValue(undefined);
     mockDeleteAsync.mockResolvedValue(undefined);
+    mockImagePicker.getMediaLibraryPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+      canAskAgain: true,
+    });
+    mockImagePicker.requestMediaLibraryPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+      canAskAgain: true,
+    });
+    mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: true,
+      assets: [],
+    });
     mockImportStickerAsset.mockResolvedValue({
       id: 'sticker-asset-1',
       ownerUid: '__local__',
@@ -858,7 +881,7 @@ describe('CaptureCard doodle handle', () => {
       fireEvent.press(view.getByTestId('capture-doodle-toggle'));
     });
 
-    expect(view.getByTestId('capture-note-input').props.editable).toBe(false);
+    expect(view.getByTestId('capture-note-input').props.editable).toBe(true);
 
     view.rerender(
       <CaptureCard
@@ -899,7 +922,7 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(view.getByTestId('mock-doodle-editable')).toHaveTextContent('true');
-    expect(view.getByTestId('capture-note-input').props.editable).toBe(false);
+    expect(view.getByTestId('capture-note-input').props.editable).toBe(true);
 
     act(() => {
       fireEvent.press(view.getByTestId('capture-doodle-toggle'));
@@ -919,7 +942,7 @@ describe('CaptureCard doodle handle', () => {
       fireEvent.press(view.getByTestId('capture-sticker-toggle'));
     });
 
-    expect(view.getByTestId('capture-note-input').props.editable).toBe(false);
+    expect(view.getByTestId('capture-note-input').props.editable).toBe(true);
 
     view.rerender(
       <CaptureCard
@@ -960,7 +983,7 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(view.getByTestId('capture-sticker-import')).toBeTruthy();
-    expect(view.getByTestId('capture-note-input').props.editable).toBe(false);
+    expect(view.getByTestId('capture-note-input').props.editable).toBe(true);
 
     act(() => {
       fireEvent.press(view.getByTestId('capture-sticker-toggle'));
@@ -968,6 +991,21 @@ describe('CaptureCard doodle handle', () => {
 
     expect(view.queryByTestId('capture-sticker-import')).toBeNull();
     expect(view.getByTestId('capture-note-input').props.editable).toBe(true);
+  });
+
+  it('mounts the sticker canvas as soon as sticker mode opens on the text card', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      noteText: 'Draft memory',
+    });
+
+    expect(view.queryByTestId('mock-sticker-canvas')).toBeNull();
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-sticker-toggle'));
+    });
+
+    expect(view.getByTestId('mock-sticker-canvas')).toBeTruthy();
   });
 
   it('restores captured-photo controls after closing doodle mode', () => {
@@ -1240,7 +1278,7 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
-  it('locks sticker motion in the capture editor', async () => {
+  it('locks sticker motion from the sticker more sheet in the capture editor', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockClipboardHasImageAsync.mockResolvedValue(true);
     mockClipboardGetImageAsync.mockResolvedValue({
@@ -1248,7 +1286,7 @@ describe('CaptureCard doodle handle', () => {
       size: { width: 140, height: 140 },
     });
 
-    const { getByTestId } = renderCaptureCard(ref, {
+    const { getByTestId, queryByTestId, getByText } = renderCaptureCard(ref, {
       captureMode: 'camera',
       capturedPhoto: 'file:///photo.jpg',
     });
@@ -1268,9 +1306,100 @@ describe('CaptureCard doodle handle', () => {
     });
 
     fireEvent.press(getByTestId('mock-sticker-select-first'));
-    fireEvent.press(getByTestId('capture-sticker-motion-lock'));
+    fireEvent.press(getByTestId('capture-sticker-more'));
 
+    expect(getByText('Sticker options')).toBeTruthy();
+    expect(getByTestId('capture-sticker-sheet-motion-lock')).toBeTruthy();
+    expect(getByTestId('capture-sticker-sheet-outline-toggle')).toBeTruthy();
+
+    fireEvent.press(getByTestId('capture-sticker-sheet-motion-lock'));
+
+    expect(queryByTestId('capture-sticker-sheet-motion-lock')).toBeNull();
+    expect(queryByTestId('capture-sticker-sheet-outline-toggle')).toBeNull();
     expect(ref.current?.getStickerSnapshot().placements[0]?.motionLocked).toBe(true);
+  });
+
+  it('creates a stamp directly from the sticker source sheet', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri: 'file:///photo.jpg',
+          mimeType: 'image/jpeg',
+          fileName: 'photo.jpg',
+        },
+      ],
+    });
+
+    const { getByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///photo.jpg',
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-sticker-toggle'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-sticker-import'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-source-option-create-stamp'));
+    });
+
+    await waitFor(() => {
+      expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+    });
+
+    expect(ref.current?.getStickerSnapshot().placements[0]?.renderMode).toBe('stamp');
+    expect(mockImportStickerAsset).toHaveBeenCalledWith(
+      {
+        uri: 'file:///photo.jpg',
+        mimeType: 'image/jpeg',
+        name: 'photo.jpg',
+      },
+      undefined
+    );
+  });
+
+  it('shows stamp-specific options and hides outline controls for stamps', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri: 'file:///photo.jpg',
+          mimeType: 'image/jpeg',
+          fileName: 'photo.jpg',
+        },
+      ],
+    });
+
+    const { getByTestId, getByText, queryByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///photo.jpg',
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-sticker-toggle'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-sticker-import'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-source-option-create-stamp'));
+    });
+
+    await waitFor(() => {
+      expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+    });
+
+    fireEvent.press(getByTestId('mock-sticker-select-first'));
+    fireEvent.press(getByTestId('capture-sticker-more'));
+
+    expect(getByText('Stamp options')).toBeTruthy();
+    expect(getByTestId('capture-sticker-sheet-motion-lock')).toBeTruthy();
+    expect(queryByTestId('capture-sticker-sheet-outline-toggle')).toBeNull();
   });
 
   it('opens the sticker source sheet from a tap on the add button', async () => {
@@ -1289,8 +1418,48 @@ describe('CaptureCard doodle handle', () => {
       fireEvent.press(getByTestId('capture-sticker-import'));
     });
 
+    expect(getByTestId('sticker-source-option-create-sticker')).toBeTruthy();
+    expect(getByTestId('sticker-source-option-create-stamp')).toBeTruthy();
     expect(getByTestId('sticker-source-option-clipboard')).toBeTruthy();
-    expect(getByTestId('sticker-source-option-photos')).toBeTruthy();
+  });
+
+  it('requests a transparent asset when creating a floating sticker from photos', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri: 'file:///sticker.png',
+          mimeType: 'image/png',
+          fileName: 'sticker.png',
+        },
+      ],
+    });
+
+    const { getByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-sticker-toggle'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-sticker-import'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-source-option-create-sticker'));
+    });
+
+    await waitFor(() => {
+      expect(mockImportStickerAsset).toHaveBeenCalledWith(
+        {
+          uri: 'file:///sticker.png',
+          mimeType: 'image/png',
+          name: 'sticker.png',
+        },
+        { requiresTransparency: true }
+      );
+    });
   });
 
   it('treats sticker edit mode like doodle mode for parent scroll locking', () => {

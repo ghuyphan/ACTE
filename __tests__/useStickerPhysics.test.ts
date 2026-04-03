@@ -14,6 +14,7 @@ function createPhysicsSticker(
     id,
     anchorX: x,
     anchorY: y,
+    collisionShape: 'ellipse',
     width: 120,
     height: 90,
     collisionRadius: 41,
@@ -29,6 +30,21 @@ function createPhysicsSticker(
     angularVelocity: 0,
     jellyScaleX: 1,
     jellyScaleY: 1,
+  };
+}
+
+function createStampPhysicsSticker(
+  id: string,
+  x: number,
+  y: number
+): StickerPhysicsState {
+  return {
+    ...createPhysicsSticker(id, x, y),
+    collisionShape: 'rect',
+    width: 120,
+    height: 90,
+    collisionHalfWidth: 60,
+    collisionHalfHeight: 45,
   };
 }
 
@@ -114,5 +130,65 @@ describe('useStickerPhysics', () => {
 
     expect(Math.abs(left.vy)).toBeGreaterThan(100);
     expect(Math.abs(right.vy)).toBeGreaterThan(100);
+  });
+
+  it('uses a softer rebound when gentle collision response is requested', () => {
+    const defaultLeft = createPhysicsSticker('default-left', 150, 150);
+    const defaultRight = createPhysicsSticker('default-right', 214, 150);
+    defaultLeft.vx = 240;
+    defaultRight.vx = -240;
+
+    const gentleLeft = createPhysicsSticker('gentle-left', 150, 150);
+    const gentleRight = createPhysicsSticker('gentle-right', 214, 150);
+    gentleLeft.vx = 240;
+    gentleRight.vx = -240;
+
+    resolveStickerCollisions(
+      [defaultLeft, defaultRight],
+      { width: 360, height: 320 },
+      0.92,
+      0.86,
+      'default'
+    );
+    resolveStickerCollisions(
+      [gentleLeft, gentleRight],
+      { width: 360, height: 320 },
+      0.92,
+      0.86,
+      'gentle'
+    );
+
+    expect(Math.abs(gentleLeft.vx)).toBeLessThan(Math.abs(defaultLeft.vx));
+    expect(Math.abs(gentleRight.vx)).toBeLessThan(Math.abs(defaultRight.vx));
+    expect(Math.abs(gentleLeft.angularVelocity)).toBeLessThanOrEqual(
+      Math.abs(defaultLeft.angularVelocity)
+    );
+    expect(Math.abs(gentleRight.angularVelocity)).toBeLessThanOrEqual(
+      Math.abs(defaultRight.angularVelocity)
+    );
+  });
+
+  it('keeps stamp collisions softer than regular sticker collisions by default', () => {
+    const stickerLeft = createPhysicsSticker('sticker-left', 150, 150);
+    const stickerRight = createPhysicsSticker('sticker-right', 214, 150);
+    stickerLeft.vx = 240;
+    stickerRight.vx = -240;
+
+    const stampLeft = createStampPhysicsSticker('stamp-left', 150, 150);
+    const stampRight = createStampPhysicsSticker('stamp-right', 214, 150);
+    stampLeft.vx = 240;
+    stampRight.vx = -240;
+
+    resolveStickerCollisions([stickerLeft, stickerRight], { width: 360, height: 320 }, 0.92, 0.86);
+    resolveStickerCollisions([stampLeft, stampRight], { width: 360, height: 320 }, 0.92, 0.86);
+
+    expect(Math.abs(stampLeft.vx)).toBeLessThan(Math.abs(stickerLeft.vx));
+    expect(Math.abs(stampRight.vx)).toBeLessThan(Math.abs(stickerRight.vx));
+    expect(Math.abs(stampLeft.angularVelocity)).toBeLessThanOrEqual(
+      Math.abs(stickerLeft.angularVelocity)
+    );
+    expect(Math.abs(stampRight.angularVelocity)).toBeLessThanOrEqual(
+      Math.abs(stickerRight.angularVelocity)
+    );
   });
 });

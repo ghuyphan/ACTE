@@ -14,6 +14,7 @@ import {
   parseNoteStickerPlacements,
   setStickerPlacementMotionLocked,
   setStickerPlacementOutlineEnabled,
+  setStickerPlacementRenderMode,
   updateStickerPlacementTransform,
   type StickerAsset,
 } from '../services/noteStickers';
@@ -102,6 +103,31 @@ describe('noteStickers helpers', () => {
 
     expect(parsed.find((placement) => placement.id === firstPlacement.id)?.motionLocked).toBe(true);
     expect(parsed.find((placement) => placement.id === secondPlacement.id)?.motionLocked).toBe(false);
+  });
+
+  it('persists the sticker render mode per sticker', () => {
+    const placement = createStickerPlacement(baseAsset);
+    const stamped = setStickerPlacementRenderMode([placement], placement.id, 'stamp');
+    const parsed = parseNoteStickerPlacements(JSON.stringify(stamped));
+
+    expect(stamped[0]?.renderMode).toBe('stamp');
+    expect(parsed[0]?.renderMode).toBe('stamp');
+  });
+
+  it('defaults imported opaque images into stamp render mode', () => {
+    const placement = createStickerPlacement({
+      ...baseAsset,
+      suggestedRenderMode: 'stamp',
+    });
+
+    expect(placement.renderMode).toBe('stamp');
+    expect('suggestedRenderMode' in placement.asset).toBe(false);
+  });
+
+  it('lets new placements start in stamp mode explicitly', () => {
+    const placement = createStickerPlacement(baseAsset, [], { renderMode: 'stamp' });
+
+    expect(placement.renderMode).toBe('stamp');
   });
 
   it('keeps new stickers unlocked by default', () => {

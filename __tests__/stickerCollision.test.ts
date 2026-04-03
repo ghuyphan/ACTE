@@ -58,4 +58,30 @@ describe('stickerCollision', () => {
     expect(collision?.normalY ?? 0).toBe(0);
     expect(Math.hypot(collision?.normalX ?? 0, collision?.normalY ?? 0)).toBeCloseTo(1, 5);
   });
+
+  it('lets rectangular stamp bodies collide using their boxier footprint', () => {
+    const geometry = getStickerCollisionGeometry(120, 90);
+    const collision = detectStickerCollision(
+      { ...geometry, collisionShape: 'rect', x: 0, y: 0, rotation: 0 },
+      { ...geometry, collisionShape: 'rect', x: 100, y: 0, rotation: 0 }
+    );
+
+    expect(collision).not.toBeNull();
+    expect(collision?.overlap ?? 0).toBeGreaterThan(0);
+  });
+
+  it('keeps rotated rectangular stamp collisions box-like instead of ellipse-like', () => {
+    const geometry = getStickerCollisionGeometry(120, 90, {
+      horizontalInset: 0,
+      verticalInset: 0,
+    });
+    const collision = detectStickerCollision(
+      { ...geometry, collisionShape: 'rect', x: 0, y: 0, rotation: 45 },
+      { ...geometry, collisionShape: 'rect', x: 118, y: 0, rotation: -45 }
+    );
+
+    expect(collision).not.toBeNull();
+    expect(collision?.overlap ?? 0).toBeGreaterThan(0);
+    expect(Math.hypot(collision?.normalX ?? 0, collision?.normalY ?? 0)).toBeCloseTo(1, 5);
+  });
 });

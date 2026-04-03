@@ -1699,90 +1699,144 @@ export default function HomeScreen() {
     });
   }, [startSearchTransition]);
 
-  const captureHeader = (
-    <View style={styles.captureItemWrapper}>
-      <CaptureCard
-        ref={captureCardRef}
-        snapHeight={snapHeight}
-        topInset={insets.top}
-        isSearching={isSearching}
-        captureMode={captureMode}
-        cameraSessionKey={cameraSessionKey}
-        captureScale={captureScale}
-        captureTranslateY={captureTranslateY}
-        isModeSwitchAnimating={isModeSwitchAnimating}
-        colors={colors}
-        t={t}
-        noteText={noteText}
-        onChangeNoteText={setNoteText}
-        noteColor={noteColor}
-        onChangeNoteColor={handleChangeNoteColor}
-        lockedNoteColorIds={lockedPremiumNoteColorIds}
-        previewOnlyNoteColorIds={previewOnlyNoteColorIds}
-        onPressLockedNoteColor={() => showPlusSheet('color')}
-        restaurantName={restaurantName}
-        onChangeRestaurantName={setRestaurantName}
-        capturedPhoto={capturedPhoto}
-        capturedPairedVideo={capturedPairedVideo}
-        onRetakePhoto={() => {
-          setCapturedPhoto(null);
-          setCapturedPairedVideo(null);
-        }}
-        onImportMotionClip={() => {
-          void handleImportMotionClip();
-        }}
-        onRemoveMotionClip={() => setCapturedPairedVideo(null)}
-        needsCameraPermission={needsCameraPermission}
-        cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
-        onRequestCameraPermission={() => {
-          void handleRequestCameraPermission();
-        }}
-        facing={facing}
-        onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
-        onOpenPhotoLibrary={() => {
-          void handleImportPhoto();
-        }}
-        selectedPhotoFilterId={selectedPhotoFilterId}
-        onChangePhotoFilter={setSelectedPhotoFilterId}
-        cameraRef={cameraRef}
-        cameraDevice={cameraDevice}
-        isCameraPreviewActive={isCameraPreviewActive}
-        flashAnim={flashAnim}
-        permissionGranted={Boolean(permission?.granted)}
-        onShutterPressIn={handleShutterPressIn}
-        onShutterPressOut={handleShutterPressOut}
-        onTakePicture={() => {
-          void takePicture();
-        }}
-        onStartLivePhotoCapture={() => {
-          void startLivePhotoCapture();
-        }}
-        onSaveNote={() => {
-          void saveNote();
-        }}
-        saving={saving}
-        saveState={saveButtonState}
-        shutterScale={shutterScale}
-        isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
-        isLivePhotoCaptureSettling={isLivePhotoCaptureSettling}
-        isLivePhotoSaveGuardActive={isLivePhotoSaveGuardActive}
-        cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
-        cameraInstructionText={
-          captureMode === 'camera' && showLivePhotoCameraHint
-            ? t('capture.livePhotoCaptureHint', 'Tap for a photo. Hold for a live photo.')
-            : null
-        }
-        remainingPhotoSlots={captureMode === 'camera' ? remainingPhotoSlots : null}
-        libraryImportLocked={!canImportFromLibrary}
-        importingPhoto={importingPhoto || isPurchaseInFlight}
-        radius={radius}
-        onChangeRadius={setRadius}
-        shareTarget={captureTarget}
-        onChangeShareTarget={handleCaptureTargetChange}
-        onDoodleModeChange={setCaptureEditorScrollLocked}
-        onInteractionLockChange={setCaptureInteractionScrollLocked}
-      />
-    </View>
+  const captureHeader = useMemo(
+    () => (
+      <View style={styles.captureItemWrapper}>
+        <CaptureCard
+          ref={captureCardRef}
+          snapHeight={snapHeight}
+          topInset={insets.top}
+          isSearching={isSearching}
+          captureMode={captureMode}
+          cameraSessionKey={cameraSessionKey}
+          captureScale={captureScale}
+          captureTranslateY={captureTranslateY}
+          isModeSwitchAnimating={isModeSwitchAnimating}
+          colors={colors}
+          t={t}
+          noteText={noteText}
+          onChangeNoteText={setNoteText}
+          noteColor={noteColor}
+          onChangeNoteColor={handleChangeNoteColor}
+          lockedNoteColorIds={lockedPremiumNoteColorIds}
+          previewOnlyNoteColorIds={previewOnlyNoteColorIds}
+          onPressLockedNoteColor={() => showPlusSheet('color')}
+          restaurantName={restaurantName}
+          onChangeRestaurantName={setRestaurantName}
+          capturedPhoto={capturedPhoto}
+          capturedPairedVideo={capturedPairedVideo}
+          onRetakePhoto={() => {
+            setCapturedPhoto(null);
+            setCapturedPairedVideo(null);
+          }}
+          onImportMotionClip={() => {
+            void handleImportMotionClip();
+          }}
+          onRemoveMotionClip={() => setCapturedPairedVideo(null)}
+          needsCameraPermission={needsCameraPermission}
+          cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
+          onRequestCameraPermission={() => {
+            void handleRequestCameraPermission();
+          }}
+          facing={facing}
+          onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
+          onOpenPhotoLibrary={() => {
+            void handleImportPhoto();
+          }}
+          selectedPhotoFilterId={selectedPhotoFilterId}
+          onChangePhotoFilter={setSelectedPhotoFilterId}
+          cameraRef={cameraRef}
+          cameraDevice={cameraDevice}
+          isCameraPreviewActive={isCameraPreviewActive}
+          flashAnim={flashAnim}
+          permissionGranted={Boolean(permission?.granted)}
+          onShutterPressIn={handleShutterPressIn}
+          onShutterPressOut={handleShutterPressOut}
+          onTakePicture={() => {
+            void takePicture();
+          }}
+          onStartLivePhotoCapture={() => {
+            void startLivePhotoCapture();
+          }}
+          onSaveNote={() => {
+            void saveNote();
+          }}
+          saving={saving}
+          saveState={saveButtonState}
+          shutterScale={shutterScale}
+          isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
+          isLivePhotoCaptureSettling={isLivePhotoCaptureSettling}
+          isLivePhotoSaveGuardActive={isLivePhotoSaveGuardActive}
+          cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
+          cameraInstructionText={
+            captureMode === 'camera' && showLivePhotoCameraHint
+              ? t('capture.livePhotoCaptureHint', 'Tap for a photo. Hold for a live photo.')
+              : null
+          }
+          remainingPhotoSlots={captureMode === 'camera' ? remainingPhotoSlots : null}
+          libraryImportLocked={!canImportFromLibrary}
+          importingPhoto={importingPhoto || isPurchaseInFlight}
+          radius={radius}
+          onChangeRadius={setRadius}
+          shareTarget={captureTarget}
+          onChangeShareTarget={handleCaptureTargetChange}
+          onDoodleModeChange={setCaptureEditorScrollLocked}
+          onInteractionLockChange={setCaptureInteractionScrollLocked}
+        />
+      </View>
+    ),
+    [
+      cameraDevice,
+      cameraPermissionRequiresSettings,
+      cameraRef,
+      cameraSessionKey,
+      cameraStatusText,
+      canImportFromLibrary,
+      captureMode,
+      captureScale,
+      captureTarget,
+      captureTranslateY,
+      capturedPairedVideo,
+      capturedPhoto,
+      colors,
+      facing,
+      flashAnim,
+      handleCaptureTargetChange,
+      handleChangeNoteColor,
+      handleImportMotionClip,
+      handleImportPhoto,
+      handleRequestCameraPermission,
+      handleShutterPressIn,
+      handleShutterPressOut,
+      importingPhoto,
+      insets.top,
+      isCameraPreviewActive,
+      isLivePhotoCaptureInProgress,
+      isLivePhotoCaptureSettling,
+      isLivePhotoSaveGuardActive,
+      isModeSwitchAnimating,
+      isPurchaseInFlight,
+      isSearching,
+      lockedPremiumNoteColorIds,
+      needsCameraPermission,
+      noteColor,
+      noteText,
+      permission?.granted,
+      previewOnlyNoteColorIds,
+      radius,
+      remainingPhotoSlots,
+      restaurantName,
+      saveButtonState,
+      saving,
+      selectedPhotoFilterId,
+      shutterScale,
+      showLivePhotoCameraHint,
+      showPlusSheet,
+      snapHeight,
+      startLivePhotoCapture,
+      t,
+      takePicture,
+    ]
   );
 
   return (

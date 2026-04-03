@@ -1,5 +1,5 @@
 import type { Note } from './database';
-import { parseNoteStickerPlacements } from './noteStickers';
+import { parseNoteStickerPlacements, type StickerRenderMode } from './noteStickers';
 
 export type MonthlyRecapObjectKind = 'postcard' | 'polaroid' | 'stamp';
 
@@ -89,6 +89,7 @@ export interface MonthlyRecapStickerUsage {
   assetWidth: number;
   assetHeight: number;
   outlineEnabled: boolean;
+  renderMode: StickerRenderMode;
 }
 
 export interface MonthlyRecap {
@@ -665,7 +666,12 @@ export function getMonthStats(notes: Note[], range?: MonthlyRecapMonth): Monthly
 }
 
 function getMonthStickerUsageFromScopedNotes(scopedNotes: Note[]): MonthlyRecapStickerUsage[] {
-  const usageByAssetId = new Map<string, MonthlyRecapStickerUsage>();
+  const usageByAssetId = new Map<
+    string,
+    MonthlyRecapStickerUsage & {
+      stampCount: number;
+    }
+  >();
 
   for (const note of scopedNotes) {
     for (const placement of parseNoteStickerPlacements(note.stickerPlacementsJson)) {
@@ -677,6 +683,7 @@ function getMonthStickerUsageFromScopedNotes(scopedNotes: Note[]): MonthlyRecapS
       const existing = usageByAssetId.get(placement.assetId);
       if (existing) {
         existing.count += 1;
+        existing.stampCount += placement.renderMode === 'stamp' ? 1 : 0;
         existing.outlineEnabled = existing.outlineEnabled || placement.outlineEnabled !== false;
         continue;
       }
@@ -689,11 +696,17 @@ function getMonthStickerUsageFromScopedNotes(scopedNotes: Note[]): MonthlyRecapS
         assetWidth: Math.max(placement.asset.width ?? 100, 1),
         assetHeight: Math.max(placement.asset.height ?? 100, 1),
         outlineEnabled: placement.outlineEnabled !== false,
+        renderMode: placement.renderMode === 'stamp' ? 'stamp' : 'default',
+        stampCount: placement.renderMode === 'stamp' ? 1 : 0,
       });
     }
   }
 
   return Array.from(usageByAssetId.values())
+    .map(({ stampCount, ...usage }) => ({
+      ...usage,
+      renderMode: (stampCount >= usage.count / 2 ? 'stamp' : 'default') as StickerRenderMode,
+    }))
     .sort((left, right) => {
       const countDelta = right.count - left.count;
       if (countDelta !== 0) {

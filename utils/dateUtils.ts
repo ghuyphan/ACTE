@@ -26,3 +26,20 @@ export function formatDate(date: Date | string, style: 'short' | 'long' = 'short
 
     return d.toLocaleDateString(locale, options);
 }
+
+export function formatStampDateTime(date: Date | string): string {
+    const d = typeof date === 'string' ? new Date(date) : date;
+
+    if (Number.isNaN(d.getTime())) {
+        return '';
+    }
+
+    return new Intl.DateTimeFormat(getLocale(), {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).format(d);
+}

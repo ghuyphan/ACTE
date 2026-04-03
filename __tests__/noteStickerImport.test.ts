@@ -139,6 +139,7 @@ describe('importStickerAsset', () => {
     );
     expect(asset.mimeType).toBe('image/png');
     expect(asset.localUri.endsWith('.png')).toBe(true);
+    expect(asset.suggestedRenderMode).toBe('default');
   });
 
   it('optimizes oversized stickers into webp before saving', async () => {
@@ -197,21 +198,20 @@ describe('importStickerAsset', () => {
     expect(asset.localUri.endsWith('.webp')).toBe(true);
   });
 
-  it('returns a typed error when the file format is unsupported', async () => {
+  it('imports regular photos and suggests stamp mode', async () => {
     const importStickerAsset = loadImportStickerAsset();
 
     mockGetInfoAsync.mockResolvedValue({ exists: true, isDirectory: false, size: 80 * 1024 });
 
-    await expect(
-      importStickerAsset({
-        uri: 'file:///imports/not-a-sticker.jpg',
-        mimeType: 'image/jpeg',
-        name: 'not-a-sticker.jpg',
-      })
-    ).rejects.toMatchObject({
-      name: 'StickerImportError',
-      code: 'unsupported-format',
+    const asset = await importStickerAsset({
+      uri: 'file:///imports/not-a-sticker.jpg',
+      mimeType: 'image/jpeg',
+      name: 'not-a-sticker.jpg',
     });
+
+    expect(asset.mimeType).toBe('image/jpeg');
+    expect(asset.localUri.endsWith('.jpg')).toBe(true);
+    expect(asset.suggestedRenderMode).toBe('stamp');
   });
 
   it('reuses an existing remote sticker path when serializing shared placements', async () => {

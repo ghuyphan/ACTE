@@ -1,4 +1,11 @@
-import { Image } from 'expo-image';
+import {
+  Canvas,
+  Group,
+  Image as SkiaImage,
+  Path,
+  useImage,
+} from '@shopify/react-native-skia';
+import { Image as ExpoImage } from 'expo-image';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutChangeEvent,
@@ -23,6 +30,13 @@ import {
   sortStickerPlacements,
   type StickerCanvasLayout as CanvasLayout,
 } from './stickerCanvasMetrics';
+import {
+  createStampFramePath,
+  getStampFrameMetrics,
+  STAMP_DROP_SHADOW_COLOR,
+  STAMP_OUTLINE_COLOR,
+  STAMP_PAPER_BORDER_COLOR,
+} from './stampFrameMetrics';
 
 interface NoteStickerCanvasProps {
   placements: NoteStickerPlacement[];
@@ -51,21 +65,92 @@ function normalizePlacements(placements: NoteStickerPlacement[]) {
   }));
 }
 
+function StampStickerArtwork({
+  placementId,
+  localUri,
+  width,
+  height,
+}: {
+  placementId: string;
+  localUri: string;
+  width: number;
+  height: number;
+}) {
+  const stampMetrics = useMemo(
+    () => getStampFrameMetrics(width, height),
+    [height, width]
+  );
+  const stampPath = useMemo(
+    () => createStampFramePath(stampMetrics),
+    [stampMetrics]
+  );
+  const stampImage = useImage(localUri);
+  const stampOutlineWidth = Math.max(2.4, stampMetrics.perforationRadius * 0.66);
+  const stampBorderWidth = Math.max(1, stampMetrics.perforationRadius * 0.18);
+
+  return (
+    <View
+      pointerEvents="none"
+      testID={`note-sticker-stamp-paper-${placementId}`}
+      style={[
+        styles.stampPaper,
+        {
+          width: stampMetrics.outerWidth,
+          height: stampMetrics.outerHeight,
+          shadowColor: STAMP_DROP_SHADOW_COLOR,
+        },
+      ]}
+    >
+      <Canvas
+        testID={`note-sticker-stamp-${placementId}`}
+        style={styles.stampArtwork}
+      >
+        {stampImage ? (
+          <Group clip={stampPath}>
+            <SkiaImage
+              image={stampImage}
+              fit="cover"
+              x={0}
+              y={0}
+              width={stampMetrics.outerWidth}
+              height={stampMetrics.outerHeight}
+            />
+          </Group>
+        ) : null}
+        <Path
+          path={stampPath}
+          color={STAMP_OUTLINE_COLOR}
+          style="stroke"
+          strokeWidth={stampOutlineWidth}
+        />
+        <Path
+          path={stampPath}
+          color={STAMP_PAPER_BORDER_COLOR}
+          style="stroke"
+          strokeWidth={stampBorderWidth}
+        />
+      </Canvas>
+    </View>
+  );
+}
+
+const MemoStampStickerArtwork = memo(StampStickerArtwork);
+
 function EditableSticker({
   placement,
   layout,
-  selected,
-  editable,
-  onSelect,
+  showSelection,
+  interactiveRef,
+  onChangeSelectedPlacementId,
   onCommit,
   sizeMultiplier,
   minimumBaseSize,
 }: {
   placement: NoteStickerPlacement;
   layout: CanvasLayout;
-  selected: boolean;
-  editable: boolean;
-  onSelect: () => void;
+  showSelection: boolean;
+  interactiveRef: { current: boolean };
+  onChangeSelectedPlacementId?: (placementId: string | null) => void;
   onCommit: (nextPlacement: NoteStickerPlacement) => void;
   sizeMultiplier: number;
   minimumBaseSize: number;
@@ -76,7 +161,7 @@ function EditableSticker({
   const livePlacementRef = useRef(placement);
   const activeGestureCountRef = useRef(0);
   const [dragPlacement, setDragPlacement] = useState(placement);
-  const activePlacement = editable ? dragPlacement : placement;
+  const activePlacement = dragPlacement;
   const normalizedScale = clampStickerScale(activePlacement.scale);
   const baseDimensions = getStickerDimensions(
     { ...activePlacement, scale: 1 },
@@ -84,9 +169,18 @@ function EditableSticker({
     sizeMultiplier,
     minimumBaseSize
   );
+  const stampMetrics =
+    activePlacement.renderMode === 'stamp'
+      ? getStampFrameMetrics(baseDimensions.width, baseDimensions.height)
+      : null;
   const outlineSize = getStickerOutlineSize(baseDimensions.width, baseDimensions.height);
-  const frameWidth = baseDimensions.width + outlineSize * 2;
-  const frameHeight = baseDimensions.height + outlineSize * 2;
+  const showOutline = activePlacement.renderMode !== 'stamp' && activePlacement.outlineEnabled !== false;
+  const frameWidth = stampMetrics
+    ? stampMetrics.outerWidth
+    : baseDimensions.width + outlineSize * 2;
+  const frameHeight = stampMetrics
+    ? stampMetrics.outerHeight
+    : baseDimensions.height + outlineSize * 2;
 
   useEffect(() => {
     livePlacementRef.current = placement;
@@ -104,6 +198,12 @@ function EditableSticker({
     livePlacementRef.current = nextPlacement;
     setDragPlacement(nextPlacement);
   }, []);
+  const handleSelect = useCallback(() => {
+    if (!interactiveRef.current) {
+      return;
+    }
+    onChangeSelectedPlacementId?.(placement.id);
+  }, [interactiveRef, onChangeSelectedPlacementId, placement.id]);
 
   const beginGesture = useCallback(
     (type: 'pan' | 'pinch' | 'rotation') => {
@@ -116,9 +216,9 @@ function EditableSticker({
       } else {
         rotationStartRef.current = currentPlacement.rotation;
       }
-      onSelect();
+      handleSelect();
     },
-    [onSelect]
+    [handleSelect]
   );
 
   const finalizeGesture = useCallback(() => {
@@ -132,18 +232,17 @@ function EditableSticker({
     () =>
       Gesture.Pan()
         .runOnJS(true)
-        .enabled(editable)
         .maxPointers(1)
         .minDistance(1)
         .shouldCancelWhenOutside(false)
         .onBegin(() => {
-          if (!editable || layout.width <= 0 || layout.height <= 0) {
+          if (!interactiveRef.current || layout.width <= 0 || layout.height <= 0) {
             return;
           }
           beginGesture('pan');
         })
         .onUpdate((event) => {
-          if (!editable || layout.width <= 0 || layout.height <= 0) {
+          if (!interactiveRef.current || layout.width <= 0 || layout.height <= 0) {
             return;
           }
           updateLivePlacement({
@@ -152,28 +251,27 @@ function EditableSticker({
           });
         })
         .onFinalize(() => {
-          if (!editable) {
+          if (!interactiveRef.current) {
             return;
           }
           finalizeGesture();
         }),
-    [beginGesture, editable, finalizeGesture, layout.height, layout.width, updateLivePlacement]
+    [beginGesture, finalizeGesture, interactiveRef, layout.height, layout.width, updateLivePlacement]
   );
 
   const pinchGesture = useMemo(
     () =>
       Gesture.Pinch()
         .runOnJS(true)
-        .enabled(editable)
         .shouldCancelWhenOutside(false)
         .onBegin(() => {
-          if (!editable) {
+          if (!interactiveRef.current) {
             return;
           }
           beginGesture('pinch');
         })
         .onUpdate((event) => {
-          if (!editable) {
+          if (!interactiveRef.current) {
             return;
           }
           updateLivePlacement({
@@ -181,28 +279,27 @@ function EditableSticker({
           });
         })
         .onFinalize(() => {
-          if (!editable) {
+          if (!interactiveRef.current) {
             return;
           }
           finalizeGesture();
         }),
-    [beginGesture, editable, finalizeGesture, updateLivePlacement]
+    [beginGesture, finalizeGesture, interactiveRef, updateLivePlacement]
   );
 
   const rotationGesture = useMemo(
     () =>
       Gesture.Rotation()
         .runOnJS(true)
-        .enabled(editable)
         .shouldCancelWhenOutside(false)
         .onBegin(() => {
-          if (!editable) {
+          if (!interactiveRef.current) {
             return;
           }
           beginGesture('rotation');
         })
         .onUpdate((event) => {
-          if (!editable) {
+          if (!interactiveRef.current) {
             return;
           }
           updateLivePlacement({
@@ -210,18 +307,17 @@ function EditableSticker({
           });
         })
         .onFinalize(() => {
-          if (!editable) {
+          if (!interactiveRef.current) {
             return;
           }
           finalizeGesture();
         }),
-    [beginGesture, editable, finalizeGesture, updateLivePlacement]
+    [beginGesture, finalizeGesture, interactiveRef, updateLivePlacement]
   );
   const combinedGesture = useMemo(
     () => Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture),
     [panGesture, pinchGesture, rotationGesture]
   );
-  const showOutline = activePlacement.outlineEnabled !== false;
   const outlineOffsets = getStickerOutlineOffsets(outlineSize, {
     preferContinuous: PREFER_CONTINUOUS_OUTLINE,
   });
@@ -241,7 +337,7 @@ function EditableSticker({
           style={styles.stickerOutlineLayer}
         >
           {outlineOffsets.map((offset, index) => (
-            <Image
+            <ExpoImage
               key={`${placement.id}-outline-${index}`}
               source={{ uri: activePlacement.asset.localUri }}
               style={[
@@ -262,19 +358,28 @@ function EditableSticker({
           ))}
         </View>
       ) : null}
-      <Image
-        testID={`note-sticker-image-${placement.id}`}
-        source={{ uri: activePlacement.asset.localUri }}
-        style={[styles.stickerLayerImage, stickerFrameStyle]}
-        contentFit="contain"
-        transition={editable ? 0 : 120}
-      />
+      {stampMetrics ? (
+        <MemoStampStickerArtwork
+          placementId={placement.id}
+          localUri={activePlacement.asset.localUri}
+          width={baseDimensions.width}
+          height={baseDimensions.height}
+        />
+      ) : (
+        <ExpoImage
+          testID={`note-sticker-image-${placement.id}`}
+          source={{ uri: activePlacement.asset.localUri }}
+          style={[styles.stickerLayerImage, stickerFrameStyle]}
+          contentFit="contain"
+          transition={interactiveRef.current ? 0 : 120}
+        />
+      )}
     </View>
   );
 
   const stickerNode = (
     <View
-      pointerEvents={editable ? 'auto' : 'none'}
+      pointerEvents="auto"
       testID={`note-sticker-wrap-${placement.id}`}
       style={[
         styles.stickerWrap,
@@ -289,11 +394,10 @@ function EditableSticker({
         },
       ]}
     >
-      {editable && selected ? <View pointerEvents="none" style={styles.selectionRing} /> : null}
+      {showSelection ? <View pointerEvents="none" style={styles.selectionRing} /> : null}
       <Pressable
         accessibilityRole="button"
-        disabled={!editable}
-        onPress={editable ? onSelect : undefined}
+        onPress={handleSelect}
         style={styles.stickerPressable}
       >
         {stickerArtwork}
@@ -325,6 +429,11 @@ function NoteStickerCanvas({
 }: NoteStickerCanvasProps) {
   const [layout, setLayout] = useState<CanvasLayout>({ width: 1, height: 1 });
   const [hydratedPlacements, setHydratedPlacements] = useState(placements);
+  const editableRef = useRef(editable);
+
+  useEffect(() => {
+    editableRef.current = editable;
+  }, [editable]);
 
   useEffect(() => {
     if (editable || !remoteBucket) {
@@ -348,15 +457,24 @@ function NoteStickerCanvas({
   const renderedPlacements = editable ? placements : hydratedPlacements;
   const sortedPlacements = useMemo(() => sortStickerPlacements(renderedPlacements), [renderedPlacements]);
 
-  const handleLayout = (event: LayoutChangeEvent) => {
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
-    setLayout({
-      width: Math.max(width, 1),
-      height: Math.max(height, 1),
-    });
-  };
+    const nextWidth = Math.max(width, 1);
+    const nextHeight = Math.max(height, 1);
 
-  const commitPlacement = (nextPlacement: NoteStickerPlacement) => {
+    setLayout((current) => {
+      if (current.width === nextWidth && current.height === nextHeight) {
+        return current;
+      }
+
+      return {
+        width: nextWidth,
+        height: nextHeight,
+      };
+    });
+  }, []);
+
+  const commitPlacement = useCallback((nextPlacement: NoteStickerPlacement) => {
     if (!onChangePlacements) {
       return;
     }
@@ -367,7 +485,7 @@ function NoteStickerCanvas({
       )
     );
     onChangePlacements(nextPlacements);
-  };
+  }, [onChangePlacements, placements]);
 
   return (
     <View pointerEvents={editable ? 'box-none' : 'none'} style={[styles.canvas, style]} onLayout={handleLayout}>
@@ -384,9 +502,9 @@ function NoteStickerCanvas({
           key={placement.id}
           placement={placement}
           layout={layout}
-          selected={selectedPlacementId === placement.id}
-          editable={editable}
-          onSelect={() => onChangeSelectedPlacementId?.(placement.id)}
+          showSelection={editable && selectedPlacementId === placement.id}
+          interactiveRef={editableRef}
+          onChangeSelectedPlacementId={onChangeSelectedPlacementId}
           onCommit={commitPlacement}
           sizeMultiplier={sizeMultiplier}
           minimumBaseSize={minimumBaseSize}
@@ -417,6 +535,7 @@ const styles = StyleSheet.create({
   stickerArtwork: {
     width: '100%',
     height: '100%',
+    overflow: 'visible',
   },
   stickerOutlineLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -434,5 +553,19 @@ const styles = StyleSheet.create({
   },
   stickerLayerImage: {
     position: 'absolute',
+  },
+  stampArtwork: {
+    width: '100%',
+    height: '100%',
+  },
+  stampPaper: {
+    overflow: 'visible',
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 6,
   },
 });

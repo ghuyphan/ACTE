@@ -109,6 +109,8 @@ type StickerPastePromptState = {
     y: number;
 };
 
+type StickerImportIntent = 'sticker' | 'stamp';
+
 function getStickerImportErrorMessage(
     t: ReturnType<typeof useTranslation>['t'],
     error: unknown
@@ -117,7 +119,7 @@ function getStickerImportErrorMessage(
         if (error.code === 'unsupported-format') {
             return t(
                 'capture.stickerUnsupportedFormat',
-                'Please import a transparent PNG or WebP sticker.'
+                'Please import a PNG, WebP, JPEG, or HEIC image.'
             );
         }
 
@@ -131,7 +133,7 @@ function getStickerImportErrorMessage(
         if (error.code === 'missing-transparency') {
             return t(
                 'capture.stickerMissingTransparency',
-                'This image does not include transparency. Import a transparent PNG or WebP sticker.'
+                'If you want a floating sticker, use a transparent PNG or WebP. Regular photos will import as stamps.'
             );
         }
     }
@@ -298,7 +300,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
     const [importingSticker, setImportingSticker] = useState(false);
     const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
-    const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<'photos' | null>(null);
+    const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<StickerImportIntent | null>(null);
     const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
     const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
@@ -781,7 +783,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }, 120);
     }, [isEditing]);
 
-    const handleImportSticker = useCallback(async () => {
+    const handleImportSticker = useCallback(async (intent: StickerImportIntent = 'sticker') => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
             return;
         }
@@ -827,9 +829,13 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 uri: result.assets[0].uri,
                 mimeType: result.assets[0].mimeType,
                 name: result.assets[0].fileName,
-            });
+            }, intent === 'sticker' ? { requiresTransparency: true } : undefined);
 
-            const nextPlacement = createStickerPlacement(importedAsset, editStickerPlacements);
+            const nextPlacement = createStickerPlacement(
+                importedAsset,
+                editStickerPlacements,
+                intent === 'stamp' ? { renderMode: 'stamp' } : undefined
+            );
             setEditStickerPlacements((current) => [...current, nextPlacement]);
             setSelectedStickerId(nextPlacement.id);
             setStickerModeEnabled(true);
@@ -845,13 +851,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
     }, [dismissPastePrompt, editStickerPlacements, importingSticker, isEditing, note, t]);
     useEffect(() => {
-        if (showStickerSourceSheet || pendingStickerSourceAction !== 'photos') {
+        if (showStickerSourceSheet || !pendingStickerSourceAction) {
             return;
         }
 
         const timer = setTimeout(() => {
+            const nextAction = pendingStickerSourceAction;
             setPendingStickerSourceAction(null);
-            void handleImportSticker();
+            void handleImportSticker(nextAction);
         }, STICKER_SOURCE_SHEET_DISMISS_DELAY_MS);
 
         return () => clearTimeout(timer);
@@ -872,7 +879,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 ),
                 unavailable: t(
                     'capture.clipboardStickerUnavailableMsg',
-                    'Copy a transparent sticker image first, then long press again to paste it.'
+                    'Copy an image first, then long press again to paste it.'
                 ),
                 unsupported: t(
                     'capture.clipboardStickerUnsupported',
@@ -968,8 +975,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setShowStickerSourceSheet(false);
         void handlePasteStickerFromClipboard();
     }, [handlePasteStickerFromClipboard]);
-    const handleSelectStickerSourcePhotos = useCallback(() => {
-        setPendingStickerSourceAction('photos');
+    const handleSelectStickerSourceSticker = useCallback(() => {
+        setPendingStickerSourceAction('sticker');
+        setShowStickerSourceSheet(false);
+    }, []);
+    const handleSelectStickerSourceStamp = useCallback(() => {
+        setPendingStickerSourceAction('stamp');
         setShowStickerSourceSheet(false);
     }, []);
     const handleShowStickerSourceOptions = useCallback(async () => {
@@ -983,6 +994,52 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setStickerSourceCanPasteFromClipboard(canPasteFromClipboard);
         setShowStickerSourceSheet(true);
     }, [dismissPastePrompt, importingSticker, isEditing, note]);
+    const stickerSourceActions = useMemo(() => {
+        const actions: Array<{
+            key: string;
+            iconName: 'images-outline' | 'pricetag-outline' | 'clipboard-outline';
+            label: string;
+            description: string;
+            onPress: () => void;
+            testID: string;
+        }> = [
+            {
+                key: 'create-sticker',
+                iconName: 'images-outline',
+                label: t('capture.createStickerLabel', 'Create sticker'),
+                description: t('capture.createStickerDescription', 'Transparent PNG or WebP'),
+                onPress: handleSelectStickerSourceSticker,
+                testID: 'sticker-source-option-create-sticker',
+            },
+            {
+                key: 'create-stamp',
+                iconName: 'pricetag-outline',
+                label: t('capture.createStampLabel', 'Create stamp'),
+                description: t('capture.createStampDescription', 'Turn any photo into a perforated stamp'),
+                onPress: handleSelectStickerSourceStamp,
+                testID: 'sticker-source-option-create-stamp',
+            },
+        ];
+
+        if (stickerSourceCanPasteFromClipboard) {
+            actions.push({
+                key: 'paste-sticker',
+                iconName: 'clipboard-outline',
+                label: t('capture.pasteStickerFromClipboard', 'Paste from Clipboard'),
+                description: t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.'),
+                onPress: handleSelectStickerSourceClipboard,
+                testID: 'sticker-source-option-clipboard',
+            });
+        }
+
+        return actions;
+    }, [
+        handleSelectStickerSourceClipboard,
+        handleSelectStickerSourceStamp,
+        handleSelectStickerSourceSticker,
+        stickerSourceCanPasteFromClipboard,
+        t,
+    ]);
     const handleToggleStickerMode = useCallback(() => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note) {
             return;
@@ -1039,6 +1096,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             } else if (action === 'outline-toggle') {
                 const selectedPlacement = editStickerPlacements.find((placement) => placement.id === selectedStickerId);
                 nextPlacements = selectedPlacement
+                    && selectedPlacement.renderMode !== 'stamp'
                     ? setStickerPlacementOutlineEnabled(
                         editStickerPlacements,
                         selectedStickerId,
@@ -1468,6 +1526,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         const displayedStickerPlacements = isEditing ? editStickerPlacements : parsedNoteStickerPlacements;
         const selectedStickerPlacement =
             displayedStickerPlacements.find((placement) => placement.id === selectedStickerId) ?? null;
+        const selectedStickerIsStamp = selectedStickerPlacement?.renderMode === 'stamp';
         const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
         const selectedStickerMotionLocked = selectedStickerPlacement?.motionLocked === true;
         const renderEditHeader = () => (
@@ -1598,35 +1657,37 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                             >
                                 <Ionicons name="add-outline" size={14} color={detailBadgeIconColor} />
                             </Pressable>
-                            <Pressable
-                                testID="note-detail-sticker-outline-toggle"
-                                accessibilityLabel={
-                                    selectedStickerOutlineEnabled
-                                        ? t('capture.stickerOutlineDisable', 'Turn off outline')
-                                        : t('capture.stickerOutlineEnable', 'Turn on outline')
-                                }
-                                onPress={() => handleStickerAction('outline-toggle')}
-                                disabled={!selectedStickerId}
-                                style={[
-                                    styles.textCardActionPill,
-                                    styles.topOverlayActionButton,
-                                    {
-                                        backgroundColor: detailBadgeFill,
-                                        borderColor: detailBadgeBorder,
-                                    },
-                                    !selectedStickerId ? styles.textCardActionDisabled : null,
-                                ]}
-                            >
-                                <Ionicons
-                                    name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
-                                    size={14}
-                                    color={
-                                        selectedStickerOutlineEnabled && selectedStickerId
-                                            ? detailBadgeActiveIconColor
-                                            : detailBadgeIconColor
+                            {!selectedStickerIsStamp ? (
+                                <Pressable
+                                    testID="note-detail-sticker-outline-toggle"
+                                    accessibilityLabel={
+                                        selectedStickerOutlineEnabled
+                                            ? t('capture.stickerOutlineDisable', 'Turn off outline')
+                                            : t('capture.stickerOutlineEnable', 'Turn on outline')
                                     }
-                                />
-                            </Pressable>
+                                    onPress={() => handleStickerAction('outline-toggle')}
+                                    disabled={!selectedStickerId}
+                                    style={[
+                                        styles.textCardActionPill,
+                                        styles.topOverlayActionButton,
+                                        {
+                                            backgroundColor: detailBadgeFill,
+                                            borderColor: detailBadgeBorder,
+                                        },
+                                        !selectedStickerId ? styles.textCardActionDisabled : null,
+                                    ]}
+                                >
+                                    <Ionicons
+                                        name={selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline'}
+                                        size={14}
+                                        color={
+                                            selectedStickerOutlineEnabled && selectedStickerId
+                                                ? detailBadgeActiveIconColor
+                                                : detailBadgeIconColor
+                                        }
+                                    />
+                                </Pressable>
+                            ) : null}
                             <Pressable
                                 testID="note-detail-sticker-remove"
                                 onPress={() => handleStickerAction('remove')}
@@ -2464,13 +2525,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 </AppSheet>
                 <StickerSourceSheet
                     visible={showStickerSourceSheet}
-                    canPasteFromClipboard={stickerSourceCanPasteFromClipboard}
                     title={t('capture.addStickerTitle', 'Add sticker')}
-                    pasteLabel={t('capture.pasteStickerFromClipboard', 'Paste from Clipboard')}
-                    photoLabel={t('capture.chooseStickerFromPhotos', 'Choose from Photos')}
+                    subtitle={t('capture.addStickerHint', 'Choose a floating sticker or a photo stamp.')}
                     cancelLabel={t('common.cancel', 'Cancel')}
-                    onSelectClipboard={handleSelectStickerSourceClipboard}
-                    onSelectPhotos={handleSelectStickerSourcePhotos}
+                    actions={stickerSourceActions}
                     onClose={handleCloseStickerSourceSheet}
                 />
             </>
@@ -2484,13 +2542,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             </AppSheet>
             <StickerSourceSheet
                 visible={showStickerSourceSheet}
-                canPasteFromClipboard={stickerSourceCanPasteFromClipboard}
                 title={t('capture.addStickerTitle', 'Add sticker')}
-                pasteLabel={t('capture.pasteStickerFromClipboard', 'Paste from Clipboard')}
-                photoLabel={t('capture.chooseStickerFromPhotos', 'Choose from Photos')}
+                subtitle={t('capture.addStickerHint', 'Choose a floating sticker or a photo stamp.')}
                 cancelLabel={t('common.cancel', 'Cancel')}
-                onSelectClipboard={handleSelectStickerSourceClipboard}
-                onSelectPhotos={handleSelectStickerSourcePhotos}
+                actions={stickerSourceActions}
                 onClose={handleCloseStickerSourceSheet}
             />
         </>

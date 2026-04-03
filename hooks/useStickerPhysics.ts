@@ -16,12 +16,14 @@ import {
 import {
   detectStickerCollision,
   getStickerCollisionGeometry,
+  type StickerCollisionShape,
 } from './stickerCollision';
 
 interface StickerPhysicsDescriptor {
   id: string;
   anchorX: number;
   anchorY: number;
+  collisionShape: StickerCollisionShape;
   width: number;
   height: number;
   collisionRadius: number;
@@ -46,6 +48,8 @@ interface UseStickerPhysicsParams {
   placements: NoteStickerPlacement[];
   layout: StickerCanvasLayout;
   isActive: boolean;
+  sensorDriven?: boolean;
+  collisionResponse?: 'default' | 'gentle';
   motionVariant?: StickerMotionVariant;
   sizeMultiplier?: number;
   minimumBaseSize?: number;
@@ -127,6 +131,74 @@ const REST_SNAP_DISTANCE = 0.85;
 const REST_SNAP_ROTATION_DEGREES = 0.6;
 const REST_SNAP_SPEED = 18;
 const RESTORE_SETTLE_BOOST = 1.65;
+const STAMP_COLLISION_INSET = 0;
+const STAMP_ANGULAR_RESPONSE = 0.22;
+const STAMP_ANGULAR_DAMPING_MULTIPLIER = 0.82;
+const STAMP_ROTATION_RESTORE_MULTIPLIER = 1.85;
+const STAMP_MAX_ROTATION_OFFSET = 18;
+const STAMP_BOUNDARY_SPIN_FACTOR = BOUNDARY_SPIN_FACTOR * 0.34;
+
+type StickerCollisionProfile = {
+  iterations: number;
+  positionCorrection: number;
+  maxPositionCorrection: number;
+  maxImpulse: number;
+  bounceFactor: number;
+  contactDamping: number;
+  spinFactor: number;
+  maxSpin: number;
+};
+
+const DEFAULT_COLLISION_PROFILE: StickerCollisionProfile = {
+  iterations: COLLISION_ITERATIONS,
+  positionCorrection: COLLISION_POSITION_CORRECTION,
+  maxPositionCorrection: MAX_COLLISION_POSITION_CORRECTION,
+  maxImpulse: MAX_COLLISION_IMPULSE,
+  bounceFactor: COLLISION_BOUNCE_FACTOR,
+  contactDamping: COLLISION_CONTACT_DAMPING,
+  spinFactor: COLLISION_SPIN_FACTOR,
+  maxSpin: MAX_COLLISION_SPIN,
+};
+
+const STAMP_COLLISION_PROFILE: StickerCollisionProfile = {
+  iterations: 2,
+  positionCorrection: 0.5,
+  maxPositionCorrection: 12,
+  maxImpulse: 240,
+  bounceFactor: 0.14,
+  contactDamping: 0.93,
+  spinFactor: 0.06,
+  maxSpin: 4,
+};
+
+const GENTLE_COLLISION_PROFILE: StickerCollisionProfile = {
+  iterations: 2,
+  positionCorrection: 0.44,
+  maxPositionCorrection: 10,
+  maxImpulse: 180,
+  bounceFactor: 0.1,
+  contactDamping: 0.9,
+  spinFactor: 0.12,
+  maxSpin: 9,
+};
+
+function getCollisionProfileForPair(
+  left: StickerPhysicsState,
+  right: StickerPhysicsState,
+  collisionResponse: 'default' | 'gentle'
+) {
+  'worklet';
+
+  if (collisionResponse === 'gentle') {
+    return GENTLE_COLLISION_PROFILE;
+  }
+
+  if (left.collisionShape === 'rect' || right.collisionShape === 'rect') {
+    return STAMP_COLLISION_PROFILE;
+  }
+
+  return DEFAULT_COLLISION_PROFILE;
+}
 
 const PHYSICS_PROFILE: StickerMotionProfile = {
   tiltAcceleration: 1760,
@@ -273,6 +345,30 @@ function clampVelocity(sticker: StickerPhysicsState) {
   );
 }
 
+function getStickerBoundaryHalfExtents(sticker: StickerPhysicsState) {
+  'worklet';
+
+  if (sticker.collisionShape === 'rect') {
+    const rotationRadians = (sticker.rotation * Math.PI) / 180;
+    const cos = Math.cos(rotationRadians);
+    const sin = Math.sin(rotationRadians);
+
+    return {
+      halfWidth:
+        Math.abs(cos) * sticker.collisionHalfWidth +
+        Math.abs(sin) * sticker.collisionHalfHeight,
+      halfHeight:
+        Math.abs(sin) * sticker.collisionHalfWidth +
+        Math.abs(cos) * sticker.collisionHalfHeight,
+    };
+  }
+
+  return {
+    halfWidth: sticker.width / 2,
+    halfHeight: sticker.height / 2,
+  };
+}
+
 function applyBoundaryConstraint(
   sticker: StickerPhysicsState,
   layout: StickerCanvasLayout,
@@ -280,8 +376,9 @@ function applyBoundaryConstraint(
 ) {
   'worklet';
 
-  const halfWidth = sticker.width / 2;
-  const halfHeight = sticker.height / 2;
+  const { halfWidth, halfHeight } = getStickerBoundaryHalfExtents(sticker);
+  const boundarySpinFactor =
+    sticker.collisionShape === 'rect' ? STAMP_BOUNDARY_SPIN_FACTOR : BOUNDARY_SPIN_FACTOR;
   const minX = halfWidth;
   const maxX = Math.max(halfWidth, layout.width - halfWidth);
   const minY = halfHeight;
@@ -291,13 +388,13 @@ function applyBoundaryConstraint(
     sticker.x = minX;
     if (sticker.vx < 0) {
       sticker.vx = -sticker.vx * boundaryRestitution;
-      sticker.angularVelocity += Math.abs(sticker.vx) * BOUNDARY_SPIN_FACTOR;
+      sticker.angularVelocity += Math.abs(sticker.vx) * boundarySpinFactor;
     }
   } else if (sticker.x > maxX) {
     sticker.x = maxX;
     if (sticker.vx > 0) {
       sticker.vx = -sticker.vx * boundaryRestitution;
-      sticker.angularVelocity -= Math.abs(sticker.vx) * BOUNDARY_SPIN_FACTOR;
+      sticker.angularVelocity -= Math.abs(sticker.vx) * boundarySpinFactor;
     }
   }
 
@@ -305,13 +402,13 @@ function applyBoundaryConstraint(
     sticker.y = minY;
     if (sticker.vy < 0) {
       sticker.vy = -sticker.vy * boundaryRestitution;
-      sticker.angularVelocity -= Math.abs(sticker.vy) * BOUNDARY_SPIN_FACTOR;
+      sticker.angularVelocity -= Math.abs(sticker.vy) * boundarySpinFactor;
     }
   } else if (sticker.y > maxY) {
     sticker.y = maxY;
     if (sticker.vy > 0) {
       sticker.vy = -sticker.vy * boundaryRestitution;
-      sticker.angularVelocity += Math.abs(sticker.vy) * BOUNDARY_SPIN_FACTOR;
+      sticker.angularVelocity += Math.abs(sticker.vy) * boundarySpinFactor;
     }
   }
 }
@@ -320,12 +417,19 @@ export function resolveStickerCollisions(
   stickers: StickerPhysicsState[],
   layout: StickerCanvasLayout,
   collisionRestitution: number,
-  boundaryRestitution: number
+  boundaryRestitution: number,
+  collisionResponse: 'default' | 'gentle' = 'default'
 ) {
   'worklet';
+  const collisionIterations =
+    collisionResponse === 'gentle'
+      ? GENTLE_COLLISION_PROFILE.iterations
+      : stickers.some((sticker) => sticker.collisionShape === 'rect')
+        ? STAMP_COLLISION_PROFILE.iterations
+        : DEFAULT_COLLISION_PROFILE.iterations;
   const collidedStickerIndices = stickers.map(() => false);
 
-  for (let iteration = 0; iteration < COLLISION_ITERATIONS; iteration += 1) {
+  for (let iteration = 0; iteration < collisionIterations; iteration += 1) {
     for (let leftIndex = 0; leftIndex < stickers.length; leftIndex += 1) {
       for (let rightIndex = leftIndex + 1; rightIndex < stickers.length; rightIndex += 1) {
         const left = stickers[leftIndex];
@@ -337,11 +441,12 @@ export function resolveStickerCollisions(
         }
         collidedStickerIndices[leftIndex] = true;
         collidedStickerIndices[rightIndex] = true;
+        const collisionProfile = getCollisionProfileForPair(left, right, collisionResponse);
         const { normalX, normalY, overlap } = collision;
         const correction = clamp(
-          Math.max(overlap - COLLISION_POSITION_SLOP, 0) * COLLISION_POSITION_CORRECTION,
+          Math.max(overlap - COLLISION_POSITION_SLOP, 0) * collisionProfile.positionCorrection,
           0,
-          MAX_COLLISION_POSITION_CORRECTION
+          collisionProfile.maxPositionCorrection
         ) / 2;
 
         if (correction > 0) {
@@ -357,9 +462,9 @@ export function resolveStickerCollisions(
 
         if (separatingVelocity < 0) {
           const impulse = clamp(
-            (-(1 + collisionRestitution * COLLISION_BOUNCE_FACTOR) * separatingVelocity) / 2,
+            (-(1 + collisionRestitution * collisionProfile.bounceFactor) * separatingVelocity) / 2,
             0,
-            MAX_COLLISION_IMPULSE
+            collisionProfile.maxImpulse
           );
           left.vx -= impulse * normalX;
           left.vy -= impulse * normalY;
@@ -370,16 +475,16 @@ export function resolveStickerCollisions(
           const tangentY = normalX;
           const tangentialVelocity = relativeVelocityX * tangentX + relativeVelocityY * tangentY;
           const spinImpulse = clamp(
-            tangentialVelocity * COLLISION_SPIN_FACTOR,
-            -MAX_COLLISION_SPIN,
-            MAX_COLLISION_SPIN
+            tangentialVelocity * collisionProfile.spinFactor,
+            -collisionProfile.maxSpin,
+            collisionProfile.maxSpin
           );
           left.angularVelocity -= spinImpulse;
           right.angularVelocity += spinImpulse;
-          left.vx *= COLLISION_CONTACT_DAMPING;
-          left.vy *= COLLISION_CONTACT_DAMPING;
-          right.vx *= COLLISION_CONTACT_DAMPING;
-          right.vy *= COLLISION_CONTACT_DAMPING;
+          left.vx *= collisionProfile.contactDamping;
+          left.vy *= collisionProfile.contactDamping;
+          right.vx *= collisionProfile.contactDamping;
+          right.vy *= collisionProfile.contactDamping;
         }
         clampVelocity(left);
         clampVelocity(right);
@@ -401,6 +506,8 @@ export function useStickerPhysics({
   placements,
   layout,
   isActive,
+  sensorDriven = true,
+  collisionResponse = 'default',
   motionVariant = 'physics',
   sizeMultiplier = 1,
   minimumBaseSize = 68,
@@ -423,20 +530,27 @@ export function useStickerPhysics({
     () =>
       sortStickerPlacements(placements).map((placement) => {
         const dimensions = getStickerDimensions(placement, layout, sizeMultiplier, minimumBaseSize);
+        const isStamp = placement.renderMode === 'stamp';
         const collisionGeometry = getStickerCollisionGeometry(
           dimensions.width,
           dimensions.height,
-          collisionInset === undefined
-            ? undefined
-            : {
+          collisionInset !== undefined
+            ? {
                 horizontalInset: collisionInset,
                 verticalInset: collisionInset,
               }
+            : isStamp
+              ? {
+                  horizontalInset: STAMP_COLLISION_INSET,
+                  verticalInset: STAMP_COLLISION_INSET,
+                }
+              : undefined
         );
         return {
           id: placement.id,
           anchorX: placement.x * layout.width,
           anchorY: placement.y * layout.height,
+          collisionShape: isStamp ? 'rect' : 'ellipse',
           width: dimensions.width,
           height: dimensions.height,
           collisionRadius: collisionGeometry.collisionRadius,
@@ -499,12 +613,12 @@ export function useStickerPhysics({
     const accelerometer = accelerometerSensor.sensor.value;
     const tiltOverride = debugTiltOverride?.value;
     const normalizedGravityX = clamp(
-      tiltOverride?.enabled ? tiltOverride.x : sensor.x / 9.81,
+      tiltOverride?.enabled ? tiltOverride.x : sensorDriven ? sensor.x / 9.81 : 0,
       -MAX_SENSOR_COMPONENT,
       MAX_SENSOR_COMPONENT
     );
     const normalizedGravityY = clamp(
-      tiltOverride?.enabled ? tiltOverride.y : -sensor.y / 9.81,
+      tiltOverride?.enabled ? tiltOverride.y : sensorDriven ? -sensor.y / 9.81 : 0,
       -MAX_SENSOR_COMPONENT,
       MAX_SENSOR_COMPONENT
     );
@@ -512,13 +626,13 @@ export function useStickerPhysics({
       normalizedGravityX * normalizedGravityX + normalizedGravityY * normalizedGravityY
     );
     const accelerometerMagnitude = Math.sqrt(
-      Math.pow(accelerometer.x / 9.81, 2) +
-        Math.pow(accelerometer.y / 9.81, 2) +
-        Math.pow(accelerometer.z / 9.81, 2)
+      Math.pow((sensorDriven ? accelerometer.x : 0) / 9.81, 2) +
+        Math.pow((sensorDriven ? accelerometer.y : 0) / 9.81, 2) +
+        Math.pow((sensorDriven ? accelerometer.z : 9.81) / 9.81, 2)
     );
     const shakeMagnitude = Math.abs(accelerometerMagnitude - 1);
     const previousGravityValue = previousGravity.value;
-    const gravityDelta = previousGravityValue.initialized
+    const gravityDelta = sensorDriven && previousGravityValue.initialized
       ? Math.hypot(
           normalizedGravityX - previousGravityValue.x,
           normalizedGravityY - previousGravityValue.y
@@ -547,6 +661,12 @@ export function useStickerPhysics({
 
     for (let index = 0; index < nextStates.length; index += 1) {
       const sticker = nextStates[index];
+      const isStamp = sticker.collisionShape === 'rect';
+      const angularResponse = isStamp ? STAMP_ANGULAR_RESPONSE : 1;
+      const rotationRestoreMultiplier = isStamp ? STAMP_ROTATION_RESTORE_MULTIPLIER : 1;
+      const stickerAngularDamping = isStamp
+        ? angularDamping * STAMP_ANGULAR_DAMPING_MULTIPLIER
+        : angularDamping;
       const surfaceY = layout.height * profile.waterLineRatio;
       const bobOffsetY =
         profile.bobAmplitude > 0
@@ -635,16 +755,30 @@ export function useStickerPhysics({
         (normalizedGravityX * sticker.vy - normalizedGravityY * sticker.vx) *
         0.0024 *
         motionAmount *
+        angularResponse *
         dt;
       sticker.angularVelocity +=
         (sticker.baseRotation - sticker.rotation) *
         profile.rotationRestoreAcceleration *
         Math.max(0.18, flatRestoreFactor + (1 - motionAmount) * 0.35) *
+        rotationRestoreMultiplier *
         dt;
-      sticker.angularVelocity += (orbitalX - orbitalY) * 0.006 * dt;
-      sticker.angularVelocity *= angularDamping;
+      sticker.angularVelocity += (orbitalX - orbitalY) * 0.006 * dt * angularResponse;
+      sticker.angularVelocity *= stickerAngularDamping;
       clampVelocity(sticker);
       sticker.rotation += sticker.angularVelocity * dt;
+
+      if (isStamp) {
+        const relativeRotation = clamp(
+          sticker.rotation - sticker.baseRotation,
+          -STAMP_MAX_ROTATION_OFFSET,
+          STAMP_MAX_ROTATION_OFFSET
+        );
+        if (relativeRotation !== sticker.rotation - sticker.baseRotation) {
+          sticker.rotation = sticker.baseRotation + relativeRotation;
+          sticker.angularVelocity *= 0.4;
+        }
+      }
 
       const normalizedVx = clamp(Math.abs(sticker.vx) / profile.velocityNormalization, 0, 1);
       const normalizedVy = clamp(Math.abs(sticker.vy) / profile.velocityNormalization, 0, 1);
@@ -668,7 +802,10 @@ export function useStickerPhysics({
       sticker.jellyScaleX += (targetJellyX - sticker.jellyScaleX) * jellyStep;
       sticker.jellyScaleY += (targetJellyY - sticker.jellyScaleY) * jellyStep;
       sticker.rotation +=
-        (sticker.vx - sticker.vy) * profile.jellyRotationFactor * profile.jellyRotationResponse;
+        (sticker.vx - sticker.vy) *
+        profile.jellyRotationFactor *
+        profile.jellyRotationResponse *
+        angularResponse;
 
       if (motionAmount < REST_SNAP_ACTIVITY_THRESHOLD) {
         if (
@@ -703,7 +840,8 @@ export function useStickerPhysics({
         nextStates,
         layout,
         profile.collisionRestitution,
-        profile.boundaryRestitution
+        profile.boundaryRestitution,
+        collisionResponse
       );
     }
     physicsState.value = nextStates;

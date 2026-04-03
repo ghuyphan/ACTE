@@ -17,6 +17,7 @@ import {
 } from '../utils/supabase';
 
 export type StickerSource = 'import';
+export type StickerRenderMode = 'default' | 'stamp';
 export type StickerImportErrorCode =
   | 'unsupported-format'
   | 'file-unavailable'
@@ -34,6 +35,7 @@ export interface StickerAsset {
   createdAt: string;
   updatedAt: string | null;
   source: StickerSource;
+  suggestedRenderMode?: StickerRenderMode;
 }
 
 export interface StickerPlacement {
@@ -47,6 +49,7 @@ export interface StickerPlacement {
   opacity: number;
   outlineEnabled?: boolean;
   motionLocked?: boolean;
+  renderMode?: StickerRenderMode;
 }
 
 export interface NoteStickerPlacement extends StickerPlacement {
@@ -57,6 +60,14 @@ export interface StickerImportSource {
   uri: string;
   mimeType?: string | null;
   name?: string | null;
+}
+
+export interface StickerImportOptions {
+  requiresTransparency?: boolean;
+}
+
+export interface CreateStickerPlacementOptions {
+  renderMode?: StickerRenderMode;
 }
 
 export class StickerImportError extends Error {
@@ -97,7 +108,13 @@ export const SHARED_STICKER_CACHE_DIRECTORY = FileSystem.cacheDirectory
   : null;
 const NOTE_STICKER_MEDIA_PREFIX = 'stickers';
 const STICKER_UPLOAD_RETRY_DELAYS_MS = [250];
-const SUPPORTED_STICKER_MIME_TYPES = new Set(['image/png', 'image/webp']);
+const SUPPORTED_STICKER_MIME_TYPES = new Set([
+  'image/png',
+  'image/webp',
+  'image/jpeg',
+  'image/heic',
+  'image/heif',
+]);
 const MAX_STICKER_FILE_SIZE_BYTES = 450 * 1024;
 const MAX_STICKER_DIMENSION_PX = 1024;
 const STICKER_IMPORT_OPTIMIZATION_PRESETS = [
@@ -107,7 +124,12 @@ const STICKER_IMPORT_OPTIMIZATION_PRESETS = [
 ];
 
 function normalizeMimeType(value: string | null | undefined) {
-  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'image/jpg') {
+    return 'image/jpeg';
+  }
+
+  return normalized;
 }
 
 function getMimeTypeFromName(name: string | null | undefined) {
@@ -124,11 +146,35 @@ function getMimeTypeFromName(name: string | null | undefined) {
     return 'image/jpeg';
   }
 
+  if (normalizedName.endsWith('.heic')) {
+    return 'image/heic';
+  }
+
+  if (normalizedName.endsWith('.heif')) {
+    return 'image/heif';
+  }
+
   return '';
 }
 
 function getStickerFileExtension(mimeType: string) {
-  return mimeType === 'image/webp' ? 'webp' : 'png';
+  if (mimeType === 'image/webp') {
+    return 'webp';
+  }
+
+  if (mimeType === 'image/jpeg') {
+    return 'jpg';
+  }
+
+  if (mimeType === 'image/heic') {
+    return 'heic';
+  }
+
+  if (mimeType === 'image/heif') {
+    return 'heif';
+  }
+
+  return 'png';
 }
 
 function parsePngHasTransparency(bytes: Uint8Array) {
@@ -227,6 +273,10 @@ function hasTransparency(base64Data: string, mimeType: string) {
   return false;
 }
 
+function mimeTypeSupportsTransparencyDetection(mimeType: string) {
+  return mimeType === 'image/png' || mimeType === 'image/webp';
+}
+
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
 }
@@ -279,6 +329,7 @@ function mapStickerAsset(row: StickerAssetRow): StickerAsset {
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? null,
     source: row.source,
+    suggestedRenderMode: undefined,
   };
 }
 
@@ -448,7 +499,11 @@ async function ensureSharedStickerCacheDirectory() {
   return SHARED_STICKER_CACHE_DIRECTORY;
 }
 
-async function validateStickerFile(uri: string, mimeType: string) {
+async function validateStickerFile(
+  uri: string,
+  mimeType: string,
+  options: StickerImportOptions = {}
+): Promise<{ suggestedRenderMode: StickerRenderMode }> {
   if (!SUPPORTED_STICKER_MIME_TYPES.has(mimeType)) {
     throw new StickerImportError('unsupported-format');
   }
@@ -458,13 +513,33 @@ async function validateStickerFile(uri: string, mimeType: string) {
     throw new StickerImportError('file-unavailable');
   }
 
+  if (!mimeTypeSupportsTransparencyDetection(mimeType)) {
+    if (options.requiresTransparency) {
+      throw new StickerImportError('missing-transparency');
+    }
+
+    return {
+      suggestedRenderMode: 'stamp',
+    };
+  }
+
   const base64Data = await FileSystem.readAsStringAsync(uri, {
     encoding: FileSystem.EncodingType.Base64,
   });
 
-  if (!base64Data.trim() || !hasTransparency(base64Data, mimeType)) {
+  if (!base64Data.trim()) {
+    throw new StickerImportError('file-unavailable');
+  }
+
+  const suggestedRenderMode = hasTransparency(base64Data, mimeType) ? 'default' : 'stamp';
+
+  if (options.requiresTransparency && suggestedRenderMode !== 'default') {
     throw new StickerImportError('missing-transparency');
   }
+
+  return {
+    suggestedRenderMode,
+  };
 }
 
 async function uploadStickerBytesWithRetry(
@@ -524,6 +599,9 @@ export function parseNoteStickerPlacements(
           typeof maybePlacement.outlineEnabled === 'boolean') &&
         (typeof maybePlacement.motionLocked === 'undefined' ||
           typeof maybePlacement.motionLocked === 'boolean') &&
+        (typeof maybePlacement.renderMode === 'undefined' ||
+          maybePlacement.renderMode === 'default' ||
+          maybePlacement.renderMode === 'stamp') &&
         Boolean(
           maybePlacement.asset &&
             typeof maybePlacement.asset === 'object' &&
@@ -540,14 +618,20 @@ export function parseNoteStickerPlacements(
 
 export function createStickerPlacement(
   asset: StickerAsset,
-  existingPlacements: NoteStickerPlacement[] = []
+  existingPlacements: NoteStickerPlacement[] = [],
+  options: CreateStickerPlacementOptions = {}
 ): NoteStickerPlacement {
   const nextZIndex = existingPlacements.reduce((maxValue, placement) => Math.max(maxValue, placement.zIndex), 0) + 1;
   const coordinates = getNextStickerPlacementCoordinates(existingPlacements);
+  const {
+    suggestedRenderMode,
+    ...placementAsset
+  } = asset;
+  const renderMode = options.renderMode ?? (suggestedRenderMode === 'stamp' ? 'stamp' : 'default');
 
   return {
     id: generateStickerPlacementId(),
-    assetId: asset.id,
+    assetId: placementAsset.id,
     x: coordinates.x,
     y: coordinates.y,
     scale: 1,
@@ -556,7 +640,8 @@ export function createStickerPlacement(
     opacity: 1,
     outlineEnabled: true,
     motionLocked: false,
-    asset,
+    renderMode,
+    asset: placementAsset,
   };
 }
 
@@ -575,6 +660,7 @@ export function normalizeStickerPlacements(
       opacity: clamp01(placement.opacity),
       outlineEnabled: placement.outlineEnabled !== false,
       motionLocked: placement.motionLocked === true,
+      renderMode: placement.renderMode === 'stamp' ? 'stamp' : 'default',
     }));
 }
 
@@ -635,6 +721,23 @@ export function setStickerPlacementMotionLocked(
         ? {
             ...placement,
             motionLocked,
+          }
+        : placement
+    )
+  );
+}
+
+export function setStickerPlacementRenderMode(
+  placements: NoteStickerPlacement[],
+  placementId: string,
+  renderMode: StickerRenderMode
+) {
+  return normalizeStickerPlacements(
+    placements.map((placement) =>
+      placement.id === placementId
+        ? {
+            ...placement,
+            renderMode,
           }
         : placement
     )
@@ -746,14 +849,17 @@ export async function upsertStickerAsset(asset: StickerAsset, txn?: SQLiteTransa
   );
 }
 
-export async function importStickerAsset(source: StickerImportSource): Promise<StickerAsset> {
+export async function importStickerAsset(
+  source: StickerImportSource,
+  options: StickerImportOptions = {}
+): Promise<StickerAsset> {
   const sourceUri = typeof source.uri === 'string' ? source.uri.trim() : '';
   if (!sourceUri) {
     throw new Error('Pick a sticker file to continue.');
   }
 
   const mimeType = normalizeMimeType(source.mimeType) || getMimeTypeFromName(source.name);
-  await validateStickerFile(sourceUri, mimeType);
+  const validation = await validateStickerFile(sourceUri, mimeType, options);
   const preparedSticker = await optimizeStickerForImport(sourceUri, mimeType);
 
   try {
@@ -782,6 +888,7 @@ export async function importStickerAsset(source: StickerImportSource): Promise<S
       createdAt: now,
       updatedAt: null,
       source: 'import',
+      suggestedRenderMode: validation.suggestedRenderMode,
     };
 
     await upsertStickerAsset(asset);

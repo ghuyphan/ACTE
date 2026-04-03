@@ -1,7 +1,51 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
+import { View } from 'react-native';
 import NoteStickerCanvas from '../components/notes/NoteStickerCanvas';
 import type { NoteStickerPlacement } from '../services/noteStickers';
+
+let mockStampCanvasRenderCount = 0;
+
+jest.mock('@shopify/react-native-skia', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  const MockCanvas = ({ children, testID, ...props }: any) => {
+    if (testID?.startsWith('note-sticker-stamp-')) {
+      mockStampCanvasRenderCount += 1;
+    }
+    return (
+      <View testID={testID} {...props}>
+        {children}
+      </View>
+    );
+  };
+
+  const MockGroup = ({ children }: any) => <>{children}</>;
+  const MockPath = (props: any) => <View {...props} />;
+  const MockImage = (props: any) => <View {...props} />;
+
+  return {
+    Canvas: MockCanvas,
+    Group: MockGroup,
+    Image: MockImage,
+    Path: MockPath,
+    PathOp: {
+      Difference: 'difference',
+    },
+    Skia: {
+      Path: {
+        Make: () => ({
+          addRRect: jest.fn(),
+          addRect: jest.fn(),
+          addCircle: jest.fn(),
+          op: jest.fn(),
+        }),
+      },
+    },
+    useImage: jest.fn(() => ({ mock: 'image' })),
+  };
+});
 
 jest.mock('expo-image', () => {
   const React = require('react');
@@ -40,6 +84,10 @@ const stickerPlacement: NoteStickerPlacement = {
 };
 
 describe('NoteStickerCanvas', () => {
+  beforeEach(() => {
+    mockStampCanvasRenderCount = 0;
+  });
+
   it('renders a white outline layer for each sticker', () => {
     const { getByTestId } = render(<NoteStickerCanvas placements={[stickerPlacement]} />);
 
@@ -52,6 +100,68 @@ describe('NoteStickerCanvas', () => {
     );
 
     expect(queryByTestId('note-sticker-outline-placement-1')).toBeNull();
+  });
+
+  it('uses the stamp artwork without the generated outline in stamp mode', () => {
+    const { queryByTestId, getByTestId } = render(
+      <NoteStickerCanvas placements={[{ ...stickerPlacement, renderMode: 'stamp' }]} />
+    );
+
+    expect(queryByTestId('note-sticker-outline-placement-1')).toBeNull();
+    expect(getByTestId('note-sticker-stamp-placement-1')).toBeTruthy();
+  });
+
+  it('keeps stamp stickers in the normal compositing path', () => {
+    const { getByTestId } = render(
+      <NoteStickerCanvas placements={[{ ...stickerPlacement, renderMode: 'stamp' }]} />
+    );
+
+    expect(getByTestId('note-sticker-stamp-paper-placement-1').props.shouldRasterizeIOS).toBeUndefined();
+    expect(
+      getByTestId('note-sticker-stamp-paper-placement-1').props.renderToHardwareTextureAndroid
+    ).toBeUndefined();
+  });
+
+  it('does not rerender stamp artwork when editable toggles without placement changes', () => {
+    const placements = [{ ...stickerPlacement, renderMode: 'stamp' as const }];
+    const { rerender } = render(<NoteStickerCanvas placements={placements} editable={false} />);
+
+    expect(mockStampCanvasRenderCount).toBe(1);
+
+    rerender(<NoteStickerCanvas placements={placements} editable />);
+    rerender(<NoteStickerCanvas placements={placements} editable={false} />);
+
+    expect(mockStampCanvasRenderCount).toBe(1);
+  });
+
+  it('does not rerender stamp artwork for repeated identical layout events', () => {
+    const placements = [{ ...stickerPlacement, renderMode: 'stamp' as const }];
+    const view = render(<NoteStickerCanvas placements={placements} />);
+    const layoutHost = view.UNSAFE_queryAllByType(View).find((node) => typeof node.props.onLayout === 'function');
+
+    expect(layoutHost).toBeTruthy();
+
+    fireEvent(layoutHost!, 'layout', {
+      nativeEvent: {
+        layout: {
+          width: 300,
+          height: 300,
+        },
+      },
+    });
+
+    expect(mockStampCanvasRenderCount).toBe(2);
+
+    fireEvent(layoutHost!, 'layout', {
+      nativeEvent: {
+        layout: {
+          width: 300,
+          height: 300,
+        },
+      },
+    });
+
+    expect(mockStampCanvasRenderCount).toBe(2);
   });
 
   it('lets editable canvases react to empty-space taps', () => {

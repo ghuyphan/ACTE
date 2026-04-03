@@ -137,6 +137,7 @@ function buildStickerPileItemsFromUsage(
     assetWidth: sticker.assetWidth,
     assetHeight: sticker.assetHeight,
     outlineEnabled: sticker.outlineEnabled,
+    renderMode: sticker.renderMode,
   }));
 }
 

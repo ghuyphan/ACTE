@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { useContext, type ReactNode } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Sheet, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 
@@ -27,6 +28,8 @@ export interface AppSheetScaffoldProps {
   contentContainerStyle?: React.ComponentProps<typeof View>['style'];
   style?: React.ComponentProps<typeof View>['style'];
   useHorizontalPadding?: boolean;
+  contentBottomPaddingWhenFooter?: number;
+  footerTopSpacing?: number;
 }
 
 function HeaderActionButton({ action }: { action?: AppSheetHeaderAction }) {
@@ -76,8 +79,11 @@ export default function AppSheetScaffold({
   contentContainerStyle,
   style,
   useHorizontalPadding = true,
+  contentBottomPaddingWhenFooter = 12,
+  footerTopSpacing = 8,
 }: AppSheetScaffoldProps) {
   const { colors } = useTheme();
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const isAndroid = Platform.OS === 'android';
   const horizontalPadding =
     Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
@@ -87,6 +93,13 @@ export default function AppSheetScaffold({
     Platform.OS === 'ios' ? Sheet.ios.headerBottomSpacing : Sheet.android.headerBottomSpacing;
   const bottomPadding =
     Platform.OS === 'ios' ? Sheet.ios.bottomPadding : Sheet.android.bottomPadding;
+  const resolvedBottomPadding =
+    bottomPadding +
+    (insets.bottom > 0
+      ? insets.bottom
+      : Platform.OS === 'android'
+        ? Sheet.android.comfortBottomPadding
+        : 0);
   const hasHeader =
     headerVariant !== 'none' && (Boolean(title) || Boolean(subtitle) || Boolean(headerTop));
 
@@ -97,7 +110,7 @@ export default function AppSheetScaffold({
         styles.scrollContent,
         {
           paddingHorizontal: useHorizontalPadding ? horizontalPadding : 0,
-          paddingBottom: footer ? 12 : bottomPadding,
+          paddingBottom: footer ? contentBottomPaddingWhenFooter : resolvedBottomPadding,
         },
         contentContainerStyle,
       ]}
@@ -110,7 +123,7 @@ export default function AppSheetScaffold({
         styles.body,
         {
           paddingHorizontal: useHorizontalPadding ? horizontalPadding : 0,
-          paddingBottom: footer ? 12 : bottomPadding,
+          paddingBottom: footer ? contentBottomPaddingWhenFooter : resolvedBottomPadding,
         },
         contentContainerStyle,
       ]}
@@ -168,8 +181,9 @@ export default function AppSheetScaffold({
           style={[
             styles.footer,
             {
+              paddingTop: footerTopSpacing,
               paddingHorizontal: horizontalPadding,
-              paddingBottom: bottomPadding,
+              paddingBottom: resolvedBottomPadding,
             },
           ]}
         >

@@ -4,6 +4,7 @@ import {
   Group,
   Image as SkiaImage,
   Paint,
+  Path,
   type Transforms3d,
   useImage,
 } from '@shopify/react-native-skia';
@@ -36,6 +37,12 @@ import {
   sortStickerPlacements,
   type StickerCanvasLayout,
 } from './stickerCanvasMetrics';
+import {
+  createStampFramePath,
+  getStampFrameMetrics,
+  STAMP_OUTLINE_COLOR,
+  STAMP_PAPER_BORDER_COLOR,
+} from './stampFrameMetrics';
 
 interface DynamicStickerCanvasProps {
   placements: NoteStickerPlacement[];
@@ -80,9 +87,17 @@ function StickerSprite({
   jellyTransform,
 }: StickerSpriteProps) {
   const image = useImage(placement.asset.localUri);
+  const stampMetrics =
+    placement.renderMode === 'stamp' ? getStampFrameMetrics(width, height) : null;
+  const stampPath = useMemo(
+    () => (stampMetrics ? createStampFramePath(stampMetrics) : null),
+    [stampMetrics]
+  );
   const outlineOffsets = getStickerOutlineOffsets(outlineSize, {
     preferContinuous: PREFER_CONTINUOUS_OUTLINE,
   });
+  const stampOutlineWidth = stampMetrics ? Math.max(2.4, stampMetrics.perforationRadius * 0.66) : 0;
+  const stampBorderWidth = stampMetrics ? Math.max(1, stampMetrics.perforationRadius * 0.18) : 0;
 
   if (!image) {
     return null;
@@ -91,7 +106,7 @@ function StickerSprite({
   return (
     <Group opacity={opacity} transform={motionTransform}>
       <Group transform={jellyTransform}>
-        {placement.outlineEnabled !== false ? (
+        {placement.renderMode !== 'stamp' && placement.outlineEnabled !== false ? (
           <Group
             opacity={0.94}
             layer={
@@ -114,14 +129,55 @@ function StickerSprite({
             ))}
           </Group>
         ) : null}
-        <SkiaImage
-          image={image}
-          fit="contain"
-          x={-width / 2}
-          y={-height / 2}
-          width={width}
-          height={height}
-        />
+        {stampMetrics && stampPath ? (
+          <Group>
+            <Group
+              clip={stampPath}
+              transform={[
+                { translateX: -stampMetrics.outerWidth / 2 },
+                { translateY: -stampMetrics.outerHeight / 2 },
+              ]}
+            >
+              <SkiaImage
+                image={image}
+                fit="cover"
+                x={0}
+                y={0}
+                width={stampMetrics.outerWidth}
+                height={stampMetrics.outerHeight}
+              />
+            </Group>
+            <Path
+              path={stampPath}
+              color={STAMP_OUTLINE_COLOR}
+              style="stroke"
+              strokeWidth={stampOutlineWidth}
+              transform={[
+                { translateX: -stampMetrics.outerWidth / 2 },
+                { translateY: -stampMetrics.outerHeight / 2 },
+              ]}
+            />
+            <Path
+              path={stampPath}
+              color={STAMP_PAPER_BORDER_COLOR}
+              style="stroke"
+              strokeWidth={stampBorderWidth}
+              transform={[
+                { translateX: -stampMetrics.outerWidth / 2 },
+                { translateY: -stampMetrics.outerHeight / 2 },
+              ]}
+            />
+          </Group>
+        ) : (
+          <SkiaImage
+            image={image}
+            fit="contain"
+            x={-width / 2}
+            y={-height / 2}
+            width={width}
+            height={height}
+          />
+        )}
       </Group>
     </Group>
   );

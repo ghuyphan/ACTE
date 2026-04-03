@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { type ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Sheet, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
@@ -6,26 +7,29 @@ import AppSheet from './AppSheet';
 import AppSheetScaffold from './AppSheetScaffold';
 import SheetFooterButton from './SheetFooterButton';
 
+export interface StickerSourceSheetAction {
+  key: string;
+  iconName: ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  description?: string;
+  onPress: () => void;
+  testID?: string;
+}
+
 interface StickerSourceSheetProps {
   visible: boolean;
-  canPasteFromClipboard: boolean;
   title: string;
-  pasteLabel: string;
-  photoLabel: string;
+  subtitle?: string;
   cancelLabel: string;
-  onSelectClipboard: () => void;
-  onSelectPhotos: () => void;
+  actions: StickerSourceSheetAction[];
   onClose: () => void;
 }
 
 function StickerSourceSheetBody({
-  canPasteFromClipboard,
   title,
-  pasteLabel,
-  photoLabel,
+  subtitle,
   cancelLabel,
-  onSelectClipboard,
-  onSelectPhotos,
+  actions,
   onClose,
 }: Omit<StickerSourceSheetProps, 'visible'>) {
   const { colors } = useTheme();
@@ -38,7 +42,7 @@ function StickerSourceSheetBody({
     <AppSheetScaffold
       headerVariant="standard"
       title={title}
-      subtitle={canPasteFromClipboard ? pasteLabel : photoLabel}
+      subtitle={subtitle}
       useHorizontalPadding={false}
       footer={(
         <View style={styles.footer}>
@@ -51,35 +55,32 @@ function StickerSourceSheetBody({
       )}
     >
       <View>
-        {canPasteFromClipboard ? (
-          <>
+        {actions.map((action, index) => (
+          <View key={action.key}>
             <Pressable
               accessibilityRole="button"
-              onPress={onSelectClipboard}
+              onPress={action.onPress}
               style={({ pressed }) => [styles.optionRow, pressed ? styles.optionRowPressed : null]}
-              testID="sticker-source-option-clipboard"
+              testID={action.testID}
             >
               <View style={[styles.optionIconBadge, { backgroundColor: `${accentColor}18` }]}>
-                <Ionicons name="clipboard-outline" size={18} color={accentColor} />
+                <Ionicons name={action.iconName} size={18} color={accentColor} />
               </View>
-              <Text style={[styles.optionLabel, { color: primaryTextColor }]}>{pasteLabel}</Text>
+              <View style={styles.optionContent}>
+                <Text style={[styles.optionLabel, { color: primaryTextColor }]}>{action.label}</Text>
+                {action.description ? (
+                  <Text style={[styles.optionDescription, { color: secondaryTextColor }]}>
+                    {action.description}
+                  </Text>
+                ) : null}
+              </View>
               <Ionicons name="chevron-forward" size={18} color={secondaryTextColor} />
             </Pressable>
-            <View style={[styles.optionDivider, { backgroundColor: borderColor }]} />
-          </>
-        ) : null}
-        <Pressable
-          accessibilityRole="button"
-          onPress={onSelectPhotos}
-          style={({ pressed }) => [styles.optionRow, pressed ? styles.optionRowPressed : null]}
-          testID="sticker-source-option-photos"
-        >
-          <View style={[styles.optionIconBadge, { backgroundColor: `${accentColor}18` }]}>
-            <Ionicons name="images-outline" size={18} color={accentColor} />
+            {index < actions.length - 1 ? (
+              <View style={[styles.optionDivider, { backgroundColor: borderColor }]} />
+            ) : null}
           </View>
-          <Text style={[styles.optionLabel, { color: primaryTextColor }]}>{photoLabel}</Text>
-          <Ionicons name="chevron-forward" size={18} color={secondaryTextColor} />
-        </Pressable>
+        ))}
       </View>
     </AppSheetScaffold>
   );
@@ -87,25 +88,19 @@ function StickerSourceSheetBody({
 
 export default function StickerSourceSheet({
   visible,
-  canPasteFromClipboard,
   title,
-  pasteLabel,
-  photoLabel,
+  subtitle,
   cancelLabel,
-  onSelectClipboard,
-  onSelectPhotos,
+  actions,
   onClose,
 }: StickerSourceSheetProps) {
   return (
     <AppSheet visible={visible} onClose={onClose}>
       <StickerSourceSheetBody
-        canPasteFromClipboard={canPasteFromClipboard}
         title={title}
-        pasteLabel={pasteLabel}
-        photoLabel={photoLabel}
+        subtitle={subtitle}
         cancelLabel={cancelLabel}
-        onSelectClipboard={onSelectClipboard}
-        onSelectPhotos={onSelectPhotos}
+        actions={actions}
         onClose={onClose}
       />
     </AppSheet>
@@ -132,8 +127,16 @@ const styles = StyleSheet.create({
   },
   optionLabel: {
     ...Typography.body,
-    flex: 1,
     fontWeight: '600',
+  },
+  optionContent: {
+    flex: 1,
+    gap: 2,
+  },
+  optionDescription: {
+    ...Typography.pill,
+    fontWeight: '500',
+    lineHeight: 18,
   },
   optionDivider: {
     height: StyleSheet.hairlineWidth,
