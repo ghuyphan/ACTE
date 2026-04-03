@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import {
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -11,6 +12,10 @@ import { Radii, Typography } from '../../../constants/theme';
 import { useStickerPhysics, type StickerPhysicsState } from '../../../hooks/useStickerPhysics';
 import { useTheme } from '../../../hooks/useTheme';
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
+import {
+  getStickerOutlineOffsets,
+  getStickerOutlineSize,
+} from '../stickerCanvasMetrics';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
 
 export interface RecapStickerPileItem {
@@ -18,6 +23,9 @@ export interface RecapStickerPileItem {
   kind: 'sticker' | 'photo';
   previewUri: string;
   count: number;
+  assetWidth?: number;
+  assetHeight?: number;
+  outlineEnabled?: boolean;
   isLivePhoto?: boolean;
   pairedVideoUri?: string | null;
 }
@@ -35,7 +43,15 @@ type PilePosition = {
   rotate: number;
 };
 
+type PileItemMetrics = {
+  width: number;
+  height: number;
+  outlineSize: number;
+};
+
 const RECAP_MIN_PHYSICS_BASE = 52;
+const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
+const PREFER_CONTINUOUS_OUTLINE = Platform.OS === 'android';
 
 function getPilePositions(count: number): PilePosition[] {
   if (count <= 1) {
@@ -89,22 +105,60 @@ function getPilePositions(count: number): PilePosition[] {
   ];
 }
 
+function getItemAssetSize(item: RecapStickerPileItem) {
+  if (item.kind === 'sticker') {
+    return {
+      width: Math.max(item.assetWidth ?? 100, 1),
+      height: Math.max(item.assetHeight ?? 100, 1),
+    };
+  }
+
+  return {
+    width: 100,
+    height: 100,
+  };
+}
+
+function getPileItemMetrics(item: RecapStickerPileItem, size: number): PileItemMetrics {
+  if (item.kind === 'photo') {
+    return {
+      width: size,
+      height: size,
+      outlineSize: 0,
+    };
+  }
+
+  const assetSize = getItemAssetSize(item);
+  const longestEdge = Math.max(assetSize.width, assetSize.height, 1);
+  const width = assetSize.width * (size / longestEdge);
+  const height = assetSize.height * (size / longestEdge);
+
+  return {
+    width,
+    height,
+    outlineSize: getStickerOutlineSize(width, height),
+  };
+}
+
 function buildPlacement(
   item: RecapStickerPileItem,
   position: PilePosition,
   width: number,
   height: number,
-  collisionSize: number
+  metrics: PileItemMetrics,
+  zIndex: number
 ): NoteStickerPlacement {
   const baseSize = Math.max(RECAP_MIN_PHYSICS_BASE, Math.min(width, height) * 0.3);
-  const scale = collisionSize / Math.max(baseSize, 1);
+  const assetSize = getItemAssetSize(item);
+  const scale = position.size / Math.max(baseSize, 1);
+  const topInset = 6;
   const centerX = Math.min(
-    Math.max(position.x * width, collisionSize / 2),
-    Math.max(collisionSize / 2, width - collisionSize / 2)
+    Math.max(position.x * width, metrics.width / 2),
+    Math.max(metrics.width / 2, width - metrics.width / 2)
   );
   const centerY = Math.min(
-    Math.max(position.y, collisionSize / 2),
-    Math.max(collisionSize / 2, height - collisionSize / 2)
+    Math.max(position.y, metrics.height / 2 + topInset),
+    Math.max(metrics.height / 2 + topInset, height - metrics.height / 2 - 6)
   );
 
   return {
@@ -114,9 +168,9 @@ function buildPlacement(
     y: centerY / Math.max(height, 1),
     scale,
     rotation: position.rotate,
-    zIndex: 1,
+    zIndex,
     opacity: 1,
-    outlineEnabled: false,
+    outlineEnabled: item.kind === 'photo' ? false : item.outlineEnabled !== false,
     motionLocked: false,
     asset: {
       id: `${item.key}:asset`,
@@ -125,8 +179,8 @@ function buildPlacement(
       remotePath: null,
       uploadFingerprint: null,
       mimeType: item.kind === 'photo' ? 'image/jpeg' : 'image/png',
-      width: 100,
-      height: 100,
+      width: assetSize.width,
+      height: assetSize.height,
       createdAt: '1970-01-01T00:00:00.000Z',
       updatedAt: null,
       source: 'import',
@@ -134,27 +188,26 @@ function buildPlacement(
   };
 }
 
-function getCollisionSize(item: RecapStickerPileItem, size: number) {
-  if (item.kind === 'photo') {
-    return size + Math.max(2, Math.round(size * 0.02));
-  }
-
-  return size + 10;
-}
-
 const RecapBubble = memo(function RecapBubble({
   item,
-  size,
-  collisionSize,
+  metrics,
   physicsState,
 }: {
   item: RecapStickerPileItem;
-  size: number;
-  collisionSize: number;
+  metrics: PileItemMetrics;
   physicsState: SharedValue<StickerPhysicsState[]>;
 }) {
   const { colors } = useTheme();
-  const inset = (collisionSize - size) / 2;
+  const outlineOffsets = useMemo(
+    () =>
+      item.kind === 'sticker' && item.outlineEnabled !== false
+        ? getStickerOutlineOffsets(metrics.outlineSize, {
+            preferContinuous: PREFER_CONTINUOUS_OUTLINE,
+          })
+        : [],
+    [item.kind, item.outlineEnabled, metrics.outlineSize]
+  );
+
   const bubbleStyle = useAnimatedStyle(() => {
     const state = physicsState.value.find((candidate: StickerPhysicsState) => candidate.id === item.key);
 
@@ -167,55 +220,23 @@ const RecapBubble = memo(function RecapBubble({
     return {
       opacity: state.opacity,
       transform: [
-        { translateX: state.x - collisionSize / 2 },
-        { translateY: state.y - collisionSize / 2 },
+        { translateX: state.x - metrics.width / 2 },
+        { translateY: state.y - metrics.height / 2 },
         { rotate: `${state.rotation}deg` },
         { scaleX: state.jellyScaleX },
         { scaleY: state.jellyScaleY },
       ],
     };
-  }, [collisionSize, item.key, physicsState]);
-
-  const shadowStyle = useAnimatedStyle(() => {
-    const state = physicsState.value.find((candidate: StickerPhysicsState) => candidate.id === item.key);
-    const shadowWidth = size * 0.58;
-
-    if (!state) {
-      return {
-        opacity: 0,
-      };
-    }
-
-    return {
-      opacity: item.kind === 'photo' ? 0.16 : 0.12,
-      transform: [
-        { translateX: state.x - shadowWidth / 2 },
-        { translateY: state.y + size * 0.34 },
-        { scaleX: 0.92 + (state.jellyScaleX - 1) * 0.3 },
-        { scaleY: 0.96 + (state.jellyScaleY - 1) * 0.12 },
-      ],
-    };
-  }, [item.kind, item.key, physicsState, size]);
+  }, [item.key, metrics.height, metrics.width, physicsState]);
 
   return (
     <>
       <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.shadow,
-          {
-            width: size * 0.58,
-          },
-          shadowStyle,
-        ]}
-      />
-
-      <Animated.View
         style={[
           styles.bubbleWrap,
           {
-            width: collisionSize,
-            height: collisionSize,
+            width: metrics.width,
+            height: metrics.height,
           },
           bubbleStyle,
         ]}
@@ -225,10 +246,8 @@ const RecapBubble = memo(function RecapBubble({
             style={[
               styles.photoBubble,
               {
-                top: inset,
-                left: inset,
-                width: size,
-                height: size,
+                width: metrics.width,
+                height: metrics.height,
               },
             ]}
           >
@@ -244,23 +263,35 @@ const RecapBubble = memo(function RecapBubble({
             style={[
               styles.stickerBubble,
               {
-                top: inset,
-                left: inset,
-                width: size,
-                height: size,
-                borderColor: `${colors.border}80`,
-                backgroundColor: colors.card,
+                width: metrics.width,
+                height: metrics.height,
               },
             ]}
           >
-            <View
-              style={[
-                styles.stickerInner,
-                {
-                  backgroundColor: colors.surface,
-                },
-              ]}
-            >
+            <View style={styles.stickerInner}>
+              {item.outlineEnabled !== false ? (
+                <View pointerEvents="none" style={styles.stickerOutlineLayer}>
+                  {outlineOffsets.map((offset, index) => (
+                    <Image
+                      key={`${item.key}-outline-${index}`}
+                      source={{ uri: item.previewUri }}
+                      style={[
+                        styles.stickerImage,
+                        {
+                          tintColor: STICKER_OUTLINE_COLOR,
+                          opacity: 0.92,
+                          transform: [
+                            { translateX: offset.x * metrics.outlineSize },
+                            { translateY: offset.y * metrics.outlineSize },
+                          ],
+                        },
+                      ]}
+                      contentFit="contain"
+                      transition={0}
+                    />
+                  ))}
+                </View>
+              ) : null}
               <Image source={{ uri: item.previewUri }} style={styles.stickerImage} contentFit="contain" />
             </View>
             {item.count > 1 ? (
@@ -283,26 +314,32 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
   const displayItems = useMemo(() => items.slice(0, 8), [items]);
   const positions = useMemo(() => getPilePositions(displayItems.length), [displayItems.length]);
   const [layout, setLayout] = useState({ width: 1, height: 176 });
+  const displayEntries = useMemo(
+    () =>
+      displayItems.map((item, index) => {
+        const position = positions[index] ?? positions[positions.length - 1];
+        return {
+          item,
+          position,
+          metrics: getPileItemMetrics(item, position.size),
+        };
+      }),
+    [displayItems, positions]
+  );
 
   const placements = useMemo(
     () =>
-      displayItems.map((item, index) =>
-        buildPlacement(
-          item,
-          positions[index] ?? positions[positions.length - 1],
-          layout.width,
-          layout.height,
-          getCollisionSize(item, (positions[index] ?? positions[positions.length - 1]).size)
-        )
+      displayEntries.map(({ item, position, metrics }, index) =>
+        buildPlacement(item, position, layout.width, layout.height, metrics, index + 1)
       ),
-    [displayItems, layout.height, layout.width, positions]
+    [displayEntries, layout.height, layout.width]
   );
   const physicsState = useStickerPhysics({
     placements,
     layout,
     isActive: displayItems.length > 0,
     motionVariant: 'physics',
-    minimumBaseSize: 52,
+    minimumBaseSize: RECAP_MIN_PHYSICS_BASE,
   });
 
   const handleLayout = (event: LayoutChangeEvent) => {
@@ -326,30 +363,14 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
     >
       <Text style={[styles.title, { color: colors.secondaryText }]}>{title}</Text>
       <View style={styles.canvas} onLayout={handleLayout}>
-        {displayItems.length === 0 ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.emptyCanvasGlow,
-              {
-                backgroundColor: colors.surface,
-                borderColor: `${colors.border}55`,
-              },
-            ]}
+        {displayEntries.map(({ item, metrics }) => (
+          <RecapBubble
+            key={item.key}
+            item={item}
+            metrics={metrics}
+            physicsState={physicsState}
           />
-        ) : null}
-        {displayItems.map((item, index) => {
-          const position = positions[index] ?? positions[positions.length - 1];
-          return (
-            <RecapBubble
-              key={item.key}
-              item={item}
-              size={position.size}
-              collisionSize={getCollisionSize(item, position.size)}
-              physicsState={physicsState}
-            />
-          );
-        })}
+        ))}
       </View>
     </View>
   );
@@ -372,18 +393,7 @@ const RecapStickerPilePlaceholder = memo(function RecapStickerPilePlaceholder({
       ]}
     >
       <Text style={[styles.title, { color: colors.secondaryText }]}>{title}</Text>
-      <View style={styles.canvas}>
-        <View
-          pointerEvents="none"
-          style={[
-            styles.emptyCanvasGlow,
-            {
-              backgroundColor: colors.surface,
-              borderColor: `${colors.border}55`,
-            },
-          ]}
-        />
-      </View>
+      <View style={styles.canvas} />
     </View>
   );
 });
@@ -454,24 +464,6 @@ const styles = StyleSheet.create({
     minHeight: 176,
     position: 'relative',
   },
-  emptyCanvasGlow: {
-    position: 'absolute',
-    left: '50%',
-    top: 56,
-    width: 124,
-    height: 124,
-    borderRadius: 36,
-    borderCurve: 'continuous',
-    borderWidth: StyleSheet.hairlineWidth,
-    opacity: 0.48,
-    transform: [{ translateX: -62 }],
-  },
-  shadow: {
-    position: 'absolute',
-    height: 16,
-    borderRadius: 999,
-    backgroundColor: '#000000',
-  },
   bubbleWrap: {
     position: 'absolute',
     left: 0,
@@ -505,21 +497,17 @@ const styles = StyleSheet.create({
   },
   stickerBubble: {
     position: 'absolute',
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-    padding: 8,
+    overflow: 'visible',
   },
   stickerInner: {
     flex: 1,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 10,
+    overflow: 'visible',
+  },
+  stickerOutlineLayer: {
+    ...StyleSheet.absoluteFillObject,
   },
   stickerImage: {
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
   },
   countBadge: {
     position: 'absolute',

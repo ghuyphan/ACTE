@@ -360,6 +360,9 @@ function buildStickerPileItemsFromNotes(notes: Note[], keyPrefix: string) {
       assetId: string;
       previewUri: string;
       count: number;
+      assetWidth: number;
+      assetHeight: number;
+      outlineEnabled: boolean;
     }
   >();
 
@@ -375,6 +378,7 @@ function buildStickerPileItemsFromNotes(notes: Note[], keyPrefix: string) {
       const current = stickerUsage.get(placement.assetId);
       if (current) {
         current.count += 1;
+        current.outlineEnabled = current.outlineEnabled || placement.outlineEnabled !== false;
         continue;
       }
 
@@ -382,6 +386,9 @@ function buildStickerPileItemsFromNotes(notes: Note[], keyPrefix: string) {
         assetId: placement.assetId,
         previewUri,
         count: 1,
+        assetWidth: Math.max(placement.asset.width, 1),
+        assetHeight: Math.max(placement.asset.height, 1),
+        outlineEnabled: placement.outlineEnabled !== false,
       });
     }
   }
@@ -391,6 +398,9 @@ function buildStickerPileItemsFromNotes(notes: Note[], keyPrefix: string) {
     kind: 'sticker' as const,
     previewUri: sticker.previewUri,
     count: sticker.count,
+    assetWidth: sticker.assetWidth,
+    assetHeight: sticker.assetHeight,
+    outlineEnabled: sticker.outlineEnabled,
   }));
 }
 
@@ -407,9 +417,12 @@ const NotesRecapView = memo(function NotesRecapView({
 }) {
   const { t, i18n } = useTranslation();
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [activeMonthKey, setActiveMonthKey] = useState<string | null>(null);
   const locale = useMemo(() => getRecapLocale(i18n.language), [i18n.language]);
+  const isCompactRecap = width < 390;
+  const recapHorizontalPadding = isCompactRecap ? 14 : Layout.screenPadding;
   const timeZone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
     []
@@ -691,8 +704,8 @@ const NotesRecapView = memo(function NotesRecapView({
       style={[
         styles.recapScreen,
         {
-        paddingTop: contentTopInset,
-        paddingHorizontal: Layout.screenPadding,
+          paddingTop: contentTopInset,
+          paddingHorizontal: recapHorizontalPadding,
         },
       ]}
     >
@@ -758,6 +771,9 @@ const NotesRecapView = memo(function NotesRecapView({
                   {
                     borderColor: colors.border,
                     backgroundColor: colors.card,
+                    paddingHorizontal: isCompactRecap ? 10 : 14,
+                    paddingTop: isCompactRecap ? 12 : 16,
+                    paddingBottom: isCompactRecap ? 8 : 10,
                   },
                 ]}
               >
@@ -766,6 +782,7 @@ const NotesRecapView = memo(function NotesRecapView({
                   weekDayLabels={weekDayLabels}
                   selectedDayKey={selectedDayKey}
                   onSelectDay={handleSelectDay}
+                  compact={isCompactRecap}
                 />
               </View>
             </View>
