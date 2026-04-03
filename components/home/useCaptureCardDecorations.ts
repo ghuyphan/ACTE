@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DoodleStroke } from '../notes/NoteDoodleCanvas';
-import {
-  bringStickerPlacementToFront,
-  duplicateStickerPlacement,
-  setStickerPlacementMotionLocked,
-  setStickerPlacementOutlineEnabled,
-  updateStickerPlacementTransform,
-  type NoteStickerPlacement,
-} from '../../services/noteStickers';
+import { type NoteStickerPlacement } from '../../services/noteStickers';
 
 interface UseCaptureCardDecorationsOptions {
   captureMode: 'text' | 'camera';
@@ -16,7 +9,6 @@ interface UseCaptureCardDecorationsOptions {
   photoDoodleDefaultColor: string;
   primaryColor: string;
   dismissCaptureInputs: () => void;
-  dismissPastePrompt: () => void;
   enablePhotoStickers: boolean;
 }
 
@@ -31,7 +23,6 @@ export function useCaptureCardDecorations({
   photoDoodleDefaultColor,
   primaryColor,
   dismissCaptureInputs,
-  dismissPastePrompt,
   enablePhotoStickers,
 }: UseCaptureCardDecorationsOptions) {
   const [doodleModeEnabled, setDoodleModeEnabled] = useState(false);
@@ -52,13 +43,6 @@ export function useCaptureCardDecorations({
   const doodleColor = isCameraCaptureSurface ? photoDoodleColor : textDoodleColor;
   const stickerPlacements = isCameraCaptureSurface ? photoStickerPlacements : textStickerPlacements;
   const selectedStickerId = isCameraCaptureSurface ? photoSelectedStickerId : textSelectedStickerId;
-  const selectedStickerPlacement = useMemo(
-    () => stickerPlacements.find((placement) => placement.id === selectedStickerId) ?? null,
-    [selectedStickerId, stickerPlacements]
-  );
-  const selectedStickerIsStamp = selectedStickerPlacement?.renderMode === 'stamp';
-  const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
-  const selectedStickerMotionLocked = selectedStickerPlacement?.motionLocked === true;
   const textDoodleColors = useMemo(
     () => getUniqueColors([captureCardTextColor, photoDoodleDefaultColor, primaryColor]),
     [captureCardTextColor, photoDoodleDefaultColor, primaryColor]
@@ -105,7 +89,6 @@ export function useCaptureCardDecorations({
   }, [stickerModeEnabled]);
 
   const toggleDoodleMode = useCallback(() => {
-    dismissPastePrompt();
     dismissCaptureInputs();
     setStickerModeEnabled(false);
     if (isPhotoDoodleSurface) {
@@ -114,7 +97,7 @@ export function useCaptureCardDecorations({
       setTextSelectedStickerId(null);
     }
     setDoodleModeEnabled((current) => !current);
-  }, [dismissCaptureInputs, dismissPastePrompt, isPhotoDoodleSurface]);
+  }, [dismissCaptureInputs, isPhotoDoodleSurface]);
 
   const undoDoodle = useCallback(() => {
     if (isPhotoDoodleSurface) {
@@ -160,7 +143,6 @@ export function useCaptureCardDecorations({
       return;
     }
 
-    dismissPastePrompt();
     dismissCaptureInputs();
     setDoodleModeEnabled(false);
     setStickerModeEnabled((current) => !current);
@@ -173,7 +155,6 @@ export function useCaptureCardDecorations({
     }
   }, [
     dismissCaptureInputs,
-    dismissPastePrompt,
     enablePhotoStickers,
     isPhotoDoodleSurface,
     stickerModeEnabled,
@@ -202,103 +183,17 @@ export function useCaptureCardDecorations({
       return;
     }
 
-    dismissPastePrompt();
-
     if (selectedStickerId) {
       selectSticker(null);
       return;
     }
 
     closeDecorateControls();
-  }, [closeDecorateControls, dismissPastePrompt, selectSticker, selectedStickerId, stickerModeEnabled]);
-
-  const toggleStickerMotionLock = useCallback(() => {
-    if (!selectedStickerId) {
-      return;
-    }
-
-    changeStickerPlacements(
-      setStickerPlacementMotionLocked(
-        stickerPlacements,
-        selectedStickerId,
-        !selectedStickerMotionLocked
-      )
-    );
-  }, [
-    changeStickerPlacements,
-    selectedStickerId,
-    selectedStickerMotionLocked,
-    stickerPlacements,
-  ]);
-
-  const applySelectedStickerAction = useCallback(
-    (
-      action:
-        | 'rotate-left'
-        | 'rotate-right'
-        | 'smaller'
-        | 'larger'
-        | 'duplicate'
-        | 'front'
-        | 'remove'
-        | 'outline-toggle'
-    ) => {
-      if (!selectedStickerId) {
-        return;
-      }
-
-      const currentPlacements = stickerPlacements;
-      let nextPlacements = currentPlacements;
-
-      if (action === 'duplicate') {
-        nextPlacements = duplicateStickerPlacement(currentPlacements, selectedStickerId);
-      } else if (action === 'front') {
-        nextPlacements = bringStickerPlacementToFront(currentPlacements, selectedStickerId);
-      } else if (action === 'outline-toggle') {
-        const placement = currentPlacements.find((candidate) => candidate.id === selectedStickerId);
-        nextPlacements = placement && placement.renderMode !== 'stamp'
-          ? setStickerPlacementOutlineEnabled(
-              currentPlacements,
-              selectedStickerId,
-              placement.outlineEnabled === false
-            )
-          : currentPlacements;
-      } else if (action === 'remove') {
-        nextPlacements = currentPlacements.filter((placement) => placement.id !== selectedStickerId);
-        selectSticker(null);
-      } else {
-        const placement = currentPlacements.find((candidate) => candidate.id === selectedStickerId);
-
-        if (!placement) {
-          nextPlacements = currentPlacements;
-        } else if (action === 'rotate-left') {
-          nextPlacements = updateStickerPlacementTransform(currentPlacements, selectedStickerId, {
-            rotation: placement.rotation - 15,
-          });
-        } else if (action === 'rotate-right') {
-          nextPlacements = updateStickerPlacementTransform(currentPlacements, selectedStickerId, {
-            rotation: placement.rotation + 15,
-          });
-        } else if (action === 'smaller') {
-          nextPlacements = updateStickerPlacementTransform(currentPlacements, selectedStickerId, {
-            scale: placement.scale - 0.12,
-          });
-        } else if (action === 'larger') {
-          nextPlacements = updateStickerPlacementTransform(currentPlacements, selectedStickerId, {
-            scale: placement.scale + 0.12,
-          });
-        }
-      }
-
-      changeStickerPlacements(nextPlacements);
-    },
-    [changeStickerPlacements, selectSticker, selectedStickerId, stickerPlacements]
-  );
+  }, [closeDecorateControls, selectSticker, selectedStickerId, stickerModeEnabled]);
 
   return useMemo(
     () => ({
       applyImportedSticker,
-      applySelectedStickerAction,
       changeStickerPlacements,
       clearDoodle,
       closeDecorateControls,
@@ -312,23 +207,18 @@ export function useCaptureCardDecorations({
       resetStickers,
       selectDoodleColor,
       selectedStickerId,
-      selectedStickerIsStamp,
-      selectedStickerMotionLocked,
-      selectedStickerOutlineEnabled,
       selectSticker,
       stickerModeEnabled,
       stickerPlacements,
       textDoodleStrokes,
       toggleDoodleMode,
       toggleStickerMode,
-      toggleStickerMotionLock,
       undoDoodle,
       setPhotoDoodleStrokes,
       setTextDoodleStrokes,
     }),
     [
       applyImportedSticker,
-      applySelectedStickerAction,
       changeStickerPlacements,
       clearDoodle,
       closeDecorateControls,
@@ -342,16 +232,12 @@ export function useCaptureCardDecorations({
       resetStickers,
       selectDoodleColor,
       selectedStickerId,
-      selectedStickerIsStamp,
-      selectedStickerMotionLocked,
-      selectedStickerOutlineEnabled,
       selectSticker,
       stickerModeEnabled,
       stickerPlacements,
       textDoodleStrokes,
       toggleDoodleMode,
       toggleStickerMode,
-      toggleStickerMotionLock,
       undoDoodle,
     ]
   );

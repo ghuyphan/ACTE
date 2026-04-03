@@ -11,20 +11,14 @@ import {
 } from '@shopify/react-native-skia';
 import {
   ClipboardPasteButton,
-  addClipboardListener,
-  isPasteButtonAvailable,
-  type PasteEventPayload,
-  type Subscription,
 } from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TFunction } from 'i18next';
 import { type ComponentProps, forwardRef, memo, ReactNode, RefObject, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
-  type GestureResponderEvent,
   Platform,
   Pressable,
   type PressableProps,
@@ -50,7 +44,6 @@ import Reanimated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { showAppAlert } from '../../utils/alert';
 import { STICKER_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { ENABLE_PHOTO_STICKERS } from '../../constants/experiments';
 import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadius';
@@ -62,19 +55,8 @@ import {
   getCaptureNoteGradient,
   getNoteColorCardGradient,
 } from '../../services/noteAppearance';
-import {
-  createStickerPlacement,
-  importStickerAsset,
-  type NoteStickerPlacement,
-  StickerImportError,
-} from '../../services/noteStickers';
+import { type NoteStickerPlacement } from '../../services/noteStickers';
 import { isOlderIOS } from '../../utils/platform';
-import {
-  ClipboardStickerError,
-  hasClipboardStickerImage,
-  importStickerAssetFromClipboard,
-  importStickerAssetFromClipboardImageData,
-} from '../../utils/stickerClipboard';
 import {
   getPhotoFilterPreset,
   PHOTO_FILTER_PRESETS,
@@ -95,6 +77,8 @@ import StickerPastePopover from '../ui/StickerPastePopover';
 import LivePhotoIcon from '../ui/LivePhotoIcon';
 import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../../services/livePhotoProcessing';
 import { useCaptureCardDecorations } from './useCaptureCardDecorations';
+import { useCaptureCardMetaSheets } from './useCaptureCardMetaSheets';
+import { useCaptureCardStickerFlow } from './useCaptureCardStickerFlow';
 import { useCaptureCardTextInputState } from './useCaptureCardTextInputState';
 
 const { width } = Dimensions.get('window');
@@ -108,7 +92,6 @@ const DECORATE_OPTION_CONTENT_SCALE = 1;
 const SHUTTER_OUTER_SIZE = 68;
 const SIDE_ACTION_SIZE = 46;
 const SHUTTER_SIDE_ACTION_OFFSET = SHUTTER_OUTER_SIZE / 2 + 12 + SIDE_ACTION_SIZE;
-const STICKER_SOURCE_SHEET_DISMISS_DELAY_MS = 250;
 const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
 const CAMERA_AUTO_RECOVERY_ATTEMPTS = 1;
 const CAMERA_START_TIMEOUT_MS = 2400;
@@ -154,76 +137,6 @@ function triggerCaptureCardHaptic(style: Haptics.ImpactFeedbackStyle = Haptics.I
   void Haptics.impactAsync(style);
 }
 
-function getStickerImportErrorMessage(t: TFunction, error: unknown) {
-  if (error instanceof StickerImportError) {
-    if (error.code === 'unsupported-format') {
-      return t(
-        'capture.stickerUnsupportedFormat',
-        'Please import a PNG, WebP, JPEG, or HEIC image.'
-      );
-    }
-
-    if (error.code === 'file-unavailable') {
-      return t(
-        'capture.stickerFileUnavailable',
-        'Sticker file is not available on this device.'
-      );
-    }
-
-    if (error.code === 'missing-transparency') {
-      return t(
-        'capture.stickerMissingTransparency',
-        'If you want a floating sticker, use a transparent PNG or WebP. Regular photos will import as stamps.'
-      );
-    }
-  }
-
-  return error instanceof Error
-    ? error.message
-    : t('capture.photoImportFailed', 'We could not import that photo right now.');
-}
-
-function getClipboardStickerMessages(t: TFunction) {
-  return {
-    requiresUpdate: t(
-      'capture.clipboardStickerRequiresUpdateMsg',
-      'Clipboard sticker paste needs the latest app build. Restart the iOS app after rebuilding to use this.'
-    ),
-    unavailable: t(
-      'capture.clipboardStickerUnavailableMsg',
-      'Copy an image first, then try again.'
-    ),
-    unsupported: t(
-      'capture.clipboardStickerUnsupported',
-      'We could not read that clipboard image right now.'
-    ),
-    storageUnavailable: t(
-      'capture.clipboardStickerStorageUnavailable',
-      'Sticker storage is unavailable on this device.'
-    ),
-    permissionDenied: t(
-      'capture.clipboardStickerPermissionDeniedMsg',
-      'This device will not let Noto read that clipboard image right now. Try copying it again, or import it from Photos instead.'
-    ),
-  };
-}
-
-function getClipboardStickerAlertTitle(t: TFunction, error: unknown) {
-  if (error instanceof ClipboardStickerError && error.code === 'unavailable') {
-    return t('capture.clipboardStickerUnavailableTitle', 'No sticker to paste');
-  }
-
-  if (error instanceof ClipboardStickerError && error.code === 'requires-update') {
-    return t('capture.clipboardStickerRequiresUpdateTitle', 'Update required');
-  }
-
-  if (error instanceof ClipboardStickerError && error.code === 'permission-denied') {
-    return t('capture.clipboardStickerPermissionDeniedTitle', 'Paste blocked');
-  }
-
-  return t('capture.error', 'Error');
-}
-
 export interface CaptureCardHandle {
   getDoodleSnapshot: () => { enabled: boolean; strokes: DoodleStroke[] };
   getStickerSnapshot: () => { enabled: boolean; placements: NoteStickerPlacement[] };
@@ -232,16 +145,6 @@ export interface CaptureCardHandle {
   closeDecorateControls: () => void;
   dismissInputs: () => void;
 }
-
-type StickerPastePromptState = {
-  visible: boolean;
-  x: number;
-  y: number;
-};
-
-type StickerImportIntent = 'sticker' | 'stamp';
-
-
 
 type CaptureAnimatedPressableProps = Omit<PressableProps, 'children' | 'style'> & {
   children?: ReactNode;
@@ -864,21 +767,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const shutterLongPressTriggeredRef = useRef(false);
   const [livePhotoCountdownSeconds, setLivePhotoCountdownSeconds] = useState(LIVE_PHOTO_MAX_DURATION_SECONDS);
   const [livePhotoRingProgress, setLivePhotoRingProgress] = useState(0);
-  const [showNoteColorSheet, setShowNoteColorSheet] = useState(false);
-  const [showRadiusSheet, setShowRadiusSheet] = useState(false);
   const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
   const [cameraRetryNonce, setCameraRetryNonce] = useState(0);
   const [cameraActivationNonce, setCameraActivationNonce] = useState(0);
   const [cameraZoom, setCameraZoom] = useState(0);
   const [showCameraZoomBadge, setShowCameraZoomBadge] = useState(false);
-  const [importingSticker, setImportingSticker] = useState(false);
-  const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
-  const [showStickerActionsSheet, setShowStickerActionsSheet] = useState(false);
-  const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<StickerImportIntent | null>(null);
-  const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
-  const [inlinePasteCanPasteFromClipboard, setInlinePasteCanPasteFromClipboard] = useState(false);
-  const [inlinePasteLoading, setInlinePasteLoading] = useState(false);
-  const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
   const cameraAutoRecoveryCountRef = useRef(0);
   const cameraZoomRef = useRef(0);
   const cameraPanZoomStartRef = useRef(0);
@@ -908,18 +801,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const livePhotoHaloProgress = useSharedValue(0);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
-  const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
-  const clearPastePromptTimeout = useCallback(() => {
-    if (pastePromptTimeoutRef.current) {
-      clearTimeout(pastePromptTimeoutRef.current);
-      pastePromptTimeoutRef.current = null;
-    }
-  }, []);
-  const dismissPastePrompt = useCallback(() => {
-    clearPastePromptTimeout();
-    setPastePrompt((current) => (current.visible ? { ...current, visible: false } : current));
-  }, [clearPastePromptTimeout]);
   const livePhotoProgressPath = useMemo(() => {
     const path = Skia.Path.Make();
     path.addCircle(
@@ -937,8 +819,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const isSaveSuccessful = saveState === 'success';
   const isSaveDisabled = isSaveBusy || isSaveSuccessful;
   const interactionsDisabled = isSaveBusy || isSaveSuccessful;
-  const useNativeInlinePasteButton = Platform.OS === 'ios' && isPasteButtonAvailable;
-  const useFallbackInlinePasteButton = Platform.OS === 'android';
   const hasVisibleCameraStatus = captureMode === 'camera' && Boolean(cameraStatusText);
   const {
     activeTextPlaceholder,
@@ -960,7 +840,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   });
   const {
     applyImportedSticker,
-    applySelectedStickerAction: handleSelectedStickerAction,
     changeStickerPlacements: handleChangeStickerPlacements,
     clearDoodle: handleClearDoodle,
     closeDecorateControls,
@@ -969,21 +848,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     doodleModeEnabled,
     doodleStrokes,
     photoDoodleStrokes,
-    pressStickerCanvas: handlePressStickerCanvas,
+    pressStickerCanvas: handlePressStickerCanvasInternal,
     resetDoodle,
     resetStickers,
     selectDoodleColor: handleSelectDoodleColor,
     selectedStickerId,
-    selectedStickerIsStamp,
-    selectedStickerMotionLocked,
-    selectedStickerOutlineEnabled,
     selectSticker: selectStickerPlacement,
     stickerModeEnabled,
     stickerPlacements,
     textDoodleStrokes,
-    toggleDoodleMode: handleToggleDoodleMode,
+    toggleDoodleMode: toggleDoodleModeInternal,
     toggleStickerMode: toggleStickerModeInternal,
-    toggleStickerMotionLock: handleToggleStickerMotionLock,
     undoDoodle: handleUndoDoodle,
     setPhotoDoodleStrokes,
     setTextDoodleStrokes,
@@ -994,22 +869,77 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     photoDoodleDefaultColor: PHOTO_DOODLE_DEFAULT_COLOR,
     primaryColor: colors.primary,
     dismissCaptureInputs,
-    dismissPastePrompt,
     enablePhotoStickers: ENABLE_PHOTO_STICKERS,
   });
-  const shouldCheckInlinePasteClipboard =
-    ENABLE_PHOTO_STICKERS &&
-    captureMode === 'text' &&
-    noteText.length === 0 &&
-    !isNoteInputFocused &&
-    !doodleModeEnabled &&
-    !stickerModeEnabled &&
-    !interactionsDisabled &&
-    (useNativeInlinePasteButton || useFallbackInlinePasteButton) &&
-    !importingSticker;
-  const showInlinePasteButton =
-    shouldCheckInlinePasteClipboard &&
-    (inlinePasteCanPasteFromClipboard || inlinePasteLoading);
+  const {
+    closeStickerOverlays,
+    dismissPastePrompt,
+    handleCloseStickerActionsSheet,
+    handleCloseStickerSourceSheet,
+    handleConfirmPasteFromPrompt,
+    handleInlinePasteStickerPress,
+    handleNativeInlinePasteStickerPress,
+    handleSelectedStickerAction,
+    handleSelectSticker,
+    handleShowCardPastePrompt,
+    handleShowStickerActions,
+    handleShowStickerSourceOptions,
+    handleToggleStickerMode,
+    importingSticker,
+    inlinePasteLoading,
+    pastePrompt,
+    selectedStickerIsStamp,
+    selectedStickerMotionLocked,
+    selectedStickerOutlineEnabled,
+    showInlinePasteButton,
+    showStickerActionsSheet,
+    showStickerSourceSheet,
+    stickerSourceActions,
+    useNativeInlinePasteButton,
+  } = useCaptureCardStickerFlow({
+    captureMode,
+    t,
+    cardSize: CARD_SIZE,
+    enablePhotoStickers: ENABLE_PHOTO_STICKERS,
+    noteText,
+    isNoteInputFocused,
+    doodleModeEnabled,
+    stickerModeEnabled,
+    interactionsDisabled,
+    selectedStickerId,
+    stickerPlacements,
+    applyImportedSticker,
+    dismissOverlay: dismissCaptureInputs,
+    onChangeStickerPlacements: handleChangeStickerPlacements,
+    selectSticker: selectStickerPlacement,
+    toggleStickerMode: toggleStickerModeInternal,
+  });
+  const {
+    handleCloseNoteColorSheet,
+    handleCloseRadiusSheet,
+    handleOpenNoteColorSheet,
+    handleOpenRadiusSheet,
+    handlePressLockedNoteColor,
+    handleSelectNoteColor,
+    handleSelectRadius,
+    showNoteColorSheet,
+    showRadiusSheet,
+  } = useCaptureCardMetaSheets({
+    captureMode,
+    isSearching,
+    onChangeNoteColor,
+    onChangeRadius,
+    onPressLockedNoteColor,
+    onHaptic: triggerCaptureCardHaptic,
+  });
+  const handleToggleDoodleMode = useCallback(() => {
+    dismissPastePrompt();
+    toggleDoodleModeInternal();
+  }, [dismissPastePrompt, toggleDoodleModeInternal]);
+  const handlePressStickerCanvas = useCallback(() => {
+    dismissPastePrompt();
+    handlePressStickerCanvasInternal();
+  }, [dismissPastePrompt, handlePressStickerCanvasInternal]);
   const shouldPrepareCameraPreview =
     captureMode === 'camera' &&
     !capturedPhoto &&
@@ -1218,8 +1148,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
   useEffect(() => {
     closeDecorateControls();
-    setShowStickerSourceSheet(false);
-  }, [captureMode, capturedPhoto, closeDecorateControls]);
+    closeStickerOverlays();
+  }, [captureMode, capturedPhoto, closeDecorateControls, closeStickerOverlays]);
 
   useEffect(() => {
     const wasTextDraftEmpty = previousTextDraftEmptyRef.current;
@@ -1255,10 +1185,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       return;
     }
 
-    dismissPastePrompt();
     closeDecorateControls();
-    setShowStickerSourceSheet(false);
-  }, [closeDecorateControls, dismissPastePrompt, isModeSwitchAnimating]);
+    closeStickerOverlays();
+  }, [closeDecorateControls, closeStickerOverlays, isModeSwitchAnimating]);
 
   const handleSavePressIn = useCallback(() => {
     if (isSaveDisabled) {
@@ -1277,57 +1206,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       easing: Easing.out(Easing.cubic),
     });
   }, [savePressScale]);
-
-  const schedulePastePromptDismiss = useCallback(() => {
-    clearPastePromptTimeout();
-    pastePromptTimeoutRef.current = setTimeout(() => {
-      setPastePrompt((current) => ({ ...current, visible: false }));
-      pastePromptTimeoutRef.current = null;
-    }, 2600);
-  }, [clearPastePromptTimeout]);
-
-  useEffect(() => () => clearPastePromptTimeout(), [clearPastePromptTimeout]);
-
-  useEffect(() => {
-    if (doodleModeEnabled || stickerModeEnabled || importingSticker || interactionsDisabled) {
-      dismissPastePrompt();
-    }
-  }, [dismissPastePrompt, doodleModeEnabled, importingSticker, interactionsDisabled, stickerModeEnabled]);
-
-  useEffect(() => {
-    if (importingSticker || interactionsDisabled) {
-      setShowStickerSourceSheet(false);
-    }
-  }, [importingSticker, interactionsDisabled]);
-
-  useEffect(() => {
-    let active = true;
-    let subscription: Subscription | null = null;
-
-    if (!shouldCheckInlinePasteClipboard) {
-      setInlinePasteCanPasteFromClipboard(false);
-      return () => {
-        active = false;
-      };
-    }
-
-    const syncClipboardAvailability = async () => {
-      const canPasteFromClipboard = await hasClipboardStickerImage();
-      if (active) {
-        setInlinePasteCanPasteFromClipboard(canPasteFromClipboard);
-      }
-    };
-
-    void syncClipboardAvailability();
-    subscription = addClipboardListener(() => {
-      void syncClipboardAvailability();
-    });
-
-    return () => {
-      active = false;
-      subscription?.remove();
-    };
-  }, [shouldCheckInlinePasteClipboard]);
 
   useImperativeHandle(
     ref,
@@ -1593,346 +1471,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     [cameraZoomGesturesEnabled, scheduleHideCameraZoomBadge, updateCameraZoom]
   );
 
-  const handleImportSticker = useCallback(async (intent: StickerImportIntent = 'sticker') => {
-    if (!ENABLE_PHOTO_STICKERS || importingSticker) {
-      return;
-    }
-
-    dismissPastePrompt();
-
-    let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
-    if (mediaPermission.status !== 'granted') {
-      mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    }
-
-    if (mediaPermission.status !== 'granted') {
-      showAppAlert(
-        t('capture.photoLibraryPermissionTitle', 'Photo access needed'),
-        mediaPermission.canAskAgain === false
-          ? t(
-            'capture.photoLibraryPermissionSettingsMsg',
-            'Photo library access is blocked for Noto. Open Settings to import from your library.'
-          )
-          : t(
-            'capture.photoLibraryPermissionMsg',
-            'Allow photo library access so you can import an image into this note.'
-          )
-      );
-      return;
-    }
-
-    setImportingSticker(true);
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        quality: 1,
-        selectionLimit: 1,
-      });
-
-      if (result.canceled || !result.assets?.[0]?.uri) {
-        return;
-      }
-
-      const importedAsset = await importStickerAsset({
-        uri: result.assets[0].uri,
-        mimeType: result.assets[0].mimeType,
-        name: result.assets[0].fileName,
-      }, intent === 'sticker' ? { requiresTransparency: true } : undefined);
-      const nextPlacement = createStickerPlacement(
-        importedAsset,
-        stickerPlacements,
-        intent === 'stamp' ? { renderMode: 'stamp' } : undefined
-      );
-      applyImportedSticker(nextPlacement);
-    } catch (error) {
-      console.warn('Sticker import failed:', error);
-      showAppAlert(
-        t('capture.error', 'Error'),
-        getStickerImportErrorMessage(t, error)
-      );
-    } finally {
-      setImportingSticker(false);
-    }
-  }, [applyImportedSticker, dismissPastePrompt, importingSticker, stickerPlacements, t]);
-  useEffect(() => {
-    if (showStickerSourceSheet || !pendingStickerSourceAction) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      const nextAction = pendingStickerSourceAction;
-      setPendingStickerSourceAction(null);
-      void handleImportSticker(nextAction);
-    }, STICKER_SOURCE_SHEET_DISMISS_DELAY_MS);
-
-    return () => clearTimeout(timer);
-  }, [handleImportSticker, pendingStickerSourceAction, showStickerSourceSheet]);
-  const handlePasteStickerFromClipboard = useCallback(async () => {
-    if (!ENABLE_PHOTO_STICKERS || importingSticker) {
-      return;
-    }
-
-    dismissPastePrompt();
-    setImportingSticker(true);
-
-    try {
-      const importedAsset = await importStickerAssetFromClipboard(getClipboardStickerMessages(t));
-      const nextPlacement = createStickerPlacement(importedAsset, stickerPlacements);
-      applyImportedSticker(nextPlacement);
-    } catch (error) {
-      if (!(error instanceof ClipboardStickerError && error.code === 'permission-denied')) {
-        console.warn('Sticker paste failed:', error);
-      }
-      showAppAlert(
-        getClipboardStickerAlertTitle(t, error),
-        error instanceof Error
-          ? error.message
-          : t('capture.clipboardStickerFailed', 'We could not paste that sticker right now.')
-      );
-    } finally {
-      setImportingSticker(false);
-    }
-  }, [applyImportedSticker, dismissPastePrompt, importingSticker, stickerPlacements, t]);
-  const showPastePromptAt = useCallback(
-    async (x: number, y: number) => {
-      if (
-        !ENABLE_PHOTO_STICKERS ||
-        importingSticker ||
-        doodleModeEnabled ||
-        stickerModeEnabled ||
-        interactionsDisabled
-      ) {
-        return;
-      }
-
-      const canPasteFromClipboard = await hasClipboardStickerImage();
-
-      if (!canPasteFromClipboard) {
-        dismissPastePrompt();
-        return;
-      }
-
-      setPastePrompt({
-        visible: true,
-        x,
-        y,
-      });
-      schedulePastePromptDismiss();
-    },
-    [
-      dismissPastePrompt,
-      doodleModeEnabled,
-      importingSticker,
-      interactionsDisabled,
-      schedulePastePromptDismiss,
-      stickerModeEnabled,
-    ]
-  );
-  const handleNativeInlinePasteStickerPress = useCallback(
-    async (payload: PasteEventPayload) => {
-      if (!ENABLE_PHOTO_STICKERS || importingSticker || inlinePasteLoading || payload.type !== 'image') {
-        return;
-      }
-
-      dismissPastePrompt();
-      setInlinePasteLoading(true);
-      setImportingSticker(true);
-
-      try {
-        const importedAsset = await importStickerAssetFromClipboardImageData(
-          payload.data,
-          getClipboardStickerMessages(t)
-        );
-        const nextPlacement = createStickerPlacement(importedAsset, stickerPlacements);
-        applyImportedSticker(nextPlacement);
-      } catch (error) {
-        if (!(error instanceof ClipboardStickerError && error.code === 'permission-denied')) {
-          console.warn('Sticker paste failed:', error);
-        }
-        showAppAlert(
-          getClipboardStickerAlertTitle(t, error),
-          error instanceof Error
-            ? error.message
-            : t('capture.clipboardStickerFailed', 'We could not paste that sticker right now.')
-        );
-      } finally {
-        setImportingSticker(false);
-        setInlinePasteLoading(false);
-      }
-    },
-    [
-      applyImportedSticker,
-      dismissPastePrompt,
-      importingSticker,
-      inlinePasteLoading,
-      stickerPlacements,
-      t,
-    ]
-  );
-  const handleShowCardPastePrompt = useCallback(
-    async (event: GestureResponderEvent) => {
-      const locationX = typeof event.nativeEvent.locationX === 'number' ? event.nativeEvent.locationX : CARD_SIZE / 2;
-      const locationY = typeof event.nativeEvent.locationY === 'number' ? event.nativeEvent.locationY : CARD_SIZE / 2;
-      await showPastePromptAt(locationX, locationY);
-    },
-    [showPastePromptAt]
-  );
-  const handleConfirmPasteFromPrompt = useCallback(() => {
-    dismissPastePrompt();
-    void handlePasteStickerFromClipboard();
-  }, [dismissPastePrompt, handlePasteStickerFromClipboard]);
-  const handleInlinePasteStickerPress = useCallback(() => {
-    if (inlinePasteLoading) {
-      return;
-    }
-
-    setInlinePasteLoading(true);
-    void handlePasteStickerFromClipboard().finally(() => {
-      setInlinePasteLoading(false);
-    });
-  }, [handlePasteStickerFromClipboard, inlinePasteLoading]);
-  const handleCloseStickerSourceSheet = useCallback(() => {
-    setShowStickerSourceSheet(false);
-  }, []);
-  const handleCloseStickerActionsSheet = useCallback(() => {
-    setShowStickerActionsSheet(false);
-  }, []);
-  const handleSelectStickerSourceClipboard = useCallback(() => {
-    setShowStickerSourceSheet(false);
-    void handlePasteStickerFromClipboard();
-  }, [handlePasteStickerFromClipboard]);
-  const handleSelectStickerSourceSticker = useCallback(() => {
-    setPendingStickerSourceAction('sticker');
-    setShowStickerSourceSheet(false);
-  }, []);
-  const handleSelectStickerSourceStamp = useCallback(() => {
-    setPendingStickerSourceAction('stamp');
-    setShowStickerSourceSheet(false);
-  }, []);
-  const handleShowStickerSourceOptions = useCallback(async () => {
-    if (!ENABLE_PHOTO_STICKERS || importingSticker) {
-      return;
-    }
-
-    dismissPastePrompt();
-    const canPasteFromClipboard = await hasClipboardStickerImage();
-    setStickerSourceCanPasteFromClipboard(canPasteFromClipboard);
-    setShowStickerSourceSheet(true);
-  }, [dismissPastePrompt, importingSticker]);
-  const stickerSourceActions = useMemo(() => {
-    const actions: Array<{
-      key: string;
-      iconName: 'images-outline' | 'pricetag-outline' | 'clipboard-outline';
-      label: string;
-      description: string;
-      onPress: () => void;
-      testID: string;
-    }> = [
-      {
-        key: 'create-sticker',
-        iconName: 'images-outline',
-        label: t('capture.createStickerLabel', 'Create sticker'),
-        description: t('capture.createStickerDescription', 'Transparent PNG or WebP'),
-        onPress: handleSelectStickerSourceSticker,
-        testID: 'sticker-source-option-create-sticker',
-      },
-      {
-        key: 'create-stamp',
-        iconName: 'pricetag-outline',
-        label: t('capture.createStampLabel', 'Create stamp'),
-        description: t('capture.createStampDescription', 'Turn any photo into a perforated stamp'),
-        onPress: handleSelectStickerSourceStamp,
-        testID: 'sticker-source-option-create-stamp',
-      },
-    ];
-
-    if (stickerSourceCanPasteFromClipboard) {
-      actions.push({
-        key: 'paste-sticker',
-        iconName: 'clipboard-outline',
-        label: t('capture.pasteStickerFromClipboard', 'Paste from Clipboard'),
-        description: t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.'),
-        onPress: handleSelectStickerSourceClipboard,
-        testID: 'sticker-source-option-clipboard',
-      });
-    }
-
-    return actions;
-  }, [
-    handleSelectStickerSourceClipboard,
-    handleSelectStickerSourceStamp,
-    handleSelectStickerSourceSticker,
-    stickerSourceCanPasteFromClipboard,
-    t,
-  ]);
-  const handleShowStickerActions = useCallback(() => {
-    if (!selectedStickerId) {
-      return;
-    }
-
-    dismissPastePrompt();
-    setShowStickerActionsSheet(true);
-  }, [dismissPastePrompt, selectedStickerId]);
-  const handleToggleStickerMode = useCallback(() => {
-    setShowStickerActionsSheet(false);
-    toggleStickerModeInternal();
-  }, [toggleStickerModeInternal]);
-  const handleSelectSticker = useCallback((nextId: string | null) => {
-    if (!nextId) {
-      setShowStickerActionsSheet(false);
-    }
-
-    selectStickerPlacement(nextId);
-  }, [selectStickerPlacement]);
   const captureGradient = getCaptureNoteGradient({ noteColor });
   const inlineColorGradient =
     getNoteColorCardGradient(noteColor ?? DEFAULT_NOTE_COLOR_ID) ??
     getNoteColorCardGradient(DEFAULT_NOTE_COLOR_ID) ??
     captureGradient;
-  const handleOpenNoteColorSheet = useCallback(() => {
-    if (!onChangeNoteColor) {
-      return;
-    }
-
-    setShowNoteColorSheet(true);
-  }, [onChangeNoteColor]);
-  const handleCloseNoteColorSheet = useCallback(() => {
-    setShowNoteColorSheet(false);
-  }, []);
-  const handleOpenRadiusSheet = useCallback(() => {
-    setShowRadiusSheet(true);
-  }, []);
-  const handleCloseRadiusSheet = useCallback(() => {
-    setShowRadiusSheet(false);
-  }, []);
-  const handleSelectNoteColor = useCallback(
-    (nextColor: string | null) => {
-      if (!onChangeNoteColor) {
-        return;
-      }
-
-      triggerCaptureCardHaptic();
-      onChangeNoteColor(nextColor ?? DEFAULT_NOTE_COLOR_ID);
-      setShowNoteColorSheet(false);
-    },
-    [onChangeNoteColor]
-  );
-  const handleSelectRadius = useCallback(
-    (nextRadius: number) => {
-      triggerCaptureCardHaptic();
-      onChangeRadius(nextRadius);
-      setShowRadiusSheet(false);
-    },
-    [onChangeRadius]
-  );
-  const handlePressLockedNoteColor = useCallback(
-    (colorId: string) => {
-      triggerCaptureCardHaptic();
-      onPressLockedNoteColor?.(colorId);
-    },
-    [onPressLockedNoteColor]
-  );
   const handleCameraRetryPress = useCallback(() => {
     triggerCaptureCardHaptic();
     restartCameraPreview(true);
@@ -1941,17 +1484,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     triggerCaptureCardHaptic();
     onRequestCameraPermission();
   }, [onRequestCameraPermission]);
-
-  useEffect(() => {
-    if (captureMode !== 'text' || !onChangeNoteColor) {
-      setShowNoteColorSheet(false);
-    }
-  }, [captureMode, onChangeNoteColor]);
-  useEffect(() => {
-    if (isSearching) {
-      setShowRadiusSheet(false);
-    }
-  }, [isSearching]);
 
   const noteColorSheetBody = onChangeNoteColor ? (
     <AppSheetScaffold
@@ -2053,7 +1585,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               : t('capture.lockStickerMotion', 'Lock sticker motion'),
             icon: selectedStickerMotionLocked ? 'lock-closed' : 'lock-open-outline',
             active: selectedStickerMotionLocked,
-            onPress: handleToggleStickerMotionLock,
+            onPress: () => handleSelectedStickerAction('motion-lock-toggle'),
           },
           ...(!selectedStickerIsStamp ? [{
             key: 'outline-toggle',
