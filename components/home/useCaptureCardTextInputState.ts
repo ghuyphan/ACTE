@@ -26,22 +26,30 @@ export function useCaptureCardTextInputState({
   const isTextEntryFocused = captureMode === 'text' && (isNoteInputFocused || isRestaurantInputFocused);
   const activeTextPlaceholder =
     placeholderVariants[textPlaceholderIndex % placeholderVariants.length] ?? placeholderVariants[0] ?? '';
-
-  useEffect(() => {
-    if (captureMode !== 'text') {
+  const resetKeyboardLift = useCallback((clearFocus = false) => {
+    setKeyboardHeight(0);
+    if (clearFocus) {
       setIsNoteInputFocused(false);
       setIsRestaurantInputFocused(false);
     }
-  }, [captureMode]);
+    keyboardLift.value = withTiming(0, {
+      duration: reduceMotionEnabled ? 110 : 180,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [keyboardLift, reduceMotionEnabled]);
+
+  useEffect(() => {
+    if (captureMode !== 'text') {
+      resetKeyboardLift(true);
+    }
+  }, [captureMode, resetKeyboardLift]);
 
   useEffect(() => {
     const handleKeyboardFrame = (event: KeyboardEvent) => {
       setKeyboardHeight(event.endCoordinates.height);
     };
     const handleKeyboardHide = () => {
-      setKeyboardHeight(0);
-      setIsNoteInputFocused(false);
-      setIsRestaurantInputFocused(false);
+      resetKeyboardLift(true);
     };
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const frameEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow';
@@ -55,7 +63,7 @@ export function useCaptureCardTextInputState({
       frameSubscription.remove();
       hideSubscription.remove();
     };
-  }, []);
+  }, [resetKeyboardLift]);
 
   useEffect(() => {
     const nextLift = isTextEntryFocused
@@ -77,9 +85,8 @@ export function useCaptureCardTextInputState({
 
   const dismissCaptureInputs = useCallback(() => {
     Keyboard.dismiss();
-    setIsNoteInputFocused(false);
-    setIsRestaurantInputFocused(false);
-  }, []);
+    resetKeyboardLift();
+  }, [resetKeyboardLift]);
 
   const handleChangeNoteText = useCallback(
     (nextText: string) => {

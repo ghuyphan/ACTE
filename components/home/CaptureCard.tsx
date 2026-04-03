@@ -1369,7 +1369,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         disabledOpacity={0.45}
                         style={[
                           styles.textCardActionPill,
-                          styles.captureActionTextPill,
                           {
                             backgroundColor: colors.captureGlassFill,
                             borderColor: colors.captureGlassBorder,
@@ -1716,7 +1715,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                         style={[
                           styles.cameraOverlayButton,
                           styles.textCardActionPill,
-                          styles.captureActionTextPill,
                           {
                             backgroundColor: photoPreviewControlFill,
                             borderColor: photoPreviewControlBorder,
