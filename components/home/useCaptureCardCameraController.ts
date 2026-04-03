@@ -1,9 +1,20 @@
+import { Skia } from '@shopify/react-native-skia';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, cancelAnimation, type SharedValue } from 'react-native-reanimated';
 import { Gesture } from 'react-native-gesture-handler';
+import {
+  cancelAnimation,
+  Easing,
+  interpolateColor,
+  type SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import type { CameraDevice } from 'react-native-vision-camera';
 import type { TFunction } from 'i18next';
-import { Skia } from '@shopify/react-native-skia';
+import type { ThemeColors } from '../../hooks/useTheme';
 import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../../services/livePhotoProcessing';
 
 const CAMERA_AUTO_RECOVERY_ATTEMPTS = 1;
@@ -16,83 +27,74 @@ const CAMERA_TRANSITION_FADE_OUT_MS = 240;
 const LIVE_PHOTO_RING_SIZE = 68;
 const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
 
-type CameraMode = 'text' | 'camera';
-type CameraFacing = 'back' | 'front';
-
-export interface UseCaptureCardCameraControllerOptions {
-  t: TFunction;
-  captureMode: CameraMode;
-  cameraSessionKey: number;
-  cameraDevice?: CameraDevice;
-  isCameraPreviewActive: boolean;
-  capturedPhoto: string | null;
-  permissionGranted: boolean;
-  cameraInstructionText?: string | null;
-  isLivePhotoCaptureInProgress?: boolean;
-  facing: CameraFacing;
-  cardSize: number;
-  borderColor: string;
-  primaryColor: string;
-  shutterScale: SharedValue<number>;
-  reduceMotionEnabled: boolean;
-  interactionsDisabled: boolean;
-  onToggleFacing: () => void;
-  onShutterPressIn: () => void;
-  onShutterPressOut: () => void;
-  onTakePicture: () => void;
-  onStartLivePhotoCapture?: () => void;
-}
-
 function clamp(value: number, minValue: number, maxValue: number) {
   return Math.min(maxValue, Math.max(minValue, value));
 }
 
+interface UseCaptureCardCameraControllerOptions {
+  captureMode: 'text' | 'camera';
+  capturedPhoto: string | null;
+  cameraDevice?: CameraDevice;
+  cameraSessionKey: number;
+  permissionGranted: boolean;
+  isCameraPreviewActive: boolean;
+  facing: 'back' | 'front';
+  cameraInstructionText?: string | null;
+  isLivePhotoCaptureInProgress: boolean;
+  interactionsDisabled: boolean;
+  reduceMotionEnabled: boolean;
+  shutterScale: SharedValue<number>;
+  colors: Pick<ThemeColors, 'primary' | 'border'>;
+  t: TFunction;
+  cardSize: number;
+  onToggleFacing: () => void;
+  onTakePicture: () => void;
+  onShutterPressOut: () => void;
+  onStartLivePhotoCapture: () => void;
+}
+
 export function useCaptureCardCameraController({
-  t,
   captureMode,
-  cameraSessionKey,
-  cameraDevice,
-  isCameraPreviewActive,
   capturedPhoto,
+  cameraDevice,
+  cameraSessionKey,
   permissionGranted,
-  cameraInstructionText,
-  isLivePhotoCaptureInProgress = false,
+  isCameraPreviewActive,
   facing,
-  cardSize,
-  borderColor,
-  primaryColor,
-  shutterScale,
-  reduceMotionEnabled,
+  cameraInstructionText = null,
+  isLivePhotoCaptureInProgress,
   interactionsDisabled,
+  reduceMotionEnabled,
+  shutterScale,
+  colors,
+  t,
+  cardSize,
   onToggleFacing,
-  onShutterPressIn,
-  onShutterPressOut,
   onTakePicture,
-  onStartLivePhotoCapture = () => undefined,
+  onShutterPressOut,
+  onStartLivePhotoCapture,
 }: UseCaptureCardCameraControllerOptions) {
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
-  const [livePhotoCountdownSeconds, setLivePhotoCountdownSeconds] = useState(LIVE_PHOTO_MAX_DURATION_SECONDS);
+  const [livePhotoCountdownSeconds, setLivePhotoCountdownSeconds] = useState(
+    LIVE_PHOTO_MAX_DURATION_SECONDS
+  );
   const [livePhotoRingProgress, setLivePhotoRingProgress] = useState(0);
   const [cameraIssueDetail, setCameraIssueDetail] = useState<string | null>(null);
   const [cameraRetryNonce, setCameraRetryNonce] = useState(0);
   const [cameraActivationNonce, setCameraActivationNonce] = useState(0);
   const [cameraZoom, setCameraZoom] = useState(0);
   const [showCameraZoomBadge, setShowCameraZoomBadge] = useState(false);
-
+  const shutterLongPressTriggeredRef = useRef(false);
   const cameraAutoRecoveryCountRef = useRef(0);
   const cameraZoomRef = useRef(0);
   const cameraPanZoomStartRef = useRef(0);
   const cameraPinchZoomStartRef = useRef(0);
   const cameraZoomBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const shutterLongPressTriggeredRef = useRef(false);
-  const previousCanShowLiveCameraPreviewRef = useRef(false);
-
-  const cameraHintVisibility = useSharedValue(cameraInstructionText && !capturedPhoto ? 1 : 0);
+  const cameraHintVisibility = useSharedValue(Boolean(cameraInstructionText) && !capturedPhoto ? 1 : 0);
   const cameraTransitionMaskOpacity = useSharedValue(0);
   const livePhotoVisualProgress = useSharedValue(isLivePhotoCaptureInProgress ? 1 : 0);
   const livePhotoHaloProgress = useSharedValue(0);
-
   const showCameraInstructionHint = Boolean(cameraInstructionText) && !capturedPhoto;
   const shouldPrepareCameraPreview =
     captureMode === 'camera' &&
@@ -101,33 +103,7 @@ export function useCaptureCardCameraController({
   const shouldShowCameraCard = captureMode === 'camera' && !capturedPhoto;
   const shouldRenderCameraPreview = shouldPrepareCameraPreview && Boolean(cameraDevice);
   const canShowLiveCameraPreview = shouldRenderCameraPreview && isCameraPreviewActive;
-  const showCameraUnavailableState =
-    captureMode === 'camera' && !capturedPhoto && permissionGranted && cameraUnavailable;
-  const cameraUnavailableDetail =
-    cameraIssueDetail?.trim() ||
-    t(
-      'capture.cameraUnavailableHint',
-      'The camera session may have stalled. Try again to restart the preview.'
-    );
-  const cameraZoomGesturesEnabled =
-    canShowLiveCameraPreview && !showCameraUnavailableState && !interactionsDisabled;
-  const maxPreviewZoomFactor = useMemo(() => {
-    if (!cameraDevice) {
-      return 1;
-    }
-
-    return Math.max(cameraDevice.neutralZoom, Math.min(cameraDevice.maxZoom, 8));
-  }, [cameraDevice]);
-  const cameraPreviewZoom = useMemo(() => {
-    if (!cameraDevice) {
-      return 1;
-    }
-
-    const zoomRange = maxPreviewZoomFactor - cameraDevice.neutralZoom;
-    return cameraDevice.neutralZoom + zoomRange * cameraZoom;
-  }, [cameraDevice, cameraZoom, maxPreviewZoomFactor]);
-  const cameraZoomLabel = `${cameraPreviewZoom.toFixed(1)}x`;
-  const cameraZoomBadgeVisible = showCameraZoomBadge && canShowLiveCameraPreview;
+  const previousCanShowLiveCameraPreviewRef = useRef(canShowLiveCameraPreview);
   const livePhotoProgressPath = useMemo(() => {
     const path = Skia.Path.Make();
     path.addCircle(
@@ -171,23 +147,20 @@ export function useCaptureCardCameraController({
     setShowCameraZoomBadge(false);
   }, [clearCameraZoomBadgeTimeout]);
 
-  const restartCameraPreview = useCallback(
-    (manual = false) => {
-      if (manual) {
-        cameraAutoRecoveryCountRef.current = 0;
-      }
+  const restartCameraPreview = useCallback((manual = false) => {
+    if (manual) {
+      cameraAutoRecoveryCountRef.current = 0;
+    }
 
-      cameraTransitionMaskOpacity.value = withTiming(1, {
-        duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_IN_MS,
-        easing: Easing.out(Easing.cubic),
-      });
-      setCameraUnavailable(false);
-      setCameraIssueDetail(null);
-      setIsCameraReady(false);
-      setCameraRetryNonce((current) => current + 1);
-    },
-    [cameraTransitionMaskOpacity, reduceMotionEnabled]
-  );
+    cameraTransitionMaskOpacity.value = withTiming(1, {
+      duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_IN_MS,
+      easing: Easing.out(Easing.cubic),
+    });
+    setCameraUnavailable(false);
+    setCameraIssueDetail(null);
+    setIsCameraReady(false);
+    setCameraRetryNonce((current) => current + 1);
+  }, [cameraTransitionMaskOpacity, reduceMotionEnabled]);
 
   const handleCameraStartupFailure = useCallback(
     (detail?: string | null) => {
@@ -290,7 +263,14 @@ export function useCaptureCardCameraController({
     }, CAMERA_START_TIMEOUT_MS);
 
     return () => clearTimeout(timer);
-  }, [cameraDevice?.id, cameraRetryNonce, canShowLiveCameraPreview, cameraUnavailable, handleCameraStartupFailure, isCameraReady]);
+  }, [
+    cameraDevice?.id,
+    cameraRetryNonce,
+    canShowLiveCameraPreview,
+    cameraUnavailable,
+    handleCameraStartupFailure,
+    isCameraReady,
+  ]);
 
   useEffect(() => {
     cameraHintVisibility.value = withTiming(showCameraInstructionHint ? 1 : 0, {
@@ -298,6 +278,44 @@ export function useCaptureCardCameraController({
       easing: Easing.out(Easing.cubic),
     });
   }, [cameraHintVisibility, reduceMotionEnabled, showCameraInstructionHint]);
+
+  const cameraHintAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: cameraHintVisibility.value,
+    transform: [{ scale: 0.985 + cameraHintVisibility.value * 0.015 }],
+  }), [cameraHintVisibility]);
+
+  const cameraRadiusAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: 1 - cameraHintVisibility.value,
+    transform: [{ scale: 1 - cameraHintVisibility.value * 0.015 }],
+  }), [cameraHintVisibility]);
+
+  const cameraTransitionMaskAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: cameraTransitionMaskOpacity.value,
+  }), [cameraTransitionMaskOpacity]);
+
+  const shutterOuterAnimatedStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(
+      livePhotoVisualProgress.value,
+      [0, 1],
+      [colors.border, `${colors.primary}3D`]
+    ),
+    borderWidth: 4,
+    transform: [{ scale: 1 + livePhotoHaloProgress.value * 0.025 }],
+  }), [colors.border, colors.primary, livePhotoHaloProgress, livePhotoVisualProgress]);
+
+  const shutterCaptureHaloAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: livePhotoVisualProgress.value * (
+      reduceMotionEnabled ? 0.12 : 0.16 + livePhotoHaloProgress.value * 0.14
+    ),
+    transform: [{ scale: 1 + livePhotoHaloProgress.value * (reduceMotionEnabled ? 0.04 : 0.18) }],
+  }), [livePhotoHaloProgress, livePhotoVisualProgress, reduceMotionEnabled]);
+
+  const shutterInnerAnimatedStyle = useAnimatedStyle(() => ({
+    width: 54 - livePhotoVisualProgress.value * 10,
+    height: 54 - livePhotoVisualProgress.value * 10,
+    borderRadius: 27 - livePhotoVisualProgress.value * 12,
+    transform: [{ scale: shutterScale.value * (1 - livePhotoVisualProgress.value * 0.04) }],
+  }), [livePhotoVisualProgress, shutterScale]);
 
   useEffect(() => {
     livePhotoVisualProgress.value = withTiming(isLivePhotoCaptureInProgress ? 1 : 0, {
@@ -319,8 +337,14 @@ export function useCaptureCardCameraController({
 
     livePhotoHaloProgress.value = withRepeat(
       withSequence(
-        withTiming(1, { duration: 720, easing: Easing.out(Easing.quad) }),
-        withTiming(0, { duration: 720, easing: Easing.inOut(Easing.quad) })
+        withTiming(1, {
+          duration: 720,
+          easing: Easing.out(Easing.quad),
+        }),
+        withTiming(0, {
+          duration: 720,
+          easing: Easing.inOut(Easing.quad),
+        })
       ),
       -1,
       false
@@ -354,58 +378,74 @@ export function useCaptureCardCameraController({
 
     updateCountdown();
     const interval = setInterval(updateCountdown, 32);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+    };
   }, [isLivePhotoCaptureInProgress]);
 
-  const cameraHintAnimatedStyle = useAnimatedStyle(
-    () => ({
-      opacity: cameraHintVisibility.value,
-      transform: [{ scale: 0.985 + cameraHintVisibility.value * 0.015 }],
-    }),
-    [cameraHintVisibility]
-  );
-  const cameraRadiusAnimatedStyle = useAnimatedStyle(
-    () => ({
-      opacity: 1 - cameraHintVisibility.value,
-      transform: [{ scale: 1 - cameraHintVisibility.value * 0.015 }],
-    }),
-    [cameraHintVisibility]
-  );
-  const cameraTransitionMaskAnimatedStyle = useAnimatedStyle(
-    () => ({
-      opacity: cameraTransitionMaskOpacity.value,
-    }),
-    [cameraTransitionMaskOpacity]
-  );
-  const shutterOuterAnimatedStyle = useAnimatedStyle(
-    () => ({
-      borderColor: interpolateColor(
-        livePhotoVisualProgress.value,
-        [0, 1],
-        [borderColor, `${primaryColor}3D`]
-      ),
-      borderWidth: 4,
-      transform: [{ scale: 1 + livePhotoHaloProgress.value * 0.025 }],
-    }),
-    [borderColor, livePhotoHaloProgress, livePhotoVisualProgress, primaryColor]
-  );
-  const shutterCaptureHaloAnimatedStyle = useAnimatedStyle(
-    () => ({
-      opacity: livePhotoVisualProgress.value * (reduceMotionEnabled ? 0.12 : 0.16 + livePhotoHaloProgress.value * 0.14),
-      transform: [{ scale: 1 + livePhotoHaloProgress.value * (reduceMotionEnabled ? 0.04 : 0.18) }],
-    }),
-    [livePhotoHaloProgress, livePhotoVisualProgress, reduceMotionEnabled]
-  );
-  const shutterInnerAnimatedStyle = useAnimatedStyle(
-    () => ({
-      width: 54 - livePhotoVisualProgress.value * 10,
-      height: 54 - livePhotoVisualProgress.value * 10,
-      borderRadius: 27 - livePhotoVisualProgress.value * 12,
-      transform: [{ scale: shutterScale.value * (1 - livePhotoVisualProgress.value * 0.04) }],
-    }),
-    [livePhotoVisualProgress, shutterScale]
-  );
+  const showCameraUnavailableState =
+    captureMode === 'camera' && !capturedPhoto && permissionGranted && cameraUnavailable;
+  const cameraUnavailableDetail =
+    cameraIssueDetail?.trim() || t(
+      'capture.cameraUnavailableHint',
+      'The camera session may have stalled. Try again to restart the preview.'
+    );
+  const cameraZoomGesturesEnabled =
+    canShowLiveCameraPreview && !showCameraUnavailableState && !interactionsDisabled;
 
+  const handleSwitchCameraPress = useCallback(() => {
+    cameraTransitionMaskOpacity.value = withTiming(1, {
+      duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_IN_MS,
+      easing: Easing.out(Easing.cubic),
+    });
+    setIsCameraReady(false);
+    onToggleFacing();
+  }, [cameraTransitionMaskOpacity, onToggleFacing, reduceMotionEnabled]);
+
+  const handleShutterLongPress = useCallback(() => {
+    shutterLongPressTriggeredRef.current = true;
+    onStartLivePhotoCapture();
+  }, [onStartLivePhotoCapture]);
+
+  const handleShutterPress = useCallback(() => {
+    if (shutterLongPressTriggeredRef.current) {
+      shutterLongPressTriggeredRef.current = false;
+      return;
+    }
+
+    onTakePicture();
+  }, [onTakePicture]);
+
+  const handleShutterRelease = useCallback(() => {
+    onShutterPressOut();
+    if (shutterLongPressTriggeredRef.current) {
+      setTimeout(() => {
+        shutterLongPressTriggeredRef.current = false;
+      }, 0);
+      return;
+    }
+
+    shutterLongPressTriggeredRef.current = false;
+  }, [onShutterPressOut]);
+
+  const maxPreviewZoomFactor = useMemo(() => {
+    if (!cameraDevice) {
+      return 1;
+    }
+
+    return Math.max(cameraDevice.neutralZoom, Math.min(cameraDevice.maxZoom, 8));
+  }, [cameraDevice]);
+
+  const cameraPreviewZoom = useMemo(() => {
+    if (!cameraDevice) {
+      return 1;
+    }
+
+    const zoomRange = maxPreviewZoomFactor - cameraDevice.neutralZoom;
+    return cameraDevice.neutralZoom + zoomRange * cameraZoom;
+  }, [cameraDevice, cameraZoom, maxPreviewZoomFactor]);
+
+  const cameraZoomLabel = `${cameraPreviewZoom.toFixed(1)}x`;
   const cameraZoomGesture = useMemo(
     () =>
       Gesture.Simultaneous(
@@ -447,146 +487,68 @@ export function useCaptureCardCameraController({
     [cameraZoomGesturesEnabled, cardSize, scheduleHideCameraZoomBadge, updateCameraZoom]
   );
 
-  const handleSwitchCameraPress = useCallback(() => {
-    cameraTransitionMaskOpacity.value = withTiming(1, {
-      duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_IN_MS,
-      easing: Easing.out(Easing.cubic),
-    });
-    setIsCameraReady(false);
-    onToggleFacing();
-  }, [cameraTransitionMaskOpacity, onToggleFacing, reduceMotionEnabled]);
-
-  const handleShutterLongPress = useCallback(() => {
-    shutterLongPressTriggeredRef.current = true;
-    onStartLivePhotoCapture();
-  }, [onStartLivePhotoCapture]);
-
-  const handleShutterPress = useCallback(() => {
-    if (shutterLongPressTriggeredRef.current) {
-      shutterLongPressTriggeredRef.current = false;
-      return;
-    }
-
-    onTakePicture();
-  }, [onTakePicture]);
-
-  const handleShutterRelease = useCallback(() => {
-    onShutterPressOut();
-    if (shutterLongPressTriggeredRef.current) {
-      setTimeout(() => {
-        shutterLongPressTriggeredRef.current = false;
-      }, 0);
-      return;
-    }
-
-    shutterLongPressTriggeredRef.current = false;
-  }, [onShutterPressOut]);
-
-  const handleCameraRetryPress = useCallback(() => {
-    restartCameraPreview(true);
-  }, [restartCameraPreview]);
+  const cameraKey = `camera-session-${cameraSessionKey}-${cameraRetryNonce}-${cameraActivationNonce}-${cameraDevice?.id ?? 'none'}`;
 
   return useMemo(
     () => ({
-      isCameraReady,
-      cameraUnavailable,
-      cameraIssueDetail,
-      cameraRetryNonce,
-      cameraActivationNonce,
-      cameraZoom,
-      showCameraZoomBadge,
-      livePhotoCountdownSeconds,
-      livePhotoRingProgress,
-      shouldPrepareCameraPreview,
-      shouldShowCameraCard,
-      shouldRenderCameraPreview,
-      canShowLiveCameraPreview,
-      showCameraUnavailableState,
-      cameraUnavailableDetail,
-      cameraZoomGesturesEnabled,
-      maxPreviewZoomFactor,
-      cameraPreviewZoom,
-      cameraZoomLabel,
-      cameraZoomBadgeVisible,
       cameraHintAnimatedStyle,
+      cameraKey,
+      cameraPreviewZoom,
       cameraRadiusAnimatedStyle,
       cameraTransitionMaskAnimatedStyle,
-      shutterOuterAnimatedStyle,
-      shutterCaptureHaloAnimatedStyle,
-      shutterInnerAnimatedStyle,
+      cameraUnavailableDetail,
       cameraZoomGesture,
-      cameraHintVisibility,
-      cameraTransitionMaskOpacity,
-      livePhotoVisualProgress,
-      livePhotoHaloProgress,
-      livePhotoProgressPath,
+      cameraZoomLabel,
+      canShowLiveCameraPreview,
       handleCameraInitialized,
       handleCameraPreviewStarted,
       handleCameraStartupFailure,
-      restartCameraPreview,
-      handleSwitchCameraPress,
       handleShutterLongPress,
       handleShutterPress,
       handleShutterRelease,
-      handleCameraRetryPress,
-      updateCameraZoom,
-      resetCameraZoom,
-      clearCameraZoomBadgeTimeout,
-      scheduleHideCameraZoomBadge,
-      setCameraRetryNonce,
-      setCameraActivationNonce,
-      setIsCameraReady,
-      setCameraUnavailable,
-      setCameraIssueDetail,
-      setCameraZoom,
-      setShowCameraZoomBadge,
+      handleSwitchCameraPress,
+      livePhotoCountdownSeconds,
+      livePhotoProgressPath,
+      livePhotoRingProgress,
+      restartCameraPreview,
+      shouldRenderCameraPreview,
+      shouldShowCameraCard,
+      showCameraInstructionHint,
+      showCameraUnavailableState,
+      showCameraZoomBadge,
+      shutterCaptureHaloAnimatedStyle,
+      shutterInnerAnimatedStyle,
+      shutterOuterAnimatedStyle,
     }),
     [
-      isCameraReady,
-      cameraUnavailable,
-      cameraIssueDetail,
-      cameraRetryNonce,
-      cameraActivationNonce,
-      cameraZoom,
-      showCameraZoomBadge,
-      livePhotoCountdownSeconds,
-      livePhotoRingProgress,
-      shouldPrepareCameraPreview,
-      shouldShowCameraCard,
-      shouldRenderCameraPreview,
-      canShowLiveCameraPreview,
-      showCameraUnavailableState,
-      cameraUnavailableDetail,
-      cameraZoomGesturesEnabled,
-      maxPreviewZoomFactor,
-      cameraPreviewZoom,
-      cameraZoomLabel,
-      cameraZoomBadgeVisible,
       cameraHintAnimatedStyle,
+      cameraKey,
+      cameraPreviewZoom,
       cameraRadiusAnimatedStyle,
       cameraTransitionMaskAnimatedStyle,
-      shutterOuterAnimatedStyle,
-      shutterCaptureHaloAnimatedStyle,
-      shutterInnerAnimatedStyle,
+      cameraUnavailableDetail,
       cameraZoomGesture,
-      cameraHintVisibility,
-      cameraTransitionMaskOpacity,
-      livePhotoVisualProgress,
-      livePhotoHaloProgress,
-      livePhotoProgressPath,
+      cameraZoomLabel,
+      canShowLiveCameraPreview,
       handleCameraInitialized,
       handleCameraPreviewStarted,
       handleCameraStartupFailure,
-      restartCameraPreview,
-      handleSwitchCameraPress,
       handleShutterLongPress,
       handleShutterPress,
       handleShutterRelease,
-      handleCameraRetryPress,
-      updateCameraZoom,
-      resetCameraZoom,
-      clearCameraZoomBadgeTimeout,
-      scheduleHideCameraZoomBadge,
+      handleSwitchCameraPress,
+      livePhotoCountdownSeconds,
+      livePhotoProgressPath,
+      livePhotoRingProgress,
+      restartCameraPreview,
+      shouldRenderCameraPreview,
+      shouldShowCameraCard,
+      showCameraInstructionHint,
+      showCameraUnavailableState,
+      showCameraZoomBadge,
+      shutterCaptureHaloAnimatedStyle,
+      shutterInnerAnimatedStyle,
+      shutterOuterAnimatedStyle,
     ]
   );
 }
