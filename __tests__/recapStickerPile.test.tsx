@@ -120,7 +120,7 @@ describe('RecapStickerPile', () => {
     );
   });
 
-  it('renders every recap item while limiting live physics work for large piles', () => {
+  it('renders every recap item and keeps all of them in live physics', () => {
     const view = render(<RecapStickerPile items={manyRecapItems} />);
 
     manyRecapItems.forEach((item) => {
@@ -128,9 +128,9 @@ describe('RecapStickerPile', () => {
     });
 
     const latestCall = mockedUseStickerPhysics.mock.calls.at(-1)?.[0];
-    expect(latestCall?.placements).toHaveLength(10);
+    expect(latestCall?.placements).toHaveLength(manyRecapItems.length);
     expect(latestCall?.placements.map((placement) => placement.id)).toEqual(
-      manyRecapItems.slice(-10).map((item) => item.key)
+      manyRecapItems.map((item) => item.key)
     );
   });
 });

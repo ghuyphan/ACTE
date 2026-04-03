@@ -456,14 +456,12 @@ export function useNotesRecapViewModel({
       ? activeRecapCalendarModel.dayNotesByKey.get(selectedRecapDay.dateKey) ?? []
       : activeMonthEntry.notes;
     const pileKeyPrefix = selectedRecapDay?.dateKey ?? activeRecap.month.monthKey;
-    const photoPileItems = buildPhotoPileItemsFromNotes(pileSourceNotes, pileKeyPrefix).slice(0, 8);
+    const photoPileItems = buildPhotoPileItemsFromNotes(pileSourceNotes, pileKeyPrefix);
     const stickerUsage = selectedRecapDay
       ? getMonthStickerUsage(pileSourceNotes)
       : activeRecap.stickerUsage;
     const stickerPileItems = buildStickerPileItemsFromUsage(stickerUsage, pileKeyPrefix);
-    const prioritizedPhotoItems =
-      stickerPileItems.length > 0 ? photoPileItems.slice(0, 5) : photoPileItems.slice(0, 8);
-    const pileItems = [...prioritizedPhotoItems, ...stickerPileItems].slice(0, 8);
+    const pileItems = [...photoPileItems, ...stickerPileItems];
     const selectedDayLabel = selectedRecapDay
       ? formatRecapDayLabel(
           new Date(

@@ -413,6 +413,19 @@ function applyBoundaryConstraint(
   }
 }
 
+function getStickerSweepBounds(sticker: StickerPhysicsState) {
+  'worklet';
+
+  const { halfWidth, halfHeight } = getStickerBoundaryHalfExtents(sticker);
+
+  return {
+    minX: sticker.x - halfWidth,
+    maxX: sticker.x + halfWidth,
+    minY: sticker.y - halfHeight,
+    maxY: sticker.y + halfHeight,
+  };
+}
+
 export function resolveStickerCollisions(
   stickers: StickerPhysicsState[],
   layout: StickerCanvasLayout,
@@ -428,12 +441,41 @@ export function resolveStickerCollisions(
         ? STAMP_COLLISION_PROFILE.iterations
         : DEFAULT_COLLISION_PROFILE.iterations;
   const collidedStickerIndices = stickers.map(() => false);
+  const sweepOrder = stickers.map((_, index) => index);
 
   for (let iteration = 0; iteration < collisionIterations; iteration += 1) {
-    for (let leftIndex = 0; leftIndex < stickers.length; leftIndex += 1) {
-      for (let rightIndex = leftIndex + 1; rightIndex < stickers.length; rightIndex += 1) {
-        const left = stickers[leftIndex];
+    sweepOrder.sort((leftIndex, rightIndex) => {
+      const leftBounds = getStickerSweepBounds(stickers[leftIndex]);
+      const rightBounds = getStickerSweepBounds(stickers[rightIndex]);
+      return leftBounds.minX - rightBounds.minX;
+    });
+
+    for (let leftOrderIndex = 0; leftOrderIndex < sweepOrder.length; leftOrderIndex += 1) {
+      const leftIndex = sweepOrder[leftOrderIndex];
+      const left = stickers[leftIndex];
+      const leftBounds = getStickerSweepBounds(left);
+
+      for (
+        let rightOrderIndex = leftOrderIndex + 1;
+        rightOrderIndex < sweepOrder.length;
+        rightOrderIndex += 1
+      ) {
+        const rightIndex = sweepOrder[rightOrderIndex];
         const right = stickers[rightIndex];
+        const rightBounds = getStickerSweepBounds(right);
+
+        if (rightBounds.minX > leftBounds.maxX + COLLISION_POSITION_SLOP) {
+          break;
+        }
+
+        if (rightBounds.minY > leftBounds.maxY + COLLISION_POSITION_SLOP) {
+          continue;
+        }
+
+        if (leftBounds.minY > rightBounds.maxY + COLLISION_POSITION_SLOP) {
+          continue;
+        }
+
         const collision = detectStickerCollision(left, right);
 
         if (!collision) {

@@ -65,21 +65,8 @@ type PileItemMetrics = {
 
 const RECAP_MIN_PHYSICS_BASE = 52;
 const RECAP_COLLISION_INSET = 2;
-const MAX_RECAP_PHYSICS_ITEMS = 12;
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
 const PREFER_CONTINUOUS_OUTLINE = Platform.OS === 'android';
-
-function getRecapPhysicsItemCount(count: number) {
-  if (count <= MAX_RECAP_PHYSICS_ITEMS) {
-    return count;
-  }
-
-  if (count <= 24) {
-    return 10;
-  }
-
-  return 8;
-}
 
 function getDensePilePositions(count: number): PilePosition[] {
   const rows = Math.min(5, Math.max(2, Math.ceil(count / 6)));
@@ -633,15 +620,6 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
     },
     [displayItems, positions]
   );
-  const physicsItemCount = useMemo(
-    () => getRecapPhysicsItemCount(displayEntries.length),
-    [displayEntries.length]
-  );
-  const firstAnimatedEntryIndex = Math.max(displayEntries.length - physicsItemCount, 0);
-  const animatedEntries = useMemo(
-    () => displayEntries.slice(firstAnimatedEntryIndex),
-    [displayEntries, firstAnimatedEntryIndex]
-  );
   const staticAnchors = useMemo(
     () =>
       displayEntries.map(({ position, metrics }) =>
@@ -652,15 +630,15 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
 
   const placements = useMemo(
     () =>
-      animatedEntries.map(({ item, position, metrics }, index) =>
-        buildPlacement(item, position, layout.width, layout.height, metrics, firstAnimatedEntryIndex + index + 1)
+      displayEntries.map(({ item, position, metrics }, index) =>
+        buildPlacement(item, position, layout.width, layout.height, metrics, index + 1)
       ),
-    [animatedEntries, firstAnimatedEntryIndex, layout.height, layout.width]
+    [displayEntries, layout.height, layout.width]
   );
   const physicsState = useStickerPhysics({
     placements: physicsEnabled ? placements : [],
     layout,
-    isActive: physicsEnabled && animatedEntries.length > 0,
+    isActive: physicsEnabled && displayEntries.length > 0,
     sensorDriven: true,
     collisionResponse: 'gentle',
     motionVariant: 'physics',
@@ -702,22 +680,22 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
             item={item}
             metrics={metrics}
             anchorX={
-              (physicsEnabled ? placements[index - firstAnimatedEntryIndex]?.x : undefined) ??
+              (physicsEnabled ? placements[index]?.x : undefined) ??
               staticAnchors[index]?.centerX ??
               0
             }
             anchorY={
-              (physicsEnabled ? placements[index - firstAnimatedEntryIndex]?.y : undefined) ??
+              (physicsEnabled ? placements[index]?.y : undefined) ??
               staticAnchors[index]?.centerY ??
               0
             }
             rotation={
-              (physicsEnabled ? placements[index - firstAnimatedEntryIndex]?.rotation : undefined) ??
+              (physicsEnabled ? placements[index]?.rotation : undefined) ??
               staticAnchors[index]?.rotation ??
               0
             }
-            physicsState={physicsEnabled && index >= firstAnimatedEntryIndex ? physicsState : undefined}
-            physicsStateIndex={index >= firstAnimatedEntryIndex ? index - firstAnimatedEntryIndex : undefined}
+            physicsState={physicsEnabled ? physicsState : undefined}
+            physicsStateIndex={index}
           />
         ))}
       </View>
