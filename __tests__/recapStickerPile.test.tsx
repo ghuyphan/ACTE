@@ -74,6 +74,16 @@ const recapItems = [
   },
 ];
 
+const manyRecapItems = Array.from({ length: 14 }, (_, index) => ({
+  key: `item-${index + 1}`,
+  kind: (index % 3 === 0 ? 'photo' : 'sticker') as 'photo' | 'sticker',
+  previewUri: `file:///item-${index + 1}.png`,
+  count: 1,
+  assetWidth: 220,
+  assetHeight: 280,
+  renderMode: (index % 4 === 0 ? 'stamp' : 'default') as 'stamp' | 'default',
+}));
+
 describe('RecapStickerPile', () => {
   beforeEach(() => {
     mockedUseStickerPhysics.mockClear();
@@ -107,6 +117,20 @@ describe('RecapStickerPile', () => {
         isActive: false,
         placements: [],
       })
+    );
+  });
+
+  it('renders every recap item while limiting live physics work for large piles', () => {
+    const view = render(<RecapStickerPile items={manyRecapItems} />);
+
+    manyRecapItems.forEach((item) => {
+      expect(view.getByTestId(`notes-recap-item-${item.key}`)).toBeTruthy();
+    });
+
+    const latestCall = mockedUseStickerPhysics.mock.calls.at(-1)?.[0];
+    expect(latestCall?.placements).toHaveLength(10);
+    expect(latestCall?.placements.map((placement) => placement.id)).toEqual(
+      manyRecapItems.slice(-10).map((item) => item.key)
     );
   });
 });

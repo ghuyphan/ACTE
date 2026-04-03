@@ -1,8 +1,9 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Reanimated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
 import { useNotesRecapViewModel } from '../../../hooks/state/useNotesRecapViewModel';
 import type { Note } from '../../../services/database';
@@ -10,15 +11,20 @@ import RecapCalendarGrid from './RecapCalendarGrid';
 import RecapMonthPicker from './RecapMonthPicker';
 import RecapStickerPile from './RecapStickerPile';
 
+const RECAP_FIRST_REVEAL_PHYSICS_DELAY_MS = 280;
+
 const NotesRecapView = memo(function NotesRecapView({
   notes,
   bottomInset,
+  isVisible = false,
 }: {
   notes: Note[];
   bottomInset: number;
+  isVisible?: boolean;
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const reduceMotionEnabled = useReducedMotion();
   const {
     activeMonthLabel,
     activeRecap,
@@ -34,6 +40,32 @@ const NotesRecapView = memo(function NotesRecapView({
     switchMonth,
     weekDayLabels,
   } = useNotesRecapViewModel({ notes });
+  const [hasCompletedFirstReveal, setHasCompletedFirstReveal] = useState(false);
+
+  useEffect(() => {
+    if (!isVisible || hasCompletedFirstReveal) {
+      return;
+    }
+
+    if (reduceMotionEnabled) {
+      setHasCompletedFirstReveal(true);
+      return;
+    }
+
+    let cancelled = false;
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) {
+        setHasCompletedFirstReveal(true);
+      }
+    }, RECAP_FIRST_REVEAL_PHYSICS_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [hasCompletedFirstReveal, isVisible, reduceMotionEnabled]);
+
+  const shouldEnablePilePhysics = isVisible && hasCompletedFirstReveal;
 
   return (
     <View
@@ -95,6 +127,7 @@ const NotesRecapView = memo(function NotesRecapView({
                   title={pileTitle}
                   items={pileItems}
                   deferUntilAfterInteractions
+                  physicsEnabled={shouldEnablePilePhysics}
                 />
               </Reanimated.View>
 

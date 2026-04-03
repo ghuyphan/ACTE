@@ -16,6 +16,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -26,6 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout } from '../../constants/theme';
 import { DOODLE_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { useAuth } from '../../hooks/useAuth';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useFeedFocus } from '../../hooks/state/useFeedFocus';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
@@ -56,13 +58,18 @@ type NoteGridItem =
 const GRID_DOODLE_STROKE_WIDTH = 4.5;
 const GRID_STICKER_MIN_SIZE = 0;
 const GRID_TILE_ENTRY_STAGGER_MS = 28;
+const GRID_TILE_ENTRY_ANIMATION_LIMIT = 5;
 const MODE_TRANSITION_DURATION_MS = 220;
 
 function triggerNotesHaptic(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
   void Haptics.impactAsync(style);
 }
 
-function getGridTileEntering(index: number) {
+function getGridTileEntering(index: number, shouldAnimate: boolean) {
+  if (!shouldAnimate || index > GRID_TILE_ENTRY_ANIMATION_LIMIT) {
+    return undefined;
+  }
+
   const delay = Math.min(index, 8) * GRID_TILE_ENTRY_STAGGER_MS;
   const column = index % 3;
 
@@ -85,6 +92,7 @@ const GridTile = memo(function GridTile({
   onPress,
   index,
   photoFallbackLabel,
+  animateOnMount,
 }: {
   item: NoteGridItem;
   size: number;
@@ -98,6 +106,7 @@ const GridTile = memo(function GridTile({
   onPress: () => void;
   index: number;
   photoFallbackLabel: string;
+  animateOnMount: boolean;
 }) {
   const [sharedPhotoUri, setSharedPhotoUri] = useState(
     item.kind === 'shared-post' ? item.post.photoLocalUri ?? null : null
@@ -203,7 +212,7 @@ const GridTile = memo(function GridTile({
       ]}
     >
       <Reanimated.View
-        entering={getGridTileEntering(index)}
+        entering={getGridTileEntering(index, animateOnMount)}
         sharedTransitionTag={sharedTransitionTag}
         style={[styles.tile, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
@@ -302,6 +311,7 @@ const GridTile = memo(function GridTile({
 export default function NotesIndexScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const reduceMotionEnabled = useReducedMotion();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -343,6 +353,8 @@ export default function NotesIndexScreen() {
   const keepAllModeMounted = process.env.NODE_ENV !== 'test';
   const shouldRenderRecap = hasRecapNotes && (hasMountedRecap || mode === 'recap');
   const shouldRenderAllMode = mode === 'all' || keepAllModeMounted;
+  const shouldAnimateGridTiles =
+    !reduceMotionEnabled && Platform.OS !== 'android' && items.length <= GRID_TILE_ENTRY_ANIMATION_LIMIT + 1;
 
   useEffect(() => {
     if (!hasRecapNotes && mode === 'recap') {
@@ -454,7 +466,9 @@ export default function NotesIndexScreen() {
                     data={items}
                     keyExtractor={(item) => item.id}
                     getItemType={(item) => `${item.kind}:${item.kind === 'note' ? item.note.type : item.post.type}`}
-                    drawDistance={gridSize * 4}
+                    drawDistance={gridSize * 2}
+                    estimatedItemSize={gridSize + gridGap}
+                    removeClippedSubviews={Platform.OS === 'android'}
                     renderItem={({ item, index }) => (
                       <GridTile
                         item={item}
@@ -463,6 +477,7 @@ export default function NotesIndexScreen() {
                         gap={gridGap}
                         colors={colors}
                         photoFallbackLabel={t('shared.photoMemory', 'Photo memory')}
+                        animateOnMount={shouldAnimateGridTiles}
                         onPress={() => openItem(item)}
                       />
                     )}
@@ -486,6 +501,7 @@ export default function NotesIndexScreen() {
                 <NotesRecapView
                   notes={notes}
                   bottomInset={insets.bottom}
+                  isVisible={mode === 'recap'}
                 />
               </Reanimated.View>
             ) : null}

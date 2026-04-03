@@ -19,7 +19,6 @@ import { Radii, Typography } from '../../../constants/theme';
 import { useStickerPhysics, type StickerPhysicsState } from '../../../hooks/useStickerPhysics';
 import { useTheme } from '../../../hooks/useTheme';
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
-import LivePhotoIcon from '../../ui/LivePhotoIcon';
 import {
   getStickerOutlineOffsets,
   getStickerOutlineSize,
@@ -66,8 +65,67 @@ type PileItemMetrics = {
 
 const RECAP_MIN_PHYSICS_BASE = 52;
 const RECAP_COLLISION_INSET = 2;
+const MAX_RECAP_PHYSICS_ITEMS = 12;
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
 const PREFER_CONTINUOUS_OUTLINE = Platform.OS === 'android';
+
+function getRecapPhysicsItemCount(count: number) {
+  if (count <= MAX_RECAP_PHYSICS_ITEMS) {
+    return count;
+  }
+
+  if (count <= 24) {
+    return 10;
+  }
+
+  return 8;
+}
+
+function getDensePilePositions(count: number): PilePosition[] {
+  const rows = Math.min(5, Math.max(2, Math.ceil(count / 6)));
+  const baseColumns = Math.ceil(count / rows);
+  const rowCounts = Array.from({ length: rows }, (_, rowIndex) =>
+    Math.floor(count / rows) + (rowIndex < count % rows ? 1 : 0)
+  );
+  const topY = rows >= 5 ? 76 : rows === 4 ? 80 : 84;
+  const bottomY = rows >= 5 ? 148 : rows === 4 ? 144 : 138;
+  const rowBaseSize = clamp(66 - Math.max(baseColumns - 4, 0) * 5 - Math.max(rows - 2, 0) * 4, 24, 54);
+
+  return rowCounts.flatMap((rowCount, rowIndex) => {
+    const rowRatio = rows <= 1 ? 0.5 : rowIndex / (rows - 1);
+    const yBase = topY + (bottomY - topY) * rowRatio;
+    const rowInset = rowIndex % 2 === 0 ? 0.1 : 0.14;
+    const left = rowInset;
+    const right = 1 - rowInset;
+    const step = rowCount <= 1 ? 0 : (right - left) / (rowCount - 1);
+
+    return Array.from({ length: rowCount }, (_, columnIndex) => {
+      const wave = (columnIndex + rowIndex) % 2 === 0 ? -1 : 1;
+      const x = rowCount <= 1 ? 0.5 : left + step * columnIndex;
+      const centerBias =
+        rowCount > 2 && columnIndex === Math.floor(rowCount / 2)
+          ? 4
+          : rowCount > 3 &&
+              columnIndex > 0 &&
+              columnIndex < rowCount - 1
+            ? 2
+            : 0;
+      const size = clamp(
+        rowBaseSize + centerBias - rowIndex * 1.5 + (wave > 0 ? 1 : -1),
+        24,
+        58
+      );
+      const rotate = clamp(wave * (rows >= 4 ? 5 : 7) + (columnIndex - (rowCount - 1) / 2) * 1.2, -10, 10);
+
+      return {
+        x,
+        y: yBase + wave * (rows >= 4 ? 3 : 5),
+        size,
+        rotate,
+      };
+    });
+  });
+}
 
 function getPilePositions(count: number): PilePosition[] {
   if (count <= 1) {
@@ -109,6 +167,10 @@ function getPilePositions(count: number): PilePosition[] {
     ];
   }
 
+  if (count > 8) {
+    return getDensePilePositions(count);
+  }
+
   return [
     { x: 0.1, y: 126, size: 60, rotate: -10 },
     { x: 0.22, y: 88, size: 66, rotate: -6 },
@@ -146,7 +208,19 @@ function getPileSpreadFactor(count: number) {
     return 1.3;
   }
 
-  return 1.08;
+  if (count <= 8) {
+    return 1.08;
+  }
+
+  if (count <= 12) {
+    return 1;
+  }
+
+  if (count <= 18) {
+    return 0.96;
+  }
+
+  return 0.92;
 }
 
 function getAdjustedPilePosition(count: number, position: PilePosition): PilePosition {
@@ -193,7 +267,23 @@ function getPileCountScale(count: number) {
     return 0.87;
   }
 
-  return 0.83;
+  if (count <= 8) {
+    return 0.83;
+  }
+
+  if (count <= 12) {
+    return 0.74;
+  }
+
+  if (count <= 18) {
+    return 0.66;
+  }
+
+  if (count <= 24) {
+    return 0.58;
+  }
+
+  return 0.52;
 }
 
 function getPileMinimumVisualSize(count: number, item: RecapStickerPileItem) {
@@ -205,7 +295,19 @@ function getPileMinimumVisualSize(count: number, item: RecapStickerPileItem) {
     return item.kind === 'sticker' ? 80 : 72;
   }
 
-  return item.kind === 'sticker' ? 60 : 54;
+  if (count <= 8) {
+    return item.kind === 'sticker' ? 60 : 54;
+  }
+
+  if (count <= 12) {
+    return item.kind === 'sticker' ? 46 : 42;
+  }
+
+  if (count <= 18) {
+    return item.kind === 'sticker' ? 38 : 34;
+  }
+
+  return item.kind === 'sticker' ? 30 : 28;
 }
 
 function getAdjustedPileSize(
@@ -249,17 +351,12 @@ function getPileItemMetrics(item: RecapStickerPileItem, size: number): PileItemM
   };
 }
 
-function buildPlacement(
-  item: RecapStickerPileItem,
+function getPilePlacementAnchor(
   position: PilePosition,
   width: number,
   height: number,
-  metrics: PileItemMetrics,
-  zIndex: number
-): NoteStickerPlacement {
-  const baseSize = Math.max(RECAP_MIN_PHYSICS_BASE, Math.min(width, height) * 0.3);
-  const assetSize = getItemAssetSize(item);
-  const scale = position.size / Math.max(baseSize, 1);
+  metrics: PileItemMetrics
+) {
   const topInset = 6;
   const centerX = Math.min(
     Math.max(position.x * width, metrics.width / 2),
@@ -271,12 +368,32 @@ function buildPlacement(
   );
 
   return {
+    centerX,
+    centerY,
+    rotation: position.rotate,
+  };
+}
+
+function buildPlacement(
+  item: RecapStickerPileItem,
+  position: PilePosition,
+  width: number,
+  height: number,
+  metrics: PileItemMetrics,
+  zIndex: number
+): NoteStickerPlacement {
+  const baseSize = Math.max(RECAP_MIN_PHYSICS_BASE, Math.min(width, height) * 0.3);
+  const assetSize = getItemAssetSize(item);
+  const scale = position.size / Math.max(baseSize, 1);
+  const anchor = getPilePlacementAnchor(position, width, height, metrics);
+
+  return {
     id: item.key,
     assetId: `${item.key}:asset`,
-    x: centerX / Math.max(width, 1),
-    y: centerY / Math.max(height, 1),
+    x: anchor.centerX / Math.max(width, 1),
+    y: anchor.centerY / Math.max(height, 1),
     scale,
-    rotation: position.rotate,
+    rotation: anchor.rotation,
     zIndex,
     opacity: 1,
     outlineEnabled: item.kind === 'photo' ? false : item.outlineEnabled !== false,
@@ -305,6 +422,7 @@ const RecapBubble = memo(function RecapBubble({
   anchorY,
   rotation,
   physicsState,
+  physicsStateIndex,
 }: {
   item: RecapStickerPileItem;
   metrics: PileItemMetrics;
@@ -312,6 +430,7 @@ const RecapBubble = memo(function RecapBubble({
   anchorY: number;
   rotation: number;
   physicsState?: SharedValue<StickerPhysicsState[]>;
+  physicsStateIndex?: number;
 }) {
   const { colors } = useTheme();
   const stampImage = useImage(item.previewUri);
@@ -336,7 +455,7 @@ const RecapBubble = memo(function RecapBubble({
   const stampBorderWidth = stampMetrics ? Math.max(1, stampMetrics.perforationRadius * 0.18) : 0;
 
   const bubbleStyle = useAnimatedStyle(() => {
-    if (!physicsState) {
+    if (!physicsState || physicsStateIndex === undefined) {
       return {
         opacity: 1,
         transform: [
@@ -347,9 +466,9 @@ const RecapBubble = memo(function RecapBubble({
       };
     }
 
-    const state = physicsState.value.find((candidate: StickerPhysicsState) => candidate.id === item.key);
+    const state = physicsState.value[physicsStateIndex];
 
-    if (!state) {
+    if (!state || state.id !== item.key) {
       return {
         opacity: 1,
         transform: [
@@ -370,11 +489,12 @@ const RecapBubble = memo(function RecapBubble({
         { scaleY: state.jellyScaleY },
       ],
     };
-  }, [anchorX, anchorY, item.key, metrics.height, metrics.width, physicsState, rotation]);
+  }, [anchorX, anchorY, item.key, metrics.height, metrics.width, physicsState, physicsStateIndex, rotation]);
 
   return (
     <>
       <Animated.View
+        testID={`notes-recap-item-${item.key}`}
         style={[
           styles.bubbleWrap,
           {
@@ -395,11 +515,6 @@ const RecapBubble = memo(function RecapBubble({
             ]}
           >
             <Image source={{ uri: item.previewUri }} style={styles.photoImage} contentFit="cover" />
-            {item.isLivePhoto ? (
-              <View style={[styles.liveBadge, { backgroundColor: colors.card }]}>
-                <LivePhotoIcon size={14} color={colors.primary} />
-              </View>
-            ) : null}
           </View>
         ) : (
           <View
@@ -493,7 +608,7 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
   physicsEnabled = true,
 }: Pick<RecapStickerPileProps, 'title' | 'items'> & { physicsEnabled?: boolean }) {
   const { colors } = useTheme();
-  const displayItems = useMemo(() => items.slice(0, 8), [items]);
+  const displayItems = useMemo(() => items, [items]);
   const positions = useMemo(() => getPilePositions(displayItems.length), [displayItems.length]);
   const [layout, setLayout] = useState({ width: 1, height: 176 });
   const displayEntries = useMemo(
@@ -518,18 +633,34 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
     },
     [displayItems, positions]
   );
+  const physicsItemCount = useMemo(
+    () => getRecapPhysicsItemCount(displayEntries.length),
+    [displayEntries.length]
+  );
+  const firstAnimatedEntryIndex = Math.max(displayEntries.length - physicsItemCount, 0);
+  const animatedEntries = useMemo(
+    () => displayEntries.slice(firstAnimatedEntryIndex),
+    [displayEntries, firstAnimatedEntryIndex]
+  );
+  const staticAnchors = useMemo(
+    () =>
+      displayEntries.map(({ position, metrics }) =>
+        getPilePlacementAnchor(position, layout.width, layout.height, metrics)
+      ),
+    [displayEntries, layout.height, layout.width]
+  );
 
   const placements = useMemo(
     () =>
-      displayEntries.map(({ item, position, metrics }, index) =>
-        buildPlacement(item, position, layout.width, layout.height, metrics, index + 1)
+      animatedEntries.map(({ item, position, metrics }, index) =>
+        buildPlacement(item, position, layout.width, layout.height, metrics, firstAnimatedEntryIndex + index + 1)
       ),
-    [displayEntries, layout.height, layout.width]
+    [animatedEntries, firstAnimatedEntryIndex, layout.height, layout.width]
   );
   const physicsState = useStickerPhysics({
     placements: physicsEnabled ? placements : [],
     layout,
-    isActive: physicsEnabled && displayItems.length > 0,
+    isActive: physicsEnabled && animatedEntries.length > 0,
     sensorDriven: true,
     collisionResponse: 'gentle',
     motionVariant: 'physics',
@@ -570,10 +701,23 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
             key={item.key}
             item={item}
             metrics={metrics}
-            anchorX={(placements[index]?.x ?? 0) * layout.width}
-            anchorY={(placements[index]?.y ?? 0) * layout.height}
-            rotation={placements[index]?.rotation ?? 0}
-            physicsState={physicsEnabled ? physicsState : undefined}
+            anchorX={
+              (physicsEnabled ? placements[index - firstAnimatedEntryIndex]?.x : undefined) ??
+              staticAnchors[index]?.centerX ??
+              0
+            }
+            anchorY={
+              (physicsEnabled ? placements[index - firstAnimatedEntryIndex]?.y : undefined) ??
+              staticAnchors[index]?.centerY ??
+              0
+            }
+            rotation={
+              (physicsEnabled ? placements[index - firstAnimatedEntryIndex]?.rotation : undefined) ??
+              staticAnchors[index]?.rotation ??
+              0
+            }
+            physicsState={physicsEnabled && index >= firstAnimatedEntryIndex ? physicsState : undefined}
+            physicsStateIndex={index >= firstAnimatedEntryIndex ? index - firstAnimatedEntryIndex : undefined}
           />
         ))}
       </View>
