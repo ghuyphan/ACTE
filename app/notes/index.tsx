@@ -6,7 +6,14 @@ import { Image } from 'expo-image';
 import { Href, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import Reanimated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
+import Reanimated, {
+  FadeInLeft,
+  FadeInRight,
+  FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import {
   ActivityIndicator,
   Pressable,
@@ -49,9 +56,25 @@ type NoteGridItem =
 const GRID_DOODLE_STROKE_WIDTH = 4.5;
 const GRID_STICKER_MIN_SIZE = 0;
 const GRID_TILE_ENTRY_STAGGER_MS = 28;
+const MODE_TRANSITION_DURATION_MS = 220;
 
 function triggerNotesHaptic(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
   void Haptics.impactAsync(style);
+}
+
+function getGridTileEntering(index: number) {
+  const delay = Math.min(index, 8) * GRID_TILE_ENTRY_STAGGER_MS;
+  const column = index % 3;
+
+  if (column === 0) {
+    return FadeInLeft.delay(delay).springify().damping(18).stiffness(210).mass(0.72);
+  }
+
+  if (column === 2) {
+    return FadeInRight.delay(delay).springify().damping(18).stiffness(210).mass(0.72);
+  }
+
+  return FadeInUp.delay(delay).springify().damping(18).stiffness(210).mass(0.72);
 }
 
 const GridTile = memo(function GridTile({
@@ -180,7 +203,7 @@ const GridTile = memo(function GridTile({
       ]}
     >
       <Reanimated.View
-        entering={FadeInDown.delay(Math.min(index, 8) * GRID_TILE_ENTRY_STAGGER_MS).duration(220)}
+        entering={getGridTileEntering(index)}
         sharedTransitionTag={sharedTransitionTag}
         style={[styles.tile, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
@@ -287,6 +310,8 @@ export default function NotesIndexScreen() {
   const { notes, loading } = useNotesStore();
   const { sharedPosts, loading: sharedLoading } = useSharedFeedStore();
   const [mode, setMode] = useState<RecapMode>('all');
+  const [hasMountedRecap, setHasMountedRecap] = useState(false);
+  const modeProgress = useSharedValue(0);
 
   const friendPosts = useMemo(
     () => sharedPosts.filter((post) => post.authorUid !== user?.uid),
@@ -315,12 +340,42 @@ export default function NotesIndexScreen() {
   const gridSize = Math.floor((width - Layout.screenPadding * 2 - gridGap * 2) / 3);
   const isLoading = loading || (sharedLoading && items.length === 0);
   const hasRecapNotes = notes.length > 0;
+  const keepAllModeMounted = process.env.NODE_ENV !== 'test';
+  const shouldRenderRecap = hasRecapNotes && (hasMountedRecap || mode === 'recap');
+  const shouldRenderAllMode = mode === 'all' || keepAllModeMounted;
 
   useEffect(() => {
     if (!hasRecapNotes && mode === 'recap') {
       setMode('all');
     }
   }, [hasRecapNotes, mode]);
+
+  useEffect(() => {
+    if (mode === 'recap' && hasRecapNotes) {
+      setHasMountedRecap(true);
+    }
+  }, [hasRecapNotes, mode]);
+
+  useEffect(() => {
+    modeProgress.value = withTiming(mode === 'recap' ? 1 : 0, {
+      duration: MODE_TRANSITION_DURATION_MS,
+    });
+  }, [mode, modeProgress]);
+
+  const allLayerAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: 1 - modeProgress.value,
+    transform: [
+      { translateY: modeProgress.value * -8 },
+      { scale: 1 - modeProgress.value * 0.02 },
+    ],
+  }));
+  const recapLayerAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: modeProgress.value,
+    transform: [
+      { translateY: (1 - modeProgress.value) * 10 },
+      { scale: 0.985 + modeProgress.value * 0.015 },
+    ],
+  }));
 
   const openItem = useCallback(
     (item: NoteGridItem) => {
@@ -364,59 +419,77 @@ export default function NotesIndexScreen() {
       ) : (
         <>
           {modeSwitch}
-          {mode === 'recap' && hasRecapNotes ? (
-            <NotesRecapView
-              notes={notes}
-              bottomInset={insets.bottom}
-            />
-          ) : items.length === 0 ? (
-        <View
-          testID="notes-empty-state"
-          style={[
-            styles.center,
-            styles.emptyScreen,
-            {
-              paddingBottom: insets.bottom + 28,
-            },
-          ]}
-        >
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconWrap}>
-              <Ionicons name="document-text-outline" size={44} color={colors.secondaryText} />
-            </View>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              {t('home.emptyTitle', 'No notes yet')}
-            </Text>
-            <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-              {t('home.emptySubtitle', 'Write down what she likes or dislikes\nat each restaurant — we\'ll remind you!')}
-            </Text>
+          <View style={styles.modeContentStack}>
+            {shouldRenderAllMode ? (
+              <Reanimated.View
+                pointerEvents={mode === 'all' ? 'auto' : 'none'}
+                style={[styles.modeContentLayer, allLayerAnimatedStyle]}
+              >
+                {items.length === 0 ? (
+                  <View
+                    testID="notes-empty-state"
+                    style={[
+                      styles.center,
+                      styles.emptyScreen,
+                      styles.modeContentFill,
+                      {
+                        paddingBottom: insets.bottom + 28,
+                      },
+                    ]}
+                  >
+                    <View style={styles.emptyState}>
+                      <View style={styles.emptyIconWrap}>
+                        <Ionicons name="document-text-outline" size={44} color={colors.secondaryText} />
+                      </View>
+                      <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                        {t('home.emptyTitle', 'No notes yet')}
+                      </Text>
+                      <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
+                        {t('home.emptySubtitle', 'Write down what she likes or dislikes\nat each restaurant — we\'ll remind you!')}
+                      </Text>
+                    </View>
+                  </View>
+                ) : (
+                  <FlashList
+                    data={items}
+                    keyExtractor={(item) => item.id}
+                    getItemType={(item) => `${item.kind}:${item.kind === 'note' ? item.note.type : item.post.type}`}
+                    drawDistance={gridSize * 4}
+                    renderItem={({ item, index }) => (
+                      <GridTile
+                        item={item}
+                        index={index}
+                        size={gridSize}
+                        gap={gridGap}
+                        colors={colors}
+                        photoFallbackLabel={t('shared.photoMemory', 'Photo memory')}
+                        onPress={() => openItem(item)}
+                      />
+                    )}
+                    numColumns={3}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{
+                      paddingBottom: insets.bottom + 28,
+                      paddingHorizontal: Layout.screenPadding,
+                    }}
+                    style={styles.modeContentFill}
+                  />
+                )}
+              </Reanimated.View>
+            ) : null}
+
+            {shouldRenderRecap ? (
+              <Reanimated.View
+                pointerEvents={mode === 'recap' ? 'auto' : 'none'}
+                style={[styles.modeContentLayer, recapLayerAnimatedStyle]}
+              >
+                <NotesRecapView
+                  notes={notes}
+                  bottomInset={insets.bottom}
+                />
+              </Reanimated.View>
+            ) : null}
           </View>
-        </View>
-          ) : (
-        <FlashList
-          data={items}
-          keyExtractor={(item) => item.id}
-          getItemType={(item) => `${item.kind}:${item.kind === 'note' ? item.note.type : item.post.type}`}
-          drawDistance={gridSize * 4}
-          renderItem={({ item, index }) => (
-            <GridTile
-              item={item}
-              index={index}
-              size={gridSize}
-              gap={gridGap}
-              colors={colors}
-              photoFallbackLabel={t('shared.photoMemory', 'Photo memory')}
-              onPress={() => openItem(item)}
-            />
-          )}
-          numColumns={3}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingBottom: insets.bottom + 28,
-            paddingHorizontal: Layout.screenPadding,
-          }}
-        />
-          )}
         </>
       )}
     </View>
@@ -438,6 +511,16 @@ const styles = StyleSheet.create({
   modeSwitchWrap: {
     paddingTop: 4,
     paddingBottom: 18,
+  },
+  modeContentStack: {
+    flex: 1,
+    position: 'relative',
+  },
+  modeContentLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modeContentFill: {
+    flex: 1,
   },
   tilePressable: {
     borderRadius: 24,

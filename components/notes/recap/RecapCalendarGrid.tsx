@@ -33,6 +33,7 @@ interface RecapCalendarGridProps {
 }
 
 const DEFAULT_WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const COMPACT_COLUMN_WIDTH = 56;
 
 type CalendarPalette = {
   card: string;
@@ -79,6 +80,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
   }
 
   const hasPhotoPreview = Boolean(day.photoPreviewUri);
+  const isEmptyDay = day.count === 0;
   const isInteractive = Boolean(day.dateKey && day.count > 0 && !day.disabled);
   const haloAnimatedStyle = useAnimatedStyle(
     () => ({
@@ -143,6 +145,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
             style={[
               styles.dayCard,
               compact ? styles.dayCardCompact : null,
+              isEmptyDay ? styles.dayCardEmpty : null,
               {
                 backgroundColor: palette.card,
                 borderColor: isSelected ? 'transparent' : `${palette.border}88`,
@@ -171,6 +174,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
               style={[
                 styles.dayNumber,
                 compact ? styles.dayNumberCompact : null,
+                isEmptyDay ? styles.dayNumberEmpty : null,
                 {
                   color: hasPhotoPreview
                     ? '#FFFFFF'
@@ -183,72 +187,74 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
             >
               {day.dayNumber}
             </Text>
-            <View
-              style={[
-                styles.markerRow,
-                compact ? styles.markerRowCompact : null,
-                hasPhotoPreview ? styles.markerRowPhoto : null,
-                hasPhotoPreview && compact ? styles.markerRowPhotoCompact : null,
-              ]}
-            >
-              {!hasPhotoPreview
-                ? day.markers.slice(0, 1).map((marker) => (
-                    marker.type === 'polaroid' && marker.previewUri ? (
-                      <View
-                        key={marker.key}
-                        style={[
-                          styles.photoMarker,
-                          compact ? styles.photoMarkerCompact : null,
-                          {
-                            borderColor: isSelected ? palette.primary : `${palette.border}AA`,
-                            backgroundColor: palette.card,
-                          },
-                        ]}
-                      >
-                        <Image
-                          source={{ uri: marker.previewUri }}
-                          style={styles.photoMarkerImage}
-                          contentFit="cover"
+            {!isEmptyDay ? (
+              <View
+                style={[
+                  styles.markerRow,
+                  compact ? styles.markerRowCompact : null,
+                  hasPhotoPreview ? styles.markerRowPhoto : null,
+                  hasPhotoPreview && compact ? styles.markerRowPhotoCompact : null,
+                ]}
+              >
+                {!hasPhotoPreview
+                  ? day.markers.slice(0, 1).map((marker) => (
+                      marker.type === 'polaroid' && marker.previewUri ? (
+                        <View
+                          key={marker.key}
+                          style={[
+                            styles.photoMarker,
+                            compact ? styles.photoMarkerCompact : null,
+                            {
+                              borderColor: isSelected ? palette.primary : `${palette.border}AA`,
+                              backgroundColor: palette.card,
+                            },
+                          ]}
+                        >
+                          <Image
+                            source={{ uri: marker.previewUri }}
+                            style={styles.photoMarkerImage}
+                            contentFit="cover"
+                          />
+                        </View>
+                      ) : (
+                        <View
+                          key={marker.key}
+                          style={[
+                            styles.marker,
+                            compact ? styles.markerCompact : null,
+                            {
+                              backgroundColor: marker.color,
+                              borderColor: marker.color,
+                            },
+                          ]}
                         />
-                      </View>
-                    ) : (
-                      <View
-                        key={marker.key}
-                        style={[
-                          styles.marker,
-                          compact ? styles.markerCompact : null,
-                          {
-                            backgroundColor: marker.color,
-                            borderColor: marker.color,
-                          },
-                        ]}
-                      />
-                    )
-                  ))
-                : null}
-              {day.count > 1 ? (
-                <View
-                  style={[
-                    styles.overflowBadge,
-                    compact ? styles.overflowBadgeCompact : null,
-                    {
-                      backgroundColor: hasPhotoPreview ? palette.card : palette.primarySoft,
-                      borderColor: hasPhotoPreview ? `${palette.border}88` : 'transparent',
-                    },
-                  ]}
-                >
-                  <Text
+                      )
+                    ))
+                  : null}
+                {day.count > 1 ? (
+                  <View
                     style={[
-                      styles.overflowText,
-                      compact ? styles.overflowTextCompact : null,
-                      { color: hasPhotoPreview ? palette.text : palette.primary },
+                      styles.overflowBadge,
+                      compact ? styles.overflowBadgeCompact : null,
+                      {
+                        backgroundColor: hasPhotoPreview ? palette.card : palette.primarySoft,
+                        borderColor: hasPhotoPreview ? `${palette.border}88` : 'transparent',
+                      },
                     ]}
                   >
-                    +{day.count - 1}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+                    <Text
+                      style={[
+                        styles.overflowText,
+                        compact ? styles.overflowTextCompact : null,
+                        { color: hasPhotoPreview ? palette.text : palette.primary },
+                      ]}
+                    >
+                      +{day.count - 1}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         </Animated.View>
       </View>
@@ -283,9 +289,13 @@ function RecapCalendarGrid({
     }),
     [colors.border, colors.card, colors.primary, colors.primarySoft, colors.secondaryText, colors.text]
   );
-  const measuredCompact = calendarWidth > 0 ? calendarWidth / 7 < 48 : false;
+  const measuredCompact = calendarWidth > 0 ? calendarWidth / 7 < COMPACT_COLUMN_WIDTH : false;
   const isCompact = compact || measuredCompact;
-  const columnWidth = calendarWidth > 0 ? calendarWidth / 7 : undefined;
+  const columnHorizontalInset = isCompact ? 1 : 2.5;
+  const columnWidth =
+    calendarWidth > 0
+      ? Math.max((calendarWidth - columnHorizontalInset * 2 * 7) / 7, 0)
+      : undefined;
   const handleCalendarLayout = useCallback((event: LayoutChangeEvent) => {
     const nextWidth = event.nativeEvent.layout.width;
     setCalendarWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
@@ -352,12 +362,11 @@ const styles = StyleSheet.create({
     ...Typography.pill,
     fontSize: 12,
     width: '100%',
-    textAlign: 'left',
-    paddingLeft: 8,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   weekLabelCompact: {
     fontSize: 11,
-    paddingLeft: 6,
   },
   grid: {
     flexDirection: 'row',
@@ -392,6 +401,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 5,
     gap: 4,
+  },
+  dayCardEmpty: {
+    justifyContent: 'center',
   },
   dayFrame: {
     flex: 1,
@@ -431,6 +443,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontFamily: 'Noto Sans',
     textAlign: 'left',
+    includeFontPadding: false,
     zIndex: 1,
     textShadowColor: 'rgba(0,0,0,0.16)',
     textShadowOffset: { width: 0, height: 1 },
@@ -439,6 +452,11 @@ const styles = StyleSheet.create({
   dayNumberCompact: {
     fontSize: 14,
     lineHeight: 16,
+  },
+  dayNumberEmpty: {
+    textAlign: 'center',
+    textShadowColor: 'transparent',
+    textShadowRadius: 0,
   },
   markerRow: {
     flexDirection: 'row',
@@ -514,6 +532,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 12,
     fontWeight: '800',
+    includeFontPadding: false,
   },
   overflowTextCompact: {
     fontSize: 9,
