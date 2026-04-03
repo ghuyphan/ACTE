@@ -9,12 +9,12 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, us
 import { useTranslation } from 'react-i18next';
 import {
   AppState,
-  Dimensions,
   Keyboard,
   Platform,
   Share,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { PAYWALL_RESULT } from 'react-native-purchases-ui';
@@ -65,7 +65,6 @@ import { isIOS26OrNewer } from '../../utils/platform';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 import { getPersistentItem, setPersistentItem } from '../../utils/appStorage';
 
-const { height } = Dimensions.get('window');
 const SHARED_MANAGE_SHEET_SHARE_DELAY_MS = Platform.OS === 'ios' ? 220 : 0;
 const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
 
@@ -80,6 +79,7 @@ type FeedFocusItem =
 type SaveButtonState = 'idle' | 'saving' | 'success';
 
 export default function HomeScreen() {
+  const { height: windowHeight } = useWindowDimensions();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const reduceMotionEnabled = useReducedMotion();
@@ -238,7 +238,7 @@ export default function HomeScreen() {
     resetCapture,
   } = useCaptureFlow();
 
-  const snapHeight = height - insets.top - 90;
+  const snapHeight = windowHeight - insets.top - 90;
 
   const filteredNotes = useMemo(() => {
     return filterNotesByQuery(notes, deferredSearchQuery);

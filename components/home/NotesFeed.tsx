@@ -10,10 +10,10 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import {
-  Dimensions,
   Platform,
   RefreshControl,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Note } from '../../services/database';
@@ -22,7 +22,6 @@ import { Layout } from '../../constants/theme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
 
-const { width, height } = Dimensions.get('window');
 const MAX_STAGGERED_ENTRANCE_INDEX = 2;
 const ENTRANCE_DELAY_MS = 24;
 
@@ -312,6 +311,7 @@ export default function NotesFeed({
   revealToken = 0,
   onSettledArchiveItemChange,
 }: NotesFeedProps) {
+  const { width, height } = useWindowDimensions();
   const captureVisibilityRef = useRef(true);
   const isAdjustingSnapRef = useRef(false);
   const lastOffsetYRef = useRef(0);
@@ -479,6 +479,36 @@ export default function NotesFeed({
     snapHeight,
   ]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    const currentOffset = lastOffsetYRef.current;
+    const maxSnapOffset = listData.length * snapHeight;
+    const nearestSnapOffset = Math.min(
+      maxSnapOffset,
+      Math.max(0, Math.round(currentOffset / snapHeight) * snapHeight)
+    );
+
+    if (Math.abs(nearestSnapOffset - currentOffset) < 2) {
+      return;
+    }
+
+    lastOffsetYRef.current = nearestSnapOffset;
+    flatListRef.current?.scrollToOffset({ offset: nearestSnapOffset, animated: false });
+    settleCaptureVisibility(nearestSnapOffset);
+    reportActiveCard(nearestSnapOffset);
+    reportSettledArchiveItem(nearestSnapOffset);
+  }, [
+    flatListRef,
+    listData.length,
+    reportActiveCard,
+    reportSettledArchiveItem,
+    settleCaptureVisibility,
+    snapHeight,
+  ]);
+
   const renderItem = useCallback(
     ({ item, index }: { item: NotesFeedListItem; index: number }) => {
       const isActive = activeCardKey === `${item.kind}:${item.id}`;
@@ -592,7 +622,7 @@ export default function NotesFeed({
 
 const styles = StyleSheet.create({
   snapItem: {
-    width,
+    width: '100%',
     justifyContent: 'flex-start',
   },
   cardStage: {
