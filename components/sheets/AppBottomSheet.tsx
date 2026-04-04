@@ -3,14 +3,16 @@ import {
   BottomSheetModal,
   BottomSheetView,
 } from '@gorhom/bottom-sheet';
-import { useEffect, useRef } from 'react';
-import { BackHandler, Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { BackHandler, Keyboard, Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 
 export default function AppBottomSheet({
   androidDynamicSizing = true,
+  androidDisablePanningWhenKeyboardHidden = false,
   androidInitialIndex = 0,
   androidKeyboardBehavior = 'interactive',
+  androidRestoreInitialSnapOnKeyboardHide = false,
   androidMaxDynamicContentSize,
   androidSnapPoints,
   children,
@@ -23,8 +25,10 @@ export default function AppBottomSheet({
   wrapContentInView = true,
 }: {
   androidDynamicSizing?: boolean;
+  androidDisablePanningWhenKeyboardHidden?: boolean;
   androidInitialIndex?: number;
   androidKeyboardBehavior?: 'interactive' | 'extend' | 'fillParent';
+  androidRestoreInitialSnapOnKeyboardHide?: boolean;
   androidMaxDynamicContentSize?: number;
   androidSnapPoints?: (number | string)[];
   children: React.ReactNode;
@@ -37,9 +41,33 @@ export default function AppBottomSheet({
   wrapContentInView?: boolean;
 }) {
   const modalRef = useRef<BottomSheetModal>(null);
+  const keyboardWasVisibleRef = useRef(false);
+  const ignoreNextDismissRef = useRef(false);
+  const previousModalConfigKeyRef = useRef<string | null>(null);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const { colors, isDark } = useTheme();
   const backgroundColor = detached ? colors.surface : colors.card;
   const backdropOpacity = isDark ? 0.52 : 0.38;
+  const panningEnabled = !androidDisablePanningWhenKeyboardHidden || keyboardVisible;
+  const modalConfigKey = [
+    detached ? 'detached' : 'edge',
+    wrapContentInView ? 'wrapped' : 'scrollable',
+    androidDynamicSizing ? 'dynamic' : 'fixed',
+    androidKeyboardBehavior,
+    androidInitialIndex,
+    androidRestoreInitialSnapOnKeyboardHide ? 'restore' : 'no-restore',
+    ...(androidSnapPoints?.map((point) => String(point)) ?? ['no-snap-points']),
+  ].join(':');
+
+  if (
+    visible &&
+    previousModalConfigKeyRef.current !== null &&
+    previousModalConfigKeyRef.current !== modalConfigKey
+  ) {
+    ignoreNextDismissRef.current = true;
+  }
+
+  previousModalConfigKeyRef.current = modalConfigKey;
 
   useEffect(() => {
     if (Platform.OS !== 'android') {
@@ -47,12 +75,14 @@ export default function AppBottomSheet({
     }
 
     if (visible) {
-      modalRef.current?.present();
+      requestAnimationFrame(() => {
+        modalRef.current?.present();
+      });
       return;
     }
 
     modalRef.current?.dismiss();
-  }, [visible]);
+  }, [modalConfigKey, visible]);
 
   useEffect(() => {
     if (Platform.OS !== 'android' || !visible || !dismissible) {
@@ -69,12 +99,69 @@ export default function AppBottomSheet({
     return () => backHandler.remove();
   }, [visible, dismissible, onClose]);
 
+  useEffect(() => {
+    if (
+      Platform.OS !== 'android' ||
+      !visible ||
+      (!androidRestoreInitialSnapOnKeyboardHide && !androidDisablePanningWhenKeyboardHidden)
+    ) {
+      keyboardWasVisibleRef.current = false;
+      setKeyboardVisible(false);
+      return;
+    }
+
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      keyboardWasVisibleRef.current = true;
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+
+      if (!keyboardWasVisibleRef.current) {
+        return;
+      }
+
+      keyboardWasVisibleRef.current = false;
+      requestAnimationFrame(() => {
+        modalRef.current?.snapToIndex(androidInitialIndex);
+      });
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+      keyboardWasVisibleRef.current = false;
+      setKeyboardVisible(false);
+    };
+  }, [
+    androidDisablePanningWhenKeyboardHidden,
+    androidInitialIndex,
+    androidRestoreInitialSnapOnKeyboardHide,
+    visible,
+  ]);
+
+  useEffect(() => {
+    if (
+      Platform.OS !== 'android' ||
+      !visible ||
+      !androidDisablePanningWhenKeyboardHidden ||
+      keyboardVisible
+    ) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      modalRef.current?.snapToIndex(androidInitialIndex);
+    });
+  }, [androidDisablePanningWhenKeyboardHidden, androidInitialIndex, keyboardVisible, visible]);
+
   if (Platform.OS !== 'android') {
     return null;
   }
 
   return (
     <BottomSheetModal
+      key={modalConfigKey}
       ref={modalRef}
       index={androidInitialIndex}
       detached={detached}
@@ -83,6 +170,8 @@ export default function AppBottomSheet({
       enableDynamicSizing={androidDynamicSizing}
       maxDynamicContentSize={androidMaxDynamicContentSize}
       snapPoints={androidSnapPoints}
+      enableContentPanningGesture={panningEnabled}
+      enableHandlePanningGesture={panningEnabled}
       enableOverDrag={false}
       enablePanDownToClose={dismissible}
       keyboardBehavior={androidKeyboardBehavior}
@@ -108,7 +197,14 @@ export default function AppBottomSheet({
           pressBehavior={dismissible ? 'close' : 'none'}
         />
       )}
-      onDismiss={onClose}
+      onDismiss={() => {
+        if (ignoreNextDismissRef.current) {
+          ignoreNextDismissRef.current = false;
+          return;
+        }
+
+        onClose();
+      }}
       style={detached ? styles.detached : styles.edge}
     >
       {wrapContentInView ? (

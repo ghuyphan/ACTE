@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -28,6 +29,8 @@ import { Sheet, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { FriendConnection, FriendInvite } from '../../services/sharedFeedService';
 import { useSharedManageSheetModel } from './useSharedManageSheetModel';
+
+const ANDROID_FRIENDS_JOIN_SNAP_POINTS: string[] = ['46%', '82%'];
 
 function ManageBody({
   friends,
@@ -85,192 +88,179 @@ function ManageBody({
       accent: false,
     },
   ];
-  const content = (
+  return (
     <>
-        <Pressable
-          onPress={onOpenJoin}
-          style={({ pressed }) => [
-            styles.addFriendRow,
-            {
-              backgroundColor: softFill,
-              borderColor: outlineColor,
-              opacity: pressed ? 0.92 : 1,
-            },
-          ]}
-        >
-          <Ionicons name="search-outline" size={24} color={colors.secondaryText} />
-          <Text style={[styles.addFriendText, { color: colors.secondaryText }]}>
-            {t('shared.addFriendCta', 'Add a new friend')}
-          </Text>
-        </Pressable>
+      <Pressable
+        onPress={onOpenJoin}
+        style={({ pressed }) => [
+          styles.addFriendRow,
+          {
+            backgroundColor: softFill,
+            borderColor: outlineColor,
+            opacity: pressed ? 0.92 : 1,
+          },
+        ]}
+      >
+        <Ionicons name="search-outline" size={24} color={colors.secondaryText} />
+        <Text style={[styles.addFriendText, { color: colors.secondaryText }]}>
+          {t('shared.addFriendCta', 'Add a new friend')}
+        </Text>
+      </Pressable>
 
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            {t('shared.quickActionsTitle', 'Invite options')}
-          </Text>
-          <View style={styles.quickActionsRow}>
-            {quickActions.map((action) => (
-              <Pressable
-                key={action.key}
-                onPress={action.onPress}
-                style={({ pressed }) => [
-                  styles.quickAction,
-                  {
-                    opacity: pressed ? 0.9 : 1,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.quickActionIcon,
-                    {
-                      backgroundColor: action.accent ? colors.primary : softFill,
-                      borderColor: action.accent ? colors.primary : outlineColor,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name={action.icon}
-                    size={22}
-                    color={action.accent ? '#1C1C1E' : colors.text}
-                  />
-                </View>
-                <Text style={[styles.quickActionLabel, { color: colors.text }]}>{action.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {activeInvite ? (
-          <View
-            style={[
-              styles.inviteCard,
-              {
-                backgroundColor: softFill,
-                borderColor: outlineColor,
-              },
-            ]}
-          >
-            <View style={styles.inviteCardHeader}>
-              <View style={styles.inviteCardCopy}>
-                <Text style={[styles.inviteCardTitle, { color: colors.text }]}>
-                  {t('shared.inviteReadyTitle', 'Invite link ready')}
-                </Text>
-                <Text style={[styles.inviteCardBody, { color: colors.secondaryText }]}>
-                  {t('shared.inviteReadyBody', 'Share this link to connect.')}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.inviteActionsRow}>
-              <Pressable
-                onPress={onShareInvite}
-                style={({ pressed }) => [
-                  styles.primaryInviteAction,
-                  {
-                    backgroundColor: colors.primary,
-                    opacity: pressed ? 0.92 : 1,
-                  },
-                ]}
-              >
-                <Ionicons name="paper-plane-outline" size={16} color="#1C1C1E" />
-                <Text numberOfLines={1} style={styles.primaryInviteActionText}>
-                  {t('shared.shareInviteButton', 'Share invite link')}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={onRevokeInvite}
-                style={({ pressed }) => [
-                  styles.secondaryInviteAction,
-                  {
-                    backgroundColor: softFill,
-                    borderColor: outlineColor,
-                    opacity: pressed ? 0.92 : 1,
-                  },
-                ]}
-              >
-                <Text numberOfLines={1} style={[styles.secondaryInviteActionText, { color: colors.secondaryText }]}>
-                  {t('shared.revokeInviteButton', 'Revoke invite')}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : null}
-
-        <View style={styles.sectionHeaderRow}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            {t('shared.friendsListTitle', 'Your friends')}
-          </Text>
-          <View style={[styles.countPill, { backgroundColor: softFill }]}>
-            <Text style={[styles.countPillText, { color: colors.text }]}>{friends.length}</Text>
-          </View>
-        </View>
-        {friends.length === 0 ? (
-          <View style={[styles.emptyStateCard, { backgroundColor: softFill, borderColor: outlineColor }]}>
-            <View style={[styles.emptyStateIcon, { backgroundColor: colors.primarySoft }]}>
-              <Ionicons name="people-outline" size={18} color={colors.primary} />
-            </View>
-            <Text style={[styles.emptyText, styles.emptyStateText, { color: colors.secondaryText }]}>
-              {loading ? emptyLoadingBody : emptyBody}
-            </Text>
-          </View>
-        ) : (
-          friends.map((friend) => (
-            <View
-              key={friend.userId}
-              style={[
-                styles.friendRow,
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {t('shared.quickActionsTitle', 'Invite options')}
+        </Text>
+        <View style={styles.quickActionsRow}>
+          {quickActions.map((action) => (
+            <Pressable
+              key={action.key}
+              onPress={action.onPress}
+              style={({ pressed }) => [
+                styles.quickAction,
                 {
-                  borderBottomColor: outlineColor,
+                  opacity: pressed ? 0.9 : 1,
                 },
               ]}
             >
-              {friend.photoURLSnapshot ? (
-                <Image source={{ uri: friend.photoURLSnapshot }} style={styles.avatarImage} contentFit="cover" />
-              ) : (
-                <View style={[styles.avatarFallback, { backgroundColor: colors.primarySoft }]}>
-                  <Text style={[styles.avatarLabel, { color: colors.primary }]}>
-                    {(friend.displayNameSnapshot ?? 'F').trim().charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-              <View style={styles.friendCopy}>
-                <Text style={[styles.friendName, { color: colors.text }]}>
-                  {friend.displayNameSnapshot ?? friendFallback}
-                </Text>
-                <Text style={[styles.friendMeta, { color: colors.secondaryText }]}>
-                  {`${connectedOnLabel} ${new Date(friend.friendedAt).toLocaleDateString()}`}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => onRemoveFriend(friend.userId)}
-                style={({ pressed }) => [
-                  styles.removeButton,
+              <View
+                style={[
+                  styles.quickActionIcon,
                   {
-                    backgroundColor: softFill,
-                    opacity: pressed ? 0.92 : 1,
+                    backgroundColor: action.accent ? colors.primary : softFill,
+                    borderColor: action.accent ? colors.primary : outlineColor,
                   },
                 ]}
               >
-                <Ionicons name="close-outline" size={24} color={colors.secondaryText} />
-              </Pressable>
+                <Ionicons
+                  name={action.icon}
+                  size={22}
+                  color={action.accent ? '#1C1C1E' : colors.text}
+                />
+              </View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>{action.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      {activeInvite ? (
+        <View
+          style={[
+            styles.inviteCard,
+            {
+              backgroundColor: softFill,
+              borderColor: outlineColor,
+            },
+          ]}
+        >
+          <View style={styles.inviteCardHeader}>
+            <View style={styles.inviteCardCopy}>
+              <Text style={[styles.inviteCardTitle, { color: colors.text }]}>
+                {t('shared.inviteReadyTitle', 'Invite link ready')}
+              </Text>
+              <Text style={[styles.inviteCardBody, { color: colors.secondaryText }]}>
+                {t('shared.inviteReadyBody', 'Share this link to connect.')}
+              </Text>
             </View>
-          ))
-        )}
+          </View>
+          <View style={styles.inviteActionsRow}>
+            <Pressable
+              onPress={onShareInvite}
+              style={({ pressed }) => [
+                styles.primaryInviteAction,
+                {
+                  backgroundColor: colors.primary,
+                  opacity: pressed ? 0.92 : 1,
+                },
+              ]}
+            >
+              <Ionicons name="paper-plane-outline" size={16} color="#1C1C1E" />
+              <Text numberOfLines={1} style={styles.primaryInviteActionText}>
+                {t('shared.shareInviteButton', 'Share invite link')}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={onRevokeInvite}
+              style={({ pressed }) => [
+                styles.secondaryInviteAction,
+                {
+                  backgroundColor: softFill,
+                  borderColor: outlineColor,
+                  opacity: pressed ? 0.92 : 1,
+                },
+              ]}
+            >
+              <Text numberOfLines={1} style={[styles.secondaryInviteActionText, { color: colors.secondaryText }]}>
+                {t('shared.revokeInviteButton', 'Revoke invite')}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.sectionHeaderRow}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {t('shared.friendsListTitle', 'Your friends')}
+        </Text>
+        <View style={[styles.countPill, { backgroundColor: softFill }]}>
+          <Text style={[styles.countPillText, { color: colors.text }]}>{friends.length}</Text>
+        </View>
+      </View>
+      {friends.length === 0 ? (
+        <View style={[styles.emptyStateCard, { backgroundColor: softFill, borderColor: outlineColor }]}>
+          <View style={[styles.emptyStateIcon, { backgroundColor: colors.primarySoft }]}>
+            <Ionicons name="people-outline" size={18} color={colors.primary} />
+          </View>
+          <Text style={[styles.emptyText, styles.emptyStateText, { color: colors.secondaryText }]}>
+            {loading ? emptyLoadingBody : emptyBody}
+          </Text>
+        </View>
+      ) : (
+        friends.map((friend) => (
+          <View
+            key={friend.userId}
+            style={[
+              styles.friendRow,
+              {
+                borderBottomColor: outlineColor,
+              },
+            ]}
+          >
+            {friend.photoURLSnapshot ? (
+              <Image source={{ uri: friend.photoURLSnapshot }} style={styles.avatarImage} contentFit="cover" />
+            ) : (
+              <View style={[styles.avatarFallback, { backgroundColor: colors.primarySoft }]}>
+                <Text style={[styles.avatarLabel, { color: colors.primary }]}>
+                  {(friend.displayNameSnapshot ?? 'F').trim().charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View style={styles.friendCopy}>
+              <Text style={[styles.friendName, { color: colors.text }]}>
+                {friend.displayNameSnapshot ?? friendFallback}
+              </Text>
+              <Text style={[styles.friendMeta, { color: colors.secondaryText }]}>
+                {`${connectedOnLabel} ${new Date(friend.friendedAt).toLocaleDateString()}`}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => onRemoveFriend(friend.userId)}
+              style={({ pressed }) => [
+                styles.removeButton,
+                {
+                  backgroundColor: softFill,
+                  opacity: pressed ? 0.92 : 1,
+                },
+              ]}
+            >
+              <Ionicons name="close-outline" size={24} color={colors.secondaryText} />
+            </Pressable>
+          </View>
+        ))
+      )}
     </>
   );
-
-  if (Platform.OS === 'android') {
-    return (
-      <BottomSheetScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {content}
-      </BottomSheetScrollView>
-    );
-  }
-
-  return <View style={styles.scrollContent}>{content}</View>;
 }
 
 export default function SharedManageSheet(props: {
@@ -302,6 +292,7 @@ export default function SharedManageSheet(props: {
   const hasInviteValue = inviteValue.trim().length > 0;
   const contentOpacity = useSharedValue(1);
   const contentTranslateY = useSharedValue(0);
+  const keyboardVisibleRef = useRef(false);
   const contentAnimatedStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
     transform: [{ translateY: contentTranslateY.value }],
@@ -330,6 +321,63 @@ export default function SharedManageSheet(props: {
 
     animateContentChange();
   }, [activeInvite?.id, animateContentChange, friends.length, hasInviteValue, mode, visible]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSubscription = Keyboard.addListener(showEvent, () => {
+      keyboardVisibleRef.current = true;
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      keyboardVisibleRef.current = false;
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+      keyboardVisibleRef.current = false;
+    };
+  }, []);
+
+  const runAfterKeyboardDismiss = useCallback((action: () => void) => {
+    if (!keyboardVisibleRef.current) {
+      action();
+      return;
+    }
+
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    let settled = false;
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      hideSubscription.remove();
+      requestAnimationFrame(action);
+    });
+
+    Keyboard.dismiss();
+
+    setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      hideSubscription.remove();
+      action();
+    }, Platform.OS === 'ios' ? 260 : 180);
+  }, []);
+
+  const handleJoinBackPress = useCallback(() => {
+    runAfterKeyboardDismiss(handleBackToManage);
+  }, [handleBackToManage, runAfterKeyboardDismiss]);
+
+  const handleJoinClosePress = useCallback(() => {
+    runAfterKeyboardDismiss(onClose);
+  }, [onClose, runAfterKeyboardDismiss]);
 
   const manageBody = (
     <ManageBody
@@ -370,13 +418,13 @@ export default function SharedManageSheet(props: {
           <View>
             <View style={styles.joinTopRow}>
               <AppBackButton
-                onPress={handleBackToManage}
+                onPress={handleJoinBackPress}
                 style={styles.joinIconButton}
               />
               <AppIconButton
                 icon="close"
                 accessibilityLabel={t('common.close', 'Close')}
-                onPress={onClose}
+                onPress={handleJoinClosePress}
                 style={styles.joinIconButton}
               />
             </View>
@@ -458,11 +506,14 @@ export default function SharedManageSheet(props: {
     <AppSheet
       visible={visible}
       onClose={onClose}
-      androidScrollable={mode === 'manage'}
-      androidDynamicSizing
+      androidScrollable
+      androidDynamicSizing={mode === 'manage'}
+      androidDisablePanningWhenKeyboardHidden={mode === 'join'}
       androidMaxDynamicContentSize={Sheet.maxHeight}
-      androidKeyboardBehavior="interactive"
+      androidKeyboardBehavior={mode === 'join' ? 'extend' : 'interactive'}
+      androidRestoreInitialSnapOnKeyboardHide={mode === 'join'}
       androidInitialIndex={0}
+      androidSnapPoints={mode === 'join' ? ANDROID_FRIENDS_JOIN_SNAP_POINTS : undefined}
     >
       {mode === 'join' ? joinContent : manageContent}
     </AppSheet>
@@ -473,12 +524,10 @@ const styles = StyleSheet.create({
   sheetContent: {
     maxHeight: 680,
   },
-  scrollContent: {
-    paddingBottom: Platform.OS === 'ios' ? 28 : 8,
-  },
   manageScrollContent: {
     paddingHorizontal: Sheet.android.horizontalPadding,
     paddingBottom: Sheet.android.bottomPadding + Sheet.android.comfortBottomPadding,
+    minHeight: 600,
   },
   manageHeader: {
     paddingTop: Sheet.android.headerTopPadding,
