@@ -56,6 +56,8 @@ const mockPublicProfiles = new Map<string, any>();
 let mockNotesUpsertError: unknown = null;
 const mockActiveNotesScope = 'test-scope';
 let mockSessionUserId = 'user-1';
+const mockUndeletableRemoteNoteIds = new Set<string>();
+const mockUndeletableRemoteSharedPostIds = new Set<string>();
 
 const mockUploadPhotoToStorage = jest.fn<Promise<string | null>, [string, string, string | null | undefined]>(
   async (_bucket: string, path: string) => path
@@ -388,10 +390,11 @@ function mockCreateNotesQueryBuilder() {
       try {
         if (state.deleteMode) {
           const rows = executeNotesQuery(state);
-          for (const row of rows) {
+          const deletedRows = rows.filter((row) => !mockUndeletableRemoteNoteIds.has(String(row.id)));
+          for (const row of deletedRows) {
             mockRemoteNotes.delete(row.id);
           }
-          return Promise.resolve(resolve({ data: null, error: null }));
+          return Promise.resolve(resolve({ data: deletedRows, error: null }));
         }
 
         return Promise.resolve(resolve({ data: executeNotesQuery(state), error: null }));
@@ -435,10 +438,11 @@ function mockCreateSharedPostsQueryBuilder() {
       try {
         if (state.deleteMode) {
           const rows = executeSharedPostsQuery(state);
-          for (const row of rows) {
+          const deletedRows = rows.filter((row) => !mockUndeletableRemoteSharedPostIds.has(String(row.id)));
+          for (const row of deletedRows) {
             mockRemoteSharedPosts.delete(row.id);
           }
-          return Promise.resolve(resolve({ data: null, error: null }));
+          return Promise.resolve(resolve({ data: deletedRows, error: null }));
         }
 
         return Promise.resolve(resolve({ data: executeSharedPostsQuery(state), error: null }));
@@ -855,6 +859,8 @@ beforeEach(async () => {
   queueId = 1;
   mockNotesUpsertError = null;
   mockSessionUserId = 'user-1';
+  mockUndeletableRemoteNoteIds.clear();
+  mockUndeletableRemoteSharedPostIds.clear();
   localNotesStore = [];
   mockRemoteNotes.clear();
   mockRemoteSharedPosts.clear();
@@ -1392,6 +1398,44 @@ describe('syncService', () => {
     expect(mockRemoteStickerAssetRefs.size).toBe(0);
   });
 
+  it('retries queued deletes when a fetched remote note row is not actually deleted', async () => {
+    mockRemoteNotes.set('note-stuck', {
+      id: 'note-stuck',
+      user_id: 'user-1',
+      type: 'text',
+      content: 'still here',
+      photo_path: null,
+      synced_at: '2026-03-09T00:00:00.000Z',
+    });
+    mockUndeletableRemoteNoteIds.add('note-stuck');
+
+    await getSyncService().recordChange({
+      type: 'delete',
+      entity: 'note',
+      entityId: 'note-stuck',
+      timestamp: '2026-03-10T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, [], { mode: 'incremental' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'error',
+        failedCount: 1,
+        message: expect.stringContaining('note-stuck'),
+      })
+    );
+    expect(mockRemoteNotes.has('note-stuck')).toBe(true);
+    expect(mockRemoteNoteTombstones.has('note-stuck')).toBe(false);
+    expect(queueRows).toHaveLength(1);
+    expect(queueRows[0]).toEqual(
+      expect.objectContaining({
+        entity_id: 'note-stuck',
+        status: 'failed',
+      })
+    );
+  });
+
   it('deletes the stored paired motion path for live photo notes without assuming mp4', async () => {
     mockRemoteNotes.set('note-live', {
       id: 'note-live',
@@ -1517,6 +1561,44 @@ describe('syncService', () => {
       'user-1/shared-2-sticker.png'
     );
     expect(mockRemoteStickerAssetRefs.size).toBe(0);
+  });
+
+  it('retries queued deletes when remote media cleanup fails', async () => {
+    mockRemoteNotes.set('note-photo-error', {
+      id: 'note-photo-error',
+      user_id: 'user-1',
+      type: 'photo',
+      content: '',
+      photo_path: 'user-1/note-photo-error',
+      synced_at: '2026-03-09T00:00:00.000Z',
+    });
+    mockDeletePhotoFromStorage.mockRejectedValueOnce(new Error('storage delete failed'));
+
+    await getSyncService().recordChange({
+      type: 'delete',
+      entity: 'note',
+      entityId: 'note-photo-error',
+      timestamp: '2026-03-10T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, [], { mode: 'incremental' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'error',
+        failedCount: 1,
+        message: 'storage delete failed',
+      })
+    );
+    expect(mockRemoteNotes.has('note-photo-error')).toBe(true);
+    expect(mockRemoteNoteTombstones.has('note-photo-error')).toBe(false);
+    expect(queueRows).toHaveLength(1);
+    expect(queueRows[0]).toEqual(
+      expect.objectContaining({
+        entity_id: 'note-photo-error',
+        status: 'failed',
+      })
+    );
   });
 
   it('cleans up newly uploaded remote media when note upsert fails', async () => {
