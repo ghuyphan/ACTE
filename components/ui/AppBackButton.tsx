@@ -1,7 +1,6 @@
-import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { useTheme } from '../../hooks/useTheme';
+import { type StyleProp, type ViewStyle } from 'react-native';
+import AppIconButton from './AppIconButton';
 
 export default function AppBackButton({
   onPress,
@@ -14,38 +13,13 @@ export default function AppBackButton({
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
-  const { colors } = useTheme();
-
   return (
-    <Pressable
+    <AppIconButton
+      icon="chevron-back"
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.button,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          opacity: pressed ? 0.82 : 1,
-        },
-        style,
-      ]}
+      size={size}
+      style={style}
       testID={testID}
-    >
-      <Ionicons
-        name="chevron-back"
-        size={size}
-        color={colors.text}
-      />
-    </Pressable>
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  button: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});

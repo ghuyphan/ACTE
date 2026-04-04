@@ -110,12 +110,12 @@ export default function FriendJoinScreen() {
     inviteValue,
     onRequireAuth: () => dismissTo('auth'),
     onJoined: () => {
-      if (router.canGoBack()) {
-        router.back();
-        return;
-      }
-
-      router.replace('/' as any);
+      router.replace({
+        pathname: '/',
+        params: {
+          openSharedManageAt: String(Date.now()),
+        },
+      } as any);
     },
   });
 

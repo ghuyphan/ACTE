@@ -1,9 +1,10 @@
-import { useContext, type ReactNode } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useContext, type ReactNode } from 'react';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Sheet, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
+import AppIconButton from '../ui/AppIconButton';
 
 export type AppSheetHeaderVariant = 'standard' | 'action' | 'none';
 
@@ -33,36 +34,34 @@ export interface AppSheetScaffoldProps {
 }
 
 function HeaderActionButton({ action }: { action?: AppSheetHeaderAction }) {
-  const { colors } = useTheme();
-
   if (!action) {
     return Platform.OS === 'android' ? null : <View style={styles.actionButtonSpacer} />;
   }
 
+  if (Platform.OS === 'android') {
+    return (
+      <View style={styles.actionButtonAndroidWrap}>
+        <AppIconButton
+          icon={action.icon}
+          accessibilityLabel={action.accessibilityLabel}
+          disabled={action.disabled}
+          onPress={action.onPress}
+          style={[styles.actionButtonAndroid, { borderColor: 'transparent', backgroundColor: 'transparent' }]}
+          testID={action.testID}
+        />
+      </View>
+    );
+  }
+
   return (
-    <Pressable
-      accessibilityRole="button"
+    <AppIconButton
+      icon={action.icon}
       accessibilityLabel={action.accessibilityLabel}
-      android_ripple={Platform.OS === 'android' ? { color: `${colors.text}12`, borderless: true } : undefined}
       disabled={action.disabled}
       onPress={action.onPress}
-      style={({ pressed }) => [
-        styles.actionButton,
-        Platform.OS === 'android' ? styles.actionButtonAndroid : null,
-        Platform.OS === 'android'
-          ? {
-              opacity: action.disabled ? 0.45 : pressed ? 0.88 : 1,
-            }
-          : {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              opacity: action.disabled ? 0.45 : pressed ? 0.82 : 1,
-            },
-      ]}
+      style={styles.actionButton}
       testID={action.testID}
-    >
-      <Ionicons name={action.icon} size={18} color={colors.text} />
-    </Pressable>
+    />
   );
 }
 
@@ -214,10 +213,11 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   actionButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
+    flexShrink: 0,
+  },
+  actionButtonAndroidWrap: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },

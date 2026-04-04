@@ -24,6 +24,31 @@ export function useFriendInviteJoin({
   const { acceptFriendInvite } = useSharedFeedStore();
   const [joining, setJoining] = useState(false);
 
+  const performJoin = useCallback(
+    async (normalizedValue: string) => {
+      setJoining(true);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      try {
+        await acceptFriendInvite(normalizedValue);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onBeforeSuccessAlert?.(normalizedValue);
+        showAppAlert(
+          t('shared.joinSuccessTitle', "You're connected"),
+          t('shared.joinSuccessBody', 'You can now share notes with this friend from Home.')
+        );
+        onJoined?.(normalizedValue);
+        return true;
+      } catch (error) {
+        showAppAlert(t('shared.joinFailedTitle', 'Could not join'), getSharedFeedErrorMessage(error));
+        return false;
+      } finally {
+        setJoining(false);
+      }
+    },
+    [acceptFriendInvite, onBeforeSuccessAlert, onJoined, t]
+  );
+
   const resetJoinState = useCallback(() => {
     setJoining(false);
   }, []);
@@ -45,27 +70,30 @@ export function useFriendInviteJoin({
         return false;
       }
 
-      setJoining(true);
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-      try {
-        await acceptFriendInvite(normalizedValue);
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        onBeforeSuccessAlert?.(normalizedValue);
+      return new Promise<boolean>((resolve) => {
         showAppAlert(
-          t('shared.joinSuccessTitle', "You're connected"),
-          t('shared.joinSuccessBody', 'You can now share notes with this friend from Home.')
+          t('shared.joinConfirmTitle', 'Accept this friend invite?'),
+          t(
+            'shared.joinConfirmBody',
+            'If you continue, this person will be added to your shared Home feed.'
+          ),
+          [
+            {
+              text: t('common.cancel', 'Cancel'),
+              style: 'cancel',
+              onPress: () => resolve(false),
+            },
+            {
+              text: t('shared.joinConfirmButton', 'Accept invite'),
+              onPress: () => {
+                void performJoin(normalizedValue).then(resolve);
+              },
+            },
+          ]
         );
-        onJoined?.(normalizedValue);
-        return true;
-      } catch (error) {
-        showAppAlert(t('shared.joinFailedTitle', 'Could not join'), getSharedFeedErrorMessage(error));
-        return false;
-      } finally {
-        setJoining(false);
-      }
+      });
     },
-    [acceptFriendInvite, inviteValue, onBeforeSuccessAlert, onJoined, onRequireAuth, t, user]
+    [inviteValue, onRequireAuth, performJoin, t, user]
   );
 
   return {

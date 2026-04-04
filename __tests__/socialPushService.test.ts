@@ -1,4 +1,5 @@
 const mockGetPermissionsAsync = jest.fn();
+const mockRequestPermissionsAsync = jest.fn();
 const mockGetExpoPushTokenAsync = jest.fn();
 const mockGetPersistentItem = jest.fn();
 const mockRemovePersistentItem = jest.fn();
@@ -20,6 +21,7 @@ jest.mock('expo-constants', () => ({
 
 jest.mock('expo-notifications', () => ({
   getPermissionsAsync: (...args: unknown[]) => mockGetPermissionsAsync(...args),
+  requestPermissionsAsync: (...args: unknown[]) => mockRequestPermissionsAsync(...args),
   getExpoPushTokenAsync: (...args: unknown[]) => mockGetExpoPushTokenAsync(...args),
 }));
 
@@ -54,6 +56,10 @@ describe('syncSocialPushRegistration', () => {
       status: 'denied',
       canAskAgain: true,
     });
+    mockRequestPermissionsAsync.mockResolvedValue({
+      status: 'denied',
+      canAskAgain: true,
+    });
     mockGetPersistentItem.mockResolvedValue(null);
     mockRemovePersistentItem.mockResolvedValue(undefined);
     mockSetPersistentItem.mockResolvedValue(undefined);
@@ -74,8 +80,42 @@ describe('syncSocialPushRegistration', () => {
     });
 
     expect(mockGetPermissionsAsync).toHaveBeenCalled();
+    expect(mockRequestPermissionsAsync).not.toHaveBeenCalled();
     expect(mockGetExpoPushTokenAsync).not.toHaveBeenCalled();
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('requests permission and registers when explicitly asked to do so', async () => {
+    mockGetPermissionsAsync.mockResolvedValue({
+      status: 'denied',
+      canAskAgain: true,
+    });
+    mockRequestPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+      canAskAgain: true,
+    });
+
+    await syncSocialPushRegistration(
+      {
+        id: 'user-1',
+        uid: 'user-1',
+        email: 'hello@example.com',
+        displayName: 'Noto User',
+        photoURL: null,
+        providerData: [],
+      },
+      { requestPermission: true }
+    );
+
+    expect(mockRequestPermissionsAsync).toHaveBeenCalled();
+    expect(mockGetExpoPushTokenAsync).toHaveBeenCalledWith({
+      projectId: 'project-123',
+    });
+    expect(rpc).toHaveBeenCalledWith('register_push_token', {
+      expo_push_token_input: 'ExponentPushToken[token]',
+      platform_input: 'ios',
+      app_version_input: '1.0.0',
+    });
   });
 
   it('registers the token when permission is already granted', async () => {

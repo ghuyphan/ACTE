@@ -5,6 +5,7 @@ import { ActiveFeedTargetProvider } from '../hooks/state/useActiveFeedTarget';
 
 const mockCreateFriendInvite = jest.fn();
 let mockSharedManageSheetProps: any = null;
+let mockLocalSearchParams: Record<string, string> = {};
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -30,6 +31,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: jest.fn(),
   }),
+  useLocalSearchParams: () => mockLocalSearchParams,
 }));
 
 jest.mock('expo-haptics', () => ({
@@ -267,6 +269,7 @@ describe('HomeScreen share invite handoff', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockSharedManageSheetProps = null;
+    mockLocalSearchParams = {};
     mockCreateFriendInvite.mockReset();
     mockCreateFriendInvite.mockResolvedValue({
       id: 'invite-1',
@@ -297,7 +300,7 @@ describe('HomeScreen share invite handoff', () => {
     });
 
     expect(Share.share).not.toHaveBeenCalled();
-    expect(mockCreateFriendInvite).not.toHaveBeenCalled();
+    expect(mockCreateFriendInvite).toHaveBeenCalledTimes(1);
     expect(mockSharedManageSheetProps.visible).toBe(false);
 
     await act(async () => {
@@ -306,11 +309,24 @@ describe('HomeScreen share invite handoff', () => {
     });
 
     await waitFor(() => {
-      expect(mockCreateFriendInvite).toHaveBeenCalledTimes(1);
       expect(Share.share).toHaveBeenCalledWith({
         message: 'Join my Noto shared feed: https://noto.app/invite-1',
         url: 'https://noto.app/invite-1',
       });
     });
+  });
+
+  it('opens the friends sheet when the deep-link handoff param is present', async () => {
+    mockLocalSearchParams = {
+      openSharedManageAt: '1712220000000',
+    };
+
+    const { getByTestId } = renderHomeScreen();
+
+    await waitFor(() => {
+      expect(getByTestId('shared-manage-visible').props.children).toBe('visible');
+    });
+
+    expect(mockSharedManageSheetProps.visible).toBe(true);
   });
 });

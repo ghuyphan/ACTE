@@ -11,12 +11,17 @@ export type AppSheetAndroidPresentation = 'edge' | 'floating';
 type IOSContentType = 'react-native' | 'swift-ui';
 
 export interface AppSheetProps {
+  androidDynamicSizing?: boolean;
+  androidInitialIndex?: number;
+  androidKeyboardBehavior?: 'interactive' | 'extend' | 'fillParent';
+  androidMaxDynamicContentSize?: number;
   children: ReactNode;
   visible: boolean;
   onClose: () => void;
   dismissible?: boolean;
   androidPresentation?: AppSheetAndroidPresentation;
   androidScrollable?: boolean;
+  androidSnapPoints?: (number | string)[];
   fitToContents?: boolean;
   iosColorScheme?: 'light' | 'dark';
   iosContentType?: IOSContentType;
@@ -26,12 +31,17 @@ export interface AppSheetProps {
 }
 
 export default function AppSheet({
+  androidDynamicSizing = true,
+  androidInitialIndex = 0,
+  androidKeyboardBehavior = 'interactive',
+  androidMaxDynamicContentSize,
   children,
   visible,
   onClose,
   dismissible = true,
   androidPresentation = 'edge',
   androidScrollable = false,
+  androidSnapPoints,
   fitToContents = true,
   iosColorScheme,
   iosContentType = 'react-native',
@@ -45,6 +55,11 @@ export default function AppSheet({
   if (Platform.OS === 'android') {
     return (
       <AppBottomSheet
+        androidDynamicSizing={androidDynamicSizing}
+        androidInitialIndex={androidInitialIndex}
+        androidKeyboardBehavior={androidKeyboardBehavior}
+        androidMaxDynamicContentSize={androidMaxDynamicContentSize}
+        androidSnapPoints={androidSnapPoints}
         visible={visible}
         onClose={onClose}
         dismissible={dismissible}

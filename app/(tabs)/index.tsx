@@ -4,14 +4,13 @@ import * as FileSystem from '../../utils/fileSystem';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { Href, useRouter } from 'expo-router';
+import { Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AppState,
   Keyboard,
   Platform,
-  Share,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -22,9 +21,11 @@ import { cancelAnimation, runOnJS, useSharedValue, withTiming } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../../components/sheets/AppSheetAlert';
 import CaptureCard, { type CaptureCardHandle } from '../../components/home/CaptureCard';
+import { buildHomeFeedItems, findHomeFeedItemIndex, type HomeFeedItem } from '../../components/home/feedItems';
 import HomeHeaderSearch from '../../components/home/HomeHeaderSearch';
 import NotesFeed from '../../components/home/NotesFeed';
 import SharedManageSheet from '../../components/home/SharedManageSheet';
+import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
 import { useAppSheetAlert } from '../../hooks/ui/useAppSheetAlert';
 import { useActiveFeedTarget } from '../../hooks/state/useActiveFeedTarget';
 import { useAuth } from '../../hooks/useAuth';
@@ -59,27 +60,19 @@ import {
   isPreviewablePremiumNoteColor,
   PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
 } from '../../services/premiumNoteFinish';
-import { generateNoteId, type Note } from '../../services/database';
-import { getSharedFeedErrorMessage, SharedPost } from '../../services/sharedFeedService';
+import { generateNoteId } from '../../services/database';
+import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
 import { isIOS26OrNewer } from '../../utils/platform';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 import { getPersistentItem, setPersistentItem } from '../../utils/appStorage';
 import { setAndroidSoftInputMode } from '../../utils/androidSoftInputMode';
 
-const SHARED_MANAGE_SHEET_SHARE_DELAY_MS = Platform.OS === 'ios' ? 220 : 0;
 const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
-
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-type FeedFocusItem =
-  | { id: string; kind: 'note'; createdAt: string; note: Note }
-  | { id: string; kind: 'shared-post'; createdAt: string; post: SharedPost };
 
 type SaveButtonState = 'idle' | 'saving' | 'success';
 
 export default function HomeScreen() {
+  const { openSharedManageAt } = useLocalSearchParams<{ openSharedManageAt?: string }>();
   const { height: windowHeight } = useWindowDimensions();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -171,6 +164,7 @@ export default function HomeScreen() {
   const saveInFlightRef = useRef(false);
   const settledArchiveItemRef = useRef<{ id: string; kind: 'note' | 'shared-post' } | null>(null);
   const previousVisibleSharedPostIdsRef = useRef<string[]>([]);
+  const lastHandledOpenSharedManageAtRef = useRef<string | null>(null);
   useScrollToTop(flatListRef);
 
   useEffect(() => {
@@ -211,13 +205,21 @@ export default function HomeScreen() {
     setShowSharedManageSheet(true);
   }, []);
 
+  useEffect(() => {
+    if (!openSharedManageAt || openSharedManageAt === lastHandledOpenSharedManageAtRef.current) {
+      return;
+    }
+
+    lastHandledOpenSharedManageAtRef.current = openSharedManageAt;
+    presentSharedManageSheet();
+  }, [openSharedManageAt, presentSharedManageSheet]);
+
   const openAuthForShare = useCallback(() => {
     router.push({
       pathname: '/auth',
       params: { intent: 'share-note' },
     } as Href);
   }, [router]);
-
   const {
     captureMode,
     cameraSessionKey,
@@ -268,22 +270,8 @@ export default function HomeScreen() {
     () => sharedPosts.filter((post) => post.authorUid !== user?.uid),
     [sharedPosts, user?.uid]
   );
-  const archiveFeedItems = useMemo<FeedFocusItem[]>(
-    () =>
-      [
-        ...notes.map((note) => ({
-          id: note.id,
-          kind: 'note' as const,
-          createdAt: note.createdAt,
-          note,
-        })),
-        ...friendPosts.map((post) => ({
-          id: post.id,
-          kind: 'shared-post' as const,
-          createdAt: post.createdAt,
-          post,
-        })),
-      ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
+  const archiveFeedItems = useMemo<HomeFeedItem[]>(
+    () => buildHomeFeedItems(notes, friendPosts),
     [friendPosts, notes]
   );
   const localPhotoNoteCount = useMemo(() => countPhotoNotes(notes), [notes]);
@@ -387,6 +375,10 @@ export default function HomeScreen() {
     () =>
       useInlineHeaderSearch && isSearching ? [] : friendPosts,
     [friendPosts, isSearching, useInlineHeaderSearch]
+  );
+  const visibleFeedItems = useMemo(
+    () => buildHomeFeedItems(displayedNotes, visibleSharedPosts),
+    [displayedNotes, visibleSharedPosts]
   );
 
   useEffect(() => {
@@ -544,9 +536,10 @@ export default function HomeScreen() {
       return;
     }
 
-    const targetIndex = archiveFeedItems.findIndex(
-      (item) => item.kind === 'note' && item.id === pendingSavedNoteScrollTargetId
-    );
+    const targetIndex = findHomeFeedItemIndex(archiveFeedItems, {
+      id: pendingSavedNoteScrollTargetId,
+      kind: 'note',
+    });
     if (targetIndex < 0) {
       return;
     }
@@ -587,9 +580,7 @@ export default function HomeScreen() {
       return;
     }
 
-    const targetIndex = archiveFeedItems.findIndex(
-      (item) => item.kind === anchor.kind && item.id === anchor.id
-    );
+    const targetIndex = findHomeFeedItemIndex(archiveFeedItems, anchor);
     if (targetIndex < 0) {
       return;
     }
@@ -660,9 +651,7 @@ export default function HomeScreen() {
         }
       }
 
-      const targetIndex = archiveFeedItems.findIndex(
-        (item) => item.kind === target.kind && item.id === target.id
-      );
+      const targetIndex = findHomeFeedItemIndex(archiveFeedItems, target);
       if (targetIndex < 0) {
         return undefined;
       }
@@ -770,6 +759,29 @@ export default function HomeScreen() {
       },
     });
   }, [showAlert, t]);
+
+  const {
+    handleCaptureTargetChange,
+    handleCreateInvite,
+    handleOpenSharedManage,
+    handleRemoveFriend,
+    handleRevokeInvite,
+    handleShareInvite,
+  } = useHomeSharedActions({
+    user,
+    sharedEnabled,
+    isAuthAvailable,
+    friendsCount: friends.length,
+    activeInvite,
+    createFriendInvite,
+    revokeFriendInvite,
+    removeFriend,
+    dismissSharedManageSheet,
+    presentSharedManageSheet,
+    openAuthForShare,
+    showSharedUnavailableSheet,
+    setCaptureTarget,
+  });
 
   const showSavedSheet = useCallback((noteId?: string | null) => {
     const releaseSavedNote = () => {
@@ -1608,145 +1620,6 @@ export default function HomeScreen() {
     [router]
   );
 
-  const handleCaptureTargetChange = useCallback(
-    (nextTarget: 'private' | 'shared') => {
-      if (nextTarget === 'shared') {
-        if (!sharedEnabled || !isAuthAvailable) {
-          showSharedUnavailableSheet();
-          return;
-        }
-
-        if (!user) {
-          openAuthForShare();
-          return;
-        }
-
-        if (friends.length === 0) {
-          presentSharedManageSheet();
-          return;
-        }
-      }
-
-      setCaptureTarget(nextTarget);
-    },
-    [
-      friends.length,
-      isAuthAvailable,
-      openAuthForShare,
-      presentSharedManageSheet,
-      sharedEnabled,
-      showSharedUnavailableSheet,
-      user,
-    ]
-  );
-
-  const handleOpenSharedManage = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    if (!sharedEnabled || !isAuthAvailable) {
-      showSharedUnavailableSheet();
-      return;
-    }
-
-    if (!user) {
-      openAuthForShare();
-      return;
-    }
-
-    presentSharedManageSheet();
-  }, [isAuthAvailable, openAuthForShare, presentSharedManageSheet, sharedEnabled, showSharedUnavailableSheet, user]);
-
-  const handleOpenSharedAuth = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    if (!isAuthAvailable) {
-      showSharedUnavailableSheet();
-      return;
-    }
-
-    openAuthForShare();
-  }, [isAuthAvailable, openAuthForShare, showSharedUnavailableSheet]);
-
-  const handleShareInvite = useCallback(async () => {
-    if (!user) {
-      handleOpenSharedAuth();
-      return;
-    }
-
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    try {
-      dismissSharedManageSheet();
-      await wait(SHARED_MANAGE_SHEET_SHARE_DELAY_MS);
-      const invite = activeInvite ?? (await createFriendInvite());
-      await Share.share({
-        message: t('shared.inviteShareMessage', 'Join my Noto shared feed: {{url}}', {
-          url: invite.url,
-        }),
-        url: invite.url,
-      });
-    } catch (error) {
-      showAppAlert(
-        t('shared.inviteFailedTitle', 'Could not prepare invite'),
-        getSharedFeedErrorMessage(error)
-      );
-    }
-  }, [activeInvite, createFriendInvite, dismissSharedManageSheet, handleOpenSharedAuth, t, user]);
-
-  const handleRevokeInvite = useCallback(async () => {
-    if (!activeInvite) {
-      return;
-    }
-
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    try {
-      await revokeFriendInvite(activeInvite.id);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      showAppAlert(
-        t('shared.inviteFailedTitle', 'Could not prepare invite'),
-        getSharedFeedErrorMessage(error)
-      );
-    }
-  }, [activeInvite, revokeFriendInvite, t]);
-
-  const handleRemoveFriend = useCallback(
-    (friendUid: string) => {
-      showAppAlert(
-        t('shared.removeFriendTitle', 'Remove friend'),
-        t(
-          'shared.removeFriendBody',
-          'This friend will stop seeing the moments you share from Home.'
-        ),
-        [
-          {
-            text: t('common.cancel', 'Cancel'),
-            style: 'cancel',
-          },
-          {
-            text: t('shared.removeFriendConfirm', 'Remove'),
-            style: 'destructive',
-            onPress: () => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              void removeFriend(friendUid)
-                .then(() => {
-                  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                })
-                .catch((error) => {
-                  showAppAlert(
-                    t('shared.removeFriendTitle', 'Remove friend'),
-                    getSharedFeedErrorMessage(error)
-                  );
-                });
-            },
-          },
-        ]
-      );
-    },
-    [removeFriend, t]
-  );
-
   const handleSearchChange = useCallback((nextQuery: string) => {
     startSearchTransition(() => {
       setSearchQuery(nextQuery);
@@ -1978,6 +1851,7 @@ export default function HomeScreen() {
         flatListRef={flatListRef}
         captureHeader={captureHeader}
         captureMode={captureMode}
+        items={visibleFeedItems}
         notes={displayedNotes}
         sharedPosts={visibleSharedPosts}
         refreshing={refreshing}
@@ -2008,6 +1882,9 @@ export default function HomeScreen() {
         activeInvite={activeInvite}
         loading={sharedLoading}
         onClose={dismissSharedManageSheet}
+        onCreateInvite={() => {
+          void handleCreateInvite();
+        }}
         onShareInvite={() => {
           void handleShareInvite();
         }}

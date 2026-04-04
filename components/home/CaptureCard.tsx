@@ -1,34 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
-import {
-  Canvas,
-  ColorMatrix,
-  Group,
-  Image as SkiaImage,
-  Paint,
-  Path as SkiaPath,
-  useImage as useSkiaImage,
-} from '@shopify/react-native-skia';
+import { Canvas, Path as SkiaPath } from '@shopify/react-native-skia';
 import {
   ClipboardPasteButton,
 } from 'expo-clipboard';
-import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TFunction } from 'i18next';
-import { type ComponentProps, forwardRef, memo, ReactNode, RefObject, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { forwardRef, type ReactNode, RefObject, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  type PressableProps,
-  ScrollView,
-  type StyleProp,
   StyleSheet,
   Text,
   TextInput,
   View,
-  type ViewStyle,
 } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { Camera, type CameraDevice } from 'react-native-vision-camera';
@@ -39,7 +26,6 @@ import Reanimated, {
   useAnimatedStyle,
   useSharedValue,
   withSequence,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { STICKER_ARTBOARD_FRAME } from '../../constants/doodleLayout';
@@ -56,8 +42,6 @@ import {
 import { type NoteStickerPlacement } from '../../services/noteStickers';
 import { isOlderIOS } from '../../utils/platform';
 import {
-  getPhotoFilterPreset,
-  PHOTO_FILTER_PRESETS,
   type PhotoFilterId,
 } from '../../services/photoFilters';
 import AppSheet from '../sheets/AppSheet';
@@ -73,6 +57,15 @@ import PremiumNoteFinishOverlay from '../ui/PremiumNoteFinishOverlay';
 import PrimaryButton from '../ui/PrimaryButton';
 import StickerPastePopover from '../ui/StickerPastePopover';
 import LivePhotoIcon from '../ui/LivePhotoIcon';
+import {
+  CaptureAnimatedPressable,
+  CaptureGlassActionButton,
+  CaptureToggleIconButton,
+  DoodleColorPalette,
+  FilteredPhotoCanvas,
+  PhotoFilterCarousel,
+  triggerCaptureCardHaptic,
+} from './capture/CaptureControls';
 import { useCaptureCardCameraController } from './useCaptureCardCameraController';
 import { useCaptureCardDecorations } from './useCaptureCardDecorations';
 import { useCaptureCardMetaSheets } from './useCaptureCardMetaSheets';
@@ -91,15 +84,10 @@ const SHUTTER_OUTER_SIZE = 68;
 const SIDE_ACTION_SIZE = 46;
 const SHUTTER_SIDE_ACTION_OFFSET = SHUTTER_OUTER_SIZE / 2 + 12 + SIDE_ACTION_SIZE;
 const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
-const CAPTURE_BUTTON_PRESS_IN = { duration: 120, easing: Easing.out(Easing.quad) };
-const CAPTURE_BUTTON_PRESS_OUT = { duration: 160, easing: Easing.out(Easing.cubic) };
-const CAPTURE_BUTTON_STATE_IN = { duration: 160, easing: Easing.out(Easing.cubic) };
-const CAPTURE_BUTTON_STATE_OUT = { duration: 210, easing: Easing.out(Easing.cubic) };
 const LIVE_PHOTO_RING_SIZE = SHUTTER_OUTER_SIZE;
 const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
 const SHEET_HORIZONTAL_PADDING =
   Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
-const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
 const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Note about this place...',
   'Leave a tiny clue for future you...',
@@ -120,10 +108,6 @@ function getCaptureTextPlaceholderVariants(t: TFunction) {
     : DEFAULT_CAPTURE_TEXT_PLACEHOLDERS;
 }
 
-function triggerCaptureCardHaptic(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
-  void Haptics.impactAsync(style);
-}
-
 export interface CaptureCardHandle {
   getDoodleSnapshot: () => { enabled: boolean; strokes: DoodleStroke[] };
   getStickerSnapshot: () => { enabled: boolean; placements: NoteStickerPlacement[] };
@@ -131,474 +115,6 @@ export interface CaptureCardHandle {
   resetStickers: () => void;
   closeDecorateControls: () => void;
   dismissInputs: () => void;
-}
-
-type CaptureAnimatedPressableProps = Omit<PressableProps, 'children' | 'style'> & {
-  children?: ReactNode;
-  style?: StyleProp<ViewStyle>;
-  pressedScale?: number;
-  active?: boolean;
-  activeScale?: number;
-  activeTranslateY?: number;
-  disabledOpacity?: number;
-  contentActiveScale?: number;
-  contentActiveTranslateY?: number;
-  childrenContainerStyle?: StyleProp<ViewStyle>;
-  hapticStyle?: Haptics.ImpactFeedbackStyle | null;
-};
-
-function CaptureAnimatedPressable({
-  children,
-  disabled,
-  active = false,
-  activeScale = 1,
-  activeTranslateY = 0,
-  disabledOpacity = 0.45,
-  contentActiveScale = 1,
-  contentActiveTranslateY = 0,
-  childrenContainerStyle,
-  hapticStyle = Haptics.ImpactFeedbackStyle.Light,
-  onPress,
-  onPressIn,
-  onPressOut,
-  pressedScale = 0.97,
-  style,
-  ...props
-}: CaptureAnimatedPressableProps) {
-  const reduceMotionEnabled = useReducedMotion();
-  const pressScale = useSharedValue(1);
-  const activeProgress = useSharedValue(active ? 1 : 0);
-  const disabledProgress = useSharedValue(disabled ? 1 : 0);
-
-  useEffect(() => {
-    const transition = reduceMotionEnabled
-      ? { duration: 110, easing: Easing.out(Easing.quad) }
-      : active
-        ? CAPTURE_BUTTON_STATE_IN
-        : CAPTURE_BUTTON_STATE_OUT;
-    activeProgress.value = withTiming(active ? 1 : 0, transition);
-  }, [active, activeProgress, reduceMotionEnabled]);
-
-  useEffect(() => {
-    if (disabled) {
-      pressScale.value = 1;
-    }
-    const transition = reduceMotionEnabled
-      ? { duration: 110, easing: Easing.out(Easing.quad) }
-      : disabled
-        ? CAPTURE_BUTTON_STATE_IN
-        : CAPTURE_BUTTON_STATE_OUT;
-    disabledProgress.value = withTiming(disabled ? 1 : 0, transition);
-  }, [disabled, disabledProgress, pressScale, reduceMotionEnabled]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: 1 - disabledProgress.value * (1 - disabledOpacity),
-    transform: [
-      { translateY: activeTranslateY * activeProgress.value },
-      {
-        scale:
-          pressScale.value *
-          (1 + (activeScale - 1) * activeProgress.value),
-      },
-    ],
-  }));
-
-  const animatedChildrenStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: contentActiveTranslateY * activeProgress.value },
-      { scale: 1 + (contentActiveScale - 1) * activeProgress.value },
-    ],
-  }));
-
-  const handlePressIn = useCallback<NonNullable<PressableProps['onPressIn']>>(
-    (event) => {
-      if (!disabled) {
-        pressScale.value = withTiming(pressedScale, CAPTURE_BUTTON_PRESS_IN);
-      }
-      onPressIn?.(event);
-    },
-    [disabled, onPressIn, pressScale, pressedScale]
-  );
-
-  const handlePressOut = useCallback<NonNullable<PressableProps['onPressOut']>>(
-    (event) => {
-      pressScale.value = reduceMotionEnabled
-        ? withTiming(1, CAPTURE_BUTTON_PRESS_OUT)
-        : withSpring(1, {
-          stiffness: 520,
-          damping: 34,
-          mass: 0.38,
-        });
-      onPressOut?.(event);
-    },
-    [onPressOut, pressScale, reduceMotionEnabled]
-  );
-
-  const handlePress = useCallback<NonNullable<PressableProps['onPress']>>(
-    (event) => {
-      if (!disabled && hapticStyle != null) {
-        triggerCaptureCardHaptic(hapticStyle);
-      }
-      onPress?.(event);
-    },
-    [disabled, hapticStyle, onPress]
-  );
-
-  return (
-    <AnimatedPressable
-      {...props}
-      disabled={disabled}
-      onPress={handlePress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      style={[style, animatedStyle]}
-    >
-      <Reanimated.View style={[styles.captureButtonContent, childrenContainerStyle, animatedChildrenStyle]}>
-        {children}
-      </Reanimated.View>
-    </AnimatedPressable>
-  );
-}
-
-type CaptureToggleIconButtonProps = Omit<CaptureAnimatedPressableProps, 'children'> & {
-  active: boolean;
-  activeIconName: ComponentProps<typeof Ionicons>['name'];
-  inactiveIconName: ComponentProps<typeof Ionicons>['name'];
-  activeBackgroundColor: string;
-  inactiveBackgroundColor: string;
-  activeBorderColor: string;
-  inactiveBorderColor: string;
-  activeIconColor: string;
-  inactiveIconColor: string;
-  iconSize?: number;
-};
-
-function CaptureToggleIconButton({
-  active,
-  activeIconName,
-  inactiveIconName,
-  activeBackgroundColor,
-  inactiveBackgroundColor,
-  activeBorderColor,
-  inactiveBorderColor,
-  activeIconColor,
-  inactiveIconColor,
-  iconSize = 17,
-  style,
-  activeScale = 1.035,
-  activeTranslateY = -1.5,
-  contentActiveScale = 1.06,
-  contentActiveTranslateY = -0.5,
-  ...props
-}: CaptureToggleIconButtonProps) {
-  const reduceMotionEnabled = useReducedMotion();
-  const activeProgress = useSharedValue(active ? 1 : 0);
-
-  useEffect(() => {
-    const transition = reduceMotionEnabled
-      ? { duration: 110, easing: Easing.out(Easing.quad) }
-      : active
-        ? CAPTURE_BUTTON_STATE_IN
-        : CAPTURE_BUTTON_STATE_OUT;
-    activeProgress.value = withTiming(active ? 1 : 0, transition);
-  }, [active, activeProgress, reduceMotionEnabled]);
-
-  const animatedButtonStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      activeProgress.value,
-      [0, 1],
-      [inactiveBackgroundColor, activeBackgroundColor]
-    ),
-    borderColor: interpolateColor(
-      activeProgress.value,
-      [0, 1],
-      [inactiveBorderColor, activeBorderColor]
-    ),
-  }));
-
-  const animatedInactiveIconStyle = useAnimatedStyle(() => ({
-    opacity: 1 - activeProgress.value,
-    transform: [{ translateY: Math.round(activeProgress.value * 3) }],
-  }));
-
-  const animatedActiveIconStyle = useAnimatedStyle(() => ({
-    opacity: activeProgress.value,
-    transform: [{ translateY: Math.round((1 - activeProgress.value) * -3) }],
-  }));
-
-  return (
-    <CaptureAnimatedPressable
-      {...props}
-      active={active}
-      activeScale={activeScale}
-      activeTranslateY={activeTranslateY}
-      contentActiveScale={contentActiveScale}
-      contentActiveTranslateY={contentActiveTranslateY}
-      style={[style, animatedButtonStyle]}
-    >
-      <View style={styles.captureToggleIconWrap}>
-        <Reanimated.View style={[styles.captureToggleIconLayer, animatedInactiveIconStyle]}>
-          <Ionicons name={inactiveIconName} size={iconSize} color={inactiveIconColor} />
-        </Reanimated.View>
-        <Reanimated.View style={[styles.captureToggleIconLayer, animatedActiveIconStyle]}>
-          <Ionicons name={activeIconName} size={iconSize} color={activeIconColor} />
-        </Reanimated.View>
-      </View>
-    </CaptureAnimatedPressable>
-  );
-}
-
-interface DoodleColorPaletteProps {
-  colors: string[];
-  selectedColor: string;
-  onSelectColor: (color: string) => void;
-  buttonBackgroundColor: string;
-  buttonBorderColor: string;
-  selectedBorderColor: string;
-  swatchBorderColor: string;
-  testIDPrefix: string;
-}
-
-function DoodleColorPalette({
-  colors,
-  selectedColor,
-  onSelectColor,
-  buttonBackgroundColor,
-  buttonBorderColor,
-  selectedBorderColor,
-  swatchBorderColor,
-  testIDPrefix,
-}: DoodleColorPaletteProps) {
-  return (
-    <View style={styles.doodleColorPalette}>
-      <ScrollView
-        horizontal
-        style={styles.doodleColorPaletteScroll}
-        contentContainerStyle={styles.doodleColorPaletteContent}
-        showsHorizontalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {colors.map((color, index) => {
-          const isSelected = selectedColor === color;
-
-          return (
-            <CaptureAnimatedPressable
-              key={`${testIDPrefix}-${color}`}
-              testID={`${testIDPrefix}-${index}`}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected }}
-              accessibilityLabel={`Doodle color ${index + 1}`}
-              onPress={() => onSelectColor(color)}
-              active={isSelected}
-              activeScale={1}
-              activeTranslateY={0}
-              contentActiveScale={1}
-              contentActiveTranslateY={0}
-              style={[
-                styles.doodleColorButton,
-                {
-                  backgroundColor: buttonBackgroundColor,
-                  borderColor: isSelected ? selectedBorderColor : buttonBorderColor,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.doodleColorSwatch,
-                  {
-                    backgroundColor: color,
-                    borderColor: color.toUpperCase() === '#FFFFFF' ? swatchBorderColor : 'transparent',
-                  },
-                ]}
-              />
-            </CaptureAnimatedPressable>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
-
-type FilteredPhotoCanvasProps = {
-  sourceUri: string;
-  filterId: PhotoFilterId;
-  width: number;
-  height: number;
-  style?: StyleProp<ViewStyle>;
-};
-
-const FilteredPhotoCanvas = memo(function FilteredPhotoCanvas({
-  sourceUri,
-  filterId,
-  width,
-  height,
-  style,
-}: FilteredPhotoCanvasProps) {
-  const image = useSkiaImage(sourceUri);
-  const filterPreset = getPhotoFilterPreset(filterId);
-
-  if (!image) {
-    return <View style={style} />;
-  }
-
-  return (
-    <Canvas style={style}>
-      <Group
-        layer={
-          filterPreset.id === 'original'
-            ? undefined
-            : (
-              <Paint>
-                <ColorMatrix matrix={filterPreset.matrix} />
-              </Paint>
-            )
-        }
-      >
-        <SkiaImage
-          image={image}
-          x={0}
-          y={0}
-          width={width}
-          height={height}
-          fit="cover"
-        />
-      </Group>
-    </Canvas>
-  );
-});
-
-function PhotoFilterSwatch({
-  sourceUri,
-  filterId,
-}: {
-  sourceUri: string;
-  filterId: PhotoFilterId;
-}) {
-  return (
-    <FilteredPhotoCanvas
-      sourceUri={sourceUri}
-      filterId={filterId}
-      width={34}
-      height={34}
-      style={styles.photoFilterPreviewCanvas}
-    />
-  );
-}
-
-type PhotoFilterCarouselProps = {
-  sourceUri: string;
-  selectedFilterId: PhotoFilterId;
-  onSelectFilter: (filterId: PhotoFilterId) => void;
-  t: TFunction;
-  colors: Pick<ThemeColors, 'captureGlassFill' | 'captureGlassBorder' | 'captureGlassText' | 'primary'>;
-};
-
-function PhotoFilterCarousel({
-  sourceUri,
-  selectedFilterId,
-  onSelectFilter,
-  t,
-  colors,
-}: PhotoFilterCarouselProps) {
-  return (
-    <View
-      style={[
-        styles.photoFilterTray,
-        {
-          borderColor: colors.captureGlassBorder,
-          backgroundColor: colors.captureGlassFill,
-        },
-      ]}
-    >
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.photoFilterRow}
-      >
-        {PHOTO_FILTER_PRESETS.map((preset) => {
-          const isSelected = preset.id === selectedFilterId;
-
-          return (
-            <CaptureAnimatedPressable
-              key={preset.id}
-              testID={`capture-filter-${preset.id}`}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected }}
-              accessibilityLabel={t(preset.labelKey, preset.defaultLabel)}
-              onPress={() => onSelectFilter(preset.id)}
-              pressedScale={0.985}
-              style={[
-                styles.photoFilterButton,
-                {
-                  borderColor: isSelected ? colors.primary : colors.captureGlassBorder,
-                  backgroundColor: colors.captureGlassFill,
-                },
-              ]}
-            >
-              <View style={styles.photoFilterPreviewClip}>
-                <PhotoFilterSwatch sourceUri={sourceUri} filterId={preset.id} />
-              </View>
-            </CaptureAnimatedPressable>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
-
-type CaptureGlassActionButtonProps = Omit<CaptureAnimatedPressableProps, 'children'> & {
-  iconName: ComponentProps<typeof Ionicons>['name'];
-  iconColor: string;
-  glassColorScheme: 'light' | 'dark';
-  fallbackColor: string;
-  borderColor: string;
-  iconSize?: number;
-};
-
-function CaptureGlassActionButton({
-  iconName,
-  iconColor,
-  glassColorScheme,
-  fallbackColor,
-  borderColor,
-  iconSize = 18,
-  style,
-  ...props
-}: CaptureGlassActionButtonProps) {
-  return (
-    <CaptureAnimatedPressable
-      {...props}
-      childrenContainerStyle={styles.secondaryActionButtonContent}
-      style={[
-        styles.secondaryActionButton,
-        {
-          borderColor,
-        },
-        style,
-      ]}
-    >
-      {isOlderIOS ? (
-        <View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              backgroundColor: fallbackColor,
-            },
-          ]}
-        />
-      ) : null}
-      <GlassView
-        pointerEvents="none"
-        style={StyleSheet.absoluteFill}
-        glassEffectStyle="regular"
-        colorScheme={glassColorScheme}
-        fallbackColor={fallbackColor}
-      />
-      <Ionicons name={iconName} size={iconSize} color={iconColor} />
-    </CaptureAnimatedPressable>
-  );
 }
 
 interface CaptureCardProps {

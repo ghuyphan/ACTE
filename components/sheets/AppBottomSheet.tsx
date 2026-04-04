@@ -8,6 +8,11 @@ import { BackHandler, Platform, StyleSheet, type StyleProp, type ViewStyle } fro
 import { useTheme } from '../../hooks/useTheme';
 
 export default function AppBottomSheet({
+  androidDynamicSizing = true,
+  androidInitialIndex = 0,
+  androidKeyboardBehavior = 'interactive',
+  androidMaxDynamicContentSize,
+  androidSnapPoints,
   children,
   contentContainerStyle,
   detached = false,
@@ -17,6 +22,11 @@ export default function AppBottomSheet({
   visible,
   wrapContentInView = true,
 }: {
+  androidDynamicSizing?: boolean;
+  androidInitialIndex?: number;
+  androidKeyboardBehavior?: 'interactive' | 'extend' | 'fillParent';
+  androidMaxDynamicContentSize?: number;
+  androidSnapPoints?: (number | string)[];
   children: React.ReactNode;
   contentContainerStyle?: StyleProp<ViewStyle>;
   detached?: boolean;
@@ -66,14 +76,16 @@ export default function AppBottomSheet({
   return (
     <BottomSheetModal
       ref={modalRef}
-      index={0}
+      index={androidInitialIndex}
       detached={detached}
       bottomInset={detached ? 16 : 0}
       topInset={topInset}
-      enableDynamicSizing
+      enableDynamicSizing={androidDynamicSizing}
+      maxDynamicContentSize={androidMaxDynamicContentSize}
+      snapPoints={androidSnapPoints}
       enableOverDrag={false}
       enablePanDownToClose={dismissible}
-      keyboardBehavior="interactive"
+      keyboardBehavior={androidKeyboardBehavior}
       keyboardBlurBehavior="restore"
       enableBlurKeyboardOnGesture
       android_keyboardInputMode="adjustResize"

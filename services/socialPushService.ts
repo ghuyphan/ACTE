@@ -12,6 +12,16 @@ type PersistedPushRegistration = {
   userId: string;
 };
 
+type SyncSocialPushRegistrationOptions = {
+  requestPermission?: boolean;
+};
+
+export type SocialPushRegistrationStatus =
+  | 'registered'
+  | 'denied'
+  | 'blocked'
+  | 'skipped';
+
 export type SocialNotificationEvent =
   | {
       type: 'friend_accepted';
@@ -111,14 +121,17 @@ export async function unregisterCurrentSocialPushToken() {
   }
 }
 
-export async function syncSocialPushRegistration(user: AppUser | null) {
+export async function syncSocialPushRegistration(
+  user: AppUser | null,
+  options: SyncSocialPushRegistrationOptions = {}
+): Promise<SocialPushRegistrationStatus> {
   if (!isNativePlatform() || !hasSupabaseConfig()) {
-    return;
+    return 'skipped';
   }
 
   const supabase = getSupabase();
   if (!supabase) {
-    return;
+    return 'skipped';
   }
 
   const persisted = await readPersistedRegistration();
@@ -128,30 +141,38 @@ export async function syncSocialPushRegistration(user: AppUser | null) {
       await unregisterPushToken(persisted.token).catch(() => undefined);
     }
     await removePersistentItem(PUSH_REGISTRATION_STORAGE_KEY).catch(() => undefined);
-    return;
+    return 'skipped';
   }
 
-  const permissions = await Notifications.getPermissionsAsync();
+  let permissions = await Notifications.getPermissionsAsync();
+
+  if (
+    permissions.status !== 'granted' &&
+    options.requestPermission &&
+    permissions.canAskAgain !== false
+  ) {
+    permissions = await Notifications.requestPermissionsAsync();
+  }
 
   if (permissions.status !== 'granted') {
     if (persisted?.token) {
       await unregisterPushToken(persisted.token).catch(() => undefined);
       await removePersistentItem(PUSH_REGISTRATION_STORAGE_KEY).catch(() => undefined);
     }
-    return;
+    return permissions.canAskAgain === false ? 'blocked' : 'denied';
   }
 
   const projectId = getExpoProjectId();
   if (!projectId) {
     console.warn('[social-push] Missing Expo project id; skipping push token registration.');
-    return;
+    return 'skipped';
   }
 
   const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
   const expoPushToken = tokenResponse.data?.trim() ?? '';
 
   if (!expoPushToken) {
-    return;
+    return 'skipped';
   }
 
   if (persisted?.token && (persisted.token !== expoPushToken || persisted.userId !== user.uid)) {
@@ -172,6 +193,8 @@ export async function syncSocialPushRegistration(user: AppUser | null) {
     token: expoPushToken,
     userId: user.uid,
   });
+
+  return 'registered';
 }
 
 export async function sendSocialNotificationEvent(event: SocialNotificationEvent) {

@@ -25,3 +25,10 @@ export function buildHomeFeedItems(notes: Note[], sharedPosts: SharedPost[] = []
 export function getHomeFeedItemKey(item: HomeFeedItem): string {
   return `${item.kind}:${item.id}`;
 }
+
+export function findHomeFeedItemIndex(
+  items: HomeFeedItem[],
+  target: Pick<HomeFeedItem, 'id' | 'kind'>
+): number {
+  return items.findIndex((item) => item.kind === target.kind && item.id === target.id);
+}

@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import {
+  Platform,
   StyleProp,
   StyleSheet,
   Text,
@@ -12,6 +14,8 @@ import {
 import { Typography } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import PrimaryButton from './ui/PrimaryButton';
+
+const SheetTextInput = Platform.OS === 'android' ? BottomSheetTextInput : TextInput;
 
 type FriendInviteJoinBodyProps = {
   user: { id?: string } | null;
@@ -48,10 +52,11 @@ export default function FriendInviteJoinBody({
           <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>
             {t('shared.joinCardTitle', 'Invite link')}
           </Text>
-          <TextInput
+          <SheetTextInput
             value={inviteValue}
             onChangeText={onChangeInvite}
-            placeholder={t('shared.joinPlaceholder', 'Paste the full invite link')}
+            onSubmitEditing={onSubmit}
+            placeholder={t('shared.joinPlaceholder', 'Paste invite link')}
             placeholderTextColor={colors.secondaryText}
             style={[
               styles.input,
@@ -64,6 +69,7 @@ export default function FriendInviteJoinBody({
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
+            returnKeyType="done"
           />
         </View>
       ) : null}
@@ -90,33 +96,16 @@ export default function FriendInviteJoinBody({
         )}
         style={[styles.primaryAction, primaryActionStyle]}
       />
-
-      {user && inviteValue.trim() ? (
-        <View
-          style={[
-            styles.helperCard,
-            {
-              backgroundColor: colors.primarySoft,
-              borderColor: colors.primary + '22',
-            },
-          ]}
-        >
-          <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
-          <Text style={[styles.helperText, { color: colors.text }]}>
-            {t('shared.joinFooterBody', 'We’ll connect you as soon as this invite checks out.')}
-          </Text>
-        </View>
-      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 18,
+    gap: 16,
   },
   formBlock: {
-    gap: 8,
+    gap: 6,
   },
   fieldLabel: {
     ...Typography.pill,
@@ -132,22 +121,6 @@ const styles = StyleSheet.create({
   },
   primaryAction: {
     width: '100%',
-    marginTop: 22,
-  },
-  helperCard: {
-    marginTop: 16,
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  helperText: {
-    ...Typography.body,
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
+    marginTop: 10,
   },
 });

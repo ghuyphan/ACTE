@@ -53,6 +53,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: jest.fn(),
   }),
+  useLocalSearchParams: () => ({}),
 }));
 
 jest.mock('../hooks/useAuth', () => ({

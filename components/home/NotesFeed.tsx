@@ -20,6 +20,7 @@ import { Note } from '../../services/database';
 import { SharedPost } from '../../services/sharedFeedService';
 import { Layout } from '../../constants/theme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { buildHomeFeedItems, type HomeFeedItem, getHomeFeedItemKey } from './feedItems';
 import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
 
 const MAX_STAGGERED_ENTRANCE_INDEX = 2;
@@ -259,15 +260,12 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   prevProps.isActive === nextProps.isActive
 ));
 
-type NotesFeedListItem =
-  | { id: string; kind: 'note'; note: Note; createdAt: string }
-  | { id: string; kind: 'shared-post'; post: SharedPost; createdAt: string };
-
 interface NotesFeedProps {
   flatListRef: RefObject<any>;
   captureHeader: ReactElement;
   captureMode: 'text' | 'camera';
-  notes: Note[];
+  items?: HomeFeedItem[];
+  notes?: Note[];
   sharedPosts?: SharedPost[];
   refreshing: boolean;
   onRefresh: () => void;
@@ -296,7 +294,8 @@ export default function NotesFeed({
   flatListRef,
   captureHeader,
   captureMode,
-  notes,
+  items,
+  notes = [],
   sharedPosts = [],
   refreshing,
   onRefresh,
@@ -319,26 +318,12 @@ export default function NotesFeed({
   const lastOffsetYRef = useRef(0);
   const previousItemKeysRef = useRef<string[] | null>(null);
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null);
-  const listData = useMemo<NotesFeedListItem[]>(
-    () =>
-      [
-        ...notes.map((note) => ({
-          id: note.id,
-          kind: 'note' as const,
-          note,
-          createdAt: note.createdAt,
-        })),
-        ...sharedPosts.map((post) => ({
-          id: post.id,
-          kind: 'shared-post' as const,
-          post,
-          createdAt: post.createdAt,
-        })),
-      ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
-    [notes, sharedPosts]
+  const listData = useMemo<HomeFeedItem[]>(
+    () => items ?? buildHomeFeedItems(notes, sharedPosts),
+    [items, notes, sharedPosts]
   );
   const itemKeys = useMemo(
-    () => listData.map((item) => `${item.kind}:${item.id}`),
+    () => listData.map(getHomeFeedItemKey),
     [listData]
   );
   const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
@@ -544,8 +529,8 @@ export default function NotesFeed({
   }, [capturePageLocked, pinCapturePageToTop]);
 
   const renderItem = useCallback(
-    ({ item, index }: { item: NotesFeedListItem; index: number }) => {
-      const isActive = activeCardKey === `${item.kind}:${item.id}`;
+    ({ item, index }: { item: HomeFeedItem; index: number }) => {
+      const isActive = activeCardKey === getHomeFeedItemKey(item);
 
       if (item.kind === 'shared-post') {
         return (
@@ -598,10 +583,11 @@ export default function NotesFeed({
     <FlashList
       ref={flatListRef}
       data={listData}
-      keyExtractor={(item) => `${item.kind}:${item.id}`}
+      keyExtractor={getHomeFeedItemKey}
       renderItem={renderItem}
       extraData={activeCardKey}
       getItemType={(item) => item.kind}
+      estimatedItemSize={snapHeight}
       drawDistance={snapHeight * 2}
       removeClippedSubviews={Platform.OS === 'android' && captureMode !== 'camera'}
       snapToInterval={snapHeight}

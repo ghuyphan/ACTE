@@ -1,12 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -23,17 +22,19 @@ import AppSheet from '../sheets/AppSheet';
 import AppSheetScaffold from '../sheets/AppSheetScaffold';
 import FriendInviteJoinBody from '../FriendInviteJoinBody';
 import SheetFooterButton from '../sheets/SheetFooterButton';
-import { Typography } from '../../constants/theme';
-import { useAuth } from '../../hooks/useAuth';
-import { useFriendInviteJoin } from '../../hooks/useFriendInviteJoin';
+import AppBackButton from '../ui/AppBackButton';
+import AppIconButton from '../ui/AppIconButton';
+import { Sheet, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { FriendConnection, FriendInvite } from '../../services/sharedFeedService';
+import { useSharedManageSheetModel } from './useSharedManageSheetModel';
 
 function ManageBody({
   friends,
   activeInvite,
   loading,
   onOpenJoin,
+  onCreateInvite,
   onShareInvite,
   onRevokeInvite,
   onRemoveFriend,
@@ -46,6 +47,7 @@ function ManageBody({
   activeInvite: FriendInvite | null;
   loading: boolean;
   onOpenJoin: () => void;
+  onCreateInvite: () => void;
   onShareInvite: () => void;
   onRevokeInvite: () => void;
   onRemoveFriend: (friendUid: string) => void;
@@ -79,13 +81,12 @@ function ManageBody({
       label: activeInvite
         ? t('shared.quickInviteReadyLabel', 'Invite ready')
         : t('shared.quickInviteLabel', 'Create link'),
-      onPress: onShareInvite,
+      onPress: onCreateInvite,
       accent: false,
     },
   ];
-
-  return (
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+  const content = (
+    <>
         <Pressable
           onPress={onOpenJoin}
           style={({ pressed }) => [
@@ -156,7 +157,7 @@ function ManageBody({
                   {t('shared.inviteReadyTitle', 'Invite link ready')}
                 </Text>
                 <Text style={[styles.inviteCardBody, { color: colors.secondaryText }]}>
-                  {t('shared.inviteReadyBody', 'Share this link with a friend to connect.')}
+                  {t('shared.inviteReadyBody', 'Share this link to connect.')}
                 </Text>
               </View>
             </View>
@@ -172,7 +173,7 @@ function ManageBody({
                 ]}
               >
                 <Ionicons name="paper-plane-outline" size={16} color="#1C1C1E" />
-                <Text style={styles.primaryInviteActionText}>
+                <Text numberOfLines={1} style={styles.primaryInviteActionText}>
                   {t('shared.shareInviteButton', 'Share invite link')}
                 </Text>
               </Pressable>
@@ -187,7 +188,7 @@ function ManageBody({
                   },
                 ]}
               >
-                <Text style={[styles.secondaryInviteActionText, { color: colors.secondaryText }]}>
+                <Text numberOfLines={1} style={[styles.secondaryInviteActionText, { color: colors.secondaryText }]}>
                   {t('shared.revokeInviteButton', 'Revoke invite')}
                 </Text>
               </Pressable>
@@ -255,8 +256,21 @@ function ManageBody({
             </View>
           ))
         )}
-    </ScrollView>
+    </>
   );
+
+  if (Platform.OS === 'android') {
+    return (
+      <BottomSheetScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {content}
+      </BottomSheetScrollView>
+    );
+  }
+
+  return <View style={styles.scrollContent}>{content}</View>;
 }
 
 export default function SharedManageSheet(props: {
@@ -265,17 +279,26 @@ export default function SharedManageSheet(props: {
   activeInvite: FriendInvite | null;
   loading: boolean;
   onClose: () => void;
+  onCreateInvite: () => void;
   onShareInvite: () => void;
   onRevokeInvite: () => void;
   onRemoveFriend: (friendUid: string) => void;
 }) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const router = useRouter();
-  const { user, isAuthAvailable } = useAuth();
-  const { visible, friends, activeInvite, loading, onClose, onShareInvite, onRevokeInvite, onRemoveFriend } = props;
-  const [mode, setMode] = useState<'manage' | 'join'>('manage');
-  const [inviteValue, setInviteValue] = useState('');
+  const { visible, friends, activeInvite, loading, onClose, onCreateInvite, onShareInvite, onRevokeInvite, onRemoveFriend } = props;
+  const {
+    handleBackToManage,
+    handleGoToAuth,
+    handleOpenJoin,
+    inviteValue,
+    isAuthAvailable,
+    joinInvite,
+    joining,
+    mode,
+    setInviteValue,
+    user,
+  } = useSharedManageSheetModel({ visible, onClose });
   const hasInviteValue = inviteValue.trim().length > 0;
   const contentOpacity = useSharedValue(1);
   const contentTranslateY = useSharedValue(0);
@@ -300,45 +323,6 @@ export default function SharedManageSheet(props: {
     });
   }, [contentOpacity, contentTranslateY]);
 
-  const handleOpenJoin = useCallback(() => {
-    setMode('join');
-  }, []);
-
-  const handleGoToAuth = useCallback(() => {
-    onClose();
-    setMode('manage');
-    setInviteValue('');
-    setTimeout(() => {
-      router.push('/auth');
-    }, 180);
-  }, [onClose, router]);
-
-  const { joining, joinInvite, resetJoinState } = useFriendInviteJoin({
-    inviteValue,
-    onRequireAuth: handleGoToAuth,
-    onBeforeSuccessAlert: () => {
-      setInviteValue('');
-      setMode('manage');
-    },
-  });
-
-  const handleBackToManage = useCallback(() => {
-    if (joining) {
-      return;
-    }
-
-    setInviteValue('');
-    setMode('manage');
-  }, [joining]);
-
-  useEffect(() => {
-    if (!visible) {
-      setMode('manage');
-      setInviteValue('');
-      resetJoinState();
-    }
-  }, [resetJoinState, visible]);
-
   useEffect(() => {
     if (!visible) {
       return;
@@ -347,23 +331,55 @@ export default function SharedManageSheet(props: {
     animateContentChange();
   }, [activeInvite?.id, animateContentChange, friends.length, hasInviteValue, mode, visible]);
 
-  const content = (
+  const manageBody = (
+    <ManageBody
+      friends={friends}
+      activeInvite={activeInvite}
+      loading={loading}
+      onOpenJoin={handleOpenJoin}
+      onCreateInvite={onCreateInvite}
+      onShareInvite={onShareInvite}
+      onRevokeInvite={onRevokeInvite}
+      onRemoveFriend={onRemoveFriend}
+      emptyLoadingBody={t('shared.refreshingFriends', 'Refreshing your shared circle...')}
+      emptyBody={t(
+        'shared.emptyManageBody',
+        'Invite someone to start a simple shared feed on Home.'
+      )}
+      friendFallback={t('shared.friendFallback', 'Friend')}
+      connectedOnLabel={t('shared.connectedOn', 'Connected')}
+    />
+  );
+
+  const joinContent = (
     <Animated.View
       layout={contentLayoutTransition}
       style={contentAnimatedStyle}
     >
-      {mode === 'join' ? (
-        <AppSheetScaffold
-          headerVariant="action"
-          title={t('shared.joinTitle', 'Join a friend')}
-          subtitle={
-            user
-              ? t('shared.joinBody', 'Paste the invite link to connect and start sharing on Home.')
-              : isAuthAvailable
-                ? t('shared.joinSignInBody', 'Sign in first so we can connect you to this friend.')
-                : t('shared.unavailableBody', 'This build does not have shared social enabled right now.')
-          }
-          headerTop={(
+      <AppSheetScaffold
+        headerVariant="standard"
+        title={t('shared.joinTitle', 'Join a friend')}
+        subtitle={
+          user
+            ? t('shared.joinBody', 'Paste an invite link to connect.')
+            : isAuthAvailable
+              ? t('shared.joinSignInBody', 'Sign in to connect with this friend.')
+              : t('shared.unavailableBody', 'This build does not have shared social enabled right now.')
+        }
+        headerTop={(
+          <View>
+            <View style={styles.joinTopRow}>
+              <AppBackButton
+                onPress={handleBackToManage}
+                style={styles.joinIconButton}
+              />
+              <AppIconButton
+                icon="close"
+                accessibilityLabel={t('common.close', 'Close')}
+                onPress={onClose}
+                style={styles.joinIconButton}
+              />
+            </View>
             <View style={[styles.joinBadge, { backgroundColor: colors.primarySoft }]}>
               <Ionicons
                 name={user ? 'link-outline' : 'person-circle-outline'}
@@ -371,67 +387,84 @@ export default function SharedManageSheet(props: {
                 color={colors.primary}
               />
             </View>
-          )}
-          leadingAction={{
-            icon: 'chevron-back',
-            accessibilityLabel: t('common.back', 'Back'),
-            onPress: handleBackToManage,
+          </View>
+        )}
+      >
+        <FriendInviteJoinBody
+          user={user}
+          isAuthAvailable={isAuthAvailable}
+          inviteValue={inviteValue}
+          joining={joining}
+          contentStyle={styles.sheetContent}
+          onChangeInvite={setInviteValue}
+          onSubmit={() => {
+            void joinInvite();
           }}
-          trailingAction={{
-            icon: 'close',
-            accessibilityLabel: t('common.close', 'Close'),
-            onPress: onClose,
-          }}
-        >
-          <FriendInviteJoinBody
-            user={user}
-            isAuthAvailable={isAuthAvailable}
-            inviteValue={inviteValue}
-            joining={joining}
-            contentStyle={styles.sheetContent}
-            onChangeInvite={setInviteValue}
-            onSubmit={() => {
-              void joinInvite();
-            }}
-            onGoToAuth={handleGoToAuth}
+          onGoToAuth={handleGoToAuth}
+        />
+      </AppSheetScaffold>
+    </Animated.View>
+  );
+
+  const manageContent = Platform.OS === 'android' ? (
+    <BottomSheetScrollView
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.manageScrollContent}
+    >
+      <Animated.View
+        layout={contentLayoutTransition}
+        style={contentAnimatedStyle}
+      >
+        <View style={styles.manageHeader}>
+          <Text style={[styles.manageTitle, { color: colors.text }]}>
+            {t('shared.manageTitle', 'Friends')}
+          </Text>
+          <Text style={[styles.manageSubtitle, { color: colors.secondaryText }]}>
+            {t('shared.friendsCount', '{{count}} friends', { count: friends.length })}
+          </Text>
+        </View>
+        {manageBody}
+        <View style={styles.manageFooter}>
+          <SheetFooterButton
+            label={t('common.done', 'Done')}
+            onPress={onClose}
           />
-        </AppSheetScaffold>
-      ) : (
-        <AppSheetScaffold
-          headerVariant="standard"
-          title={t('shared.manageTitle', 'Friends')}
-          subtitle={t('shared.friendsCount', '{{count}} friends', { count: friends.length })}
-          footer={
-            <SheetFooterButton
-              label={t('common.done', 'Done')}
-              onPress={onClose}
-            />
-          }
-        >
-          <ManageBody
-            friends={friends}
-            activeInvite={activeInvite}
-            loading={loading}
-            onOpenJoin={handleOpenJoin}
-            onShareInvite={onShareInvite}
-            onRevokeInvite={onRevokeInvite}
-            onRemoveFriend={onRemoveFriend}
-            emptyLoadingBody={t('shared.refreshingFriends', 'Refreshing your shared circle...')}
-            emptyBody={t(
-              'shared.emptyManageBody',
-              'Invite someone to start a simple shared feed on Home.'
-            )}
-            friendFallback={t('shared.friendFallback', 'Friend')}
-            connectedOnLabel={t('shared.connectedOn', 'Connected')}
+        </View>
+      </Animated.View>
+    </BottomSheetScrollView>
+  ) : (
+    <Animated.View
+      layout={contentLayoutTransition}
+      style={contentAnimatedStyle}
+    >
+      <AppSheetScaffold
+        headerVariant="standard"
+        title={t('shared.manageTitle', 'Friends')}
+        subtitle={t('shared.friendsCount', '{{count}} friends', { count: friends.length })}
+        footer={
+          <SheetFooterButton
+            label={t('common.done', 'Done')}
+            onPress={onClose}
           />
-        </AppSheetScaffold>
-      )}
+        }
+      >
+        {manageBody}
+      </AppSheetScaffold>
     </Animated.View>
   );
 
   return (
-    <AppSheet visible={visible} onClose={onClose}>
-      {content}
+    <AppSheet
+      visible={visible}
+      onClose={onClose}
+      androidScrollable={mode === 'manage'}
+      androidDynamicSizing
+      androidMaxDynamicContentSize={Sheet.maxHeight}
+      androidKeyboardBehavior="interactive"
+      androidInitialIndex={0}
+    >
+      {mode === 'join' ? joinContent : manageContent}
     </AppSheet>
   );
 }
@@ -442,6 +475,28 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: Platform.OS === 'ios' ? 28 : 8,
+  },
+  manageScrollContent: {
+    paddingHorizontal: Sheet.android.horizontalPadding,
+    paddingBottom: Sheet.android.bottomPadding + Sheet.android.comfortBottomPadding,
+  },
+  manageHeader: {
+    paddingTop: Sheet.android.headerTopPadding,
+    paddingBottom: Sheet.android.headerBottomSpacing,
+  },
+  manageTitle: {
+    ...Typography.screenTitle,
+    textAlign: 'left',
+    fontWeight: '600',
+  },
+  manageSubtitle: {
+    ...Typography.body,
+    marginTop: 8,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  manageFooter: {
+    paddingTop: 8,
   },
   addFriendRow: {
     minHeight: 72,
@@ -529,7 +584,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   primaryInviteAction: {
-    minHeight: 44,
+    flex: 1,
+    minWidth: 0,
+    minHeight: 48,
     borderRadius: 999,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -542,9 +599,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '700',
     color: '#1C1C1E',
+    flexShrink: 1,
   },
   secondaryInviteAction: {
-    minHeight: 44,
+    flex: 1,
+    minWidth: 0,
+    minHeight: 48,
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 16,
@@ -555,6 +615,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
     fontWeight: '700',
+    flexShrink: 1,
   },
   countPill: {
     minWidth: 28,
