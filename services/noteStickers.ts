@@ -2,7 +2,6 @@ import * as Crypto from 'expo-crypto';
 import * as FileSystem from '../utils/fileSystem';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { Image } from 'react-native';
-import { decode } from 'base64-arraybuffer';
 import {
   getActiveNotesScope,
   getDB,
@@ -286,9 +285,7 @@ function parseWebpHasTransparency(bytes: Uint8Array) {
   return false;
 }
 
-function hasTransparency(base64Data: string, mimeType: string) {
-  const bytes = new Uint8Array(decode(base64Data));
-
+function hasTransparency(bytes: Uint8Array, mimeType: string) {
   if (mimeType === 'image/png') {
     return parsePngHasTransparency(bytes);
   }
@@ -306,6 +303,30 @@ function mimeTypeSupportsTransparencyDetection(mimeType: string) {
 
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
+}
+
+async function readStickerBytes(uri: string) {
+  const bytes = await FileSystem.readAsBytesAsync(uri);
+  if (!bytes || bytes.length === 0) {
+    return null;
+  }
+
+  return bytes;
+}
+
+function bufferToHex(buffer: ArrayBuffer) {
+  return Array.from(new Uint8Array(buffer))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function hashStickerBytes(bytes: Uint8Array) {
+  if (bytes.length === 0) {
+    return null;
+  }
+
+  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes);
+  return bufferToHex(digest);
 }
 
 function sleep(ms: number) {
@@ -432,10 +453,12 @@ async function registerRemoteStickerAsset(
 
   try {
     const uploadFingerprint = asset.uploadFingerprint ?? (await getStickerUploadFingerprint(localUri));
-    const base64Data = await FileSystem.readAsStringAsync(localUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const contentHash = asset.contentHash ?? (await hashStickerBase64(base64Data));
+    const bytes = await readStickerBytes(localUri);
+    if (!bytes) {
+      return null;
+    }
+
+    const contentHash = asset.contentHash ?? (await hashStickerBytes(bytes));
     if (!contentHash) {
       return null;
     }
@@ -453,12 +476,12 @@ async function registerRemoteStickerAsset(
     await uploadStickerBytesWithRetry(
       NOTE_MEDIA_BUCKET,
       storagePath,
-      decode(base64Data),
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
       asset.mimeType,
       true
     );
 
-    const byteSize = decode(base64Data).byteLength;
+    const byteSize = bytes.byteLength;
     const now = new Date().toISOString();
     const { error: insertError } = await requireSupabase().from('sticker_assets').insert({
       owner_user_id: ownerUserId,
@@ -555,20 +578,8 @@ async function getStickerUploadFingerprint(uri: string) {
     return `md5:${info.md5.trim()}`;
   }
 
-  const base64Data = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-
-  return hashStickerBase64(base64Data);
-}
-
-async function hashStickerBase64(base64Data: string) {
-  const normalizedBase64 = base64Data.trim();
-  if (!normalizedBase64) {
-    return null;
-  }
-
-  return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, normalizedBase64);
+  const bytes = await readStickerBytes(uri);
+  return bytes ? hashStickerBytes(bytes) : null;
 }
 
 async function getStickerContentHash(uri: string) {
@@ -577,11 +588,8 @@ async function getStickerContentHash(uri: string) {
     return null;
   }
 
-  const base64Data = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-
-  return hashStickerBase64(base64Data);
+  const bytes = await readStickerBytes(uri);
+  return bytes ? hashStickerBytes(bytes) : null;
 }
 
 async function getStickerAssetByContentHash(
@@ -754,15 +762,13 @@ async function validateStickerFile(
     };
   }
 
-  const base64Data = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  const bytes = await readStickerBytes(uri);
 
-  if (!base64Data.trim()) {
+  if (!bytes) {
     throw new StickerImportError('file-unavailable');
   }
 
-  const suggestedRenderMode = hasTransparency(base64Data, mimeType) ? 'default' : 'stamp';
+  const suggestedRenderMode = hasTransparency(bytes, mimeType) ? 'default' : 'stamp';
 
   if (options.requiresTransparency && suggestedRenderMode !== 'default') {
     throw new StickerImportError('missing-transparency');
@@ -1218,10 +1224,8 @@ export async function uploadStickerAssetToStorage(
     return asset;
   }
 
-  const base64 = await FileSystem.readAsStringAsync(localUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  const contentHash = asset.contentHash ?? (await hashStickerBase64(base64));
+  const bytes = await readStickerBytes(localUri);
+  const contentHash = asset.contentHash ?? (bytes ? await hashStickerBytes(bytes) : null);
 
   if (asset.remotePath === remotePath && asset.contentHash && asset.contentHash === contentHash) {
     const nextAsset = {
@@ -1234,7 +1238,17 @@ export async function uploadStickerAssetToStorage(
     return nextAsset;
   }
 
-  await uploadStickerBytesWithRetry(bucket, remotePath, decode(base64), asset.mimeType, true);
+  if (!bytes || !contentHash) {
+    return asset;
+  }
+
+  await uploadStickerBytesWithRetry(
+    bucket,
+    remotePath,
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    asset.mimeType,
+    true
+  );
   const nextAsset = {
     ...asset,
     remotePath,
@@ -1373,10 +1387,17 @@ export async function serializeStickerPlacementsForStorage(
         existingRemoteAssetPathsById[placement.asset.id] ??
         `${ownerUid}/${NOTE_STICKER_MEDIA_PREFIX}/${placement.asset.id}.${getStickerFileExtension(placement.asset.mimeType)}`;
       if (!existingRemoteAssetPathsById[placement.asset.id]) {
-        const base64 = await FileSystem.readAsStringAsync(placement.asset.localUri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        await uploadStickerBytesWithRetry(bucket, remotePath, decode(base64), placement.asset.mimeType, true);
+        const bytes = await readStickerBytes(placement.asset.localUri);
+        if (!bytes) {
+          continue;
+        }
+        await uploadStickerBytesWithRetry(
+          bucket,
+          remotePath,
+          bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+          placement.asset.mimeType,
+          true
+        );
       }
       assetsById.set(placement.asset.id, {
         ...placement.asset,

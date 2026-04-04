@@ -22,7 +22,7 @@ import MapPreviewCard from '../map/MapPreviewCard';
 import MapStatusCard from '../map/MapStatusCard';
 import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from '../map/overlayTokens';
 import { useAuth } from '../../hooks/useAuth';
-import type { MapClusterNode } from '../../hooks/map/mapDomain';
+import type { MapClusterNode, NearbyNoteItem } from '../../hooks/map/mapDomain';
 import { regionToZoom } from '../../hooks/map/mapDomain';
 import { useMapScreenState } from '../../hooks/map/useMapScreenState';
 import { useGeofence } from '../../hooks/useGeofence';
@@ -53,6 +53,21 @@ function areRegionsClose(left: Region | null, right: Region) {
   );
 }
 
+function areNearbyItemsEquivalent(left: NearbyNoteItem[], right: NearbyNoteItem[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((item, index) => {
+    const other = right[index];
+    return (
+      other != null &&
+      other.note.id === item.note.id &&
+      other.distanceMeters === item.distanceMeters
+    );
+  });
+}
+
 export default function MapScreenIOS() {
   const isAndroid = Platform.OS === 'android';
   const { t } = useTranslation();
@@ -74,13 +89,11 @@ export default function MapScreenIOS() {
   const [showFriendsPreview, setShowFriendsPreview] = useState(false);
   const [activeFriendPostId, setActiveFriendPostId] = useState<string | null>(null);
   const [androidMapUiReady, setAndroidMapUiReady] = useState(!isAndroid);
-  const [keepNotePreviewMounted, setKeepNotePreviewMounted] = useState(false);
-  const [preferCurrentPreviewWhileHidden, setPreferCurrentPreviewWhileHidden] = useState(false);
+  const [nearbyPreviewItems, setNearbyPreviewItems] = useState<NearbyNoteItem[]>([]);
   const hasCenteredRef = useRef(false);
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const previewRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const previewHiddenStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingProgrammaticRegionRef = useRef<Region | null>(null);
+  const shouldAdoptNearbyPreviewItemsRef = useRef(true);
 
   useEffect(() => {
     if (!isAndroid) {
@@ -132,8 +145,8 @@ export default function MapScreenIOS() {
   const noteById = useMemo(() => new Map(notes.map((note) => [note.id, note] as const)), [notes]);
   const currentZoom = visibleRegion ? regionToZoom(visibleRegion) : regionToZoom(initialRegion);
   const nearbyItemById = useMemo(
-    () => new Map(nearbyItems.map((item) => [item.note.id, item] as const)),
-    [nearbyItems]
+    () => new Map(nearbyPreviewItems.map((item) => [item.note.id, item] as const)),
+    [nearbyPreviewItems]
   );
   const friendPosts = useMemo(
     () =>
@@ -171,19 +184,40 @@ export default function MapScreenIOS() {
   const previewVisible =
     androidMapUiReady &&
     overlayState === 'content' &&
-    nearbyItems.length > 0 &&
+    nearbyPreviewItems.length > 0 &&
     !notesPreviewDismissed;
+
+  useEffect(() => {
+    const shouldAdopt =
+      shouldAdoptNearbyPreviewItemsRef.current ||
+      nearbyPreviewItems.length === 0 ||
+      (activeNearbyNoteId != null && !nearbyPreviewItems.some((item) => item.note.id === activeNearbyNoteId));
+
+    if (!shouldAdopt) {
+      return;
+    }
+
+    setNearbyPreviewItems((current) =>
+      areNearbyItemsEquivalent(current, nearbyItems) ? current : nearbyItems
+    );
+    setActiveNearbyNoteId((current) => {
+      if (nearbyItems.length === 0) {
+        return null;
+      }
+
+      if (current && nearbyItems.some((item) => item.note.id === current)) {
+        return current;
+      }
+
+      return nearbyItems[0].note.id;
+    });
+    shouldAdoptNearbyPreviewItemsRef.current = false;
+  }, [activeNearbyNoteId, nearbyItems, nearbyPreviewItems]);
 
   useEffect(() => {
     return () => {
       if (markerPulseTimerRef.current) {
         clearTimeout(markerPulseTimerRef.current);
-      }
-      if (previewRestoreTimerRef.current) {
-        clearTimeout(previewRestoreTimerRef.current);
-      }
-      if (previewHiddenStateTimerRef.current) {
-        clearTimeout(previewHiddenStateTimerRef.current);
       }
     };
   }, []);
@@ -217,6 +251,7 @@ export default function MapScreenIOS() {
       }
 
       pendingProgrammaticRegionRef.current = null;
+      shouldAdoptNearbyPreviewItemsRef.current = true;
       setVisibleRegion(region);
     },
     [setProgrammaticVisibleRegion, setVisibleRegion]
@@ -251,21 +286,6 @@ export default function MapScreenIOS() {
   );
 
   useEffect(() => {
-    if (nearbyItems.length === 0) {
-      if (activeNearbyNoteId !== null) {
-        setActiveNearbyNoteId(null);
-      }
-      return;
-    }
-
-    if (activeNearbyNoteId && nearbyItems.some((item) => item.note.id === activeNearbyNoteId)) {
-      return;
-    }
-
-    setActiveNearbyNoteId(nearbyItems[0].note.id);
-  }, [activeNearbyNoteId, nearbyItems]);
-
-  useEffect(() => {
     if (!friendPosts.length) {
       if (showFriendsPreview) {
         setShowFriendsPreview(false);
@@ -287,50 +307,13 @@ export default function MapScreenIOS() {
     if (showFriendsPreview) {
       setShowFriendsPreview(false);
     }
-    const shouldRestoreNearbyPreview =
-      !notesPreviewDismissed &&
-      Boolean(selectedGroup) &&
-      nearbyItems.length > 0;
-
-    if (previewRestoreTimerRef.current) {
-      clearTimeout(previewRestoreTimerRef.current);
-      previewRestoreTimerRef.current = null;
-    }
-    if (previewHiddenStateTimerRef.current) {
-      clearTimeout(previewHiddenStateTimerRef.current);
-      previewHiddenStateTimerRef.current = null;
-    }
 
     if (!notesPreviewDismissed) {
       setNotesPreviewDismissed(true);
     }
 
     handleMapPress();
-
-    if (shouldRestoreNearbyPreview) {
-      setKeepNotePreviewMounted(true);
-      setPreferCurrentPreviewWhileHidden(false);
-      if (reduceMotionEnabled) {
-        setNotesPreviewDismissed(false);
-        setKeepNotePreviewMounted(false);
-        setPreferCurrentPreviewWhileHidden(false);
-      } else {
-        previewHiddenStateTimerRef.current = setTimeout(() => {
-          setPreferCurrentPreviewWhileHidden(true);
-          previewHiddenStateTimerRef.current = null;
-        }, 90);
-        previewRestoreTimerRef.current = setTimeout(() => {
-          setNotesPreviewDismissed(false);
-          setKeepNotePreviewMounted(false);
-          setPreferCurrentPreviewWhileHidden(false);
-          previewRestoreTimerRef.current = null;
-        }, 180);
-      }
-    } else {
-      setKeepNotePreviewMounted(false);
-      setPreferCurrentPreviewWhileHidden(false);
-    }
-  }, [handleMapPress, nearbyItems.length, notesPreviewDismissed, reduceMotionEnabled, selectedGroup, showFriendsPreview]);
+  }, [handleMapPress, notesPreviewDismissed, showFriendsPreview]);
 
   const handleChangeFilterType = useCallback(
     (nextType: Parameters<typeof setFilterType>[0]) => {
@@ -340,6 +323,7 @@ export default function MapScreenIOS() {
       if (notesPreviewDismissed) {
         setNotesPreviewDismissed(false);
       }
+      shouldAdoptNearbyPreviewItemsRef.current = true;
       setFilterType(nextType);
     },
     [notesPreviewDismissed, setFilterType, showFriendsPreview]
@@ -352,6 +336,7 @@ export default function MapScreenIOS() {
     if (notesPreviewDismissed) {
       setNotesPreviewDismissed(false);
     }
+    shouldAdoptNearbyPreviewItemsRef.current = true;
     toggleFavoritesOnly();
   }, [notesPreviewDismissed, showFriendsPreview, toggleFavoritesOnly]);
 
@@ -812,14 +797,13 @@ export default function MapScreenIOS() {
         </Pressable>
       </View>
 
-      {androidMapUiReady && notes.length > 0 && !friendsPreviewVisible && (previewVisible || keepNotePreviewMounted) ? (
+      {androidMapUiReady && notes.length > 0 && !friendsPreviewVisible ? (
         <MapPreviewCard
           previewMode={previewMode}
           visible={previewVisible}
-          preferCurrentStateWhileHidden={preferCurrentPreviewWhileHidden}
           selectedGroup={selectedGroup}
           selectedNoteIndex={selectedNoteIndex}
-          nearbyItems={nearbyItems}
+          nearbyItems={nearbyPreviewItems}
           activeNearbyNoteId={activeNearbyNoteId}
           bottomOffset={previewBottomOffset}
           onOpenNote={openNote}
@@ -881,6 +865,7 @@ export default function MapScreenIOS() {
             onAction={() => {
               emitLightHaptic();
               setNotesPreviewDismissed(false);
+              shouldAdoptNearbyPreviewItemsRef.current = true;
               clearFilters();
             }}
           />
@@ -904,6 +889,7 @@ export default function MapScreenIOS() {
             onAction={() => {
               emitLightHaptic();
               setNotesPreviewDismissed(false);
+              shouldAdoptNearbyPreviewItemsRef.current = true;
               showAllFilteredResults();
             }}
           />

@@ -1,3 +1,5 @@
+import { Image } from 'react-native';
+
 const mockDb = {
   runAsync: jest.fn(async () => undefined),
   getAllAsync: jest.fn(async () => []),
@@ -6,6 +8,7 @@ const mockDb = {
 
 const mockGetInfoAsync = jest.fn();
 const mockReadAsStringAsync = jest.fn();
+const mockReadAsBytesAsync = jest.fn();
 const mockCopyAsync = jest.fn(async () => undefined);
 const mockDeleteAsync = jest.fn(async () => undefined);
 const mockMakeDirectoryAsync = jest.fn(async () => undefined);
@@ -13,11 +16,21 @@ const mockManipulateAsync = jest.fn();
 const mockStorageUpload = jest.fn(async () => ({ error: null }));
 const mockRemoteStickerAssets = new Map<string, any>();
 
+function bytesToHex(bytes: Uint8Array) {
+  return Array.from(bytes)
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => 'test-uuid-1234'),
-  digestStringAsync: jest.fn(async (_algorithm: string, value: string) =>
-    `digest-${value.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase()}`
-  ),
+  digest: jest.fn(async (_algorithm: string, data: BufferSource) => {
+    if (ArrayBuffer.isView(data)) {
+      return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    }
+
+    return data;
+  }),
   CryptoDigestAlgorithm: {
     SHA256: 'SHA-256',
   },
@@ -32,6 +45,7 @@ jest.mock('../utils/fileSystem', () => ({
   },
   getInfoAsync: mockGetInfoAsync,
   readAsStringAsync: mockReadAsStringAsync,
+  readAsBytesAsync: mockReadAsBytesAsync,
   copyAsync: mockCopyAsync,
   deleteAsync: mockDeleteAsync,
   makeDirectoryAsync: mockMakeDirectoryAsync,
@@ -63,7 +77,7 @@ jest.mock('../utils/supabase', () => ({
       }
 
       const state = {
-        filters: [] as Array<{ field: string; value: unknown }>,
+        filters: [] as { field: string; value: unknown }[],
         updateValues: null as Record<string, unknown> | null,
       };
       const builder: any = {
@@ -129,10 +143,10 @@ jest.mock('../utils/supabase', () => ({
   })),
 }));
 
-import { Image } from 'react-native';
-
 const transparentPngBase64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFAAH/e+m+7wAAAABJRU5ErkJggg==';
+const transparentPngBytes = Uint8Array.from(Buffer.from(transparentPngBase64, 'base64'));
+const transparentPngHash = bytesToHex(transparentPngBytes);
 
 function loadImportStickerAsset() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -171,6 +185,7 @@ describe('importStickerAsset', () => {
     );
 
     mockReadAsStringAsync.mockResolvedValue(transparentPngBase64);
+    mockReadAsBytesAsync.mockResolvedValue(transparentPngBytes);
     mockMakeDirectoryAsync.mockResolvedValue(undefined);
     mockCopyAsync.mockResolvedValue(undefined);
     mockDeleteAsync.mockResolvedValue(undefined);
@@ -315,7 +330,7 @@ describe('importStickerAsset', () => {
           local_uri: 'file:///documents/stickers/existing.webp',
           remote_path: 'owner-1/stickers/asset-existing.webp',
           upload_fingerprint: 'fingerprint-existing',
-          content_hash: `digest-${transparentPngBase64.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase()}`,
+          content_hash: transparentPngHash,
           mime_type: 'image/webp',
           width: 320,
           height: 240,
@@ -378,10 +393,7 @@ describe('importStickerAsset', () => {
       }
     );
 
-    expect(mockReadAsStringAsync).not.toHaveBeenCalledWith(
-      'file:///documents/stickers/asset-1.png',
-      expect.anything()
-    );
+    expect(mockReadAsBytesAsync).not.toHaveBeenCalledWith('file:///documents/stickers/asset-1.png');
     expect(mockStorageUpload).not.toHaveBeenCalled();
     expect(JSON.parse(serialized)[0]?.asset?.remotePath).toBe(
       'owner-1/shared-post-1/stickers/asset-1.png'
@@ -428,7 +440,7 @@ describe('importStickerAsset', () => {
     );
 
     expect(mockStorageUpload).toHaveBeenCalledWith(
-      'owner-1/stickers/digest-ivborw0kggoaaaansuheugaa.png',
+      `owner-1/stickers/${transparentPngHash}.png`,
       expect.any(ArrayBuffer),
       expect.objectContaining({
         contentType: 'image/png',
@@ -438,7 +450,7 @@ describe('importStickerAsset', () => {
     expect(JSON.parse(serialized)[0]?.asset).toEqual(
       expect.objectContaining({
         remoteAssetId: 'remote-sticker-1',
-        remotePath: 'owner-1/stickers/digest-ivborw0kggoaaaansuheugaa.png',
+        remotePath: `owner-1/stickers/${transparentPngHash}.png`,
         storageBucket: 'note-media',
       })
     );
@@ -450,13 +462,13 @@ describe('importStickerAsset', () => {
     mockRemoteStickerAssets.set('remote-sticker-1', {
       id: 'remote-sticker-1',
       owner_user_id: 'owner-1',
-      content_hash: `digest-${transparentPngBase64.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase()}`,
+      content_hash: transparentPngHash,
       mime_type: 'image/png',
       width: 320,
       height: 240,
       byte_size: 512,
       storage_bucket: 'note-media',
-      storage_path: 'owner-1/stickers/digest-ivborw0kggoaaaansuheugaa.png',
+      storage_path: `owner-1/stickers/${transparentPngHash}.png`,
       created_at: '2026-03-10T00:00:00.000Z',
       last_seen_at: '2026-03-11T00:00:00.000Z',
     });
@@ -520,7 +532,7 @@ describe('importStickerAsset', () => {
       };
     });
 
-    mockReadAsStringAsync.mockResolvedValue(transparentPngBase64);
+    mockReadAsBytesAsync.mockResolvedValue(transparentPngBytes);
 
     const asset = await uploadStickerAssetToStorage('note-media', 'owner-1', {
       id: 'asset-1',
@@ -528,7 +540,7 @@ describe('importStickerAsset', () => {
       localUri: 'file:///documents/stickers/asset-1.png',
       remotePath: 'owner-1/stickers/asset-1.png',
       uploadFingerprint: 'file:///documents/stickers/asset-1.png:81920:100',
-      contentHash: `digest-${transparentPngBase64.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase()}`,
+      contentHash: transparentPngHash,
       mimeType: 'image/png',
       width: 320,
       height: 240,
@@ -539,11 +551,7 @@ describe('importStickerAsset', () => {
 
     expect(mockStorageUpload).not.toHaveBeenCalled();
     expect(mockDb.runAsync).toHaveBeenCalled();
-    expect(asset.uploadFingerprint).toBe(
-      `digest-${transparentPngBase64.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase()}`
-    );
-    expect(asset.contentHash).toBe(
-      `digest-${transparentPngBase64.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase()}`
-    );
+    expect(asset.uploadFingerprint).toBe(transparentPngHash);
+    expect(asset.contentHash).toBe(transparentPngHash);
   });
 });

@@ -1,18 +1,17 @@
 import * as FileSystem from '../utils/fileSystem';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
-import { decode } from 'base64-arraybuffer';
 import {
   ensureLivePhotoVideoDirectory,
   ensureSharedLivePhotoVideoCacheDirectory,
   MAX_SYNCABLE_LIVE_PHOTO_VIDEO_FILE_SIZE_BYTES,
-  readPairedVideoAsBase64,
+  readPairedVideoAsArrayBuffer,
   resolveStoredPairedVideoUri,
 } from './livePhotoStorage';
 import {
   ensurePhotoDirectory,
   ensureSharedPhotoCacheDirectory,
   MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES,
-  readPhotoAsBase64,
+  readPhotoAsArrayBuffer,
   resolveStoredPhotoUri,
 } from './photoStorage';
 import {
@@ -38,6 +37,12 @@ interface UploadStorageOptions {
 
 interface DownloadMediaOptions {
   preferCached?: boolean;
+}
+
+interface PreparedUpload {
+  uri: string;
+  cleanupUri: string | null;
+  contentType: string;
 }
 
 function sleep(ms: number) {
@@ -201,6 +206,35 @@ async function uploadBytesWithRetry(
   }
 }
 
+async function uploadPreparedFileToStorage(
+  bucket: string,
+  path: string,
+  preparedFile: PreparedUpload | null,
+  readPayload: (fileUri: string) => Promise<ArrayBuffer | null>,
+  options: UploadStorageOptions = {}
+) {
+  if (!preparedFile?.uri) {
+    return null;
+  }
+
+  try {
+    const payload = await readPayload(preparedFile.uri);
+    if (!payload) {
+      return null;
+    }
+
+    await uploadBytesWithRetry(bucket, path, payload, {
+      ...options,
+      contentType: preparedFile.contentType,
+    });
+    return path;
+  } finally {
+    if (preparedFile.cleanupUri) {
+      await FileSystem.deleteAsync(preparedFile.cleanupUri, { idempotent: true }).catch(() => undefined);
+    }
+  }
+}
+
 export async function uploadPhotoToStorage(
   bucket: string,
   path: string,
@@ -212,26 +246,18 @@ export async function uploadPhotoToStorage(
   }
 
   const preparedPhoto = await optimizePhotoForUpload(photoUri);
-  if (!preparedPhoto?.uri) {
-    return null;
-  }
-
-  try {
-    const base64 = await readPhotoAsBase64(preparedPhoto.uri);
-    if (!base64) {
-      return null;
-    }
-
-    await uploadBytesWithRetry(bucket, path, decode(base64), {
-      ...options,
-      contentType: 'image/jpeg',
-    });
-    return path;
-  } finally {
-    if (preparedPhoto.cleanupUri) {
-      await FileSystem.deleteAsync(preparedPhoto.cleanupUri, { idempotent: true }).catch(() => undefined);
-    }
-  }
+  return uploadPreparedFileToStorage(
+    bucket,
+    path,
+    preparedPhoto
+      ? {
+          ...preparedPhoto,
+          contentType: 'image/jpeg',
+        }
+      : null,
+    readPhotoAsArrayBuffer,
+    options
+  );
 }
 
 export async function uploadPairedVideoToStorage(
@@ -245,26 +271,13 @@ export async function uploadPairedVideoToStorage(
   }
 
   const preparedVideo = await optimizePairedVideoForUpload(videoUri);
-  if (!preparedVideo?.uri) {
-    return null;
-  }
-
-  try {
-    const base64 = await readPairedVideoAsBase64(preparedVideo.uri);
-    if (!base64) {
-      return null;
-    }
-
-    await uploadBytesWithRetry(bucket, path, decode(base64), {
-      ...options,
-      contentType: preparedVideo.contentType,
-    });
-    return path;
-  } finally {
-    if (preparedVideo.cleanupUri) {
-      await FileSystem.deleteAsync(preparedVideo.cleanupUri, { idempotent: true }).catch(() => undefined);
-    }
-  }
+  return uploadPreparedFileToStorage(
+    bucket,
+    path,
+    preparedVideo,
+    readPairedVideoAsArrayBuffer,
+    options
+  );
 }
 
 async function createSignedDownloadUrl(bucket: string, path: string) {

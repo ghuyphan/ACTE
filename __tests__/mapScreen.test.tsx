@@ -191,6 +191,12 @@ function setPlatformOS(nextOS: 'ios' | 'android' | 'web') {
   });
 }
 
+async function waitForPreviewCloseAnimation() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 320));
+  });
+}
+
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
@@ -358,7 +364,6 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(getByText('No notes in this area')).toBeTruthy();
       expect(getByTestId('map-show-all-results')).toBeTruthy();
-      expect(queryByTestId('map-preview-shell')).toBeNull();
     });
 
     fireEvent.press(getByTestId('map-show-all-results'));
@@ -555,12 +560,12 @@ describe('MapScreen', () => {
     });
   });
 
-  it('keeps the preview rail mounted when switching between marker and nearby modes', async () => {
+  it('dismisses the selected preview when tapping outside the map content', async () => {
     const nowSpy = jest.spyOn(Date, 'now');
     let now = 1000;
     nowSpy.mockImplementation(() => now);
 
-    const { getAllByTestId, getByTestId, getByText } = render(<MapScreen />);
+    const { getAllByTestId, getByTestId, getByText, queryByTestId } = render(<MapScreen />);
 
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
@@ -581,10 +586,12 @@ describe('MapScreen', () => {
     now = 1400;
     fireEvent.press(getByTestId('mock-map-press'));
 
+    expect(getByTestId('map-preview-shell')).toBeTruthy();
+
+    await waitForPreviewCloseAnimation();
+
     await waitFor(() => {
-      expect(getByTestId('map-preview-shell')).toBeTruthy();
-      expect(getByTestId('map-preview-list')).toBeTruthy();
-      expect(String(getByTestId('map-preview-context').props.children)).toBe('Nearby notes');
+      expect(queryByTestId('map-preview-shell')).toBeNull();
     });
 
     nowSpy.mockRestore();
@@ -598,6 +605,10 @@ describe('MapScreen', () => {
     });
 
     fireEvent.press(getByTestId('map-preview-dismiss'));
+
+    expect(getByTestId('map-preview-shell')).toBeTruthy();
+
+    await waitForPreviewCloseAnimation();
 
     await waitFor(() => {
       expect(queryByTestId('map-preview-shell')).toBeNull();
@@ -668,6 +679,37 @@ describe('MapScreen', () => {
     });
 
     fireEvent.press(getByTestId('leaf-marker-10.80000:106.70000'));
+
+    await waitFor(() => {
+      expect(getByTestId('photo-marker-photo-1')).toBeTruthy();
+    });
+  });
+
+  it('restores the photo marker after dismissing the preview for a selected photo note', async () => {
+    const { getByTestId } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.8,
+        longitude: 106.7,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('photo-marker-photo-1')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.80000:106.70000'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-shell')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('map-preview-dismiss'));
+
+    await waitForPreviewCloseAnimation();
 
     await waitFor(() => {
       expect(getByTestId('photo-marker-photo-1')).toBeTruthy();

@@ -127,6 +127,16 @@ export async function readAsStringAsync(fileUri: string, options?: ReadingOption
   return options?.encoding === EncodingType.Base64 ? file.base64() : file.text();
 }
 
+export async function readAsBytesAsync(fileUri: string): Promise<Uint8Array<ArrayBuffer>> {
+  const file = new File(fileUri);
+  return file.bytes();
+}
+
+export async function readAsArrayBufferAsync(fileUri: string): Promise<ArrayBuffer> {
+  const file = new File(fileUri);
+  return file.arrayBuffer();
+}
+
 export async function writeAsStringAsync(
   fileUri: string,
   contents: string,

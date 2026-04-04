@@ -30,15 +30,6 @@ type SharedPostWithCoordinates = SharedPost & {
   longitude: number;
 };
 
-interface DetachedSelectedMarker {
-  groupId: string;
-  latitude: number;
-  longitude: number;
-  note: Note;
-}
-
-const DETACHED_SELECTED_MARKER_EXIT_MS = 180;
-
 interface MapCanvasProps {
   mapRef: RefObject<MapView | null>;
   initialRegion: Region;
@@ -484,10 +475,7 @@ function MapCanvas({
 }: MapCanvasProps) {
   const isAndroid = Platform.OS === 'android';
   const palette = useMemo(() => getMapPalette(colors, isDark), [colors, isDark]);
-  const [detachedSelectedMarker, setDetachedSelectedMarker] = useState<DetachedSelectedMarker | null>(null);
-  const [detachedSelectedMarkerVisible, setDetachedSelectedMarkerVisible] = useState(false);
   const [androidShouldTrackMarkerViews, setAndroidShouldTrackMarkerViews] = useState(isAndroid);
-  const detachedSelectedMarkerExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const androidMarkerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Android applies map color scheme only from initial props, so remount on theme flips.
   const mapViewKey = isAndroid ? `map-${isDark ? 'dark' : 'light'}` : 'map';
@@ -529,18 +517,8 @@ function MapCanvas({
       }),
     [currentZoom, markerNodes, markerPulseId, noteById, palette.photo, palette.text, preferLiteMarkers, selectedGroupId]
   );
-  const shouldShowDetachedSelectedMarker = Boolean(
-    !preferLiteMarkers &&
-    selectedGroup &&
-    selectedGroup.notes.length === 1 &&
-    selectedNote
-  );
-
   useEffect(() => {
     return () => {
-      if (detachedSelectedMarkerExitTimerRef.current) {
-        clearTimeout(detachedSelectedMarkerExitTimerRef.current);
-      }
       if (androidMarkerRefreshTimerRef.current) {
         clearTimeout(androidMarkerRefreshTimerRef.current);
       }
@@ -575,66 +553,6 @@ function MapCanvas({
     selectedGroupId,
   ]);
 
-  useEffect(() => {
-    if (preferLiteMarkers) {
-      setDetachedSelectedMarkerVisible(false);
-      setDetachedSelectedMarker(null);
-      return;
-    }
-
-    if (detachedSelectedMarkerExitTimerRef.current) {
-      clearTimeout(detachedSelectedMarkerExitTimerRef.current);
-      detachedSelectedMarkerExitTimerRef.current = null;
-    }
-
-    if (shouldShowDetachedSelectedMarker && selectedGroup && selectedNote) {
-      const nextGroupId = selectedGroup.id;
-      setDetachedSelectedMarker((current) => {
-        if (
-          current &&
-          current.groupId === nextGroupId &&
-          current.note.id === selectedNote.id &&
-          current.latitude === selectedGroup.latitude &&
-          current.longitude === selectedGroup.longitude
-        ) {
-          return current;
-        }
-
-        return {
-          groupId: nextGroupId,
-          latitude: selectedGroup.latitude,
-          longitude: selectedGroup.longitude,
-          note: selectedNote,
-        };
-      });
-      setDetachedSelectedMarkerVisible(true);
-      return;
-    }
-
-    if (!detachedSelectedMarker) {
-      return;
-    }
-
-    if (reduceMotionEnabled) {
-      setDetachedSelectedMarkerVisible(false);
-      setDetachedSelectedMarker(null);
-      return;
-    }
-
-    setDetachedSelectedMarkerVisible(false);
-    detachedSelectedMarkerExitTimerRef.current = setTimeout(() => {
-      setDetachedSelectedMarker(null);
-      detachedSelectedMarkerExitTimerRef.current = null;
-    }, DETACHED_SELECTED_MARKER_EXIT_MS);
-  }, [
-    detachedSelectedMarker,
-    preferLiteMarkers,
-    reduceMotionEnabled,
-    selectedGroup,
-    selectedNote,
-    shouldShowDetachedSelectedMarker,
-  ]);
-
   return (
     <MapView
       key={mapViewKey}
@@ -667,9 +585,13 @@ function MapCanvas({
           previewText,
           countBadgeLabel,
         }) => {
-        const renderDetachedSelectedMarker =
+        const renderSelectedCallout =
+          !preferLiteMarkers &&
           !node.isCluster &&
-          detachedSelectedMarker?.groupId === node.groupId;
+          Boolean(selectedGroup) &&
+          selectedGroup!.notes.length === 1 &&
+          Boolean(selectedNote) &&
+          node.groupId === selectedGroup!.id;
 
         return (
           preferLiteMarkers && !node.isCluster ? (
@@ -690,7 +612,7 @@ function MapCanvas({
               key={node.id}
               testID={node.isCluster ? `cluster-marker-${node.id}` : `leaf-marker-${node.groupId ?? node.id}`}
               coordinate={{ latitude: node.latitude, longitude: node.longitude }}
-              anchor={{ x: 0.5, y: 0.5 }}
+              anchor={renderSelectedCallout ? { x: 0.5, y: 30 / 136 } : { x: 0.5, y: 0.5 }}
               tracksViewChanges={androidShouldTrackMarkerViews || pulseActive || isSelected || reduceMotionEnabled}
               onPress={(event) => {
                 event.stopPropagation?.();
@@ -707,13 +629,21 @@ function MapCanvas({
               <View
                 style={[
                   styles.markerWrap,
-                  renderDetachedSelectedMarker ? styles.hiddenMarkerWrap : null,
                   showRichPreviewMarker ? styles.richMarkerHitArea : null,
                   showStackPreviewMarker ? styles.stackMarkerHitArea : null,
                 ]}
                 collapsable={false}
               >
-                {renderDetachedSelectedMarker ? null : (
+                {renderSelectedCallout && selectedNote ? (
+                  <View pointerEvents="none" style={styles.selectedMarkerWrap} collapsable={false}>
+                    <MapSelectedNoteCallout
+                      note={selectedNote}
+                      colors={colors}
+                      visible
+                      reduceMotionEnabled={reduceMotionEnabled}
+                    />
+                  </View>
+                ) : (
                   <MarkerContent
                     isCluster={node.isCluster}
                     pointCount={node.pointCount}
@@ -744,31 +674,6 @@ function MapCanvas({
           )
         );
       })}
-      {!preferLiteMarkers && detachedSelectedMarker ? (
-        <Marker
-          key={`selected-note-${detachedSelectedMarker.groupId}`}
-          coordinate={{
-            latitude: detachedSelectedMarker.latitude,
-            longitude: detachedSelectedMarker.longitude,
-          }}
-          anchor={{ x: 0.5, y: 30 / 136 }}
-          tracksViewChanges={androidShouldTrackMarkerViews || detachedSelectedMarkerVisible || reduceMotionEnabled}
-          zIndex={40}
-          onPress={(event) => {
-            event.stopPropagation?.();
-            onLeafPress(detachedSelectedMarker.groupId);
-          }}
-        >
-          <View pointerEvents="none" style={styles.selectedMarkerWrap} collapsable={false}>
-            <MapSelectedNoteCallout
-              note={detachedSelectedMarker.note}
-              colors={colors}
-              visible={detachedSelectedMarkerVisible}
-              reduceMotionEnabled={reduceMotionEnabled}
-            />
-          </View>
-        </Marker>
-      ) : null}
       {friendMarkers.map((post) => {
         const isSelected = selectedFriendPostId === post.id;
         const authorLabel = post.authorDisplayName?.trim() || 'F';
@@ -843,10 +748,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minWidth: 60,
     minHeight: 60,
-  },
-  hiddenMarkerWrap: {
-    minWidth: 1,
-    minHeight: 1,
   },
   selectedMarkerWrap: {
     width: 176,

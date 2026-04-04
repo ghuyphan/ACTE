@@ -31,7 +31,6 @@ type PreviewMode = 'group' | 'nearby';
 interface MapPreviewCardProps {
   previewMode: PreviewMode;
   visible: boolean;
-  preferCurrentStateWhileHidden?: boolean;
   selectedGroup: MapPointGroup | null;
   selectedNoteIndex: number;
   nearbyItems: NearbyNoteItem[];
@@ -76,7 +75,6 @@ function getPreviewText(note: Note, photoLabel: string, noContentLabel: string) 
 export default function MapPreviewCard({
   previewMode,
   visible,
-  preferCurrentStateWhileHidden = false,
   selectedGroup,
   selectedNoteIndex,
   nearbyItems,
@@ -117,7 +115,7 @@ export default function MapPreviewCard({
     };
   }, [previewMode, selectedGroup, selectedNoteIndex, visible]);
 
-  const shouldUseCurrentPreviewState = visible || preferCurrentStateWhileHidden;
+  const shouldUseCurrentPreviewState = visible;
   const renderPreviewMode = shouldUseCurrentPreviewState
     ? previewMode
     : lastVisiblePreviewStateRef.current?.previewMode ?? previewMode;
@@ -227,15 +225,8 @@ export default function MapPreviewCard({
     }
   }, [activeIndex, nearbyPageWidth, renderPreviewMode, reduceMotionEnabled]);
 
-  const handlePreviewMomentumEnd = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (!previewDraggingRef.current) {
-        return;
-      }
-      previewDraggingRef.current = false;
-
-      const xOffset = event.nativeEvent.contentOffset.x;
-      const nextIndex = Math.round(xOffset / nearbyPageWidth);
+  const commitNearbyFocus = useCallback(
+    (nextIndex: number) => {
       const boundedIndex = Math.max(0, Math.min(nextIndex, previewItems.length - 1));
       const item = previewItems[boundedIndex];
       if (!item) {
@@ -249,7 +240,21 @@ export default function MapPreviewCard({
 
       onFocusNearbyNote(item.note.id);
     },
-    [isGroupMode, nearbyPageWidth, onFocusGroupNote, onFocusNearbyNote, previewItems]
+    [isGroupMode, onFocusGroupNote, onFocusNearbyNote, previewItems]
+  );
+
+  const handlePreviewMomentumEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (!previewDraggingRef.current) {
+        return;
+      }
+      previewDraggingRef.current = false;
+
+      const xOffset = event.nativeEvent.contentOffset.x;
+      const nextIndex = Math.round(xOffset / nearbyPageWidth);
+      commitNearbyFocus(nextIndex);
+    },
+    [commitNearbyFocus, nearbyPageWidth]
   );
 
   if (!isMounted && !visible) {
@@ -432,6 +437,14 @@ export default function MapPreviewCard({
             scrollEnabled={renderItems.length > 1}
             onScrollBeginDrag={() => {
               previewDraggingRef.current = true;
+            }}
+            onScrollEndDrag={(event) => {
+              const velocityX = event.nativeEvent.velocity?.x ?? 0;
+              if (Math.abs(velocityX) > 0.05) {
+                return;
+              }
+
+              handlePreviewMomentumEnd(event);
             }}
             onMomentumScrollEnd={handlePreviewMomentumEnd}
           />

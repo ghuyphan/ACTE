@@ -98,6 +98,24 @@ export async function readPhotoAsBase64(photoUri: string) {
   });
 }
 
+export async function readPhotoAsArrayBuffer(photoUri: string) {
+  const normalizedPhotoUri = resolveStoredPhotoUri(photoUri);
+  if (!normalizedPhotoUri) {
+    return null;
+  }
+
+  const info = await FileSystem.getInfoAsync(normalizedPhotoUri);
+  if (!info.exists || info.isDirectory) {
+    return null;
+  }
+
+  if (typeof info.size === 'number' && info.size > MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES) {
+    throw new Error('Photo is too large to sync safely. Please retake it with a lower resolution.');
+  }
+
+  return FileSystem.readAsArrayBufferAsync(normalizedPhotoUri);
+}
+
 export async function writePhotoFromBase64(noteId: string, base64Data: string) {
   const directory = await ensurePhotoDirectory();
   if (!directory || !base64Data.trim()) {

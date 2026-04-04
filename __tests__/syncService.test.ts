@@ -218,14 +218,32 @@ function executeNotesQuery(state: any) {
     if (filter.type === 'gt') {
       rows = rows.filter((row) => String(row?.[filter.field] ?? '') > String(filter.value ?? ''));
     }
+
+    if (filter.type === 'in') {
+      rows = rows.filter((row) => filter.values.includes(row?.[filter.field]));
+    }
   }
 
-  if (state.orderField) {
+  if (state.orderFields.length > 0) {
     rows = [...rows].sort((left, right) => {
-      const leftValue = String(left?.[state.orderField!] ?? '');
-      const rightValue = String(right?.[state.orderField!] ?? '');
-      return state.ascending ? leftValue.localeCompare(rightValue) : rightValue.localeCompare(leftValue);
+      for (const order of state.orderFields) {
+        const leftValue = String(left?.[order.field] ?? '');
+        const rightValue = String(right?.[order.field] ?? '');
+        const comparison = order.ascending
+          ? leftValue.localeCompare(rightValue)
+          : rightValue.localeCompare(leftValue);
+
+        if (comparison !== 0) {
+          return comparison;
+        }
+      }
+
+      return 0;
     });
+  }
+
+  if (typeof state.rangeStart === 'number' && typeof state.rangeEnd === 'number') {
+    rows = rows.slice(state.rangeStart, state.rangeEnd + 1);
   }
 
   return rows;
@@ -263,12 +281,26 @@ function executeTombstoneQuery(
     }
   }
 
-  if (state.orderField) {
+  if (state.orderFields.length > 0) {
     rows = [...rows].sort((left, right) => {
-      const leftValue = String(left?.[state.orderField!] ?? '');
-      const rightValue = String(right?.[state.orderField!] ?? '');
-      return state.ascending ? leftValue.localeCompare(rightValue) : rightValue.localeCompare(leftValue);
+      for (const order of state.orderFields) {
+        const leftValue = String(left?.[order.field] ?? '');
+        const rightValue = String(right?.[order.field] ?? '');
+        const comparison = order.ascending
+          ? leftValue.localeCompare(rightValue)
+          : rightValue.localeCompare(leftValue);
+
+        if (comparison !== 0) {
+          return comparison;
+        }
+      }
+
+      return 0;
     });
+  }
+
+  if (typeof state.rangeStart === 'number' && typeof state.rangeEnd === 'number') {
+    rows = rows.slice(state.rangeStart, state.rangeEnd + 1);
   }
 
   return rows;
@@ -304,9 +336,13 @@ function executeStickerAssetRefsQuery(state: any) {
 
 function mockCreateNotesQueryBuilder() {
   const state = {
-    filters: [] as Array<{ type: 'eq' | 'gt'; field: string; value: unknown }>,
-    orderField: null as string | null,
-    ascending: true,
+    filters: [] as (
+      | { type: 'eq' | 'gt'; field: string; value: unknown }
+      | { type: 'in'; field: string; values: unknown[] }
+    )[],
+    orderFields: [] as { field: string; ascending: boolean }[],
+    rangeStart: null as number | null,
+    rangeEnd: null as number | null,
     deleteMode: false,
   };
 
@@ -320,9 +356,17 @@ function mockCreateNotesQueryBuilder() {
       state.filters.push({ type: 'gt', field, value });
       return builder;
     },
+    in: (field: string, values: unknown[]) => {
+      state.filters.push({ type: 'in', field, values });
+      return builder;
+    },
     order: (field: string, options?: { ascending?: boolean }) => {
-      state.orderField = field;
-      state.ascending = options?.ascending ?? true;
+      state.orderFields.push({ field, ascending: options?.ascending ?? true });
+      return builder;
+    },
+    range: (from: number, to: number) => {
+      state.rangeStart = from;
+      state.rangeEnd = to;
       return builder;
     },
     maybeSingle: async () => {
@@ -366,10 +410,10 @@ function mockCreateNotesQueryBuilder() {
 
 function mockCreateSharedPostsQueryBuilder() {
   const state = {
-    filters: [] as Array<
+    filters: [] as (
       | { type: 'eq'; field: string; value: unknown }
       | { type: 'in'; field: string; values: unknown[] }
-    >,
+    )[],
     deleteMode: false,
   };
 
@@ -416,9 +460,10 @@ function mockCreateTombstonesQueryBuilder(
   idField: 'note_id' | 'post_id'
 ) {
   const state = {
-    filters: [] as Array<{ type: 'eq' | 'gt'; field: string; value: unknown }>,
-    orderField: null as string | null,
-    ascending: true,
+    filters: [] as { type: 'eq' | 'gt'; field: string; value: unknown }[],
+    orderFields: [] as { field: string; ascending: boolean }[],
+    rangeStart: null as number | null,
+    rangeEnd: null as number | null,
     deleteMode: false,
   };
 
@@ -433,11 +478,15 @@ function mockCreateTombstonesQueryBuilder(
       return builder;
     },
     order: (field: string, options?: { ascending?: boolean }) => {
-      state.orderField = field;
-      state.ascending = options?.ascending ?? true;
+      state.orderFields.push({ field, ascending: options?.ascending ?? true });
       return builder;
     },
-    upsert: async (value: Record<string, unknown> | Array<Record<string, unknown>>) => {
+    range: (from: number, to: number) => {
+      state.rangeStart = from;
+      state.rangeEnd = to;
+      return builder;
+    },
+    upsert: async (value: Record<string, unknown> | Record<string, unknown>[]) => {
       const rows = Array.isArray(value) ? value : [value];
       for (const row of rows) {
         store.set(String(row[idField]), row);
@@ -474,7 +523,7 @@ function mockCreateTombstonesQueryBuilder(
 
 function mockCreateStickerAssetsQueryBuilder() {
   const state = {
-    filters: [] as Array<{ type: 'eq'; field: string; value: unknown }>,
+    filters: [] as { type: 'eq'; field: string; value: unknown }[],
     updateValues: null as Record<string, unknown> | null,
   };
 
@@ -531,10 +580,10 @@ function mockCreateStickerAssetsQueryBuilder() {
 
 function mockCreateStickerAssetRefsQueryBuilder() {
   const state = {
-    filters: [] as Array<
+    filters: [] as (
       | { type: 'eq'; field: string; value: unknown }
       | { type: 'in'; field: string; values: unknown[] }
-    >,
+    )[],
     deleteMode: false,
   };
 
@@ -548,7 +597,7 @@ function mockCreateStickerAssetRefsQueryBuilder() {
       state.filters.push({ type: 'in', field, values });
       return builder;
     },
-    upsert: async (value: Record<string, unknown> | Array<Record<string, unknown>>) => {
+    upsert: async (value: Record<string, unknown> | Record<string, unknown>[]) => {
       const rows = Array.isArray(value) ? value : [value];
       for (const row of rows) {
         mockRemoteStickerAssetRefs.set(
@@ -1068,6 +1117,89 @@ describe('syncService', () => {
         locationName: 'Da Nang',
       })
     );
+  });
+
+  it('imports remote notes across multiple pages during incremental sync', async () => {
+    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-09T00:00:00.000Z');
+
+    for (let index = 0; index < 205; index += 1) {
+      const syncedAt = new Date(Date.UTC(2026, 2, 10 + index, 0, 0, 0)).toISOString();
+      mockRemoteNotes.set(`note-page-${index}`, {
+        id: `note-page-${index}`,
+        user_id: 'user-1',
+        type: 'text',
+        content: `remote memory ${index}`,
+        photo_path: null,
+        has_doodle: false,
+        doodle_strokes_json: null,
+        has_stickers: false,
+        sticker_placements_json: null,
+        location_name: 'Da Nang',
+        prompt_id: null,
+        prompt_text_snapshot: null,
+        prompt_answer: null,
+        mood_emoji: null,
+        note_color: null,
+        latitude: 16.06,
+        longitude: 108.22,
+        radius: 150,
+        is_favorite: false,
+        created_at: syncedAt,
+        updated_at: syncedAt,
+        synced_at: syncedAt,
+      });
+    }
+
+    const result = await syncNotes(syncUser, [], { mode: 'incremental' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        importedCount: 205,
+      })
+    );
+    expect(mockUpsertNote).toHaveBeenCalledTimes(205);
+  });
+
+  it('skips remote photo downloads when the local note is already current', async () => {
+    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-09T00:00:00.000Z');
+    localNotesStore = [
+      {
+        ...createPhotoNote('note-remote-stable'),
+        photoSyncedLocalUri: 'file:///photos/note-remote-stable.jpg',
+        updatedAt: '2026-03-12T00:00:00.000Z',
+      },
+    ];
+    mockRemoteNotes.set('note-remote-stable', {
+      id: 'note-remote-stable',
+      user_id: 'user-1',
+      type: 'photo',
+      content: '',
+      photo_path: 'user-1/note-remote-stable',
+      has_doodle: false,
+      doodle_strokes_json: null,
+      has_stickers: false,
+      sticker_placements_json: null,
+      location_name: 'Da Nang',
+      prompt_id: null,
+      prompt_text_snapshot: null,
+      prompt_answer: null,
+      mood_emoji: null,
+      note_color: null,
+      latitude: 16.06,
+      longitude: 108.22,
+      radius: 150,
+      is_favorite: false,
+      created_at: '2026-03-10T00:00:00.000Z',
+      updated_at: '2026-03-11T00:00:00.000Z',
+      synced_at: '2026-03-11T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'incremental' });
+
+    expect(result.status).toBe('success');
+    expect(mockDownloadPhotoFromStorage).not.toHaveBeenCalled();
+    expect(mockUpsertNote).not.toHaveBeenCalled();
   });
 
   it('keeps incremental sync running when a remote photo object is missing', async () => {

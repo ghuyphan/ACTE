@@ -131,3 +131,24 @@ export async function readPairedVideoAsBase64(fileUri: string) {
     encoding: FileSystem.EncodingType.Base64,
   });
 }
+
+export async function readPairedVideoAsArrayBuffer(fileUri: string) {
+  const normalizedFileUri = resolveStoredPairedVideoUri(fileUri);
+  if (!normalizedFileUri) {
+    return null;
+  }
+
+  const info = await FileSystem.getInfoAsync(normalizedFileUri);
+  if (!info.exists || info.isDirectory) {
+    return null;
+  }
+
+  if (
+    typeof info.size === 'number' &&
+    info.size > MAX_SYNCABLE_LIVE_PHOTO_VIDEO_FILE_SIZE_BYTES
+  ) {
+    throw new Error('Live photo motion is too large to sync safely. Please retake it and try again.');
+  }
+
+  return FileSystem.readAsArrayBufferAsync(normalizedFileUri);
+}
