@@ -104,10 +104,10 @@ export const CaptureToggleIconButton = memo(function CaptureToggleIconButton({
 
 const styles = StyleSheet.create({
   captureToggleIconWrap: {
+    width: 20,
+    height: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    width: '100%',
-    height: '100%',
   },
   captureToggleIconLayer: {
     position: 'absolute',

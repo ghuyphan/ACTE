@@ -5,6 +5,7 @@ import MapScreen from '../app/(tabs)/map';
 
 const mockOpenNoteDetail = jest.fn();
 const mockRouterPush = jest.fn();
+const mockRouterReplace = jest.fn();
 const mockAnimateToRegion = jest.fn();
 const mockFitToCoordinates = jest.fn();
 const mockRequestForegroundLocation = jest.fn();
@@ -94,6 +95,7 @@ jest.mock('react-i18next', () => ({
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: (...args: unknown[]) => mockRouterPush(...args),
+    replace: (...args: unknown[]) => mockRouterReplace(...args),
   }),
 }));
 
@@ -384,6 +386,22 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(queryByText('2 notes · all results')).toBeNull();
     });
+  });
+
+  it('routes to the home tab from the empty-map create-note pill', async () => {
+    replaceMockNotes([]);
+    resetMockSharedPosts();
+    mockSharedPosts.splice(0, mockSharedPosts.length);
+
+    const { getByTestId } = render(<MapScreen />);
+
+    await waitFor(() => {
+      expect(getByTestId('map-create-first-note')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('map-create-first-note'));
+
+    expect(mockRouterReplace).toHaveBeenCalledWith('/(tabs)/index');
   });
 
   it('keeps the initial map entry static', () => {

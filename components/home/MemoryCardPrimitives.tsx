@@ -3,7 +3,7 @@ import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
 import { Dimensions, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
-import { Layout, Typography } from '../../constants/theme';
+import { Layout, Radii, Typography } from '../../constants/theme';
 import { Note } from '../../services/database';
 import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { getNotePhotoUri } from '../../services/photoStorage';
@@ -124,11 +124,11 @@ export function NoteMemoryCard({
               pressed ? styles.metadataPressablePressed : null,
             ]}
           >
-	            <InfoPill style={styles.metadataPill}>
-	              <View style={styles.metadataPillContent}>
-	                <View style={styles.metadataPillMain}>
-	                  <Ionicons name="location" size={14} color={colors.secondaryText} />
-	                  <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
+            <InfoPill style={styles.metadataPill}>
+              <View style={styles.metadataPillContent}>
+                <View style={styles.metadataPillMain}>
+                  <Ionicons name="location" size={14} color={colors.secondaryText} />
+                  <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
                     {locationLabel}
                   </Text>
                   <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
@@ -136,19 +136,19 @@ export function NoteMemoryCard({
                   {note.hasDoodle ? (
                     <>
                       <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-	                      <Ionicons name="brush-outline" size={14} color={colors.secondaryText} />
-	                    </>
-	                  ) : null}
-	                </View>
-	                <View style={styles.metadataPillAction}>
-	                  <Text style={[styles.metadataActionText, { color: colors.primary }]}>
-	                    {t('home.openDetails', 'Details')}
-	                  </Text>
-	                  <Ionicons name="chevron-forward" size={14} color={colors.primary} />
-	                </View>
-	              </View>
-	            </InfoPill>
-	          </Pressable>
+                      <Ionicons name="brush-outline" size={14} color={colors.secondaryText} />
+                    </>
+                  ) : null}
+                </View>
+                <View style={styles.metadataPillAction}>
+                  <Text style={[styles.metadataActionText, { color: colors.primary }]}>
+                    {t('home.openDetails', 'Details')}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+                </View>
+              </View>
+            </InfoPill>
+          </Pressable>
         ) : (
           <InfoPill style={styles.metadataPill}>
             <View style={styles.metadataPillContent}>
@@ -218,7 +218,7 @@ export function SharedPostMemoryCard({
                 pressed ? styles.metadataPressablePressed : null,
               ]}
             >
-              <InfoPill style={[styles.metadataPill, styles.sharedUnifiedPill]}>
+              <InfoPill style={styles.metadataPill}>
                 <View style={styles.metadataPillContent}>
                   <View style={styles.metadataPillMain}>
                     {post.authorPhotoURLSnapshot ? (
@@ -252,7 +252,7 @@ export function SharedPostMemoryCard({
               </InfoPill>
             </Pressable>
           ) : (
-            <InfoPill style={[styles.metadataPill, styles.sharedUnifiedPill]}>
+            <InfoPill style={styles.metadataPill}>
               <View style={styles.metadataPillContent}>
                 <View style={styles.metadataPillMain}>
                   {post.authorPhotoURLSnapshot ? (
@@ -329,9 +329,6 @@ const styles = StyleSheet.create({
   sharedCardWrap: {
     alignSelf: 'center',
   },
-  sharedUnifiedPill: {
-    alignSelf: 'center',
-  },
   sharedAvatarImage: {
     width: 24,
     height: 24,
@@ -350,11 +347,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   metadataPill: {
-    minHeight: 36,
-    minWidth: '100%',
+    minHeight: 42,
+    maxWidth: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 0,
+    borderRadius: Radii.pill,
   },
   metadataPressable: {
-    alignSelf: 'stretch',
+    alignSelf: 'center',
+    maxWidth: '100%',
   },
   metadataPressablePressed: {
     opacity: 0.84,
@@ -375,18 +376,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
   },
   metadataPillContent: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
+    gap: 6,
+    maxWidth: '100%',
   },
   metadataPillMain: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     minWidth: 0,
+    flexShrink: 1,
   },
   metadataPillAction: {
     flexDirection: 'row',

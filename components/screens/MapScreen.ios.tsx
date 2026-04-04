@@ -868,6 +868,7 @@ export default function MapScreenIOS() {
         {overlayState === 'no-notes' && !friendsPreviewVisible ? (
           <MapStatusCard
             overlayState="no-notes"
+            variant="pill"
             isDark={isDark}
             primaryColor={colors.primary}
             textColor={colors.text}
@@ -875,6 +876,12 @@ export default function MapScreenIOS() {
             reduceMotionEnabled={reduceMotionEnabled}
             title={t('map.emptyTitle', 'No notes on the map yet')}
             subtitle={t('map.emptySubtitle', 'Your saved notes will appear as pins here')}
+            actionLabel={t('map.createFirstNote', 'Create first note')}
+            actionTestID="map-create-first-note"
+            onAction={() => {
+              emitLightHaptic();
+              router.replace('/(tabs)/index' as any);
+            }}
           />
         ) : null}
 

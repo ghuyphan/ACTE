@@ -182,6 +182,7 @@
         "areaEmptySubtitle": "Move the map a bit more or show all matching notes from anywhere.",
         "clearFilters": "Clear filters",
         "showAllResults": "Show all results",
+        "createFirstNote": "Create first note",
         "allResultsLabel": "all results",
         "noContent": "No note content",
         "note": "note",

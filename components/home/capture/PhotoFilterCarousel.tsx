@@ -6,6 +6,9 @@ import type { ThemeColors } from '../../../hooks/useTheme';
 import { CaptureAnimatedPressable } from './CaptureAnimatedPressable';
 import { FilteredPhotoCanvas } from './FilteredPhotoCanvas';
 
+const PHOTO_FILTER_BUTTON_SIZE = 38;
+const PHOTO_FILTER_PREVIEW_SIZE = 34;
+
 export type PhotoFilterCarouselProps = {
   sourceUri: string;
   selectedFilterId: PhotoFilterId;
@@ -88,26 +91,35 @@ export const PhotoFilterCarousel = memo(function PhotoFilterCarousel({
 
 const styles = StyleSheet.create({
   photoFilterTray: {
+    maxWidth: '100%',
+    paddingHorizontal: 5,
+    paddingVertical: 4,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 18,
+    borderRadius: 999,
     overflow: 'hidden',
   },
   photoFilterRow: {
     flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    alignItems: 'center',
+    gap: 6,
   },
   photoFilterButton: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 14,
-    padding: 3,
+    width: PHOTO_FILTER_BUTTON_SIZE,
+    height: PHOTO_FILTER_BUTTON_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: PHOTO_FILTER_BUTTON_SIZE / 2,
+    borderWidth: 2,
+    padding: 1,
   },
   photoFilterPreviewClip: {
+    width: PHOTO_FILTER_PREVIEW_SIZE,
+    height: PHOTO_FILTER_PREVIEW_SIZE,
     overflow: 'hidden',
-    borderRadius: 12,
+    borderRadius: PHOTO_FILTER_PREVIEW_SIZE / 2,
   },
   photoFilterPreviewCanvas: {
-    borderRadius: 12,
+    width: '100%',
+    height: '100%',
   },
 });

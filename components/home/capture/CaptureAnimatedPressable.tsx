@@ -152,8 +152,9 @@ export const CaptureAnimatedPressable = memo(function CaptureAnimatedPressable({
 
 const styles = StyleSheet.create({
   captureButtonContent: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
+    gap: 6,
   },
 });
