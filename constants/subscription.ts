@@ -5,7 +5,6 @@ export type PlanTier = 'free' | 'plus';
 export const FREE_PHOTO_NOTE_LIMIT = 10;
 export const PLUS_PHOTO_NOTE_LIMIT = null;
 
-export const REVENUECAT_TEST_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY ?? '';
 export const REVENUECAT_IOS_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ?? '';
 export const REVENUECAT_ANDROID_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ?? '';
 export const REVENUECAT_PRO_ENTITLEMENT_ID =
@@ -22,10 +21,6 @@ export const REVENUECAT_PLUS_ENTITLEMENT_ID = REVENUECAT_PRO_ENTITLEMENT_ID;
 export const REVENUECAT_PLUS_OFFERING_ID = REVENUECAT_OFFERING_ID;
 
 export function getRevenueCatApiKey(platformOS = Platform.OS) {
-  if (__DEV__ && REVENUECAT_TEST_API_KEY.trim()) {
-    return REVENUECAT_TEST_API_KEY;
-  }
-
   if (platformOS === 'ios') {
     return REVENUECAT_IOS_API_KEY;
   }

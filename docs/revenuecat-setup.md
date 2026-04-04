@@ -22,14 +22,11 @@ Backward-compatible `PLUS` env aliases still work, but the primary names are the
 ## Environment Variables
 
 ```env
-EXPO_PUBLIC_REVENUECAT_TEST_API_KEY=
 EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=appl_xxx
 EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=goog_xxx
 EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID=noto_pro
 EXPO_PUBLIC_REVENUECAT_OFFERING_ID=default
 ```
-
-`EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` is for development-only simulated purchases. Do not ship production builds with the test-store key.
 
 Also supported for backward compatibility:
 

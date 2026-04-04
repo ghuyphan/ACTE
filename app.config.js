@@ -1,5 +1,4 @@
-import { existsSync } from 'node:fs';
-import type { ExpoConfig } from 'expo/config';
+const { existsSync } = require('node:fs');
 
 const googleMapsAndroidApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY;
 const easProjectIdFromEnv = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ?? '';
@@ -61,7 +60,7 @@ const notoSansFontDefinitions = [
     path: './node_modules/@expo-google-fonts/noto-sans/900Black/NotoSans_900Black.ttf',
     weight: 900,
   },
-] as const;
+];
 const appVersion = '1.0.0';
 
 function assertProductionConfig() {
@@ -69,7 +68,7 @@ function assertProductionConfig() {
     return;
   }
 
-  const missingItems: string[] = [];
+  const missingItems = [];
 
   if (!easProjectIdFromEnv) {
     missingItems.push('EXPO_PUBLIC_EAS_PROJECT_ID');
@@ -267,6 +266,6 @@ const config = {
       projectId: easProjectId,
     },
   },
-} as ExpoConfig;
+};
 
-export default config;
+module.exports = config;
