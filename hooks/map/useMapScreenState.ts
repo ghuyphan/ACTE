@@ -53,6 +53,7 @@ export function useMapScreenState({
   const [nearbyBrowseRegion, setNearbyBrowseRegion] = useState<Region | null>(null);
   const [allowOffscreenResults, setAllowOffscreenResults] = useState(false);
   const lastMarkerTapAtRef = useRef(0);
+  const ignoreNextMapPressUntilRef = useRef(0);
   const visibleRegionRef = useRef<Region | null>(null);
 
   const initialRegion = useMemo(() => getInitialMapRegion(location, notes), [location, notes]);
@@ -124,8 +125,12 @@ export function useMapScreenState({
       return filteredNotes;
     }
 
+    if (visibleRegion && areRegionsEquivalent(visibleRegion, nearbyReferenceRegion)) {
+      return notesInVisibleRegion;
+    }
+
     return getNotesInRegion(filteredNotes, nearbyReferenceRegion);
-  }, [enableHeavyCalculations, filteredNotes, nearbyReferenceRegion]);
+  }, [enableHeavyCalculations, filteredNotes, nearbyReferenceRegion, notesInVisibleRegion, visibleRegion]);
 
   const nearbyCandidates = useMemo(() => {
     if (!nearbyReferenceRegion) {
@@ -211,19 +216,30 @@ export function useMapScreenState({
   }, []);
 
   const handleLeafMarkerPress = useCallback((groupId: string) => {
-    lastMarkerTapAtRef.current = Date.now();
+    const now = Date.now();
+    lastMarkerTapAtRef.current = now;
+    ignoreNextMapPressUntilRef.current = now + 320;
     setSelectedGroupId(groupId);
     setSelectedNoteIndex(0);
   }, []);
 
   const handleClusterMarkerPress = useCallback(() => {
-    lastMarkerTapAtRef.current = Date.now();
+    const now = Date.now();
+    lastMarkerTapAtRef.current = now;
+    ignoreNextMapPressUntilRef.current = now + 320;
     setSelectedGroupId(null);
     setSelectedNoteIndex(0);
   }, []);
 
   const handleMapPress = useCallback(() => {
-    if (Date.now() - lastMarkerTapAtRef.current < 250) {
+    const now = Date.now();
+
+    if (now <= ignoreNextMapPressUntilRef.current) {
+      ignoreNextMapPressUntilRef.current = 0;
+      return;
+    }
+
+    if (now - lastMarkerTapAtRef.current < 250) {
       return;
     }
     setSelectedGroupId(null);

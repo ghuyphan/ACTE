@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import type MapView from 'react-native-maps';
+import type { Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapCanvas from '../map/MapCanvas';
 import MapFilterBar from '../map/MapFilterBar';
@@ -35,8 +36,22 @@ import { isOlderIOS } from '../../utils/platform';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
 const MIN_ZOOM_DELTA = 0.002;
+const PROGRAMMATIC_REGION_TOLERANCE = 0.0005;
 
 type OverlayState = 'content' | 'no-filter-results' | 'no-notes' | 'no-area-results';
+
+function areRegionsClose(left: Region | null, right: Region) {
+  if (!left) {
+    return false;
+  }
+
+  return (
+    Math.abs(left.latitude - right.latitude) < PROGRAMMATIC_REGION_TOLERANCE &&
+    Math.abs(left.longitude - right.longitude) < PROGRAMMATIC_REGION_TOLERANCE &&
+    Math.abs(left.latitudeDelta - right.latitudeDelta) < PROGRAMMATIC_REGION_TOLERANCE &&
+    Math.abs(left.longitudeDelta - right.longitudeDelta) < PROGRAMMATIC_REGION_TOLERANCE
+  );
+}
 
 export default function MapScreenIOS() {
   const isAndroid = Platform.OS === 'android';
@@ -65,6 +80,7 @@ export default function MapScreenIOS() {
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewHiddenStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingProgrammaticRegionRef = useRef<Region | null>(null);
 
   useEffect(() => {
     if (!isAndroid) {
@@ -115,6 +131,10 @@ export default function MapScreenIOS() {
   const previewMode = selectedGroup ? 'group' : 'nearby';
   const noteById = useMemo(() => new Map(notes.map((note) => [note.id, note] as const)), [notes]);
   const currentZoom = visibleRegion ? regionToZoom(visibleRegion) : regionToZoom(initialRegion);
+  const nearbyItemById = useMemo(
+    () => new Map(nearbyItems.map((item) => [item.note.id, item] as const)),
+    [nearbyItems]
+  );
   const friendPosts = useMemo(
     () =>
       sharedPosts
@@ -171,6 +191,36 @@ export default function MapScreenIOS() {
   const emitLightHaptic = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
+
+  const updateProgrammaticRegion = useCallback(
+    (region: Region) => {
+      pendingProgrammaticRegionRef.current = region;
+      setProgrammaticVisibleRegion(region);
+    },
+    [setProgrammaticVisibleRegion]
+  );
+
+  const animateToRegion = useCallback(
+    (region: Region, duration: number) => {
+      updateProgrammaticRegion(region);
+      mapRef.current?.animateToRegion(region, duration);
+    },
+    [updateProgrammaticRegion]
+  );
+
+  const handleRegionChangeComplete = useCallback(
+    (region: Region) => {
+      if (areRegionsClose(pendingProgrammaticRegionRef.current, region)) {
+        pendingProgrammaticRegionRef.current = null;
+        setProgrammaticVisibleRegion(region);
+        return;
+      }
+
+      pendingProgrammaticRegionRef.current = null;
+      setVisibleRegion(region);
+    },
+    [setProgrammaticVisibleRegion, setVisibleRegion]
+  );
 
   const triggerMarkerPulse = useCallback(
     (nextMarkerId: string) => {
@@ -324,17 +374,16 @@ export default function MapScreenIOS() {
         longitudeDelta: 0.02,
       };
 
-      mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 450);
-      setVisibleRegion(nextRegion);
+      animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 450);
       emitLightHaptic();
     }
   }, [
+    animateToRegion,
     emitLightHaptic,
     location,
     openAppSettings,
     reduceMotionEnabled,
     requestForegroundLocation,
-    setVisibleRegion,
   ]);
 
   const handleClusterPress = useCallback(
@@ -366,16 +415,15 @@ export default function MapScreenIOS() {
         longitudeDelta: Math.max(baseRegion.longitudeDelta / zoomFactor, MIN_ZOOM_DELTA),
       };
 
-      mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
-      setVisibleRegion(nextRegion);
+      animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
     },
     [
+      animateToRegion,
       emitLightHaptic,
       handleClusterMarkerPress,
       initialRegion,
       notesPreviewDismissed,
       reduceMotionEnabled,
-      setVisibleRegion,
       showFriendsPreview,
       triggerMarkerPulse,
       visibleRegion,
@@ -419,7 +467,7 @@ export default function MapScreenIOS() {
       if (notesPreviewDismissed) {
         setNotesPreviewDismissed(false);
       }
-      const nearbyItem = nearbyItems.find((item) => item.note.id === noteId);
+      const nearbyItem = nearbyItemById.get(noteId);
       if (!nearbyItem) {
         return;
       }
@@ -438,15 +486,14 @@ export default function MapScreenIOS() {
         longitudeDelta: Math.max(Math.min(baseRegion.longitudeDelta, 0.025), MIN_ZOOM_DELTA),
       };
 
-      mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
-      setProgrammaticVisibleRegion(nextRegion);
+      animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
     },
     [
+      animateToRegion,
       initialRegion,
-      nearbyItems,
+      nearbyItemById,
       notesPreviewDismissed,
       reduceMotionEnabled,
-      setProgrammaticVisibleRegion,
       showFriendsPreview,
       visibleRegion,
     ]
@@ -498,8 +545,7 @@ export default function MapScreenIOS() {
           longitudeDelta: Math.max(Math.min(baseRegion.longitudeDelta, 0.025), MIN_ZOOM_DELTA),
         };
 
-        mapRef.current.animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
-        setVisibleRegion(nextRegion);
+        animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
       }
 
       const shouldOpenPreview = options?.openPreview ?? true;
@@ -513,7 +559,7 @@ export default function MapScreenIOS() {
         }
       }
     },
-    [friendMarkerPosts, friendPosts, initialRegion, reduceMotionEnabled, setVisibleRegion, showFriendsPreview, visibleRegion]
+    [animateToRegion, friendMarkerPosts, friendPosts, initialRegion, reduceMotionEnabled, showFriendsPreview, visibleRegion]
   );
 
   const handleFriendMarkerPress = useCallback(
@@ -618,7 +664,7 @@ export default function MapScreenIOS() {
         onMapReady={() => {
           setIsMapReady(true);
         }}
-        onRegionChangeComplete={setVisibleRegion}
+        onRegionChangeComplete={handleRegionChangeComplete}
         onLeafPress={handleLeafPress}
         onClusterPress={handleClusterPress}
         onFriendPress={handleFriendMarkerPress}

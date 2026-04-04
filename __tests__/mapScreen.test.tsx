@@ -518,12 +518,49 @@ describe('MapScreen', () => {
     });
   });
 
+  it('keeps the nearby preview on the focused item after programmatic camera movement completes', async () => {
+    const { getByTestId } = render(<MapScreen />);
+    const nearbyList = await waitFor(() => getByTestId('map-preview-list'));
+    const snapInterval = nearbyList.props.snapToInterval;
+
+    act(() => {
+      nearbyList.props.onScrollBeginDrag({
+        nativeEvent: {},
+      });
+      nearbyList.props.onMomentumScrollEnd({
+        nativeEvent: {
+          contentOffset: {
+            x: snapInterval,
+            y: 0,
+          },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(String(getByTestId('map-preview-index').props.children)).toBe('2/2');
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.8,
+        longitude: 106.7,
+        latitudeDelta: 0.025,
+        longitudeDelta: 0.025,
+      });
+    });
+
+    await waitFor(() => {
+      expect(String(getByTestId('map-preview-index').props.children)).toBe('2/2');
+    });
+  });
+
   it('keeps the preview rail mounted when switching between marker and nearby modes', async () => {
     const nowSpy = jest.spyOn(Date, 'now');
     let now = 1000;
     nowSpy.mockImplementation(() => now);
 
-    const { getAllByTestId, getByTestId, getByText, queryByText } = render(<MapScreen />);
+    const { getAllByTestId, getByTestId, getByText } = render(<MapScreen />);
 
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
@@ -547,7 +584,7 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(getByTestId('map-preview-list')).toBeTruthy();
-      expect(queryByText('Saved here')).toBeNull();
+      expect(String(getByTestId('map-preview-context').props.children)).toBe('Nearby notes');
     });
 
     nowSpy.mockRestore();
@@ -660,6 +697,38 @@ describe('MapScreen', () => {
       y: 0.5,
     });
     expect(mockAnimateToRegion).not.toHaveBeenCalled();
+  });
+
+  it('keeps a tapped marker selected when a follow-up map press fires immediately after selection', async () => {
+    const nowSpy = jest.spyOn(Date, 'now');
+    let now = 1000;
+    nowSpy.mockImplementation(() => now);
+
+    const { getByTestId, getByText } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByText('Saved here')).toBeTruthy();
+    });
+
+    now = 1100;
+    fireEvent.press(getByTestId('mock-map-press'));
+
+    expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    expect(getByText('Saved here')).toBeTruthy();
+
+    nowSpy.mockRestore();
   });
 
   it('keeps the selected note callout mounted when the visible region updates', async () => {

@@ -99,4 +99,50 @@ describe('useMapScreenState', () => {
       expect(result.current.nearbyItems.some((item) => item.note.id === 'near')).toBe(false);
     });
   });
+
+  it('ignores only the first quick map press after a marker tap', () => {
+    const nowSpy = jest.spyOn(Date, 'now');
+    let now = 1000;
+    nowSpy.mockImplementation(() => now);
+
+    const notes = [
+      makeNote({ id: 'near', latitude: 10.7601, longitude: 106.6601 }),
+      makeNote({ id: 'far', latitude: 11.0, longitude: 107.0 }),
+    ];
+
+    const { result } = renderHook(() =>
+      useMapScreenState({
+        notes,
+        location: null,
+      })
+    );
+
+    const nearGroup = Array.from(result.current.pointGroupMap.values()).find((group) =>
+      group.notes.some((note) => note.id === 'near')
+    );
+
+    expect(nearGroup).toBeTruthy();
+
+    act(() => {
+      result.current.handleLeafMarkerPress(nearGroup!.id);
+    });
+
+    expect(result.current.selectedGroupId).toBe(nearGroup!.id);
+
+    now = 1100;
+    act(() => {
+      result.current.handleMapPress();
+    });
+
+    expect(result.current.selectedGroupId).toBe(nearGroup!.id);
+
+    now = 1400;
+    act(() => {
+      result.current.handleMapPress();
+    });
+
+    expect(result.current.selectedGroupId).toBeNull();
+
+    nowSpy.mockRestore();
+  });
 });

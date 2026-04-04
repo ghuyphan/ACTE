@@ -79,6 +79,14 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function compareNearbyItems(left: NearbyNoteItem, right: NearbyNoteItem) {
+  if (left.distanceMeters !== right.distanceMeters) {
+    return left.distanceMeters - right.distanceMeters;
+  }
+
+  return right.note.createdAt.localeCompare(left.note.createdAt);
+}
+
 export function getInitialMapRegion(
   location: Location.LocationObject | null,
   notes: Note[]
@@ -133,13 +141,25 @@ export function buildMapPointGroups(notes: Note[]): MapPointGroup[] {
 
   return Array.from(grouped.entries()).map(([id, bucket]) => {
     const sortedNotes = [...bucket].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    const photoCount = sortedNotes.filter((item) => item.type === 'photo').length;
+    let photoCount = 0;
+    let latitudeSum = 0;
+    let longitudeSum = 0;
+
+    sortedNotes.forEach((item) => {
+      if (item.type === 'photo') {
+        photoCount += 1;
+      }
+
+      latitudeSum += item.latitude;
+      longitudeSum += item.longitude;
+    });
+
     const textCount = sortedNotes.length - photoCount;
 
     return {
       id,
-      latitude: sortedNotes.reduce((sum, item) => sum + item.latitude, 0) / sortedNotes.length,
-      longitude: sortedNotes.reduce((sum, item) => sum + item.longitude, 0) / sortedNotes.length,
+      latitude: latitudeSum / sortedNotes.length,
+      longitude: longitudeSum / sortedNotes.length,
       notes: sortedNotes,
       primaryType: photoCount >= textCount ? 'photo' : 'text',
       photoCount,
@@ -309,8 +329,14 @@ export function getNearbyNoteItems(
   anchor: CoordinatePoint,
   limit = 20
 ): NearbyNoteItem[] {
-  return notes
-    .map((note) => ({
+  if (limit <= 0 || notes.length === 0) {
+    return [];
+  }
+
+  const nearbyItems: NearbyNoteItem[] = [];
+
+  notes.forEach((note) => {
+    const nextItem = {
       note,
       latitude: note.latitude,
       longitude: note.longitude,
@@ -318,12 +344,19 @@ export function getNearbyNoteItems(
         latitude: note.latitude,
         longitude: note.longitude,
       }),
-    }))
-    .sort((a, b) => {
-      if (a.distanceMeters !== b.distanceMeters) {
-        return a.distanceMeters - b.distanceMeters;
-      }
-      return b.note.createdAt.localeCompare(a.note.createdAt);
-    })
-    .slice(0, limit);
+    };
+    const insertIndex = nearbyItems.findIndex((item) => compareNearbyItems(nextItem, item) < 0);
+
+    if (insertIndex === -1) {
+      nearbyItems.push(nextItem);
+    } else {
+      nearbyItems.splice(insertIndex, 0, nextItem);
+    }
+
+    if (nearbyItems.length > limit) {
+      nearbyItems.pop();
+    }
+  });
+
+  return nearbyItems;
 }

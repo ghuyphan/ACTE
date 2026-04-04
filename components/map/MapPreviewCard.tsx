@@ -95,6 +95,7 @@ export default function MapPreviewCard({
   const hasAlignedInitialPreviewRef = useRef(false);
   const previewListRef = useRef<any>(null);
   const previewDraggingRef = useRef(false);
+  const lastAlignedIndexRef = useRef<number | null>(null);
   const prevPreviewModeRef = useRef(previewMode);
   const lastVisiblePreviewStateRef = useRef<{
     previewMode: PreviewMode;
@@ -210,11 +211,16 @@ export default function MapPreviewCard({
       return;
     }
 
+    if (!modeChanged && hasAlignedInitialPreviewRef.current && lastAlignedIndexRef.current === activeIndex) {
+      return;
+    }
+
     previewListRef.current.scrollToOffset({
       offset: activeIndex * nearbyPageWidth,
       animated: hasAlignedInitialPreviewRef.current && !reduceMotionEnabled,
     });
     hasAlignedInitialPreviewRef.current = true;
+    lastAlignedIndexRef.current = activeIndex;
 
     if (modeChanged) {
       previewDraggingRef.current = false;

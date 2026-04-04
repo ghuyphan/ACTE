@@ -15,7 +15,6 @@ import type { MapClusterNode, MapPointGroup } from '../../hooks/map/mapDomain';
 import type { ThemeColors } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
-import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
 import type { SharedPost } from '../../services/sharedFeedService';
 import {
   mapMotionDurations,
@@ -100,19 +99,6 @@ function getClusterSize(pointCount: number) {
   }
 
   return 46;
-}
-
-function getMarkerPreviewText(note: Note) {
-  const primarySource = note.type === 'text'
-    ? note.content
-    : note.promptAnswer || note.promptTextSnapshot || note.locationName || '';
-  const normalized = formatNoteTextWithEmoji(primarySource, note.moodEmoji).trim();
-
-  if (!normalized) {
-    return null;
-  }
-
-  return normalized.length > 52 ? `${normalized.slice(0, 51)}…` : normalized;
 }
 
 function getMapPalette(colors: ThemeColors, isDark: boolean) {
@@ -515,7 +501,6 @@ function MapCanvas({
         const pulseActive = markerPulseId === markerId;
         const representativeNote =
           !node.isCluster && node.noteIds.length > 0 ? noteById.get(node.noteIds[0]) ?? null : null;
-        const previewNote = !node.isCluster && representativeNote && isSelected ? representativeNote : null;
         const showRichPreviewMarker = false;
         const showStackPreviewMarker = false;
         const canShowPhotoThumbnail =
@@ -526,11 +511,6 @@ function MapCanvas({
           node.primaryType === 'photo' &&
           node.noteIds.length === 1 &&
           currentZoom >= photoOrbMinZoom;
-        const photoNote = canShowPhotoThumbnail
-          ? noteById.get(node.noteIds[0]) ?? null
-          : representativeNote && (showRichPreviewMarker || showStackPreviewMarker)
-            ? representativeNote
-            : previewNote;
 
         return {
           node,
@@ -539,15 +519,11 @@ function MapCanvas({
           pulseActive,
           showRichPreviewMarker,
           showStackPreviewMarker,
-          usesFloatingLabel: showRichPreviewMarker,
-          previewNoteId: !preferLiteMarkers ? (previewNote ?? representativeNote)?.id ?? null : null,
-          photoNoteId: !preferLiteMarkers ? photoNote?.id ?? null : null,
-          photoUri: !preferLiteMarkers && photoNote ? getNotePhotoUri(photoNote) : null,
-          previewTitle: !preferLiteMarkers ? (previewNote ?? representativeNote)?.locationName?.trim() || null : null,
-          previewText:
-            !preferLiteMarkers && (previewNote ?? representativeNote)
-              ? getMarkerPreviewText(previewNote ?? representativeNote!)
-              : null,
+          previewNoteId: null,
+          photoNoteId: canShowPhotoThumbnail ? representativeNote?.id ?? null : null,
+          photoUri: canShowPhotoThumbnail && representativeNote ? getNotePhotoUri(representativeNote) : null,
+          previewTitle: null,
+          previewText: null,
           countBadgeLabel: node.pointCount > 1 ? String(node.pointCount) : null,
         };
       }),
@@ -684,7 +660,6 @@ function MapCanvas({
           pulseActive,
           showRichPreviewMarker,
           showStackPreviewMarker,
-          usesFloatingLabel,
           previewNoteId,
           photoNoteId,
           photoUri,
