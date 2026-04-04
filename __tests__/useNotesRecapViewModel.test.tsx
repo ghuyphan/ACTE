@@ -3,11 +3,13 @@ import * as ReactNative from 'react-native';
 import { useNotesRecapViewModel } from '../hooks/state/useNotesRecapViewModel';
 import type { Note } from '../services/database';
 
+let mockLanguage = 'en';
+
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (_key: string, defaultValueOrOptions?: unknown) =>
       typeof defaultValueOrOptions === 'string' ? defaultValueOrOptions : _key,
-    i18n: { language: 'en' },
+    i18n: { language: mockLanguage },
   }),
 }));
 
@@ -90,6 +92,7 @@ function buildStickerPlacementsJson(index: number) {
 
 describe('useNotesRecapViewModel', () => {
   beforeEach(() => {
+    mockLanguage = 'en';
     jest
       .spyOn(ReactNative, 'useWindowDimensions')
       .mockReturnValue({ width: 430, height: 932, scale: 3, fontScale: 1 });
@@ -160,5 +163,15 @@ describe('useNotesRecapViewModel', () => {
 
     expect(result.current.pileItems.filter((item) => item.kind === 'photo')).toHaveLength(3);
     expect(result.current.pileItems.filter((item) => item.kind === 'sticker')).toHaveLength(9);
+  });
+
+  it('uses a shorter month label in Vietnamese', async () => {
+    mockLanguage = 'vi';
+
+    const { result } = renderHook(() => useNotesRecapViewModel({ notes: [buildNote()] }));
+
+    await waitFor(() => {
+      expect(result.current.activeMonthLabel).toBe('4/2026');
+    });
   });
 });

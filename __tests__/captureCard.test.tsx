@@ -505,6 +505,7 @@ describe('CaptureCard doodle handle', () => {
 
     fireEvent.changeText(getByTestId('capture-note-input'), 'Ca phe ');
     expect(handleChangeNoteText).toHaveBeenCalledWith('Ca phe ☕️ ');
+    expect(getByTestId('capture-auto-emoji-pop-label')).toHaveTextContent('☕️');
   });
 
   it('rotates the text placeholder when the draft becomes empty again', () => {

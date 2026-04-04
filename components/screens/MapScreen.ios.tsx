@@ -880,7 +880,7 @@ export default function MapScreenIOS() {
             actionTestID="map-create-first-note"
             onAction={() => {
               emitLightHaptic();
-              router.replace('/(tabs)/index' as any);
+              router.replace('/' as any);
             }}
           />
         ) : null}

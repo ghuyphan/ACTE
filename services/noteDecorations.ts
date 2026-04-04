@@ -161,7 +161,7 @@ const EMOJI_RULES: EmojiRule[] = [
     score: 2,
   },
   {
-    emoji: '🍰',
+    emoji: '🧁',
     keywords: [
       'cake',
       'bakery',
@@ -177,6 +177,9 @@ const EMOJI_RULES: EmojiRule[] = [
       'pudding',
       'waffle',
       'tiramisu',
+      'parfait',
+      'gelato',
+      'pancake',
     ],
     score: 3,
   },
@@ -240,13 +243,45 @@ const EMOJI_RULES: EmojiRule[] = [
     score: 3,
   },
   {
-    emoji: '🏙️',
-    keywords: ['city', 'district', 'downtown', 'center', 'centre', 'saigon', 'hcm', 'ha noi', 'dalat', 'da lat', 'da nang', 'hoi an'],
+    emoji: '🌆',
+    keywords: [
+      'city',
+      'district',
+      'downtown',
+      'center',
+      'centre',
+      'saigon',
+      'hcm',
+      'ha noi',
+      'dalat',
+      'da lat',
+      'da nang',
+      'hoi an',
+      'skyline',
+      'rooftop',
+    ],
     score: 2,
   },
   {
-    emoji: '💻',
-    keywords: ['work', 'office', 'meeting', 'laptop', 'cowork', 'coworking', 'workspace', 'study', 'deadline', 'project', 'coding', 'code', 'remote work'],
+    emoji: '🖥️',
+    keywords: [
+      'work',
+      'office',
+      'meeting',
+      'laptop',
+      'cowork',
+      'coworking',
+      'workspace',
+      'study',
+      'deadline',
+      'project',
+      'coding',
+      'code',
+      'remote work',
+      'focus',
+      'deep work',
+      'studio',
+    ],
     score: 3,
   },
   {
@@ -260,8 +295,8 @@ const EMOJI_RULES: EmojiRule[] = [
     score: 3,
   },
   {
-    emoji: '🎵',
-    keywords: ['music', 'song', 'concert', 'band', 'jazz', 'lofi', 'vinyl', 'playlist', 'piano', 'karaoke'],
+    emoji: '🎧',
+    keywords: ['music', 'song', 'concert', 'band', 'jazz', 'lofi', 'vinyl', 'playlist', 'piano', 'karaoke', 'dj', 'acoustic'],
     score: 3,
   },
   {
@@ -275,13 +310,13 @@ const EMOJI_RULES: EmojiRule[] = [
     score: 3,
   },
   {
-    emoji: '🏠',
-    keywords: ['home', 'house', 'apartment', 'my place', 'at home', 'homestay'],
+    emoji: '🏡',
+    keywords: ['home', 'house', 'apartment', 'my place', 'at home', 'homestay', 'cozy home'],
     score: 3,
   },
   {
-    emoji: '🛏️',
-    keywords: ['hotel', 'staycation', 'stay', 'resort room', 'airbnb', 'check in'],
+    emoji: '🛌',
+    keywords: ['hotel', 'staycation', 'stay', 'resort room', 'airbnb', 'check in', 'suite'],
     score: 3,
   },
   {
@@ -290,8 +325,8 @@ const EMOJI_RULES: EmojiRule[] = [
     score: 3,
   },
   {
-    emoji: '🚆',
-    keywords: ['station', 'train', 'metro', 'bus', 'bus stop'],
+    emoji: '🚇',
+    keywords: ['station', 'train', 'metro', 'bus', 'bus stop', 'subway'],
     score: 3,
   },
   {
@@ -310,13 +345,43 @@ const EMOJI_RULES: EmojiRule[] = [
     score: 3,
   },
   {
-    emoji: '🤍',
-    keywords: ['love', 'favorite', 'favourite', 'date', 'special', 'cute', 'cozy', 'cosy', 'romantic'],
+    emoji: '💖',
+    keywords: [
+      'love',
+      'favorite',
+      'favourite',
+      'date',
+      'special',
+      'cute',
+      'cozy',
+      'cosy',
+      'romantic',
+      'date night',
+      'bestie',
+      'sweet',
+      'girls night',
+      'soft launch',
+    ],
     score: 3,
   },
   {
-    emoji: '✨',
-    keywords: ['beautiful', 'magic', 'memorable', 'spark', 'calm', 'quiet', 'peaceful', 'nice', 'lovely', 'soft'],
+    emoji: '💫',
+    keywords: [
+      'beautiful',
+      'magic',
+      'memorable',
+      'spark',
+      'calm',
+      'quiet',
+      'peaceful',
+      'nice',
+      'lovely',
+      'soft',
+      'dreamy',
+      'glowy',
+      'vibe',
+      'vibes',
+    ],
     score: 2,
   },
 ];
@@ -338,8 +403,8 @@ export const AUTO_NOTE_EMOJIS = Array.from(
   new Set([
     ...EMOJI_RULES.map((rule) => rule.emoji),
     '📸',
-    '☀️',
-    '✨',
+    '🌤️',
+    '💫',
     '🌙',
   ])
 );
@@ -452,25 +517,33 @@ export function resolveInlineNoteEmojiSuggestion(text: string, caret = text.leng
 }
 
 export function applyCommittedInlineEmoji(previousText: string, nextText: string) {
+  const commitment = resolveCommittedInlineEmoji(previousText, nextText);
+  return commitment ? commitment.text : (typeof nextText === 'string' ? nextText : '');
+}
+
+export function resolveCommittedInlineEmoji(previousText: string, nextText: string) {
   const previousValue = typeof previousText === 'string' ? previousText : '';
   const nextValue = typeof nextText === 'string' ? nextText : '';
 
   if (!isCommitInsertion(previousValue, nextValue)) {
-    return nextValue;
+    return null;
   }
 
   const { committedText, trailingCharacters } = splitTrailingCommitCharacters(nextValue);
   const suggestion = resolveInlineNoteEmojiSuggestion(committedText);
 
   if (!suggestion?.exact) {
-    return nextValue;
+    return null;
   }
 
   if (committedText.endsWith(` ${suggestion.emoji}`) || committedText.endsWith(suggestion.emoji)) {
-    return nextValue;
+    return null;
   }
 
-  return `${committedText} ${suggestion.emoji}${trailingCharacters}`;
+  return {
+    emoji: suggestion.emoji,
+    text: `${committedText} ${suggestion.emoji}${trailingCharacters}`,
+  };
 }
 
 export function resolveAutoNoteEmoji(options: {
@@ -525,8 +598,8 @@ export function resolveAutoNoteEmoji(options: {
   }
 
   if (hour >= 5 && hour < 11) {
-    return '☀️';
+    return '🌤️';
   }
 
-  return '✨';
+  return '💫';
 }

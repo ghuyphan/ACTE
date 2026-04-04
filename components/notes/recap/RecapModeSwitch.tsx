@@ -15,6 +15,7 @@ interface RecapModeSwitchProps {
   onChange: (mode: RecapMode) => void;
   allLabel?: string;
   recapLabel?: string;
+  trackWidth?: number;
 }
 
 function RecapModeSwitch({
@@ -22,25 +23,27 @@ function RecapModeSwitch({
   onChange,
   allLabel = 'All',
   recapLabel = 'Recap',
+  trackWidth,
 }: RecapModeSwitchProps) {
   const { colors, isDark } = useTheme();
-  const [trackWidth, setTrackWidth] = useState(0);
+  const [measuredTrackWidth, setMeasuredTrackWidth] = useState(0);
   const trackBackground = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.72)';
+  const resolvedTrackWidth = trackWidth ?? measuredTrackWidth;
   const segmentMetrics = useMemo(() => {
-    if (trackWidth <= 0) {
+    if (resolvedTrackWidth <= 0) {
       return {
         width: 0,
         offset: 0,
       };
     }
 
-    const innerWidth = Math.max(trackWidth - TRACK_PADDING * 2, 0);
+    const innerWidth = Math.max(resolvedTrackWidth - TRACK_PADDING * 2, 0);
     const width = Math.max((innerWidth - TRACK_GAP) / 2, 0);
     return {
       width,
       offset: width + TRACK_GAP,
     };
-  }, [trackWidth]);
+  }, [resolvedTrackWidth]);
   const indicatorStyle = useAnimatedStyle(
     () => ({
       opacity: withTiming(segmentMetrics.width > 0 ? 1 : 0, { duration: 120 }),
@@ -66,9 +69,13 @@ function RecapModeSwitch({
     onChange(mode);
   };
   const handleTrackLayout = useCallback((event: LayoutChangeEvent) => {
+    if (trackWidth !== undefined) {
+      return;
+    }
+
     const nextWidth = event.nativeEvent.layout.width;
-    setTrackWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
-  }, []);
+    setMeasuredTrackWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
+  }, [trackWidth]);
 
   return (
     <View
@@ -78,10 +85,12 @@ function RecapModeSwitch({
         {
           backgroundColor: trackBackground,
           borderColor: colors.border,
+          width: trackWidth,
         },
       ]}
     >
       <Animated.View
+        testID="notes-mode-pill"
         pointerEvents="none"
         style={[
           styles.activePill,

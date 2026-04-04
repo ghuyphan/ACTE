@@ -284,9 +284,18 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const saveStateScale = useSharedValue(1);
   const saveSuccessProgress = useSharedValue(saveState === 'success' ? 1 : 0);
   const savePressScale = useSharedValue(1);
+  const autoEmojiPopOpacity = useSharedValue(0);
+  const autoEmojiPopTranslateY = useSharedValue(12);
+  const autoEmojiPopScale = useSharedValue(0.86);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
+  const textInputDynamicStyle = useMemo(
+    () =>
+      noteText.length > 200 ? { fontSize: 16, lineHeight: 22 } :
+        noteText.length > 100 ? { fontSize: 20, lineHeight: 28 } : null,
+    [noteText.length]
+  );
   const isSaveBusy =
     saving ||
     saveState === 'saving' ||
@@ -308,6 +317,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     handleRestaurantInputFocus,
     isNoteInputFocused,
     isTextEntryFocused,
+    recentAutoEmoji,
     rotatePlaceholderIfNeeded,
   } = useCaptureCardTextInputState({
     captureMode,
@@ -539,6 +549,55 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   }, [isSaveDisabled, savePressScale]);
 
   useEffect(() => {
+    if (!recentAutoEmoji) {
+      autoEmojiPopOpacity.value = 0;
+      autoEmojiPopTranslateY.value = 12;
+      autoEmojiPopScale.value = 0.86;
+      return;
+    }
+
+    autoEmojiPopOpacity.value = withSequence(
+      withTiming(1, {
+        duration: reduceMotionEnabled ? 90 : 180,
+        easing: Easing.out(Easing.cubic),
+      }),
+      withTiming(1, {
+        duration: reduceMotionEnabled ? 140 : 520,
+      }),
+      withTiming(0, {
+        duration: reduceMotionEnabled ? 140 : 240,
+        easing: Easing.in(Easing.quad),
+      })
+    );
+    autoEmojiPopTranslateY.value = withSequence(
+      withTiming(reduceMotionEnabled ? 0 : -12, {
+        duration: reduceMotionEnabled ? 90 : 220,
+        easing: Easing.out(Easing.cubic),
+      }),
+      withTiming(reduceMotionEnabled ? 0 : -18, {
+        duration: reduceMotionEnabled ? 180 : 620,
+        easing: Easing.out(Easing.quad),
+      })
+    );
+    autoEmojiPopScale.value = withSequence(
+      withTiming(1.06, {
+        duration: reduceMotionEnabled ? 90 : 180,
+        easing: Easing.out(Easing.back(1.2)),
+      }),
+      withTiming(1, {
+        duration: reduceMotionEnabled ? 140 : 220,
+        easing: Easing.out(Easing.cubic),
+      })
+    );
+  }, [
+    autoEmojiPopOpacity,
+    autoEmojiPopScale,
+    autoEmojiPopTranslateY,
+    recentAutoEmoji,
+    reduceMotionEnabled,
+  ]);
+
+  useEffect(() => {
     closeDecorateControls();
     closeStickerOverlays();
   }, [captureMode, capturedPhoto, closeDecorateControls, closeStickerOverlays]);
@@ -652,6 +711,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const animatedSaveIconStyle = useAnimatedStyle(() => ({
     transform: [{ scale: 1 + saveSuccessProgress.value * 0.12 }],
   }));
+  const animatedAutoEmojiPopStyle = useAnimatedStyle(() => ({
+    opacity: autoEmojiPopOpacity.value,
+    transform: [
+      { translateY: autoEmojiPopTranslateY.value },
+      { scale: autoEmojiPopScale.value },
+    ],
+  }), [autoEmojiPopOpacity, autoEmojiPopScale, autoEmojiPopTranslateY]);
   const captureAreaAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
       { translateY: captureTranslateY.value },
@@ -1119,14 +1185,33 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 pointerEvents={doodleModeEnabled || stickerModeEnabled ? 'none' : 'auto'}
                 style={styles.cardTextCenter}
               >
+                {recentAutoEmoji ? (
+                  <Reanimated.View
+                    pointerEvents="none"
+                    testID="capture-auto-emoji-pop"
+                    style={[
+                      styles.autoEmojiPopWrap,
+                      {
+                        backgroundColor: `${colors.captureGlassFill}F4`,
+                        borderColor: colors.captureGlassBorder,
+                        shadowColor: colors.primary,
+                      },
+                      animatedAutoEmojiPopStyle,
+                    ]}
+                  >
+                    <Text testID="capture-auto-emoji-pop-label" style={styles.autoEmojiPopEmoji}>
+                      {recentAutoEmoji.emoji}
+                    </Text>
+                    <Ionicons name="sparkles" size={13} color={colors.primary} />
+                  </Reanimated.View>
+                ) : null}
                 <TextInput
                   ref={noteInputRef}
                   testID="capture-note-input"
                   style={[
                     styles.textInput,
                     { color: colors.captureCardText },
-                    noteText.length > 200 ? { fontSize: 16, lineHeight: 22 } :
-                      noteText.length > 100 ? { fontSize: 20, lineHeight: 28 } : null,
+                    textInputDynamicStyle,
                   ]}
                   placeholder={activeTextPlaceholder}
                   placeholderTextColor={colors.captureCardPlaceholder}
@@ -2109,6 +2194,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     zIndex: 1,
+  },
+  autoEmojiPopWrap: {
+    position: 'absolute',
+    top: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 4,
+    zIndex: 2,
+  },
+  autoEmojiPopEmoji: {
+    fontSize: 18,
+    lineHeight: 20,
   },
   inlinePasteStickerWrap: {
     overflow: 'hidden',

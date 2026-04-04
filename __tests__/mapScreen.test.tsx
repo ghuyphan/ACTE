@@ -401,7 +401,7 @@ describe('MapScreen', () => {
 
     fireEvent.press(getByTestId('map-create-first-note'));
 
-    expect(mockRouterReplace).toHaveBeenCalledWith('/(tabs)/index');
+    expect(mockRouterReplace).toHaveBeenCalledWith('/');
   });
 
   it('keeps the initial map entry static', () => {

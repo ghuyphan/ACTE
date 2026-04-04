@@ -1,6 +1,6 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, type TextInput, type ViewStyle } from 'react-native';
-import { applyCommittedInlineEmoji } from '../../services/noteDecorations';
+import { applyCommittedInlineEmoji, resolveCommittedInlineEmoji } from '../../services/noteDecorations';
 
 interface UseCaptureCardTextInputStateOptions {
   captureMode: 'text' | 'camera';
@@ -64,11 +64,22 @@ export function useCaptureCardTextInputState({
   const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
   const [isNoteInputFocused, setIsNoteInputFocused] = useState(false);
   const [isRestaurantInputFocused, setIsRestaurantInputFocused] = useState(false);
+  const [recentAutoEmoji, setRecentAutoEmoji] = useState<{ emoji: string; token: number } | null>(null);
   const focusedInputRef = useRef<CaptureInputTarget | null>(null);
   const pendingBlurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recentAutoEmojiTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recentAutoEmojiTokenRef = useRef(0);
   const isTextEntryFocused = captureMode === 'text' && (isNoteInputFocused || isRestaurantInputFocused);
   const activeTextPlaceholder =
     placeholderVariants[textPlaceholderIndex % placeholderVariants.length] ?? placeholderVariants[0] ?? '';
+  const clearRecentAutoEmoji = useCallback(() => {
+    if (recentAutoEmojiTimeoutRef.current == null) {
+      return;
+    }
+
+    clearTimeout(recentAutoEmojiTimeoutRef.current);
+    recentAutoEmojiTimeoutRef.current = null;
+  }, []);
   const cancelPendingBlurResolution = useCallback(() => {
     if (pendingBlurTimeoutRef.current == null) {
       return;
@@ -143,9 +154,19 @@ export function useCaptureCardTextInputState({
   useEffect(
     () => () => {
       cancelPendingBlurResolution();
+      clearRecentAutoEmoji();
     },
-    [cancelPendingBlurResolution]
+    [cancelPendingBlurResolution, clearRecentAutoEmoji]
   );
+
+  useEffect(() => {
+    if (captureMode === 'text') {
+      return;
+    }
+
+    clearRecentAutoEmoji();
+    setRecentAutoEmoji(null);
+  }, [captureMode, clearRecentAutoEmoji]);
   const keyboardLiftAnimatedStyle = useMemo<ViewStyle>(() => ({}), []);
 
   const dismissCaptureInputs = useCallback(() => {
@@ -156,9 +177,24 @@ export function useCaptureCardTextInputState({
 
   const handleChangeNoteText = useCallback(
     (nextText: string) => {
-      onChangeNoteText(applyCommittedInlineEmoji(noteText, nextText));
+      const committedEmoji = resolveCommittedInlineEmoji(noteText, nextText);
+      const resolvedText = committedEmoji?.text ?? applyCommittedInlineEmoji(noteText, nextText);
+      onChangeNoteText(resolvedText);
+
+      if (!committedEmoji) {
+        return;
+      }
+
+      clearRecentAutoEmoji();
+      recentAutoEmojiTokenRef.current += 1;
+      const nextToken = recentAutoEmojiTokenRef.current;
+      setRecentAutoEmoji({ emoji: committedEmoji.emoji, token: nextToken });
+      recentAutoEmojiTimeoutRef.current = setTimeout(() => {
+        setRecentAutoEmoji((current) => (current?.token === nextToken ? null : current));
+        recentAutoEmojiTimeoutRef.current = null;
+      }, 1300);
     },
-    [noteText, onChangeNoteText]
+    [clearRecentAutoEmoji, noteText, onChangeNoteText]
   );
 
   const handleNoteInputFocus = useCallback(() => {
@@ -210,6 +246,7 @@ export function useCaptureCardTextInputState({
       handleRestaurantInputBlur,
       handleRestaurantInputFocus,
       isNoteInputFocused,
+      recentAutoEmoji,
       isTextEntryFocused,
       keyboardLiftAnimatedStyle,
       rotatePlaceholderIfNeeded,
@@ -223,6 +260,7 @@ export function useCaptureCardTextInputState({
       handleRestaurantInputBlur,
       handleRestaurantInputFocus,
       isNoteInputFocused,
+      recentAutoEmoji,
       isTextEntryFocused,
       keyboardLiftAnimatedStyle,
       rotatePlaceholderIfNeeded,

@@ -6,6 +6,7 @@ import { Image } from 'expo-image';
 import { Href, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
   FadeInLeft,
   FadeInRight,
@@ -62,9 +63,36 @@ const GRID_TILE_ENTRY_STAGGER_MS = 28;
 const GRID_TILE_ENTRY_ANIMATION_LIMIT = 5;
 const GRID_DECORATION_REVEAL_DELAY_MS = 180;
 const MODE_TRANSITION_DURATION_MS = 220;
+const MODE_SWIPE_DISTANCE = 56;
+const MODE_SWIPE_VELOCITY = 460;
 
 function triggerNotesHaptic(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
   void Haptics.impactAsync(style);
+}
+
+export function resolveNotesModeFromSwipe(
+  currentMode: RecapMode,
+  translationX: number,
+  velocityX: number,
+  hasRecapNotes: boolean
+): RecapMode {
+  if (!hasRecapNotes) {
+    return currentMode;
+  }
+
+  const swipeLeft =
+    translationX <= -MODE_SWIPE_DISTANCE || velocityX <= -MODE_SWIPE_VELOCITY;
+  if (currentMode === 'all' && swipeLeft) {
+    return 'recap';
+  }
+
+  const swipeRight =
+    translationX >= MODE_SWIPE_DISTANCE || velocityX >= MODE_SWIPE_VELOCITY;
+  if (currentMode === 'recap' && swipeRight) {
+    return 'all';
+  }
+
+  return currentMode;
 }
 
 function getGridTileEntering(index: number, shouldAnimate: boolean) {
@@ -499,6 +527,23 @@ export default function NotesIndexScreen() {
     setIsRecapPhysicsSuspended(false);
     setMode(nextMode);
   }, [mode]);
+  const modeContentGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(hasRecapNotes)
+        .maxPointers(1)
+        .activeOffsetX([-18, 18])
+        .failOffsetY([-14, 14])
+        .shouldCancelWhenOutside(false)
+        .runOnJS(true)
+        .onEnd((event) => {
+          const nextMode = resolveNotesModeFromSwipe(mode, event.translationX, event.velocityX, hasRecapNotes);
+          if (nextMode !== mode) {
+            handleModeChange(nextMode);
+          }
+        }),
+    [handleModeChange, hasRecapNotes, mode]
+  );
   const modeSwitch = hasRecapNotes ? (
     <Reanimated.View
       entering={FadeInUp.duration(220)}
@@ -514,6 +559,7 @@ export default function NotesIndexScreen() {
         onChange={handleModeChange}
         allLabel={t('notes.recap.allLabel', 'All')}
         recapLabel={t('notes.recap.recapLabel', 'Calendar')}
+        trackWidth={width - Layout.screenPadding * 2}
       />
     </Reanimated.View>
   ) : null;
@@ -527,82 +573,84 @@ export default function NotesIndexScreen() {
       ) : (
         <>
           {modeSwitch}
-          <View style={styles.modeContentStack}>
-            {shouldRenderAllMode ? (
-              <Reanimated.View
-                pointerEvents={mode === 'all' ? 'auto' : 'none'}
-                style={[styles.modeContentLayer, allLayerAnimatedStyle]}
-              >
-                {items.length === 0 ? (
-                  <View
-                    testID="notes-empty-state"
-                    style={[
-                      styles.center,
-                      styles.emptyScreen,
-                      styles.modeContentFill,
-                      {
-                        paddingBottom: insets.bottom + 28,
-                      },
-                    ]}
-                  >
-                    <View style={styles.emptyState}>
-                      <View style={styles.emptyIconWrap}>
-                        <Ionicons name="document-text-outline" size={44} color={colors.secondaryText} />
+          <GestureDetector gesture={modeContentGesture}>
+            <View style={styles.modeContentStack}>
+              {shouldRenderAllMode ? (
+                <Reanimated.View
+                  pointerEvents={mode === 'all' ? 'auto' : 'none'}
+                  style={[styles.modeContentLayer, allLayerAnimatedStyle]}
+                >
+                  {items.length === 0 ? (
+                    <View
+                      testID="notes-empty-state"
+                      style={[
+                        styles.center,
+                        styles.emptyScreen,
+                        styles.modeContentFill,
+                        {
+                          paddingBottom: insets.bottom + 28,
+                        },
+                      ]}
+                    >
+                      <View style={styles.emptyState}>
+                        <View style={styles.emptyIconWrap}>
+                          <Ionicons name="document-text-outline" size={44} color={colors.secondaryText} />
+                        </View>
+                        <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                          {t('home.emptyTitle', 'No notes yet')}
+                        </Text>
+                        <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
+                          {t('home.emptySubtitle', 'Write down what she likes or dislikes\nat each restaurant — we\'ll remind you!')}
+                        </Text>
                       </View>
-                      <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                        {t('home.emptyTitle', 'No notes yet')}
-                      </Text>
-                      <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-                        {t('home.emptySubtitle', 'Write down what she likes or dislikes\nat each restaurant — we\'ll remind you!')}
-                      </Text>
                     </View>
-                  </View>
-                ) : (
-                  <FlashList
-                    data={items}
-                    keyExtractor={(item) => item.id}
-                    getItemType={(item) => `${item.kind}:${item.kind === 'note' ? item.note.type : item.post.type}`}
-                    drawDistance={gridSize * 2}
-                    removeClippedSubviews={Platform.OS === 'android'}
-                    renderItem={({ item, index }) => (
-                      <GridTile
-                        item={item}
-                        index={index}
-                        size={gridSize}
-                        gap={gridGap}
-                        colors={colors}
-                        photoFallbackLabel={t('shared.photoMemory', 'Photo memory')}
-                        animateOnMount={shouldAnimateGridTiles}
-                        showDecorations={showGridDecorations && mode === 'all'}
-                        onPress={() => openItem(item)}
-                      />
-                    )}
-                    numColumns={3}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{
-                      paddingBottom: insets.bottom + 28,
-                      paddingHorizontal: Layout.screenPadding,
-                    }}
-                    style={styles.modeContentFill}
-                  />
-                )}
-              </Reanimated.View>
-            ) : null}
+                  ) : (
+                    <FlashList
+                      data={items}
+                      keyExtractor={(item) => item.id}
+                      getItemType={(item) => `${item.kind}:${item.kind === 'note' ? item.note.type : item.post.type}`}
+                      drawDistance={gridSize * 2}
+                      removeClippedSubviews={Platform.OS === 'android'}
+                      renderItem={({ item, index }) => (
+                        <GridTile
+                          item={item}
+                          index={index}
+                          size={gridSize}
+                          gap={gridGap}
+                          colors={colors}
+                          photoFallbackLabel={t('shared.photoMemory', 'Photo memory')}
+                          animateOnMount={shouldAnimateGridTiles}
+                          showDecorations={showGridDecorations && mode === 'all'}
+                          onPress={() => openItem(item)}
+                        />
+                      )}
+                      numColumns={3}
+                      showsVerticalScrollIndicator={false}
+                      contentContainerStyle={{
+                        paddingBottom: insets.bottom + 28,
+                        paddingHorizontal: Layout.screenPadding,
+                      }}
+                      style={styles.modeContentFill}
+                    />
+                  )}
+                </Reanimated.View>
+              ) : null}
 
-            {shouldRenderRecap ? (
-              <Reanimated.View
-                pointerEvents={mode === 'recap' ? 'auto' : 'none'}
-                style={[styles.modeContentLayer, recapLayerAnimatedStyle]}
-              >
-                <NotesRecapView
-                  notes={notes}
-                  bottomInset={insets.bottom}
-                  isVisible={mode === 'recap'}
-                  suspendPhysics={isRecapPhysicsSuspended}
-                />
-              </Reanimated.View>
-            ) : null}
-          </View>
+              {shouldRenderRecap ? (
+                <Reanimated.View
+                  pointerEvents={mode === 'recap' ? 'auto' : 'none'}
+                  style={[styles.modeContentLayer, recapLayerAnimatedStyle]}
+                >
+                  <NotesRecapView
+                    notes={notes}
+                    bottomInset={insets.bottom}
+                    isVisible={mode === 'recap'}
+                    suspendPhysics={isRecapPhysicsSuspended}
+                  />
+                </Reanimated.View>
+              ) : null}
+            </View>
+          </GestureDetector>
         </>
       )}
     </View>

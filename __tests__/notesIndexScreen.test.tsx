@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import NotesIndexScreen from '../app/notes/index';
+import { StyleSheet } from 'react-native';
+import NotesIndexScreen, { resolveNotesModeFromSwipe } from '../app/notes/index';
 
 const mockRouterReplace = jest.fn();
 const mockRouterPush = jest.fn();
@@ -239,7 +240,7 @@ describe('NotesIndexScreen', () => {
     mockNotes.splice(0, mockNotes.length);
     mockSharedPosts.splice(0, mockSharedPosts.length);
 
-    const { getByTestId, getByText, queryByTestId } = render(<NotesIndexScreen />);
+    const { getByTestId, getByText } = render(<NotesIndexScreen />);
 
     expect(getByTestId('notes-empty-state')).toBeTruthy();
     expect(getByText('document-text-outline')).toBeTruthy();
@@ -256,6 +257,15 @@ describe('NotesIndexScreen', () => {
     expect(getByTestId('notes-recap-sticker-pile')).toBeTruthy();
     expect(getByText('Used this month')).toBeTruthy();
     expect(queryByText('Shared memory')).toBeNull();
+  });
+
+  it('renders the active mode pill with width immediately', () => {
+    const { getByTestId } = render(<NotesIndexScreen />);
+
+    const pillStyle = StyleSheet.flatten(getByTestId('notes-mode-pill').props.style);
+
+    expect(pillStyle.width).toBeGreaterThan(0);
+    expect(pillStyle.opacity).toBe(1);
   });
 
   it('shows month items by default, filters to a tapped day, and clears when tapped again', () => {
@@ -319,7 +329,7 @@ describe('NotesIndexScreen', () => {
       }
     );
 
-    const { getByTestId, getByText, queryByTestId } = render(<NotesIndexScreen />);
+    const { getByTestId, getByText } = render(<NotesIndexScreen />);
 
     fireEvent.press(getByTestId('notes-mode-recap'));
 
@@ -413,5 +423,14 @@ describe('NotesIndexScreen', () => {
     await waitFor(() => {
       expect(queryByTestId('shared-photo-grid-placeholder')).toBeNull();
     });
+  });
+
+  it('resolves left and right swipes into the expected modes', () => {
+    expect(resolveNotesModeFromSwipe('all', -72, 0, true)).toBe('recap');
+    expect(resolveNotesModeFromSwipe('all', 0, -520, true)).toBe('recap');
+    expect(resolveNotesModeFromSwipe('recap', 72, 0, true)).toBe('all');
+    expect(resolveNotesModeFromSwipe('recap', 0, 520, true)).toBe('all');
+    expect(resolveNotesModeFromSwipe('all', -72, 0, false)).toBe('all');
+    expect(resolveNotesModeFromSwipe('recap', 12, 40, true)).toBe('recap');
   });
 });

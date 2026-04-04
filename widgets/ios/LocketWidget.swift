@@ -1553,24 +1553,11 @@ private struct LocketWidgetEntryView: View {
         }
     }
 
-    private var livePhotoBadgeLabel: String {
-        payload.livePhotoBadgeText.isEmpty
-            ? widgetLocalized("widget.livePhotoBadge", fallback: "Live")
-            : payload.livePhotoBadgeText
-    }
-
     private var livePhotoBadge: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 0) {
             Image(systemName: "livephoto")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(authorChipForegroundColor)
-
-            if isMedium || isLarge {
-                Text(livePhotoBadgeLabel)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(authorChipForegroundColor)
-                    .lineLimit(1)
-            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)

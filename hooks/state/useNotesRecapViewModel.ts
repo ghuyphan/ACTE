@@ -78,7 +78,7 @@ function getRecapLocale(language: string) {
 
 function formatRecapMonthLabel(date: Date, locale: string) {
   return new Intl.DateTimeFormat(locale, {
-    month: 'long',
+    month: locale.startsWith('vi') ? 'numeric' : 'long',
     year: 'numeric',
   }).format(date);
 }

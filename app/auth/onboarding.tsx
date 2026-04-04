@@ -21,8 +21,8 @@ import { isOlderIOS } from '../../utils/platform';
 const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
 
 const SLIDES = [
-    { emoji: '🪴', titleKey: 'onboarding.title1', subtitleKey: 'onboarding.subtitle1' },
-    { emoji: '☕️', titleKey: 'onboarding.title2', subtitleKey: 'onboarding.subtitle2' },
+    { emoji: '🧅', titleKey: 'onboarding.title1', subtitleKey: 'onboarding.subtitle1' },
+    { emoji: '📍', titleKey: 'onboarding.title2', subtitleKey: 'onboarding.subtitle2' },
     { emoji: '💛', titleKey: 'onboarding.title3', subtitleKey: 'onboarding.subtitle3' },
 ];
 

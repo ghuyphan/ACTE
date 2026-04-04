@@ -1,4 +1,9 @@
-import { applyCommittedInlineEmoji, resolveAutoNoteEmoji, resolveInlineNoteEmojiSuggestion } from '../services/noteDecorations';
+import {
+  applyCommittedInlineEmoji,
+  resolveAutoNoteEmoji,
+  resolveCommittedInlineEmoji,
+  resolveInlineNoteEmojiSuggestion,
+} from '../services/noteDecorations';
 
 describe('noteDecorations', () => {
   it('suggests an emoji from the active phrase without mutating the raw text', () => {
@@ -39,6 +44,14 @@ describe('noteDecorations', () => {
 
   it('does not duplicate an emoji when spacing continues after insertion', () => {
     expect(applyCommittedInlineEmoji('Need ca phe ☕️ ', 'Need ca phe ☕️  ')).toBe('Need ca phe ☕️  ');
+  });
+
+  it('exposes the committed emoji metadata for cute capture-card reactions', () => {
+    expect(resolveCommittedInlineEmoji('Need ca phe', 'Need ca phe ')).toEqual({
+      emoji: '☕️',
+      text: 'Need ca phe ☕️ ',
+    });
+    expect(resolveCommittedInlineEmoji('Need a cof', 'Need a cof ')).toBeNull();
   });
 
   it('supports local garnish-style keywords for garlic, shallot, and chili', () => {
@@ -131,5 +144,48 @@ describe('noteDecorations', () => {
         locationName: 'Tan Phu',
       })
     ).toBe('🛍️');
+  });
+
+  it('uses the refreshed cuter vibe emojis for cozy, work, and skyline notes', () => {
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Soft date night with my favorite person',
+        locationName: 'District 1',
+      })
+    ).toBe('💖');
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Deep work sprint before a deadline',
+        locationName: 'Coworking studio',
+      })
+    ).toBe('🖥️');
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Late rooftop catch-up',
+        locationName: 'Saigon skyline',
+      })
+    ).toBe('🌆');
+  });
+
+  it('falls back to the updated daytime and dreamy defaults when no keyword wins', () => {
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: '',
+        locationName: '',
+        createdAt: new Date('2026-04-04T08:00:00'),
+      })
+    ).toBe('🌤️');
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: '',
+        locationName: '',
+        createdAt: new Date('2026-04-04T14:00:00'),
+      })
+    ).toBe('💫');
   });
 });
