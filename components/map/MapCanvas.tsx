@@ -30,6 +30,10 @@ type SharedPostWithCoordinates = SharedPost & {
   longitude: number;
 };
 
+type MapRegionChangeDetails = {
+  isGesture?: boolean;
+};
+
 interface MapCanvasProps {
   mapRef: RefObject<MapView | null>;
   initialRegion: Region;
@@ -47,7 +51,7 @@ interface MapCanvasProps {
   reduceMotionEnabled: boolean;
   onMapPress: () => void;
   onMapReady: () => void;
-  onRegionChangeComplete: (region: Region) => void;
+  onRegionChangeComplete: (region: Region, details?: MapRegionChangeDetails) => void;
   onLeafPress: (groupId: string) => void;
   onClusterPress: (node: MapClusterNode) => void;
   onFriendPress: (postId: string) => void;

@@ -37,6 +37,11 @@ import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
 const MIN_ZOOM_DELTA = 0.002;
 const PROGRAMMATIC_REGION_TOLERANCE = 0.0005;
+const PREVIEW_FOCUS_REGION_GUARD_MS = 900;
+
+type MapRegionChangeDetails = {
+  isGesture?: boolean;
+};
 
 type OverlayState = 'content' | 'no-filter-results' | 'no-notes' | 'no-area-results';
 
@@ -94,6 +99,7 @@ export default function MapScreenIOS() {
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingProgrammaticRegionRef = useRef<Region | null>(null);
   const shouldAdoptNearbyPreviewItemsRef = useRef(true);
+  const nearbyPreviewFocusGuardUntilRef = useRef(0);
 
   useEffect(() => {
     if (!isAndroid) {
@@ -227,29 +233,37 @@ export default function MapScreenIOS() {
   }, []);
 
   const updateProgrammaticRegion = useCallback(
-    (region: Region) => {
+    (region: Region, options?: { freezeNearbyPreviewSession?: boolean }) => {
       pendingProgrammaticRegionRef.current = region;
+      if (options?.freezeNearbyPreviewSession) {
+        nearbyPreviewFocusGuardUntilRef.current = Date.now() + PREVIEW_FOCUS_REGION_GUARD_MS;
+      }
       setProgrammaticVisibleRegion(region);
     },
     [setProgrammaticVisibleRegion]
   );
 
   const animateToRegion = useCallback(
-    (region: Region, duration: number) => {
-      updateProgrammaticRegion(region);
+    (region: Region, duration: number, options?: { freezeNearbyPreviewSession?: boolean }) => {
+      updateProgrammaticRegion(region, options);
       mapRef.current?.animateToRegion(region, duration);
     },
     [updateProgrammaticRegion]
   );
 
   const handleRegionChangeComplete = useCallback(
-    (region: Region) => {
-      if (areRegionsClose(pendingProgrammaticRegionRef.current, region)) {
+    (region: Region, details?: MapRegionChangeDetails) => {
+      const isGoogleMapsGesture = details?.isGesture;
+      const isInsidePreviewFocusGuard = Date.now() <= nearbyPreviewFocusGuardUntilRef.current;
+      const matchesPendingProgrammaticRegion = areRegionsClose(pendingProgrammaticRegionRef.current, region);
+
+      if (isGoogleMapsGesture === false || matchesPendingProgrammaticRegion || isInsidePreviewFocusGuard) {
         pendingProgrammaticRegionRef.current = null;
         setProgrammaticVisibleRegion(region);
         return;
       }
 
+      nearbyPreviewFocusGuardUntilRef.current = 0;
       pendingProgrammaticRegionRef.current = null;
       shouldAdoptNearbyPreviewItemsRef.current = true;
       setVisibleRegion(region);
@@ -304,6 +318,8 @@ export default function MapScreenIOS() {
   }, [activeFriendPostId, friendPosts, showFriendsPreview]);
 
   const handleMapCanvasPress = useCallback(() => {
+    nearbyPreviewFocusGuardUntilRef.current = 0;
+
     if (showFriendsPreview) {
       setShowFriendsPreview(false);
     }
@@ -317,6 +333,7 @@ export default function MapScreenIOS() {
 
   const handleChangeFilterType = useCallback(
     (nextType: Parameters<typeof setFilterType>[0]) => {
+      nearbyPreviewFocusGuardUntilRef.current = 0;
       if (showFriendsPreview) {
         setShowFriendsPreview(false);
       }
@@ -330,6 +347,7 @@ export default function MapScreenIOS() {
   );
 
   const handleToggleFavorites = useCallback(() => {
+    nearbyPreviewFocusGuardUntilRef.current = 0;
     if (showFriendsPreview) {
       setShowFriendsPreview(false);
     }
@@ -373,6 +391,7 @@ export default function MapScreenIOS() {
 
   const handleClusterPress = useCallback(
     (node: MapClusterNode) => {
+      nearbyPreviewFocusGuardUntilRef.current = 0;
       if (showFriendsPreview) {
         setShowFriendsPreview(false);
       }
@@ -417,6 +436,7 @@ export default function MapScreenIOS() {
 
   const handleLeafPress = useCallback(
     (groupId: string) => {
+      nearbyPreviewFocusGuardUntilRef.current = 0;
       if (showFriendsPreview) {
         setShowFriendsPreview(false);
       }
@@ -471,7 +491,9 @@ export default function MapScreenIOS() {
         longitudeDelta: Math.max(Math.min(baseRegion.longitudeDelta, 0.025), MIN_ZOOM_DELTA),
       };
 
-      animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350);
+      animateToRegion(nextRegion, reduceMotionEnabled ? 0 : 350, {
+        freezeNearbyPreviewSession: true,
+      });
     },
     [
       animateToRegion,
@@ -485,6 +507,7 @@ export default function MapScreenIOS() {
   );
 
   const handleOpenFriendsLayer = useCallback(() => {
+    nearbyPreviewFocusGuardUntilRef.current = 0;
     if (!hasFriendLayer) {
       return;
     }
@@ -495,6 +518,7 @@ export default function MapScreenIOS() {
   }, [emitLightHaptic, friendPosts, hasFriendLayer]);
 
   const handleDismissNotesPreview = useCallback(() => {
+    nearbyPreviewFocusGuardUntilRef.current = 0;
     emitLightHaptic();
     setNotesPreviewDismissed(true);
     clearSelection();
@@ -507,6 +531,7 @@ export default function MapScreenIOS() {
 
   const focusFriendPost = useCallback(
     (postId: string, options?: { animate?: boolean; openPreview?: boolean }) => {
+      nearbyPreviewFocusGuardUntilRef.current = 0;
       const targetPost =
         friendMarkerPosts.find((post) => post.id === postId) ??
         friendPosts.find((post) => post.id === postId);

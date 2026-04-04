@@ -560,6 +560,43 @@ describe('MapScreen', () => {
     });
   });
 
+  it('keeps the nearby preview locked when the map reports a slightly different completion region after preview focus', async () => {
+    const { getByTestId } = render(<MapScreen />);
+    const nearbyList = await waitFor(() => getByTestId('map-preview-list'));
+    const snapInterval = nearbyList.props.snapToInterval;
+
+    act(() => {
+      nearbyList.props.onScrollBeginDrag({
+        nativeEvent: {},
+      });
+      nearbyList.props.onMomentumScrollEnd({
+        nativeEvent: {
+          contentOffset: {
+            x: snapInterval,
+            y: 0,
+          },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(String(getByTestId('map-preview-index').props.children)).toBe('2/2');
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.8,
+        longitude: 106.7,
+        latitudeDelta: 0.04,
+        longitudeDelta: 0.04,
+      });
+    });
+
+    await waitFor(() => {
+      expect(String(getByTestId('map-preview-index').props.children)).toBe('2/2');
+    });
+  });
+
   it('dismisses the selected preview when tapping outside the map content', async () => {
     const nowSpy = jest.spyOn(Date, 'now');
     let now = 1000;
