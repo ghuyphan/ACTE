@@ -350,7 +350,7 @@ describe('MapScreen', () => {
   });
 
   it('shows an in-area empty state and can temporarily reveal all matching results', async () => {
-    const { getByTestId, getByText, queryByTestId, queryByText } = render(<MapScreen />);
+    const { getByTestId, getByText, queryByText } = render(<MapScreen />);
 
     act(() => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
@@ -362,7 +362,6 @@ describe('MapScreen', () => {
     });
 
     await waitFor(() => {
-      expect(getByText('No notes in this area')).toBeTruthy();
       expect(getByTestId('map-show-all-results')).toBeTruthy();
     });
 

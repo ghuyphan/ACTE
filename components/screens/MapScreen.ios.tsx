@@ -856,7 +856,13 @@ export default function MapScreenIOS() {
 
       <View
         testID="map-overlay-host"
-        style={styles.emptyOverlay}
+        style={[
+          styles.emptyOverlay,
+          {
+            paddingTop: insets.top + 72,
+            paddingBottom: previewBottomOffset,
+          },
+        ]}
         pointerEvents={overlayState === 'content' || friendsPreviewVisible ? 'none' : 'box-none'}
       >
         {overlayState === 'no-notes' && !friendsPreviewVisible ? (
@@ -899,6 +905,7 @@ export default function MapScreenIOS() {
         {overlayState === 'no-area-results' && !friendsPreviewVisible ? (
           <MapStatusCard
             overlayState="no-area-results"
+            variant="pill"
             isDark={isDark}
             primaryColor={colors.primary}
             textColor={colors.text}
@@ -986,9 +993,9 @@ const styles = StyleSheet.create({
   },
   emptyOverlay: {
     ...StyleSheet.absoluteFill,
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 14,
     zIndex: 9,
   },
 });

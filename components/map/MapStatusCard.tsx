@@ -4,9 +4,11 @@ import { GlassView } from '../ui/GlassView';
 import { getOverlayBorderColor, mapOverlayTokens } from './overlayTokens';
 
 type OverlayState = 'no-filter-results' | 'no-notes' | 'no-area-results';
+type MapStatusCardVariant = 'card' | 'pill';
 
 interface MapStatusCardProps {
   overlayState: OverlayState;
+  variant?: MapStatusCardVariant;
   isDark: boolean;
   primaryColor: string;
   textColor: string;
@@ -21,6 +23,7 @@ interface MapStatusCardProps {
 
 export default function MapStatusCard({
   overlayState,
+  variant = 'card',
   isDark,
   primaryColor,
   textColor,
@@ -38,9 +41,59 @@ export default function MapStatusCard({
   const fallbackFill = isDark ? 'rgba(26,26,32,0.95)' : 'rgba(248,247,243,0.88)';
   const statusGlassScrimColor = isDark ? 'rgba(12,12,18,0.10)' : 'rgba(255,255,255,0.04)';
   const iconColor = isIOS ? secondaryTextColor : primaryColor;
+  const isPill = variant === 'pill';
+
+  if (isPill && actionLabel && onAction) {
+    return (
+      <View testID="map-status-card" style={styles.wrap}>
+        <Pressable
+          testID={actionTestID}
+          style={({ pressed }) => [
+            styles.pill,
+            isIOS ? styles.pillIOS : styles.pillAndroid,
+            {
+              opacity: pressed ? 0.94 : 1,
+              borderColor: isIOS ? getOverlayBorderColor(isDark) : 'transparent',
+              backgroundColor: shouldUseGlass ? 'transparent' : fallbackFill,
+            },
+          ]}
+          onPress={onAction}
+        >
+          {shouldUseGlass ? (
+            <GlassView
+              pointerEvents="none"
+              style={StyleSheet.absoluteFill}
+              glassEffectStyle="regular"
+              colorScheme={isDark ? 'dark' : 'light'}
+            />
+          ) : null}
+          <View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              styles.pillScrim,
+              {
+                backgroundColor: shouldUseGlass ? statusGlassScrimColor : fallbackFill,
+              },
+            ]}
+          />
+          <Ionicons name="albums-outline" size={15} color={primaryColor} />
+          <Text
+            style={[
+              styles.pillLabel,
+              isIOS ? styles.pillLabelIOS : styles.pillLabelAndroid,
+              { color: primaryColor },
+            ]}
+          >
+            {actionLabel}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
-    <View key={overlayState} testID="map-status-card" style={styles.wrap}>
+    <View testID="map-status-card" style={styles.wrap}>
       <View
         style={[
           styles.card,
@@ -77,39 +130,41 @@ export default function MapStatusCard({
             color={iconColor}
             style={styles.icon}
           />
-          <Text style={[styles.title, isIOS ? styles.titleIOS : styles.titleAndroid, { color: textColor }]}>
-            {title}
-          </Text>
-          <Text
-            style={[
-              styles.subtitle,
-              isIOS ? styles.subtitleIOS : styles.subtitleAndroid,
-              { color: secondaryTextColor },
-            ]}
-          >
-            {subtitle}
-          </Text>
-          {actionLabel && onAction ? (
-            <Pressable
-              testID={actionTestID}
+          <View style={styles.copyBlock}>
+            <Text style={[styles.title, isIOS ? styles.titleIOS : styles.titleAndroid, { color: textColor }]}>
+              {title}
+            </Text>
+            <Text
               style={[
-                styles.clearFiltersBtn,
-                isIOS ? styles.clearFiltersBtnIOS : styles.clearFiltersBtnAndroid,
-                isIOS ? null : { backgroundColor: `${primaryColor}14` },
+                styles.subtitle,
+                isIOS ? styles.subtitleIOS : styles.subtitleAndroid,
+                { color: secondaryTextColor },
               ]}
-              onPress={onAction}
             >
-              <Text
+              {subtitle}
+            </Text>
+            {actionLabel && onAction ? (
+              <Pressable
+                testID={actionTestID}
                 style={[
-                  styles.clearFiltersText,
-                  isIOS ? styles.clearFiltersTextIOS : styles.clearFiltersTextAndroid,
-                  { color: primaryColor },
+                  styles.clearFiltersBtn,
+                  isIOS ? styles.clearFiltersBtnIOS : styles.clearFiltersBtnAndroid,
+                  isIOS ? null : { backgroundColor: `${primaryColor}14` },
                 ]}
+                onPress={onAction}
               >
-                {actionLabel}
-              </Text>
-            </Pressable>
-          ) : null}
+                <Text
+                  style={[
+                    styles.clearFiltersText,
+                    isIOS ? styles.clearFiltersTextIOS : styles.clearFiltersTextAndroid,
+                    { color: primaryColor },
+                  ]}
+                >
+                  {actionLabel}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       </View>
     </View>
@@ -121,12 +176,46 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    overflow: 'hidden',
+  },
+  pillIOS: {
+    minHeight: 38,
+    borderRadius: 19,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  pillAndroid: {
+    minHeight: 40,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    ...mapOverlayTokens.overlayShadow,
+  },
+  pillScrim: {
+    borderRadius: 20,
+  },
+  pillLabel: {
+    fontFamily: 'Noto Sans',
+  },
+  pillLabelIOS: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  pillLabelAndroid: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
   card: {
     width: '100%',
     overflow: 'hidden',
   },
   cardIOS: {
-    maxWidth: 292,
+    maxWidth: 360,
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
     shadowColor: '#000',
@@ -136,21 +225,26 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
   },
   cardAndroid: {
-    maxWidth: 320,
+    maxWidth: 368,
     borderRadius: 22,
     borderWidth: 0,
     ...mapOverlayTokens.overlayShadow,
   },
   content: {
-    alignItems: 'center',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
   },
   contentIOS: {
-    paddingHorizontal: 22,
-    paddingVertical: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   contentAndroid: {
-    paddingHorizontal: 28,
-    paddingVertical: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  copyBlock: {
+    flex: 1,
   },
   scrim: {
     borderRadius: 24,
@@ -162,46 +256,44 @@ const styles = StyleSheet.create({
     borderRadius: 22,
   },
   icon: {
-    marginBottom: 10,
+    marginTop: 2,
   },
   title: {
-    textAlign: 'center',
     fontFamily: 'Noto Sans',
   },
   titleIOS: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   titleAndroid: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   subtitle: {
-    textAlign: 'center',
     fontFamily: 'Noto Sans',
   },
   subtitleIOS: {
-    fontSize: 13,
-    lineHeight: 18,
-    maxWidth: 220,
+    fontSize: 12,
+    lineHeight: 17,
   },
   subtitleAndroid: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
   },
   clearFiltersBtn: {
-    marginTop: 12,
+    alignSelf: 'flex-start',
+    marginTop: 10,
     borderRadius: 999,
   },
   clearFiltersBtnIOS: {
-    paddingHorizontal: 4,
-    paddingVertical: 4,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
   },
   clearFiltersBtnAndroid: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   clearFiltersText: {
     fontFamily: 'Noto Sans',
