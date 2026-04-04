@@ -9,6 +9,7 @@ const mockCachedActiveInvites = new Map<string, any>();
 let mockUuidCounter = 0;
 let mockSessionUserId = 'owner-1';
 let mockSharedPostsInsertError: unknown = null;
+const mockUndeletableSharedPostIds = new Set<string>();
 
 function mockHashInviteToken(token: string) {
   return `digest-${token.replace(/[^a-z0-9]/gi, '').toLowerCase()}`;
@@ -140,8 +141,8 @@ function mockCreateQueryBuilder(table: string) {
         }
 
         if (state.shouldDelete) {
-          applyDelete(table, state);
-          return Promise.resolve(resolve({ data: null, error: null }));
+          const deletedRows = applyDelete(table, state);
+          return Promise.resolve(resolve({ data: deletedRows, error: null }));
         }
 
         return Promise.resolve(resolve({ data: executeSelect(table, state), error: null }));
@@ -238,12 +239,16 @@ function applyUpdate(table: string, state: any, nextValues: Record<string, unkno
 function applyDelete(table: string, state: any) {
   if (table !== 'shared_posts') {
     if (table !== 'shared_post_tombstones' && table !== 'sticker_asset_refs') {
-      return;
+      return [];
     }
   }
 
   const rows = executeSelect(table, state);
-  for (const row of rows) {
+  const deletedRows =
+    table === 'shared_posts'
+      ? rows.filter((row) => !mockUndeletableSharedPostIds.has(String(row.id)))
+      : rows;
+  for (const row of deletedRows) {
     if (table === 'shared_posts') {
       mockSharedPosts.delete(row.id);
     } else if (table === 'sticker_asset_refs') {
@@ -252,6 +257,8 @@ function applyDelete(table: string, state: any) {
       mockSharedPostTombstones.delete(row.post_id);
     }
   }
+
+  return deletedRows;
 }
 
 const mockUploadPhotoToStorage = jest.fn<Promise<string | null>, [string, string, string | null | undefined]>(
@@ -550,6 +557,30 @@ jest.mock('../utils/supabase', () => ({
   getSupabaseErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : typeof error === 'string' ? error : '',
   isSupabaseNetworkError: () => false,
+  isSupabaseStorageObjectMissingError: (error: unknown) => {
+    const code =
+      typeof error === 'object' && error && 'code' in error
+        ? String((error as { code?: unknown }).code ?? '')
+        : '';
+    const message = String(
+      error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error && 'message' in error
+          ? (error as { message?: unknown }).message ?? ''
+          : ''
+    ).toLowerCase();
+
+    return (
+      code === '404' ||
+      code === 'NoSuchKey' ||
+      message.includes('object not found') ||
+      (message.includes('not found') &&
+        (message.includes('object') ||
+          message.includes('storage') ||
+          message.includes('bucket') ||
+          message.includes('key')))
+    );
+  },
   isSupabasePolicyError: () => false,
   isSupabaseSchemaMismatchError: () => false,
 }));
@@ -619,6 +650,7 @@ const secondFriendUser = {
   mockUuidCounter = 0;
   mockSessionUserId = 'owner-1';
   mockSharedPostsInsertError = null;
+  mockUndeletableSharedPostIds.clear();
     mockFriendInvites.clear();
     mockSharedPosts.clear();
     mockSharedPostTombstones.clear();
@@ -857,6 +889,68 @@ describe('sharedFeedService', () => {
       'owner-1/shared-post-sticker-1.png'
     );
     expect(mockStickerAssetRefs.size).toBe(0);
+  });
+
+  it('fails shared post deletion when the row is fetched but not actually deleted', async () => {
+    mockSharedPosts.set('shared-stuck', {
+      id: 'shared-stuck',
+      author_user_id: ownerUser.id,
+      author_display_name: ownerUser.displayName,
+      author_photo_url_snapshot: ownerUser.photoURL,
+      audience_user_ids: [ownerUser.id, friendUser.id],
+      type: 'text',
+      text: 'Still there',
+      photo_path: null,
+      paired_video_path: null,
+      doodle_strokes_json: null,
+      sticker_placements_json: null,
+      note_color: null,
+      place_name: 'District 1',
+      source_note_id: 'note-1',
+      latitude: null,
+      longitude: null,
+      created_at: '2026-03-24T00:00:00.000Z',
+      updated_at: null,
+    });
+    mockUndeletableSharedPostIds.add('shared-stuck');
+
+    await expect(deleteSharedPost(ownerUser, 'shared-stuck')).rejects.toThrow(
+      'Remote shared post delete did not remove expected rows: shared-stuck'
+    );
+
+    expect(mockSharedPosts.has('shared-stuck')).toBe(true);
+    expect(mockSharedPostTombstones.has('shared-stuck')).toBe(false);
+  });
+
+  it('fails shared post deletion when shared media cleanup fails', async () => {
+    mockSharedPosts.set('shared-photo-error', {
+      id: 'shared-photo-error',
+      author_user_id: ownerUser.id,
+      author_display_name: ownerUser.displayName,
+      author_photo_url_snapshot: ownerUser.photoURL,
+      audience_user_ids: [ownerUser.id, friendUser.id],
+      type: 'photo',
+      text: '',
+      photo_path: 'owner-1/shared-photo-error',
+      paired_video_path: null,
+      doodle_strokes_json: null,
+      sticker_placements_json: null,
+      note_color: null,
+      place_name: 'District 1',
+      source_note_id: 'note-2',
+      latitude: null,
+      longitude: null,
+      created_at: '2026-03-24T00:00:00.000Z',
+      updated_at: null,
+    });
+    mockDeletePhotoFromStorage.mockRejectedValueOnce(new Error('shared media delete failed'));
+
+    await expect(deleteSharedPost(ownerUser, 'shared-photo-error')).rejects.toThrow(
+      'shared media delete failed'
+    );
+
+    expect(mockSharedPosts.has('shared-photo-error')).toBe(true);
+    expect(mockSharedPostTombstones.has('shared-photo-error')).toBe(false);
   });
 
   it('revokes old shared audiences and hides author-only leftovers after removing a friend', async () => {

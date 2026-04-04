@@ -2,7 +2,7 @@ import { AppState } from 'react-native';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import i18n from '../constants/i18n';
 import { useConnectivity } from './useConnectivity';
-import { getSyncRepository, SyncMode, syncNotes } from '../services/syncService';
+import { getSyncRepository, SyncMode, SyncQueueItem, syncNotes } from '../services/syncService';
 import { useAuth } from './useAuth';
 import { useNotes } from './useNotes';
 import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
@@ -16,6 +16,7 @@ interface SyncStatusContextValue {
   pendingCount: number;
   failedCount: number;
   blockedCount: number;
+  recentQueueItems: SyncQueueItem[];
   isEnabled: boolean;
   setSyncEnabled: (enabled: boolean) => void;
   requestSync: () => void;
@@ -36,6 +37,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const [pendingCount, setPendingCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
   const [blockedCount, setBlockedCount] = useState(0);
+  const [recentQueueItems, setRecentQueueItems] = useState<SyncQueueItem[]>([]);
   const [syncEnabledState, setSyncEnabledState] = useState<boolean>(true);
   const [isSyncPrefReady, setIsSyncPrefReady] = useState(false);
 
@@ -56,10 +58,13 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
   const refreshQueueStats = useCallback(async () => {
     try {
-      const stats = await getSyncRepository().getStats();
+      const repository = getSyncRepository();
+      const stats = await repository.getStats();
+      const recentItems = await repository.listRecent(5);
       setPendingCount(stats.pendingCount);
       setFailedCount(stats.failedCount);
       setBlockedCount(stats.blockedCount);
+      setRecentQueueItems(recentItems);
     } catch (error) {
       console.warn('[syncStatus] Failed to load queue stats:', error);
     }
@@ -268,13 +273,14 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       pendingCount,
       failedCount,
       blockedCount,
+      recentQueueItems,
       isEnabled: syncEnabledState,
       setSyncEnabled,
       requestSync: () => {
         queueSync(true, 'full');
       },
     }),
-    [blockedCount, failedCount, lastMessage, lastSyncedAt, pendingCount, queueSync, setSyncEnabled, status, syncEnabledState]
+    [blockedCount, failedCount, lastMessage, lastSyncedAt, pendingCount, queueSync, recentQueueItems, setSyncEnabled, status, syncEnabledState]
   );
 
   return <SyncStatusContext.Provider value={value}>{children}</SyncStatusContext.Provider>;

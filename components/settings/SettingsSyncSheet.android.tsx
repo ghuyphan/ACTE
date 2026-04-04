@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Sheet } from '../../constants/theme';
 import { useSyncSheetDetails } from '../../hooks/useSyncSheetDetails';
 import { useTheme } from '../../hooks/useTheme';
@@ -15,11 +15,46 @@ export default function SettingsSyncSheetAndroid({
   const { colors } = useTheme();
   const {
     canManageSync,
+    canRequestSync,
     description,
+    diagnosticsMessage,
     isEnabled,
+    queueSummary,
+    recentQueueItems,
+    requestSync,
     setSyncEnabled,
+    showDiagnostics,
+    status,
     statusLabel,
   } = useSyncSheetDetails(accountHint);
+
+  const getOperationLabel = (operation: 'create' | 'update' | 'delete' | 'deleteAll') => {
+    switch (operation) {
+      case 'create':
+        return t('settings.syncOpCreate', 'Create');
+      case 'update':
+        return t('settings.syncOpUpdate', 'Update');
+      case 'delete':
+        return t('settings.syncOpDelete', 'Delete');
+      case 'deleteAll':
+        return t('settings.syncOpDeleteAll', 'Delete all');
+      default:
+        return operation;
+    }
+  };
+
+  const getStatusLabel = (nextStatus: 'pending' | 'processing' | 'failed') => {
+    switch (nextStatus) {
+      case 'pending':
+        return t('settings.syncItemStatusPending', 'Pending');
+      case 'processing':
+        return t('settings.syncItemStatusProcessing', 'Processing');
+      case 'failed':
+        return t('settings.syncItemStatusFailed', 'Failed');
+      default:
+        return nextStatus;
+    }
+  };
 
   return (
     <AppSheetScaffold
@@ -33,7 +68,9 @@ export default function SettingsSyncSheetAndroid({
         <View style={styles.row}>
           <View style={styles.copy}>
             <Text style={[styles.label, { color: colors.text }]}>{t('settings.autoSync', 'Auto sync')}</Text>
-            <Text style={[styles.hint, { color: colors.secondaryText }]}>{statusLabel}</Text>
+            {!canManageSync ? (
+              <Text style={[styles.hint, { color: colors.secondaryText }]}>{statusLabel}</Text>
+            ) : null}
           </View>
           {canManageSync ? (
             <Switch
@@ -44,6 +81,63 @@ export default function SettingsSyncSheetAndroid({
             />
           ) : null}
         </View>
+
+        <View style={[styles.section, styles.sectionCompact]}>
+          <Pressable
+            accessibilityRole="button"
+            android_ripple={{ color: `${colors.primary}14` }}
+            disabled={!canRequestSync}
+            onPress={requestSync}
+            style={({ pressed }) => [
+              styles.syncButton,
+              {
+                backgroundColor: canRequestSync ? colors.primary : colors.border,
+                opacity: canRequestSync ? (pressed ? 0.88 : 1) : 0.55,
+              },
+            ]}
+          >
+            <Text style={[styles.syncButtonLabel, { color: canRequestSync ? colors.background : colors.secondaryText }]}>
+              {status === 'syncing'
+                ? t('settings.syncing', 'Syncing...')
+                : t('settings.syncNow', 'Sync with server')}
+            </Text>
+          </Pressable>
+        </View>
+
+        {showDiagnostics ? (
+          <View style={styles.section}>
+            {queueSummary ? (
+              <Text style={[styles.hint, { color: colors.secondaryText }]}>{queueSummary}</Text>
+            ) : null}
+            {diagnosticsMessage ? (
+              <Text style={[styles.hint, { color: colors.secondaryText }]}>{diagnosticsMessage}</Text>
+            ) : null}
+
+            <View style={styles.queueList}>
+              {recentQueueItems.map((item) => (
+                <View key={`${item.id}-${item.createdAt}`} style={[styles.queueItem, { borderColor: colors.border }]}>
+                  <View style={styles.queueItemHeader}>
+                    <Text style={[styles.queueItemTitle, { color: colors.text }]}>
+                      {getOperationLabel(item.operation)}
+                      {item.entityId ? ` · ${item.entityId}` : ''}
+                    </Text>
+                    <Text style={[styles.queueItemStatus, { color: colors.secondaryText }]}>
+                      {getStatusLabel(item.status)}
+                    </Text>
+                  </View>
+                  <Text style={[styles.queueItemMeta, { color: colors.secondaryText }]}>
+                    {new Date(item.createdAt).toLocaleString()}
+                  </Text>
+                  {item.blockedReason || item.lastError ? (
+                    <Text style={[styles.queueItemHint, { color: item.blockedReason ? colors.danger : colors.secondaryText }]}>
+                      {item.blockedReason ?? item.lastError}
+                    </Text>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
       </View>
     </AppSheetScaffold>
   );
@@ -61,6 +155,15 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: Sheet.android.horizontalPadding,
   },
+  section: {
+    marginTop: 12,
+    paddingTop: 16,
+    paddingHorizontal: Sheet.android.horizontalPadding,
+    gap: 12,
+  },
+  sectionCompact: {
+    gap: 0,
+  },
   copy: {
     flex: 1,
   },
@@ -73,6 +176,55 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginTop: 4,
+    fontFamily: 'Noto Sans',
+  },
+  syncButton: {
+    minHeight: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  syncButtonLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  queueList: {
+    gap: 10,
+  },
+  queueItem: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  queueItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  queueItemTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: 'Noto Sans',
+  },
+  queueItemStatus: {
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'Noto Sans',
+  },
+  queueItemMeta: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: 'Noto Sans',
+  },
+  queueItemHint: {
+    fontSize: 12,
+    lineHeight: 17,
     fontFamily: 'Noto Sans',
   },
 });

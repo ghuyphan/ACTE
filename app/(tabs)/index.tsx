@@ -107,6 +107,7 @@ export default function HomeScreen() {
     plusPriceLabel,
     canImportFromLibrary,
     remotePhotoNoteCount,
+    isRemotePhotoNoteCountReady,
     presentPaywallIfNeeded,
     restorePurchases,
   } = useSubscription();
@@ -290,15 +291,26 @@ export default function HomeScreen() {
     () => Math.max(localPhotoNoteCount, remotePhotoNoteCount ?? 0),
     [localPhotoNoteCount, remotePhotoNoteCount]
   );
+  const isPhotoNoteQuotaReady = useMemo(
+    () => tier === 'plus' || !user || !isAuthAvailable || isRemotePhotoNoteCountReady,
+    [isAuthAvailable, isRemotePhotoNoteCountReady, tier, user]
+  );
   const canSaveAnotherPhotoNote = useMemo(
-    () => canCreatePhotoNote(tier, photoNoteCount),
-    [photoNoteCount, tier]
+    () => isPhotoNoteQuotaReady && canCreatePhotoNote(tier, photoNoteCount),
+    [isPhotoNoteQuotaReady, photoNoteCount, tier]
   );
   const remainingPhotoSlots = useMemo(
-    () => getRemainingPhotoSlots(tier, photoNoteCount),
-    [photoNoteCount, tier]
+    () => (isPhotoNoteQuotaReady ? getRemainingPhotoSlots(tier, photoNoteCount) : null),
+    [isPhotoNoteQuotaReady, photoNoteCount, tier]
   );
   const cameraStatusText = useMemo(() => {
+    if (tier !== 'plus' && !isPhotoNoteQuotaReady) {
+      return t(
+        'capture.photoLimitCheckingHint',
+        'Checking your free photo note limit...'
+      );
+    }
+
     if (tier !== 'plus' && remainingPhotoSlots === 0) {
       return t(
         'capture.photoLimitReachedHint',
@@ -307,7 +319,7 @@ export default function HomeScreen() {
     }
 
     return null;
-  }, [remainingPhotoSlots, t, tier]);
+  }, [isPhotoNoteQuotaReady, remainingPhotoSlots, t, tier]);
   useEffect(() => {
     const isCameraHintEligible =
       captureMode === 'camera' &&
@@ -1200,6 +1212,18 @@ export default function HomeScreen() {
         return;
       }
 
+      if (captureMode === 'camera' && !isPhotoNoteQuotaReady) {
+        showDoneSheet(
+          'warning',
+          t('capture.photoLimitCheckingTitle', 'Checking photo limit'),
+          t(
+            'capture.photoLimitCheckingMessage',
+            'We are still loading your account photo usage. Try again in a moment.'
+          )
+        );
+        return;
+      }
+
       if (captureMode === 'camera' && !canSaveAnotherPhotoNote) {
         showPlusSheet('limit');
         return;
@@ -1385,6 +1409,7 @@ export default function HomeScreen() {
     finalizeSavedCapture,
     showSavedSheet,
     canSaveAnotherPhotoNote,
+    isPhotoNoteQuotaReady,
     promptHologramSaveChoice,
     captureTarget,
     createSharedPost,

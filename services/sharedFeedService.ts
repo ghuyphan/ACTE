@@ -8,6 +8,7 @@ import {
   isSupabaseNetworkError,
   isSupabasePolicyError,
   isSupabaseSchemaMismatchError,
+  isSupabaseStorageObjectMissingError,
 } from '../utils/supabase';
 import { Note, NoteType } from './database';
 import { normalizeSavedTextNoteColor } from './noteAppearance';
@@ -195,6 +196,16 @@ function normalizeRemoteArtifactPath(path: string | null | undefined) {
   return normalizedPath || null;
 }
 
+function normalizeRemoteEntityIds(ids: Iterable<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      Array.from(ids)
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter(Boolean)
+    )
+  );
+}
+
 function getRemoteStickerAssetPaths(stickerPlacementsJson: string | null | undefined) {
   return Array.from(
     new Set(
@@ -252,7 +263,8 @@ async function cleanupRemoteArtifacts(
     photoPath?: string | null;
     pairedVideoPath?: string | null;
     stickerPaths?: string[];
-  }
+  },
+  options: { strict?: boolean } = {}
 ) {
   const removals: Promise<unknown>[] = [];
 
@@ -274,7 +286,19 @@ async function cleanupRemoteArtifacts(
     return;
   }
 
-  await Promise.allSettled(removals);
+  if (!options.strict) {
+    await Promise.allSettled(removals);
+    return;
+  }
+
+  const results = await Promise.allSettled(removals);
+  const firstFailure = results.find(
+    (result): result is PromiseRejectedResult =>
+      result.status === 'rejected' && !isSupabaseStorageObjectMissingError(result.reason)
+  );
+  if (firstFailure) {
+    throw firstFailure.reason;
+  }
 }
 
 function getReusableSharedPostCleanupArtifacts(artifacts: {
@@ -286,6 +310,36 @@ function getReusableSharedPostCleanupArtifacts(artifacts: {
     photoPath: artifacts.photoPath ?? null,
     pairedVideoPath: artifacts.pairedVideoPath ?? null,
   };
+}
+
+function collectDeletedIds<Row extends Record<string, unknown>>(
+  rows: Row[] | null | undefined,
+  idField: keyof Row
+) {
+  return normalizeRemoteEntityIds(
+    (rows ?? []).map((row) => {
+      const value = row?.[idField];
+      return typeof value === 'string' ? value : null;
+    })
+  );
+}
+
+function assertExpectedDeleteIds(
+  entityLabel: string,
+  expectedIds: string[],
+  deletedIds: string[]
+) {
+  if (expectedIds.length === 0) {
+    return;
+  }
+
+  const deletedSet = new Set(deletedIds);
+  const missingIds = expectedIds.filter((id) => !deletedSet.has(id));
+  if (missingIds.length > 0) {
+    throw new Error(
+      `Remote ${entityLabel} delete did not remove expected rows: ${missingIds.join(', ')}`
+    );
+  }
 }
 
 async function upsertSharedPostTombstones(
@@ -1187,7 +1241,7 @@ export async function deleteOwnedSharedPostsForNotes(
   user: AppUser,
   noteIds: string[]
 ): Promise<string[]> {
-  const dedupedNoteIds = Array.from(new Set(noteIds.filter((noteId) => noteId?.trim())));
+  const dedupedNoteIds = normalizeRemoteEntityIds(noteIds);
   if (dedupedNoteIds.length === 0) {
     return [];
   }
@@ -1212,27 +1266,42 @@ export async function deleteOwnedSharedPostsForNotes(
     return [];
   }
 
-  const postIds = rows.map((row) => row.id).filter(Boolean);
+  const postIds = normalizeRemoteEntityIds(rows.map((row) => row.id));
   const deletedAt = getNowIso();
-  const { error: deleteError } = await supabase
+  await Promise.all(
+    rows.map((row) =>
+      cleanupRemoteArtifacts(
+        SHARED_POST_MEDIA_BUCKET,
+        {
+          photoPath: row.photo_path ?? null,
+          pairedVideoPath: row.paired_video_path ?? null,
+        },
+        { strict: true }
+      )
+    )
+  );
+
+  const { data: deletedPosts, error: deleteError } = await supabase
     .from('shared_posts')
     .delete()
     .eq('author_user_id', user.id)
-    .in('id', postIds);
+    .in('id', postIds)
+    .select('id');
 
   if (deleteError) {
     throw deleteError;
   }
+  assertExpectedDeleteIds(
+    'shared post',
+    postIds,
+    collectDeletedIds(deletedPosts as { id?: string | null }[] | null | undefined, 'id')
+  );
 
   await upsertSharedPostTombstones(user.id, postIds, deletedAt);
 
   await Promise.all(
     rows.map(async (row) => {
       await clearRemoteStickerAssetRefs(user.id, 'shared_post', row.id);
-      return cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
-        photoPath: row.photo_path ?? null,
-        pairedVideoPath: row.paired_video_path ?? null,
-      });
     })
   );
 
@@ -1255,23 +1324,33 @@ export async function deleteSharedPost(
     throw fetchError;
   }
 
-  const { error } = await supabase
+  const expectedDeletedPostIds = existing ? [postId] : [];
+  await cleanupRemoteArtifacts(
+    SHARED_POST_MEDIA_BUCKET,
+    {
+      photoPath: (existing as { photo_path?: string | null } | null)?.photo_path ?? null,
+      pairedVideoPath:
+        (existing as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
+    },
+    { strict: true }
+  );
+
+  const { data: deletedPosts, error } = await supabase
     .from('shared_posts')
     .delete()
     .eq('id', postId)
-    .eq('author_user_id', user.id);
+    .eq('author_user_id', user.id)
+    .select('id');
 
   if (error) {
     throw error;
   }
+  assertExpectedDeleteIds(
+    'shared post',
+    expectedDeletedPostIds,
+    collectDeletedIds(deletedPosts as { id?: string | null }[] | null | undefined, 'id')
+  );
 
   await upsertSharedPostTombstones(user.id, [postId], getNowIso());
   await clearRemoteStickerAssetRefs(user.id, 'shared_post', postId);
-
-  await cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
-    photoPath: (existing as { photo_path?: string | null } | null)?.photo_path ?? null,
-    pairedVideoPath:
-      (existing as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
-  });
-
 }

@@ -37,6 +37,7 @@ interface SubscriptionContextValue {
   canImportFromLibrary: boolean;
   photoNoteLimit: number | null;
   remotePhotoNoteCount: number | null;
+  isRemotePhotoNoteCountReady: boolean;
   customerInfo: CustomerInfo | null;
   currentOffering: PurchasesOffering | null;
   availablePackages: PurchasesPackage[];
@@ -142,6 +143,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [currentOffering, setCurrentOffering] = useState<PurchasesOffering | null>(null);
   const [isPurchaseInFlight, setIsPurchaseInFlight] = useState(false);
   const [remotePhotoNoteCount, setRemotePhotoNoteCount] = useState<number | null>(null);
+  const [isRemotePhotoNoteCountReady, setIsRemotePhotoNoteCountReady] = useState(false);
   const [cachedSnapshot, setCachedSnapshot] = useState<SubscriptionSnapshot | null>(null);
   const isConfiguredRef = useRef(false);
   const isInitializedRef = useRef(false);
@@ -179,6 +181,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         setCachedSnapshot(parsed);
         if (parsed.remotePhotoNoteCount !== null) {
           setRemotePhotoNoteCount((current) => current ?? parsed.remotePhotoNoteCount);
+          setIsRemotePhotoNoteCountReady(true);
         }
       })
       .catch((error) => {
@@ -236,15 +239,21 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     }
 
     const supabase = getSupabase();
+    const cachedRemotePhotoNoteCount = cachedSnapshot?.remotePhotoNoteCount ?? null;
     if (!user || !supabase) {
-      setRemotePhotoNoteCount(cachedSnapshot?.remotePhotoNoteCount ?? null);
+      setRemotePhotoNoteCount(cachedRemotePhotoNoteCount);
+      setIsRemotePhotoNoteCountReady(true);
       return;
     }
 
+    setRemotePhotoNoteCount(cachedRemotePhotoNoteCount);
+
     if (!isOnline) {
-      setRemotePhotoNoteCount((current) => current ?? cachedSnapshot?.remotePhotoNoteCount ?? null);
+      setIsRemotePhotoNoteCountReady(cachedRemotePhotoNoteCount !== null);
       return;
     }
+
+    setIsRemotePhotoNoteCountReady(cachedRemotePhotoNoteCount !== null);
 
     let active = true;
     const channel = supabase
@@ -262,6 +271,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
             typeof payload.new === 'object' && payload.new && 'photo_note_count' in payload.new
               ? (payload.new as { photo_note_count?: unknown }).photo_note_count
               : null;
+          setIsRemotePhotoNoteCountReady(true);
           setRemotePhotoNoteCount(
             typeof nextCount === 'number' && Number.isFinite(nextCount) ? nextCount : null
           );
@@ -286,11 +296,15 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         }
 
         const nextCount = data?.photo_note_count;
+        setIsRemotePhotoNoteCountReady(true);
         setRemotePhotoNoteCount(
           typeof nextCount === 'number' && Number.isFinite(nextCount) ? nextCount : null
         );
       } catch (error: unknown) {
         console.warn('[subscription] Failed to load remote usage:', error);
+        if (active) {
+          setIsRemotePhotoNoteCountReady(cachedRemotePhotoNoteCount !== null);
+        }
       }
     })();
 
@@ -394,6 +408,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       canImportFromLibrary: tier === 'plus',
       photoNoteLimit: getPhotoNoteLimitForTier(tier),
       remotePhotoNoteCount: remotePhotoNoteCount ?? cachedSnapshot?.remotePhotoNoteCount ?? null,
+      isRemotePhotoNoteCountReady,
       customerInfo,
       currentOffering,
       availablePackages,
@@ -501,6 +516,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       monthlyPackage,
       purchasePackage,
       remotePhotoNoteCount,
+      isRemotePhotoNoteCountReady,
       selectedPackage,
       tier,
     ]

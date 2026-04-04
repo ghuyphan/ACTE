@@ -71,6 +71,7 @@ export interface SyncQueueItem {
 export interface SyncRepository {
   enqueue: (change: SyncChange) => Promise<void>;
   listPending: (limit?: number) => Promise<SyncQueueItem[]>;
+  listRecent: (limit?: number) => Promise<SyncQueueItem[]>;
   getStats: () => Promise<{
     pendingCount: number;
     failedCount: number;
@@ -1741,6 +1742,21 @@ const sqliteSyncRepository: SyncRepository = {
       failedCount: row?.failed_count ?? 0,
       blockedCount: row?.blocked_count ?? 0,
     };
+  },
+
+  async listRecent(limit = 5) {
+    const db = await getDB();
+    const scope = getActiveNotesScope();
+    const rows = await db.getAllAsync<QueueRow>(
+      `SELECT *
+       FROM sync_queue
+       WHERE owner_uid = ?
+       ORDER BY created_at DESC
+       LIMIT ?`,
+      scope,
+      limit
+    );
+    return rows.map(rowToQueueItem);
   },
 
   async markFailed(id, details) {

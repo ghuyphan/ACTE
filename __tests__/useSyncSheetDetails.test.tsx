@@ -12,13 +12,33 @@ const mockAuthState = {
 };
 
 const mockSyncState = {
+  blockedCount: 0,
+  failedCount: 0,
   isEnabled: true,
+  lastMessage: null as string | null,
+  pendingCount: 0,
+  recentQueueItems: [] as unknown[],
+  requestSync: jest.fn(),
   setSyncEnabled: jest.fn(),
+  status: 'idle' as 'idle' | 'syncing' | 'success' | 'error',
 };
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, fallback?: string) => fallback ?? _key,
+    t: (_key: string, fallback?: string, options?: Record<string, string | number>) => {
+      if (typeof fallback !== 'string') {
+        return _key;
+      }
+
+      if (!options) {
+        return fallback;
+      }
+
+      return Object.entries(options).reduce(
+        (message, [key, value]) => message.replace(`{{${key}}}`, String(value)),
+        fallback
+      );
+    },
   }),
 }));
 
@@ -34,8 +54,15 @@ describe('useSyncSheetDetails', () => {
   beforeEach(() => {
     mockAuthState.user = null;
     mockAuthState.isAuthAvailable = true;
+    mockSyncState.blockedCount = 0;
+    mockSyncState.failedCount = 0;
     mockSyncState.isEnabled = true;
+    mockSyncState.lastMessage = null;
+    mockSyncState.pendingCount = 0;
+    mockSyncState.recentQueueItems = [];
+    mockSyncState.requestSync.mockClear();
     mockSyncState.setSyncEnabled.mockClear();
+    mockSyncState.status = 'idle';
   });
 
   it('prefers the current sync hint when one is available', () => {
@@ -50,6 +77,8 @@ describe('useSyncSheetDetails', () => {
 
     expect(result.current.description).toBe('Last synced today');
     expect(result.current.statusLabel).toBe('On');
+    expect(result.current.queueSummary).toBeNull();
+    expect(result.current.showDiagnostics).toBe(false);
   });
 
   it('explains the local-only state when cloud sync is turned off', () => {

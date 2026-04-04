@@ -5,7 +5,17 @@ import { useSyncStatus } from './useSyncStatus';
 export function useSyncSheetDetails(accountHint: string | null) {
   const { t } = useTranslation();
   const { user, isAuthAvailable } = useAuth();
-  const { isEnabled, setSyncEnabled } = useSyncStatus();
+  const {
+    blockedCount,
+    failedCount,
+    isEnabled,
+    lastMessage,
+    pendingCount,
+    recentQueueItems,
+    requestSync,
+    setSyncEnabled,
+    status,
+  } = useSyncStatus();
   const canManageSync = Boolean(user && isAuthAvailable);
   const description =
     canManageSync
@@ -28,12 +38,40 @@ export function useSyncSheetDetails(accountHint: string | null) {
       : isAuthAvailable
         ? t('settings.notSignedIn', 'Not signed in')
         : t('settings.unavailableShort', 'Unavailable');
+  const hasQueueItems = pendingCount > 0 || failedCount > 0 || blockedCount > 0;
+  const queueSummary = hasQueueItems
+    ? t('settings.syncQueueSummary', 'Pending: {{pending}} · Retry: {{failed}} · Blocked: {{blocked}}', {
+        pending: pendingCount,
+        failed: failedCount,
+        blocked: blockedCount,
+      })
+    : null;
+  const canRequestSync = canManageSync && isEnabled;
+  const diagnosticsMessage =
+    status === 'error'
+      ? lastMessage ??
+        t(
+          'settings.autoSyncRetry',
+          'We could not sync right now. We will try again when the app is active.'
+        )
+      : null;
+  const showDiagnostics = Boolean(queueSummary || diagnosticsMessage || recentQueueItems.length > 0);
 
   return {
     canManageSync,
+    canRequestSync,
     description,
+    diagnosticsMessage,
     isEnabled,
+    pendingCount,
+    failedCount,
+    blockedCount,
+    recentQueueItems,
+    requestSync,
     setSyncEnabled,
+    queueSummary,
+    showDiagnostics,
+    status,
     statusLabel,
   };
 }

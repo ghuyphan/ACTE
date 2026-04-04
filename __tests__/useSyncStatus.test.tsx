@@ -65,6 +65,7 @@ jest.mock('../services/syncService', () => ({
       failedCount: 0,
       blockedCount: 0,
     }),
+    listRecent: async () => [],
   }),
 }));
 
