@@ -12,9 +12,12 @@ import {
 import {
   getSupabaseErrorMessage,
   isSupabaseNetworkError,
+  isSupabasePolicyError,
+  isSupabaseSchemaMismatchError,
   isSupabaseStorageObjectMissingError,
   requireSupabase,
 } from '../utils/supabase';
+import { NOTE_MEDIA_BUCKET } from './remoteMedia';
 
 export type StickerSource = 'import';
 export type StickerRenderMode = 'default' | 'stamp';
@@ -29,6 +32,9 @@ export interface StickerAsset {
   localUri: string;
   remotePath: string | null;
   uploadFingerprint?: string | null;
+  contentHash?: string | null;
+  remoteAssetId?: string | null;
+  storageBucket?: string | null;
   mimeType: string;
   width: number;
   height: number;
@@ -86,6 +92,7 @@ interface StickerAssetRow {
   local_uri: string;
   remote_path: string | null;
   upload_fingerprint: string | null;
+  content_hash: string | null;
   mime_type: string;
   width: number;
   height: number;
@@ -98,6 +105,26 @@ interface NoteStickerRow {
   note_id: string;
   placements_json: string;
   updated_at: string;
+}
+
+type RemoteStickerContainerType = 'note' | 'shared_post';
+
+interface RemoteStickerAssetRow {
+  id: string;
+  owner_user_id: string;
+  content_hash: string;
+  mime_type: string;
+  width: number;
+  height: number;
+  byte_size: number | null;
+  storage_bucket: string;
+  storage_path: string;
+  created_at: string;
+  last_seen_at: string;
+}
+
+interface RemoteStickerAssetRefRow {
+  asset_id: string;
 }
 
 export const STICKER_DIRECTORY = FileSystem.documentDirectory
@@ -323,6 +350,7 @@ function mapStickerAsset(row: StickerAssetRow): StickerAsset {
     localUri: row.local_uri,
     remotePath: row.remote_path ?? null,
     uploadFingerprint: row.upload_fingerprint ?? null,
+    contentHash: row.content_hash ?? null,
     mimeType: row.mime_type,
     width: row.width,
     height: row.height,
@@ -331,6 +359,165 @@ function mapStickerAsset(row: StickerAssetRow): StickerAsset {
     source: row.source,
     suggestedRenderMode: undefined,
   };
+}
+
+function isRemoteStickerRegistryUnavailableError(error: unknown) {
+  return isSupabaseSchemaMismatchError(error) || isSupabasePolicyError(error);
+}
+
+function getRemoteStickerAssetId(asset: StickerAsset) {
+  const remoteAssetId = typeof asset.remoteAssetId === 'string' ? asset.remoteAssetId.trim() : '';
+  return remoteAssetId || null;
+}
+
+function getStickerAssetStorageBucket(asset: StickerAsset, fallbackBucket: string) {
+  const storageBucket = typeof asset.storageBucket === 'string' ? asset.storageBucket.trim() : '';
+  return storageBucket || fallbackBucket;
+}
+
+function mapRemoteStickerAsset(asset: StickerAsset, row: RemoteStickerAssetRow): StickerAsset {
+  return {
+    ...asset,
+    remotePath: row.storage_path,
+    remoteAssetId: row.id,
+    storageBucket: row.storage_bucket,
+    contentHash: row.content_hash,
+  };
+}
+
+async function getRemoteStickerAssetRowByContentHash(
+  ownerUserId: string,
+  contentHash: string
+): Promise<RemoteStickerAssetRow | null> {
+  const { data, error } = await requireSupabase()
+    .from('sticker_assets')
+    .select(
+      'id, owner_user_id, content_hash, mime_type, width, height, byte_size, storage_bucket, storage_path, created_at, last_seen_at'
+    )
+    .eq('owner_user_id', ownerUserId)
+    .eq('content_hash', contentHash)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as RemoteStickerAssetRow | null) ?? null;
+}
+
+async function touchRemoteStickerAssetLastSeen(assetId: string) {
+  const normalizedAssetId = typeof assetId === 'string' ? assetId.trim() : '';
+  if (!normalizedAssetId) {
+    return;
+  }
+
+  const { error } = await requireSupabase()
+    .from('sticker_assets')
+    .update({ last_seen_at: new Date().toISOString() })
+    .eq('id', normalizedAssetId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function registerRemoteStickerAsset(
+  ownerUserId: string,
+  asset: StickerAsset
+): Promise<StickerAsset | null> {
+  const localUri = typeof asset.localUri === 'string' ? asset.localUri.trim() : '';
+  if (!localUri) {
+    return null;
+  }
+
+  try {
+    const uploadFingerprint = asset.uploadFingerprint ?? (await getStickerUploadFingerprint(localUri));
+    const base64Data = await FileSystem.readAsStringAsync(localUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const contentHash = asset.contentHash ?? (await hashStickerBase64(base64Data));
+    if (!contentHash) {
+      return null;
+    }
+
+    const existingRow = await getRemoteStickerAssetRowByContentHash(ownerUserId, contentHash);
+    if (existingRow) {
+      await touchRemoteStickerAssetLastSeen(existingRow.id);
+      return {
+        ...mapRemoteStickerAsset(asset, existingRow),
+        uploadFingerprint,
+      };
+    }
+
+    const storagePath = `${ownerUserId}/${NOTE_STICKER_MEDIA_PREFIX}/${contentHash}.${getStickerFileExtension(asset.mimeType)}`;
+    await uploadStickerBytesWithRetry(
+      NOTE_MEDIA_BUCKET,
+      storagePath,
+      decode(base64Data),
+      asset.mimeType,
+      true
+    );
+
+    const byteSize = decode(base64Data).byteLength;
+    const now = new Date().toISOString();
+    const { error: insertError } = await requireSupabase().from('sticker_assets').insert({
+      owner_user_id: ownerUserId,
+      content_hash: contentHash,
+      mime_type: asset.mimeType,
+      width: Math.round(asset.width),
+      height: Math.round(asset.height),
+      byte_size: byteSize,
+      storage_bucket: NOTE_MEDIA_BUCKET,
+      storage_path: storagePath,
+      last_seen_at: now,
+    });
+
+    if (insertError && !isRemoteStickerRegistryUnavailableError(insertError)) {
+      const concurrentRow = await getRemoteStickerAssetRowByContentHash(ownerUserId, contentHash);
+      if (!concurrentRow) {
+        throw insertError;
+      }
+
+      await touchRemoteStickerAssetLastSeen(concurrentRow.id);
+      return {
+        ...mapRemoteStickerAsset(asset, concurrentRow),
+        uploadFingerprint,
+      };
+    }
+
+    if (insertError) {
+      throw insertError;
+    }
+
+    const insertedRow = await getRemoteStickerAssetRowByContentHash(ownerUserId, contentHash);
+    if (!insertedRow) {
+      throw new Error('Sticker asset registration finished without returning a server asset row.');
+    }
+
+    return {
+      ...mapRemoteStickerAsset(asset, insertedRow),
+      uploadFingerprint,
+    };
+  } catch (error) {
+    if (isRemoteStickerRegistryUnavailableError(error)) {
+      console.warn('[stickers] Remote sticker registry unavailable, falling back to legacy uploads:', error);
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function getRemoteStickerAssetIdsFromPlacementsJson(
+  placementsJson: string | null | undefined
+) {
+  return Array.from(
+    new Set(
+      parseNoteStickerPlacements(placementsJson)
+        .map((placement) => getRemoteStickerAssetId(placement.asset))
+        .filter((value): value is string => Boolean(value))
+    )
+  );
 }
 
 function getImageSize(uri: string) {
@@ -359,16 +546,60 @@ async function getStickerFileInfo(uri: string) {
 }
 
 async function getStickerUploadFingerprint(uri: string) {
+  const info = await FileSystem.getInfoAsync(uri, { md5: true });
+  if (!info.exists || info.isDirectory) {
+    return null;
+  }
+
+  if (typeof info.md5 === 'string' && info.md5.trim()) {
+    return `md5:${info.md5.trim()}`;
+  }
+
+  const base64Data = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  return hashStickerBase64(base64Data);
+}
+
+async function hashStickerBase64(base64Data: string) {
+  const normalizedBase64 = base64Data.trim();
+  if (!normalizedBase64) {
+    return null;
+  }
+
+  return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, normalizedBase64);
+}
+
+async function getStickerContentHash(uri: string) {
   const info = await FileSystem.getInfoAsync(uri);
   if (!info.exists || info.isDirectory) {
     return null;
   }
 
-  return [
-    uri.trim(),
-    typeof info.size === 'number' ? info.size : 'na',
-    typeof info.modificationTime === 'number' ? info.modificationTime : 'na',
-  ].join(':');
+  const base64Data = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  return hashStickerBase64(base64Data);
+}
+
+async function getStickerAssetByContentHash(
+  ownerUid: string,
+  contentHash: string
+): Promise<StickerAsset | null> {
+  const database = await getDB();
+  const row = await database.getFirstAsync<StickerAssetRow>(
+    `SELECT id, owner_uid, local_uri, remote_path, upload_fingerprint, content_hash, mime_type, width, height, created_at, updated_at, source
+     FROM sticker_assets
+     WHERE owner_uid = ? AND content_hash = ?
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    ownerUid,
+    contentHash
+  );
+
+  return row ? mapStickerAsset(row) : null;
 }
 
 function needsStickerOptimization(
@@ -786,7 +1017,7 @@ export async function getStickerAssets(): Promise<StickerAsset[]> {
   const database = await getDB();
   const ownerUid = getActiveNotesScope();
   const rows = await database.getAllAsync<StickerAssetRow>(
-    `SELECT id, owner_uid, local_uri, remote_path, upload_fingerprint, mime_type, width, height, created_at, updated_at, source
+    `SELECT id, owner_uid, local_uri, remote_path, upload_fingerprint, content_hash, mime_type, width, height, created_at, updated_at, source
      FROM sticker_assets
      WHERE owner_uid = ?
      ORDER BY created_at DESC`,
@@ -799,7 +1030,7 @@ export async function getStickerAssets(): Promise<StickerAsset[]> {
 export async function getStickerAssetById(assetId: string): Promise<StickerAsset | null> {
   const database = await getDB();
   const row = await database.getFirstAsync<StickerAssetRow>(
-    `SELECT id, owner_uid, local_uri, remote_path, upload_fingerprint, mime_type, width, height, created_at, updated_at, source
+    `SELECT id, owner_uid, local_uri, remote_path, upload_fingerprint, content_hash, mime_type, width, height, created_at, updated_at, source
      FROM sticker_assets
      WHERE id = ?`,
     assetId
@@ -817,6 +1048,7 @@ export async function upsertStickerAsset(asset: StickerAsset, txn?: SQLiteTransa
       local_uri,
       remote_path,
       upload_fingerprint,
+      content_hash,
       mime_type,
       width,
       height,
@@ -824,12 +1056,13 @@ export async function upsertStickerAsset(asset: StickerAsset, txn?: SQLiteTransa
       updated_at,
       source
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       owner_uid = excluded.owner_uid,
       local_uri = excluded.local_uri,
       remote_path = excluded.remote_path,
       upload_fingerprint = excluded.upload_fingerprint,
+      content_hash = excluded.content_hash,
       mime_type = excluded.mime_type,
       width = excluded.width,
       height = excluded.height,
@@ -840,6 +1073,7 @@ export async function upsertStickerAsset(asset: StickerAsset, txn?: SQLiteTransa
     asset.localUri,
     asset.remotePath ?? null,
     asset.uploadFingerprint ?? null,
+    asset.contentHash ?? null,
     asset.mimeType,
     asset.width,
     asset.height,
@@ -861,11 +1095,40 @@ export async function importStickerAsset(
   const mimeType = normalizeMimeType(source.mimeType) || getMimeTypeFromName(source.name);
   const validation = await validateStickerFile(sourceUri, mimeType, options);
   const preparedSticker = await optimizeStickerForImport(sourceUri, mimeType);
+  const ownerUid = getActiveNotesScope();
 
   try {
     const directory = await ensureStickerDirectory();
     if (!directory) {
       throw new Error('Sticker storage is unavailable on this device.');
+    }
+
+    const contentHash = await getStickerContentHash(preparedSticker.uri);
+    if (contentHash) {
+      const existingAsset = await getStickerAssetByContentHash(ownerUid, contentHash);
+      if (existingAsset) {
+        const existingInfo = await FileSystem.getInfoAsync(existingAsset.localUri).catch(() => null);
+        if (existingInfo?.exists && !existingInfo.isDirectory) {
+          return {
+            ...existingAsset,
+            suggestedRenderMode: validation.suggestedRenderMode,
+          };
+        }
+
+        await FileSystem.copyAsync({ from: preparedSticker.uri, to: existingAsset.localUri });
+        const nextAsset = {
+          ...existingAsset,
+          uploadFingerprint: await getStickerUploadFingerprint(existingAsset.localUri),
+          contentHash,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await upsertStickerAsset(nextAsset);
+        return {
+          ...nextAsset,
+          suggestedRenderMode: validation.suggestedRenderMode,
+        };
+      }
     }
 
     const assetId = generateStickerAssetId();
@@ -878,10 +1141,11 @@ export async function importStickerAsset(
     const now = new Date().toISOString();
     const asset: StickerAsset = {
       id: assetId,
-      ownerUid: getActiveNotesScope(),
+      ownerUid,
       localUri: destinationPath,
       remotePath: null,
-      uploadFingerprint: null,
+      uploadFingerprint: await getStickerUploadFingerprint(destinationPath),
+      contentHash,
       mimeType: preparedSticker.mimeType,
       width,
       height,
@@ -945,19 +1209,37 @@ export async function uploadStickerAssetToStorage(
     asset.remotePath?.trim() || `${ownerUid}/${NOTE_STICKER_MEDIA_PREFIX}/${asset.id}.${getStickerFileExtension(asset.mimeType)}`;
   const uploadFingerprint = await getStickerUploadFingerprint(localUri);
 
-  if (asset.remotePath === remotePath && asset.uploadFingerprint && asset.uploadFingerprint === uploadFingerprint) {
+  if (
+    asset.remotePath === remotePath &&
+    asset.contentHash &&
+    asset.uploadFingerprint &&
+    asset.uploadFingerprint === uploadFingerprint
+  ) {
     return asset;
   }
 
   const base64 = await FileSystem.readAsStringAsync(localUri, {
     encoding: FileSystem.EncodingType.Base64,
   });
+  const contentHash = asset.contentHash ?? (await hashStickerBase64(base64));
+
+  if (asset.remotePath === remotePath && asset.contentHash && asset.contentHash === contentHash) {
+    const nextAsset = {
+      ...asset,
+      uploadFingerprint,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await upsertStickerAsset(nextAsset);
+    return nextAsset;
+  }
 
   await uploadStickerBytesWithRetry(bucket, remotePath, decode(base64), asset.mimeType, true);
   const nextAsset = {
     ...asset,
     remotePath,
     uploadFingerprint,
+    contentHash,
     updatedAt: new Date().toISOString(),
   };
 
@@ -1029,7 +1311,7 @@ export async function hydrateStickerPlacements(
 
       try {
         const localUri = await downloadStickerAssetFromStorage(
-          bucket,
+          getStickerAssetStorageBucket(placement.asset, bucket),
           placement.asset.remotePath,
           placement.asset.id,
           placement.asset.mimeType,
@@ -1061,17 +1343,32 @@ export async function serializeStickerPlacementsForStorage(
   options: {
     persistAssets?: boolean;
     existingRemoteAssetPathsById?: Readonly<Record<string, string>>;
+    serverOwnerUid?: string;
   } = {}
 ) {
   const assetsById = new Map<string, StickerAsset>();
   const existingRemoteAssetPathsById = options.existingRemoteAssetPathsById ?? {};
+  const serverOwnerUid = typeof options.serverOwnerUid === 'string' ? options.serverOwnerUid.trim() : '';
 
-  if (options.persistAssets === false) {
-    for (const placement of placements) {
-      if (assetsById.has(placement.asset.id)) {
-        continue;
+  for (const placement of placements) {
+    if (assetsById.has(placement.asset.id)) {
+      continue;
+    }
+
+    const remoteServerAsset =
+      serverOwnerUid || options.persistAssets !== false
+        ? await registerRemoteStickerAsset(serverOwnerUid || ownerUid, placement.asset)
+        : null;
+
+    if (remoteServerAsset) {
+      if (options.persistAssets !== false) {
+        await upsertStickerAsset(remoteServerAsset);
       }
+      assetsById.set(placement.asset.id, remoteServerAsset);
+      continue;
+    }
 
+    if (options.persistAssets === false) {
       const remotePath =
         existingRemoteAssetPathsById[placement.asset.id] ??
         `${ownerUid}/${NOTE_STICKER_MEDIA_PREFIX}/${placement.asset.id}.${getStickerFileExtension(placement.asset.mimeType)}`;
@@ -1084,15 +1381,16 @@ export async function serializeStickerPlacementsForStorage(
       assetsById.set(placement.asset.id, {
         ...placement.asset,
         remotePath,
+        storageBucket: bucket,
       });
+      continue;
     }
-  } else {
-    for (const placement of placements) {
-      if (!assetsById.has(placement.asset.id)) {
-        const uploadedAsset = await uploadStickerAssetToStorage(bucket, ownerUid, placement.asset);
-        assetsById.set(uploadedAsset.id, uploadedAsset);
-      }
-    }
+
+    const uploadedAsset = await uploadStickerAssetToStorage(bucket, ownerUid, placement.asset);
+    assetsById.set(placement.asset.id, {
+      ...uploadedAsset,
+      storageBucket: bucket,
+    });
   }
 
   const serializedPlacements = placements
@@ -1113,6 +1411,113 @@ export async function serializeStickerPlacementsForStorage(
     });
 
   return JSON.stringify(serializedPlacements);
+}
+
+export async function reconcileRemoteStickerAssetRefs(
+  ownerUserId: string,
+  containerType: RemoteStickerContainerType,
+  containerId: string,
+  placementsJson: string | null | undefined
+) {
+  const normalizedOwnerUserId = typeof ownerUserId === 'string' ? ownerUserId.trim() : '';
+  const normalizedContainerId = typeof containerId === 'string' ? containerId.trim() : '';
+  if (!normalizedOwnerUserId || !normalizedContainerId) {
+    return;
+  }
+
+  try {
+    const nextAssetIds = getRemoteStickerAssetIdsFromPlacementsJson(placementsJson);
+    const { data, error } = await requireSupabase()
+      .from('sticker_asset_refs')
+      .select('asset_id')
+      .eq('owner_user_id', normalizedOwnerUserId)
+      .eq('container_type', containerType)
+      .eq('container_id', normalizedContainerId);
+
+    if (error) {
+      throw error;
+    }
+
+    const existingAssetIds = new Set(
+      ((data ?? []) as RemoteStickerAssetRefRow[])
+        .map((row) => (typeof row.asset_id === 'string' ? row.asset_id.trim() : ''))
+        .filter(Boolean)
+    );
+    const nextAssetIdSet = new Set(nextAssetIds);
+    const assetIdsToDelete = Array.from(existingAssetIds).filter((assetId) => !nextAssetIdSet.has(assetId));
+    const assetIdsToInsert = nextAssetIds.filter((assetId) => !existingAssetIds.has(assetId));
+
+    if (assetIdsToDelete.length > 0) {
+      const { error: deleteError } = await requireSupabase()
+        .from('sticker_asset_refs')
+        .delete()
+        .eq('owner_user_id', normalizedOwnerUserId)
+        .eq('container_type', containerType)
+        .eq('container_id', normalizedContainerId)
+        .in('asset_id', assetIdsToDelete);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+    }
+
+    if (assetIdsToInsert.length > 0) {
+      const { error: upsertError } = await requireSupabase().from('sticker_asset_refs').upsert(
+        assetIdsToInsert.map((assetId) => ({
+          asset_id: assetId,
+          owner_user_id: normalizedOwnerUserId,
+          container_type: containerType,
+          container_id: normalizedContainerId,
+        })),
+        {
+          onConflict: 'container_type,container_id,asset_id',
+        }
+      );
+
+      if (upsertError) {
+        throw upsertError;
+      }
+    }
+  } catch (error) {
+    if (isRemoteStickerRegistryUnavailableError(error)) {
+      console.warn('[stickers] Remote sticker refs unavailable, skipping ref reconciliation:', error);
+      return;
+    }
+
+    throw error;
+  }
+}
+
+export async function clearRemoteStickerAssetRefs(
+  ownerUserId: string,
+  containerType: RemoteStickerContainerType,
+  containerId: string
+) {
+  const normalizedOwnerUserId = typeof ownerUserId === 'string' ? ownerUserId.trim() : '';
+  const normalizedContainerId = typeof containerId === 'string' ? containerId.trim() : '';
+  if (!normalizedOwnerUserId || !normalizedContainerId) {
+    return;
+  }
+
+  try {
+    const { error } = await requireSupabase()
+      .from('sticker_asset_refs')
+      .delete()
+      .eq('owner_user_id', normalizedOwnerUserId)
+      .eq('container_type', containerType)
+      .eq('container_id', normalizedContainerId);
+
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    if (isRemoteStickerRegistryUnavailableError(error)) {
+      console.warn('[stickers] Remote sticker refs unavailable, skipping ref cleanup:', error);
+      return;
+    }
+
+    throw error;
+  }
 }
 
 export async function syncStickerAssetsFromPlacements(

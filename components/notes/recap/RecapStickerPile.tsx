@@ -69,19 +69,24 @@ const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
 const PREFER_CONTINUOUS_OUTLINE = Platform.OS === 'android';
 
 function getDensePilePositions(count: number): PilePosition[] {
-  const rows = Math.min(5, Math.max(2, Math.ceil(count / 6)));
+  const rows =
+    count >= 72 ? 7 : count >= 48 ? 6 : Math.min(5, Math.max(2, Math.ceil(count / 6)));
   const baseColumns = Math.ceil(count / rows);
   const rowCounts = Array.from({ length: rows }, (_, rowIndex) =>
     Math.floor(count / rows) + (rowIndex < count % rows ? 1 : 0)
   );
-  const topY = rows >= 5 ? 76 : rows === 4 ? 80 : 84;
-  const bottomY = rows >= 5 ? 148 : rows === 4 ? 144 : 138;
-  const rowBaseSize = clamp(66 - Math.max(baseColumns - 4, 0) * 5 - Math.max(rows - 2, 0) * 4, 24, 54);
+  const topY = rows >= 7 ? 66 : rows === 6 ? 70 : rows >= 5 ? 76 : rows === 4 ? 80 : 84;
+  const bottomY = rows >= 7 ? 154 : rows === 6 ? 150 : rows >= 5 ? 148 : rows === 4 ? 144 : 138;
+  const rowBaseSize = clamp(
+    66 - Math.max(baseColumns - 4, 0) * 5 - Math.max(rows - 2, 0) * 4,
+    rows >= 6 ? 18 : 24,
+    54
+  );
 
   return rowCounts.flatMap((rowCount, rowIndex) => {
     const rowRatio = rows <= 1 ? 0.5 : rowIndex / (rows - 1);
     const yBase = topY + (bottomY - topY) * rowRatio;
-    const rowInset = rowIndex % 2 === 0 ? 0.1 : 0.14;
+    const rowInset = rows >= 6 ? (rowIndex % 2 === 0 ? 0.06 : 0.1) : rowIndex % 2 === 0 ? 0.1 : 0.14;
     const left = rowInset;
     const right = 1 - rowInset;
     const step = rowCount <= 1 ? 0 : (right - left) / (rowCount - 1);
@@ -99,14 +104,19 @@ function getDensePilePositions(count: number): PilePosition[] {
             : 0;
       const size = clamp(
         rowBaseSize + centerBias - rowIndex * 1.5 + (wave > 0 ? 1 : -1),
-        24,
+        rows >= 6 ? 16 : 24,
         58
       );
-      const rotate = clamp(wave * (rows >= 4 ? 5 : 7) + (columnIndex - (rowCount - 1) / 2) * 1.2, -10, 10);
+      const rotate = clamp(
+        wave * (rows >= 6 ? 3.5 : rows >= 4 ? 5 : 7) +
+          (columnIndex - (rowCount - 1) / 2) * (rows >= 6 ? 0.8 : 1.2),
+        -10,
+        10
+      );
 
       return {
         x,
-        y: yBase + wave * (rows >= 4 ? 3 : 5),
+        y: yBase + wave * (rows >= 6 ? 2 : rows >= 4 ? 3 : 5),
         size,
         rotate,
       };
@@ -270,7 +280,23 @@ function getPileCountScale(count: number) {
     return 0.58;
   }
 
-  return 0.52;
+  if (count <= 36) {
+    return 0.5;
+  }
+
+  if (count <= 48) {
+    return 0.44;
+  }
+
+  if (count <= 64) {
+    return 0.38;
+  }
+
+  if (count <= 80) {
+    return 0.34;
+  }
+
+  return 0.3;
 }
 
 function getPileMinimumVisualSize(count: number, item: RecapStickerPileItem) {
@@ -294,7 +320,23 @@ function getPileMinimumVisualSize(count: number, item: RecapStickerPileItem) {
     return item.kind === 'sticker' ? 38 : 34;
   }
 
-  return item.kind === 'sticker' ? 30 : 28;
+  if (count <= 24) {
+    return item.kind === 'sticker' ? 30 : 28;
+  }
+
+  if (count <= 36) {
+    return item.kind === 'sticker' ? 24 : 22;
+  }
+
+  if (count <= 48) {
+    return item.kind === 'sticker' ? 20 : 18;
+  }
+
+  if (count <= 64) {
+    return item.kind === 'sticker' ? 18 : 16;
+  }
+
+  return item.kind === 'sticker' ? 16 : 14;
 }
 
 function getAdjustedPileSize(

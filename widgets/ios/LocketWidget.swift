@@ -2,6 +2,18 @@ import WidgetKit
 import SwiftUI
 import UIKit
 
+private func widgetLocalized(_ key: String, fallback: String) -> String {
+    NSLocalizedString(key, tableName: nil, bundle: .main, value: fallback, comment: "")
+}
+
+private func widgetLocalizedCount(_ singularKey: String, pluralKey: String, count: Int) -> String {
+    let format = widgetLocalized(
+        count == 1 ? singularKey : pluralKey,
+        fallback: count == 1 ? "%d item" : "%d items"
+    )
+    return String.localizedStringWithFormat(format, count)
+}
+
 private struct LocketWidgetPayload {
     let noteType: String
     let text: String
@@ -56,18 +68,18 @@ private struct LocketWidgetPayload {
         hasStickers: false,
         stickerPlacementsJson: nil,
         isIdleState: true,
-        idleText: "The right note will appear when you're nearby.",
+        idleText: widgetLocalized("widget.idleText", fallback: "The right note will appear when you're nearby."),
         savedCountText: "",
         nearbyPlacesLabelText: "",
-        memoryReminderText: "A quiet reminder from here.",
-        accessorySaveMemoryText: "Save a memory",
-        accessoryAddFirstPlaceText: "Add your first place",
-        accessoryMemoryNearbyText: "Memory nearby",
-        accessoryOpenAppText: "Open Noto",
-        accessoryAddLabelText: "Add",
-        accessorySavedLabelText: "Saved",
-        accessoryNearLabelText: "Near",
-        livePhotoBadgeText: "Live",
+        memoryReminderText: widgetLocalized("widget.memoryReminder", fallback: "A quiet reminder from here."),
+        accessorySaveMemoryText: widgetLocalized("widget.accessorySaveMemory", fallback: "Save a memory"),
+        accessoryAddFirstPlaceText: widgetLocalized("widget.accessoryAddFirstPlace", fallback: "Add your first place"),
+        accessoryMemoryNearbyText: widgetLocalized("widget.accessoryMemoryNearby", fallback: "Memory nearby"),
+        accessoryOpenAppText: widgetLocalized("widget.accessoryOpenApp", fallback: "Open Noto"),
+        accessoryAddLabelText: widgetLocalized("widget.accessoryAddLabel", fallback: "Add"),
+        accessorySavedLabelText: widgetLocalized("widget.accessorySavedLabel", fallback: "Saved"),
+        accessoryNearLabelText: widgetLocalized("widget.accessoryNearLabel", fallback: "Near"),
+        livePhotoBadgeText: widgetLocalized("widget.livePhotoBadge", fallback: "Live"),
         isSharedContent: false,
         authorDisplayName: "",
         authorInitials: "",
@@ -662,7 +674,7 @@ private struct LocketWidgetEntryView: View {
             if !payload.idleText.isEmpty {
                 return payload.idleText
             }
-            return "The right note will appear when you're nearby."
+            return widgetLocalized("widget.idleText", fallback: "The right note will appear when you're nearby.")
         }
 
         if !payload.text.isEmpty {
@@ -677,7 +689,7 @@ private struct LocketWidgetEntryView: View {
             return payload.memoryReminderText
         }
 
-        return "A quiet reminder from here."
+        return widgetLocalized("widget.memoryReminder", fallback: "A quiet reminder from here.")
     }
 
     private var shouldHidePhotoBodyText: Bool {
@@ -708,8 +720,11 @@ private struct LocketWidgetEntryView: View {
         if !payload.savedCountText.isEmpty {
             return payload.savedCountText
         }
-        let noteLabel = payload.noteCount == 1 ? "note" : "notes"
-        return "\(payload.noteCount) \(noteLabel)"
+        return widgetLocalizedCount(
+            "widget.countBadgeFallbackOne",
+            pluralKey: "widget.countBadgeFallbackOther",
+            count: payload.noteCount
+        )
     }
 
     private var resolvedImage: UIImage? {
@@ -823,7 +838,11 @@ private struct LocketWidgetEntryView: View {
         }
 
         let count = max(payload.nearbyPlacesCount, payload.isIdleState ? 0 : 1)
-        return count == 1 ? "1 place nearby" : "\(count) places nearby"
+        return widgetLocalizedCount(
+            "widget.nearbyPlaceFallbackOne",
+            pluralKey: "widget.nearbyPlaceFallbackOther",
+            count: count
+        )
     }
 
     private var accessorySymbolName: String {
@@ -838,7 +857,9 @@ private struct LocketWidgetEntryView: View {
         let locationLabel = compactLocationName
 
         if payload.noteCount <= 0 {
-            return payload.accessorySaveMemoryText.isEmpty ? "Save a memory" : payload.accessorySaveMemoryText
+            return payload.accessorySaveMemoryText.isEmpty
+                ? widgetLocalized("widget.accessorySaveMemory", fallback: "Save a memory")
+                : payload.accessorySaveMemoryText
         }
 
         if !locationLabel.isEmpty {
@@ -849,16 +870,22 @@ private struct LocketWidgetEntryView: View {
             return countLabel
         }
 
-        return payload.accessoryMemoryNearbyText.isEmpty ? "Memory nearby" : payload.accessoryMemoryNearbyText
+        return payload.accessoryMemoryNearbyText.isEmpty
+            ? widgetLocalized("widget.accessoryMemoryNearby", fallback: "Memory nearby")
+            : payload.accessoryMemoryNearbyText
     }
 
     private var accessoryNearLabel: String {
-        payload.accessoryNearLabelText.isEmpty ? "Near" : payload.accessoryNearLabelText
+        payload.accessoryNearLabelText.isEmpty
+            ? widgetLocalized("widget.accessoryNearLabel", fallback: "Near")
+            : payload.accessoryNearLabelText
     }
 
     private var accessorySubtitle: String {
         if payload.noteCount <= 0 {
-            return payload.accessoryAddFirstPlaceText.isEmpty ? "Add your first place" : payload.accessoryAddFirstPlaceText
+            return payload.accessoryAddFirstPlaceText.isEmpty
+                ? widgetLocalized("widget.accessoryAddFirstPlace", fallback: "Add your first place")
+                : payload.accessoryAddFirstPlaceText
         }
 
         if !accessoryNoteExcerpt.isEmpty {
@@ -866,7 +893,9 @@ private struct LocketWidgetEntryView: View {
         }
 
         if payload.isIdleState {
-            return payload.accessoryOpenAppText.isEmpty ? "Open Noto" : payload.accessoryOpenAppText
+            return payload.accessoryOpenAppText.isEmpty
+                ? widgetLocalized("widget.accessoryOpenApp", fallback: "Open Noto")
+                : payload.accessoryOpenAppText
         }
 
         return nearbyPlacesLabel
@@ -874,7 +903,9 @@ private struct LocketWidgetEntryView: View {
 
     private var accessoryInlineText: String {
         if payload.noteCount <= 0 {
-            return payload.accessorySaveMemoryText.isEmpty ? "Save a memory" : payload.accessorySaveMemoryText
+            return payload.accessorySaveMemoryText.isEmpty
+                ? widgetLocalized("widget.accessorySaveMemory", fallback: "Save a memory")
+                : payload.accessorySaveMemoryText
         }
 
         if payload.isIdleState {
@@ -886,7 +917,9 @@ private struct LocketWidgetEntryView: View {
             return "\(accessoryNearLabel) \(locationLabel)"
         }
 
-        return payload.accessoryMemoryNearbyText.isEmpty ? "Memory nearby" : payload.accessoryMemoryNearbyText
+        return payload.accessoryMemoryNearbyText.isEmpty
+            ? widgetLocalized("widget.accessoryMemoryNearby", fallback: "Memory nearby")
+            : payload.accessoryMemoryNearbyText
     }
 
     private var accessoryInlineFallbackText: String {
@@ -907,11 +940,15 @@ private struct LocketWidgetEntryView: View {
 
     private var accessoryCircularCaption: String {
         if payload.noteCount <= 0 {
-            return payload.accessoryAddLabelText.isEmpty ? "Add" : payload.accessoryAddLabelText
+            return payload.accessoryAddLabelText.isEmpty
+                ? widgetLocalized("widget.accessoryAddLabel", fallback: "Add")
+                : payload.accessoryAddLabelText
         }
 
         if payload.isIdleState {
-            return payload.accessorySavedLabelText.isEmpty ? "Saved" : payload.accessorySavedLabelText
+            return payload.accessorySavedLabelText.isEmpty
+                ? widgetLocalized("widget.accessorySavedLabel", fallback: "Saved")
+                : payload.accessorySavedLabelText
         }
 
         return accessoryNearLabel
@@ -1517,7 +1554,9 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var livePhotoBadgeLabel: String {
-        payload.livePhotoBadgeText.isEmpty ? "Live" : payload.livePhotoBadgeText
+        payload.livePhotoBadgeText.isEmpty
+            ? widgetLocalized("widget.livePhotoBadge", fallback: "Live")
+            : payload.livePhotoBadgeText
     }
 
     private var livePhotoBadge: some View {
@@ -1567,8 +1606,8 @@ struct LocketWidget: Widget {
         StaticConfiguration(kind: name, provider: LocketWidgetTimelineProvider()) { entry in
             LocketWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Nearby reminders")
-        .description("See the right note when you return somewhere familiar.")
+        .configurationDisplayName(widgetLocalized("widget.configTitle", fallback: "Nearby reminders"))
+        .description(widgetLocalized("widget.configDescription", fallback: "See the right note when you return somewhere familiar."))
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryInline, .accessoryCircular, .accessoryRectangular])
     }
 }

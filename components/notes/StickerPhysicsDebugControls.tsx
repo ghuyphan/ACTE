@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
 
@@ -16,18 +17,18 @@ export const DEFAULT_DEBUG_TILT_STATE: DebugTiltState = {
 
 const DEBUG_TILT_PRESETS: {
   id: string;
-  label: string;
+  labelKey: string;
   x: number;
   y: number;
   enabled: boolean;
 }[] = [
-  { id: 'sensor', label: 'Sensor', x: 0, y: 0, enabled: false },
-  { id: 'left', label: 'Left', x: -0.92, y: 0, enabled: true },
-  { id: 'right', label: 'Right', x: 0.92, y: 0, enabled: true },
-  { id: 'up', label: 'Up', x: 0, y: -0.92, enabled: true },
-  { id: 'down', label: 'Down', x: 0, y: 0.92, enabled: true },
-  { id: 'drift', label: 'Drift', x: 0.98, y: 0.82, enabled: true },
-  { id: 'flat', label: 'Flat', x: 0, y: 0, enabled: true },
+  { id: 'sensor', labelKey: 'debug.tilt.sensor', x: 0, y: 0, enabled: false },
+  { id: 'left', labelKey: 'debug.tilt.left', x: -0.92, y: 0, enabled: true },
+  { id: 'right', labelKey: 'debug.tilt.right', x: 0.92, y: 0, enabled: true },
+  { id: 'up', labelKey: 'debug.tilt.up', x: 0, y: -0.92, enabled: true },
+  { id: 'down', labelKey: 'debug.tilt.down', x: 0, y: 0.92, enabled: true },
+  { id: 'drift', labelKey: 'debug.tilt.drift', x: 0.98, y: 0.82, enabled: true },
+  { id: 'flat', labelKey: 'debug.tilt.flat', x: 0, y: 0, enabled: true },
 ];
 
 interface StickerPhysicsDebugControlsProps {
@@ -41,6 +42,7 @@ export default function StickerPhysicsDebugControls({
   visible,
   style,
 }: StickerPhysicsDebugControlsProps) {
+  const { t } = useTranslation();
   const [activePresetId, setActivePresetId] = useState('sensor');
 
   useEffect(() => {
@@ -58,7 +60,7 @@ export default function StickerPhysicsDebugControls({
 
   return (
     <View style={[styles.panel, style]}>
-      <Text style={styles.title}>Sim Tilt</Text>
+      <Text style={styles.title}>{t('debug.tilt.title', 'Sim Tilt')}</Text>
       <View style={styles.buttonGrid}>
         {DEBUG_TILT_PRESETS.map((preset) => {
           const selected = activePresetId === preset.id;
@@ -77,7 +79,7 @@ export default function StickerPhysicsDebugControls({
               style={[styles.button, selected ? styles.buttonActive : null]}
             >
               <Text style={[styles.buttonLabel, selected ? styles.buttonLabelActive : null]}>
-                {preset.label}
+                {t(preset.labelKey)}
               </Text>
             </Pressable>
           );

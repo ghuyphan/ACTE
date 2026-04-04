@@ -848,6 +848,40 @@ describe('widgetService', () => {
     expect(entries[0]?.props.props.locationName).toBe('Fallback Place');
   });
 
+  it('falls back to the next eligible note when a selected photo cannot be rendered for the widget', async () => {
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'favorite-photo',
+        type: 'photo',
+        content: 'file:///mock-documents/photos/latest.jpg',
+        isFavorite: true,
+        locationName: 'Photo Place',
+        createdAt: '2026-03-10T10:00:00.000Z',
+      }),
+      buildNote({
+        id: 'text-fallback',
+        content: 'Readable text fallback',
+        locationName: 'Fallback Place',
+        createdAt: '2026-03-09T10:00:00.000Z',
+      }),
+    ]);
+    mockCopyAsync.mockRejectedValue(new Error('copy failed'));
+    mockReadAsStringAsync.mockRejectedValue(new Error('read failed'));
+
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
+
+    const entries = getLastTimelineEntries();
+
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        noteType: 'text',
+        text: 'Readable text fallback',
+        locationName: 'Fallback Place',
+        primaryActionUrl: 'noto:///widget/note/text-fallback',
+      })
+    );
+  });
+
   it('includes doodle metadata for selected text notes', async () => {
     mockGetAllNotes.mockResolvedValue([
       buildNote({

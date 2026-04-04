@@ -1,44 +1,123 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { Keyboard, Platform, type KeyboardEvent } from 'react-native';
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Keyboard, type TextInput, type ViewStyle } from 'react-native';
 import { applyCommittedInlineEmoji } from '../../services/noteDecorations';
 
 interface UseCaptureCardTextInputStateOptions {
   captureMode: 'text' | 'camera';
+  minimumVisibleInputY: number;
   noteText: string;
+  noteInputRef: RefObject<TextInput | null>;
   onChangeNoteText: (nextText: string) => void;
   placeholderVariants: string[];
   reduceMotionEnabled: boolean;
+  restaurantInputRef: RefObject<TextInput | null>;
 }
 
+type CaptureInputTarget = 'note' | 'restaurant';
+
+type CaptureKeyboardLiftOptions = {
+  extraGap: number;
+  inputHeight: number;
+  inputY: number;
+  keyboardScreenY: number;
+  minimumVisibleInputY: number;
+};
+
+export function resolveCaptureKeyboardLift({
+  extraGap,
+  inputHeight,
+  inputY,
+  keyboardScreenY,
+  minimumVisibleInputY,
+}: CaptureKeyboardLiftOptions) {
+  if (
+    !Number.isFinite(inputHeight) ||
+    !Number.isFinite(inputY) ||
+    !Number.isFinite(keyboardScreenY) ||
+    inputHeight <= 0 ||
+    keyboardScreenY <= 0
+  ) {
+    return 0;
+  }
+
+  const overlap = inputY + inputHeight + extraGap - keyboardScreenY;
+
+  if (overlap <= 0) {
+    return 0;
+  }
+
+  const maxLiftBeforeHittingTopGuard = Math.max(inputY - minimumVisibleInputY, 0);
+  return Math.min(overlap, maxLiftBeforeHittingTopGuard);
+}
 export function useCaptureCardTextInputState({
   captureMode,
+  minimumVisibleInputY,
   noteText,
+  noteInputRef,
   onChangeNoteText,
   placeholderVariants,
   reduceMotionEnabled,
+  restaurantInputRef,
 }: UseCaptureCardTextInputStateOptions) {
+  void minimumVisibleInputY;
+  void reduceMotionEnabled;
   const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
   const [isNoteInputFocused, setIsNoteInputFocused] = useState(false);
   const [isRestaurantInputFocused, setIsRestaurantInputFocused] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const keyboardLift = useSharedValue(0);
+  const focusedInputRef = useRef<CaptureInputTarget | null>(null);
+  const pendingBlurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTextEntryFocused = captureMode === 'text' && (isNoteInputFocused || isRestaurantInputFocused);
   const activeTextPlaceholder =
     placeholderVariants[textPlaceholderIndex % placeholderVariants.length] ?? placeholderVariants[0] ?? '';
+  const cancelPendingBlurResolution = useCallback(() => {
+    if (pendingBlurTimeoutRef.current == null) {
+      return;
+    }
+
+    clearTimeout(pendingBlurTimeoutRef.current);
+    pendingBlurTimeoutRef.current = null;
+  }, []);
   const resetKeyboardLift = useCallback((clearFocus = false) => {
-    setKeyboardHeight(0);
-    setIsKeyboardVisible(false);
+    cancelPendingBlurResolution();
     if (clearFocus) {
+      focusedInputRef.current = null;
       setIsNoteInputFocused(false);
       setIsRestaurantInputFocused(false);
     }
-    keyboardLift.value = withTiming(0, {
-      duration: reduceMotionEnabled ? 110 : 180,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [keyboardLift, reduceMotionEnabled]);
+  }, [cancelPendingBlurResolution]);
+
+  const endTextEntrySession = useCallback((target?: CaptureInputTarget) => {
+    cancelPendingBlurResolution();
+    if (!target || focusedInputRef.current === target) {
+      focusedInputRef.current = null;
+    }
+    if (!target || target === 'note') {
+      setIsNoteInputFocused(false);
+    }
+    if (!target || target === 'restaurant') {
+      setIsRestaurantInputFocused(false);
+    }
+  }, [cancelPendingBlurResolution]);
+  const scheduleBlurResolution = useCallback((target: CaptureInputTarget) => {
+    cancelPendingBlurResolution();
+    pendingBlurTimeoutRef.current = setTimeout(() => {
+      pendingBlurTimeoutRef.current = null;
+
+      if (focusedInputRef.current === target) {
+        focusedInputRef.current = null;
+      }
+
+      if (target === 'note') {
+        setIsNoteInputFocused(false);
+      } else {
+        setIsRestaurantInputFocused(false);
+      }
+    }, 0);
+  }, [cancelPendingBlurResolution]);
+  const blurCaptureInputs = useCallback(() => {
+    noteInputRef.current?.blur();
+    restaurantInputRef.current?.blur();
+  }, [noteInputRef, restaurantInputRef]);
 
   useEffect(() => {
     if (captureMode !== 'text') {
@@ -47,53 +126,33 @@ export function useCaptureCardTextInputState({
   }, [captureMode, resetKeyboardLift]);
 
   useEffect(() => {
-    const handleKeyboardShow = (event: KeyboardEvent) => {
-      setKeyboardHeight(event.endCoordinates.height);
-      setIsKeyboardVisible(event.endCoordinates.height > 0);
-    };
-    const handleKeyboardFrame = (event: KeyboardEvent) => {
-      setKeyboardHeight(event.endCoordinates.height);
-      setIsKeyboardVisible(event.endCoordinates.height > 0);
-    };
-    const handleKeyboardHide = () => {
-      resetKeyboardLift(true);
-    };
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const frameEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSubscription = Keyboard.addListener(showEvent, handleKeyboardShow);
-    const frameSubscription = Keyboard.addListener(frameEvent, handleKeyboardFrame);
-    const hideSubscription = Keyboard.addListener(hideEvent, handleKeyboardHide);
+    const keyboardDidHideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      if (captureMode !== 'text' || focusedInputRef.current == null) {
+        return;
+      }
+
+      blurCaptureInputs();
+      endTextEntrySession();
+    });
 
     return () => {
-      showSubscription.remove();
-      frameSubscription.remove();
-      hideSubscription.remove();
+      keyboardDidHideSubscription.remove();
     };
-  }, [resetKeyboardLift]);
+  }, [blurCaptureInputs, captureMode, endTextEntrySession]);
 
-  useEffect(() => {
-    const nextLift = isTextEntryFocused && isKeyboardVisible
-      ? Math.min(Math.max(keyboardHeight - 150, 0), 170)
-      : 0;
-
-    keyboardLift.value = withTiming(nextLift, {
-      duration: reduceMotionEnabled ? 110 : 220,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [isKeyboardVisible, isTextEntryFocused, keyboardHeight, keyboardLift, reduceMotionEnabled]);
-
-  const keyboardLiftAnimatedStyle = useAnimatedStyle(
-    () => ({
-      transform: [{ translateY: -keyboardLift.value }],
-    }),
-    [keyboardLift]
+  useEffect(
+    () => () => {
+      cancelPendingBlurResolution();
+    },
+    [cancelPendingBlurResolution]
   );
+  const keyboardLiftAnimatedStyle = useMemo<ViewStyle>(() => ({}), []);
 
   const dismissCaptureInputs = useCallback(() => {
+    blurCaptureInputs();
+    endTextEntrySession();
     Keyboard.dismiss();
-    resetKeyboardLift();
-  }, [resetKeyboardLift]);
+  }, [blurCaptureInputs, endTextEntrySession]);
 
   const handleChangeNoteText = useCallback(
     (nextText: string) => {
@@ -103,20 +162,26 @@ export function useCaptureCardTextInputState({
   );
 
   const handleNoteInputFocus = useCallback(() => {
+    cancelPendingBlurResolution();
+    focusedInputRef.current = 'note';
     setIsNoteInputFocused(true);
-  }, []);
+    setIsRestaurantInputFocused(false);
+  }, [cancelPendingBlurResolution]);
 
   const handleNoteInputBlur = useCallback(() => {
-    setIsNoteInputFocused(false);
-  }, []);
+    scheduleBlurResolution('note');
+  }, [scheduleBlurResolution]);
 
   const handleRestaurantInputFocus = useCallback(() => {
+    cancelPendingBlurResolution();
+    focusedInputRef.current = 'restaurant';
     setIsRestaurantInputFocused(true);
-  }, []);
+    setIsNoteInputFocused(false);
+  }, [cancelPendingBlurResolution]);
 
   const handleRestaurantInputBlur = useCallback(() => {
-    setIsRestaurantInputFocused(false);
-  }, []);
+    scheduleBlurResolution('restaurant');
+  }, [scheduleBlurResolution]);
 
   const rotatePlaceholderIfNeeded = useCallback(
     (previousCaptureMode: 'text' | 'camera', wasTextDraftEmpty: boolean) => {

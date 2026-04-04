@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Platform, View } from 'react-native';
+import { Alert, Platform, StyleSheet, View } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { getImageAsync, hasImageAsync } from 'expo-clipboard';
 import { deleteAsync, writeAsStringAsync } from '../utils/fileSystem';
@@ -1125,7 +1125,7 @@ describe('CaptureCard doodle handle', () => {
     expect(queryByTestId('capture-radius-250')).toBeNull();
   });
 
-  it('drops the animated card transform while the android note input is focused', () => {
+  it('drops the animated card transform while the android note input is focused', async () => {
     const originalPlatform = Platform.OS;
     Platform.OS = 'android';
 
@@ -1133,8 +1133,10 @@ describe('CaptureCard doodle handle', () => {
       const ref = React.createRef<CaptureCardHandle>();
       const { getByTestId, rerender } = renderCaptureCard(ref);
 
-      const hasTransform = () =>
-        getByTestId('capture-card-area').props.style.some((item: { transform?: unknown } | null) => Boolean(item?.transform));
+      const hasTransform = () => {
+        const flattenedStyle = StyleSheet.flatten(getByTestId('capture-card-area').props.style);
+        return Array.isArray(flattenedStyle?.transform) && flattenedStyle.transform.length > 0;
+      };
 
       expect(hasTransform()).toBe(true);
 
@@ -1148,7 +1150,9 @@ describe('CaptureCard doodle handle', () => {
         fireEvent(getByTestId('capture-note-input'), 'blur');
       });
 
-      expect(hasTransform()).toBe(true);
+      await waitFor(() => {
+        expect(hasTransform()).toBe(true);
+      });
 
       rerender(
         <CaptureCard

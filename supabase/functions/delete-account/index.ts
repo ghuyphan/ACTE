@@ -10,6 +10,11 @@ type MediaRow = {
   sticker_placements_json?: string | null;
 };
 
+type StickerAssetRow = {
+  storage_bucket?: string | null;
+  storage_path?: string | null;
+};
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -79,11 +84,13 @@ async function cleanupOwnedMedia(
   const notePaths = new Set<string>();
   const sharedPostPaths = new Set<string>();
   const roomPostPaths = new Set<string>();
+  const stickerAssetPathsByBucket = new Map<string, Set<string>>();
 
   const [
     { data: notes, error: notesError },
     { data: sharedPosts, error: sharedPostsError },
     { data: roomPosts, error: roomPostsError },
+    { data: stickerAssets, error: stickerAssetsError },
   ] = await Promise.all([
     adminClient
       .from('notes')
@@ -94,6 +101,10 @@ async function cleanupOwnedMedia(
       .select('photo_path, paired_video_path, sticker_placements_json')
       .eq('author_user_id', userId),
     adminClient.from('room_posts').select('photo_path').eq('author_user_id', userId),
+    adminClient
+      .from('sticker_assets')
+      .select('storage_bucket, storage_path')
+      .eq('owner_user_id', userId),
   ]);
 
   if (notesError) {
@@ -106,6 +117,9 @@ async function cleanupOwnedMedia(
 
   if (roomPostsError) {
     throw roomPostsError;
+  }
+  if (stickerAssetsError) {
+    throw stickerAssetsError;
   }
 
   for (const row of (notes ?? []) as MediaRow[]) {
@@ -128,11 +142,29 @@ async function cleanupOwnedMedia(
     addStoragePath(roomPostPaths, row.photo_path);
   }
 
+  for (const row of (stickerAssets ?? []) as StickerAssetRow[]) {
+    const bucket = typeof row.storage_bucket === 'string' ? row.storage_bucket.trim() : '';
+    const path = typeof row.storage_path === 'string' ? row.storage_path.trim() : '';
+    if (!bucket || !path) {
+      continue;
+    }
+
+    const bucketPaths = stickerAssetPathsByBucket.get(bucket) ?? new Set<string>();
+    bucketPaths.add(path);
+    stickerAssetPathsByBucket.set(bucket, bucketPaths);
+  }
+
   await Promise.all([
     removeStorageObjects(adminClient, 'note-media', notePaths),
     removeStorageObjects(adminClient, 'shared-post-media', sharedPostPaths),
     removeStorageObjects(adminClient, 'room-post-media', roomPostPaths),
+    ...Array.from(stickerAssetPathsByBucket.entries()).map(([bucket, paths]) =>
+      removeStorageObjects(adminClient, bucket, paths)
+    ),
   ]);
+
+  await adminClient.from('sticker_asset_refs').delete().eq('owner_user_id', userId);
+  await adminClient.from('sticker_assets').delete().eq('owner_user_id', userId);
 }
 
 Deno.serve(async (request) => {

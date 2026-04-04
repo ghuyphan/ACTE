@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -58,6 +59,7 @@ export default function MapPreviewSheet({
   reduceMotionEnabled,
   children,
 }: MapPreviewSheetProps) {
+  const { t } = useTranslation();
   const translateY = useSharedValue(400);
   const dismissing = useSharedValue(false);
   const closeSequenceRef = useRef(0);
@@ -275,7 +277,7 @@ export default function MapPreviewSheet({
             <Pressable
               testID={dismissTestID}
               accessibilityRole="button"
-              accessibilityLabel="Dismiss map preview"
+              accessibilityLabel={t('map.dismissPreview', 'Dismiss map preview')}
               onPress={handlePressDismiss}
               style={styles.dismissHandlePressable}
             >

@@ -63,6 +63,10 @@ export async function cleanupOrphanPhotoFiles(): Promise<number> {
     }
 
     const filenames = await FileSystem.readDirectoryAsync(directory);
+    if (!Array.isArray(filenames)) {
+      continue;
+    }
+
     for (const filename of filenames) {
       const absolutePath = `${directory}${filename}`;
       if (referencedPhotoPaths.has(absolutePath)) {
@@ -93,6 +97,10 @@ export async function cleanupOrphanStickerFiles(): Promise<number> {
 
   const referencedStickerPaths = await getReferencedStickerPaths();
   const filenames = await FileSystem.readDirectoryAsync(STICKER_DIRECTORY);
+  if (!Array.isArray(filenames)) {
+    return 0;
+  }
+
   let deletedCount = 0;
 
   for (const filename of filenames) {

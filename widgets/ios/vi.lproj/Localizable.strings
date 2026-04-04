@@ -1,0 +1,16 @@
+"widget.idleText" = "Khi bạn ở gần, Noto sẽ hiện ghi chú phù hợp.";
+"widget.memoryReminder" = "Một gợi nhắc nhẹ từ nơi này.";
+"widget.accessorySaveMemory" = "Lưu một kỷ niệm";
+"widget.accessoryAddFirstPlace" = "Thêm địa điểm đầu tiên";
+"widget.accessoryMemoryNearby" = "Kỷ niệm ở gần";
+"widget.accessoryOpenApp" = "Mở Noto";
+"widget.accessoryAddLabel" = "Thêm";
+"widget.accessorySavedLabel" = "Đã lưu";
+"widget.accessoryNearLabel" = "Gần";
+"widget.livePhotoBadge" = "Live";
+"widget.configTitle" = "Nhắc nhở ở gần";
+"widget.configDescription" = "Xem đúng ghi chú khi bạn quay lại một nơi quen thuộc.";
+"widget.countBadgeFallbackOne" = "%d ghi chú";
+"widget.countBadgeFallbackOther" = "%d ghi chú";
+"widget.nearbyPlaceFallbackOne" = "%d địa điểm ở gần";
+"widget.nearbyPlaceFallbackOther" = "%d địa điểm ở gần";

@@ -19,7 +19,12 @@ import {
   uploadPairedVideoToStorage,
 } from './remoteMedia';
 import { getPairedVideoFileExtension } from './livePhotoStorage';
-import { parseNoteStickerPlacements, serializeStickerPlacementsForStorage } from './noteStickers';
+import {
+  clearRemoteStickerAssetRefs,
+  parseNoteStickerPlacements,
+  reconcileRemoteStickerAssetRefs,
+  serializeStickerPlacementsForStorage,
+} from './noteStickers';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getPublicUserProfile, upsertPublicUserProfile } from './publicProfileService';
 import {
@@ -270,6 +275,17 @@ async function cleanupRemoteArtifacts(
   }
 
   await Promise.allSettled(removals);
+}
+
+function getReusableSharedPostCleanupArtifacts(artifacts: {
+  photoPath?: string | null;
+  pairedVideoPath?: string | null;
+  stickerPaths?: string[];
+}) {
+  return {
+    photoPath: artifacts.photoPath ?? null,
+    pairedVideoPath: artifacts.pairedVideoPath ?? null,
+  };
 }
 
 async function upsertSharedPostTombstones(
@@ -940,7 +956,10 @@ export async function createSharedPost(
             stickerPlacements,
             SHARED_POST_MEDIA_BUCKET,
             `${user.id}/${postId}`,
-            { persistAssets: false }
+            {
+              persistAssets: false,
+              serverOwnerUid: user.id,
+            }
           )
         : null;
 
@@ -971,6 +990,8 @@ export async function createSharedPost(
       throw error;
     }
 
+    await reconcileRemoteStickerAssetRefs(user.id, 'shared_post', postId, stickerPlacementsJson);
+
     const friendRefs = dedupedAudience.filter((uid) => uid !== user.id);
     if (friendRefs.length > 0) {
       await supabase
@@ -992,14 +1013,16 @@ export async function createSharedPost(
       photoLocalUri: note.type === 'photo' ? note.photoLocalUri ?? note.content : null,
       pairedVideoLocalUri: note.type === 'photo' ? note.pairedVideoLocalUri ?? null : null,
       hasStickers: Boolean(note.hasStickers && note.stickerPlacementsJson),
-      stickerPlacementsJson: note.stickerPlacementsJson ?? null,
+      stickerPlacementsJson,
       noteColor: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
     };
   } catch (error) {
     await cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
-      photoPath,
-      pairedVideoPath,
-      stickerPaths: getRemoteStickerAssetPaths(stickerPlacementsJson),
+      ...getReusableSharedPostCleanupArtifacts({
+        photoPath,
+        pairedVideoPath,
+        stickerPaths: getRemoteStickerAssetPaths(stickerPlacementsJson),
+      }),
     });
     throw error;
   }
@@ -1069,19 +1092,22 @@ export async function updateSharedPost(
               existingRemoteAssetPathsById: getRemoteStickerAssetPathMap(
                 current.sticker_placements_json ?? null
               ),
+              serverOwnerUid: user.id,
             }
           )
         : null;
   } catch (error) {
     await cleanupRemoteArtifacts(
       SHARED_POST_MEDIA_BUCKET,
-      buildNewRemoteArtifacts(
-        {
-          photoPath: nextPhotoPath,
-          pairedVideoPath: nextPairedVideoPath,
-          stickerPlacementsJson: nextStickerPlacementsJson,
-        },
-        currentArtifacts
+      getReusableSharedPostCleanupArtifacts(
+        buildNewRemoteArtifacts(
+          {
+            photoPath: nextPhotoPath,
+            pairedVideoPath: nextPairedVideoPath,
+            stickerPlacementsJson: nextStickerPlacementsJson,
+          },
+          currentArtifacts
+        )
       )
     );
     throw error;
@@ -1109,27 +1135,33 @@ export async function updateSharedPost(
   if (error) {
     await cleanupRemoteArtifacts(
       SHARED_POST_MEDIA_BUCKET,
-      buildNewRemoteArtifacts(
-        {
-          photoPath: nextPhotoPath,
-          pairedVideoPath: nextPairedVideoPath,
-          stickerPlacementsJson: nextStickerPlacementsJson,
-        },
-        currentArtifacts
+      getReusableSharedPostCleanupArtifacts(
+        buildNewRemoteArtifacts(
+          {
+            photoPath: nextPhotoPath,
+            pairedVideoPath: nextPairedVideoPath,
+            stickerPlacementsJson: nextStickerPlacementsJson,
+          },
+          currentArtifacts
+        )
       )
     );
     throw error;
   }
 
+  await reconcileRemoteStickerAssetRefs(user.id, 'shared_post', postId, nextStickerPlacementsJson);
+
   await deleteSharedPostTombstone(user.id, postId);
 
   await cleanupRemoteArtifacts(
     SHARED_POST_MEDIA_BUCKET,
-    buildRemovedRemoteArtifacts(currentArtifacts, {
-      photoPath: nextPhotoPath,
-      pairedVideoPath: nextPairedVideoPath,
-      stickerPlacementsJson: nextStickerPlacementsJson,
-    })
+    getReusableSharedPostCleanupArtifacts(
+      buildRemovedRemoteArtifacts(currentArtifacts, {
+        photoPath: nextPhotoPath,
+        pairedVideoPath: nextPairedVideoPath,
+        stickerPlacementsJson: nextStickerPlacementsJson,
+      })
+    )
   );
 
 }
@@ -1195,15 +1227,13 @@ export async function deleteOwnedSharedPostsForNotes(
   await upsertSharedPostTombstones(user.id, postIds, deletedAt);
 
   await Promise.all(
-    rows.map((row) =>
-      cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
+    rows.map(async (row) => {
+      await clearRemoteStickerAssetRefs(user.id, 'shared_post', row.id);
+      return cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
         photoPath: row.photo_path ?? null,
         pairedVideoPath: row.paired_video_path ?? null,
-        stickerPaths: getRemoteStickerAssetPaths(
-          (row as { sticker_placements_json?: string | null }).sticker_placements_json ?? null
-        ),
-      })
-    )
+      });
+    })
   );
 
   return postIds;
@@ -1236,14 +1266,12 @@ export async function deleteSharedPost(
   }
 
   await upsertSharedPostTombstones(user.id, [postId], getNowIso());
+  await clearRemoteStickerAssetRefs(user.id, 'shared_post', postId);
 
   await cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
     photoPath: (existing as { photo_path?: string | null } | null)?.photo_path ?? null,
     pairedVideoPath:
       (existing as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
-    stickerPaths: getRemoteStickerAssetPaths(
-      (existing as { sticker_placements_json?: string | null } | null)?.sticker_placements_json ?? null
-    ),
   });
 
 }

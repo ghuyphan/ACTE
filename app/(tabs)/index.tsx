@@ -64,6 +64,7 @@ import { getSharedFeedErrorMessage, SharedPost } from '../../services/sharedFeed
 import { isIOS26OrNewer } from '../../utils/platform';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 import { getPersistentItem, setPersistentItem } from '../../utils/appStorage';
+import { setAndroidSoftInputMode } from '../../utils/androidSoftInputMode';
 
 const SHARED_MANAGE_SHEET_SHARE_DELAY_MS = Platform.OS === 'ios' ? 220 : 0;
 const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
@@ -137,6 +138,8 @@ export default function HomeScreen() {
   const [suppressedHomeNoteIds, setSuppressedHomeNoteIds] = useState<string[]>([]);
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [appState, setAppState] = useState(AppState.currentState);
+  const [isCaptureTextEntryFocused, setIsCaptureTextEntryFocused] = useState(false);
+  const [lockedCaptureSnapHeight, setLockedCaptureSnapHeight] = useState<number | null>(null);
   const [captureEditorScrollLocked, setCaptureEditorScrollLocked] = useState(false);
   const [captureInteractionScrollLocked, setCaptureInteractionScrollLocked] = useState(false);
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
@@ -184,6 +187,20 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') {
+        return undefined;
+      }
+
+      void setAndroidSoftInputMode('pan');
+
+      return () => {
+        void setAndroidSoftInputMode('resize');
+      };
+    }, [])
+  );
 
   const dismissSharedManageSheet = useCallback(() => {
     setShowSharedManageSheet(false);
@@ -238,7 +255,10 @@ export default function HomeScreen() {
     resetCapture,
   } = useCaptureFlow();
 
-  const snapHeight = windowHeight - insets.top - 90;
+  const liveSnapHeight = windowHeight - insets.top - 90;
+  const shouldLockCapturePage = Platform.OS === 'android' && isCaptureTextEntryFocused;
+  const snapHeight =
+    shouldLockCapturePage && lockedCaptureSnapHeight != null ? lockedCaptureSnapHeight : liveSnapHeight;
 
   const filteredNotes = useMemo(() => {
     return filterNotesByQuery(notes, deferredSearchQuery);
@@ -668,6 +688,14 @@ export default function HomeScreen() {
   );
 
   const onRefresh = useCallback(async () => {
+    const hasNetworkRefreshWork = Boolean(user && sharedEnabled);
+
+    if (!hasNetworkRefreshWork) {
+      await refreshNotes(false);
+      setSuppressedHomeNoteIds([]);
+      return;
+    }
+
     setRefreshing(true);
     try {
       await refreshNotes(false);
@@ -756,7 +784,7 @@ export default function HomeScreen() {
         title: t('capture.reminderDisclosureTitle', 'Enable background reminders'),
         message: t(
           'capture.reminderDisclosureMsg',
-          'Noto uses your location in the background to notice when you return to a saved place, even when the app is closed or not on screen. We only use this to trigger your note reminders.'
+          'This app collects location data to remind you when you return to a saved place, even when the app is closed or not in use. Noto only uses this data for nearby note reminders.'
         ),
         primaryAction: {
           label: t('common.continue', 'Continue'),
@@ -1700,6 +1728,22 @@ export default function HomeScreen() {
     });
   }, [startSearchTransition]);
 
+  const handleCaptureTextEntryFocusChange = useCallback((focused: boolean) => {
+    setIsCaptureTextEntryFocused(focused);
+
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    if (focused) {
+      setLockedCaptureSnapHeight((current) => current ?? liveSnapHeight);
+    } else {
+      setLockedCaptureSnapHeight(null);
+    }
+
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [liveSnapHeight]);
+
   const captureHeader = useMemo(
     () => (
       <View style={styles.captureItemWrapper}>
@@ -1783,6 +1827,7 @@ export default function HomeScreen() {
           onChangeShareTarget={handleCaptureTargetChange}
           onDoodleModeChange={setCaptureEditorScrollLocked}
           onInteractionLockChange={setCaptureInteractionScrollLocked}
+          onTextEntryFocusChange={handleCaptureTextEntryFocusChange}
         />
       </View>
     ),
@@ -1804,6 +1849,7 @@ export default function HomeScreen() {
       flashAnim,
       handleCaptureTargetChange,
       handleChangeNoteColor,
+      handleCaptureTextEntryFocusChange,
       handleImportMotionClip,
       handleImportPhoto,
       handleRequestCameraPermission,
@@ -1830,6 +1876,14 @@ export default function HomeScreen() {
       saveButtonState,
       saving,
       selectedPhotoFilterId,
+      setCapturedPairedVideo,
+      setCapturedPhoto,
+      setFacing,
+      setNoteText,
+      setRadius,
+      setRestaurantName,
+      setSelectedPhotoFilterId,
+      saveNote,
       shutterScale,
       showLivePhotoCameraHint,
       showPlusSheet,
@@ -1915,7 +1969,12 @@ export default function HomeScreen() {
         revealToken={0}
         onSettledArchiveItemChange={handleSettledArchiveItemChange}
         onCaptureVisibilityChange={setIsCaptureVisible}
-        scrollEnabled={!captureEditorScrollLocked && !captureInteractionScrollLocked}
+        scrollEnabled={
+          !captureEditorScrollLocked &&
+          !captureInteractionScrollLocked &&
+          !isCaptureTextEntryFocused
+        }
+        capturePageLocked={shouldLockCapturePage}
       />
 
       <SharedManageSheet

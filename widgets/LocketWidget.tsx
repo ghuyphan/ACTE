@@ -13,6 +13,7 @@ import {
     truncationMode
 } from '@expo/ui/swift-ui/modifiers';
 import { Platform } from 'react-native';
+import i18n from '../constants/i18n';
 
 interface WidgetProps {
     noteType: 'text' | 'photo';
@@ -84,7 +85,7 @@ function getTextLayout(isLarge: boolean, trimmedLength: number): WidgetTextLayou
 }
 
 function getFallbackCountLabel(noteCount: number): string {
-    return `${noteCount} ${noteCount === 1 ? 'note' : 'notes'}`;
+    return i18n.t('widget.savedCount', { count: noteCount, defaultValue: `${noteCount} notes saved` });
 }
 
 const LocketWidget = (props: { props: WidgetProps }) => {
@@ -142,8 +143,8 @@ const LocketWidget = (props: { props: WidgetProps }) => {
     const isPhoto = !showIdle && hasImage;
     const showLivePhotoBadge = isPhoto && Boolean(isLivePhoto);
     const bodyText = showIdle
-        ? asString(idleText) || 'The right note will appear when you are nearby.'
-        : safeText || asString(memoryReminderText) || 'A quiet reminder from here.';
+        ? asString(idleText) || i18n.t('widget.idleText', 'The right note will appear when you are nearby.')
+        : safeText || asString(memoryReminderText) || i18n.t('widget.memoryReminder', 'A quiet reminder from here.');
     const eyebrowText = !showIdle ? asString(locationName) : '';
     const backgroundColors = isTextNote || showIdle
         ? [
@@ -158,37 +159,44 @@ const LocketWidget = (props: { props: WidgetProps }) => {
     const footerIconName = usesTextSurface ? 'doc.text' : 'photo';
     const eyebrowColor = usesTextSurface ? '#6E5E4F' : '#FFF8F0';
     const nearbyLabelCount = Math.max(safeNearbyPlacesCount, showIdle ? 0 : 1);
-    const nearbyPlacesLabel = asString(nearbyPlacesLabelText) || (nearbyLabelCount === 1 ? '1 place nearby' : `${nearbyLabelCount} places nearby`);
+    const nearbyPlacesLabel = asString(nearbyPlacesLabelText)
+        || i18n.t(
+            nearbyLabelCount === 1 ? 'widget.nearbyPlaceOne' : 'widget.nearbyPlaceOther',
+            {
+                count: nearbyLabelCount,
+                defaultValue: nearbyLabelCount === 1 ? '1 place nearby' : `${nearbyLabelCount} places nearby`,
+            }
+        );
     const accessorySymbolName = safeNoteCount <= 0 ? 'plus.circle.fill' : showIdle ? 'bookmark.fill' : 'location.fill';
     const accessoryNoteExcerpt = bodyText.length <= (showIdle ? 26 : 32)
         ? bodyText
         : `${bodyText.slice(0, (showIdle ? 26 : 32) - 1)}…`;
     const accessoryTitle = safeNoteCount <= 0
-        ? asString(accessorySaveMemoryText) || 'Save a memory'
-        : compactLocationName || (showIdle ? countLabel : asString(accessoryMemoryNearbyText) || 'Memory nearby');
+        ? asString(accessorySaveMemoryText) || i18n.t('widget.accessorySaveMemory', 'Save a memory')
+        : compactLocationName || (showIdle ? countLabel : asString(accessoryMemoryNearbyText) || i18n.t('widget.accessoryMemoryNearby', 'Memory nearby'));
     const accessorySubtitle = safeNoteCount <= 0
-        ? asString(accessoryAddFirstPlaceText) || 'Add your first place'
-        : accessoryNoteExcerpt || (showIdle ? asString(accessoryOpenAppText) || 'Open Noto' : nearbyPlacesLabel);
+        ? asString(accessoryAddFirstPlaceText) || i18n.t('widget.accessoryAddFirstPlace', 'Add your first place')
+        : accessoryNoteExcerpt || (showIdle ? asString(accessoryOpenAppText) || i18n.t('widget.accessoryOpenApp', 'Open Noto') : nearbyPlacesLabel);
     const accessoryInlineText = safeNoteCount <= 0
-        ? asString(accessorySaveMemoryText) || 'Save a memory'
+        ? asString(accessorySaveMemoryText) || i18n.t('widget.accessorySaveMemory', 'Save a memory')
         : showIdle
             ? countLabel
             : compactLocationName
-                ? `${asString(accessoryNearLabelText) || 'Near'} ${compactLocationName}`
-                : asString(accessoryMemoryNearbyText) || 'Memory nearby';
+                ? `${asString(accessoryNearLabelText) || i18n.t('widget.accessoryNearLabel', 'Near')} ${compactLocationName}`
+                : asString(accessoryMemoryNearbyText) || i18n.t('widget.accessoryMemoryNearby', 'Memory nearby');
     const accessoryCircularValue = safeNoteCount <= 0 ? '+' : showIdle ? `${safeNoteCount}` : `${nearbyLabelCount}`;
     const accessoryCircularCaption = safeNoteCount <= 0
-        ? asString(accessoryAddLabelText) || 'Add'
+        ? asString(accessoryAddLabelText) || i18n.t('widget.accessoryAddLabel', 'Add')
         : showIdle
-            ? asString(accessorySavedLabelText) || 'Saved'
-            : asString(accessoryNearLabelText) || 'Near';
+            ? asString(accessorySavedLabelText) || i18n.t('widget.accessorySavedLabel', 'Saved')
+            : asString(accessoryNearLabelText) || i18n.t('widget.accessoryNearLabel', 'Near');
     const safeAuthorName = asString(authorDisplayName);
     const safeAuthorInitials = asString(authorInitials);
     const compactAuthorName = safeAuthorName.split(/\s+/)[0]?.trim() ?? safeAuthorName;
     const showAuthorChip = Boolean(isSharedContent && (safeAuthorInitials || compactAuthorName));
     const authorChipBackground = hasImage ? 'rgba(16,12,10,0.32)' : 'rgba(255,249,243,0.82)';
     const authorChipForeground = hasImage ? '#FFF8F0' : '#2A1A11';
-    const livePhotoText = asString(livePhotoBadgeText) || 'Live';
+    const livePhotoText = asString(livePhotoBadgeText) || i18n.t('widget.livePhotoBadge', 'Live');
 
     if (isAccessoryInline) {
         return (

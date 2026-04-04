@@ -453,6 +453,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         local_uri TEXT NOT NULL,
         remote_path TEXT,
         upload_fingerprint TEXT,
+        content_hash TEXT,
         mime_type TEXT NOT NULL,
         width REAL NOT NULL,
         height REAL NOT NULL,
@@ -634,6 +635,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                         local_uri TEXT NOT NULL,
                         remote_path TEXT,
                         upload_fingerprint TEXT,
+                        content_hash TEXT,
                         mime_type TEXT NOT NULL,
                         width REAL NOT NULL,
                         height REAL NOT NULL,
@@ -654,6 +656,14 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                         `ALTER TABLE sticker_assets ADD COLUMN upload_fingerprint TEXT`
                     );
                 }
+                if (!stickerAssetColumns.includes('content_hash')) {
+                    await database.execAsync(
+                        `ALTER TABLE sticker_assets ADD COLUMN content_hash TEXT`
+                    );
+                }
+                await database.execAsync(
+                    `CREATE INDEX IF NOT EXISTS idx_sticker_assets_owner_content_hash ON sticker_assets(owner_uid, content_hash)`
+                );
                 await database.execAsync(
                     `CREATE TABLE IF NOT EXISTS note_stickers (
                         note_id TEXT PRIMARY KEY NOT NULL,

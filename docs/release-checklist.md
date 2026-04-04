@@ -49,8 +49,11 @@
 - [ ] Privacy policy link is configured and opens.
 - [ ] Support URL or support email is configured and opens.
 - [ ] Account deletion help link or support email is configured.
+- [ ] If the app offers account creation, a web-based account deletion request path is published and matches Play metadata.
 - [ ] App Store Connect privacy details are current.
 - [ ] Google Play data safety and background-location disclosures are current.
+- [ ] Google Play background-location declaration form is complete when reminders are enabled in the Android production build.
+- [ ] Reviewer login credentials or app-access instructions are prepared if any core flow requires auth.
 
 ## Platform QA
 

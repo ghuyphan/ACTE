@@ -130,4 +130,35 @@ describe('useNotesRecapViewModel', () => {
     expect(result.current.pileItems.filter((item) => item.kind === 'photo')).toHaveLength(9);
     expect(result.current.pileItems.filter((item) => item.kind === 'sticker')).toHaveLength(3);
   });
+
+  it('does not cap month recap sticker usage at six items', async () => {
+    const notes: Note[] = [
+      ...Array.from({ length: 3 }, (_, index) =>
+        buildNote({
+          id: `photo-mix-${index + 1}`,
+          type: 'photo',
+          content: `file:///mix-photo-${index + 1}.jpg`,
+          photoLocalUri: `file:///mix-photo-${index + 1}.jpg`,
+          createdAt: `2026-04-${String(index + 1).padStart(2, '0')}T08:00:00.000Z`,
+        })
+      ),
+      ...Array.from({ length: 9 }, (_, index) =>
+        buildNote({
+          id: `sticker-mix-${index + 1}`,
+          hasStickers: true,
+          stickerPlacementsJson: buildStickerPlacementsJson(index + 1),
+          createdAt: `2026-04-${String(index + 11).padStart(2, '0')}T08:00:00.000Z`,
+        })
+      ),
+    ];
+
+    const { result } = renderHook(() => useNotesRecapViewModel({ notes }));
+
+    await waitFor(() => {
+      expect(result.current.pileItems).toHaveLength(12);
+    });
+
+    expect(result.current.pileItems.filter((item) => item.kind === 'photo')).toHaveLength(3);
+    expect(result.current.pileItems.filter((item) => item.kind === 'sticker')).toHaveLength(9);
+  });
 });

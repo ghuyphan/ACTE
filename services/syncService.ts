@@ -21,8 +21,10 @@ import {
   upsertNote,
 } from './database';
 import {
+  clearRemoteStickerAssetRefs,
   hydrateStickerPlacements,
   parseNoteStickerPlacements,
+  reconcileRemoteStickerAssetRefs,
   serializeStickerPlacementsForStorage,
   syncStickerAssetsFromPlacements,
 } from './noteStickers';
@@ -432,6 +434,17 @@ async function cleanupRemoteArtifacts(
   await Promise.allSettled(removals);
 }
 
+function getReusableNoteMediaCleanupArtifacts(artifacts: {
+  photoPath?: string | null;
+  pairedVideoPath?: string | null;
+  stickerPaths?: string[];
+}) {
+  return {
+    photoPath: artifacts.photoPath ?? null,
+    pairedVideoPath: artifacts.pairedVideoPath ?? null,
+  };
+}
+
 async function upsertRemoteNoteTombstones(
   userId: string,
   noteIds: Iterable<string>,
@@ -664,7 +677,9 @@ async function serializeNoteForSupabase(
     const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
     stickerPlacementsJson =
       stickerPlacements.length > 0
-        ? await serializeStickerPlacementsForStorage(stickerPlacements, NOTE_MEDIA_BUCKET, userId)
+        ? await serializeStickerPlacementsForStorage(stickerPlacements, NOTE_MEDIA_BUCKET, userId, {
+            serverOwnerUid: userId,
+          })
         : null;
 
     return {
@@ -696,13 +711,15 @@ async function serializeNoteForSupabase(
   } catch (error) {
     await cleanupRemoteArtifacts(
       NOTE_MEDIA_BUCKET,
-      buildNewRemoteArtifacts(
-        {
-          photoPath,
-          pairedVideoPath,
-          stickerPlacementsJson,
-        },
-        existingRemoteArtifacts
+      getReusableNoteMediaCleanupArtifacts(
+        buildNewRemoteArtifacts(
+          {
+            photoPath,
+            pairedVideoPath,
+            stickerPlacementsJson,
+          },
+          existingRemoteArtifacts
+        )
       )
     );
     throw error;
@@ -884,18 +901,18 @@ async function deleteRemoteNote(userId: string, noteId: string) {
     await upsertRemoteSharedPostTombstones(userId, sharedPostIds, deletedAt);
 
     await Promise.all(
-      ((sharedPosts ?? []) as Array<RemoteArtifactSnapshot>).map((row) =>
-        cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
+      ((sharedPosts ?? []) as Array<RemoteArtifactSnapshot & { id?: string }>).map(async (row) => {
+        const postId = typeof row.id === 'string' ? row.id.trim() : '';
+        if (postId) {
+          await clearRemoteStickerAssetRefs(userId, 'shared_post', postId);
+        }
+
+        await cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
           photoPath: row.photoPath ?? (row as { photo_path?: string | null }).photo_path ?? null,
           pairedVideoPath:
             row.pairedVideoPath ?? (row as { paired_video_path?: string | null }).paired_video_path ?? null,
-          stickerPaths: getRemoteStickerAssetPaths(
-            row.stickerPlacementsJson ??
-              (row as { sticker_placements_json?: string | null }).sticker_placements_json ??
-              null
-          ),
-        })
-      )
+        });
+      })
     );
   }
   const { error } = await supabase.from('notes').delete().eq('id', noteId).eq('user_id', userId);
@@ -904,14 +921,12 @@ async function deleteRemoteNote(userId: string, noteId: string) {
   }
 
   await upsertRemoteNoteTombstones(userId, [noteId], deletedAt);
+  await clearRemoteStickerAssetRefs(userId, 'note', noteId);
 
   await cleanupRemoteArtifacts(NOTE_MEDIA_BUCKET, {
     photoPath: (existingNote as { photo_path?: string | null } | null)?.photo_path ?? null,
     pairedVideoPath:
       (existingNote as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
-    stickerPaths: getRemoteStickerAssetPaths(
-      (existingNote as { sticker_placements_json?: string | null } | null)?.sticker_placements_json ?? null
-    ),
   });
 }
 
@@ -955,13 +970,18 @@ async function deleteAllRemoteNotesForUser(userId: string) {
   );
 
   await Promise.all(
-    ((sharedPosts ?? []) as Array<{ photo_path?: string | null; paired_video_path?: string | null; sticker_placements_json?: string | null }>).map(
-      (row) =>
-        cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
+    ((sharedPosts ?? []) as Array<{ id?: string; photo_path?: string | null; paired_video_path?: string | null; sticker_placements_json?: string | null }>).map(
+      async (row) => {
+        const postId = typeof row.id === 'string' ? row.id.trim() : '';
+        if (postId) {
+          await clearRemoteStickerAssetRefs(userId, 'shared_post', postId);
+        }
+
+        return cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
           photoPath: row.photo_path ?? null,
           pairedVideoPath: row.paired_video_path ?? null,
-          stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
-        })
+        });
+      }
     )
   );
 
@@ -975,6 +995,12 @@ async function deleteAllRemoteNotesForUser(userId: string) {
     ((data ?? []) as Array<{ id: string }>).map((row) => row.id),
     deletedAt
   );
+  await Promise.all(
+    ((data ?? []) as Array<{ id?: string }>).map((row) => {
+      const noteId = typeof row.id === 'string' ? row.id.trim() : '';
+      return noteId ? clearRemoteStickerAssetRefs(userId, 'note', noteId) : Promise.resolve();
+    })
+  );
 
   await Promise.all(
     ((data ?? []) as Array<{ photo_path?: string | null; paired_video_path?: string | null; sticker_placements_json?: string | null }>).map(
@@ -982,7 +1008,6 @@ async function deleteAllRemoteNotesForUser(userId: string) {
         cleanupRemoteArtifacts(NOTE_MEDIA_BUCKET, {
           photoPath: row.photo_path ?? null,
           pairedVideoPath: row.paired_video_path ?? null,
-          stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
         })
     )
   );
@@ -1019,17 +1044,26 @@ async function upsertRemoteNote(userId: string, note: Note, syncMarker: string) 
   if (error) {
     await cleanupRemoteArtifacts(
       NOTE_MEDIA_BUCKET,
-      buildNewRemoteArtifacts(
-        {
-          photoPath: serializedNote.photo_path,
-          pairedVideoPath: serializedNote.paired_video_path,
-          stickerPlacementsJson: serializedNote.sticker_placements_json,
-        },
-        existingArtifacts
+      getReusableNoteMediaCleanupArtifacts(
+        buildNewRemoteArtifacts(
+          {
+            photoPath: serializedNote.photo_path,
+            pairedVideoPath: serializedNote.paired_video_path,
+            stickerPlacementsJson: serializedNote.sticker_placements_json,
+          },
+          existingArtifacts
+        )
       )
     );
     throw error;
   }
+
+  await reconcileRemoteStickerAssetRefs(
+    userId,
+    'note',
+    note.id,
+    serializedNote.sticker_placements_json ?? null
+  );
 
   let tombstoneError: unknown = null;
   try {
@@ -1040,11 +1074,13 @@ async function upsertRemoteNote(userId: string, note: Note, syncMarker: string) 
 
   await cleanupRemoteArtifacts(
     NOTE_MEDIA_BUCKET,
-    buildRemovedRemoteArtifacts(existingArtifacts, {
-      photoPath: serializedNote.photo_path,
-      pairedVideoPath: serializedNote.paired_video_path,
-      stickerPlacementsJson: serializedNote.sticker_placements_json,
-    })
+    getReusableNoteMediaCleanupArtifacts(
+      buildRemovedRemoteArtifacts(existingArtifacts, {
+        photoPath: serializedNote.photo_path,
+        pairedVideoPath: serializedNote.paired_video_path,
+        stickerPlacementsJson: serializedNote.sticker_placements_json,
+      })
+    )
   );
 
   try {
@@ -1058,6 +1094,8 @@ async function upsertRemoteNote(userId: string, note: Note, syncMarker: string) 
           ? normalizeMediaUri(note.pairedVideoLocalUri ?? null)
           : null,
       pairedVideoRemotePath: serializedNote.paired_video_path ?? null,
+      hasStickers: Boolean(serializedNote.sticker_placements_json),
+      stickerPlacementsJson: serializedNote.sticker_placements_json ?? null,
     });
   } catch (error) {
     console.warn('Failed to persist synced media metadata locally:', error);
@@ -1463,7 +1501,7 @@ export async function syncNotes(
   if (!user) {
     return {
       status: 'unavailable',
-      message: 'Sign in to sync your notes.',
+      message: i18n.t('settings.syncSignInMsg'),
     };
   }
 
@@ -1471,7 +1509,7 @@ export async function syncNotes(
   if (!supabase) {
     return {
       status: 'unavailable',
-      message: 'Cloud sync is unavailable in this build.',
+      message: i18n.t('settings.syncUnavailableMsg'),
     };
   }
 
@@ -1507,7 +1545,10 @@ export async function syncNotes(
         message:
           queueResult.lastBlockedReason ??
           queueResult.lastError ??
-          'Some notes could not be synced. Please try again after checking your photo sizes and connection.',
+          i18n.t(
+            'settings.syncQueueFailureMsg',
+            'Some notes could not be synced. Please try again after checking your photo sizes and connection.'
+          ),
       };
     }
 
@@ -1597,8 +1638,8 @@ export async function syncNotes(
       failedCount: 0,
       message:
         syncedCount === 1
-          ? 'Synced 1 note with the server.'
-          : `Synced ${syncedCount} notes with the server.`,
+          ? i18n.t('settings.syncSuccessMsgOne')
+          : i18n.t('settings.syncSuccessMsgOther', { count: syncedCount }),
     };
   } catch (error) {
     if (shouldLogSyncWarning(error)) {

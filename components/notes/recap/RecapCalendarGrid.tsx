@@ -65,20 +65,6 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
     }
   }, [day.dateKey, onSelectDay]);
 
-  if (day.dayNumber === null) {
-    return (
-      <View
-        style={[
-          styles.dayPressable,
-          compact ? styles.dayPressableCompact : null,
-          columnWidth ? { width: columnWidth } : null,
-        ]}
-      >
-        <View style={styles.emptySlot} />
-      </View>
-    );
-  }
-
   const hasPhotoPreview = Boolean(day.photoPreviewUri);
   const isEmptyDay = day.count === 0;
   const isInteractive = Boolean(day.dateKey && day.count > 0 && !day.disabled);
@@ -112,6 +98,20 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
     }),
     [day.count, isSelected]
   );
+
+  if (day.dayNumber === null) {
+    return (
+      <View
+        style={[
+          styles.dayPressable,
+          compact ? styles.dayPressableCompact : null,
+          columnWidth ? { width: columnWidth } : null,
+        ]}
+      >
+        <View style={styles.emptySlot} />
+      </View>
+    );
+  }
 
   return (
     <Pressable

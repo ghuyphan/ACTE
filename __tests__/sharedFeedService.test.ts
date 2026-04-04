@@ -1,6 +1,8 @@
 const mockFriendInvites = new Map<string, any>();
 const mockSharedPosts = new Map<string, any>();
 const mockSharedPostTombstones = new Map<string, any>();
+const mockStickerAssets = new Map<string, any>();
+const mockStickerAssetRefs = new Map<string, any>();
 const mockFriendships = new Map<string, Map<string, any>>();
 const mockPublicProfiles = new Map<string, { displayNameSnapshot: string | null; photoURLSnapshot: string | null }>();
 const mockCachedActiveInvites = new Map<string, any>();
@@ -84,6 +86,16 @@ function mockCreateQueryBuilder(table: string) {
         }
       }
 
+      if (table === 'sticker_asset_refs') {
+        const rows = Array.isArray(value) ? value : [value];
+        for (const row of rows) {
+          mockStickerAssetRefs.set(
+            `${row.container_type}:${row.container_id}:${row.asset_id}`,
+            row
+          );
+        }
+      }
+
       return { error: null };
     },
     insert: async (value: Record<string, unknown>) => {
@@ -92,6 +104,15 @@ function mockCreateQueryBuilder(table: string) {
       }
       if (table === 'shared_posts') {
         mockSharedPosts.set(String(value.id), value);
+      }
+
+      if (table === 'sticker_assets') {
+        const nextId = `remote-sticker-${mockStickerAssets.size + 1}`;
+        mockStickerAssets.set(nextId, {
+          id: nextId,
+          created_at: '2026-03-25T00:00:00.000Z',
+          ...value,
+        });
       }
 
       return { error: null };
@@ -149,6 +170,10 @@ function executeSelect(table: string, state: any) {
     rows = Array.from(mockSharedPosts.values());
   } else if (table === 'shared_post_tombstones') {
     rows = Array.from(mockSharedPostTombstones.values());
+  } else if (table === 'sticker_assets') {
+    rows = Array.from(mockStickerAssets.values());
+  } else if (table === 'sticker_asset_refs') {
+    rows = Array.from(mockStickerAssetRefs.values());
   }
 
   for (const filter of state.filters) {
@@ -200,12 +225,19 @@ function applyUpdate(table: string, state: any, nextValues: Record<string, unkno
       const current = mockEnsureFriendMap(String(userId)).get(String(friendId)) ?? {};
       mockEnsureFriendMap(String(userId)).set(String(friendId), { ...current, ...nextValues });
     }
+    return;
+  }
+
+  if (table === 'sticker_assets') {
+    for (const asset of executeSelect(table, state)) {
+      mockStickerAssets.set(asset.id, { ...asset, ...nextValues });
+    }
   }
 }
 
 function applyDelete(table: string, state: any) {
   if (table !== 'shared_posts') {
-    if (table !== 'shared_post_tombstones') {
+    if (table !== 'shared_post_tombstones' && table !== 'sticker_asset_refs') {
       return;
     }
   }
@@ -214,6 +246,8 @@ function applyDelete(table: string, state: any) {
   for (const row of rows) {
     if (table === 'shared_posts') {
       mockSharedPosts.delete(row.id);
+    } else if (table === 'sticker_asset_refs') {
+      mockStickerAssetRefs.delete(`${row.container_type}:${row.container_id}:${row.asset_id}`);
     } else {
       mockSharedPostTombstones.delete(row.post_id);
     }
@@ -404,6 +438,115 @@ jest.mock('../utils/supabase', () => ({
     })),
     removeChannel: jest.fn(async () => 'ok'),
   }),
+  requireSupabase: () => ({
+    from: (table: string) => mockCreateQueryBuilder(table),
+    rpc: async (name: string, params: Record<string, unknown>) => {
+      if (name === 'accept_friend_invite') {
+        const inviteToken = String(params.invite_token ?? '').trim();
+        const inviteTokenHash = mockHashInviteToken(inviteToken);
+        const invite = Array.from(mockFriendInvites.values()).find(
+          (item) =>
+            (item.token === inviteToken ||
+              item.token === inviteTokenHash ||
+              item.token_hash === inviteToken ||
+              item.token_hash === inviteTokenHash) &&
+            (!params.invite_id || item.id === params.invite_id)
+        );
+
+        if (!invite) {
+          return { data: null, error: new Error('Invite not found.') };
+        }
+
+        invite.accepted_at = '2026-03-21T00:00:00.000Z';
+        invite.accepted_by_user_id = 'friend-1';
+
+        const inviterProfile = mockPublicProfiles.get(invite.inviter_user_id) ?? {
+          displayNameSnapshot: null,
+          photoURLSnapshot: null,
+        };
+        const receiverProfile = mockPublicProfiles.get('friend-1') ?? {
+          displayNameSnapshot: null,
+          photoURLSnapshot: null,
+        };
+
+        mockEnsureFriendMap('friend-1').set(invite.inviter_user_id, {
+          display_name_snapshot: inviterProfile.displayNameSnapshot,
+          photo_url_snapshot: inviterProfile.photoURLSnapshot,
+          friended_at: invite.created_at,
+          last_shared_at: null,
+          created_by_invite_id: invite.id,
+        });
+        mockEnsureFriendMap(invite.inviter_user_id).set('friend-1', {
+          display_name_snapshot: receiverProfile.displayNameSnapshot,
+          photo_url_snapshot: receiverProfile.photoURLSnapshot,
+          friended_at: invite.created_at,
+          last_shared_at: null,
+          created_by_invite_id: invite.id,
+        });
+
+        return {
+          data: [
+            {
+              user_id: 'friend-1',
+              friend_user_id: invite.inviter_user_id,
+              display_name_snapshot: inviterProfile.displayNameSnapshot,
+              photo_url_snapshot: inviterProfile.photoURLSnapshot,
+              friended_at: invite.created_at,
+              last_shared_at: null,
+              created_by_invite_id: invite.id,
+            },
+          ],
+          error: null,
+        };
+      }
+
+      if (name === 'remove_friend') {
+        const currentUserId = mockSessionUserId;
+        const friendUserId = String(params.friend_user_id);
+
+        for (const [postId, post] of mockSharedPosts.entries()) {
+          if (!Array.isArray(post.audience_user_ids)) {
+            continue;
+          }
+
+          if (post.author_user_id === currentUserId) {
+            mockSharedPosts.set(postId, {
+              ...post,
+              audience_user_ids: post.audience_user_ids.filter((userId: string) => userId !== friendUserId),
+              updated_at: '2026-03-27T00:00:00.000Z',
+            });
+            continue;
+          }
+
+          if (post.author_user_id === friendUserId) {
+            mockSharedPosts.set(postId, {
+              ...post,
+              audience_user_ids: post.audience_user_ids.filter((userId: string) => userId !== currentUserId),
+              updated_at: '2026-03-27T00:00:00.000Z',
+            });
+          }
+        }
+
+        for (const [userId, friends] of mockFriendships.entries()) {
+          friends.delete(String(params.friend_user_id));
+          if (String(params.friend_user_id) === userId) {
+            continue;
+          }
+          const target = mockFriendships.get(String(params.friend_user_id));
+          target?.delete(userId);
+        }
+
+        return { data: null, error: null };
+      }
+
+      return { data: null, error: null };
+    },
+    channel: jest.fn(() => ({
+      on: jest.fn().mockReturnThis(),
+      subscribe: jest.fn(),
+    })),
+    removeChannel: jest.fn(async () => 'ok'),
+  }),
   getSupabaseErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : typeof error === 'string' ? error : '',
   isSupabaseNetworkError: () => false,
@@ -471,15 +614,17 @@ const secondFriendUser = {
   providerData: [],
 } as any;
 
-beforeEach(() => {
+  beforeEach(() => {
   jest.clearAllMocks();
   mockUuidCounter = 0;
   mockSessionUserId = 'owner-1';
   mockSharedPostsInsertError = null;
-  mockFriendInvites.clear();
-  mockSharedPosts.clear();
-  mockSharedPostTombstones.clear();
-  mockFriendships.clear();
+    mockFriendInvites.clear();
+    mockSharedPosts.clear();
+    mockSharedPostTombstones.clear();
+    mockStickerAssets.clear();
+    mockStickerAssetRefs.clear();
+    mockFriendships.clear();
   mockPublicProfiles.clear();
   mockCachedActiveInvites.clear();
   mockPublicProfiles.set(ownerUser.id, {
@@ -653,7 +798,7 @@ describe('sharedFeedService', () => {
     );
   });
 
-  it('deletes shared post sticker assets from storage after row deletion', async () => {
+  it('clears shared post sticker refs without deleting the reusable sticker asset', async () => {
     mockSharedPosts.set('shared-sticker', {
       id: 'shared-sticker',
       author_user_id: ownerUser.id,
@@ -691,6 +836,12 @@ describe('sharedFeedService', () => {
       created_at: '2026-03-24T00:00:00.000Z',
       updated_at: null,
     });
+    mockStickerAssetRefs.set('shared_post:shared-sticker:remote-sticker-1', {
+      asset_id: 'remote-sticker-1',
+      owner_user_id: ownerUser.id,
+      container_type: 'shared_post',
+      container_id: 'shared-sticker',
+    });
 
     await deleteSharedPost(ownerUser, 'shared-sticker');
 
@@ -701,10 +852,11 @@ describe('sharedFeedService', () => {
         author_user_id: ownerUser.id,
       })
     );
-    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith(
+    expect(mockDeletePhotoFromStorage).not.toHaveBeenCalledWith(
       'shared-post-media',
       'owner-1/shared-post-sticker-1.png'
     );
+    expect(mockStickerAssetRefs.size).toBe(0);
   });
 
   it('revokes old shared audiences and hides author-only leftovers after removing a friend', async () => {

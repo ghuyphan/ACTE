@@ -16,6 +16,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import {
   ActivityIndicator,
+  InteractionManager,
   Platform,
   Pressable,
   StyleSheet,
@@ -323,8 +324,10 @@ export default function NotesIndexScreen() {
   const { notes, loading } = useNotesStore();
   const { sharedPosts, loading: sharedLoading } = useSharedFeedStore();
   const [mode, setMode] = useState<RecapMode>('all');
-  const [hasMountedRecap, setHasMountedRecap] = useState(false);
+  const [hasPreparedRecap, setHasPreparedRecap] = useState(process.env.NODE_ENV === 'test');
   const [showGridDecorations, setShowGridDecorations] = useState(process.env.NODE_ENV === 'test');
+  const [showAllModeLayer, setShowAllModeLayer] = useState(true);
+  const [isRecapPhysicsSuspended, setIsRecapPhysicsSuspended] = useState(false);
   const modeProgress = useSharedValue(0);
 
   const friendPosts = useMemo(
@@ -354,9 +357,8 @@ export default function NotesIndexScreen() {
   const gridSize = Math.floor((width - Layout.screenPadding * 2 - gridGap * 2) / 3);
   const isLoading = loading || (sharedLoading && items.length === 0);
   const hasRecapNotes = notes.length > 0;
-  const keepAllModeMounted = process.env.NODE_ENV !== 'test';
-  const shouldRenderRecap = hasRecapNotes && (hasMountedRecap || mode === 'recap');
-  const shouldRenderAllMode = mode === 'all' || keepAllModeMounted;
+  const shouldRenderRecap = hasRecapNotes && (hasPreparedRecap || mode === 'recap');
+  const shouldRenderAllMode = showAllModeLayer;
   const shouldAnimateGridTiles =
     !reduceMotionEnabled && Platform.OS !== 'android' && items.length <= GRID_TILE_ENTRY_ANIMATION_LIMIT + 1;
 
@@ -367,10 +369,44 @@ export default function NotesIndexScreen() {
   }, [hasRecapNotes, mode]);
 
   useEffect(() => {
-    if (mode === 'recap' && hasRecapNotes) {
-      setHasMountedRecap(true);
+    if (!hasRecapNotes) {
+      setHasPreparedRecap(process.env.NODE_ENV === 'test');
+      return;
     }
-  }, [hasRecapNotes, mode]);
+
+    if (hasPreparedRecap || mode === 'recap') {
+      setHasPreparedRecap(true);
+      return;
+    }
+
+    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+      setHasPreparedRecap(true);
+    });
+
+    return () => {
+      interactionHandle.cancel();
+    };
+  }, [hasPreparedRecap, hasRecapNotes, mode]);
+
+  useEffect(() => {
+    if (mode === 'all') {
+      setShowAllModeLayer(true);
+      return;
+    }
+
+    if (process.env.NODE_ENV === 'test') {
+      setShowAllModeLayer(false);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setShowAllModeLayer(false);
+    }, MODE_TRANSITION_DURATION_MS);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [mode]);
 
   useEffect(() => {
     modeProgress.value = withTiming(mode === 'recap' ? 1 : 0, {
@@ -379,24 +415,36 @@ export default function NotesIndexScreen() {
   }, [mode, modeProgress]);
 
   useEffect(() => {
-    if (showGridDecorations) {
+    if (process.env.NODE_ENV === 'test') {
       return;
     }
 
     let cancelled = false;
     let animationFrameId: number | null = null;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let interactionHandle: { cancel: () => void } | null = null;
 
-    animationFrameId = requestAnimationFrame(() => {
-      timeoutId = setTimeout(() => {
-        if (!cancelled) {
-          setShowGridDecorations(true);
-        }
-      }, GRID_DECORATION_REVEAL_DELAY_MS);
+    setShowGridDecorations(false);
+
+    if (mode !== 'all') {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    interactionHandle = InteractionManager.runAfterInteractions(() => {
+      animationFrameId = requestAnimationFrame(() => {
+        timeoutId = setTimeout(() => {
+          if (!cancelled) {
+            setShowGridDecorations(true);
+          }
+        }, GRID_DECORATION_REVEAL_DELAY_MS);
+      });
     });
 
     return () => {
       cancelled = true;
+      interactionHandle?.cancel();
       if (animationFrameId !== null) {
         cancelAnimationFrame(animationFrameId);
       }
@@ -404,7 +452,7 @@ export default function NotesIndexScreen() {
         clearTimeout(timeoutId);
       }
     };
-  }, [showGridDecorations]);
+  }, [mode]);
 
   const allLayerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: 1 - modeProgress.value,
@@ -435,6 +483,22 @@ export default function NotesIndexScreen() {
     },
     [requestFeedFocus, router]
   );
+  const handleModeChange = useCallback((nextMode: RecapMode) => {
+    if (nextMode === mode) {
+      return;
+    }
+
+    if (nextMode === 'all' && mode === 'recap' && process.env.NODE_ENV !== 'test') {
+      setIsRecapPhysicsSuspended(true);
+      requestAnimationFrame(() => {
+        setMode('all');
+      });
+      return;
+    }
+
+    setIsRecapPhysicsSuspended(false);
+    setMode(nextMode);
+  }, [mode]);
   const modeSwitch = hasRecapNotes ? (
     <Reanimated.View
       entering={FadeInUp.duration(220)}
@@ -447,7 +511,7 @@ export default function NotesIndexScreen() {
     >
       <RecapModeSwitch
         value={mode}
-        onChange={setMode}
+        onChange={handleModeChange}
         allLabel={t('notes.recap.allLabel', 'All')}
         recapLabel={t('notes.recap.recapLabel', 'Calendar')}
       />
@@ -499,7 +563,6 @@ export default function NotesIndexScreen() {
                     keyExtractor={(item) => item.id}
                     getItemType={(item) => `${item.kind}:${item.kind === 'note' ? item.note.type : item.post.type}`}
                     drawDistance={gridSize * 2}
-                    estimatedItemSize={gridSize + gridGap}
                     removeClippedSubviews={Platform.OS === 'android'}
                     renderItem={({ item, index }) => (
                       <GridTile
@@ -510,7 +573,7 @@ export default function NotesIndexScreen() {
                         colors={colors}
                         photoFallbackLabel={t('shared.photoMemory', 'Photo memory')}
                         animateOnMount={shouldAnimateGridTiles}
-                        showDecorations={showGridDecorations}
+                        showDecorations={showGridDecorations && mode === 'all'}
                         onPress={() => openItem(item)}
                       />
                     )}
@@ -535,6 +598,7 @@ export default function NotesIndexScreen() {
                   notes={notes}
                   bottomInset={insets.bottom}
                   isVisible={mode === 'recap'}
+                  suspendPhysics={isRecapPhysicsSuspended}
                 />
               </Reanimated.View>
             ) : null}

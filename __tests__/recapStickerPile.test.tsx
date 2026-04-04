@@ -84,6 +84,16 @@ const manyRecapItems = Array.from({ length: 14 }, (_, index) => ({
   renderMode: (index % 4 === 0 ? 'stamp' : 'default') as 'stamp' | 'default',
 }));
 
+const hugeRecapItems = Array.from({ length: 80 }, (_, index) => ({
+  key: `huge-item-${index + 1}`,
+  kind: (index % 4 === 0 ? 'photo' : 'sticker') as 'photo' | 'sticker',
+  previewUri: `file:///huge-item-${index + 1}.png`,
+  count: 1,
+  assetWidth: 220,
+  assetHeight: 280,
+  renderMode: (index % 5 === 0 ? 'stamp' : 'default') as 'stamp' | 'default',
+}));
+
 describe('RecapStickerPile', () => {
   beforeEach(() => {
     mockedUseStickerPhysics.mockClear();
@@ -132,5 +142,25 @@ describe('RecapStickerPile', () => {
     expect(latestCall?.placements.map((placement) => placement.id)).toEqual(
       manyRecapItems.map((item) => item.key)
     );
+  });
+
+  it('scales huge recap piles down more aggressively while keeping every item live', () => {
+    render(<RecapStickerPile items={manyRecapItems} />);
+    const mediumCall = mockedUseStickerPhysics.mock.calls.at(-1)?.[0];
+
+    const view = render(<RecapStickerPile items={hugeRecapItems} />);
+    hugeRecapItems.forEach((item) => {
+      expect(view.getByTestId(`notes-recap-item-${item.key}`)).toBeTruthy();
+    });
+
+    const hugeCall = mockedUseStickerPhysics.mock.calls.at(-1)?.[0];
+    expect(hugeCall?.placements).toHaveLength(hugeRecapItems.length);
+    expect(hugeCall?.placements.map((placement) => placement.id)).toEqual(
+      hugeRecapItems.map((item) => item.key)
+    );
+
+    const mediumMaxScale = Math.max(...(mediumCall?.placements ?? []).map((placement) => placement.scale));
+    const hugeMaxScale = Math.max(...(hugeCall?.placements ?? []).map((placement) => placement.scale));
+    expect(hugeMaxScale).toBeLessThan(mediumMaxScale);
   });
 });

@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Reanimated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, InteractionManager, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
@@ -17,10 +17,12 @@ const NotesRecapView = memo(function NotesRecapView({
   notes,
   bottomInset,
   isVisible = false,
+  suspendPhysics = false,
 }: {
   notes: Note[];
   bottomInset: number;
   isVisible?: boolean;
+  suspendPhysics?: boolean;
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -41,13 +43,14 @@ const NotesRecapView = memo(function NotesRecapView({
     weekDayLabels,
   } = useNotesRecapViewModel({ notes });
   const [hasCompletedFirstReveal, setHasCompletedFirstReveal] = useState(false);
+  const [isPileReady, setIsPileReady] = useState(process.env.NODE_ENV === 'test');
 
   useEffect(() => {
     if (!isVisible || hasCompletedFirstReveal) {
       return;
     }
 
-    if (reduceMotionEnabled) {
+    if (reduceMotionEnabled || process.env.NODE_ENV === 'test') {
       setHasCompletedFirstReveal(true);
       return;
     }
@@ -65,7 +68,35 @@ const NotesRecapView = memo(function NotesRecapView({
     };
   }, [hasCompletedFirstReveal, isVisible, reduceMotionEnabled]);
 
-  const shouldEnablePilePhysics = isVisible && hasCompletedFirstReveal;
+  useEffect(() => {
+    if (!activeRecap) {
+      setIsPileReady(process.env.NODE_ENV === 'test');
+      return;
+    }
+
+    if (!isVisible) {
+      return;
+    }
+
+    if (isPileReady) {
+      return;
+    }
+
+    if (process.env.NODE_ENV === 'test') {
+      setIsPileReady(true);
+      return;
+    }
+
+    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+      setIsPileReady(true);
+    });
+
+    return () => {
+      interactionHandle.cancel();
+    };
+  }, [activeRecap, isPileReady, isVisible]);
+
+  const shouldEnablePilePhysics = isVisible && hasCompletedFirstReveal && !suspendPhysics;
 
   return (
     <View
@@ -123,12 +154,29 @@ const NotesRecapView = memo(function NotesRecapView({
               style={styles.recapMonthSection}
             >
               <Reanimated.View entering={FadeIn.delay(70).duration(220)}>
-                <RecapStickerPile
-                  title={pileTitle}
-                  items={pileItems}
-                  deferUntilAfterInteractions
-                  physicsEnabled={shouldEnablePilePhysics}
-                />
+                {isPileReady ? (
+                  <RecapStickerPile
+                    title={pileTitle}
+                    items={pileItems}
+                    deferUntilAfterInteractions
+                    physicsEnabled={shouldEnablePilePhysics}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.recapPilePlaceholder,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.card,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.recapPilePlaceholderTitle, { color: colors.secondaryText }]}>
+                      {pileTitle ?? t('notes.recap.stickerTrayTitle', 'Used this month')}
+                    </Text>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                )}
               </Reanimated.View>
 
               <Reanimated.View
@@ -176,6 +224,22 @@ const styles = StyleSheet.create({
   },
   recapMonthHeader: {
     gap: 2,
+  },
+  recapPilePlaceholder: {
+    minHeight: 220,
+    borderRadius: 30,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+  },
+  recapPilePlaceholderTitle: {
+    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
   },
   recapCalendarShell: {
     borderRadius: 30,

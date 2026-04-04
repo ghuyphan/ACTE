@@ -18,6 +18,7 @@ import { type ComponentProps, forwardRef, memo, ReactNode, RefObject, useCallbac
 import {
   ActivityIndicator,
   Dimensions,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   type PressableProps,
@@ -682,6 +683,7 @@ interface CaptureCardProps {
   onChangeShareTarget: (nextTarget: 'private' | 'shared') => void;
   onDoodleModeChange?: (enabled: boolean) => void;
   onInteractionLockChange?: (locked: boolean) => void;
+  onTextEntryFocusChange?: (focused: boolean) => void;
   footerContent?: ReactNode;
 }
 
@@ -745,6 +747,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onChangeShareTarget,
   onDoodleModeChange,
   onInteractionLockChange,
+  onTextEntryFocusChange,
   footerContent,
 }, ref) {
   const reduceMotionEnabled = useReducedMotion();
@@ -777,6 +780,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const isSaveDisabled = isSaveBusy || isSaveSuccessful;
   const interactionsDisabled = isSaveBusy || isSaveSuccessful;
   const hasVisibleCameraStatus = captureMode === 'camera' && Boolean(cameraStatusText);
+  const noteInputRef = useRef<TextInput | null>(null);
+  const restaurantInputRef = useRef<TextInput | null>(null);
   const {
     activeTextPlaceholder,
     dismissCaptureInputs: dismissCaptureInputsState,
@@ -787,19 +792,32 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     handleRestaurantInputFocus,
     isNoteInputFocused,
     isTextEntryFocused,
-    keyboardLiftAnimatedStyle,
     rotatePlaceholderIfNeeded,
   } = useCaptureCardTextInputState({
     captureMode,
+    minimumVisibleInputY: topInset + 24,
     noteText,
+    noteInputRef,
     onChangeNoteText,
     placeholderVariants,
     reduceMotionEnabled,
+    restaurantInputRef,
   });
-  const noteInputRef = useRef<TextInput | null>(null);
-  const restaurantInputRef = useRef<TextInput | null>(null);
+  useEffect(() => {
+    onTextEntryFocusChange?.(isTextEntryFocused);
+  }, [isTextEntryFocused, onTextEntryFocusChange]);
+  useEffect(
+    () => () => {
+      onTextEntryFocusChange?.(false);
+    },
+    [onTextEntryFocusChange]
+  );
   const dismissCaptureInputs = useCallback(() => {
     noteInputRef.current?.blur();
+    restaurantInputRef.current?.blur();
+    dismissCaptureInputsState();
+  }, [dismissCaptureInputsState]);
+  const handleRestaurantInputSubmit = useCallback(() => {
     restaurantInputRef.current?.blur();
     dismissCaptureInputsState();
   }, [dismissCaptureInputsState]);
@@ -963,6 +981,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     Platform.OS === 'android' &&
     !isModeSwitchAnimating &&
     (captureMode === 'camera' || (captureMode === 'text' && isTextEntryFocused));
+  const shouldUseSimpleKeyboardAvoidance =
+    Platform.OS === 'ios' && captureMode === 'text' && isTextEntryFocused;
+  const androidTextEntryBottomInset =
+    Platform.OS === 'android' && captureMode === 'text' && isTextEntryFocused ? 96 : 0;
+  const captureKeyboardVerticalOffset = topInset + 76;
 
   useEffect(() => {
     if (saveState === 'success') {
@@ -1296,8 +1319,22 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   ) : null;
   return (
     <>
-      <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
-        <Reanimated.View style={keyboardLiftAnimatedStyle}>
+      <View
+        style={[
+          styles.snapItem,
+          {
+            height: snapHeight,
+            paddingTop: topInset + 60,
+            paddingBottom: androidTextEntryBottomInset,
+          },
+        ]}
+      >
+        <KeyboardAvoidingView
+          enabled={shouldUseSimpleKeyboardAvoidance}
+          behavior="padding"
+          keyboardVerticalOffset={captureKeyboardVerticalOffset}
+          style={styles.captureKeyboardAvoiding}
+        >
           <Reanimated.View
             testID="capture-card-area"
             style={[
@@ -1306,18 +1343,18 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             ]}
             pointerEvents={isSearching || interactionsDisabled ? 'none' : 'auto'}
           >
-          {captureMode === 'text' ? (
-            <LinearGradient
-              style={[
-                styles.textCard,
-                {
-                  borderColor: colors.captureCardBorder,
-                },
-              ]}
-              colors={captureGradient}
-              start={{ x: 0.08, y: 0.06 }}
-              end={{ x: 0.94, y: 0.94 }}
-            >
+            {captureMode === 'text' ? (
+              <LinearGradient
+                style={[
+                  styles.textCard,
+                  {
+                    borderColor: colors.captureCardBorder,
+                  },
+                ]}
+                colors={captureGradient}
+                start={{ x: 0.08, y: 0.06 }}
+                end={{ x: 0.94, y: 0.94 }}
+              >
               <PremiumNoteFinishOverlay
                 noteColor={noteColor}
                 animated
@@ -1585,7 +1622,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   onChangeText={handleChangeNoteText}
                   onFocus={handleNoteInputFocus}
                   onBlur={handleNoteInputBlur}
-                  onEndEditing={dismissCaptureInputs}
                   maxLength={300}
                   selectionColor={colors.primary}
                 />
@@ -2016,7 +2052,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               ) : null}
             </View>
           ) : null}
-          
           </Reanimated.View>
 
           <Reanimated.View
@@ -2026,161 +2061,161 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             ]}
             pointerEvents={interactionsDisabled ? 'none' : 'auto'}
           >
-          {hasVisibleCameraStatus ? (
-            <View style={styles.cameraStatusSlot}>
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.cameraStatusText,
-                  { color: colors.secondaryText, opacity: cameraStatusText ? 1 : 0 },
-                ]}
-              >
-                {cameraStatusText ?? ' '}
-              </Text>
-            </View>
-          ) : null}
-          <View style={styles.belowCardMetaRow}>
-            <View style={styles.captureMetaStack}>
-              {captureMode === 'text' ? (
-                <View style={[styles.cardRestaurantPill, styles.captureMetaComposite, { borderColor: colors.captureGlassBorder }]}>
-                  {isOlderIOS ? (
-                    <View
-                      style={[
-                        StyleSheet.absoluteFill,
-                        {
-                          backgroundColor: colors.captureGlassFill,
-                          borderRadius: Radii.pill,
-                        },
-                      ]}
+            {hasVisibleCameraStatus ? (
+              <View style={styles.cameraStatusSlot}>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.cameraStatusText,
+                    { color: colors.secondaryText, opacity: cameraStatusText ? 1 : 0 },
+                  ]}
+                >
+                  {cameraStatusText ?? ' '}
+                </Text>
+              </View>
+            ) : null}
+            <View style={styles.belowCardMetaRow}>
+              <View style={styles.captureMetaStack}>
+                {captureMode === 'text' ? (
+                  <View style={[styles.cardRestaurantPill, styles.captureMetaComposite, { borderColor: colors.captureGlassBorder }]}>
+                    {isOlderIOS ? (
+                      <View
+                        style={[
+                          StyleSheet.absoluteFill,
+                          {
+                            backgroundColor: colors.captureGlassFill,
+                            borderRadius: Radii.pill,
+                          },
+                        ]}
+                      />
+                    ) : null}
+                    <GlassView
+                      pointerEvents="none"
+                      style={StyleSheet.absoluteFill}
+                      glassEffectStyle="regular"
+                      colorScheme={colors.captureGlassColorScheme}
                     />
-                  ) : null}
-                  <GlassView
-                    pointerEvents="none"
-                    style={StyleSheet.absoluteFill}
-                    glassEffectStyle="regular"
-                    colorScheme={colors.captureGlassColorScheme}
-                  />
-                  <View style={styles.captureMetaInputWrap}>
-                    <Ionicons
-                      name="restaurant-outline"
-                      size={13}
-                      color={colors.captureGlassIcon}
-                    />
-                    <TextInput
-                      ref={restaurantInputRef}
-                      testID="capture-restaurant-input"
-                      style={[styles.cardRestaurantInput, styles.cardRestaurantInputCompact, { color: colors.captureGlassText }]}
-                      placeholder={t('capture.restaurantPlaceholder', 'Restaurant name (e.g. Phở Hòa)')}
-                      placeholderTextColor={colors.captureGlassPlaceholder}
-                      value={restaurantName}
-                      onChangeText={onChangeRestaurantName}
-                      onFocus={handleRestaurantInputFocus}
-                      onBlur={handleRestaurantInputBlur}
-                      onEndEditing={dismissCaptureInputs}
-                      onSubmitEditing={dismissCaptureInputs}
-                      returnKeyType="done"
-                      maxLength={100}
-                      selectionColor={colors.primary}
-                    />
-                  </View>
-                  <View style={[styles.captureMetaDivider, { backgroundColor: colors.captureGlassBorder }]} />
-                  <View style={styles.captureMetaActions}>
-                    <CaptureAnimatedPressable
-                      testID="capture-radius-toggle"
-                      accessibilityRole="button"
-                      accessibilityLabel={`${t('capture.radiusLabel', 'Reminder radius')}: ${formatRadiusLabel(radius)}`}
-                      onPress={handleOpenRadiusSheet}
-                      hitSlop={10}
-                      style={[
-                        styles.captureInlineRadiusButton,
-                        {
-                          backgroundColor: colors.captureGlassFill,
-                          borderColor: colors.captureGlassBorder,
-                        },
-                      ]}
-                    >
-                      <Ionicons name="radio-outline" size={16} color={colors.captureGlassText} />
-                    </CaptureAnimatedPressable>
-                    {onChangeNoteColor ? (
+                    <View style={styles.captureMetaInputWrap}>
+                      <Ionicons
+                        name="restaurant-outline"
+                        size={13}
+                        color={colors.captureGlassIcon}
+                      />
+                      <TextInput
+                        ref={restaurantInputRef}
+                        testID="capture-restaurant-input"
+                        style={[styles.cardRestaurantInput, styles.cardRestaurantInputCompact, { color: colors.captureGlassText }]}
+                        placeholder={t('capture.restaurantPlaceholder', 'Restaurant name (e.g. Phở Hòa)')}
+                        placeholderTextColor={colors.captureGlassPlaceholder}
+                        value={restaurantName}
+                        onChangeText={onChangeRestaurantName}
+                        onFocus={handleRestaurantInputFocus}
+                        onBlur={handleRestaurantInputBlur}
+                        blurOnSubmit
+                        onSubmitEditing={handleRestaurantInputSubmit}
+                        returnKeyType="done"
+                        maxLength={100}
+                        selectionColor={colors.primary}
+                      />
+                    </View>
+                    <View style={[styles.captureMetaDivider, { backgroundColor: colors.captureGlassBorder }]} />
+                    <View style={styles.captureMetaActions}>
                       <CaptureAnimatedPressable
-                        testID="capture-note-color-toggle"
+                        testID="capture-radius-toggle"
                         accessibilityRole="button"
-                        accessibilityLabel={t('capture.noteColor', 'Card color')}
-                        onPress={handleOpenNoteColorSheet}
+                        accessibilityLabel={`${t('capture.radiusLabel', 'Reminder radius')}: ${formatRadiusLabel(radius)}`}
+                        onPress={handleOpenRadiusSheet}
                         hitSlop={10}
                         style={[
-                          styles.captureInlineColorButton,
+                          styles.captureInlineRadiusButton,
                           {
                             backgroundColor: colors.captureGlassFill,
                             borderColor: colors.captureGlassBorder,
                           },
                         ]}
                       >
-                        <LinearGradient
-                          colors={inlineColorGradient}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={styles.captureInlineColorPreview}
-                        />
+                        <Ionicons name="radio-outline" size={16} color={colors.captureGlassText} />
                       </CaptureAnimatedPressable>
-                    ) : null}
+                      {onChangeNoteColor ? (
+                        <CaptureAnimatedPressable
+                          testID="capture-note-color-toggle"
+                          accessibilityRole="button"
+                          accessibilityLabel={t('capture.noteColor', 'Card color')}
+                          onPress={handleOpenNoteColorSheet}
+                          hitSlop={10}
+                          style={[
+                            styles.captureInlineColorButton,
+                            {
+                              backgroundColor: colors.captureGlassFill,
+                              borderColor: colors.captureGlassBorder,
+                            },
+                          ]}
+                        >
+                          <LinearGradient
+                            colors={inlineColorGradient}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.captureInlineColorPreview}
+                          />
+                        </CaptureAnimatedPressable>
+                      ) : null}
+                    </View>
                   </View>
-                </View>
-              ) : (
-                <View style={styles.cameraMetaSlot}>
-                  {cameraInstructionText ? (
-                    <Reanimated.View
-                      pointerEvents={showCameraInstructionHint ? 'auto' : 'none'}
-                      style={[styles.cameraMetaHintLayer, cameraHintAnimatedStyle]}
-                    >
-                      <View
-                        accessibilityRole="text"
-                        accessibilityLabel={cameraInstructionText}
-                        style={[styles.cameraHintPill, { borderColor: colors.captureGlassBorder }]}
+                ) : (
+                  <View style={styles.cameraMetaSlot}>
+                    {cameraInstructionText ? (
+                      <Reanimated.View
+                        pointerEvents={showCameraInstructionHint ? 'auto' : 'none'}
+                        style={[styles.cameraMetaHintLayer, cameraHintAnimatedStyle]}
                       >
-                        {isOlderIOS ? (
-                          <View
-                            style={[
-                              StyleSheet.absoluteFill,
-                              {
-                                backgroundColor: colors.captureGlassFill,
-                                borderRadius: Radii.pill,
-                              },
-                            ]}
-                          />
-                        ) : null}
-                        {!isOlderIOS ? (
-                          <GlassView
-                            pointerEvents="none"
-                            style={StyleSheet.absoluteFill}
-                            glassEffectStyle="regular"
-                            colorScheme={colors.captureGlassColorScheme}
-                          />
-                        ) : null}
-                        <View style={styles.cameraHintContent}>
-                          <Ionicons name="sparkles-outline" size={12} color={colors.captureGlassIcon} />
-                          <Text numberOfLines={1} style={[styles.cameraHintText, { color: colors.captureGlassIcon }]}>
-                            {t('capture.livePhotoCoachPhotoHint', 'Tap for photo')}
-                            <Text style={[styles.cameraHintSeparator, { color: colors.captureGlassBorder }]}>  •  </Text>
-                            <Text style={[styles.cameraHintAccentText, { color: colors.captureGlassText }]}>
-                              {t('capture.livePhotoCoachLiveHint', 'Hold for Live')}
+                        <View
+                          accessibilityRole="text"
+                          accessibilityLabel={cameraInstructionText}
+                          style={[styles.cameraHintPill, { borderColor: colors.captureGlassBorder }]}
+                        >
+                          {isOlderIOS ? (
+                            <View
+                              style={[
+                                StyleSheet.absoluteFill,
+                                {
+                                  backgroundColor: colors.captureGlassFill,
+                                  borderRadius: Radii.pill,
+                                },
+                              ]}
+                            />
+                          ) : null}
+                          {!isOlderIOS ? (
+                            <GlassView
+                              pointerEvents="none"
+                              style={StyleSheet.absoluteFill}
+                              glassEffectStyle="regular"
+                              colorScheme={colors.captureGlassColorScheme}
+                            />
+                          ) : null}
+                          <View style={styles.cameraHintContent}>
+                            <Ionicons name="sparkles-outline" size={12} color={colors.captureGlassIcon} />
+                            <Text numberOfLines={1} style={[styles.cameraHintText, { color: colors.captureGlassIcon }]}>
+                              {t('capture.livePhotoCoachPhotoHint', 'Tap for photo')}
+                              <Text style={[styles.cameraHintSeparator, { color: colors.captureGlassBorder }]}>  •  </Text>
+                              <Text style={[styles.cameraHintAccentText, { color: colors.captureGlassText }]}>
+                                {t('capture.livePhotoCoachLiveHint', 'Hold for Live')}
+                              </Text>
                             </Text>
-                          </Text>
+                          </View>
                         </View>
-                      </View>
-                    </Reanimated.View>
-                  ) : null}
-                  <Reanimated.View
-                    pointerEvents={showCameraInstructionHint ? 'none' : 'auto'}
-                    style={[styles.cameraMetaButtonLayer, cameraRadiusAnimatedStyle]}
-                  >
-                    <CaptureAnimatedPressable
-                      testID="capture-radius-toggle"
-                      accessibilityRole="button"
-                      accessibilityLabel={`${t('capture.radiusLabel', 'Reminder radius')}: ${formatRadiusLabel(radius)}`}
-                      accessibilityElementsHidden={showCameraInstructionHint}
-                      importantForAccessibility={showCameraInstructionHint ? 'no-hide-descendants' : 'auto'}
-                      disabled={showCameraInstructionHint}
+                      </Reanimated.View>
+                    ) : null}
+                    <Reanimated.View
+                      pointerEvents={showCameraInstructionHint ? 'none' : 'auto'}
+                      style={[styles.cameraMetaButtonLayer, cameraRadiusAnimatedStyle]}
+                    >
+                      <CaptureAnimatedPressable
+                        testID="capture-radius-toggle"
+                        accessibilityRole="button"
+                        accessibilityLabel={`${t('capture.radiusLabel', 'Reminder radius')}: ${formatRadiusLabel(radius)}`}
+                        accessibilityElementsHidden={showCameraInstructionHint}
+                        importantForAccessibility={showCameraInstructionHint ? 'no-hide-descendants' : 'auto'}
+                        disabled={showCameraInstructionHint}
                       onPress={handleOpenRadiusSheet}
                       hitSlop={10}
                       childrenContainerStyle={styles.captureStandaloneRadiusButtonContent}
@@ -2451,7 +2486,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           )}
           {footerContent ? <View style={styles.footerSlot}>{footerContent}</View> : null}
           </Reanimated.View>
-        </Reanimated.View>
+        </KeyboardAvoidingView>
       </View>
       <StickerSourceSheet
         visible={showStickerSourceSheet}
@@ -2492,6 +2527,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 export default CaptureCard;
 
 const styles = StyleSheet.create({
+  captureKeyboardAvoiding: {
+    width: '100%',
+  },
   captureButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',

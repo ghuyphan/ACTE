@@ -1,5 +1,6 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import i18n from '../constants/i18n';
 import { Note } from '../services/database';
 import {
   acceptFriendInvite as acceptInvite,
@@ -282,7 +283,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
   const requireUser = useCallback(() => {
     if (!enabled || !user) {
-      throw new Error('Sign in to share moments.');
+      throw new Error(i18n.t('shared.signInRequiredError', 'Sign in to share moments.'));
     }
 
     return user;
@@ -290,7 +291,12 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
   const requireOnline = useCallback(() => {
     if (!isOnline) {
-      throw new Error('You are offline. Cached shared moments are still visible, but sharing actions need a connection.');
+      throw new Error(
+        i18n.t(
+          'shared.offlineActionError',
+          'You are offline. Cached shared moments are still visible, but sharing actions need a connection.'
+        )
+      );
     }
   }, [isOnline]);
 

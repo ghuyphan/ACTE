@@ -51,7 +51,7 @@
         "savedLocalMsg": "Ghi chú đã được lưu trên thiết bị này. Bật nhắc nhở để nhận thông báo khi bạn quay lại địa điểm này.",
         "enableReminders": "Bật nhắc nhở",
         "reminderDisclosureTitle": "Bật nhắc nhở nền",
-        "reminderDisclosureMsg": "Noto dùng vị trí nền để nhận ra khi bạn quay lại một địa điểm đã lưu, kể cả khi ứng dụng đã đóng hoặc không hiển thị trên màn hình. Dữ liệu này chỉ được dùng để gửi nhắc nhở cho ghi chú của bạn.",
+        "reminderDisclosureMsg": "Ứng dụng này thu thập dữ liệu vị trí để nhắc bạn khi quay lại một địa điểm đã lưu, kể cả khi ứng dụng đã đóng hoặc không được sử dụng. Noto chỉ dùng dữ liệu này cho nhắc nhở ghi chú ở gần.",
         "remindersEnabledTitle": "Đã bật nhắc nhở",
         "remindersEnabledMsg": "Noto sẽ nhắc bạn khi quay lại những nơi đã lưu.",
         "remindersUnavailableTitle": "Nhắc nhở vẫn đang tắt",
@@ -114,25 +114,25 @@
         "filterVintage": "Hoài cổ",
         "stickerUnsupportedFormat": "Hãy nhập ảnh PNG, WebP, JPEG hoặc HEIC.",
         "stickerFileUnavailable": "Tệp sticker hiện không khả dụng trên thiết bị này.",
-        "stickerMissingTransparency": "Nếu bạn muốn sticker nổi, hãy dùng PNG hoặc WebP có nền trong suốt. Ảnh thường sẽ được nhập dưới dạng con dấu.",
-        "stickerPasteHint": "Chạm để chỉnh sticker. Chạm nút + để tạo sticker hoặc con dấu.",
+        "stickerMissingTransparency": "Nếu bạn muốn sticker nổi, hãy dùng PNG hoặc WebP có nền trong suốt. Ảnh thường sẽ được nhập dưới dạng con tem.",
+        "stickerPasteHint": "Chạm để chỉnh sticker. Chạm nút + để tạo sticker hoặc con tem.",
         "stickerOutline": "Viền",
         "stickerOutlineEnable": "Bật viền",
         "stickerOutlineDisable": "Tắt viền",
         "stickerStamp": "Dấu",
-        "stickerStampEnable": "Bật kiểu con dấu",
-        "stickerStampDisable": "Tắt kiểu con dấu",
+        "stickerStampEnable": "Bật kiểu con tem",
+        "stickerStampDisable": "Tắt kiểu con tem",
         "addStickerTitle": "Thêm sticker",
-        "addStickerHint": "Chọn sticker nổi hoặc con dấu từ ảnh.",
-        "stampOptionsTitle": "Tùy chọn con dấu",
+        "addStickerHint": "Chọn sticker nổi hoặc con tem từ ảnh.",
+        "stampOptionsTitle": "Tùy chọn con tem",
         "stickerOptionsTitle": "Tùy chọn sticker",
         "stickerOptionsHint": "Chọn các điều khiển sticker bổ sung ở đây.",
-        "stampMore": "Thêm tùy chọn con dấu",
+        "stampMore": "Thêm tùy chọn con tem",
         "stickerMore": "Thêm tùy chọn sticker",
         "createStickerLabel": "Tạo sticker",
         "createStickerDescription": "PNG hoặc WebP trong suốt",
-        "createStampLabel": "Tạo con dấu",
-        "createStampDescription": "Biến bất kỳ ảnh nào thành con dấu răng cưa",
+        "createStampLabel": "Tạo con tem",
+        "createStampDescription": "Biến bất kỳ ảnh nào thành con tem răng cưa",
         "pasteStickerFromClipboard": "Dán từ khay nhớ tạm",
         "pasteStickerAction": "Dán sticker",
         "clipboardStickerReadyHint": "Ảnh bạn vừa sao chép sẽ được thêm dưới dạng sticker.",
@@ -145,7 +145,13 @@
         "clipboardStickerPermissionDeniedMsg": "Thiết bị hiện không cho Noto đọc ảnh đó từ khay nhớ tạm. Hãy thử sao chép lại, hoặc nhập từ Ảnh thay thế.",
         "clipboardStickerUnsupported": "Hiện chưa thể đọc ảnh đó từ khay nhớ tạm.",
         "clipboardStickerStorageUnavailable": "Bộ nhớ sticker hiện không khả dụng trên thiết bị này.",
-        "clipboardStickerFailed": "Hiện chưa thể dán sticker đó."
+        "clipboardStickerFailed": "Hiện chưa thể dán sticker đó.",
+        "cancel": "Hủy",
+        "unlockStickerMotion": "Mở khóa chuyển động sticker",
+        "lockStickerMotion": "Khóa chuyển động sticker",
+        "doneStickers": "Xong",
+        "stickers": "Sticker",
+        "remindersUnavailableSettingsMsg": "Quyền vị trí nền hoặc thông báo của Noto đang bị chặn. Hãy mở Cài đặt để bật nhắc nhở."
     },
     "map": {
         "photoNote": "Ghi chú ảnh",
@@ -183,7 +189,8 @@
         "emptySubtitle": "Các ghi chú đã lưu sẽ xuất hiện ở đây dưới dạng ghim.",
         "friendsChip": "Bạn bè",
         "friendFrom": "Từ {{name}}",
-        "openShared": "Mở chia sẻ"
+        "openShared": "Mở chia sẻ",
+        "dismissPreview": "Đóng xem trước bản đồ"
     },
     "noteDetail": {
         "deleteTitle": "Xóa ghi chú",
@@ -225,7 +232,9 @@
         "sharePhotoMsg": "📷 Ảnh kỷ niệm tại {{location}}",
         "updated": "Đã cập nhật!",
         "updateWarningTitle": "Đã lưu trên máy",
-        "updateWarningMsg": "Ghi chú đã được cập nhật trên thiết bị của bạn, nhưng bản chia sẻ chưa thể làm mới ngay lúc này."
+        "updateWarningMsg": "Ghi chú đã được cập nhật trên thiết bị của bạn, nhưng bản chia sẻ chưa thể làm mới ngay lúc này.",
+        "favoriteErrorTitle": "Không thể cập nhật mục yêu thích",
+        "favoriteErrorMsg": "Vui lòng thử lại sau ít phút."
     },
     "notes": {
         "viewAllTitle": "Tất cả ghi chú",
@@ -334,7 +343,9 @@
         "joinErrorBody": "Hãy dán một liên kết mời hợp lệ để kết nối.",
         "joinSuccessTitle": "Bạn đã kết nối",
         "joinSuccessBody": "Giờ bạn có thể chia sẻ ghi chú với người bạn này ngay từ Home.",
-        "joinFailedTitle": "Không thể tham gia"
+        "joinFailedTitle": "Không thể tham gia",
+        "signInRequiredError": "Đăng nhập để chia sẻ khoảnh khắc.",
+        "offlineActionError": "Bạn đang ngoại tuyến. Khoảnh khắc đã lưu vẫn xem được, nhưng các thao tác chia sẻ cần có kết nối mạng."
     },
     "settings": {
         "title": "Cài đặt",
@@ -393,6 +404,7 @@
         "syncSchemaOutdatedMsg": "Đồng bộ đám mây cần các migration máy chủ mới nhất. Hãy áp dụng Supabase migration mới nhất rồi thử lại.",
         "syncPhotoTooLargeMsg": "Một ảnh quá lớn để đồng bộ an toàn. Hãy chụp lại với độ phân giải thấp hơn rồi thử lại.",
         "syncBlockedRetryMsg": "Ghi chú này không thể đồng bộ sau nhiều lần thử. Hãy chỉnh sửa rồi thử lại.",
+        "syncQueueFailureMsg": "Một số ghi chú chưa thể đồng bộ. Hãy kiểm tra kích thước ảnh và kết nối rồi thử lại.",
         "syncSuccessTitle": "Đồng bộ hoàn tất",
         "syncSuccessMsgOne": "Đã đồng bộ 1 ghi chú lên máy chủ.",
         "syncSuccessMsgOther": "Đã đồng bộ {{count}} ghi chú lên máy chủ.",
@@ -444,6 +456,8 @@
         "signedOutMsg": "Đăng nhập để sao lưu ghi chú và đồng bộ chúng trên các thiết bị của bạn.",
         "unavailableMsg": "Đăng nhập tài khoản hiện chưa khả dụng, nhưng ghi chú của bạn vẫn được lưu an toàn trên thiết bị này.",
         "logout": "Đăng xuất",
+        "logoutConfirmTitle": "Đăng xuất khỏi Noto?",
+        "logoutConfirmMsg": "Ghi chú của bạn vẫn sẽ được đồng bộ an toàn. Bạn có thể đăng nhập lại bất cứ lúc nào.",
         "logoutFailedTitle": "Không thể đăng xuất",
         "logoutFailed": "Hiện chưa thể hoàn tất đăng xuất. Vui lòng thử lại sau ít phút nữa.",
         "actionsTitle": "Thao tác",
@@ -601,7 +615,25 @@
         "accessoryAddLabel": "Thêm",
         "accessorySavedLabel": "Đã lưu",
         "accessoryNearLabel": "Gần",
-        "livePhotoBadge": "Live"
+        "livePhotoBadge": "Live",
+        "configTitle": "Nhắc nhở ở gần",
+        "configDescription": "Xem đúng ghi chú khi bạn quay lại một nơi quen thuộc.",
+        "countBadgeFallbackOne": "%d ghi chú",
+        "countBadgeFallbackOther": "%d ghi chú",
+        "nearbyPlaceFallbackOne": "%d địa điểm ở gần",
+        "nearbyPlaceFallbackOther": "%d địa điểm ở gần"
+    },
+    "debug": {
+        "tilt": {
+            "title": "Nghiêng giả lập",
+            "sensor": "Cảm biến",
+            "left": "Trái",
+            "right": "Phải",
+            "up": "Lên",
+            "down": "Xuống",
+            "drift": "Trôi",
+            "flat": "Phẳng"
+        }
     },
     "feedback": {
         "favorited": "Đã yêu thích",
@@ -610,6 +642,7 @@
     },
     "plus": {
         "title": "Noto Plus",
+        "badge": "Plus",
         "subtitle": "Nhiều không gian hơn cùng hiệu ứng lấp lánh hơn cho những khoảnh khắc bạn muốn lưu lại.",
         "includedEyebrow": "Có ngay hôm nay",
         "includedTitle": "Những gì Plus mở khóa hôm nay",
@@ -645,6 +678,10 @@
         "restoreFailedMessage": "Hiện chưa thể khôi phục giao dịch.",
         "offlineTitle": "Bạn đang ngoại tuyến",
         "offlineBody": "Gói hiện tại của bạn vẫn được hiển thị, nhưng để mua hoặc khôi phục cần có kết nối mạng.",
+        "monthly": "Theo tháng",
+        "yearly": "Theo năm",
+        "lifetime": "Trọn đời",
+        "customerCenter": "Quản lý gói đăng ký",
         "close": "Đóng",
         "libraryTitle": "Yêu cầu Plus",
         "libraryMessage": "Tính năng nhập từ Ảnh chỉ có trong Plus.",
@@ -657,12 +694,21 @@
         "limitTitle": "Đã đạt giới hạn ảnh",
         "limitMessage": "Bản miễn phí có 10 ghi chú ảnh. Plus gỡ bỏ giới hạn này và mở khóa tính năng nhập từ Ảnh."
     },
+    "not_found": {
+        "title": "Ôi không!",
+        "message": "Màn hình này không tồn tại.",
+        "go_home": "Về màn hình chính"
+    },
     "common": {
         "cancel": "Hủy",
         "continue": "Tiếp tục",
         "delete": "Xóa",
         "goBack": "Quay lại",
         "done": "Xong",
-        "openSettings": "Mở Cài đặt"
+        "openSettings": "Mở Cài đặt",
+        "ok": "OK",
+        "close": "Đóng",
+        "back": "Quay lại",
+        "previewLivePhotoMotion": "Xem trước chuyển động live photo"
     }
 }

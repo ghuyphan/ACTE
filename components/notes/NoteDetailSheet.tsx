@@ -995,14 +995,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setShowStickerSourceSheet(true);
     }, [dismissPastePrompt, importingSticker, isEditing, note]);
     const stickerSourceActions = useMemo(() => {
-        const actions: Array<{
+        const actions: {
             key: string;
             iconName: 'images-outline' | 'pricetag-outline' | 'clipboard-outline';
             label: string;
             description: string;
             onPress: () => void;
             testID: string;
-        }> = [
+        }[] = [
             {
                 key: 'create-sticker',
                 iconName: 'images-outline',

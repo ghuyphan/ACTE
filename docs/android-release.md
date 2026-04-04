@@ -26,7 +26,15 @@ Local smoke tests can still opt into the debug keystore with `ACTE_ALLOW_DEBUG_S
 
 - Package ID: `com.acte.app`
 - Confirm camera, photo-library, notifications, foreground location, and background location disclosures.
+- If place reminders stay enabled for Android production, complete Play Console `Sensitive app permissions > Location permissions`.
+- Record a short Android demo video that shows:
+  - the saved-note reminder disclosure
+  - the runtime location permission prompt
+  - the reminder feature being enabled and used as a core flow
+- Make the store listing clearly describe the background reminder value as a core feature, not a secondary extra.
 - Keep the privacy policy, support, and account-deletion metadata aligned with the app settings surfaces.
+- Make sure the privacy policy explicitly covers background location usage for nearby note reminders.
+- Provide reusable reviewer login instructions if auth is needed to reach reminder or sharing flows.
 - Prepare screenshots for light and dark mode on phone form factors.
 - Roll out through Internal testing before Closed or Production.
 

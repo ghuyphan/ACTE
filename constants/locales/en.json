@@ -51,7 +51,7 @@
         "savedLocalMsg": "Your note is saved on this device. Enable reminders to get notified when you revisit this place.",
         "enableReminders": "Enable reminders",
         "reminderDisclosureTitle": "Enable background reminders",
-        "reminderDisclosureMsg": "Noto uses your location in the background to notice when you return to a saved place, even when the app is closed or not on screen. We only use this to trigger your note reminders.",
+        "reminderDisclosureMsg": "This app collects location data to remind you when you return to a saved place, even when the app is closed or not in use. Noto only uses this data for nearby note reminders.",
         "remindersEnabledTitle": "Reminders enabled",
         "remindersEnabledMsg": "Noto will remind you when you return to saved places.",
         "remindersUnavailableTitle": "Reminders still off",
@@ -145,7 +145,13 @@
         "clipboardStickerPermissionDeniedMsg": "This device will not let Noto read that clipboard image right now. Try copying it again, or import it from Photos instead.",
         "clipboardStickerUnsupported": "We could not read that clipboard image right now.",
         "clipboardStickerStorageUnavailable": "Sticker storage is unavailable on this device.",
-        "clipboardStickerFailed": "We could not paste that sticker right now."
+        "clipboardStickerFailed": "We could not paste that sticker right now.",
+        "cancel": "Cancel",
+        "unlockStickerMotion": "Unlock sticker motion",
+        "lockStickerMotion": "Lock sticker motion",
+        "doneStickers": "Done",
+        "stickers": "Stickers",
+        "remindersUnavailableSettingsMsg": "Background location or notifications are blocked for Noto. Open Settings to enable reminders."
     },
     "map": {
         "photoNote": "Photo Note",
@@ -183,7 +189,8 @@
         "emptySubtitle": "Your saved notes will appear here as pins.",
         "friendsChip": "Friends",
         "friendFrom": "From {{name}}",
-        "openShared": "Open shared"
+        "openShared": "Open shared",
+        "dismissPreview": "Dismiss map preview"
     },
     "noteDetail": {
         "deleteTitle": "Delete Note",
@@ -225,7 +232,9 @@
         "sharePhotoMsg": "📷 Photo Memory at {{location}}",
         "updated": "Note updated!",
         "updateWarningTitle": "Saved locally",
-        "updateWarningMsg": "This note was updated on your device, but the shared copy could not be refreshed yet."
+        "updateWarningMsg": "This note was updated on your device, but the shared copy could not be refreshed yet.",
+        "favoriteErrorTitle": "Could not update favorite",
+        "favoriteErrorMsg": "Please try again in a moment."
     },
     "notes": {
         "viewAllTitle": "All notes",
@@ -334,7 +343,9 @@
         "joinErrorBody": "Paste a valid invite link to connect.",
         "joinSuccessTitle": "You're connected",
         "joinSuccessBody": "You can now share notes with this friend from Home.",
-        "joinFailedTitle": "Could not join"
+        "joinFailedTitle": "Could not join",
+        "signInRequiredError": "Sign in to share moments.",
+        "offlineActionError": "You are offline. Cached shared moments are still visible, but sharing actions need a connection."
     },
     "settings": {
         "title": "Settings",
@@ -393,6 +404,7 @@
         "syncSchemaOutdatedMsg": "Cloud sync needs the latest server migrations. Apply the latest Supabase migrations, then try again.",
         "syncPhotoTooLargeMsg": "A photo is too large to sync safely. Retake it with a lower resolution, then try again.",
         "syncBlockedRetryMsg": "This note could not be synced after multiple attempts. Edit it and try again.",
+        "syncQueueFailureMsg": "Some notes could not be synced. Please try again after checking your photo sizes and connection.",
         "syncSuccessTitle": "Sync complete",
         "syncSuccessMsgOne": "Synced 1 note to the server.",
         "syncSuccessMsgOther": "Synced {{count}} notes to the server.",
@@ -444,6 +456,8 @@
         "signedOutMsg": "Sign in to back up your notes and keep them synced across your devices.",
         "unavailableMsg": "Account sign-in is unavailable right now, but your notes stay safely on this device.",
         "logout": "Log out",
+        "logoutConfirmTitle": "Log out of Noto?",
+        "logoutConfirmMsg": "Your notes will remain safely synced. You can sign back in anytime.",
         "logoutFailedTitle": "Could not log out",
         "logoutFailed": "We could not finish signing you out right now. Please try again in a moment.",
         "actionsTitle": "Actions",
@@ -601,7 +615,25 @@
         "accessoryAddLabel": "Add",
         "accessorySavedLabel": "Saved",
         "accessoryNearLabel": "Near",
-        "livePhotoBadge": "Live"
+        "livePhotoBadge": "Live",
+        "configTitle": "Nearby reminders",
+        "configDescription": "See the right note when you return somewhere familiar.",
+        "countBadgeFallbackOne": "%d note",
+        "countBadgeFallbackOther": "%d notes",
+        "nearbyPlaceFallbackOne": "%d place nearby",
+        "nearbyPlaceFallbackOther": "%d places nearby"
+    },
+    "debug": {
+        "tilt": {
+            "title": "Sim Tilt",
+            "sensor": "Sensor",
+            "left": "Left",
+            "right": "Right",
+            "up": "Up",
+            "down": "Down",
+            "drift": "Drift",
+            "flat": "Flat"
+        }
     },
     "feedback": {
         "favorited": "Favorited",
@@ -610,6 +642,7 @@
     },
     "plus": {
         "title": "Noto Plus",
+        "badge": "Plus",
         "subtitle": "More room and more shimmer for the moments you want to keep.",
         "includedEyebrow": "Included today",
         "includedTitle": "What Plus unlocks today",
@@ -655,7 +688,16 @@
         "restoreFailedTitle": "Restore failed",
         "restoreFailedMessage": "We couldn't restore purchases right now.",
         "offlineTitle": "Offline right now",
-        "offlineBody": "Your current plan is still visible, but purchases and restores need an internet connection."
+        "offlineBody": "Your current plan is still visible, but purchases and restores need an internet connection.",
+        "monthly": "Monthly",
+        "yearly": "Yearly",
+        "lifetime": "Lifetime",
+        "customerCenter": "Manage subscription"
+    },
+    "not_found": {
+        "title": "Oops!",
+        "message": "This screen doesn't exist.",
+        "go_home": "Go to home screen!"
     },
     "common": {
         "cancel": "Cancel",
@@ -663,6 +705,10 @@
         "delete": "Delete",
         "goBack": "Go Back",
         "done": "Done",
-        "openSettings": "Open Settings"
+        "openSettings": "Open Settings",
+        "ok": "OK",
+        "close": "Close",
+        "back": "Back",
+        "previewLivePhotoMotion": "Preview live photo motion"
     }
 }

@@ -1,0 +1,16 @@
+"widget.idleText" = "The right note will appear when you're nearby.";
+"widget.memoryReminder" = "A quiet reminder from here.";
+"widget.accessorySaveMemory" = "Save a memory";
+"widget.accessoryAddFirstPlace" = "Add your first place";
+"widget.accessoryMemoryNearby" = "Memory nearby";
+"widget.accessoryOpenApp" = "Open Noto";
+"widget.accessoryAddLabel" = "Add";
+"widget.accessorySavedLabel" = "Saved";
+"widget.accessoryNearLabel" = "Near";
+"widget.livePhotoBadge" = "Live";
+"widget.configTitle" = "Nearby reminders";
+"widget.configDescription" = "See the right note when you return somewhere familiar.";
+"widget.countBadgeFallbackOne" = "%d note";
+"widget.countBadgeFallbackOther" = "%d notes";
+"widget.nearbyPlaceFallbackOne" = "%d place nearby";
+"widget.nearbyPlaceFallbackOther" = "%d places nearby";

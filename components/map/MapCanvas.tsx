@@ -11,8 +11,7 @@ import Reanimated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import type { MapClusterNode } from '../../hooks/map/mapDomain';
-import type { MapPointGroup } from '../../hooks/map/mapDomain';
+import type { MapClusterNode, MapPointGroup } from '../../hooks/map/mapDomain';
 import type { ThemeColors } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';

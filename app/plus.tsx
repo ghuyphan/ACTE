@@ -162,7 +162,9 @@ export default function PlusScreen() {
             <Text style={[styles.title, { color: colors.text }]}>
               {t('auth.title', 'Noto')}
             </Text>
-            <Text style={[styles.plusBadge, { color: colors.primary }]}>Plus</Text>
+            <Text style={[styles.plusBadge, { color: colors.primary }]}>
+              {t('plus.badge', 'Plus')}
+            </Text>
           </View>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
             {t('plus.subtitle', 'More room for your photo memories.')}

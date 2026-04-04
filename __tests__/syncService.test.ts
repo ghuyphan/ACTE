@@ -49,6 +49,8 @@ const mockRemoteNotes = new Map<string, any>();
 const mockRemoteSharedPosts = new Map<string, any>();
 const mockRemoteNoteTombstones = new Map<string, any>();
 const mockRemoteSharedPostTombstones = new Map<string, any>();
+const mockRemoteStickerAssets = new Map<string, any>();
+const mockRemoteStickerAssetRefs = new Map<string, any>();
 const mockUserUsage = new Map<string, any>();
 const mockPublicProfiles = new Map<string, any>();
 let mockNotesUpsertError: unknown = null;
@@ -272,6 +274,34 @@ function executeTombstoneQuery(
   return rows;
 }
 
+function executeStickerAssetsQuery(state: any) {
+  let rows = Array.from(mockRemoteStickerAssets.values());
+
+  for (const filter of state.filters) {
+    if (filter.type === 'eq') {
+      rows = rows.filter((row) => row?.[filter.field] === filter.value);
+    }
+  }
+
+  return rows;
+}
+
+function executeStickerAssetRefsQuery(state: any) {
+  let rows = Array.from(mockRemoteStickerAssetRefs.values());
+
+  for (const filter of state.filters) {
+    if (filter.type === 'eq') {
+      rows = rows.filter((row) => row?.[filter.field] === filter.value);
+    }
+
+    if (filter.type === 'in') {
+      rows = rows.filter((row) => filter.values.includes(row?.[filter.field]));
+    }
+  }
+
+  return rows;
+}
+
 function mockCreateNotesQueryBuilder() {
   const state = {
     filters: [] as Array<{ type: 'eq' | 'gt'; field: string; value: unknown }>,
@@ -442,6 +472,122 @@ function mockCreateTombstonesQueryBuilder(
   return builder;
 }
 
+function mockCreateStickerAssetsQueryBuilder() {
+  const state = {
+    filters: [] as Array<{ type: 'eq'; field: string; value: unknown }>,
+    updateValues: null as Record<string, unknown> | null,
+  };
+
+  const builder: any = {
+    select: () => builder,
+    eq: (field: string, value: unknown) => {
+      state.filters.push({ type: 'eq', field, value });
+      return builder;
+    },
+    maybeSingle: async () => {
+      const rows = executeStickerAssetsQuery(state);
+      return { data: rows[0] ?? null, error: null };
+    },
+    insert: async (value: Record<string, unknown>) => {
+      const nextId = `remote-sticker-${mockRemoteStickerAssets.size + 1}`;
+      mockRemoteStickerAssets.set(nextId, {
+        id: nextId,
+        created_at: '2026-03-10T00:00:00.000Z',
+        ...value,
+      });
+      return { error: null };
+    },
+    update: (value: Record<string, unknown>) => {
+      state.updateValues = value;
+      return builder;
+    },
+    then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
+      try {
+        if (state.updateValues) {
+          const rows = executeStickerAssetsQuery(state);
+          for (const row of rows) {
+            mockRemoteStickerAssets.set(row.id, {
+              ...row,
+              ...state.updateValues,
+            });
+          }
+
+          return Promise.resolve(resolve({ data: null, error: null }));
+        }
+
+        return Promise.resolve(resolve({ data: executeStickerAssetsQuery(state), error: null }));
+      } catch (error) {
+        if (reject) {
+          return Promise.resolve(reject(error));
+        }
+
+        return Promise.reject(error);
+      }
+    },
+  };
+
+  return builder;
+}
+
+function mockCreateStickerAssetRefsQueryBuilder() {
+  const state = {
+    filters: [] as Array<
+      | { type: 'eq'; field: string; value: unknown }
+      | { type: 'in'; field: string; values: unknown[] }
+    >,
+    deleteMode: false,
+  };
+
+  const builder: any = {
+    select: () => builder,
+    eq: (field: string, value: unknown) => {
+      state.filters.push({ type: 'eq', field, value });
+      return builder;
+    },
+    in: (field: string, values: unknown[]) => {
+      state.filters.push({ type: 'in', field, values });
+      return builder;
+    },
+    upsert: async (value: Record<string, unknown> | Array<Record<string, unknown>>) => {
+      const rows = Array.isArray(value) ? value : [value];
+      for (const row of rows) {
+        mockRemoteStickerAssetRefs.set(
+          `${row.container_type}:${row.container_id}:${row.asset_id}`,
+          row
+        );
+      }
+      return { error: null };
+    },
+    delete: () => {
+      state.deleteMode = true;
+      return builder;
+    },
+    then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
+      try {
+        if (state.deleteMode) {
+          const rows = executeStickerAssetRefsQuery(state);
+          for (const row of rows) {
+            mockRemoteStickerAssetRefs.delete(
+              `${row.container_type}:${row.container_id}:${row.asset_id}`
+            );
+          }
+          return Promise.resolve(resolve({ data: null, error: null }));
+        }
+
+        return Promise.resolve(resolve({ data: executeStickerAssetRefsQuery(state), error: null }));
+      } catch (error) {
+        if (reject) {
+          return Promise.resolve(reject(error));
+        }
+
+        return Promise.reject(error);
+      }
+    },
+  };
+
+  return builder;
+}
+
 jest.mock('../utils/supabase', () => ({
   getCurrentSupabaseSession: async () => ({
     user: mockSessionUserId ? { id: mockSessionUserId } : null,
@@ -516,6 +662,52 @@ jest.mock('../utils/supabase', () => ({
 
       if (table === 'shared_post_tombstones') {
         return mockCreateTombstonesQueryBuilder(mockRemoteSharedPostTombstones, 'post_id');
+      }
+
+      if (table === 'sticker_assets') {
+        return mockCreateStickerAssetsQueryBuilder();
+      }
+
+      if (table === 'sticker_asset_refs') {
+        return mockCreateStickerAssetRefsQueryBuilder();
+      }
+
+      if (table === 'user_usage') {
+        return {
+          upsert: async (value: Record<string, unknown>) => {
+            mockUserUsage.set(String(value.user_id), value);
+            return { error: null };
+          },
+        };
+      }
+
+      throw new Error(`Unexpected table: ${table}`);
+    },
+  }),
+  requireSupabase: () => ({
+    from: (table: string) => {
+      if (table === 'notes') {
+        return mockCreateNotesQueryBuilder();
+      }
+
+      if (table === 'shared_posts') {
+        return mockCreateSharedPostsQueryBuilder();
+      }
+
+      if (table === 'note_tombstones') {
+        return mockCreateTombstonesQueryBuilder(mockRemoteNoteTombstones, 'note_id');
+      }
+
+      if (table === 'shared_post_tombstones') {
+        return mockCreateTombstonesQueryBuilder(mockRemoteSharedPostTombstones, 'post_id');
+      }
+
+      if (table === 'sticker_assets') {
+        return mockCreateStickerAssetsQueryBuilder();
+      }
+
+      if (table === 'sticker_asset_refs') {
+        return mockCreateStickerAssetRefsQueryBuilder();
       }
 
       if (table === 'user_usage') {
@@ -619,6 +811,8 @@ beforeEach(async () => {
   mockRemoteSharedPosts.clear();
   mockRemoteNoteTombstones.clear();
   mockRemoteSharedPostTombstones.clear();
+  mockRemoteStickerAssets.clear();
+  mockRemoteStickerAssetRefs.clear();
   mockUserUsage.clear();
   mockPublicProfiles.clear();
 });
@@ -1015,6 +1209,12 @@ describe('syncService', () => {
       sticker_placements_json: createRemoteStickerPlacementsJson('user-1/note-sticker-1.png'),
       synced_at: '2026-03-09T00:00:00.000Z',
     });
+    mockRemoteStickerAssetRefs.set('note:note-1:remote-sticker-1', {
+      asset_id: 'remote-sticker-1',
+      owner_user_id: 'user-1',
+      container_type: 'note',
+      container_id: 'note-1',
+    });
     mockRemoteSharedPosts.set('shared-1', {
       id: 'shared-1',
       author_user_id: 'user-1',
@@ -1048,12 +1248,16 @@ describe('syncService', () => {
       })
     );
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-1');
-    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-sticker-1.png');
+    expect(mockDeletePhotoFromStorage).not.toHaveBeenCalledWith(
+      'note-media',
+      'user-1/note-sticker-1.png'
+    );
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('shared-post-media', 'user-1/shared-1');
-    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith(
+    expect(mockDeletePhotoFromStorage).not.toHaveBeenCalledWith(
       'shared-post-media',
       'user-1/shared-sticker-1.png'
     );
+    expect(mockRemoteStickerAssetRefs.size).toBe(0);
   });
 
   it('deletes the stored paired motion path for live photo notes without assuming mp4', async () => {
@@ -1100,6 +1304,18 @@ describe('syncService', () => {
       photo_path: 'user-1/note-2',
       sticker_placements_json: createRemoteStickerPlacementsJson('user-1/note-2-sticker.png'),
       synced_at: '2026-03-09T00:00:00.000Z',
+    });
+    mockRemoteStickerAssetRefs.set('note:note-2:remote-sticker-2', {
+      asset_id: 'remote-sticker-2',
+      owner_user_id: 'user-1',
+      container_type: 'note',
+      container_id: 'note-2',
+    });
+    mockRemoteStickerAssetRefs.set('shared_post:shared-2:remote-sticker-3', {
+      asset_id: 'remote-sticker-3',
+      owner_user_id: 'user-1',
+      container_type: 'shared_post',
+      container_id: 'shared-2',
     });
     mockRemoteSharedPosts.set('shared-1', {
       id: 'shared-1',
@@ -1159,12 +1375,16 @@ describe('syncService', () => {
       })
     );
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-2');
-    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-2-sticker.png');
+    expect(mockDeletePhotoFromStorage).not.toHaveBeenCalledWith(
+      'note-media',
+      'user-1/note-2-sticker.png'
+    );
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('shared-post-media', 'user-1/shared-2');
-    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith(
+    expect(mockDeletePhotoFromStorage).not.toHaveBeenCalledWith(
       'shared-post-media',
       'user-1/shared-2-sticker.png'
     );
+    expect(mockRemoteStickerAssetRefs.size).toBe(0);
   });
 
   it('cleans up newly uploaded remote media when note upsert fails', async () => {

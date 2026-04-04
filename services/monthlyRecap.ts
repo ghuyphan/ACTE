@@ -714,8 +714,7 @@ function getMonthStickerUsageFromScopedNotes(scopedNotes: Note[]): MonthlyRecapS
       }
 
       return left.assetId.localeCompare(right.assetId);
-    })
-    .slice(0, 6);
+    });
 }
 
 export function getMonthStickerUsage(notes: Note[], range?: MonthlyRecapMonth): MonthlyRecapStickerUsage[] {

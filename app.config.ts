@@ -191,6 +191,7 @@ const config = {
     ],
     './plugins/withExpoWidgetsBundleFix.js',
     './plugins/withAndroidReleaseHardening.js',
+    './plugins/withAndroidWidgetTypography.js',
     './plugins/withLivePhotoMotionTranscoder.js',
     [
       'expo-widgets',

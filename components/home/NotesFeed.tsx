@@ -285,6 +285,7 @@ interface NotesFeedProps {
   };
   t: TFunction;
   onCaptureVisibilityChange?: (isVisible: boolean) => void;
+  capturePageLocked?: boolean;
   scrollEnabled?: boolean;
   revealedNoteId?: string | null;
   revealToken?: number;
@@ -306,12 +307,13 @@ export default function NotesFeed({
   colors,
   t,
   onCaptureVisibilityChange,
+  capturePageLocked = false,
   scrollEnabled = true,
   revealedNoteId = null,
   revealToken = 0,
   onSettledArchiveItemChange,
 }: NotesFeedProps) {
-  const { width, height } = useWindowDimensions();
+  const { height } = useWindowDimensions();
   const captureVisibilityRef = useRef(true);
   const isAdjustingSnapRef = useRef(false);
   const lastOffsetYRef = useRef(0);
@@ -431,8 +433,26 @@ export default function NotesFeed({
     [getSettledItemFromOffset, onSettledArchiveItemChange]
   );
 
+  const pinCapturePageToTop = useCallback(() => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    isAdjustingSnapRef.current = false;
+    lastOffsetYRef.current = 0;
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    settleCaptureVisibility(0);
+    reportActiveCard(0);
+    reportSettledArchiveItem(0);
+  }, [flatListRef, reportActiveCard, reportSettledArchiveItem, settleCaptureVisibility]);
+
   useLayoutEffect(() => {
     if (Platform.OS !== 'android') {
+      previousItemKeysRef.current = itemKeys;
+      return;
+    }
+
+    if (capturePageLocked) {
       previousItemKeysRef.current = itemKeys;
       return;
     }
@@ -474,6 +494,7 @@ export default function NotesFeed({
     flatListRef,
     itemKeys,
     reportActiveCard,
+    capturePageLocked,
     reportSettledArchiveItem,
     settleCaptureVisibility,
     snapHeight,
@@ -481,6 +502,10 @@ export default function NotesFeed({
 
   useEffect(() => {
     if (Platform.OS !== 'android') {
+      return;
+    }
+
+    if (capturePageLocked) {
       return;
     }
 
@@ -503,11 +528,20 @@ export default function NotesFeed({
   }, [
     flatListRef,
     listData.length,
+    capturePageLocked,
     reportActiveCard,
     reportSettledArchiveItem,
     settleCaptureVisibility,
     snapHeight,
   ]);
+
+  useEffect(() => {
+    if (!capturePageLocked) {
+      return;
+    }
+
+    pinCapturePageToTop();
+  }, [capturePageLocked, pinCapturePageToTop]);
 
   const renderItem = useCallback(
     ({ item, index }: { item: NotesFeedListItem; index: number }) => {
@@ -586,6 +620,11 @@ export default function NotesFeed({
         setActiveCardKey(null);
       }}
       onScrollEndDrag={(event) => {
+        if (capturePageLocked) {
+          pinCapturePageToTop();
+          return;
+        }
+
         const velocityY = event.nativeEvent.velocity?.y ?? 0;
         if (Math.abs(velocityY) < 0.05) {
           const offsetY = event.nativeEvent.contentOffset.y;
@@ -599,6 +638,11 @@ export default function NotesFeed({
         setActiveCardKey(null);
       }}
       onMomentumScrollEnd={(event) => {
+        if (capturePageLocked) {
+          pinCapturePageToTop();
+          return;
+        }
+
         const offsetY = event.nativeEvent.contentOffset.y;
         lastOffsetYRef.current = offsetY;
         settleCaptureVisibility(offsetY);

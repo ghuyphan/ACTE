@@ -369,6 +369,22 @@ describe('HomeScreen camera lifecycle', () => {
     expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
   });
 
+  it('locks capture scrolling while a text input session is active', () => {
+    const { getByTestId } = render(<HomeScreen />);
+
+    expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
+
+    act(() => {
+      mockCaptureCardProps?.onTextEntryFocusChange?.(true);
+    });
+    expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('false');
+
+    act(() => {
+      mockCaptureCardProps?.onTextEntryFocusChange?.(false);
+    });
+    expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
+  });
+
   it('shows a camera permission prompt before requesting camera access', async () => {
     render(<HomeScreen />);
 

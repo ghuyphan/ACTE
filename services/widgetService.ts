@@ -1520,6 +1520,105 @@ async function buildWidgetPropsFromSelection(
     return props;
 }
 
+function isRenderableWidgetProps(props: WidgetProps) {
+    if (props.isIdleState) {
+        return true;
+    }
+
+    if (props.noteType === 'photo') {
+        return Boolean(
+            props.backgroundImageUrl?.trim() ||
+            props.backgroundImageBase64?.trim()
+        );
+    }
+
+    return Boolean(
+        props.text.trim() ||
+        (props.hasDoodle && props.doodleStrokesJson) ||
+        (props.hasStickers && props.stickerPlacementsJson)
+    );
+}
+
+async function buildWidgetEntryForDate(options: {
+    noteCount: number;
+    personalCandidates: WidgetCandidate[];
+    sharedCandidates: WidgetCandidate[];
+    currentLocation: LocationCoords | null;
+    referenceDate: Date;
+    recentHistory: WidgetHistoryEntry[];
+    readablePhotoUrisByCandidateKey: Map<string, string>;
+}) {
+    const {
+        noteCount,
+        personalCandidates,
+        sharedCandidates,
+        currentLocation,
+        referenceDate,
+        recentHistory,
+        readablePhotoUrisByCandidateKey,
+    } = options;
+
+    const excludedCandidateKeys = new Set<string>();
+    const totalCandidateCount = personalCandidates.length + sharedCandidates.length;
+
+    while (excludedCandidateKeys.size < totalCandidateCount) {
+        const selection = selectWidgetNote({
+            notes: personalCandidates.filter((candidate) => !excludedCandidateKeys.has(candidate.candidateKey)),
+            sharedPosts: sharedCandidates.filter((candidate) => !excludedCandidateKeys.has(candidate.candidateKey)),
+            currentLocation,
+            referenceDate,
+            recentHistory,
+        });
+
+        if (!selection.selectedCandidate || selection.isIdleState) {
+            return {
+                selection,
+                props: buildIdleWidgetProps(noteCount, selection.selectionMode),
+            };
+        }
+
+        try {
+            const props = await buildWidgetPropsFromSelection(
+                noteCount,
+                selection,
+                referenceDate,
+                readablePhotoUrisByCandidateKey
+            );
+
+            if (isRenderableWidgetProps(props)) {
+                return {
+                    selection,
+                    props,
+                };
+            }
+
+            console.warn(
+                '[widgetService] Selected widget candidate could not render, trying next candidate:',
+                selection.selectedCandidate.candidateKey
+            );
+        } catch (error) {
+            console.warn(
+                '[widgetService] Failed to build widget props for selected candidate, trying next candidate:',
+                getWidgetWarningMessage(error)
+            );
+        }
+
+        excludedCandidateKeys.add(selection.selectedCandidate.candidateKey);
+    }
+
+    return {
+        selection: {
+            selectedNote: null,
+            selectedCandidate: null,
+            selectedLocationName: null,
+            nearbyPlacesCount: 0,
+            isIdleState: true,
+            selectionMode: 'latest_memory',
+        } satisfies WidgetSelectionResult,
+        props: buildIdleWidgetProps(noteCount),
+    };
+}
+
 async function buildWidgetTimeline(options: {
     notes: Note[];
     sharedPosts?: SharedPost[];
@@ -1553,17 +1652,19 @@ async function buildWidgetTimeline(options: {
     }
 
     for (const date of timelineDates) {
-        const selection = selectWidgetNote({
-            notes: personalCandidates,
-            sharedPosts: sharedCandidates,
+        const { selection, props } = await buildWidgetEntryForDate({
+            noteCount: notes.length,
+            personalCandidates,
+            sharedCandidates,
             currentLocation,
             referenceDate: date,
             recentHistory: nextHistory,
+            readablePhotoUrisByCandidateKey,
         });
 
         entries.push({
             date,
-            props: await buildWidgetPropsFromSelection(notes.length, selection, date, readablePhotoUrisByCandidateKey),
+            props,
         });
 
         if (selection.selectedCandidate && !selection.isIdleState) {

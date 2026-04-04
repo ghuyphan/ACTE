@@ -276,6 +276,19 @@ describe('NotesIndexScreen', () => {
     expect(queryByText('Mar 11')).toBeNull();
   });
 
+  it('switches back to all mode and restores the note grid content', () => {
+    const { getByTestId, getByText } = render(<NotesIndexScreen />);
+
+    fireEvent.press(getByTestId('notes-mode-recap'));
+    expect(getByTestId('notes-recap-mode')).toBeTruthy();
+
+    fireEvent.press(getByTestId('notes-mode-all'));
+
+    expect(getByTestId('notes-mode-all').props.accessibilityState).toEqual({ selected: true });
+    expect(getByText('Newest note')).toBeTruthy();
+    expect(getByText('Shared memory')).toBeTruthy();
+  });
+
   it('lets the user switch recap months from the header', () => {
     mockNotes.splice(
       0,

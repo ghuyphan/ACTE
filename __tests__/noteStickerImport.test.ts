@@ -11,9 +11,16 @@ const mockDeleteAsync = jest.fn(async () => undefined);
 const mockMakeDirectoryAsync = jest.fn(async () => undefined);
 const mockManipulateAsync = jest.fn();
 const mockStorageUpload = jest.fn(async () => ({ error: null }));
+const mockRemoteStickerAssets = new Map<string, any>();
 
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => 'test-uuid-1234'),
+  digestStringAsync: jest.fn(async (_algorithm: string, value: string) =>
+    `digest-${value.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase()}`
+  ),
+  CryptoDigestAlgorithm: {
+    SHA256: 'SHA-256',
+  },
 }));
 
 jest.mock('../utils/fileSystem', () => ({
@@ -47,7 +54,72 @@ jest.mock('../services/database', () => ({
 jest.mock('../utils/supabase', () => ({
   getSupabaseErrorMessage: jest.fn((error: Error) => error.message),
   isSupabaseNetworkError: jest.fn(() => false),
+  isSupabasePolicyError: jest.fn(() => false),
+  isSupabaseSchemaMismatchError: jest.fn(() => false),
   requireSupabase: jest.fn(() => ({
+    from: (table: string) => {
+      if (table !== 'sticker_assets') {
+        throw new Error(`Unexpected table: ${table}`);
+      }
+
+      const state = {
+        filters: [] as Array<{ field: string; value: unknown }>,
+        updateValues: null as Record<string, unknown> | null,
+      };
+      const builder: any = {
+        select: () => builder,
+        eq: (field: string, value: unknown) => {
+          state.filters.push({ field, value });
+          return builder;
+        },
+        maybeSingle: async () => {
+          const row =
+            Array.from(mockRemoteStickerAssets.values()).find((item) =>
+              state.filters.every((filter) => item?.[filter.field] === filter.value)
+            ) ?? null;
+          return { data: row, error: null };
+        },
+        insert: async (value: Record<string, unknown>) => {
+          const nextId = `remote-sticker-${mockRemoteStickerAssets.size + 1}`;
+          mockRemoteStickerAssets.set(nextId, {
+            id: nextId,
+            created_at: '2026-03-10T00:00:00.000Z',
+            ...value,
+          });
+          return { error: null };
+        },
+        update: (value: Record<string, unknown>) => {
+          state.updateValues = value;
+          return builder;
+        },
+        then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
+          try {
+            if (state.updateValues) {
+              for (const [assetId, item] of mockRemoteStickerAssets.entries()) {
+                if (state.filters.every((filter) => item?.[filter.field] === filter.value)) {
+                  mockRemoteStickerAssets.set(assetId, {
+                    ...item,
+                    ...state.updateValues,
+                  });
+                }
+              }
+
+              return Promise.resolve(resolve({ data: null, error: null }));
+            }
+
+            return Promise.resolve(resolve({ data: null, error: null }));
+          } catch (error) {
+            if (reject) {
+              return Promise.resolve(reject(error));
+            }
+
+            return Promise.reject(error);
+          }
+        },
+      };
+
+      return builder;
+    },
     storage: {
       from: jest.fn(() => ({
         upload: mockStorageUpload,
@@ -106,6 +178,7 @@ describe('importStickerAsset', () => {
       uri: 'file:///cache/optimized-sticker.webp',
     });
     mockStorageUpload.mockResolvedValue({ error: null });
+    mockRemoteStickerAssets.clear();
   });
 
   afterEach(() => {
@@ -196,6 +269,11 @@ describe('importStickerAsset', () => {
     });
     expect(asset.mimeType).toBe('image/webp');
     expect(asset.localUri.endsWith('.webp')).toBe(true);
+    const insertCall = mockDb.runAsync.mock.calls.at(0);
+    expect(insertCall).toBeTruthy();
+    const insertSql = insertCall?.at(0);
+    expect(insertSql).toContain('INSERT INTO sticker_assets');
+    expect(insertCall).toHaveLength(13);
   });
 
   it('imports regular photos and suggests stamp mode', async () => {
@@ -212,6 +290,51 @@ describe('importStickerAsset', () => {
     expect(asset.mimeType).toBe('image/jpeg');
     expect(asset.localUri.endsWith('.jpg')).toBe(true);
     expect(asset.suggestedRenderMode).toBe('stamp');
+  });
+
+  it('reuses an existing imported asset when the optimized sticker bytes match', async () => {
+    const importStickerAsset = loadImportStickerAsset();
+
+    mockGetInfoAsync.mockImplementation(async (uri: string) => {
+      if (uri === 'file:///imports/same-sticker.png') {
+        return { exists: true, isDirectory: false, size: 80 * 1024 };
+      }
+
+      if (uri === 'file:///documents/stickers/existing.webp') {
+        return { exists: true, isDirectory: false, size: 80 * 1024 };
+      }
+
+      return { exists: true, isDirectory: false, size: 80 * 1024 };
+    });
+
+    mockDb.getFirstAsync.mockImplementationOnce(
+      async () =>
+        ({
+          id: 'asset-existing',
+          owner_uid: '__local__',
+          local_uri: 'file:///documents/stickers/existing.webp',
+          remote_path: 'owner-1/stickers/asset-existing.webp',
+          upload_fingerprint: 'fingerprint-existing',
+          content_hash: `digest-${transparentPngBase64.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase()}`,
+          mime_type: 'image/webp',
+          width: 320,
+          height: 240,
+          created_at: '2026-03-10T00:00:00.000Z',
+          updated_at: null,
+          source: 'import',
+        }) as never
+    );
+
+    const asset = await importStickerAsset({
+      uri: 'file:///imports/same-sticker.png',
+      mimeType: 'image/png',
+      name: 'same-sticker.png',
+    });
+
+    expect(mockCopyAsync).not.toHaveBeenCalled();
+    expect(mockDb.runAsync).not.toHaveBeenCalled();
+    expect(asset.id).toBe('asset-existing');
+    expect(asset.localUri).toBe('file:///documents/stickers/existing.webp');
   });
 
   it('reuses an existing remote sticker path when serializing shared placements', async () => {
@@ -262,6 +385,165 @@ describe('importStickerAsset', () => {
     expect(mockStorageUpload).not.toHaveBeenCalled();
     expect(JSON.parse(serialized)[0]?.asset?.remotePath).toBe(
       'owner-1/shared-post-1/stickers/asset-1.png'
+    );
+  });
+
+  it('uses the remote sticker registry when serializing shared placements', async () => {
+    const { serializeStickerPlacementsForStorage } = loadNoteStickersModule();
+
+    const placements = [
+      {
+        id: 'placement-1',
+        assetId: 'asset-1',
+        x: 0.5,
+        y: 0.5,
+        scale: 1,
+        rotation: 0,
+        zIndex: 1,
+        opacity: 1,
+        asset: {
+          id: 'asset-1',
+          ownerUid: '__local__',
+          localUri: 'file:///documents/stickers/asset-1.png',
+          remotePath: null,
+          uploadFingerprint: null,
+          mimeType: 'image/png',
+          width: 320,
+          height: 240,
+          createdAt: '2026-03-10T00:00:00.000Z',
+          updatedAt: null,
+          source: 'import',
+        },
+      },
+    ];
+
+    const serialized = await serializeStickerPlacementsForStorage(
+      placements,
+      'shared-post-media',
+      'owner-1/shared-post-1',
+      {
+        persistAssets: false,
+        serverOwnerUid: 'owner-1',
+      }
+    );
+
+    expect(mockStorageUpload).toHaveBeenCalledWith(
+      'owner-1/stickers/digest-ivborw0kggoaaaansuheugaa.png',
+      expect.any(ArrayBuffer),
+      expect.objectContaining({
+        contentType: 'image/png',
+        upsert: true,
+      })
+    );
+    expect(JSON.parse(serialized)[0]?.asset).toEqual(
+      expect.objectContaining({
+        remoteAssetId: 'remote-sticker-1',
+        remotePath: 'owner-1/stickers/digest-ivborw0kggoaaaansuheugaa.png',
+        storageBucket: 'note-media',
+      })
+    );
+  });
+
+  it('refreshes last seen when the remote sticker registry reuses an existing asset', async () => {
+    const { serializeStickerPlacementsForStorage } = loadNoteStickersModule();
+
+    mockRemoteStickerAssets.set('remote-sticker-1', {
+      id: 'remote-sticker-1',
+      owner_user_id: 'owner-1',
+      content_hash: `digest-${transparentPngBase64.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase()}`,
+      mime_type: 'image/png',
+      width: 320,
+      height: 240,
+      byte_size: 512,
+      storage_bucket: 'note-media',
+      storage_path: 'owner-1/stickers/digest-ivborw0kggoaaaansuheugaa.png',
+      created_at: '2026-03-10T00:00:00.000Z',
+      last_seen_at: '2026-03-11T00:00:00.000Z',
+    });
+
+    const placements = [
+      {
+        id: 'placement-1',
+        assetId: 'asset-1',
+        x: 0.5,
+        y: 0.5,
+        scale: 1,
+        rotation: 0,
+        zIndex: 1,
+        opacity: 1,
+        asset: {
+          id: 'asset-1',
+          ownerUid: '__local__',
+          localUri: 'file:///documents/stickers/asset-1.png',
+          remotePath: null,
+          uploadFingerprint: null,
+          mimeType: 'image/png',
+          width: 320,
+          height: 240,
+          createdAt: '2026-03-10T00:00:00.000Z',
+          updatedAt: null,
+          source: 'import',
+        },
+      },
+    ];
+
+    const beforeLastSeenAt = mockRemoteStickerAssets.get('remote-sticker-1')?.last_seen_at;
+    await serializeStickerPlacementsForStorage(placements, 'shared-post-media', 'owner-1/shared-post-1', {
+      persistAssets: false,
+      serverOwnerUid: 'owner-1',
+    });
+
+    const reusedRow = mockRemoteStickerAssets.get('remote-sticker-1');
+    expect(mockStorageUpload).not.toHaveBeenCalled();
+    expect(reusedRow?.last_seen_at).toBeTruthy();
+    expect(reusedRow?.last_seen_at).not.toBe(beforeLastSeenAt);
+  });
+
+  it('skips re-uploading when the sticker bytes are unchanged but file metadata changed', async () => {
+    const { uploadStickerAssetToStorage } = loadNoteStickersModule();
+
+    mockGetInfoAsync.mockImplementation(async (uri: string) => {
+      if (uri === 'file:///documents/stickers/asset-1.png') {
+        return {
+          exists: true,
+          isDirectory: false,
+          size: 80 * 1024,
+          modificationTime: 200,
+        };
+      }
+
+      return {
+        exists: true,
+        isDirectory: false,
+        size: 80 * 1024,
+        modificationTime: 200,
+      };
+    });
+
+    mockReadAsStringAsync.mockResolvedValue(transparentPngBase64);
+
+    const asset = await uploadStickerAssetToStorage('note-media', 'owner-1', {
+      id: 'asset-1',
+      ownerUid: '__local__',
+      localUri: 'file:///documents/stickers/asset-1.png',
+      remotePath: 'owner-1/stickers/asset-1.png',
+      uploadFingerprint: 'file:///documents/stickers/asset-1.png:81920:100',
+      contentHash: `digest-${transparentPngBase64.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase()}`,
+      mimeType: 'image/png',
+      width: 320,
+      height: 240,
+      createdAt: '2026-03-10T00:00:00.000Z',
+      updatedAt: null,
+      source: 'import',
+    });
+
+    expect(mockStorageUpload).not.toHaveBeenCalled();
+    expect(mockDb.runAsync).toHaveBeenCalled();
+    expect(asset.uploadFingerprint).toBe(
+      `digest-${transparentPngBase64.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase()}`
+    );
+    expect(asset.contentHash).toBe(
+      `digest-${transparentPngBase64.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase()}`
     );
   });
 });

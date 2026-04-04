@@ -85,4 +85,31 @@ describe('PhotoMediaView', () => {
 
     expect(player.pause).toHaveBeenCalledTimes(1);
   });
+
+  it('recovers when a prior preview missed press-out cleanup', () => {
+    const { getByLabelText } = render(
+      <PhotoMediaView
+        imageUrl="file:///captured-photo.jpg"
+        isLivePhoto
+        pairedVideoUri="file:///captured-photo.mov"
+      />
+    );
+
+    const previewSurface = getByLabelText('Preview live photo motion');
+    const player = mockPlayers[0];
+
+    fireEvent(previewSurface, 'pressIn');
+    act(() => {
+      jest.advanceTimersByTime(170);
+    });
+    expect(player.play).toHaveBeenCalledTimes(1);
+
+    fireEvent(previewSurface, 'pressIn');
+    act(() => {
+      jest.advanceTimersByTime(170);
+    });
+
+    expect(player.pause).toHaveBeenCalledTimes(1);
+    expect(player.play).toHaveBeenCalledTimes(2);
+  });
 });
