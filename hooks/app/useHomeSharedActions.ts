@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform, Share } from 'react-native';
 import { getSharedFeedErrorMessage, type FriendInvite } from '../../services/sharedFeedService';
@@ -47,6 +47,7 @@ export function useHomeSharedActions({
 }: UseHomeSharedActionsOptions) {
   const { t } = useTranslation();
   const inviteActionInFlightRef = useRef<InviteAction | null>(null);
+  const [inviteActionInFlight, setInviteActionInFlight] = useState<InviteAction | null>(null);
 
   const handleOpenSharedAuth = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -151,12 +152,14 @@ export function useHomeSharedActions({
 
     try {
       inviteActionInFlightRef.current = 'create';
+      setInviteActionInFlight('create');
       await resolveInvite();
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       handleInviteActionError(error);
     } finally {
       inviteActionInFlightRef.current = null;
+      setInviteActionInFlight(null);
     }
   }, [handleInviteActionError, requireSharedUser, resolveInvite]);
 
@@ -173,6 +176,7 @@ export function useHomeSharedActions({
 
     try {
       inviteActionInFlightRef.current = 'share';
+      setInviteActionInFlight('share');
       const invite = await resolveInvite();
       dismissSharedManageSheet();
       await wait(SHARED_MANAGE_SHEET_SHARE_DELAY_MS);
@@ -186,6 +190,7 @@ export function useHomeSharedActions({
       handleInviteActionError(error);
     } finally {
       inviteActionInFlightRef.current = null;
+      setInviteActionInFlight(null);
     }
   }, [dismissSharedManageSheet, handleInviteActionError, requireSharedUser, resolveInvite, t]);
 
@@ -198,12 +203,14 @@ export function useHomeSharedActions({
 
     try {
       inviteActionInFlightRef.current = 'revoke';
+      setInviteActionInFlight('revoke');
       await revokeFriendInvite(activeInvite.id);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       handleInviteActionError(error);
     } finally {
       inviteActionInFlightRef.current = null;
+      setInviteActionInFlight(null);
     }
   }, [activeInvite, handleInviteActionError, revokeFriendInvite]);
 
@@ -251,5 +258,6 @@ export function useHomeSharedActions({
     handleRemoveFriend,
     handleRevokeInvite,
     handleShareInvite,
+    inviteActionInFlight,
   };
 }

@@ -10,6 +10,7 @@ let mockUuidCounter = 0;
 let mockSessionUserId = 'owner-1';
 let mockSharedPostsInsertError: unknown = null;
 const mockUndeletableSharedPostIds = new Set<string>();
+const mockDeleteResponseOmittedSharedPostIds = new Set<string>();
 
 function mockHashInviteToken(token: string) {
   return `digest-${token.replace(/[^a-z0-9]/gi, '').toLowerCase()}`;
@@ -248,6 +249,10 @@ function applyDelete(table: string, state: any) {
     table === 'shared_posts'
       ? rows.filter((row) => !mockUndeletableSharedPostIds.has(String(row.id)))
       : rows;
+  const returnedRows =
+    table === 'shared_posts'
+      ? deletedRows.filter((row) => !mockDeleteResponseOmittedSharedPostIds.has(String(row.id)))
+      : deletedRows;
   for (const row of deletedRows) {
     if (table === 'shared_posts') {
       mockSharedPosts.delete(row.id);
@@ -258,7 +263,7 @@ function applyDelete(table: string, state: any) {
     }
   }
 
-  return deletedRows;
+  return returnedRows;
 }
 
 const mockUploadPhotoToStorage = jest.fn<Promise<string | null>, [string, string, string | null | undefined]>(
@@ -651,6 +656,7 @@ const secondFriendUser = {
   mockSessionUserId = 'owner-1';
   mockSharedPostsInsertError = null;
   mockUndeletableSharedPostIds.clear();
+  mockDeleteResponseOmittedSharedPostIds.clear();
     mockFriendInvites.clear();
     mockSharedPosts.clear();
     mockSharedPostTombstones.clear();
@@ -920,6 +926,40 @@ describe('sharedFeedService', () => {
 
     expect(mockSharedPosts.has('shared-stuck')).toBe(true);
     expect(mockSharedPostTombstones.has('shared-stuck')).toBe(false);
+  });
+
+  it('accepts shared post deletion when the row is gone but omitted from the delete response', async () => {
+    mockSharedPosts.set('shared-hidden-delete', {
+      id: 'shared-hidden-delete',
+      author_user_id: ownerUser.id,
+      author_display_name: ownerUser.displayName,
+      author_photo_url_snapshot: ownerUser.photoURL,
+      audience_user_ids: [ownerUser.id, friendUser.id],
+      type: 'text',
+      text: 'Gone remotely',
+      photo_path: null,
+      paired_video_path: null,
+      doodle_strokes_json: null,
+      sticker_placements_json: null,
+      note_color: null,
+      place_name: 'District 1',
+      source_note_id: 'note-1',
+      latitude: null,
+      longitude: null,
+      created_at: '2026-03-24T00:00:00.000Z',
+      updated_at: null,
+    });
+    mockDeleteResponseOmittedSharedPostIds.add('shared-hidden-delete');
+
+    await deleteSharedPost(ownerUser, 'shared-hidden-delete');
+
+    expect(mockSharedPosts.has('shared-hidden-delete')).toBe(false);
+    expect(mockSharedPostTombstones.get('shared-hidden-delete')).toEqual(
+      expect.objectContaining({
+        post_id: 'shared-hidden-delete',
+        author_user_id: ownerUser.id,
+      })
+    );
   });
 
   it('fails shared post deletion when shared media cleanup fails', async () => {

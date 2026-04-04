@@ -3,14 +3,7 @@ import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  Keyboard,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   LinearTransition,
@@ -19,24 +12,21 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import { Sheet, Typography } from '../../constants/theme';
+import { useAuth } from '../../hooks/useAuth';
+import { useTheme } from '../../hooks/useTheme';
+import { syncSocialPushRegistration } from '../../services/socialPushService';
+import { FriendConnection, FriendInvite } from '../../services/sharedFeedService';
+import { showAppAlert } from '../../utils/alert';
 import AppSheet from '../sheets/AppSheet';
 import AppSheetScaffold from '../sheets/AppSheetScaffold';
-import FriendInviteJoinBody from '../FriendInviteJoinBody';
 import SheetFooterButton from '../sheets/SheetFooterButton';
-import AppBackButton from '../ui/AppBackButton';
-import AppIconButton from '../ui/AppIconButton';
-import { Sheet, Typography } from '../../constants/theme';
-import { useTheme } from '../../hooks/useTheme';
-import { FriendConnection, FriendInvite } from '../../services/sharedFeedService';
-import { useSharedManageSheetModel } from './useSharedManageSheetModel';
-
-const ANDROID_FRIENDS_JOIN_SNAP_POINTS: string[] = ['46%', '82%'];
 
 function ManageBody({
   friends,
   activeInvite,
+  creatingInvite,
   loading,
-  onOpenJoin,
   onCreateInvite,
   onShareInvite,
   onRevokeInvite,
@@ -48,8 +38,8 @@ function ManageBody({
 }: {
   friends: FriendConnection[];
   activeInvite: FriendInvite | null;
+  creatingInvite: boolean;
   loading: boolean;
-  onOpenJoin: () => void;
   onCreateInvite: () => void;
   onShareInvite: () => void;
   onRevokeInvite: () => void;
@@ -63,123 +53,74 @@ function ManageBody({
   const { t } = useTranslation();
   const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
   const outlineColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-  const quickActions = [
-    {
-      key: 'share',
-      icon: 'paper-plane-outline' as const,
-      label: t('shared.quickShareLabel', 'Share'),
-      onPress: onShareInvite,
-      accent: true,
-    },
-    {
-      key: 'join',
-      icon: 'enter-outline' as const,
-      label: t('shared.quickJoinLabel', 'Join'),
-      onPress: onOpenJoin,
-      accent: false,
-    },
-    {
-      key: 'link',
-      icon: activeInvite ? ('link-outline' as const) : ('person-add-outline' as const),
-      label: activeInvite
-        ? t('shared.quickInviteReadyLabel', 'Invite ready')
-        : t('shared.quickInviteLabel', 'Create link'),
-      onPress: onCreateInvite,
-      accent: false,
-    },
-  ];
+  const inviteState = activeInvite ? 'ready' : creatingInvite ? 'creating' : 'empty';
+  const invitePrimaryAction = inviteState === 'ready' ? onShareInvite : onCreateInvite;
+  const invitePrimaryIcon =
+    inviteState === 'empty' ? 'person-add-outline' : 'paper-plane-outline';
+  const invitePrimaryLabel =
+    inviteState === 'ready'
+      ? t('shared.shareInviteButton', 'Share invite link')
+      : inviteState === 'creating'
+        ? t('shared.creatingInviteButton', 'Preparing invite...')
+        : t('shared.createInviteButton', 'Create invite');
+  const inviteTitle =
+    inviteState === 'ready'
+      ? t('shared.inviteReadyTitle', 'Invite link ready')
+      : inviteState === 'creating'
+        ? t('shared.creatingInviteTitle', 'Preparing invite link')
+        : t('shared.inviteFirstTitle', 'Invite your first friend');
+  const inviteBody =
+    inviteState === 'ready'
+      ? t('shared.inviteReadyBody', 'Share this link to connect.')
+      : inviteState === 'creating'
+        ? t('shared.creatingInviteBody', 'Getting your invite link ready...')
+        : t(
+            'shared.inviteFirstBody',
+            'One invite link is all you need to start sharing notes from Home.'
+          );
+
   return (
     <>
-      <Pressable
-        onPress={onOpenJoin}
-        style={({ pressed }) => [
-          styles.addFriendRow,
+      <View
+        style={[
+          styles.inviteCard,
           {
             backgroundColor: softFill,
             borderColor: outlineColor,
-            opacity: pressed ? 0.92 : 1,
           },
         ]}
       >
-        <Ionicons name="search-outline" size={24} color={colors.secondaryText} />
-        <Text style={[styles.addFriendText, { color: colors.secondaryText }]}>
-          {t('shared.addFriendCta', 'Add a new friend')}
-        </Text>
-      </Pressable>
-
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>
-          {t('shared.quickActionsTitle', 'Invite options')}
-        </Text>
-        <View style={styles.quickActionsRow}>
-          {quickActions.map((action) => (
-            <Pressable
-              key={action.key}
-              onPress={action.onPress}
-              style={({ pressed }) => [
-                styles.quickAction,
-                {
-                  opacity: pressed ? 0.9 : 1,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.quickActionIcon,
-                  {
-                    backgroundColor: action.accent ? colors.primary : softFill,
-                    borderColor: action.accent ? colors.primary : outlineColor,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={action.icon}
-                  size={22}
-                  color={action.accent ? '#1C1C1E' : colors.text}
-                />
-              </View>
-              <Text style={[styles.quickActionLabel, { color: colors.text }]}>{action.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      {activeInvite ? (
-        <View
-          style={[
-            styles.inviteCard,
-            {
-              backgroundColor: softFill,
-              borderColor: outlineColor,
-            },
-          ]}
-        >
-          <View style={styles.inviteCardHeader}>
-            <View style={styles.inviteCardCopy}>
-              <Text style={[styles.inviteCardTitle, { color: colors.text }]}>
-                {t('shared.inviteReadyTitle', 'Invite link ready')}
-              </Text>
-              <Text style={[styles.inviteCardBody, { color: colors.secondaryText }]}>
-                {t('shared.inviteReadyBody', 'Share this link to connect.')}
-              </Text>
-            </View>
+        <View style={styles.inviteCardHeader}>
+          <View style={[styles.inviteCardIcon, { backgroundColor: colors.primarySoft }]}>
+            <Ionicons name={invitePrimaryIcon} size={18} color={colors.primary} />
           </View>
-          <View style={styles.inviteActionsRow}>
-            <Pressable
-              onPress={onShareInvite}
-              style={({ pressed }) => [
-                styles.primaryInviteAction,
-                {
-                  backgroundColor: colors.primary,
-                  opacity: pressed ? 0.92 : 1,
-                },
-              ]}
-            >
-              <Ionicons name="paper-plane-outline" size={16} color="#1C1C1E" />
-              <Text numberOfLines={1} style={styles.primaryInviteActionText}>
-                {t('shared.shareInviteButton', 'Share invite link')}
-              </Text>
-            </Pressable>
+          <View style={styles.inviteCardCopy}>
+            <Text style={[styles.inviteCardTitle, { color: colors.text }]}>
+              {inviteTitle}
+            </Text>
+            <Text style={[styles.inviteCardBody, { color: colors.secondaryText }]}>
+              {inviteBody}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.inviteActionsRow}>
+          <Pressable
+            onPress={invitePrimaryAction}
+            disabled={inviteState === 'creating'}
+            style={({ pressed }) => [
+              styles.primaryInviteAction,
+              {
+                backgroundColor: colors.primary,
+                opacity: inviteState === 'creating' ? 0.72 : pressed ? 0.92 : 1,
+              },
+            ]}
+          >
+            <Ionicons name={invitePrimaryIcon} size={16} color="#1C1C1E" />
+            <Text numberOfLines={1} style={styles.primaryInviteActionText}>
+              {invitePrimaryLabel}
+            </Text>
+          </Pressable>
+          {inviteState === 'ready' ? (
             <Pressable
               onPress={onRevokeInvite}
               style={({ pressed }) => [
@@ -191,13 +132,16 @@ function ManageBody({
                 },
               ]}
             >
-              <Text numberOfLines={1} style={[styles.secondaryInviteActionText, { color: colors.secondaryText }]}>
+              <Text
+                numberOfLines={1}
+                style={[styles.secondaryInviteActionText, { color: colors.secondaryText }]}
+              >
                 {t('shared.revokeInviteButton', 'Revoke invite')}
               </Text>
             </Pressable>
-          </View>
+          ) : null}
         </View>
-      ) : null}
+      </View>
 
       <View style={styles.sectionHeaderRow}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>
@@ -208,7 +152,15 @@ function ManageBody({
         </View>
       </View>
       {friends.length === 0 ? (
-        <View style={[styles.emptyStateCard, { backgroundColor: softFill, borderColor: outlineColor }]}>
+        <View
+          style={[
+            styles.emptyStateCard,
+            {
+              backgroundColor: softFill,
+              borderColor: outlineColor,
+            },
+          ]}
+        >
           <View style={[styles.emptyStateIcon, { backgroundColor: colors.primarySoft }]}>
             <Ionicons name="people-outline" size={18} color={colors.primary} />
           </View>
@@ -228,7 +180,11 @@ function ManageBody({
             ]}
           >
             {friend.photoURLSnapshot ? (
-              <Image source={{ uri: friend.photoURLSnapshot }} style={styles.avatarImage} contentFit="cover" />
+              <Image
+                source={{ uri: friend.photoURLSnapshot }}
+                style={styles.avatarImage}
+                contentFit="cover"
+              />
             ) : (
               <View style={[styles.avatarFallback, { backgroundColor: colors.primarySoft }]}>
                 <Text style={[styles.avatarLabel, { color: colors.primary }]}>
@@ -267,6 +223,7 @@ export default function SharedManageSheet(props: {
   visible: boolean;
   friends: FriendConnection[];
   activeInvite: FriendInvite | null;
+  creatingInvite?: boolean;
   loading: boolean;
   onClose: () => void;
   onCreateInvite: () => void;
@@ -276,23 +233,22 @@ export default function SharedManageSheet(props: {
 }) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const { visible, friends, activeInvite, loading, onClose, onCreateInvite, onShareInvite, onRevokeInvite, onRemoveFriend } = props;
+  const { user } = useAuth();
   const {
-    handleBackToManage,
-    handleGoToAuth,
-    handleOpenJoin,
-    inviteValue,
-    isAuthAvailable,
-    joinInvite,
-    joining,
-    mode,
-    setInviteValue,
-    user,
-  } = useSharedManageSheetModel({ visible, onClose });
-  const hasInviteValue = inviteValue.trim().length > 0;
+    visible,
+    friends,
+    activeInvite,
+    creatingInvite = false,
+    loading,
+    onClose,
+    onCreateInvite,
+    onShareInvite,
+    onRevokeInvite,
+    onRemoveFriend,
+  } = props;
   const contentOpacity = useSharedValue(1);
   const contentTranslateY = useSharedValue(0);
-  const keyboardVisibleRef = useRef(false);
+  const socialPushPromptedUserIdRef = useRef<string | null>(null);
   const contentAnimatedStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
     transform: [{ translateY: contentTranslateY.value }],
@@ -320,71 +276,55 @@ export default function SharedManageSheet(props: {
     }
 
     animateContentChange();
-  }, [activeInvite?.id, animateContentChange, friends.length, hasInviteValue, mode, visible]);
+  }, [activeInvite?.id, animateContentChange, friends.length, visible]);
 
   useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSubscription = Keyboard.addListener(showEvent, () => {
-      keyboardVisibleRef.current = true;
-    });
-    const hideSubscription = Keyboard.addListener(hideEvent, () => {
-      keyboardVisibleRef.current = false;
-    });
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-      keyboardVisibleRef.current = false;
-    };
-  }, []);
-
-  const runAfterKeyboardDismiss = useCallback((action: () => void) => {
-    if (!keyboardVisibleRef.current) {
-      action();
+    if (!visible || !user) {
       return;
     }
 
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    let settled = false;
-    const hideSubscription = Keyboard.addListener(hideEvent, () => {
-      if (settled) {
-        return;
-      }
+    if (socialPushPromptedUserIdRef.current === user.uid) {
+      return;
+    }
 
-      settled = true;
-      hideSubscription.remove();
-      requestAnimationFrame(action);
-    });
+    socialPushPromptedUserIdRef.current = user.uid;
+    void syncSocialPushRegistration(user, { requestPermission: true })
+      .then((status) => {
+        if (status !== 'blocked') {
+          return;
+        }
 
-    Keyboard.dismiss();
-
-    setTimeout(() => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      hideSubscription.remove();
-      action();
-    }, Platform.OS === 'ios' ? 260 : 180);
-  }, []);
-
-  const handleJoinBackPress = useCallback(() => {
-    runAfterKeyboardDismiss(handleBackToManage);
-  }, [handleBackToManage, runAfterKeyboardDismiss]);
-
-  const handleJoinClosePress = useCallback(() => {
-    runAfterKeyboardDismiss(onClose);
-  }, [onClose, runAfterKeyboardDismiss]);
+        showAppAlert(
+          t('shared.pushBlockedTitle', 'Turn on friend activity notifications'),
+          t(
+            'shared.pushBlockedBody',
+            'Notifications are off for Noto. Open Settings if you want alerts when friends accept invites or share memories.'
+          ),
+          [
+            {
+              text: t('common.notNow', 'Not now'),
+              style: 'cancel',
+            },
+            {
+              text: t('common.openSettings', 'Open Settings'),
+              onPress: () => {
+                void Linking.openSettings().catch(() => undefined);
+              },
+            },
+          ]
+        );
+      })
+      .catch((error) => {
+        console.warn('[social-push] Registration prompt failed:', error);
+      });
+  }, [t, user, visible]);
 
   const manageBody = (
     <ManageBody
       friends={friends}
       activeInvite={activeInvite}
+      creatingInvite={creatingInvite}
       loading={loading}
-      onOpenJoin={handleOpenJoin}
       onCreateInvite={onCreateInvite}
       onShareInvite={onShareInvite}
       onRevokeInvite={onRevokeInvite}
@@ -399,71 +339,13 @@ export default function SharedManageSheet(props: {
     />
   );
 
-  const joinContent = (
-    <Animated.View
-      layout={contentLayoutTransition}
-      style={contentAnimatedStyle}
-    >
-      <AppSheetScaffold
-        headerVariant="standard"
-        title={t('shared.joinTitle', 'Join a friend')}
-        subtitle={
-          user
-            ? t('shared.joinBody', 'Paste an invite link to connect.')
-            : isAuthAvailable
-              ? t('shared.joinSignInBody', 'Sign in to connect with this friend.')
-              : t('shared.unavailableBody', 'This build does not have shared social enabled right now.')
-        }
-        headerTop={(
-          <View>
-            <View style={styles.joinTopRow}>
-              <AppBackButton
-                onPress={handleJoinBackPress}
-                style={styles.joinIconButton}
-              />
-              <AppIconButton
-                icon="close"
-                accessibilityLabel={t('common.close', 'Close')}
-                onPress={handleJoinClosePress}
-                style={styles.joinIconButton}
-              />
-            </View>
-            <View style={[styles.joinBadge, { backgroundColor: colors.primarySoft }]}>
-              <Ionicons
-                name={user ? 'link-outline' : 'person-circle-outline'}
-                size={20}
-                color={colors.primary}
-              />
-            </View>
-          </View>
-        )}
-      >
-        <FriendInviteJoinBody
-          user={user}
-          isAuthAvailable={isAuthAvailable}
-          inviteValue={inviteValue}
-          joining={joining}
-          contentStyle={styles.sheetContent}
-          onChangeInvite={setInviteValue}
-          onSubmit={() => {
-            void joinInvite();
-          }}
-          onGoToAuth={handleGoToAuth}
-        />
-      </AppSheetScaffold>
-    </Animated.View>
-  );
-
-  const manageContent = Platform.OS === 'android' ? (
+  const androidContent = (
     <BottomSheetScrollView
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.manageScrollContent}
     >
-      <Animated.View
-        layout={contentLayoutTransition}
-        style={contentAnimatedStyle}
-      >
+      <Animated.View layout={contentLayoutTransition} style={contentAnimatedStyle}>
         <View style={styles.manageHeader}>
           <Text style={[styles.manageTitle, { color: colors.text }]}>
             {t('shared.manageTitle', 'Friends')}
@@ -474,28 +356,19 @@ export default function SharedManageSheet(props: {
         </View>
         {manageBody}
         <View style={styles.manageFooter}>
-          <SheetFooterButton
-            label={t('common.done', 'Done')}
-            onPress={onClose}
-          />
+          <SheetFooterButton label={t('common.done', 'Done')} onPress={onClose} />
         </View>
       </Animated.View>
     </BottomSheetScrollView>
-  ) : (
-    <Animated.View
-      layout={contentLayoutTransition}
-      style={contentAnimatedStyle}
-    >
+  );
+
+  const iosContent = (
+    <Animated.View layout={contentLayoutTransition} style={contentAnimatedStyle}>
       <AppSheetScaffold
         headerVariant="standard"
         title={t('shared.manageTitle', 'Friends')}
         subtitle={t('shared.friendsCount', '{{count}} friends', { count: friends.length })}
-        footer={
-          <SheetFooterButton
-            label={t('common.done', 'Done')}
-            onPress={onClose}
-          />
-        }
+        footer={<SheetFooterButton label={t('common.done', 'Done')} onPress={onClose} />}
       >
         {manageBody}
       </AppSheetScaffold>
@@ -507,27 +380,19 @@ export default function SharedManageSheet(props: {
       visible={visible}
       onClose={onClose}
       androidScrollable
-      androidDynamicSizing={mode === 'manage'}
-      androidDisablePanningWhenKeyboardHidden={mode === 'join'}
+      androidDynamicSizing
       androidMaxDynamicContentSize={Sheet.maxHeight}
-      androidKeyboardBehavior={mode === 'join' ? 'extend' : 'interactive'}
-      androidRestoreInitialSnapOnKeyboardHide={mode === 'join'}
       androidInitialIndex={0}
-      androidSnapPoints={mode === 'join' ? ANDROID_FRIENDS_JOIN_SNAP_POINTS : undefined}
     >
-      {mode === 'join' ? joinContent : manageContent}
+      {Platform.OS === 'android' ? androidContent : iosContent}
     </AppSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  sheetContent: {
-    maxHeight: 680,
-  },
   manageScrollContent: {
     paddingHorizontal: Sheet.android.horizontalPadding,
     paddingBottom: Sheet.android.bottomPadding + Sheet.android.comfortBottomPadding,
-    minHeight: 600,
   },
   manageHeader: {
     paddingTop: Sheet.android.headerTopPadding,
@@ -547,29 +412,12 @@ const styles = StyleSheet.create({
   manageFooter: {
     paddingTop: 8,
   },
-  addFriendRow: {
-    minHeight: 72,
-    borderRadius: 28,
-    borderWidth: 1,
-    paddingHorizontal: 22,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
-  addFriendText: {
-    fontSize: 18,
-    lineHeight: 22,
-    fontWeight: '600',
-  },
-  section: {
-    marginTop: 28,
-  },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    marginTop: 30,
+    marginTop: 28,
     marginBottom: 14,
   },
   sectionTitle: {
@@ -577,33 +425,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: '800',
   },
-  quickActionsRow: {
-    marginTop: 18,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  quickAction: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 10,
-  },
-  quickActionIcon: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickActionLabel: {
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
   inviteCard: {
-    marginTop: 22,
     borderRadius: 24,
     borderWidth: 1,
     padding: 16,
@@ -612,6 +434,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
+  },
+  inviteCardIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   inviteCardCopy: {
     flex: 1,
@@ -743,38 +573,5 @@ const styles = StyleSheet.create({
     borderRadius: 27,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  joinTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: Platform.OS === 'ios' ? 6 : 0,
-  },
-  joinIconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  joinBadge: {
-    width: 46,
-    height: 46,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 18,
-  },
-  joinTitle: {
-    marginTop: 18,
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  joinSubtitle: {
-    ...Typography.body,
-    marginTop: 10,
   },
 });

@@ -767,6 +767,7 @@ export default function HomeScreen() {
     handleRemoveFriend,
     handleRevokeInvite,
     handleShareInvite,
+    inviteActionInFlight,
   } = useHomeSharedActions({
     user,
     sharedEnabled,
@@ -1880,6 +1881,7 @@ export default function HomeScreen() {
         visible={showSharedManageSheet}
         friends={friends}
         activeInvite={activeInvite}
+        creatingInvite={inviteActionInFlight === 'create'}
         loading={sharedLoading}
         onClose={dismissSharedManageSheet}
         onCreateInvite={() => {

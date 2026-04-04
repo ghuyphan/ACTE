@@ -324,17 +324,30 @@ function collectDeletedIds<Row extends Record<string, unknown>>(
   );
 }
 
-function assertExpectedDeleteIds(
+type MissingDeleteVerifier = (missingIds: string[]) => Promise<string[]>;
+
+async function assertExpectedDeleteIds(
   entityLabel: string,
   expectedIds: string[],
-  deletedIds: string[]
+  deletedIds: string[],
+  verifyMissingIds?: MissingDeleteVerifier
 ) {
   if (expectedIds.length === 0) {
     return;
   }
 
   const deletedSet = new Set(deletedIds);
-  const missingIds = expectedIds.filter((id) => !deletedSet.has(id));
+  let missingIds = expectedIds.filter((id) => !deletedSet.has(id));
+  if (missingIds.length > 0 && verifyMissingIds) {
+    const stillExistingIds = normalizeRemoteEntityIds(await verifyMissingIds(missingIds));
+    if (stillExistingIds.length === 0) {
+      return;
+    }
+
+    const stillExistingSet = new Set(stillExistingIds);
+    missingIds = missingIds.filter((id) => stillExistingSet.has(id));
+  }
+
   if (missingIds.length > 0) {
     throw new Error(
       `Remote ${entityLabel} delete did not remove expected rows: ${missingIds.join(', ')}`
@@ -1291,10 +1304,26 @@ export async function deleteOwnedSharedPostsForNotes(
   if (deleteError) {
     throw deleteError;
   }
-  assertExpectedDeleteIds(
+  await assertExpectedDeleteIds(
     'shared post',
     postIds,
-    collectDeletedIds(deletedPosts as { id?: string | null }[] | null | undefined, 'id')
+    collectDeletedIds(deletedPosts as { id?: string | null }[] | null | undefined, 'id'),
+    async (missingIds) => {
+      const { data: remainingPosts, error: remainingPostsError } = await supabase
+        .from('shared_posts')
+        .select('id')
+        .eq('author_user_id', user.id)
+        .in('id', missingIds);
+
+      if (remainingPostsError) {
+        throw remainingPostsError;
+      }
+
+      return collectDeletedIds(
+        remainingPosts as { id?: string | null }[] | null | undefined,
+        'id'
+      );
+    }
   );
 
   await upsertSharedPostTombstones(user.id, postIds, deletedAt);
@@ -1345,10 +1374,26 @@ export async function deleteSharedPost(
   if (error) {
     throw error;
   }
-  assertExpectedDeleteIds(
+  await assertExpectedDeleteIds(
     'shared post',
     expectedDeletedPostIds,
-    collectDeletedIds(deletedPosts as { id?: string | null }[] | null | undefined, 'id')
+    collectDeletedIds(deletedPosts as { id?: string | null }[] | null | undefined, 'id'),
+    async (missingIds) => {
+      const { data: remainingPosts, error: remainingPostsError } = await supabase
+        .from('shared_posts')
+        .select('id')
+        .eq('author_user_id', user.id)
+        .in('id', missingIds);
+
+      if (remainingPostsError) {
+        throw remainingPostsError;
+      }
+
+      return collectDeletedIds(
+        remainingPosts as { id?: string | null }[] | null | undefined,
+        'id'
+      );
+    }
   );
 
   await upsertSharedPostTombstones(user.id, [postId], getNowIso());

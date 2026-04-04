@@ -12,10 +12,8 @@ type IOSContentType = 'react-native' | 'swift-ui';
 
 export interface AppSheetProps {
   androidDynamicSizing?: boolean;
-  androidDisablePanningWhenKeyboardHidden?: boolean;
   androidInitialIndex?: number;
   androidKeyboardBehavior?: 'interactive' | 'extend' | 'fillParent';
-  androidRestoreInitialSnapOnKeyboardHide?: boolean;
   androidMaxDynamicContentSize?: number;
   children: ReactNode;
   visible: boolean;
@@ -34,10 +32,8 @@ export interface AppSheetProps {
 
 export default function AppSheet({
   androidDynamicSizing = true,
-  androidDisablePanningWhenKeyboardHidden = false,
   androidInitialIndex = 0,
   androidKeyboardBehavior = 'interactive',
-  androidRestoreInitialSnapOnKeyboardHide = false,
   androidMaxDynamicContentSize,
   children,
   visible,
@@ -60,10 +56,8 @@ export default function AppSheet({
     return (
       <AppBottomSheet
         androidDynamicSizing={androidDynamicSizing}
-        androidDisablePanningWhenKeyboardHidden={androidDisablePanningWhenKeyboardHidden}
         androidInitialIndex={androidInitialIndex}
         androidKeyboardBehavior={androidKeyboardBehavior}
-        androidRestoreInitialSnapOnKeyboardHide={androidRestoreInitialSnapOnKeyboardHide}
         androidMaxDynamicContentSize={androidMaxDynamicContentSize}
         androidSnapPoints={androidSnapPoints}
         visible={visible}

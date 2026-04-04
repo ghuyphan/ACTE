@@ -58,6 +58,8 @@ const mockActiveNotesScope = 'test-scope';
 let mockSessionUserId = 'user-1';
 const mockUndeletableRemoteNoteIds = new Set<string>();
 const mockUndeletableRemoteSharedPostIds = new Set<string>();
+const mockDeleteResponseOmittedRemoteNoteIds = new Set<string>();
+const mockDeleteResponseOmittedRemoteSharedPostIds = new Set<string>();
 
 const mockUploadPhotoToStorage = jest.fn<Promise<string | null>, [string, string, string | null | undefined]>(
   async (_bucket: string, path: string) => path
@@ -391,10 +393,13 @@ function mockCreateNotesQueryBuilder() {
         if (state.deleteMode) {
           const rows = executeNotesQuery(state);
           const deletedRows = rows.filter((row) => !mockUndeletableRemoteNoteIds.has(String(row.id)));
+          const returnedRows = deletedRows.filter(
+            (row) => !mockDeleteResponseOmittedRemoteNoteIds.has(String(row.id))
+          );
           for (const row of deletedRows) {
             mockRemoteNotes.delete(row.id);
           }
-          return Promise.resolve(resolve({ data: deletedRows, error: null }));
+          return Promise.resolve(resolve({ data: returnedRows, error: null }));
         }
 
         return Promise.resolve(resolve({ data: executeNotesQuery(state), error: null }));
@@ -439,10 +444,13 @@ function mockCreateSharedPostsQueryBuilder() {
         if (state.deleteMode) {
           const rows = executeSharedPostsQuery(state);
           const deletedRows = rows.filter((row) => !mockUndeletableRemoteSharedPostIds.has(String(row.id)));
+          const returnedRows = deletedRows.filter(
+            (row) => !mockDeleteResponseOmittedRemoteSharedPostIds.has(String(row.id))
+          );
           for (const row of deletedRows) {
             mockRemoteSharedPosts.delete(row.id);
           }
-          return Promise.resolve(resolve({ data: deletedRows, error: null }));
+          return Promise.resolve(resolve({ data: returnedRows, error: null }));
         }
 
         return Promise.resolve(resolve({ data: executeSharedPostsQuery(state), error: null }));
@@ -861,6 +869,8 @@ beforeEach(async () => {
   mockSessionUserId = 'user-1';
   mockUndeletableRemoteNoteIds.clear();
   mockUndeletableRemoteSharedPostIds.clear();
+  mockDeleteResponseOmittedRemoteNoteIds.clear();
+  mockDeleteResponseOmittedRemoteSharedPostIds.clear();
   localNotesStore = [];
   mockRemoteNotes.clear();
   mockRemoteSharedPosts.clear();
@@ -1432,6 +1442,43 @@ describe('syncService', () => {
       expect.objectContaining({
         entity_id: 'note-stuck',
         status: 'failed',
+      })
+    );
+  });
+
+  it('treats shared post deletes as successful when the delete response omits rows that are gone', async () => {
+    mockRemoteNotes.set('note-hidden-shared-delete', {
+      id: 'note-hidden-shared-delete',
+      user_id: 'user-1',
+      type: 'text',
+      content: 'note',
+      photo_path: null,
+      synced_at: '2026-03-09T00:00:00.000Z',
+    });
+    mockRemoteSharedPosts.set('shared-hidden-delete', {
+      id: 'shared-hidden-delete',
+      author_user_id: 'user-1',
+      source_note_id: 'note-hidden-shared-delete',
+      photo_path: null,
+    });
+    mockDeleteResponseOmittedRemoteSharedPostIds.add('shared-hidden-delete');
+
+    await getSyncService().recordChange({
+      type: 'delete',
+      entity: 'note',
+      entityId: 'note-hidden-shared-delete',
+      timestamp: '2026-03-10T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, [], { mode: 'incremental' });
+
+    expect(result.status).toBe('success');
+    expect(mockRemoteNotes.has('note-hidden-shared-delete')).toBe(false);
+    expect(mockRemoteSharedPosts.has('shared-hidden-delete')).toBe(false);
+    expect(mockRemoteSharedPostTombstones.get('shared-hidden-delete')).toEqual(
+      expect.objectContaining({
+        post_id: 'shared-hidden-delete',
+        author_user_id: 'user-1',
       })
     );
   });
