@@ -477,6 +477,7 @@ function MapCanvas({
   const palette = useMemo(() => getMapPalette(colors, isDark), [colors, isDark]);
   const [androidShouldTrackMarkerViews, setAndroidShouldTrackMarkerViews] = useState(isAndroid);
   const androidMarkerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedCalloutAnchor = useMemo(() => ({ x: 0.5, y: 0.86 }), []);
   // Android applies map color scheme only from initial props, so remount on theme flips.
   const mapViewKey = isAndroid ? `map-${isDark ? 'dark' : 'light'}` : 'map';
 
@@ -585,7 +586,7 @@ function MapCanvas({
           previewText,
           countBadgeLabel,
         }) => {
-        const renderSelectedCallout =
+        const showSelectedCallout =
           !preferLiteMarkers &&
           !node.isCluster &&
           Boolean(selectedGroup) &&
@@ -612,7 +613,7 @@ function MapCanvas({
               key={node.id}
               testID={node.isCluster ? `cluster-marker-${node.id}` : `leaf-marker-${node.groupId ?? node.id}`}
               coordinate={{ latitude: node.latitude, longitude: node.longitude }}
-              anchor={renderSelectedCallout ? { x: 0.5, y: 30 / 136 } : { x: 0.5, y: 0.5 }}
+              anchor={showSelectedCallout ? selectedCalloutAnchor : { x: 0.5, y: 0.5 }}
               tracksViewChanges={androidShouldTrackMarkerViews || pulseActive || isSelected || reduceMotionEnabled}
               onPress={(event) => {
                 event.stopPropagation?.();
@@ -629,46 +630,47 @@ function MapCanvas({
               <View
                 style={[
                   styles.markerWrap,
+                  showSelectedCallout ? styles.selectedMarkerHitArea : null,
                   showRichPreviewMarker ? styles.richMarkerHitArea : null,
                   showStackPreviewMarker ? styles.stackMarkerHitArea : null,
                 ]}
                 collapsable={false}
               >
-                {renderSelectedCallout && selectedNote ? (
-                  <View pointerEvents="none" style={styles.selectedMarkerWrap} collapsable={false}>
+                {showSelectedCallout && selectedNote ? (
+                  <View pointerEvents="none" style={styles.selectedMarkerOverlay} collapsable={false}>
                     <MapSelectedNoteCallout
                       note={selectedNote}
                       colors={colors}
                       visible
                       reduceMotionEnabled={reduceMotionEnabled}
+                      showOrb={false}
                     />
                   </View>
-                ) : (
-                  <MarkerContent
-                    isCluster={node.isCluster}
-                    pointCount={node.pointCount}
-                    zoomLevel={currentZoom}
-                    showRichPreview={showRichPreviewMarker}
-                    showStackPreview={showStackPreviewMarker}
-                    previewNoteId={previewNoteId}
-                    showPhotoThumbnail={Boolean(photoUri)}
-                    photoNoteId={photoNoteId}
-                    photoUri={photoUri}
-                    previewTitle={previewTitle}
-                    previewText={previewText}
-                    countBadgeLabel={showRichPreviewMarker || showStackPreviewMarker ? countBadgeLabel : null}
-                    selected={isSelected}
-                    color={node.isCluster ? palette.cluster : markerColor}
-                    accentColor={palette.focus}
-                    cardBackgroundColor={palette.cardBackground}
-                    cardTextColor={palette.cardText}
-                    cardSubtextColor={palette.cardSubtext}
-                    labelShadowColor={palette.labelShadow}
-                    pulseActive={pulseActive}
-                    pulseKey={markerPulseKey}
-                    reduceMotionEnabled={reduceMotionEnabled}
-                  />
-                )}
+                ) : null}
+                <MarkerContent
+                  isCluster={node.isCluster}
+                  pointCount={node.pointCount}
+                  zoomLevel={currentZoom}
+                  showRichPreview={showRichPreviewMarker}
+                  showStackPreview={showStackPreviewMarker}
+                  previewNoteId={previewNoteId}
+                  showPhotoThumbnail={Boolean(photoUri)}
+                  photoNoteId={photoNoteId}
+                  photoUri={photoUri}
+                  previewTitle={previewTitle}
+                  previewText={previewText}
+                  countBadgeLabel={showRichPreviewMarker || showStackPreviewMarker ? countBadgeLabel : null}
+                  selected={isSelected}
+                  color={node.isCluster ? palette.cluster : markerColor}
+                  accentColor={palette.focus}
+                  cardBackgroundColor={palette.cardBackground}
+                  cardTextColor={palette.cardText}
+                  cardSubtextColor={palette.cardSubtext}
+                  labelShadowColor={palette.labelShadow}
+                  pulseActive={pulseActive}
+                  pulseKey={markerPulseKey}
+                  reduceMotionEnabled={reduceMotionEnabled}
+                />
               </View>
             </Marker>
           )
@@ -749,11 +751,16 @@ const styles = StyleSheet.create({
     minWidth: 60,
     minHeight: 60,
   },
-  selectedMarkerWrap: {
+  selectedMarkerHitArea: {
+    minWidth: 176,
+    minHeight: 136,
+    justifyContent: 'flex-end',
+  },
+  selectedMarkerOverlay: {
+    position: 'absolute',
+    bottom: 50,
     width: 176,
-    height: 136,
     alignItems: 'center',
-    justifyContent: 'flex-start',
   },
   richMarkerHitArea: {
     minWidth: 164,

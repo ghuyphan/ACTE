@@ -716,7 +716,7 @@ describe('MapScreen', () => {
     });
   });
 
-  it('shows a richer selected marker card for a single text note', async () => {
+  it('shows an anchored selected preview above a single text marker', async () => {
     const { getByTestId } = render(<MapScreen />);
 
     act(() => {
@@ -736,7 +736,7 @@ describe('MapScreen', () => {
 
     expect(getByTestId('leaf-marker-10.76000:106.66000').props.anchor).toMatchObject({
       x: 0.5,
-      y: 0.5,
+      y: 0.86,
     });
     expect(mockAnimateToRegion).not.toHaveBeenCalled();
   });
@@ -803,7 +803,7 @@ describe('MapScreen', () => {
     expect(getByTestId('note-marker-text-1')).toBeTruthy();
   });
 
-  it('keeps the selected note callout mounted after opening the note and a follow-up map update', async () => {
+  it('keeps the pinned preview visible after opening the note and a follow-up map update', async () => {
     const { getByTestId } = render(<MapScreen />);
 
     act(() => {
@@ -836,10 +836,11 @@ describe('MapScreen', () => {
       });
     });
 
-    expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    expect(getByTestId('map-preview-shell')).toBeTruthy();
+    expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
   });
 
-  it('keeps the selected marker and pinned preview visible for the start of the dismiss animation', async () => {
+  it('keeps the pinned preview visible for the start of the dismiss animation while the base marker stays mounted', async () => {
     const nowSpy = jest.spyOn(Date, 'now');
     let now = 1000;
     nowSpy.mockImplementation(() => now);
@@ -865,7 +866,7 @@ describe('MapScreen', () => {
     now = 1400;
     fireEvent.press(getByTestId('mock-map-press'));
 
-    expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    expect(getByTestId('leaf-marker-10.76000:106.66000')).toBeTruthy();
     expect(getByText('Saved here')).toBeTruthy();
 
     nowSpy.mockRestore();

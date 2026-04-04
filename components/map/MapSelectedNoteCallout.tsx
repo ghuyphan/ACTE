@@ -19,6 +19,7 @@ interface MapSelectedNoteCalloutProps {
   colors: ThemeColors;
   visible: boolean;
   reduceMotionEnabled: boolean;
+  showOrb?: boolean;
 }
 
 function getPreviewText(note: Note) {
@@ -39,6 +40,7 @@ function MapSelectedNoteCallout({
   colors,
   visible,
   reduceMotionEnabled,
+  showOrb = true,
 }: MapSelectedNoteCalloutProps) {
   const title = note.locationName?.trim() || null;
   const previewText = getPreviewText(note);
@@ -73,30 +75,35 @@ function MapSelectedNoteCallout({
   }, [visibilityProgress]);
 
   return (
-    <Animated.View testID={`note-marker-${note.id}`} style={[styles.container, animatedStyle]}>
-      <View
-        style={[
-          styles.orb,
-          {
-            borderColor: colors.primary,
-            backgroundColor: colors.card,
-          },
-        ]}
-      >
-        {photoUri ? (
-          <Image
-            testID={`photo-marker-${note.id}`}
-            source={{ uri: photoUri }}
-            style={styles.image}
-            contentFit="cover"
-            transition={0}
-          />
-        ) : (
-          <View style={[styles.iconWrap, { backgroundColor: `${colors.primary}14` }]}>
-            <Ionicons name="document-text" size={18} color={colors.primary} />
-          </View>
-        )}
-      </View>
+    <Animated.View
+      testID={`note-marker-${note.id}`}
+      style={[styles.container, !showOrb ? styles.cardOnlyContainer : null, animatedStyle]}
+    >
+      {showOrb ? (
+        <View
+          style={[
+            styles.orb,
+            {
+              borderColor: colors.primary,
+              backgroundColor: colors.card,
+            },
+          ]}
+        >
+          {photoUri ? (
+            <Image
+              testID={`photo-marker-${note.id}`}
+              source={{ uri: photoUri }}
+              style={styles.image}
+              contentFit="cover"
+              transition={0}
+            />
+          ) : (
+            <View style={[styles.iconWrap, { backgroundColor: `${colors.primary}14` }]}>
+              <Ionicons name="document-text" size={18} color={colors.primary} />
+            </View>
+          )}
+        </View>
+      ) : null}
       <View
         style={[
           styles.card,
@@ -128,6 +135,10 @@ const styles = StyleSheet.create({
     width: 176,
     alignItems: 'center',
     gap: 8,
+  },
+  cardOnlyContainer: {
+    width: 168,
+    gap: 0,
   },
   orb: {
     width: 60,
