@@ -268,6 +268,7 @@ jest.mock('../utils/interactionFeedback', () => ({
 
 jest.mock('../utils/dateUtils', () => ({
   formatDate: () => 'Mar 10, 2026',
+  formatNoteTimestamp: () => '2 hr. ago',
 }));
 
 jest.mock('../utils/platform', () => ({

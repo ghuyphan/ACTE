@@ -1875,6 +1875,7 @@ export default function HomeScreen() {
         flatListRef={flatListRef}
         captureHeader={captureHeader}
         captureMode={captureMode}
+        screenActive={isScreenFocused}
         items={visibleFeedItems}
         notes={displayedNotes}
         sharedPosts={visibleSharedPosts}

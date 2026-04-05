@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { type ComponentProps } from 'react';
+import { type ComponentProps, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Sheet, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
+import StampIcon from '../ui/StampIcon';
+import StickerIcon from '../ui/StickerIcon';
 import AppSheet from './AppSheet';
 import AppSheetScaffold from './AppSheetScaffold';
 import SheetFooterButton from './SheetFooterButton';
@@ -10,6 +12,7 @@ import SheetFooterButton from './SheetFooterButton';
 export interface StickerSourceSheetAction {
   key: string;
   iconName: ComponentProps<typeof Ionicons>['name'];
+  renderIcon?: (props: { color: string; size: number }) => ReactNode;
   label: string;
   description?: string;
   onPress: () => void;
@@ -64,7 +67,9 @@ function StickerSourceSheetBody({
               testID={action.testID}
             >
               <View style={[styles.optionIconBadge, { backgroundColor: `${accentColor}18` }]}>
-                <Ionicons name={action.iconName} size={18} color={accentColor} />
+                {action.renderIcon
+                  ? action.renderIcon({ color: accentColor, size: 18 })
+                  : <Ionicons name={action.iconName} size={18} color={accentColor} />}
               </View>
               <View style={styles.optionContent}>
                 <Text style={[styles.optionLabel, { color: primaryTextColor }]}>{action.label}</Text>
@@ -106,6 +111,22 @@ export default function StickerSourceSheet({
     </AppSheet>
   );
 }
+
+export const renderStickerSourceSheetStickerIcon = ({
+  color,
+  size,
+}: {
+  color: string;
+  size: number;
+}) => <StickerIcon color={color} size={size} />;
+
+export const renderStickerSourceSheetStampIcon = ({
+  color,
+  size,
+}: {
+  color: string;
+  size: number;
+}) => <StampIcon color={color} size={size} />;
 
 const styles = StyleSheet.create({
   optionRow: {

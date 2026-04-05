@@ -56,6 +56,8 @@ import PremiumNoteFinishOverlay from '../ui/PremiumNoteFinishOverlay';
 import PrimaryButton from '../ui/PrimaryButton';
 import StickerPastePopover from '../ui/StickerPastePopover';
 import LivePhotoIcon from '../ui/LivePhotoIcon';
+import DoodleIcon from '../ui/DoodleIcon';
+import StickerIcon from '../ui/StickerIcon';
 import {
   CaptureAnimatedPressable,
   CaptureGlassActionButton,
@@ -999,6 +1001,8 @@ function CaptureDecorateRail({
         active={doodleModeEnabled}
         activeIconName="create"
         inactiveIconName="create-outline"
+        renderActiveIcon={({ color, size }) => <DoodleIcon color={color} size={size} />}
+        renderInactiveIcon={({ color, size }) => <DoodleIcon color={color} size={size} />}
         activeBackgroundColor={theme.activeBackgroundColor}
         inactiveBackgroundColor={theme.inactiveBackgroundColor}
         activeBorderColor={theme.activeBorderColor}
@@ -1023,6 +1027,8 @@ function CaptureDecorateRail({
           active={stickerModeEnabled}
           activeIconName="images"
           inactiveIconName="images-outline"
+          renderActiveIcon={({ color, size }) => <StickerIcon color={color} size={size} />}
+          renderInactiveIcon={({ color, size }) => <StickerIcon color={color} size={size} />}
           activeBackgroundColor={theme.activeBackgroundColor}
           inactiveBackgroundColor={theme.inactiveBackgroundColor}
           activeBorderColor={theme.activeBorderColor}
@@ -1067,7 +1073,7 @@ function CaptureDecorateRail({
               },
             ]}
           >
-            <Ionicons name="close-outline" size={14} color={theme.detailIconColor} />
+            <Ionicons name="trash-outline" size={16} color={theme.detailIconColor} />
           </CaptureAnimatedPressable>
           <DoodleColorPalette
             colors={doodleColorOptions}
@@ -1259,6 +1265,8 @@ function LiveCameraActionBar({
     return null;
   }
 
+  const showLivePhotoGuide = Boolean(cameraInstructionText);
+
   return (
     <View style={styles.captureActionBarWrap}>
       <CaptureControlRail
@@ -1266,47 +1274,48 @@ function LiveCameraActionBar({
         borderColor={colors.captureGlassBorder}
         colors={colors}
       >
-        {cameraInstructionText ? (
+        {showLivePhotoGuide ? (
           <View style={styles.cameraActionHintWrap}>
-            <Text
-              style={[styles.cameraActionHintText, { color: colors.captureGlassText }]}
-            >
-              {cameraInstructionText}
+            <LivePhotoIcon size={15} color={colors.captureGlassText} />
+            <Text style={[styles.cameraActionHintText, { color: colors.captureGlassText }]}>
+              {t('capture.livePhotoCoachLiveHint', 'Hold for live photo')}
             </Text>
           </View>
         ) : null}
-        <CaptureAnimatedPressable
-          testID="capture-library-button"
-          accessibilityLabel={libraryImportLocked ? t('capture.plusLibraryLocked', 'Plus') : t('capture.importPhoto', 'Photos')}
-          onPress={onOpenPhotoLibrary}
-          active={importingPhoto}
-          activeScale={1.015}
-          activeTranslateY={0}
-          contentActiveScale={1}
-          style={[
-            styles.textCardActionPill,
-            styles.captureActionTextPill,
-            {
-              backgroundColor: colors.captureGlassFill,
-              borderColor: 'transparent',
-            },
-          ]}
-        >
-          {importingPhoto ? (
-            <ActivityIndicator size="small" color={colors.captureGlassText} />
-          ) : (
-            <>
-              <Ionicons
-                name={libraryImportLocked ? 'sparkles' : 'images-outline'}
-                size={16}
-                color={colors.captureGlassText}
-              />
-              <Text style={[styles.captureActionPillLabel, { color: colors.captureGlassText }]}>
-                {libraryImportLocked ? t('capture.plusLibraryLocked', 'Plus') : t('capture.importPhoto', 'Photos')}
-              </Text>
-            </>
-          )}
-        </CaptureAnimatedPressable>
+        {!showLivePhotoGuide ? (
+          <CaptureAnimatedPressable
+            testID="capture-library-button"
+            accessibilityLabel={libraryImportLocked ? t('capture.plusLibraryLocked', 'Plus') : t('capture.importPhoto', 'Photos')}
+            onPress={onOpenPhotoLibrary}
+            active={importingPhoto}
+            activeScale={1.015}
+            activeTranslateY={0}
+            contentActiveScale={1}
+            style={[
+              styles.textCardActionPill,
+              styles.captureActionTextPill,
+              {
+                backgroundColor: colors.captureGlassFill,
+                borderColor: 'transparent',
+              },
+            ]}
+          >
+            {importingPhoto ? (
+              <ActivityIndicator size="small" color={colors.captureGlassText} />
+            ) : (
+              <>
+                <Ionicons
+                  name="images-outline"
+                  size={16}
+                  color={colors.captureGlassText}
+                />
+                <Text style={[styles.captureActionPillLabel, { color: colors.captureGlassText }]}>
+                  {libraryImportLocked ? t('capture.plusLibraryLocked', 'Plus') : t('capture.importPhoto', 'Photos')}
+                </Text>
+              </>
+            )}
+          </CaptureAnimatedPressable>
+        ) : null}
       </CaptureControlRail>
     </View>
   );
@@ -1517,7 +1526,7 @@ function CaptureActionRow({
   if (captureMode === 'camera' && !capturedPhoto) {
     return (
       <View style={styles.cameraControlsWrap}>
-        <View style={styles.belowCardShutterRow}>
+        <View style={[styles.belowCardShutterRow, styles.liveCameraShutterRow]}>
           {permissionGranted ? (
             <CaptureShareTargetButton
               colors={colors}
@@ -3050,17 +3059,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   cameraActionHintWrap: {
-    flexShrink: 1,
-    maxWidth: 228,
-    paddingLeft: 4,
-    paddingRight: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
   },
   cameraActionHintText: {
     ...Typography.pill,
     fontSize: 12,
     lineHeight: 16,
     textAlign: 'center',
+    fontWeight: '700',
   },
   cameraControlsWrap: {
     width: '100%',
@@ -3124,6 +3135,11 @@ const styles = StyleSheet.create({
   },
   belowCardCapturedPhotoActions: {
     minHeight: 68,
+  },
+  liveCameraShutterRow: {
+    minHeight: 92,
+    paddingTop: 12,
+    paddingBottom: 14,
   },
   photoFilterTray: {
     maxWidth: '100%',

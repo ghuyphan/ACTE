@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   LinearTransition,
@@ -13,11 +13,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Sheet, Typography } from '../../constants/theme';
-import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
-import { syncSocialPushRegistration } from '../../services/socialPushService';
 import { FriendConnection, FriendInvite } from '../../services/sharedFeedService';
-import { showAppAlert } from '../../utils/alert';
 import AppSheet from '../sheets/AppSheet';
 import AppSheetScaffold from '../sheets/AppSheetScaffold';
 import SheetFooterButton from '../sheets/SheetFooterButton';
@@ -233,7 +230,6 @@ export default function SharedManageSheet(props: {
 }) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const { user } = useAuth();
   const {
     visible,
     friends,
@@ -248,7 +244,6 @@ export default function SharedManageSheet(props: {
   } = props;
   const contentOpacity = useSharedValue(1);
   const contentTranslateY = useSharedValue(0);
-  const socialPushPromptedUserIdRef = useRef<string | null>(null);
   const contentAnimatedStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
     transform: [{ translateY: contentTranslateY.value }],
@@ -277,47 +272,6 @@ export default function SharedManageSheet(props: {
 
     animateContentChange();
   }, [activeInvite?.id, animateContentChange, friends.length, visible]);
-
-  useEffect(() => {
-    if (!visible || !user) {
-      return;
-    }
-
-    if (socialPushPromptedUserIdRef.current === user.uid) {
-      return;
-    }
-
-    socialPushPromptedUserIdRef.current = user.uid;
-    void syncSocialPushRegistration(user, { requestPermission: true })
-      .then((status) => {
-        if (status !== 'blocked') {
-          return;
-        }
-
-        showAppAlert(
-          t('shared.pushBlockedTitle', 'Turn on friend activity notifications'),
-          t(
-            'shared.pushBlockedBody',
-            'Notifications are off for Noto. Open Settings if you want alerts when friends accept invites or share memories.'
-          ),
-          [
-            {
-              text: t('common.notNow', 'Not now'),
-              style: 'cancel',
-            },
-            {
-              text: t('common.openSettings', 'Open Settings'),
-              onPress: () => {
-                void Linking.openSettings().catch(() => undefined);
-              },
-            },
-          ]
-        );
-      })
-      .catch((error) => {
-        console.warn('[social-push] Registration prompt failed:', error);
-      });
-  }, [t, user, visible]);
 
   const manageBody = (
     <ManageBody

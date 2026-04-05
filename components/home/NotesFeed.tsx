@@ -264,6 +264,7 @@ interface NotesFeedProps {
   flatListRef: RefObject<any>;
   captureHeader: ReactElement;
   captureMode: 'text' | 'camera';
+  screenActive?: boolean;
   items?: HomeFeedItem[];
   notes?: Note[];
   sharedPosts?: SharedPost[];
@@ -294,6 +295,7 @@ export default function NotesFeed({
   flatListRef,
   captureHeader,
   captureMode,
+  screenActive = true,
   items,
   notes = [],
   sharedPosts = [],
@@ -530,7 +532,7 @@ export default function NotesFeed({
 
   const renderItem = useCallback(
     ({ item, index }: { item: HomeFeedItem; index: number }) => {
-      const isActive = activeCardKey === getHomeFeedItemKey(item);
+      const isActive = screenActive && activeCardKey === getHomeFeedItemKey(item);
 
       if (item.kind === 'shared-post') {
         return (
@@ -573,6 +575,7 @@ export default function NotesFeed({
       onOpenSharedPost,
       revealedNoteId,
       revealToken,
+      screenActive,
       snapHeight,
       t,
       topInset,

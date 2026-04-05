@@ -138,6 +138,100 @@ describe('NotesFeed capture visibility', () => {
     expect(activeLabels[1]).toHaveTextContent('true');
   });
 
+  it('stops card physics activity when the parent screen is not focused', () => {
+    const view = render(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="camera"
+        screenActive
+        notes={[
+          {
+            id: 'note-1',
+            type: 'text',
+            content: 'first',
+            locationName: 'Cafe',
+            latitude: 0,
+            longitude: 0,
+            radius: 150,
+            isFavorite: false,
+            createdAt: '2026-03-19T00:00:00.000Z',
+            updatedAt: null,
+          },
+        ] as any}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    const list = view.UNSAFE_getByType(FlatList);
+
+    act(() => {
+      list.props.onMomentumScrollEnd({
+        nativeEvent: {
+          contentOffset: {
+            y: 700,
+          },
+        },
+      });
+    });
+
+    expect(view.getByTestId('mock-text-memory-card-active')).toHaveTextContent('true');
+
+    view.rerender(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="camera"
+        screenActive={false}
+        notes={[
+          {
+            id: 'note-1',
+            type: 'text',
+            content: 'first',
+            locationName: 'Cafe',
+            latitude: 0,
+            longitude: 0,
+            radius: 150,
+            isFavorite: false,
+            createdAt: '2026-03-19T00:00:00.000Z',
+            updatedAt: null,
+          },
+        ] as any}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    expect(view.getByTestId('mock-text-memory-card-active')).toHaveTextContent('false');
+  });
+
   it('re-renders a note card when only doodle strokes change', () => {
     const baseNote = {
       id: 'note-1',

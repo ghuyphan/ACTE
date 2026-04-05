@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type GestureResponderEvent, Platform } from 'react-native';
 import {
   addClipboardListener,
@@ -9,6 +9,10 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import type { TFunction } from 'i18next';
 import { showAppAlert } from '../../utils/alert';
+import {
+  renderStickerSourceSheetStampIcon,
+  renderStickerSourceSheetStickerIcon,
+} from '../sheets/StickerSourceSheet';
 import {
   clipboardImageDataHasTransparency,
   ClipboardStickerError,
@@ -42,6 +46,7 @@ export type StickerPastePromptState = {
 export type StickerSourceAction = {
   key: string;
   iconName: 'images-outline' | 'pricetag-outline' | 'clipboard-outline';
+  renderIcon?: ({ color, size }: { color: string; size: number }) => ReactNode;
   label: string;
   description: string;
   onPress: () => void;
@@ -499,6 +504,7 @@ export function useCaptureCardStickerFlow({
         {
           key: 'create-sticker',
           iconName: 'images-outline',
+          renderIcon: renderStickerSourceSheetStickerIcon,
           label: t('capture.createStickerLabel', 'Create sticker'),
           description: t('capture.createStickerDescription', 'Transparent PNG or WebP'),
           onPress: handleSelectStickerSourceSticker,
@@ -507,6 +513,7 @@ export function useCaptureCardStickerFlow({
         {
           key: 'create-stamp',
           iconName: 'pricetag-outline',
+          renderIcon: renderStickerSourceSheetStampIcon,
           label: t('capture.createStampLabel', 'Create stamp'),
           description: t('capture.createStampDescription', 'Turn any photo into a perforated stamp'),
           onPress: handleSelectStickerSourceStamp,

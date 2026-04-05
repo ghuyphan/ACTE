@@ -30,7 +30,7 @@ import { parseNoteDoodleStrokes } from '../../../services/noteDoodles';
 import { getNotePairedVideoUri } from '../../../services/livePhotoStorage';
 import { getNotePhotoUri } from '../../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../../services/noteTextPresentation';
-import { formatDate } from '../../../utils/dateUtils';
+import { formatNoteTimestamp } from '../../../utils/dateUtils';
 import { parseNoteStickerPlacements } from '../../../services/noteStickers';
 import DynamicStickerCanvas from '../DynamicStickerCanvas';
 import NoteDoodleCanvas from '../NoteDoodleCanvas';
@@ -222,7 +222,7 @@ export default function NoteDetailSheetContent({
         );
     }
 
-    const dateStr = formatDate(note.createdAt, 'long');
+    const dateStr = formatNoteTimestamp(note.createdAt, 'detail');
     const gradient = getTextNoteCardGradient({
         text: isEditing ? editContent : note.content,
         noteId: note.id,

@@ -8,7 +8,7 @@ import { Note } from '../../services/database';
 import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { SharedPost } from '../../services/sharedFeedService';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, formatNoteTimestamp } from '../../utils/dateUtils';
 import ImageMemoryCard from '../notes/ImageMemoryCard';
 import {
   DEFAULT_DEBUG_TILT_STATE,
@@ -60,7 +60,7 @@ export function NoteMemoryCard({
   containerStyle,
   isActive = false,
 }: NoteMemoryCardProps) {
-  const dateStr = formatDate(note.createdAt, 'short');
+  const dateStr = formatNoteTimestamp(note.createdAt, 'card');
   const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
   const locationLabel = note.locationName ?? t('home.unknownLocation', 'Unknown location');
 
@@ -127,10 +127,12 @@ export function NoteMemoryCard({
             <InfoPill style={styles.metadataPill}>
               <View style={styles.metadataPillContent}>
                 <View style={styles.metadataPillMain}>
-                  <Ionicons name="location" size={14} color={colors.secondaryText} />
-                  <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
-                    {locationLabel}
-                  </Text>
+                  <View style={styles.metadataLocationGroup}>
+                    <Ionicons name="location" size={14} color={colors.secondaryText} />
+                    <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
+                      {locationLabel}
+                    </Text>
+                  </View>
                   <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
                   <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
                   {note.hasDoodle ? (
@@ -150,13 +152,15 @@ export function NoteMemoryCard({
             </InfoPill>
           </Pressable>
         ) : (
-          <InfoPill style={styles.metadataPill}>
-            <View style={styles.metadataPillContent}>
-              <View style={styles.metadataPillMain}>
-                <Ionicons name="location" size={14} color={colors.secondaryText} />
-                <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
-                  {locationLabel}
-                </Text>
+            <InfoPill style={styles.metadataPill}>
+              <View style={styles.metadataPillContent}>
+                <View style={styles.metadataPillMain}>
+                <View style={styles.metadataLocationGroup}>
+                  <Ionicons name="location" size={14} color={colors.secondaryText} />
+                  <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
+                    {locationLabel}
+                  </Text>
+                </View>
                 <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
                 <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
                 {note.hasDoodle ? (
@@ -235,10 +239,12 @@ export function SharedPostMemoryCard({
                       </View>
                     )}
                     <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-                    <Ionicons name="location" size={14} color={colors.secondaryText} />
-                    <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
-                      {placeLabel}
-                    </Text>
+                    <View style={styles.metadataLocationGroup}>
+                      <Ionicons name="location" size={14} color={colors.secondaryText} />
+                      <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
+                        {placeLabel}
+                      </Text>
+                    </View>
                     <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
                     <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
                   </View>
@@ -269,10 +275,12 @@ export function SharedPostMemoryCard({
                     </View>
                   )}
                   <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-                  <Ionicons name="location" size={14} color={colors.secondaryText} />
-                  <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
-                    {placeLabel}
-                  </Text>
+                  <View style={styles.metadataLocationGroup}>
+                    <Ionicons name="location" size={14} color={colors.secondaryText} />
+                    <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
+                      {placeLabel}
+                    </Text>
+                  </View>
                   <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
                   <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
                 </View>
@@ -321,7 +329,7 @@ const styles = StyleSheet.create({
   },
   metaContainer: {
     alignSelf: 'center',
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'center',
     minHeight: 56,
     paddingTop: 16,
@@ -348,13 +356,14 @@ const styles = StyleSheet.create({
   },
   metadataPill: {
     minHeight: 42,
+    width: '100%',
     maxWidth: '100%',
     paddingHorizontal: 10,
     paddingVertical: 0,
     borderRadius: Radii.pill,
   },
   metadataPressable: {
-    alignSelf: 'center',
+    width: '100%',
     maxWidth: '100%',
   },
   metadataPressablePressed: {
@@ -362,12 +371,21 @@ const styles = StyleSheet.create({
   },
   metadataPillText: {
     ...Typography.pill,
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
+  },
+  metadataLocationGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
   },
   metadataPillDate: {
     fontSize: 13,
     fontWeight: '500',
     fontFamily: 'Noto Sans',
+    flexShrink: 0,
   },
   metadataPillDot: {
     width: 4,
@@ -379,6 +397,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    width: '100%',
     maxWidth: '100%',
   },
   metadataPillMain: {
@@ -386,13 +405,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     minWidth: 0,
-    flexShrink: 1,
+    flex: 1,
   },
   metadataPillAction: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     flexShrink: 0,
+    marginLeft: 8,
   },
   metadataActionText: {
     fontSize: 13,

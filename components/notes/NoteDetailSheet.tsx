@@ -11,6 +11,10 @@ import {
     Share,
 } from 'react-native';
 import { PAYWALL_RESULT } from 'react-native-purchases-ui';
+import StickerSourceSheet, {
+    renderStickerSourceSheetStampIcon,
+    renderStickerSourceSheetStickerIcon,
+} from '../sheets/StickerSourceSheet';
 import {
     cancelAnimation,
     Easing,
@@ -67,7 +71,6 @@ import {
 } from '../../utils/stickerClipboard';
 import AppSheet from '../sheets/AppSheet';
 import { type DoodleStroke } from './NoteDoodleCanvas';
-import StickerSourceSheet from '../sheets/StickerSourceSheet';
 import NoteDetailSheetContent from './detail/NoteDetailSheetContent';
 
 const { width } = Dimensions.get('window');
@@ -845,6 +848,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         const actions: {
             key: string;
             iconName: 'images-outline' | 'pricetag-outline' | 'clipboard-outline';
+            renderIcon?: ({ color, size }: { color: string; size: number }) => React.ReactNode;
             label: string;
             description: string;
             onPress: () => void;
@@ -853,6 +857,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             {
                 key: 'create-sticker',
                 iconName: 'images-outline',
+                renderIcon: renderStickerSourceSheetStickerIcon,
                 label: t('capture.createStickerLabel', 'Create sticker'),
                 description: t('capture.createStickerDescription', 'Transparent PNG or WebP'),
                 onPress: handleSelectStickerSourceSticker,
@@ -861,6 +866,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             {
                 key: 'create-stamp',
                 iconName: 'pricetag-outline',
+                renderIcon: renderStickerSourceSheetStampIcon,
                 label: t('capture.createStampLabel', 'Create stamp'),
                 description: t('capture.createStampDescription', 'Turn any photo into a perforated stamp'),
                 onPress: handleSelectStickerSourceStamp,

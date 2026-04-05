@@ -129,6 +129,7 @@ jest.mock('../services/remoteMedia', () => ({
 
 jest.mock('../utils/dateUtils', () => ({
   formatDate: () => 'Mar 11, 12:00 AM',
+  formatNoteTimestamp: () => '2 hr. ago',
 }));
 
 jest.mock('../hooks/useAuth', () => ({

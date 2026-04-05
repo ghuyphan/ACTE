@@ -135,7 +135,7 @@
         "createStickerLabel": "Tạo sticker",
         "createStickerDescription": "PNG hoặc WebP trong suốt",
         "createStampLabel": "Tạo tem ảnh",
-        "createStampDescription": "Biến ảnh thành tem thư viền răng cưa",
+        "createStampDescription": "Thêm khung viền kiểu tem thư",
         "pasteStickerFromClipboard": "Dán từ khay nhớ tạm",
         "pasteStickerAction": "Dán sticker",
         "clipboardStickerReadyHint": "Ảnh bạn vừa sao chép sẽ được thêm dưới dạng sticker.",
@@ -576,9 +576,12 @@
         "subtitle2": "Khi bạn ghé lại một nơi đã lưu, Noto sẽ hiện đúng ghi chú vào đúng lúc.",
         "title3": "Những điều nhỏ cũng đáng nhớ 💛",
         "subtitle3": "Vì đôi khi nhớ đúng một chi tiết nhỏ là cách dễ thương nhất để nói rằng bạn thật sự để tâm.",
-        "getStarted": "Bắt đầu",
+        "notificationsTitle": "Đừng bỏ lỡ lời nhắc 🔔",
+        "notificationsSubtitle": "Bật thông báo để Noto báo cho bạn về lời nhắc theo vị trí và hoạt động bạn bè, thay vì hỏi lại vào lúc bất tiện hơn.",
+        "allowNotifications": "Bật thông báo",
         "next": "Tiếp theo",
-        "skip": "Bỏ qua"
+        "skip": "Bỏ qua",
+        "notNow": "Để sau"
     },
     "notification": {
         "title": "Nhắc nhở khi ở gần",

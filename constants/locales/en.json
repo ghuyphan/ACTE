@@ -76,7 +76,7 @@
         "livePhotoReady": "Live",
         "livePhotoCaptureHint": "Tap for a photo. Hold for a live photo.",
         "livePhotoCoachPhotoHint": "Tap for photo",
-        "livePhotoCoachLiveHint": "Hold for Live",
+        "livePhotoCoachLiveHint": "Hold for Live Photo",
         "livePhotoCapturingHint": "Release to finish the live photo.",
         "livePhotoPreparingHint": "Preparing live photo...",
         "livePhotoHint": "Press and hold on cards to play the motion clip.",
@@ -576,9 +576,12 @@
         "subtitle2": "Next time you return to that restaurant, you'll get a reminder with your notes right on time.",
         "title3": "Small things matter 🫶",
         "subtitle3": "Because remembering no onions in her phở is how you say \"I love you\".",
-        "getStarted": "Get Started",
+        "notificationsTitle": "Stay in the loop 🔔",
+        "notificationsSubtitle": "Turn on notifications so Noto can alert you about nearby reminders and friend activity without interrupting you later.",
+        "allowNotifications": "Allow notifications",
         "next": "Next",
-        "skip": "Skip"
+        "skip": "Skip",
+        "notNow": "Not now"
     },
     "notification": {
         "title": "Nearby reminder",

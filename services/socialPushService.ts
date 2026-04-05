@@ -16,6 +16,12 @@ type SyncSocialPushRegistrationOptions = {
   requestPermission?: boolean;
 };
 
+export type SocialPushPermissionStatus =
+  | 'granted'
+  | 'denied'
+  | 'blocked'
+  | 'skipped';
+
 export type SocialPushRegistrationStatus =
   | 'registered'
   | 'denied'
@@ -93,6 +99,38 @@ function getAppVersion() {
   return Constants.expoConfig?.version?.trim() || null;
 }
 
+async function getSocialPushPermissions(options: { requestPermission?: boolean } = {}) {
+  if (!isNativePlatform()) {
+    return null;
+  }
+
+  let permissions = await Notifications.getPermissionsAsync();
+
+  if (
+    permissions.status !== 'granted' &&
+    options.requestPermission &&
+    permissions.canAskAgain !== false
+  ) {
+    permissions = await Notifications.requestPermissionsAsync();
+  }
+
+  return permissions;
+}
+
+export async function requestSocialPushPermission(): Promise<SocialPushPermissionStatus> {
+  const permissions = await getSocialPushPermissions({ requestPermission: true });
+
+  if (!permissions) {
+    return 'skipped';
+  }
+
+  if (permissions.status === 'granted') {
+    return 'granted';
+  }
+
+  return permissions.canAskAgain === false ? 'blocked' : 'denied';
+}
+
 async function unregisterPushToken(token: string) {
   const supabase = getSupabase();
   if (!supabase || !token.trim()) {
@@ -144,14 +182,12 @@ export async function syncSocialPushRegistration(
     return 'skipped';
   }
 
-  let permissions = await Notifications.getPermissionsAsync();
+  const permissions = await getSocialPushPermissions({
+    requestPermission: options.requestPermission,
+  });
 
-  if (
-    permissions.status !== 'granted' &&
-    options.requestPermission &&
-    permissions.canAskAgain !== false
-  ) {
-    permissions = await Notifications.requestPermissionsAsync();
+  if (!permissions) {
+    return 'skipped';
   }
 
   if (permissions.status !== 'granted') {

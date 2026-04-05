@@ -750,13 +750,14 @@ describe('CaptureCard doodle handle', () => {
 
   it('keeps the simplified camera action row without removing the footer controls', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const { getByTestId, queryByLabelText, queryByTestId } = renderCaptureCard(ref, {
+    const { getByText, getByTestId, queryByLabelText, queryByTestId } = renderCaptureCard(ref, {
       captureMode: 'camera',
       cameraInstructionText: 'Tap for a photo. Hold for a live photo.',
     });
 
     expect(queryByLabelText('Tap for a photo. Hold for a live photo.')).toBeNull();
-    expect(getByTestId('capture-library-button')).toBeTruthy();
+    expect(getByText('Hold for live photo')).toBeTruthy();
+    expect(queryByTestId('capture-library-button')).toBeNull();
     expect(getByTestId('capture-shutter-button')).toBeTruthy();
     expect(getByTestId('capture-share-target-toggle')).toBeTruthy();
     expect(queryByTestId('capture-radius-toggle')).toBeNull();

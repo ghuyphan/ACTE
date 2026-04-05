@@ -1,4 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
+import DoodleIcon from '../../ui/DoodleIcon';
+import StickerIcon from '../../ui/StickerIcon';
 import { type TFunction } from 'i18next';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -80,13 +82,12 @@ export default function NoteDetailEditToolbar({
                             borderColor: detailBadgeBorder,
                         },
                     ]}
-                >
-                    <Ionicons
-                        name={doodleModeEnabled ? 'create' : 'create-outline'}
-                        size={16}
-                        color={doodleModeEnabled ? detailBadgeActiveIconColor : detailBadgeIconColor}
-                    />
-                </Pressable>
+                    >
+                        <DoodleIcon
+                            size={18}
+                            color={doodleModeEnabled ? detailBadgeActiveIconColor : detailBadgeIconColor}
+                        />
+                    </Pressable>
                 {stickersEnabled ? (
                     <Pressable
                         testID="note-detail-sticker-toggle"
@@ -100,9 +101,8 @@ export default function NoteDetailEditToolbar({
                             },
                         ]}
                     >
-                        <Ionicons
-                            name={stickerModeEnabled ? 'images' : 'images-outline'}
-                            size={16}
+                        <StickerIcon
+                            size={18}
                             color={stickerModeEnabled ? detailBadgeActiveIconColor : detailBadgeIconColor}
                         />
                     </Pressable>
@@ -166,7 +166,7 @@ export default function NoteDetailEditToolbar({
                                 editDoodleStrokesCount === 0 ? styles.textCardActionDisabled : null,
                             ]}
                         >
-                            <Ionicons name="close-outline" size={14} color={detailBadgeIconColor} />
+                            <Ionicons name="trash-outline" size={16} color={detailBadgeIconColor} />
                         </Pressable>
                     </>
                 ) : null}

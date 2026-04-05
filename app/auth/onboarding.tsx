@@ -15,9 +15,13 @@ import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
+import {
+    requestSocialPushPermission,
+    syncSocialPushRegistration,
+} from '../../services/socialPushService';
+import { completeOnboardingAndEnterApp } from '../../services/startupRouting';
 import { getPersistentItem } from '../../utils/appStorage';
 import { isOlderIOS } from '../../utils/platform';
-import { completeOnboardingAndEnterApp } from '../../services/startupRouting';
 
 const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
 
@@ -25,6 +29,11 @@ const SLIDES = [
     { emoji: '🧅', titleKey: 'onboarding.title1', subtitleKey: 'onboarding.subtitle1' },
     { emoji: '📍', titleKey: 'onboarding.title2', subtitleKey: 'onboarding.subtitle2' },
     { emoji: '💛', titleKey: 'onboarding.title3', subtitleKey: 'onboarding.subtitle3' },
+    {
+        emoji: '🔔',
+        titleKey: 'onboarding.notificationsTitle',
+        subtitleKey: 'onboarding.notificationsSubtitle',
+    },
 ];
 
 const DOT_SIZE = 8;
@@ -69,6 +78,7 @@ export default function OnboardingScreen() {
     const router = useRouter();
     const [step, setStep] = useState(0);
     const [isCompleting, setIsCompleting] = useState(false);
+    const isNotificationStep = step === SLIDES.length - 1;
 
     useEffect(() => {
         let cancelled = false;
@@ -98,12 +108,14 @@ export default function OnboardingScreen() {
         };
     }, [router, user]);
 
-    const completeOnboarding = async () => {
-        if (isCompleting) {
+    const completeOnboarding = async (options?: { allowWhileCompleting?: boolean; keepLoadingState?: boolean }) => {
+        if (isCompleting && !options?.allowWhileCompleting) {
             return;
         }
 
-        setIsCompleting(true);
+        if (!options?.keepLoadingState) {
+            setIsCompleting(true);
+        }
         await completeOnboardingAndEnterApp((route) => {
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
@@ -112,7 +124,31 @@ export default function OnboardingScreen() {
             });
         }).catch((error) => {
             console.warn('Failed to persist onboarding state:', error);
+        }).finally(() => {
+            setIsCompleting(false);
         });
+    };
+
+    const completeOnboardingWithNotifications = async () => {
+        if (isCompleting) {
+            return;
+        }
+
+        setIsCompleting(true);
+
+        try {
+            const permissionStatus = await requestSocialPushPermission();
+
+            if (permissionStatus === 'granted' && user) {
+                await syncSocialPushRegistration(user).catch((error) => {
+                    console.warn('[social-push] Registration failed after onboarding prompt:', error);
+                });
+            }
+        } catch (error) {
+            console.warn('[social-push] Permission prompt failed during onboarding:', error);
+        }
+
+        await completeOnboarding({ allowWhileCompleting: true, keepLoadingState: true });
     };
 
     const nextStep = () => {
@@ -122,8 +158,6 @@ export default function OnboardingScreen() {
 
         if (step < SLIDES.length - 1) {
             setStep(step + 1);
-        } else {
-            void completeOnboarding();
         }
     };
 
@@ -187,32 +221,36 @@ export default function OnboardingScreen() {
                 {/* Next Button */}
                 <PrimaryButton
                     label={
-                        step === SLIDES.length - 1
-                            ? t('onboarding.getStarted', 'Get Started')
+                        isNotificationStep
+                            ? t('onboarding.allowNotifications', 'Allow notifications')
                             : t('onboarding.next', 'Next')
                     }
                     disabled={isCompleting}
                     loading={isCompleting}
-                    onPress={nextStep}
+                    onPress={
+                        isNotificationStep
+                            ? () => {
+                                void completeOnboardingWithNotifications();
+                            }
+                            : nextStep
+                    }
                 />
 
                 {/* Skip */}
                 <View style={styles.skipContainer}>
-                    {step < SLIDES.length - 1 ? (
-                        <Pressable disabled={isCompleting} onPress={() => {
-                            void completeOnboarding();
-                        }} style={({ pressed }) => [
-                            styles.skipButton,
-                            isCompleting && { opacity: 0.5 },
-                            pressed && !isCompleting && { opacity: 0.7 }
-                        ]}>
-                            <Text style={[styles.skipText, { color: colors.secondaryText }]}>
-                                {t('onboarding.skip', 'Skip')}
-                            </Text>
-                        </Pressable>
-                    ) : (
-                        <View style={styles.skipPlaceholder} />
-                    )}
+                    <Pressable disabled={isCompleting} onPress={() => {
+                        void completeOnboarding();
+                    }} style={({ pressed }) => [
+                        styles.skipButton,
+                        isCompleting && { opacity: 0.5 },
+                        pressed && !isCompleting && { opacity: 0.7 }
+                    ]}>
+                        <Text style={[styles.skipText, { color: colors.secondaryText }]}>
+                            {isNotificationStep
+                                ? t('onboarding.notNow', 'Not now')
+                                : t('onboarding.skip', 'Skip')}
+                        </Text>
+                    </Pressable>
                 </View>
             </View>
         </View>
@@ -284,8 +322,5 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         fontFamily: 'Noto Sans',
-    },
-    skipPlaceholder: {
-        height: 48,
     },
 });

@@ -4,9 +4,17 @@ import OnboardingScreen from '../app/auth/onboarding';
 const mockReplace = jest.fn();
 const mockGetPersistentItem = jest.fn<Promise<string | null>, [string]>(async () => null);
 const mockSetPersistentItem = jest.fn<Promise<void>, [string, string]>(async () => undefined);
+const mockRequestSocialPushPermission = jest.fn<
+  Promise<'granted' | 'denied' | 'blocked' | 'skipped'>,
+  []
+>(async () => 'granted');
+const mockSyncSocialPushRegistration = jest.fn<
+  Promise<'registered' | 'denied' | 'blocked' | 'skipped'>,
+  [unknown]
+>(async () => 'registered');
 
 const mockAuthState = {
-  user: null as { id: string } | null,
+  user: null as { id: string; uid?: string } | null,
 };
 
 jest.mock('expo-router', () => ({
@@ -76,6 +84,11 @@ jest.mock('../utils/platform', () => ({
   isOlderIOS: false,
 }));
 
+jest.mock('../services/socialPushService', () => ({
+  requestSocialPushPermission: () => mockRequestSocialPushPermission(),
+  syncSocialPushRegistration: (user: unknown) => mockSyncSocialPushRegistration(user),
+}));
+
 describe('OnboardingScreen', () => {
   const originalRequestAnimationFrame = global.requestAnimationFrame;
 
@@ -95,6 +108,8 @@ describe('OnboardingScreen', () => {
     mockAuthState.user = null;
     mockGetPersistentItem.mockResolvedValue(null);
     mockSetPersistentItem.mockResolvedValue(undefined);
+    mockRequestSocialPushPermission.mockResolvedValue('granted');
+    mockSyncSocialPushRegistration.mockResolvedValue('registered');
   });
 
   it('redirects away when a signed-in user lands on onboarding', async () => {
@@ -132,5 +147,19 @@ describe('OnboardingScreen', () => {
     expect(mockSetPersistentItem.mock.invocationCallOrder[0]).toBeLessThan(
       mockReplace.mock.invocationCallOrder[0]
     );
+  });
+
+  it('requests notification permission on the final onboarding step before navigating home', async () => {
+    const { getByText } = render(<OnboardingScreen />);
+
+    fireEvent.press(getByText('Next'));
+    fireEvent.press(getByText('Next'));
+    fireEvent.press(getByText('Next'));
+    fireEvent.press(getByText('Allow notifications'));
+
+    await waitFor(() => {
+      expect(mockRequestSocialPushPermission).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+    });
   });
 });

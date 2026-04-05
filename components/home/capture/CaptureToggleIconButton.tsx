@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { type ComponentProps, memo, useEffect } from 'react';
+import { type ComponentProps, memo, type ReactNode, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Reanimated, {
   interpolateColor,
@@ -18,6 +18,8 @@ type CaptureToggleIconButtonProps = Omit<CaptureAnimatedPressableProps, 'childre
   active: boolean;
   activeIconName: ComponentProps<typeof Ionicons>['name'];
   inactiveIconName: ComponentProps<typeof Ionicons>['name'];
+  renderActiveIcon?: (props: { color: string; size: number }) => ReactNode;
+  renderInactiveIcon?: (props: { color: string; size: number }) => ReactNode;
   activeBackgroundColor: string;
   inactiveBackgroundColor: string;
   activeBorderColor: string;
@@ -31,13 +33,15 @@ export const CaptureToggleIconButton = memo(function CaptureToggleIconButton({
   active,
   activeIconName,
   inactiveIconName,
+  renderActiveIcon,
+  renderInactiveIcon,
   activeBackgroundColor,
   inactiveBackgroundColor,
   activeBorderColor,
   inactiveBorderColor,
   activeIconColor,
   inactiveIconColor,
-  iconSize = 17,
+  iconSize = 20,
   style,
   activeScale = 1.035,
   activeTranslateY = -1.5,
@@ -92,10 +96,14 @@ export const CaptureToggleIconButton = memo(function CaptureToggleIconButton({
     >
       <View style={styles.captureToggleIconWrap}>
         <Reanimated.View style={[styles.captureToggleIconLayer, animatedInactiveIconStyle]}>
-          <Ionicons name={inactiveIconName} size={iconSize} color={inactiveIconColor} />
+          {renderInactiveIcon
+            ? renderInactiveIcon({ color: inactiveIconColor, size: iconSize })
+            : <Ionicons name={inactiveIconName} size={iconSize} color={inactiveIconColor} />}
         </Reanimated.View>
         <Reanimated.View style={[styles.captureToggleIconLayer, animatedActiveIconStyle]}>
-          <Ionicons name={activeIconName} size={iconSize} color={activeIconColor} />
+          {renderActiveIcon
+            ? renderActiveIcon({ color: activeIconColor, size: iconSize })
+            : <Ionicons name={activeIconName} size={iconSize} color={activeIconColor} />}
         </Reanimated.View>
       </View>
     </CaptureAnimatedPressable>
@@ -104,8 +112,8 @@ export const CaptureToggleIconButton = memo(function CaptureToggleIconButton({
 
 const styles = StyleSheet.create({
   captureToggleIconWrap: {
-    width: 20,
-    height: 20,
+    width: 22,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
