@@ -678,7 +678,6 @@ async function performSharedFeedRefresh(user: AppUser): Promise<SharedFeedSnapsh
   const friends = await getFriendsForUser(user.id);
   const friendUids = friends.map((friend: FriendConnection) => friend.userId);
   const friendUidSet = new Set(friendUids);
-  const authorWhitelist = [user.id, ...friendUids].slice(0, 30);
 
   const [activeInvite, postsResponse] = await Promise.all([
     getActiveFriendInvite(user),
@@ -688,7 +687,6 @@ async function performSharedFeedRefresh(user: AppUser): Promise<SharedFeedSnapsh
         'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, is_live_photo, paired_video_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, latitude, longitude, created_at, updated_at'
       )
       .contains('audience_user_ids', [user.id])
-      .in('author_user_id', authorWhitelist)
       .order('created_at', { ascending: false })
       .limit(20),
   ]);

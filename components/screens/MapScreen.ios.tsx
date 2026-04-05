@@ -73,6 +73,20 @@ function areNearbyItemsEquivalent(left: NearbyNoteItem[], right: NearbyNoteItem[
   });
 }
 
+function isCoordinateCenteredInRegion(region: Region | null, latitude: number, longitude: number) {
+  if (!region) {
+    return false;
+  }
+
+  const latitudeTolerance = Math.max(0.0004, region.latitudeDelta * 0.12);
+  const longitudeTolerance = Math.max(0.0004, region.longitudeDelta * 0.12);
+
+  return (
+    Math.abs(region.latitude - latitude) <= latitudeTolerance &&
+    Math.abs(region.longitude - longitude) <= longitudeTolerance
+  );
+}
+
 export default function MapScreenIOS() {
   const isAndroid = Platform.OS === 'android';
   const { t } = useTranslation();
@@ -95,6 +109,7 @@ export default function MapScreenIOS() {
   const [activeFriendPostId, setActiveFriendPostId] = useState<string | null>(null);
   const [androidMapUiReady, setAndroidMapUiReady] = useState(!isAndroid);
   const [nearbyPreviewItems, setNearbyPreviewItems] = useState<NearbyNoteItem[]>([]);
+  const [settledRegion, setSettledRegion] = useState<Region | null>(null);
   const hasCenteredRef = useRef(false);
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingProgrammaticRegionRef = useRef<Region | null>(null);
@@ -174,6 +189,28 @@ export default function MapScreenIOS() {
         : [],
     [androidMapUiReady, friendPosts]
   );
+  const activePreviewNote = useMemo(() => {
+    if (selectedGroup && selectedNote) {
+      return selectedNote;
+    }
+
+    if (activeNearbyNoteId) {
+      return nearbyItemById.get(activeNearbyNoteId)?.note ?? null;
+    }
+
+    return nearbyPreviewItems[0]?.note ?? null;
+  }, [activeNearbyNoteId, nearbyItemById, nearbyPreviewItems, selectedGroup, selectedNote]);
+  const activeNoteReadyToOpen = useMemo(
+    () =>
+      activePreviewNote != null &&
+      isCoordinateCenteredInRegion(
+        settledRegion ?? initialRegion,
+        activePreviewNote.latitude,
+        activePreviewNote.longitude
+      ),
+    [activePreviewNote, initialRegion, settledRegion]
+  );
+  const activePreviewNoteId = activePreviewNote?.id ?? null;
   const friendsPreviewVisible = showFriendsPreview && friendPosts.length > 0;
   const hasFriendLayer = sharedEnabled && friendPosts.length > 0;
   const hasMapContent = notes.length > 0 || friendMarkerPosts.length > 0;
@@ -192,6 +229,10 @@ export default function MapScreenIOS() {
     overlayState === 'content' &&
     nearbyPreviewItems.length > 0 &&
     !notesPreviewDismissed;
+  const showAreaResultsAction =
+    androidMapUiReady && overlayState === 'no-area-results' && !friendsPreviewVisible;
+  const bottomOverlayVisible = (previewVisible || showAreaResultsAction) && !friendsPreviewVisible;
+  const bottomOverlayMode = showAreaResultsAction ? 'status' : 'preview';
 
   useEffect(() => {
     const shouldAdopt =
@@ -253,6 +294,7 @@ export default function MapScreenIOS() {
 
   const handleRegionChangeComplete = useCallback(
     (region: Region, details?: MapRegionChangeDetails) => {
+      setSettledRegion(region);
       const isGoogleMapsGesture = details?.isGesture;
       const isInsidePreviewFocusGuard = Date.now() <= nearbyPreviewFocusGuardUntilRef.current;
       const matchesPendingProgrammaticRegion = areRegionsClose(pendingProgrammaticRegionRef.current, region);
@@ -505,6 +547,43 @@ export default function MapScreenIOS() {
       visibleRegion,
     ]
   );
+
+  const focusPreviewNote = useCallback(
+    (noteId: string) => {
+      if (selectedGroup) {
+        selectNoteById(noteId);
+        return;
+      }
+
+      handleFocusNearbyNote(noteId);
+    },
+    [handleFocusNearbyNote, selectNoteById, selectedGroup]
+  );
+
+  const handleActivatePreviewNote = useCallback(
+    (noteId: string) => {
+      if (noteId !== activePreviewNoteId) {
+        focusPreviewNote(noteId);
+        return;
+      }
+
+      if (!activeNoteReadyToOpen) {
+        focusPreviewNote(noteId);
+        return;
+      }
+
+      openNote(noteId);
+    },
+    [activeNoteReadyToOpen, activePreviewNoteId, focusPreviewNote, openNote]
+  );
+
+  const handlePreviewPrimaryAction = useCallback(() => {
+    if (!activePreviewNoteId) {
+      return;
+    }
+
+    handleActivatePreviewNote(activePreviewNoteId);
+  }, [activePreviewNoteId, handleActivatePreviewNote]);
 
   const handleOpenFriendsLayer = useCallback(() => {
     nearbyPreviewFocusGuardUntilRef.current = 0;
@@ -824,17 +903,26 @@ export default function MapScreenIOS() {
 
       {androidMapUiReady && notes.length > 0 && !friendsPreviewVisible ? (
         <MapPreviewCard
+          mode={bottomOverlayMode}
           previewMode={previewMode}
-          visible={previewVisible}
+          visible={bottomOverlayVisible}
           selectedGroup={selectedGroup}
           selectedNoteIndex={selectedNoteIndex}
           nearbyItems={nearbyPreviewItems}
           activeNearbyNoteId={activeNearbyNoteId}
+          activeNoteReadyToOpen={activeNoteReadyToOpen}
           bottomOffset={previewBottomOffset}
-          onOpenNote={openNote}
+          statusActionLabel={t('map.showAllResults', 'Show all results')}
+          statusActionTestID="map-show-all-results"
+          onStatusAction={() => {
+            setNotesPreviewDismissed(false);
+            shouldAdoptNearbyPreviewItemsRef.current = true;
+            showAllFilteredResults();
+          }}
+          onFocusPreviewNote={focusPreviewNote}
+          onActivatePreviewNote={handleActivatePreviewNote}
+          onPrimaryAction={handlePreviewPrimaryAction}
           onDismiss={handleDismissNotesPreview}
-          onFocusNearbyNote={handleFocusNearbyNote}
-          onFocusGroupNote={selectNoteById}
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
         />
@@ -880,7 +968,7 @@ export default function MapScreenIOS() {
             actionTestID="map-create-first-note"
             onAction={() => {
               emitLightHaptic();
-              router.replace('/' as any);
+              router.replace('/(tabs)' as any);
             }}
           />
         ) : null}
@@ -909,30 +997,6 @@ export default function MapScreenIOS() {
           />
         ) : null}
 
-        {overlayState === 'no-area-results' && !friendsPreviewVisible ? (
-          <MapStatusCard
-            overlayState="no-area-results"
-            variant="pill"
-            isDark={isDark}
-            primaryColor={colors.primary}
-            textColor={colors.text}
-            secondaryTextColor={colors.secondaryText}
-            reduceMotionEnabled={reduceMotionEnabled}
-            title={t('map.areaEmptyTitle', 'No notes in this area')}
-            subtitle={t(
-              'map.areaEmptySubtitle',
-              'Move the map a bit more or show all matching notes from anywhere.'
-            )}
-            actionLabel={t('map.showAllResults', 'Show all results')}
-            actionTestID="map-show-all-results"
-            onAction={() => {
-              emitLightHaptic();
-              setNotesPreviewDismissed(false);
-              shouldAdoptNearbyPreviewItemsRef.current = true;
-              showAllFilteredResults();
-            }}
-          />
-        ) : null}
       </View>
 
     </View>

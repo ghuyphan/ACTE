@@ -12,13 +12,13 @@ import {
   isSupabaseStorageObjectMissingError,
 } from '../utils/supabase';
 import {
-  deleteNote,
+  deleteNoteForScope,
   getActiveNotesScope,
   Note,
-  getAllNotes,
+  getAllNotesForScope,
   getDB,
-  getNoteById,
-  upsertNote,
+  getNoteByIdForScope,
+  upsertNoteForScope,
 } from './database';
 import {
   clearRemoteStickerAssetRefs,
@@ -51,6 +51,7 @@ export interface SyncChange {
   entityId?: string;
   payload?: unknown;
   timestamp: string;
+  ownerScope?: string;
 }
 
 export interface SyncQueueItem {
@@ -1366,7 +1367,8 @@ async function upsertRemoteNote(
   userId: string,
   note: Note,
   syncMarker: string,
-  existingArtifactsOverride?: RemoteArtifactSnapshot | null
+  existingArtifactsOverride?: RemoteArtifactSnapshot | null,
+  ownerScope?: string
 ) {
   const supabase = getSupabase();
   if (!supabase) {
@@ -1442,7 +1444,7 @@ async function upsertRemoteNote(
   );
 
   try {
-    await upsertNote({
+    await upsertNoteForScope({
       ...note,
       content: note.type === 'photo' ? normalizeMediaUri(note.photoLocalUri ?? note.content) ?? '' : note.content,
       photoSyncedLocalUri:
@@ -1454,7 +1456,7 @@ async function upsertRemoteNote(
       pairedVideoRemotePath: serializedNote.paired_video_path ?? null,
       hasStickers: Boolean(serializedNote.sticker_placements_json),
       stickerPlacementsJson: serializedNote.sticker_placements_json ?? null,
-    });
+    }, ownerScope ?? getActiveNotesScope());
   } catch (error) {
     console.warn('Failed to persist synced media metadata locally:', error);
   }
@@ -1469,7 +1471,8 @@ async function flushPendingQueueToSupabase(
   syncRepository: SyncRepository,
   notes: Note[],
   syncMarker: string,
-  syncedNoteIds: Set<string>
+  syncedNoteIds: Set<string>,
+  ownerScope: string
 ): Promise<FlushQueueResult> {
   const pendingChanges = await syncRepository.listPending(5000);
   const noteMap = new Map(notes.map((note) => [note.id, note]));
@@ -1520,7 +1523,8 @@ async function flushPendingQueueToSupabase(
             syncMarker,
             remoteArtifactSnapshots.has(note.id)
               ? (remoteArtifactSnapshots.get(note.id) ?? null)
-              : null
+              : null,
+            ownerScope
           );
           syncedNoteIds.add(note.id);
         }
@@ -1550,7 +1554,12 @@ async function flushPendingQueueToSupabase(
   };
 }
 
-async function uploadLocalSnapshotToSupabase(userId: string, notes: Note[], syncMarker: string) {
+async function uploadLocalSnapshotToSupabase(
+  userId: string,
+  notes: Note[],
+  syncMarker: string,
+  ownerScope: string
+) {
   const remoteArtifactSnapshots = await fetchRemoteArtifactSnapshots(
     userId,
     notes.map((note) => note.id)
@@ -1562,7 +1571,8 @@ async function uploadLocalSnapshotToSupabase(userId: string, notes: Note[], sync
       syncMarker,
       remoteArtifactSnapshots.has(note.id)
         ? (remoteArtifactSnapshots.get(note.id) ?? null)
-        : null
+        : null,
+      ownerScope
     );
   });
 
@@ -1570,6 +1580,7 @@ async function uploadLocalSnapshotToSupabase(userId: string, notes: Note[], sync
 }
 
 async function reconcileLocallyDeletedNotes(
+  ownerScope: string,
   remoteNoteIds: Set<string>,
   syncedNoteIds: Set<string>,
   lastRemoteCursor: string | null
@@ -1583,7 +1594,7 @@ async function reconcileLocallyDeletedNotes(
     return 0;
   }
 
-  const localNotes = await getAllNotes();
+  const localNotes = await getAllNotesForScope(ownerScope);
   const staleNotes = localNotes.filter(
     (note) =>
       syncedNoteIds.has(note.id) &&
@@ -1592,7 +1603,7 @@ async function reconcileLocallyDeletedNotes(
   );
 
   for (const note of staleNotes) {
-    await deleteNote(note.id);
+    await deleteNoteForScope(note.id, ownerScope);
     syncedNoteIds.delete(note.id);
   }
 
@@ -1601,6 +1612,7 @@ async function reconcileLocallyDeletedNotes(
 
 async function mergeRemoteNoteTombstonesFromSupabase(
   userId: string,
+  ownerScope: string,
   syncedNoteIds: Set<string>,
   remoteNoteSyncMarks: Map<string, string>,
   options: { since: string | null }
@@ -1625,7 +1637,7 @@ async function mergeRemoteNoteTombstonesFromSupabase(
       }
 
       latestDeletedAt = row.deleted_at ?? latestDeletedAt;
-      const existingLocalNote = await getNoteById(row.note_id);
+      const existingLocalNote = await getNoteByIdForScope(row.note_id, ownerScope);
       if (shouldIgnoreRemoteTombstone(row, remoteNoteSyncMarks, existingLocalNote)) {
         continue;
       }
@@ -1636,7 +1648,7 @@ async function mergeRemoteNoteTombstonesFromSupabase(
         continue;
       }
 
-      await deleteNote(row.note_id);
+      await deleteNoteForScope(row.note_id, ownerScope);
       deletedCount += 1;
     }
 
@@ -1652,6 +1664,7 @@ async function mergeRemoteNoteTombstonesFromSupabase(
 
 async function mergeRemoteNotesFromSupabase(
   userId: string,
+  ownerScope: string,
   localNotes: Note[],
   options: { since: string | null }
 ): Promise<RemoteMergeResult> {
@@ -1679,7 +1692,8 @@ async function mergeRemoteNotesFromSupabase(
         remoteNoteSyncMarks.set(row.id, row.synced_at);
       }
 
-      const existingLocalNote = localNoteMap.get(row.id) ?? (await getNoteById(row.id));
+      const existingLocalNote =
+        localNoteMap.get(row.id) ?? (await getNoteByIdForScope(row.id, ownerScope));
       if (existingLocalNote && getSyncTimestamp(existingLocalNote) >= getSyncTimestamp(row)) {
         if (!cursorBlockedByMissingMedia) {
           latestSyncedAt = row.synced_at ?? latestSyncedAt;
@@ -1698,7 +1712,7 @@ async function mergeRemoteNotesFromSupabase(
         continue;
       }
 
-      await upsertNote(nextLocalNote);
+      await upsertNoteForScope(nextLocalNote, ownerScope);
       localNoteMap.set(nextLocalNote.id, nextLocalNote);
       importedCount += 1;
       if (!cursorBlockedByMissingMedia) {
@@ -1716,10 +1730,11 @@ async function mergeRemoteNotesFromSupabase(
   return { importedCount, latestSyncedAt, remoteNoteIds, remoteNoteSyncMarks };
 }
 
-const sqliteSyncRepository: SyncRepository = {
+function createSqliteSyncRepository(resolveScope: () => string): SyncRepository {
+  return {
   async enqueue(change) {
     const db = await getDB();
-    const scope = getActiveNotesScope();
+    const scope = resolveScope();
     const serializedPayload =
       change.payload === undefined ? null : JSON.stringify(change.payload);
     await db.runAsync(
@@ -1749,7 +1764,7 @@ const sqliteSyncRepository: SyncRepository = {
 
   async listPending(limit = 100) {
     const db = await getDB();
-    const scope = getActiveNotesScope();
+    const scope = resolveScope();
     const now = new Date().toISOString();
     const rows = await db.getAllAsync<QueueRow>(
       `SELECT *
@@ -1769,7 +1784,7 @@ const sqliteSyncRepository: SyncRepository = {
 
   async recoverProcessing() {
     const db = await getDB();
-    const scope = getActiveNotesScope();
+    const scope = resolveScope();
     await db.runAsync(
       `UPDATE sync_queue
        SET status = 'pending',
@@ -1783,7 +1798,7 @@ const sqliteSyncRepository: SyncRepository = {
 
   async markProcessing(id) {
     const db = await getDB();
-    const scope = getActiveNotesScope();
+    const scope = resolveScope();
     await db.runAsync(
       `UPDATE sync_queue
        SET status = 'processing',
@@ -1798,7 +1813,7 @@ const sqliteSyncRepository: SyncRepository = {
 
   async getStats() {
     const db = await getDB();
-    const scope = getActiveNotesScope();
+    const scope = resolveScope();
     await sqliteSyncRepository.recoverProcessing();
     const row = await db.getFirstAsync<{
       pending_count: number | null;
@@ -1823,7 +1838,7 @@ const sqliteSyncRepository: SyncRepository = {
 
   async listRecent(limit = 5) {
     const db = await getDB();
-    const scope = getActiveNotesScope();
+    const scope = resolveScope();
     const rows = await db.getAllAsync<QueueRow>(
       `SELECT *
        FROM sync_queue
@@ -1838,7 +1853,7 @@ const sqliteSyncRepository: SyncRepository = {
 
   async markFailed(id, details) {
     const db = await getDB();
-    const scope = getActiveNotesScope();
+    const scope = resolveScope();
     const normalizedDetails =
       typeof details === 'string'
         ? { error: details, nextRetryAt: null, terminal: false, blockedReason: null }
@@ -1862,22 +1877,30 @@ const sqliteSyncRepository: SyncRepository = {
 
   async markDone(id) {
     const db = await getDB();
-    const scope = getActiveNotesScope();
+    const scope = resolveScope();
     await db.runAsync('DELETE FROM sync_queue WHERE id = ? AND owner_uid = ?', id, scope);
   },
 
   async clearAll() {
     const db = await getDB();
-    const scope = getActiveNotesScope();
+    const scope = resolveScope();
     await db.runAsync('DELETE FROM sync_queue WHERE owner_uid = ?', scope);
   },
-};
+  };
+}
+
+const sqliteSyncRepository = createSqliteSyncRepository(() => getActiveNotesScope());
+
+function getScopedSyncRepository(scope: string): SyncRepository {
+  return createSqliteSyncRepository(() => scope);
+}
 
 const localFirstSyncService: SyncService = {
   isAvailable: Boolean(getSupabase()),
   async recordChange(change) {
     try {
-      await sqliteSyncRepository.enqueue(change);
+      const syncRepository = getScopedSyncRepository(change.ownerScope ?? getActiveNotesScope());
+      await syncRepository.enqueue(change);
     } catch (error) {
       console.warn('[syncService] Failed to enqueue sync change:', error);
     }
@@ -1906,11 +1929,12 @@ export async function syncNotes(
 
   const requestedMode = options.mode ?? 'incremental';
   const userId = getSyncUserId(user);
+  const ownerScope = getActiveNotesScope();
 
   try {
     await ensureSupabaseSessionMatchesUser(userId);
 
-    const syncRepository = getSyncRepository();
+    const syncRepository = getScopedSyncRepository(ownerScope);
     const syncMarker = new Date().toISOString();
     const lastRemoteCursor = await getLastRemoteSyncCursor(userId);
     const syncedNoteIds = await getPreviouslySyncedNoteIds(userId);
@@ -1924,7 +1948,8 @@ export async function syncNotes(
       syncRepository,
       notes,
       syncMarker,
-      syncedNoteIds
+      syncedNoteIds,
+      ownerScope
     );
     if (queueResult.failedCount > 0) {
       return {
@@ -1950,29 +1975,36 @@ export async function syncNotes(
     let finalPhotoNoteCount = countPhotoNotes(notes);
 
     if (mode === 'full') {
-      const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, notes, { since: null });
+      const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, ownerScope, notes, { since: null });
       const tombstoneMergeResult = await mergeRemoteNoteTombstonesFromSupabase(
         userId,
+        ownerScope,
         syncedNoteIds,
         remoteMergeResult.remoteNoteSyncMarks,
         { since: null }
       );
       importedCount = remoteMergeResult.importedCount + tombstoneMergeResult.deletedCount;
-      await reconcileLocallyDeletedNotes(remoteMergeResult.remoteNoteIds, syncedNoteIds, lastRemoteCursor);
-      const latestLocalNotes = await getAllNotes();
+      await reconcileLocallyDeletedNotes(ownerScope, remoteMergeResult.remoteNoteIds, syncedNoteIds, lastRemoteCursor);
+      const latestLocalNotes = await getAllNotesForScope(ownerScope);
       finalNoteCount = latestLocalNotes.length;
       finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
       for (const note of latestLocalNotes) {
         syncedNoteIds.add(note.id);
       }
-      uploadedSnapshotCount = await uploadLocalSnapshotToSupabase(userId, latestLocalNotes, syncMarker);
+      uploadedSnapshotCount = await uploadLocalSnapshotToSupabase(
+        userId,
+        latestLocalNotes,
+        syncMarker,
+        ownerScope
+      );
       nextCursor = syncMarker;
     } else {
-      const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, notes, {
+      const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, ownerScope, notes, {
         since: lastRemoteCursor,
       });
       const tombstoneMergeResult = await mergeRemoteNoteTombstonesFromSupabase(
         userId,
+        ownerScope,
         syncedNoteIds,
         remoteMergeResult.remoteNoteSyncMarks,
         { since: lastRemoteCursor }
@@ -1991,7 +2023,7 @@ export async function syncNotes(
         nextCursor = syncMarker;
       }
       if (importedCount > 0) {
-        const latestLocalNotes = await getAllNotes();
+        const latestLocalNotes = await getAllNotesForScope(ownerScope);
         finalNoteCount = latestLocalNotes.length;
         finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
       }

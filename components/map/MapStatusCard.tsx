@@ -1,6 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useCallback, useEffect } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { GlassView } from '../ui/GlassView';
+import {
+  getMapCardEnter,
+  getMapCardExit,
+  getMapLayoutTransition,
+  mapMotionDurations,
+  mapMotionEasing,
+  mapMotionPressTiming,
+} from './mapMotion';
 import { getOverlayBorderColor, mapOverlayTokens } from './overlayTokens';
 
 type OverlayState = 'no-filter-results' | 'no-notes' | 'no-area-results';
@@ -42,58 +52,118 @@ export default function MapStatusCard({
   const statusGlassScrimColor = isDark ? 'rgba(12,12,18,0.10)' : 'rgba(255,255,255,0.04)';
   const iconColor = isIOS ? secondaryTextColor : primaryColor;
   const isPill = variant === 'pill';
+  const pillEnterProgress = useSharedValue(reduceMotionEnabled ? 1 : 0);
+  const pressScale = useSharedValue(1);
+  const animatedPillEntranceStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(pillEnterProgress.value, [0, 1], [10, 0]) },
+      { scale: interpolate(pillEnterProgress.value, [0, 1], [0.985, 1]) },
+    ],
+  }));
+  const animatedPressStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pressScale.value }],
+  }));
+
+  useEffect(() => {
+    if (!isPill) {
+      return;
+    }
+
+    if (reduceMotionEnabled) {
+      pillEnterProgress.value = 1;
+      return;
+    }
+
+    pillEnterProgress.value = 0;
+    pillEnterProgress.value = withTiming(1, {
+      duration: mapMotionDurations.standard,
+      easing: mapMotionEasing.standard,
+    });
+  }, [isPill, pillEnterProgress, reduceMotionEnabled]);
+
+  const handlePressState = useCallback(
+    (pressed: boolean) => {
+      if (reduceMotionEnabled) {
+        pressScale.value = 1;
+        return;
+      }
+
+      pressScale.value = withTiming(pressed ? 0.975 : 1, mapMotionPressTiming);
+    },
+    [pressScale, reduceMotionEnabled]
+  );
 
   if (isPill && actionLabel && onAction) {
     return (
-      <View testID="map-status-card" style={styles.wrap}>
-        <Pressable
-          testID={actionTestID}
-          style={({ pressed }) => [
-            styles.pill,
-            isIOS ? styles.pillIOS : styles.pillAndroid,
-            {
-              opacity: pressed ? 0.94 : 1,
-              borderColor: isIOS ? getOverlayBorderColor(isDark) : 'transparent',
-              backgroundColor: shouldUseGlass ? 'transparent' : fallbackFill,
-            },
-          ]}
-          onPress={onAction}
-        >
-          {shouldUseGlass ? (
-            <GlassView
-              pointerEvents="none"
-              style={StyleSheet.absoluteFill}
-              glassEffectStyle="regular"
-              colorScheme={isDark ? 'dark' : 'light'}
-            />
-          ) : null}
-          <View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFill,
-              styles.pillScrim,
+      <Animated.View
+        testID="map-status-card"
+        style={styles.wrap}
+        layout={getMapLayoutTransition(reduceMotionEnabled)}
+      >
+        <Animated.View style={animatedPillEntranceStyle}>
+          <Animated.View style={animatedPressStyle}>
+          <Pressable
+            testID={actionTestID}
+            style={({ pressed }) => [
+              styles.pill,
+              isIOS ? styles.pillIOS : styles.pillAndroid,
               {
-                backgroundColor: shouldUseGlass ? statusGlassScrimColor : fallbackFill,
+                opacity: pressed ? 0.96 : 1,
+                borderColor: isIOS ? getOverlayBorderColor(isDark) : 'transparent',
+                backgroundColor: shouldUseGlass ? 'transparent' : fallbackFill,
               },
             ]}
-          />
-          <Ionicons name="albums-outline" size={15} color={primaryColor} />
-          <Text
-            style={[
-              styles.pillLabel,
-              isIOS ? styles.pillLabelIOS : styles.pillLabelAndroid,
-              { color: primaryColor },
-            ]}
-          >
-            {actionLabel}
-          </Text>
-        </Pressable>
-      </View>
+            onPress={onAction}
+            onPressIn={() => {
+              handlePressState(true);
+            }}
+            onPressOut={() => {
+              handlePressState(false);
+            }}
+            >
+              {shouldUseGlass ? (
+                <GlassView
+                pointerEvents="none"
+                style={StyleSheet.absoluteFill}
+                glassEffectStyle="regular"
+                colorScheme={isDark ? 'dark' : 'light'}
+              />
+            ) : null}
+            <View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                styles.pillScrim,
+                {
+                  backgroundColor: shouldUseGlass ? statusGlassScrimColor : fallbackFill,
+                },
+              ]}
+            />
+            <Ionicons name="albums-outline" size={15} color={primaryColor} />
+            <Text
+              style={[
+                styles.pillLabel,
+                isIOS ? styles.pillLabelIOS : styles.pillLabelAndroid,
+                { color: primaryColor },
+              ]}
+            >
+              {actionLabel}
+            </Text>
+          </Pressable>
+          </Animated.View>
+        </Animated.View>
+      </Animated.View>
     );
   }
 
   return (
-    <View testID="map-status-card" style={styles.wrap}>
+    <Animated.View
+      testID="map-status-card"
+      style={styles.wrap}
+      entering={getMapCardEnter(reduceMotionEnabled)}
+      exiting={getMapCardExit(reduceMotionEnabled)}
+      layout={getMapLayoutTransition(reduceMotionEnabled)}
+    >
       <View
         style={[
           styles.card,
@@ -167,7 +237,7 @@ export default function MapStatusCard({
           </View>
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

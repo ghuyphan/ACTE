@@ -77,6 +77,7 @@ export async function getReminderPermissionState(): Promise<ReminderPermissionSt
 export async function syncGeofenceRegions(): Promise<boolean> {
   const { remindersEnabled } = await getReminderPermissionState();
   if (!remindersEnabled) {
+    await clearGeofenceRegions();
     return false;
   }
 

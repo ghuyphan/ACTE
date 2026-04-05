@@ -15,8 +15,9 @@ import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
-import { getPersistentItem, setPersistentItem } from '../../utils/appStorage';
+import { getPersistentItem } from '../../utils/appStorage';
 import { isOlderIOS } from '../../utils/platform';
+import { completeOnboardingAndEnterApp } from '../../services/startupRouting';
 
 const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
 
@@ -73,7 +74,14 @@ export default function OnboardingScreen() {
         let cancelled = false;
 
         if (user) {
-            router.replace('/');
+            void completeOnboardingAndEnterApp((route) => {
+                if (!cancelled) {
+                    router.replace(route);
+                }
+            })
+                .catch((error) => {
+                    console.warn('Failed to persist onboarding state:', error);
+                });
             return;
         }
 
@@ -96,15 +104,14 @@ export default function OnboardingScreen() {
         }
 
         setIsCompleting(true);
-        await setPersistentItem(HAS_LAUNCHED_KEY, 'true').catch((error) => {
-            console.warn('Failed to persist onboarding state:', error);
-        });
-
-        // Let the pressed/loading state paint before mounting the tabs tree.
-        requestAnimationFrame(() => {
+        await completeOnboardingAndEnterApp((route) => {
             requestAnimationFrame(() => {
-                router.replace('/');
+                requestAnimationFrame(() => {
+                    router.replace(route);
+                });
             });
+        }).catch((error) => {
+            console.warn('Failed to persist onboarding state:', error);
         });
     };
 

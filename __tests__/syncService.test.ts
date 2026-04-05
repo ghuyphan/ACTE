@@ -185,9 +185,13 @@ jest.mock('../services/database', () => ({
   }),
   getActiveNotesScope: () => mockActiveNotesScope,
   getAllNotes: () => mockGetAllNotes(),
+  getAllNotesForScope: (_scope: string) => mockGetAllNotes(),
   getNoteById: (id: string) => mockGetNoteById(id),
+  getNoteByIdForScope: (id: string, _scope: string) => mockGetNoteById(id),
   deleteNote: (id: string) => mockDeleteNote(id),
+  deleteNoteForScope: (id: string, _scope: string) => mockDeleteNote(id),
   upsertNote: (note: NoteRecord) => mockUpsertNote(note),
+  upsertNoteForScope: (note: NoteRecord, _scope: string) => mockUpsertNote(note),
 }));
 
 jest.mock('../services/remoteMedia', () => ({

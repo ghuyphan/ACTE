@@ -32,6 +32,7 @@ import { Layout, Shadows, Typography } from '../../constants/theme';
 import { EmailRegistrationInput, useAuth } from '../../hooks/useAuth';
 import { useConnectivity } from '../../hooks/useConnectivity';
 import { useTheme } from '../../hooks/useTheme';
+import { completeOnboardingAndEnterApp } from '../../services/startupRouting';
 
 type AuthScreenMode = 'landing' | 'signIn' | 'register' | 'resetPassword';
 type AuthIntent = 'share-note';
@@ -223,9 +224,13 @@ export default function LoginScreen() {
     router.replace('/' as Href);
   };
 
-  const handleAuthSuccess = () => {
+  const handleAuthSuccess = async () => {
     resetMessages();
-    router.replace('/' as Href);
+    await completeOnboardingAndEnterApp((route) => {
+      router.replace(route as Href);
+    }).catch((error) => {
+      console.warn('Failed to persist onboarding state after auth:', error);
+    });
   };
 
   const handleGoogleSignIn = async () => {
@@ -235,7 +240,7 @@ export default function LoginScreen() {
     setActiveAction(null);
 
     if (result.status === 'success') {
-      handleAuthSuccess();
+      await handleAuthSuccess();
       return;
     }
 
@@ -266,7 +271,7 @@ export default function LoginScreen() {
     setActiveAction(null);
 
     if (result.status === 'success') {
-      handleAuthSuccess();
+      await handleAuthSuccess();
       return;
     }
 
@@ -314,7 +319,7 @@ export default function LoginScreen() {
     setActiveAction(null);
 
     if (result.status === 'success') {
-      handleAuthSuccess();
+      await handleAuthSuccess();
       return;
     }
 

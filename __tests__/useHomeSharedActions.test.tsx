@@ -39,7 +39,14 @@ function createDeferred<T>() {
 
 function createHookOptions(overrides: Partial<Parameters<typeof useHomeSharedActions>[0]> = {}) {
   return {
-    user: { uid: 'user-1' },
+    user: {
+      id: 'user-1',
+      uid: 'user-1',
+      email: 'user-1@noto.app',
+      displayName: 'User One',
+      photoURL: null,
+      providerData: [{ providerId: 'password' }],
+    },
     sharedEnabled: true,
     isAuthAvailable: true,
     friendsCount: 0,

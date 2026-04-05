@@ -45,6 +45,8 @@ interface MapPreviewSheetProps {
   handleColor: string;
   onDismiss: () => void;
   reduceMotionEnabled: boolean;
+  allowDragDismiss?: boolean;
+  showHandle?: boolean;
   children: ReactNode;
 }
 
@@ -57,6 +59,8 @@ export default function MapPreviewSheet({
   handleColor,
   onDismiss,
   reduceMotionEnabled,
+  allowDragDismiss = true,
+  showHandle = true,
   children,
 }: MapPreviewSheetProps) {
   const { t } = useTranslation();
@@ -212,7 +216,7 @@ export default function MapPreviewSheet({
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
-        .enabled(true)
+        .enabled(allowDragDismiss)
         .maxPointers(1)
         .activeOffsetY([-4, 4])
         .failOffsetX([-24, 24])
@@ -242,7 +246,7 @@ export default function MapPreviewSheet({
             scheduleOnRN(resetPosition, 0);
           }
         }),
-    [dismissing, finishDismiss, resetPosition, translateY]
+    [allowDragDismiss, dismissing, finishDismiss, resetPosition, translateY]
   );
 
   const animatedStyle = useAnimatedStyle(() => {
@@ -273,23 +277,25 @@ export default function MapPreviewSheet({
     >
       <GestureDetector gesture={panGesture}>
         <View pointerEvents="box-none">
-          <View style={styles.handleGestureZone} pointerEvents="auto">
-            <Pressable
-              testID={dismissTestID}
-              accessibilityRole="button"
-              accessibilityLabel={t('map.dismissPreview', 'Dismiss map preview')}
-              onPress={handlePressDismiss}
-              style={styles.dismissHandlePressable}
-            >
-              <Animated.View
-                style={[
-                  styles.dismissHandle,
-                  { backgroundColor: handleColor },
-                  handleAnimatedStyle,
-                ]}
-              />
-            </Pressable>
-          </View>
+          {showHandle ? (
+            <View style={styles.handleGestureZone} pointerEvents="auto">
+              <Pressable
+                testID={dismissTestID}
+                accessibilityRole="button"
+                accessibilityLabel={t('map.dismissPreview', 'Dismiss map preview')}
+                onPress={handlePressDismiss}
+                style={styles.dismissHandlePressable}
+              >
+                <Animated.View
+                  style={[
+                    styles.dismissHandle,
+                    { backgroundColor: handleColor },
+                    handleAnimatedStyle,
+                  ]}
+                />
+              </Pressable>
+            </View>
+          ) : null}
           {children}
         </View>
       </GestureDetector>

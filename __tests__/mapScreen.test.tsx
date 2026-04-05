@@ -88,7 +88,19 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, fallback?: string) => fallback ?? _key,
+    t: (_key: string, fallbackOrOptions?: string | Record<string, unknown>) => {
+      if (typeof fallbackOrOptions === 'string') {
+        return fallbackOrOptions;
+      }
+
+      if (fallbackOrOptions && typeof fallbackOrOptions === 'object') {
+        const defaultValue =
+          typeof fallbackOrOptions.defaultValue === 'string' ? fallbackOrOptions.defaultValue : _key;
+        return defaultValue.replace(/\{\{count\}\}/g, String(fallbackOrOptions.count ?? ''));
+      }
+
+      return _key;
+    },
   }),
 }));
 
@@ -364,6 +376,7 @@ describe('MapScreen', () => {
     });
 
     await waitFor(() => {
+      expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(getByTestId('map-show-all-results')).toBeTruthy();
     });
 
@@ -401,7 +414,7 @@ describe('MapScreen', () => {
 
     fireEvent.press(getByTestId('map-create-first-note'));
 
-    expect(mockRouterReplace).toHaveBeenCalledWith('/');
+    expect(mockRouterReplace).toHaveBeenCalledWith('/(tabs)');
   });
 
   it('keeps the initial map entry static', () => {
@@ -483,23 +496,65 @@ describe('MapScreen', () => {
     expect(getByTestId('note-marker-text-1')).toBeTruthy();
   });
 
-  it('renders nearby mode in preview and opens the tapped preview card', async () => {
-    const { getByTestId, queryByTestId } = render(<MapScreen />);
+  it('renders nearby mode in preview and opens the centered preview card on tap', async () => {
+    const { getAllByTestId, getByTestId, queryByTestId } = render(<MapScreen />);
 
     expect(queryByTestId('nearby-rail')).toBeNull();
     await waitFor(() => {
       expect(getByTestId('map-preview-list')).toBeTruthy();
-      expect(String(getByTestId('map-preview-context').props.children)).toBe('Nearby notes');
+      expect(queryByTestId('map-preview-group-count')).toBeNull();
+      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('Open note');
       expect(String(getByTestId('map-preview-index').props.children)).toMatch(/^1\/\d+$/);
     });
 
     fireEvent.press(getByTestId('map-preview-item-text-1'));
+
     await waitFor(() => {
       expect(mockOpenNoteDetail).toHaveBeenCalledWith('text-1');
     });
   });
 
-  it('swipes nearby preview and pans map to focused note', async () => {
+  it('centers an off-center nearby preview card without opening the note', async () => {
+    const { getByTestId } = render(<MapScreen />);
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-item-photo-1')).toBeTruthy();
+      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('Open note');
+      expect(String(getByTestId('map-preview-index').props.children)).toBe('1/2');
+    });
+
+    fireEvent.press(getByTestId('map-preview-item-photo-1'));
+
+    await waitFor(() => {
+      const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
+      expect(lastCall?.[0]?.latitude).toBeCloseTo(10.8, 2);
+      expect(lastCall?.[0]?.longitude).toBeCloseTo(106.7, 2);
+      expect(mockOpenNoteDetail).not.toHaveBeenCalled();
+      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('Center on map');
+      expect(String(getByTestId('map-preview-index').props.children)).toBe('2/2');
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.8,
+        longitude: 106.7,
+        latitudeDelta: 0.025,
+        longitudeDelta: 0.025,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('Open note');
+    });
+
+    fireEvent.press(getByTestId('map-preview-item-photo-1'));
+
+    await waitFor(() => {
+      expect(mockOpenNoteDetail).toHaveBeenCalledWith('photo-1');
+    });
+  });
+
+  it('swipes nearby preview and pans map to the focused note before opening', async () => {
     const { getByTestId } = render(<MapScreen />);
     const nearbyList = await waitFor(() => getByTestId('map-preview-list'));
     const snapInterval = nearbyList.props.snapToInterval;
@@ -529,9 +584,24 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(String(getByTestId('map-preview-index').props.children)).toBe('2/2');
+      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('Center on map');
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.8,
+        longitude: 106.7,
+        latitudeDelta: 0.025,
+        longitudeDelta: 0.025,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('Open note');
     });
 
     fireEvent.press(getByTestId('map-preview-item-photo-1'));
+
     await waitFor(() => {
       const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
       expect(lastCall?.[0]?.latitude).toBeCloseTo(10.8, 2);
@@ -633,7 +703,8 @@ describe('MapScreen', () => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(getByTestId('map-preview-list')).toBeTruthy();
       expect(getByText('Saved here')).toBeTruthy();
-      expect(String(getByTestId('map-preview-context').props.children)).toBe('1 note here');
+      expect(queryByTestId('map-preview-group-count')).toBeNull();
+      expect(queryByTestId('map-preview-index')).toBeNull();
     });
     expect(mockImpactAsync).toHaveBeenCalledTimes(1);
 
@@ -692,6 +763,7 @@ describe('MapScreen', () => {
     });
 
     fireEvent.press(getByTestId('map-preview-item-photo-1'));
+    expect(mockOpenNoteDetail).not.toHaveBeenCalled();
 
     fireEvent.press(getByTestId('map-filter-text'));
     fireEvent.press(getByTestId('map-show-all-results'));
@@ -715,7 +787,7 @@ describe('MapScreen', () => {
   });
 
   it('shows a thumbnail marker for single photo notes at high zoom and when selected', async () => {
-    const { getByTestId, queryByTestId } = render(<MapScreen />);
+    const { getAllByTestId, getByTestId, queryByTestId } = render(<MapScreen />);
 
     expect(queryByTestId('photo-marker-photo-1')).toBeNull();
 
@@ -966,7 +1038,7 @@ describe('MapScreen', () => {
       },
     ]);
 
-    const { getByTestId, queryByTestId } = render(<MapScreen />);
+    const { getAllByTestId, getByTestId, queryByTestId } = render(<MapScreen />);
 
     act(() => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
@@ -984,6 +1056,9 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
+      expect(queryByTestId('map-preview-group-count')).toBeNull();
+      expect(getByTestId('map-preview-action')).toBeTruthy();
+      expect(String(getByTestId('map-preview-index').props.children)).toBe('1/3');
       expect(queryByTestId('stack-marker-same-1')).toBeNull();
       expect(queryByTestId('note-marker-same-1')).toBeNull();
     });

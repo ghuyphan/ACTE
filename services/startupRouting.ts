@@ -1,4 +1,4 @@
-import { getPersistentItem, getPersistentItemSync } from '../utils/appStorage';
+import { getPersistentItem, getPersistentItemSync, setPersistentItem } from '../utils/appStorage';
 
 export const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
 
@@ -6,6 +6,7 @@ export type StartupRouteVariant = 'entry' | 'index';
 export type StartupEntryRoute = '/' | '/auth/onboarding';
 export type StartupIndexRoute = '/(tabs)' | '/auth/onboarding';
 export type StartupRoute = StartupEntryRoute | StartupIndexRoute;
+export const POST_ONBOARDING_ROUTE: StartupIndexRoute = '/(tabs)';
 
 function hasCompletedOnboarding(hasLaunched: string | null) {
   return hasLaunched === 'true';
@@ -42,4 +43,15 @@ export async function loadStartupRoute(variant: StartupRouteVariant): Promise<St
   } catch {
     return getDefaultStartupRoute(variant);
   }
+}
+
+export async function markOnboardingComplete(): Promise<void> {
+  await setPersistentItem(HAS_LAUNCHED_KEY, 'true');
+}
+
+export async function completeOnboardingAndEnterApp(
+  navigate: (route: StartupIndexRoute) => void
+): Promise<void> {
+  await markOnboardingComplete();
+  navigate(POST_ONBOARDING_ROUTE);
 }

@@ -437,6 +437,14 @@ function compareOldestWidgetNotes(left: WidgetCandidate, right: WidgetCandidate)
     return left.candidateKey.localeCompare(right.candidateKey);
 }
 
+function getWidgetPlaceKey(candidate: Pick<WidgetCandidate, 'locationName' | 'latitude' | 'longitude'>) {
+    return [
+        candidate.locationName?.trim().toLowerCase() ?? '',
+        candidate.latitude?.toFixed(4) ?? '',
+        candidate.longitude?.toFixed(4) ?? '',
+    ].join(':');
+}
+
 function compareNearbyWidgetNotes(
     left: { note: WidgetCandidate; distanceMeters: number },
     right: { note: WidgetCandidate; distanceMeters: number }
@@ -869,11 +877,14 @@ export function selectWidgetNote(options: {
         : [];
 
     if (nearestCandidates.length > 0) {
+        const nearbyPlaceKeys = new Set(
+            nearestCandidates.map((entry) => getWidgetPlaceKey(entry.note)).filter(Boolean)
+        );
         return {
             selectedNote: nearestCandidates[0]?.note ?? null,
             selectedCandidate: nearestCandidates[0]?.note ?? null,
             selectedLocationName: nearestCandidates[0]?.note.locationName ?? null,
-            nearbyPlacesCount: Math.max(0, nearestCandidates.length - 1),
+            nearbyPlacesCount: Math.max(0, nearbyPlaceKeys.size - 1),
             isIdleState: false,
             selectionMode: 'nearest_memory',
         };

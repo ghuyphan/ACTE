@@ -170,6 +170,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   }, [isOnline]);
 
   useEffect(() => {
+    setCachedSnapshot(null);
+    setRemotePhotoNoteCount(null);
+    setIsRemotePhotoNoteCountReady(false);
+
     getPersistentItem(snapshotStorageKey)
       .then((rawValue) => {
         if (!rawValue) {
@@ -179,10 +183,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
         const parsed = JSON.parse(rawValue) as SubscriptionSnapshot;
         setCachedSnapshot(parsed);
-        if (parsed.remotePhotoNoteCount !== null) {
-          setRemotePhotoNoteCount((current) => current ?? parsed.remotePhotoNoteCount);
-          setIsRemotePhotoNoteCountReady(true);
-        }
+        setRemotePhotoNoteCount(parsed.remotePhotoNoteCount ?? null);
+        setIsRemotePhotoNoteCountReady(parsed.remotePhotoNoteCount !== null);
       })
       .catch((error) => {
         console.warn('[subscription] Failed to load cached subscription snapshot:', error);
@@ -312,14 +314,20 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       active = false;
       void supabase.removeChannel(channel);
     };
-  }, [authReady, cachedSnapshot?.remotePhotoNoteCount, isOnline, user]);
+  }, [authReady, isOnline, user?.id]);
 
   useEffect(() => {
-    if (!isConfigured || !authReady || !isOnline) {
+    if (!isConfigured || !authReady) {
       return;
     }
 
     const nextUserId = user?.uid ?? null;
+
+    if (!isOnline) {
+      setCustomerInfo(null);
+      return;
+    }
+
     if (currentRevenueCatUserIdRef.current === nextUserId) {
       return;
     }
@@ -362,7 +370,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       cachedAt: new Date().toISOString(),
     };
 
-    setCachedSnapshot(nextSnapshot);
     void setPersistentItem(snapshotStorageKey, JSON.stringify(nextSnapshot)).catch((error) => {
       console.warn('[subscription] Failed to persist subscription snapshot:', error);
     });

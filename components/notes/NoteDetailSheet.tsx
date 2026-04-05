@@ -34,6 +34,7 @@ import {
     normalizeSavedTextNoteColor,
     PREMIUM_NOTE_COLOR_IDS,
 } from '../../services/noteAppearance';
+import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { clearNoteDoodle, parseNoteDoodleStrokes, saveNoteDoodle } from '../../services/noteDoodles';
 import {
     bringStickerPlacementToFront,
@@ -1138,6 +1139,22 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         if (editLocation.trim() !== (note.locationName || '')) {
             updates.locationName = editLocation.trim() || null;
         }
+        const nextContent = updates.content ?? note.content;
+        const nextLocationName = updates.locationName !== undefined ? updates.locationName : note.locationName;
+        if (
+            note.type === 'text' &&
+            (updates.content !== undefined || updates.locationName !== undefined)
+        ) {
+            const nextMoodEmoji = resolveAutoNoteEmoji({
+                type: note.type,
+                content: nextContent,
+                locationName: nextLocationName,
+                createdAt: new Date(note.createdAt),
+            });
+            if (nextMoodEmoji !== note.moodEmoji) {
+                updates.moodEmoji = nextMoodEmoji;
+            }
+        }
         if (editRadius !== note.radius) {
             updates.radius = editRadius;
         }
@@ -1165,32 +1182,69 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             const nextNote = {
                 ...note,
                 ...storeUpdates,
-                content: updates.content ?? note.content,
+                content: nextContent,
+                locationName: nextLocationName ?? null,
                 noteColor: updates.noteColor !== undefined ? updates.noteColor : currentNoteColor,
                 hasDoodle: doodleChanged ? nextHasDoodle : note.hasDoodle,
                 doodleStrokesJson: doodleChanged ? nextDoodleStrokesJson : note.doodleStrokesJson ?? null,
                 hasStickers: stickersChanged ? nextHasStickers : note.hasStickers,
                 stickerPlacementsJson: stickersChanged ? nextStickerPlacementsJson : note.stickerPlacementsJson ?? null,
+                moodEmoji: updates.moodEmoji !== undefined ? updates.moodEmoji : note.moodEmoji,
                 updatedAt: nextUpdatedAt,
             };
 
-            if (doodleChanged) {
-                if (nextDoodleStrokesJson) {
-                    await saveNoteDoodle(note.id, nextDoodleStrokesJson);
-                } else {
-                    await clearNoteDoodle(note.id);
+            const restoreDecorations = async () => {
+                if (doodleChanged) {
+                    if (note.doodleStrokesJson) {
+                        await saveNoteDoodle(note.id, note.doodleStrokesJson);
+                    } else {
+                        await clearNoteDoodle(note.id);
+                    }
                 }
-            }
 
-            if (stickersChanged) {
-                if (nextStickerPlacementsJson) {
-                    await saveNoteStickerPlacementsWithAssets(note.id, editStickerPlacements);
-                } else {
-                    await clearNoteStickers(note.id);
+                if (stickersChanged) {
+                    if (note.stickerPlacementsJson) {
+                        await saveNoteStickerPlacementsWithAssets(
+                            note.id,
+                            parseNoteStickerPlacements(note.stickerPlacementsJson)
+                        );
+                    } else {
+                        await clearNoteStickers(note.id);
+                    }
                 }
-            }
+            };
 
-            await updateNote(note.id, storeUpdates);
+            try {
+                if (doodleChanged) {
+                    if (nextDoodleStrokesJson) {
+                        await saveNoteDoodle(note.id, nextDoodleStrokesJson);
+                    } else {
+                        await clearNoteDoodle(note.id);
+                    }
+                }
+
+                if (stickersChanged) {
+                    if (nextStickerPlacementsJson) {
+                        await saveNoteStickerPlacementsWithAssets(note.id, editStickerPlacements);
+                    } else {
+                        await clearNoteStickers(note.id);
+                    }
+                }
+
+                await updateNote(note.id, storeUpdates);
+            } catch (error) {
+                try {
+                    await restoreDecorations();
+                } catch (rollbackError) {
+                    console.warn('Failed to restore note decorations after save error:', rollbackError);
+                }
+                console.error('Note save failed:', error);
+                showAppAlert(
+                    t('noteDetail.updateErrorTitle', 'Could not save changes'),
+                    t('noteDetail.updateErrorMsg', 'Please try again in a moment.')
+                );
+                return;
+            }
             await refreshNotes(false);
             setNote(nextNote);
             setEditDoodleStrokes(parseNoteDoodleStrokes(nextDoodleStrokesJson));
@@ -1269,9 +1323,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             editStickerPlacements={editStickerPlacements}
             setEditStickerPlacements={setEditStickerPlacements}
             doodleModeEnabled={doodleModeEnabled}
-            setDoodleModeEnabled={setDoodleModeEnabled}
             stickerModeEnabled={stickerModeEnabled}
-            setStickerModeEnabled={setStickerModeEnabled}
             selectedStickerId={selectedStickerId}
             setSelectedStickerId={setSelectedStickerId}
             importingSticker={importingSticker}

@@ -75,7 +75,7 @@ export default function HomeScreen() {
   const { openSharedManageAt } = useLocalSearchParams<{ openSharedManageAt?: string }>();
   const { height: windowHeight } = useWindowDimensions();
   const { t } = useTranslation();
-  const { colors, isDark, space } = useTheme();
+  const { colors, isDark } = useTheme();
   const reduceMotionEnabled = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { notes, loading, refreshNotes, createNote } = useNotesStore();
@@ -315,11 +315,13 @@ export default function HomeScreen() {
       !(tier !== 'plus' && remainingPhotoSlots === 0);
 
     if (hasSeenLivePhotoCameraHint !== false) {
-      setShowLivePhotoCameraHint(false);
+      setShowLivePhotoCameraHint((current) => (current ? false : current));
       return;
     }
 
-    setShowLivePhotoCameraHint(isCameraHintEligible);
+    setShowLivePhotoCameraHint((current) =>
+      current === isCameraHintEligible ? current : isCameraHintEligible
+    );
   }, [
     captureMode,
     capturedPhoto,
@@ -377,8 +379,23 @@ export default function HomeScreen() {
     [friendPosts, isSearching, useInlineHeaderSearch]
   );
   const visibleFeedItems = useMemo(
-    () => buildHomeFeedItems(displayedNotes, visibleSharedPosts),
-    [displayedNotes, visibleSharedPosts]
+    () => {
+      if (displayedNotes === notes && visibleSharedPosts === friendPosts) {
+        return archiveFeedItems;
+      }
+
+      const visibleNoteIds = new Set(displayedNotes.map((note) => note.id));
+      const visibleSharedPostIds = new Set(visibleSharedPosts.map((post) => post.id));
+
+      return archiveFeedItems.filter((item) => {
+        if (item.kind === 'note') {
+          return visibleNoteIds.has(item.id);
+        }
+
+        return visibleSharedPostIds.has(item.id);
+      });
+    },
+    [archiveFeedItems, displayedNotes, friendPosts, notes, visibleSharedPosts]
   );
 
   useEffect(() => {
@@ -1828,20 +1845,20 @@ export default function HomeScreen() {
             style={[
               styles.center,
               {
-                gap: space(8),
+                gap: 8,
                 backgroundColor: colors.background,
                 position: 'absolute',
                 top: snapHeight,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              zIndex: 10,
-            },
-          ]}
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 10,
+              },
+            ]}
           pointerEvents="none"
         >
           <Ionicons name="search-outline" size={48} color={colors.secondaryText} style={{ opacity: 0.5 }} />
-          <Text style={[styles.emptyTitle, { color: colors.text, marginTop: space(12) }]}>
+          <Text style={[styles.emptyTitle, { color: colors.text, marginTop: 12 }]}>
             {t('home.noResults', 'No notes found')}
           </Text>
           <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>

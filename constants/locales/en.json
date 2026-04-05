@@ -176,6 +176,8 @@
         "nearbyEmpty": "No nearby notes match these filters",
         "groupSummaryOne": "1 note here",
         "groupSummaryOther": "{{count}} notes here",
+        "openNoteAction": "Open note",
+        "centerOnMapAction": "Center on map",
         "filteredEmptyTitle": "No notes match these filters",
         "filteredEmptySubtitle": "Try a different filter combination or reset to see all notes.",
         "areaEmptyTitle": "No notes in this area",

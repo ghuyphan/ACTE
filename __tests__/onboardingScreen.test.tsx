@@ -103,7 +103,7 @@ describe('OnboardingScreen', () => {
     render(<OnboardingScreen />);
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('/');
+      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
     });
 
     expect(mockGetPersistentItem).not.toHaveBeenCalled();
@@ -126,7 +126,7 @@ describe('OnboardingScreen', () => {
 
     await waitFor(() => {
       expect(mockSetPersistentItem).toHaveBeenCalledWith('settings.hasLaunched', 'true');
-      expect(mockReplace).toHaveBeenCalledWith('/');
+      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
     });
 
     expect(mockSetPersistentItem.mock.invocationCallOrder[0]).toBeLessThan(

@@ -84,9 +84,10 @@ function useNotesStoreValue(): NotesStoreValue {
   );
 
   const recordNoteChange = useCallback(
-    (change: Omit<SyncChange, 'timestamp'>) => {
+    (change: Omit<SyncChange, 'timestamp' | 'ownerScope'>) => {
       void syncService.recordChange({
         ...change,
+        ownerScope: activeScopeRef.current,
         timestamp: new Date().toISOString(),
       });
     },
@@ -202,9 +203,7 @@ function useNotesStoreValue(): NotesStoreValue {
       const nextNotes = updateNoteInCollection(notesRef.current, id, updates);
       commitNotes(nextNotes);
 
-      if (updates.radius !== undefined) {
-        void syncGeofenceRegions();
-      }
+      void syncGeofenceRegions();
       recordNoteChange({
         type: 'update',
         entity: 'note',

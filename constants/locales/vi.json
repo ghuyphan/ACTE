@@ -176,6 +176,8 @@
         "nearbyEmpty": "Không có ghi chú nào gần bạn phù hợp với bộ lọc hiện tại",
         "groupSummaryOne": "1 ghi chú ở đây",
         "groupSummaryOther": "{{count}} ghi chú ở đây",
+        "openNoteAction": "Mở ghi chú",
+        "centerOnMapAction": "Đưa vào giữa bản đồ",
         "filteredEmptyTitle": "Không có ghi chú phù hợp bộ lọc này",
         "filteredEmptySubtitle": "Hãy thử bộ lọc khác hoặc đặt lại để xem tất cả ghi chú.",
         "areaEmptyTitle": "Không có ghi chú nào trong khu vực này",

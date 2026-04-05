@@ -102,7 +102,7 @@ export default function SettingsSyncSheet({
             padding({ top: 14, leading: 16, trailing: 16, bottom: 14 }),
           ]}
         >
-          <Button onPress={requestSync} disabled={!canRequestSync}>
+          <Button onPress={canRequestSync ? requestSync : undefined}>
             <HStack
               modifiers={[
                 backgroundOverlay({ color: canRequestSync ? colors.primary : colors.border }),

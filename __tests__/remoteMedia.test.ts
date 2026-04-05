@@ -1,8 +1,17 @@
-const mockUpload = jest.fn(async () => ({ error: null }));
-const mockGetInfoAsync = jest.fn();
-const mockDeleteAsync = jest.fn(async () => undefined);
-const mockReadPhotoAsArrayBuffer = jest.fn();
-const mockReadPairedVideoAsArrayBuffer = jest.fn();
+const mockUpload = jest.fn(
+  async (_path: string, _payload: ArrayBuffer, _options: unknown) => ({ error: null })
+);
+const mockGetInfoAsync = jest.fn(async (_uri: string) => ({
+  exists: true,
+  isDirectory: false,
+  size: 128 * 1024,
+  uri: _uri,
+}));
+const mockDeleteAsync = jest.fn(async (_uri: string, _options?: unknown) => undefined);
+const mockReadPhotoAsArrayBuffer = jest.fn(async (_uri: string) => Uint8Array.from([1, 2, 3]).buffer);
+const mockReadPairedVideoAsArrayBuffer = jest.fn(
+  async (_uri: string) => Uint8Array.from([4, 5, 6]).buffer
+);
 
 jest.mock('../utils/fileSystem', () => ({
   getInfoAsync: (uri: string) => mockGetInfoAsync(uri),
@@ -41,7 +50,8 @@ jest.mock('../utils/supabase', () => ({
   requireSupabase: () => ({
     storage: {
       from: () => ({
-        upload: (...args: unknown[]) => mockUpload(...args),
+        upload: (path: string, payload: ArrayBuffer, options: unknown) =>
+          mockUpload(path, payload, options),
         createSignedUrl: jest.fn(),
         remove: jest.fn(),
       }),

@@ -60,6 +60,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: jest.fn(),
   }),
+  useLocalSearchParams: () => ({}),
 }));
 
 jest.mock('expo-haptics', () => ({

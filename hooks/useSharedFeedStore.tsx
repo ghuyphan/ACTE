@@ -25,8 +25,10 @@ import {
   getCachedSharedFeedSnapshot,
   replaceCachedActiveInvite,
 } from '../services/sharedFeedCache';
+import { getNotePairedVideoUri } from '../services/livePhotoStorage';
 import { normalizeSavedTextNoteColor } from '../services/noteAppearance';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
+import { getNotePhotoUri } from '../services/photoStorage';
 import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
 
@@ -232,6 +234,15 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     }
 
     previousUserUidRef.current = user.uid;
+    commitSnapshot(
+      {
+        friends: [],
+        sharedPosts: [],
+        activeInvite: null,
+      },
+      'cache',
+      null
+    );
     setLoading(true);
     setReady(false);
     void hydrateFromCache(user.uid)
@@ -487,10 +498,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             type: nextType,
             text: nextType === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
             photoPath: nextPhotoPath,
-            photoLocalUri: nextType === 'photo' ? post.photoLocalUri : null,
+            photoLocalUri: nextType === 'photo' ? getNotePhotoUri(note) : null,
             isLivePhoto: Boolean(nextType === 'photo' && note.isLivePhoto && nextPairedVideoPath),
             pairedVideoPath: nextPairedVideoPath,
-            pairedVideoLocalUri: nextType === 'photo' && note.isLivePhoto ? post.pairedVideoLocalUri ?? null : null,
+            pairedVideoLocalUri:
+              nextType === 'photo' && note.isLivePhoto ? getNotePairedVideoUri(note) : null,
             doodleStrokesJson: note.doodleStrokesJson ?? null,
             hasStickers: Boolean(note.hasStickers && note.stickerPlacementsJson),
             stickerPlacementsJson: note.stickerPlacementsJson ?? null,

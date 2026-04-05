@@ -1302,7 +1302,16 @@ export async function getAllNotesForScope(scope: string): Promise<Note[]> {
 export async function getNoteById(id: string): Promise<Note | null> {
     const database = await getDB();
     const scope = getCurrentScope();
-    const row = await database.getFirstAsync<NoteRow>(
+    return getNoteByIdForScope(id, scope, database);
+}
+
+export async function getNoteByIdForScope(
+    id: string,
+    scope: string,
+    database?: SQLite.SQLiteDatabase
+): Promise<Note | null> {
+    const activeDatabase = database ?? (await getDB());
+    const row = await activeDatabase.getFirstAsync<NoteRow>(
         `SELECT ${NOTES_SELECT_FIELDS}
          FROM ${NOTES_FROM_CLAUSE}
          WHERE id = ? AND owner_uid = ?`,
@@ -1314,7 +1323,7 @@ export async function getNoteById(id: string): Promise<Note | null> {
 
 export async function updateNote(id: string, updates: NoteUpdates): Promise<void> {
     const scope = getCurrentScope();
-    const existing = await getNoteById(id);
+    const existing = await getNoteByIdForScope(id, scope);
     if (!existing) {
         return;
     }
@@ -1477,7 +1486,7 @@ export async function toggleFavorite(id: string): Promise<boolean> {
         id,
         scope
     );
-    const note = await getNoteById(id);
+    const note = await getNoteByIdForScope(id, scope, database);
     if (note) {
         scheduleMonthlyRecapCacheRefreshForMonthKey(
             scope,
@@ -1537,19 +1546,30 @@ export async function getNotesForReminderSelection(): Promise<Note[]> {
 export async function deleteNote(id: string): Promise<void> {
     const database = await getDB();
     const scope = getCurrentScope();
-    const note = await getNoteById(id);
-    await database.runAsync(
-        'DELETE FROM note_doodles WHERE note_id IN (SELECT id FROM notes WHERE id = ? AND owner_uid = ?)',
-        id,
-        scope
-    );
-    await database.runAsync(
-        'DELETE FROM note_stickers WHERE note_id IN (SELECT id FROM notes WHERE id = ? AND owner_uid = ?)',
-        id,
-        scope
-    );
-    await deleteNoteSearchDocument(database, id);
-    await database.runAsync('DELETE FROM notes WHERE id = ? AND owner_uid = ?', id, scope);
+    await deleteNoteForScope(id, scope, database);
+}
+
+export async function deleteNoteForScope(
+    id: string,
+    scope: string,
+    database?: SQLite.SQLiteDatabase
+): Promise<void> {
+    const activeDatabase = database ?? (await getDB());
+    const note = await getNoteByIdForScope(id, scope, activeDatabase);
+    await withDatabaseTransaction(async (txn) => {
+        await txn.runAsync(
+            'DELETE FROM note_doodles WHERE note_id IN (SELECT id FROM notes WHERE id = ? AND owner_uid = ?)',
+            id,
+            scope
+        );
+        await txn.runAsync(
+            'DELETE FROM note_stickers WHERE note_id IN (SELECT id FROM notes WHERE id = ? AND owner_uid = ?)',
+            id,
+            scope
+        );
+        await deleteNoteSearchDocument(txn, id);
+        await txn.runAsync('DELETE FROM notes WHERE id = ? AND owner_uid = ?', id, scope);
+    });
     if (note) {
         scheduleMonthlyRecapCacheRefreshForMonthKey(
             scope,
@@ -1564,17 +1584,18 @@ export async function deleteAllNotes(): Promise<void> {
 }
 
 export async function deleteAllNotesForScope(scope: string): Promise<void> {
-    const database = await getDB();
-    await database.runAsync(
-        'DELETE FROM note_doodles WHERE note_id IN (SELECT id FROM notes WHERE owner_uid = ?)',
-        scope
-    );
-    await database.runAsync(
-        'DELETE FROM note_stickers WHERE note_id IN (SELECT id FROM notes WHERE owner_uid = ?)',
-        scope
-    );
-    await deleteNoteSearchDocumentsForScope(database, scope);
-    await database.runAsync('DELETE FROM notes WHERE owner_uid = ?', scope);
+    await withDatabaseTransaction(async (txn) => {
+        await txn.runAsync(
+            'DELETE FROM note_doodles WHERE note_id IN (SELECT id FROM notes WHERE owner_uid = ?)',
+            scope
+        );
+        await txn.runAsync(
+            'DELETE FROM note_stickers WHERE note_id IN (SELECT id FROM notes WHERE owner_uid = ?)',
+            scope
+        );
+        await deleteNoteSearchDocumentsForScope(txn, scope);
+        await txn.runAsync('DELETE FROM notes WHERE owner_uid = ?', scope);
+    });
     scheduleMonthlyRecapCacheClear(scope);
 }
 
@@ -1680,6 +1701,10 @@ export async function refreshCachedMonthlyRecapForMonthKey(
 
 export async function upsertNote(input: UpsertNoteInput): Promise<Note> {
     const scope = getCurrentScope();
+    return upsertNoteForScope(input, scope);
+}
+
+export async function upsertNoteForScope(input: UpsertNoteInput, scope: string): Promise<Note> {
     const photoLocalUri =
         input.type === 'photo'
             ? resolveStoredPhotoUri(input.photoLocalUri ?? input.content)

@@ -587,7 +587,6 @@ export default function NotesFeed({
       renderItem={renderItem}
       extraData={activeCardKey}
       getItemType={(item) => item.kind}
-      estimatedItemSize={snapHeight}
       drawDistance={snapHeight * 2}
       removeClippedSubviews={Platform.OS === 'android' && captureMode !== 'camera'}
       snapToInterval={snapHeight}

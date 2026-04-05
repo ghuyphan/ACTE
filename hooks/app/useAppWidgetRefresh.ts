@@ -26,13 +26,9 @@ export function useAppWidgetRefresh() {
   }, [isOnline, user]);
 
   useEffect(() => {
-    if (!user) {
-      return;
-    }
-
     updateWidgetData({
       includeLocationLookup: true,
-      includeSharedRefresh: isOnline,
+      includeSharedRefresh: Boolean(user && isOnline),
     }).catch((err) => console.warn('Widget data update failed:', err));
   }, [isOnline, user]);
 }
