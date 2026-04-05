@@ -8,13 +8,15 @@ import CaptureCard, { type CaptureCardHandle } from '../components/home/CaptureC
 
 const transparentPngBase64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFAAH/e+m+7wAAAABJRU5ErkJggg==';
+const opaquePngBase64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
 let mockClipboardPasteButtonAvailable = true;
 let mockCameraViewProps: any = null;
 let mockCameraMountCount = 0;
 let mockCameraUnmountCount = 0;
 let mockClipboardPastePayload: any = {
   type: 'image',
-  data: 'data:image/png;base64,ZmFrZS1zdGlja2Vy',
+  data: `data:image/png;base64,${transparentPngBase64}`,
   size: { width: 120, height: 120 },
 };
 let mockClipboardListeners: Array<() => void> = [];
@@ -408,10 +410,14 @@ describe('CaptureCard doodle handle', () => {
     mockClipboardListeners = [];
     mockClipboardPastePayload = {
       type: 'image',
-      data: 'data:image/png;base64,ZmFrZS1zdGlja2Vy',
+      data: `data:image/png;base64,${transparentPngBase64}`,
       size: { width: 120, height: 120 },
     };
     mockClipboardHasImageAsync.mockResolvedValue(false);
+    mockClipboardGetImageAsync.mockResolvedValue({
+      data: `data:image/png;base64,${transparentPngBase64}`,
+      size: { width: 120, height: 120 },
+    });
     mockWriteAsStringAsync.mockResolvedValue(undefined);
     mockDeleteAsync.mockResolvedValue(undefined);
     mockImagePicker.getMediaLibraryPermissionsAsync.mockResolvedValue({
@@ -1173,7 +1179,7 @@ describe('CaptureCard doodle handle', () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockClipboardHasImageAsync.mockResolvedValue(true);
     mockClipboardGetImageAsync.mockResolvedValue({
-      data: 'data:image/png;base64,ZmFrZS1zdGlja2Vy',
+      data: `data:image/png;base64,${transparentPngBase64}`,
       size: { width: 120, height: 120 },
     });
 
@@ -1192,7 +1198,7 @@ describe('CaptureCard doodle handle', () => {
     await waitFor(() => {
       expect(mockWriteAsStringAsync).toHaveBeenCalledWith(
         expect.stringContaining('file:///cache/clipboard-sticker-'),
-        'ZmFrZS1zdGlja2Vy',
+        transparentPngBase64,
         { encoding: 'base64' }
       );
     });
@@ -1216,6 +1222,23 @@ describe('CaptureCard doodle handle', () => {
 
     await waitFor(() => {
       expect(getByTestId('capture-inline-paste-sticker')).toBeTruthy();
+    });
+  });
+
+  it('hides the inline paste action when the clipboard image has no transparency', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardGetImageAsync.mockResolvedValue({
+      data: `data:image/png;base64,${opaquePngBase64}`,
+      size: { width: 120, height: 120 },
+    });
+
+    const { queryByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    await waitFor(() => {
+      expect(queryByTestId('capture-inline-paste-sticker')).toBeNull();
     });
   });
 
@@ -1254,7 +1277,7 @@ describe('CaptureCard doodle handle', () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockClipboardHasImageAsync.mockResolvedValue(true);
     mockClipboardGetImageAsync.mockResolvedValue({
-      data: 'data:image/png;base64,cGhvdG8tc3RpY2tlcg==',
+      data: `data:image/png;base64,${transparentPngBase64}`,
       size: { width: 140, height: 140 },
     });
 
@@ -1284,7 +1307,7 @@ describe('CaptureCard doodle handle', () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockClipboardHasImageAsync.mockResolvedValue(true);
     mockClipboardGetImageAsync.mockResolvedValue({
-      data: 'data:image/png;base64,cGhvdG8tc3RpY2tlcg==',
+      data: `data:image/png;base64,${transparentPngBase64}`,
       size: { width: 140, height: 140 },
     });
 

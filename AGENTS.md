@@ -13,8 +13,10 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - `app/shared/`: Shared moments list and shared post detail.
 - `app/friends/`: Friend invite join flow.
 - `app/widget/`: Widget deep-link entry points.
-- `app/plus.tsx`: Subscription / purchase screen.
+- `app/plus.tsx`: Route entry for the subscription / purchase screen.
 - `components/`: Reusable UI, with most feature-owned pieces under `home/`, `map/`, `notes/`, `settings/`, `sheets/`, `screens/`, and `ui/`.
+- `components/app/`: App-wide composition such as provider wiring.
+- `components/friends/`: Friend invite/join feature UI.
 - `hooks/`: Shared hooks and providers, now grouped by concern under `app/`, `state/`, `ui/`, and top-level cross-cutting hooks.
 - `hooks/map/`: Map-only domain and screen-state logic.
 - `services/`: SQLite, sync, geofence, widget, media, search, and sharing logic.
@@ -30,9 +32,16 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 ## Important Entry Points
 
 - `package.json`: `expo-router/entry` app entry and supported scripts.
-- `app/_layout.tsx`: Root providers, splash flow, and app-startup hook wiring.
+- `app/_layout.tsx`: Root Expo Router layout, splash flow, and app-startup hook wiring.
 - `app/index.tsx`: First-launch redirect into onboarding or tabs.
 - `app/(tabs)/_layout.tsx`: Native tab layout setup.
+- `components/app/AppProviders.tsx`: Root provider composition extracted from the app layout.
+- `components/screens/auth/AuthScreen.tsx`: Landing, sign-in, register, and password-reset flow.
+- `components/screens/notes/NotesScreen.tsx`: Combined notes and shared-posts grid.
+- `components/screens/search/SearchScreen.tsx`: Native search tab implementation.
+- `components/screens/shared/SharedFeedScreen.tsx`: Shared moments feed implementation.
+- `components/screens/friends/FriendJoinScreen.tsx`: Friend invite join implementation.
+- `components/screens/plus/PlusScreen.tsx`: `Noto Plus` upsell and purchase UI.
 - `app.config.ts`: Expo config, permissions, widgets, Google Maps wiring, custom plugins, and native IDs.
 - `services/database.ts`: SQLite schema, note model, local cache tables, and migrations.
 - `services/sharedFeedService.ts`: Friend invites, shared post CRUD, and shared feed refresh logic.
@@ -43,6 +52,7 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - `hooks/app/useAppNotificationRouting.ts`: Notification open handling and deep-link routing.
 - `hooks/app/useAppWidgetRefresh.ts`: App foreground and widget refresh wiring.
 - `hooks/state/useNotesStore.tsx`: The main note mutation path.
+- `hooks/useNotes.ts`: Public notes hook/provider entry point.
 - `hooks/useSharedFeedStore.tsx`: Shared feed state and sharing actions.
 - `hooks/useSubscription.tsx`: RevenueCat subscription state and purchase actions.
 - `widgets/ios/LocketWidget.swift`: Source of truth for real iOS widget rendering.
@@ -65,7 +75,7 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - Use `useTheme()` and `constants/theme.ts` rather than hardcoded colors.
 - Add user-facing copy through `react-i18next` and update both `constants/locales/en.json` and `constants/locales/vi.json`.
 - Normal note CRUD should flow through `useNotesStore`.
-- Prefer the grouped source folders (`hooks/app`, `hooks/state`, `hooks/ui`, `components/notes`, `components/settings`, `components/sheets`) when adding or moving feature code. Keep top-level wrapper exports only for compatibility.
+- Prefer the grouped source folders (`hooks/app`, `hooks/state`, `hooks/ui`, top-level public `hooks/*`, `components/notes`, `components/settings`, `components/sheets`, `components/screens/<feature>`) when adding or moving feature code. Keep route files thin and keep top-level wrapper exports only for compatibility.
 - Shared feed state and sharing actions should flow through `useSharedFeedStore`.
 - Subscription state should flow through `useSubscription`.
 - Widget refreshes are already wired to note mutations; preserve that behavior when adding new mutation paths.
@@ -73,9 +83,10 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 
 ## Where To Add New Code
 
-- New route or screen entry: `app/` in the correct route group.
+- New route entry: `app/` in the correct route group.
+- New screen implementation: `components/screens/<feature>/`.
 - Shared screen UI: `components/`, usually `components/ui/`, `components/home/`, `components/map/`, `components/notes/`, `components/settings/`, `components/sheets/`, or `components/screens/`.
-- Reusable state/provider logic: `hooks/`, with startup logic in `hooks/app/`, store/provider state in `hooks/state/`, and sheet/presentation state in `hooks/ui/`.
+- Reusable state/provider logic: `hooks/`, with startup logic in `hooks/app/`, store/provider state in `hooks/state/`, sheet/presentation state in `hooks/ui/`, and public import surfaces in top-level `hooks/*`.
 - Domain or integration logic: `services/`.
 - Smaller helpers or platform utilities: `utils/`.
 - Theme/i18n/subscription constants: `constants/`.

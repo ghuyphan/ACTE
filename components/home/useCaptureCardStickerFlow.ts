@@ -10,8 +10,9 @@ import * as ImagePicker from 'expo-image-picker';
 import type { TFunction } from 'i18next';
 import { showAppAlert } from '../../utils/alert';
 import {
+  clipboardImageDataHasTransparency,
   ClipboardStickerError,
-  hasClipboardStickerImage,
+  hasTransparentClipboardStickerImage,
   importStickerAssetFromClipboard,
   importStickerAssetFromClipboardImageData,
 } from '../../utils/stickerClipboard';
@@ -362,6 +363,16 @@ export function useCaptureCardStickerFlow({
       setImportingSticker(true);
 
       try {
+        if (!clipboardImageDataHasTransparency(payload.data)) {
+          throw new ClipboardStickerError(
+            'unsupported',
+            t(
+              'capture.stickerMissingTransparency',
+              'If you want a floating sticker, use a transparent PNG or WebP. Regular photos will import as stamps.'
+            )
+          );
+        }
+
         const importedAsset = await importStickerAssetFromClipboardImageData(
           payload.data,
           getClipboardStickerMessages(t)
@@ -415,7 +426,7 @@ export function useCaptureCardStickerFlow({
       const locationX = typeof event.nativeEvent.locationX === 'number' ? event.nativeEvent.locationX : cardSize / 2;
       const locationY = typeof event.nativeEvent.locationY === 'number' ? event.nativeEvent.locationY : cardSize / 2;
 
-      const canPasteFromClipboard = await hasClipboardStickerImage();
+      const canPasteFromClipboard = await hasTransparentClipboardStickerImage();
       if (!canPasteFromClipboard) {
         dismissPastePrompt();
         return;
@@ -460,7 +471,7 @@ export function useCaptureCardStickerFlow({
 
     dismissOverlay();
     dismissPastePrompt();
-    const canPasteFromClipboard = await hasClipboardStickerImage();
+    const canPasteFromClipboard = await hasTransparentClipboardStickerImage();
     setStickerSourceCanPasteFromClipboard(canPasteFromClipboard);
     setShowStickerSourceSheet(true);
   }, [dismissOverlay, dismissPastePrompt, enablePhotoStickers, importingSticker]);
@@ -664,7 +675,7 @@ export function useCaptureCardStickerFlow({
     let subscription: Subscription | null = null;
 
     const syncClipboardAvailability = async () => {
-      const canPasteFromClipboard = await hasClipboardStickerImage();
+      const canPasteFromClipboard = await hasTransparentClipboardStickerImage();
       if (active) {
         setInlinePasteCanPasteFromClipboard(canPasteFromClipboard);
       }

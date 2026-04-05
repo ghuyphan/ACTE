@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import SharedPostDetailSheet from '../../components/SharedPostDetailSheet';
+import SharedPostDetailSheet from '../../components/shared/SharedPostDetailSheet';
 
 export default function SharedPostDetailRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();

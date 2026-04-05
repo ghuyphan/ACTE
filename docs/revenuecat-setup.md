@@ -72,5 +72,6 @@ EXPO_PUBLIC_REVENUECAT_PLUS_OFFERING_ID=default
 - `constants/subscription.ts`
 - `hooks/useSubscription.tsx`
 - `app/plus.tsx`
+- `components/screens/plus/PlusScreen.tsx`
 - `docs/android-release.md`
 - `docs/release-checklist.md`

@@ -4,6 +4,7 @@ import {
   EncodingType,
   writeAsStringAsync,
 } from './fileSystem';
+import { decode as decodeBase64ArrayBuffer } from 'base64-arraybuffer';
 import { importStickerAsset, type StickerAsset } from '../services/noteStickers';
 
 const CLIPBOARD_STICKER_PREFIX = 'data:image/png;base64,';
@@ -56,6 +57,61 @@ function getClipboardStickerBase64(data: string) {
     : null;
 }
 
+function parsePngHasTransparency(bytes: Uint8Array) {
+  if (bytes.length < 33) {
+    return false;
+  }
+
+  const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (!pngSignature.every((value, index) => bytes[index] === value)) {
+    return false;
+  }
+
+  const colorType = bytes[25] ?? 0;
+  if (colorType === 4 || colorType === 6) {
+    return true;
+  }
+
+  let offset = 8;
+  while (offset + 8 <= bytes.length) {
+    const length =
+      ((bytes[offset] ?? 0) << 24) |
+      ((bytes[offset + 1] ?? 0) << 16) |
+      ((bytes[offset + 2] ?? 0) << 8) |
+      (bytes[offset + 3] ?? 0);
+    const type = String.fromCharCode(
+      bytes[offset + 4] ?? 0,
+      bytes[offset + 5] ?? 0,
+      bytes[offset + 6] ?? 0,
+      bytes[offset + 7] ?? 0
+    );
+
+    if (type === 'tRNS') {
+      return true;
+    }
+
+    offset += 12 + length;
+    if (type === 'IEND') {
+      break;
+    }
+  }
+
+  return false;
+}
+
+export function clipboardImageDataHasTransparency(data: string) {
+  const base64 = getClipboardStickerBase64(data);
+  if (!base64) {
+    return false;
+  }
+
+  try {
+    return parsePngHasTransparency(new Uint8Array(decodeBase64ArrayBuffer(base64)));
+  } catch {
+    return false;
+  }
+}
+
 async function loadClipboardModule() {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -75,6 +131,29 @@ export async function hasClipboardStickerImage() {
   try {
     return await clipboardModule.hasImageAsync();
   } catch {
+    return false;
+  }
+}
+
+export async function hasTransparentClipboardStickerImage() {
+  const clipboardModule = await loadClipboardModule();
+  if (!clipboardModule?.hasImageAsync || !clipboardModule?.getImageAsync) {
+    return false;
+  }
+
+  try {
+    const hasImage = await clipboardModule.hasImageAsync();
+    if (!hasImage) {
+      return false;
+    }
+
+    const clipboardImage = await clipboardModule.getImageAsync({ format: 'png' });
+    return !!clipboardImage?.data && clipboardImageDataHasTransparency(clipboardImage.data);
+  } catch (error) {
+    if (isClipboardPermissionDeniedError(error)) {
+      return false;
+    }
+
     return false;
   }
 }

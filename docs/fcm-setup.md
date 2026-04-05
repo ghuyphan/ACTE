@@ -44,6 +44,7 @@ Client-side registration and routing currently live in:
 - `hooks/app/useSocialPushRegistration.ts`
 - `hooks/app/useAppNotificationRouting.ts`
 - `app/_layout.tsx`
+- `components/app/AppProviders.tsx`
 
 ## Quick Verification
 

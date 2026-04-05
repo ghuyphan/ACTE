@@ -5,7 +5,7 @@ import { ActivityIndicator, InteractionManager, ScrollView, StyleSheet, Text, Vi
 import { Ionicons } from '@expo/vector-icons';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
-import { useNotesRecapViewModel } from '../../../hooks/state/useNotesRecapViewModel';
+import { useNotesRecapViewModel } from '../../../hooks/useNotesRecapViewModel';
 import type { Note } from '../../../services/database';
 import RecapCalendarGrid from './RecapCalendarGrid';
 import RecapMonthPicker from './RecapMonthPicker';

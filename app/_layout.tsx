@@ -1,30 +1,19 @@
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
 import * as SystemUI from 'expo-system-ui';
 import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo } from 'react';
-import { useTranslation, I18nextProvider } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
-import i18n, { i18nReady } from '../constants/i18n';
-import { ActiveFeedTargetProvider } from '../hooks/state/useActiveFeedTarget';
-import { ActiveNoteProvider } from '../hooks/state/useActiveNote';
-import { AuthProvider } from '../hooks/useAuth';
-import { ConnectivityProvider } from '../hooks/useConnectivity';
-import { FeedFocusProvider } from '../hooks/state/useFeedFocus';
-import { NotesProvider } from '../hooks/useNotes';
-import { NoteDetailSheetProvider } from '../hooks/ui/useNoteDetailSheet';
-import { SharedFeedProvider } from '../hooks/useSharedFeed';
-import { SyncStatusProvider } from '../hooks/useSyncStatus';
-import { SubscriptionProvider } from '../hooks/useSubscription';
-import { ThemeProvider, useTheme } from '../hooks/useTheme';
+import { i18nReady } from '../constants/i18n';
+import AppProviders from '../components/app/AppProviders';
+import { useTheme } from '../hooks/useTheme';
 import { useAppNotificationRouting } from '../hooks/app/useAppNotificationRouting';
 import { useAppStartupBootstrap } from '../hooks/app/useAppStartupBootstrap';
 import { useAppWidgetRefresh } from '../hooks/app/useAppWidgetRefresh';
 import { useSocialPushRegistration } from '../hooks/app/useSocialPushRegistration';
-import { AppAlertProvider } from '../components/ui/AppAlertProvider';
 import '../utils/backgroundGeofence';
 
 export { ErrorBoundary } from 'expo-router';
@@ -181,34 +170,9 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-        <I18nextProvider i18n={i18n}>
-          <ThemeProvider>
-            <ConnectivityProvider>
-              <AuthProvider>
-                <SubscriptionProvider>
-                  <ActiveNoteProvider>
-                    <ActiveFeedTargetProvider>
-                      <FeedFocusProvider>
-                        <NotesProvider>
-                          <SyncStatusProvider>
-                            <SharedFeedProvider>
-                              <NoteDetailSheetProvider>
-                                <BottomSheetModalProvider>
-                                  <AppAlertProvider />
-                                  <AppContent />
-                                </BottomSheetModalProvider>
-                              </NoteDetailSheetProvider>
-                            </SharedFeedProvider>
-                          </SyncStatusProvider>
-                        </NotesProvider>
-                      </FeedFocusProvider>
-                    </ActiveFeedTargetProvider>
-                  </ActiveNoteProvider>
-                </SubscriptionProvider>
-              </AuthProvider>
-            </ConnectivityProvider>
-          </ThemeProvider>
-        </I18nextProvider>
+        <AppProviders>
+          <AppContent />
+        </AppProviders>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

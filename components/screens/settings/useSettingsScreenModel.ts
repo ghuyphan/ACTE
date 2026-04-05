@@ -3,7 +3,7 @@ import { Href, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAppSheetAlert } from '../../../hooks/ui/useAppSheetAlert';
+import { useAppSheetAlert } from '../../../hooks/useAppSheetAlert';
 import { useAuth } from '../../../hooks/useAuth';
 import { useConnectivity } from '../../../hooks/useConnectivity';
 import { useNotes } from '../../../hooks/useNotes';
