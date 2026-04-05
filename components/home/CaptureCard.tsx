@@ -1269,7 +1269,6 @@ function LiveCameraActionBar({
         {cameraInstructionText ? (
           <View style={styles.cameraActionHintWrap}>
             <Text
-              numberOfLines={1}
               style={[styles.cameraActionHintText, { color: colors.captureGlassText }]}
             >
               {cameraInstructionText}
@@ -1907,6 +1906,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     },
     t,
     cardSize: CARD_SIZE,
+    livePhotoRingStrokeWidth: LIVE_PHOTO_RING_STROKE_WIDTH,
     onToggleFacing,
     onTakePicture,
     onShutterPressOut,
@@ -3050,16 +3050,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   cameraActionHintWrap: {
-    flex: 1,
-    minWidth: 0,
+    flexShrink: 1,
+    maxWidth: 228,
     paddingLeft: 4,
-    paddingRight: 8,
+    paddingRight: 4,
     justifyContent: 'center',
   },
   cameraActionHintText: {
     ...Typography.pill,
     fontSize: 12,
-    lineHeight: 15,
+    lineHeight: 16,
+    textAlign: 'center',
   },
   cameraControlsWrap: {
     width: '100%',

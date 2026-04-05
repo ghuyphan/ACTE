@@ -1,4 +1,5 @@
 import { Skia } from '@shopify/react-native-skia';
+import type { TFunction } from 'i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Gesture } from 'react-native-gesture-handler';
 import {
@@ -13,7 +14,6 @@ import {
   withTiming,
 } from 'react-native-reanimated';
 import type { CameraDevice } from 'react-native-vision-camera';
-import type { TFunction } from 'i18next';
 import { Layout } from '../../constants/theme';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../../services/livePhotoProcessing';
@@ -25,8 +25,6 @@ const CAMERA_ZOOM_PINCH_RANGE = 0.45;
 const CAMERA_ZOOM_LABEL_VISIBLE_MS = 1100;
 const CAMERA_TRANSITION_FADE_IN_MS = 140;
 const CAMERA_TRANSITION_FADE_OUT_MS = 240;
-const LIVE_PHOTO_RING_STROKE_WIDTH = 6;
-const LIVE_PHOTO_CARD_PROGRESS_INSET = LIVE_PHOTO_RING_STROKE_WIDTH / 2;
 const SHUTTER_CORE_SIZE = 58;
 
 function clamp(value: number, minValue: number, maxValue: number) {
@@ -49,6 +47,7 @@ interface UseCaptureCardCameraControllerOptions {
   colors: Pick<ThemeColors, 'primary' | 'border'>;
   t: TFunction;
   cardSize: number;
+  livePhotoRingStrokeWidth: number;
   onToggleFacing: () => void;
   onTakePicture: () => void;
   onShutterPressOut: () => void;
@@ -71,6 +70,7 @@ export function useCaptureCardCameraController({
   colors,
   t,
   cardSize,
+  livePhotoRingStrokeWidth,
   onToggleFacing,
   onTakePicture,
   onShutterPressOut,
@@ -107,25 +107,42 @@ export function useCaptureCardCameraController({
   const canShowLiveCameraPreview = shouldRenderCameraPreview && isCameraPreviewActive;
   const previousCanShowLiveCameraPreviewRef = useRef(canShowLiveCameraPreview);
   const livePhotoProgressPath = useMemo(() => {
+    const livePhotoCardProgressInset = livePhotoRingStrokeWidth / 2;
     const path = Skia.Path.Make();
-    const left = LIVE_PHOTO_CARD_PROGRESS_INSET;
-    const top = LIVE_PHOTO_CARD_PROGRESS_INSET;
-    const right = cardSize - LIVE_PHOTO_CARD_PROGRESS_INSET;
-    const bottom = cardSize - LIVE_PHOTO_CARD_PROGRESS_INSET;
-    const radius = Math.max(Layout.cardRadius - LIVE_PHOTO_CARD_PROGRESS_INSET, 0);
+    const left = livePhotoCardProgressInset;
+    const top = livePhotoCardProgressInset;
+    const right = cardSize - livePhotoCardProgressInset;
+    const bottom = cardSize - livePhotoCardProgressInset;
+    const radius = Math.max(Layout.cardRadius - livePhotoCardProgressInset, 0);
 
     path.moveTo(right - radius, top);
-    path.quadTo(right, top, right, top + radius);
+    if (typeof path.rArcTo === 'function') {
+      path.rArcTo(radius, radius, 0, true, false, radius, radius);
+    } else {
+      path.quadTo(right, top, right, top + radius);
+    }
     path.lineTo(right, bottom - radius);
-    path.quadTo(right, bottom, right - radius, bottom);
+    if (typeof path.rArcTo === 'function') {
+      path.rArcTo(radius, radius, 0, true, false, -radius, radius);
+    } else {
+      path.quadTo(right, bottom, right - radius, bottom);
+    }
     path.lineTo(left + radius, bottom);
-    path.quadTo(left, bottom, left, bottom - radius);
+    if (typeof path.rArcTo === 'function') {
+      path.rArcTo(radius, radius, 0, true, false, -radius, -radius);
+    } else {
+      path.quadTo(left, bottom, left, bottom - radius);
+    }
     path.lineTo(left, top + radius);
-    path.quadTo(left, top, left + radius, top);
+    if (typeof path.rArcTo === 'function') {
+      path.rArcTo(radius, radius, 0, true, false, radius, -radius);
+    } else {
+      path.quadTo(left, top, left + radius, top);
+    }
     path.lineTo(right - radius, top);
 
     return path;
-  }, [cardSize]);
+  }, [cardSize, livePhotoRingStrokeWidth]);
 
   const clearCameraZoomBadgeTimeout = useCallback(() => {
     if (cameraZoomBadgeTimeoutRef.current) {
@@ -186,10 +203,10 @@ export function useCaptureCardCameraController({
       setCameraUnavailable(true);
       setCameraIssueDetail(
         detail?.trim() ||
-          t(
-            'capture.cameraUnavailableTimeoutHint',
-            'The camera preview took too long to start. Try again to restart the camera session.'
-          )
+        t(
+          'capture.cameraUnavailableTimeoutHint',
+          'The camera preview took too long to start. Try again to restart the camera session.'
+        )
       );
       setIsCameraReady(false);
       cameraTransitionMaskOpacity.value = withTiming(0, { duration: 0 });
