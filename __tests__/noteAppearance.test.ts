@@ -24,6 +24,10 @@ describe('noteAppearance', () => {
     );
   });
 
+  it('uses the configured marigold default gradient when no note color is selected', () => {
+    expect(getCaptureNoteGradient({ text: 'Just a quiet note' })).toEqual(['#F6D365', '#FDA085']);
+  });
+
   it('matches the capture gradient to the saved note gradient when a note color is selected', () => {
     expect(getCaptureNoteGradient({ noteColor: 'sunset-coral' })).toEqual(
       getTextNoteCardGradient({ text: 'Cafe note', noteId: '1', noteColor: 'sunset-coral' })

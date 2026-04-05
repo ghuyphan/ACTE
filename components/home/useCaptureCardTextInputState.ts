@@ -69,7 +69,7 @@ export function useCaptureCardTextInputState({
   const pendingBlurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recentAutoEmojiTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recentAutoEmojiTokenRef = useRef(0);
-  const isTextEntryFocused = captureMode === 'text' && (isNoteInputFocused || isRestaurantInputFocused);
+  const isTextEntryFocused = isNoteInputFocused || isRestaurantInputFocused;
   const activeTextPlaceholder =
     placeholderVariants[textPlaceholderIndex % placeholderVariants.length] ?? placeholderVariants[0] ?? '';
   const clearRecentAutoEmoji = useCallback(() => {
@@ -138,7 +138,7 @@ export function useCaptureCardTextInputState({
 
   useEffect(() => {
     const keyboardDidHideSubscription = Keyboard.addListener('keyboardDidHide', () => {
-      if (captureMode !== 'text' || focusedInputRef.current == null) {
+      if (focusedInputRef.current == null) {
         return;
       }
 
@@ -149,7 +149,7 @@ export function useCaptureCardTextInputState({
     return () => {
       keyboardDidHideSubscription.remove();
     };
-  }, [blurCaptureInputs, captureMode, endTextEntrySession]);
+  }, [blurCaptureInputs, endTextEntrySession]);
 
   useEffect(
     () => () => {

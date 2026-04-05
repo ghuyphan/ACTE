@@ -11,7 +11,12 @@ import {
   mapMotionEasing,
   mapMotionPressTiming,
 } from './mapMotion';
-import { getOverlayBorderColor, mapOverlayTokens } from './overlayTokens';
+import {
+  getOverlayBorderColor,
+  getOverlayFallbackColor,
+  getOverlayMutedFillColor,
+  mapOverlayTokens,
+} from './overlayTokens';
 
 type OverlayState = 'no-filter-results' | 'no-notes' | 'no-area-results';
 type MapStatusCardVariant = 'card' | 'pill';
@@ -48,7 +53,7 @@ export default function MapStatusCard({
   const isFiltered = overlayState === 'no-filter-results';
   const isIOS = Platform.OS === 'ios';
   const shouldUseGlass = isIOS;
-  const fallbackFill = isDark ? 'rgba(26,26,32,0.95)' : 'rgba(248,247,243,0.88)';
+  const fallbackFill = getOverlayFallbackColor(isDark);
   const statusGlassScrimColor = isDark ? 'rgba(12,12,18,0.10)' : 'rgba(255,255,255,0.04)';
   const iconColor = isIOS ? secondaryTextColor : primaryColor;
   const isPill = variant === 'pill';
@@ -108,9 +113,9 @@ export default function MapStatusCard({
               styles.pill,
               isIOS ? styles.pillIOS : styles.pillAndroid,
               {
-                opacity: pressed ? 0.96 : 1,
+                opacity: pressed ? 0.74 : 1,
                 borderColor: isIOS ? getOverlayBorderColor(isDark) : 'transparent',
-                backgroundColor: shouldUseGlass ? 'transparent' : fallbackFill,
+                backgroundColor: shouldUseGlass ? 'transparent' : getOverlayMutedFillColor(isDark),
               },
             ]}
             onPress={onAction}
@@ -121,8 +126,8 @@ export default function MapStatusCard({
               handlePressState(false);
             }}
             >
-              {shouldUseGlass ? (
-                <GlassView
+            {shouldUseGlass ? (
+              <GlassView
                 pointerEvents="none"
                 style={StyleSheet.absoluteFill}
                 glassEffectStyle="regular"
@@ -135,11 +140,13 @@ export default function MapStatusCard({
                 StyleSheet.absoluteFill,
                 styles.pillScrim,
                 {
-                  backgroundColor: shouldUseGlass ? statusGlassScrimColor : fallbackFill,
+                  backgroundColor: shouldUseGlass ? statusGlassScrimColor : getOverlayMutedFillColor(isDark),
                 },
               ]}
             />
-            <Ionicons name="albums-outline" size={15} color={primaryColor} />
+            <View style={[styles.pillIconWrap, { backgroundColor: `${primaryColor}16` }]}>
+              <Ionicons name="add-circle-outline" size={16} color={primaryColor} />
+            </View>
             <Text
               style={[
                 styles.pillLabel,
@@ -194,12 +201,13 @@ export default function MapStatusCard({
           ]}
         />
         <View style={[styles.content, isIOS ? styles.contentIOS : styles.contentAndroid]}>
-          <Ionicons
-            name={isFiltered ? 'filter-outline' : 'map-outline'}
-            size={isIOS ? (isFiltered ? 26 : 28) : isFiltered ? 32 : 34}
-            color={iconColor}
-            style={styles.icon}
-          />
+          <View style={[styles.iconWrap, { backgroundColor: `${primaryColor}14` }]}>
+            <Ionicons
+              name={isFiltered ? 'filter-outline' : 'map-outline'}
+              size={isIOS ? (isFiltered ? 22 : 24) : isFiltered ? 26 : 28}
+              color={iconColor}
+            />
+          </View>
           <View style={styles.copyBlock}>
             <Text style={[styles.title, isIOS ? styles.titleIOS : styles.titleAndroid, { color: textColor }]}>
               {title}
@@ -249,35 +257,42 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     overflow: 'hidden',
   },
   pillIOS: {
-    minHeight: 38,
-    borderRadius: 19,
+    minHeight: 42,
+    borderRadius: 21,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
   },
   pillAndroid: {
-    minHeight: 40,
-    borderRadius: 20,
+    minHeight: 42,
+    borderRadius: 21,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
     ...mapOverlayTokens.overlayShadow,
   },
   pillScrim: {
-    borderRadius: 20,
+    borderRadius: 21,
+  },
+  pillIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pillLabel: {
     fontFamily: 'Noto Sans',
   },
   pillLabelIOS: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
   },
   pillLabelAndroid: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
   card: {
@@ -286,7 +301,7 @@ const styles = StyleSheet.create({
   },
   cardIOS: {
     maxWidth: 360,
-    borderRadius: 20,
+    borderRadius: mapOverlayTokens.overlayRadius,
     borderWidth: StyleSheet.hairlineWidth,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
@@ -296,13 +311,13 @@ const styles = StyleSheet.create({
   },
   cardAndroid: {
     maxWidth: 368,
-    borderRadius: 22,
+    borderRadius: mapOverlayTokens.overlayRadius,
     borderWidth: 0,
     ...mapOverlayTokens.overlayShadow,
   },
   content: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 12,
   },
   contentIOS: {
@@ -317,16 +332,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrim: {
-    borderRadius: 24,
+    borderRadius: mapOverlayTokens.overlayRadius,
   },
   scrimIOS: {
-    borderRadius: 20,
+    borderRadius: mapOverlayTokens.overlayRadius,
   },
   scrimAndroid: {
-    borderRadius: 22,
+    borderRadius: mapOverlayTokens.overlayRadius,
   },
-  icon: {
-    marginTop: 2,
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   title: {
     fontFamily: 'Noto Sans',

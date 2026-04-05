@@ -230,6 +230,7 @@ jest.mock('../components/notes/NoteStickerCanvas', () => {
   return {
     __esModule: true,
     default: function MockNoteStickerCanvas(props: any) {
+      const selectedPlacement = props.placements?.find((placement: any) => placement.id === props.selectedPlacementId);
       return (
         <View testID="mock-sticker-canvas">
           <Text testID="mock-sticker-editable">{String(props.editable)}</Text>
@@ -238,6 +239,20 @@ jest.mock('../components/notes/NoteStickerCanvas', () => {
             testID="mock-sticker-select-first"
             onPress={() => props.onChangeSelectedPlacementId?.(props.placements?.[0]?.id ?? null)}
           />
+          {selectedPlacement ? (
+            <>
+              <Pressable
+                testID={`note-sticker-lock-toggle-${selectedPlacement.id}`}
+                onPress={() => props.onToggleSelectedPlacementMotionLock?.(selectedPlacement.id)}
+              />
+              {selectedPlacement.renderMode !== 'stamp' ? (
+                <Pressable
+                  testID={`note-sticker-outline-toggle-${selectedPlacement.id}`}
+                  onPress={() => props.onToggleSelectedPlacementOutline?.(selectedPlacement.id)}
+                />
+              ) : null}
+            </>
+          ) : null}
           <Pressable testID="mock-sticker-canvas-empty" onPress={() => props.onPressCanvas?.()} />
         </View>
       );
@@ -425,13 +440,25 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
-  it('shows the restaurant field by default in text mode', () => {
+  it('removes the restaurant field in text mode and keeps the action row', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const { getByTestId } = renderCaptureCard(ref, {
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
       restaurantName: '',
     });
 
-    expect(getByTestId('capture-restaurant-input')).toBeTruthy();
+    expect(queryByTestId('capture-restaurant-input')).toBeNull();
+    expect(getByTestId('capture-doodle-toggle')).toBeTruthy();
+  });
+
+  it('uses the simplified camera action row instead of the restaurant field', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      restaurantName: '',
+    });
+
+    expect(queryByTestId('capture-restaurant-input')).toBeNull();
+    expect(getByTestId('capture-library-button')).toBeTruthy();
   });
 
   it('tracks local doodle state through the imperative handle', () => {
@@ -527,7 +554,6 @@ describe('CaptureCard doodle handle', () => {
     const { getByTestId } = renderCaptureCard(ref);
 
     expect(getByTestId('capture-note-input').props.selectionColor).toBe('#FFC107');
-    expect(getByTestId('capture-restaurant-input').props.selectionColor).toBe('#FFC107');
   });
 
   it('keeps doodle editing available on captured photos', () => {
@@ -716,15 +742,18 @@ describe('CaptureCard doodle handle', () => {
     expect(queryByTestId('capture-card-paste-surface')).toBeNull();
   });
 
-  it('shows the first-time live photo hint without removing the footer controls', () => {
+  it('keeps the simplified camera action row without removing the footer controls', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const { UNSAFE_getByProps, getByLabelText } = renderCaptureCard(ref, {
+    const { getByTestId, queryByLabelText, queryByTestId } = renderCaptureCard(ref, {
       captureMode: 'camera',
       cameraInstructionText: 'Tap for a photo. Hold for a live photo.',
     });
 
-    expect(getByLabelText('Tap for a photo. Hold for a live photo.')).toBeTruthy();
-    expect(UNSAFE_getByProps({ testID: 'capture-radius-toggle' })).toBeTruthy();
+    expect(queryByLabelText('Tap for a photo. Hold for a live photo.')).toBeNull();
+    expect(getByTestId('capture-library-button')).toBeTruthy();
+    expect(getByTestId('capture-shutter-button')).toBeTruthy();
+    expect(getByTestId('capture-share-target-toggle')).toBeTruthy();
+    expect(queryByTestId('capture-radius-toggle')).toBeNull();
   });
 
   it('lets you change the text-card doodle color', () => {
@@ -904,12 +933,8 @@ describe('CaptureCard doodle handle', () => {
     );
 
     expect(view.getByTestId('capture-note-input').props.editable).toBe(true);
-
-    act(() => {
-      fireEvent.press(view.getByTestId('capture-radius-toggle'));
-    });
-
-    expect(view.getByTestId('capture-radius-150')).toBeTruthy();
+    expect(view.queryByTestId('capture-radius-toggle')).toBeNull();
+    expect(view.queryByTestId('capture-note-color-toggle')).toBeNull();
   });
 
   it('fully closes doodle mode when you tap the doodle toggle again', () => {
@@ -965,12 +990,8 @@ describe('CaptureCard doodle handle', () => {
     );
 
     expect(view.getByTestId('capture-note-input').props.editable).toBe(true);
-
-    act(() => {
-      fireEvent.press(view.getByTestId('capture-radius-toggle'));
-    });
-
-    expect(view.getByTestId('capture-radius-150')).toBeTruthy();
+    expect(view.queryByTestId('capture-radius-toggle')).toBeNull();
+    expect(view.queryByTestId('capture-note-color-toggle')).toBeNull();
   });
 
   it('fully closes sticker mode when you tap the sticker toggle again', () => {
@@ -1078,52 +1099,28 @@ describe('CaptureCard doodle handle', () => {
     expect(handleChangeShareTarget).toHaveBeenCalledWith('shared');
   });
 
-  it('opens a note color sheet and applies the selected swatch', () => {
+  it('hides the note color control in text mode and keeps the default note color', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const handleChangeNoteColor = jest.fn();
-    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
-      noteColor: 'marigold-glow',
+    const { queryByTestId } = renderCaptureCard(ref, {
+      noteColor: 'sunset-coral',
       onChangeNoteColor: handleChangeNoteColor,
     });
 
-    expect(queryByTestId('capture-note-color-sunset-coral')).toBeNull();
-
-    act(() => {
-      fireEvent.press(getByTestId('capture-note-color-toggle'));
-    });
-
-    expect(getByTestId('capture-note-color-sunset-coral')).toBeTruthy();
-
-    act(() => {
-      fireEvent.press(getByTestId('capture-note-color-sunset-coral'));
-    });
-
-    expect(handleChangeNoteColor).toHaveBeenCalledWith('sunset-coral');
-    expect(queryByTestId('capture-note-color-sunset-coral')).toBeNull();
+    expect(queryByTestId('capture-note-color-toggle')).toBeNull();
+    expect(handleChangeNoteColor).toHaveBeenCalledWith('marigold-glow');
   });
 
-  it('opens the compact radius picker and applies the selection', () => {
+  it('hides the compact radius picker in text mode', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const handleChangeRadius = jest.fn();
-    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
+    const { queryByTestId } = renderCaptureCard(ref, {
       onChangeRadius: handleChangeRadius,
     });
 
-    expect(getByTestId('capture-radius-toggle')).toBeTruthy();
+    expect(queryByTestId('capture-radius-toggle')).toBeNull();
     expect(queryByTestId('capture-radius-150')).toBeNull();
-
-    act(() => {
-      fireEvent.press(getByTestId('capture-radius-toggle'));
-    });
-
-    expect(getByTestId('capture-radius-250')).toBeTruthy();
-
-    act(() => {
-      fireEvent.press(getByTestId('capture-radius-250'));
-    });
-
-    expect(handleChangeRadius).toHaveBeenCalledWith(250);
-    expect(queryByTestId('capture-radius-250')).toBeNull();
+    expect(handleChangeRadius).not.toHaveBeenCalled();
   });
 
   it('drops the animated card transform while the android note input is focused', async () => {
@@ -1283,7 +1280,7 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
-  it('locks sticker motion from the sticker more sheet in the capture editor', async () => {
+  it('locks sticker motion from the selected sticker controls in the capture editor', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockClipboardHasImageAsync.mockResolvedValue(true);
     mockClipboardGetImageAsync.mockResolvedValue({
@@ -1291,7 +1288,7 @@ describe('CaptureCard doodle handle', () => {
       size: { width: 140, height: 140 },
     });
 
-    const { getByTestId, queryByTestId, getByText } = renderCaptureCard(ref, {
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
       captureMode: 'camera',
       capturedPhoto: 'file:///photo.jpg',
     });
@@ -1311,16 +1308,12 @@ describe('CaptureCard doodle handle', () => {
     });
 
     fireEvent.press(getByTestId('mock-sticker-select-first'));
-    fireEvent.press(getByTestId('capture-sticker-more'));
+    expect(getByTestId('note-sticker-lock-toggle-placement-1')).toBeTruthy();
+    expect(getByTestId('note-sticker-outline-toggle-placement-1')).toBeTruthy();
 
-    expect(getByText('Sticker options')).toBeTruthy();
-    expect(getByTestId('capture-sticker-sheet-motion-lock')).toBeTruthy();
-    expect(getByTestId('capture-sticker-sheet-outline-toggle')).toBeTruthy();
+    fireEvent.press(getByTestId('note-sticker-lock-toggle-placement-1'));
 
-    fireEvent.press(getByTestId('capture-sticker-sheet-motion-lock'));
-
-    expect(queryByTestId('capture-sticker-sheet-motion-lock')).toBeNull();
-    expect(queryByTestId('capture-sticker-sheet-outline-toggle')).toBeNull();
+    expect(queryByTestId('capture-sticker-more')).toBeNull();
     expect(ref.current?.getStickerSnapshot().placements[0]?.motionLocked).toBe(true);
   });
 
@@ -1367,7 +1360,7 @@ describe('CaptureCard doodle handle', () => {
     );
   });
 
-  it('shows stamp-specific options and hides outline controls for stamps', async () => {
+  it('hides the outline toggle on selected stamp stickers', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
       canceled: false,
@@ -1380,7 +1373,7 @@ describe('CaptureCard doodle handle', () => {
       ],
     });
 
-    const { getByTestId, getByText, queryByTestId } = renderCaptureCard(ref, {
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
       captureMode: 'camera',
       capturedPhoto: 'file:///photo.jpg',
     });
@@ -1400,11 +1393,9 @@ describe('CaptureCard doodle handle', () => {
     });
 
     fireEvent.press(getByTestId('mock-sticker-select-first'));
-    fireEvent.press(getByTestId('capture-sticker-more'));
 
-    expect(getByText('Stamp options')).toBeTruthy();
-    expect(getByTestId('capture-sticker-sheet-motion-lock')).toBeTruthy();
-    expect(queryByTestId('capture-sticker-sheet-outline-toggle')).toBeNull();
+    expect(getByTestId('note-sticker-lock-toggle-placement-1')).toBeTruthy();
+    expect(queryByTestId('note-sticker-outline-toggle-placement-1')).toBeNull();
   });
 
   it('opens the sticker source sheet from a tap on the add button', async () => {

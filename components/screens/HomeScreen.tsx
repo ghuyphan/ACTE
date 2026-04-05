@@ -63,6 +63,8 @@ import {
 import { generateNoteId } from '../../services/database';
 import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
 import { isIOS26OrNewer } from '../../utils/platform';
+import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
+import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 import { getPersistentItem, setPersistentItem } from '../../utils/appStorage';
 import { setAndroidSoftInputMode } from '../../utils/androidSoftInputMode';
@@ -1614,9 +1616,12 @@ export default function HomeScreen() {
     toggleCaptureMode();
   }, [toggleCaptureMode]);
 
-  const handleOpenNotes = useCallback(() => {
+  const handleOpenNotes = useCallback((origin?: NotesRouteTransitionRect) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Keyboard.dismiss();
+    if (origin) {
+      setPendingNotesRouteTransition(origin);
+    }
     router.push('/notes');
   }, [router]);
 

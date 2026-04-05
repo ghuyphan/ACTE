@@ -17,9 +17,16 @@ import { useTheme } from '../../hooks/useTheme';
 import { SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
 import MapPreviewSheet from './MapPreviewSheet';
-import { getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
+import {
+  getOverlayBorderColor,
+  getOverlayFallbackColor,
+  mapOverlayTokens,
+} from './overlayTokens';
 
 const PREVIEW_HORIZONTAL_INSET = 14;
+const PREVIEW_MEDIA_SIZE = 56;
+const PREVIEW_ROW_GAP = 12;
+const PREVIEW_FOOTER_OFFSET = PREVIEW_MEDIA_SIZE + PREVIEW_ROW_GAP;
 
 function getPreviewText(post: SharedPost, photoLabel: string, noContentLabel: string) {
   if (post.type === 'photo') {
@@ -168,7 +175,13 @@ export default function MapFriendsPreviewCard({
       reduceMotionEnabled={reduceMotionEnabled}
     >
       <View
-        style={[styles.inner]}
+        style={[
+          styles.inner,
+          {
+            borderColor: getOverlayBorderColor(isDark),
+            backgroundColor: getOverlayFallbackColor(isDark),
+          },
+        ]}
       >
         <GlassView
           pointerEvents="none"
@@ -235,10 +248,13 @@ export default function MapFriendsPreviewCard({
                     )}
 
                     <View style={styles.copyWrap}>
-                      <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+                      <Text
+                        style={[styles.title, { color: item.id === renderPost.id ? colors.primary : colors.text }]}
+                        numberOfLines={1}
+                      >
                         {item.placeName || t('shared.sharedNow', 'Shared now')}
                       </Text>
-                      <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={1}>
+                      <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={2}>
                         {previewText}
                       </Text>
                       <View style={styles.metaRow}>
@@ -276,15 +292,13 @@ export default function MapFriendsPreviewCard({
 
             <Pressable
               testID="map-friends-preview-open"
-              style={[
-                styles.actionButton,
-                { backgroundColor: `${colors.primary}1F`, borderColor: `${colors.primary}36` },
-              ]}
+              style={({ pressed }) => [styles.actionButton, { opacity: pressed ? 0.72 : 1 }]}
               onPress={() => {
                 onInteraction?.();
                 onOpen();
               }}
             >
+              <Ionicons name="arrow-forward-circle" size={14} color={colors.primary} />
               <Text style={[styles.actionText, { color: colors.primary }]}>
                 {t('map.openShared', 'Open shared')}
               </Text>
@@ -298,34 +312,35 @@ export default function MapFriendsPreviewCard({
 
 const styles = StyleSheet.create({
   inner: {
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: mapOverlayTokens.overlayRadius,
     overflow: 'hidden',
     ...mapOverlayTokens.overlayShadow,
   },
   cardContent: {
     paddingHorizontal: mapOverlayTokens.overlayPadding,
-    paddingTop: mapOverlayTokens.overlayPadding + 14,
-    paddingBottom: mapOverlayTokens.overlayPadding,
+    paddingTop: 20,
+    paddingBottom: 12,
   },
   previewList: {
-    marginBottom: 6,
+    marginBottom: 8,
   },
   previewListContent: {
     gap: 0,
   },
   previewPage: {
-    minHeight: 64,
+    minHeight: 76,
   },
   previewPageInner: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: mapOverlayTokens.overlayGap,
-    minHeight: 64,
+    alignItems: 'flex-start',
+    gap: PREVIEW_ROW_GAP,
+    minHeight: 76,
   },
   avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
+    width: PREVIEW_MEDIA_SIZE,
+    height: PREVIEW_MEDIA_SIZE,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -336,9 +351,10 @@ const styles = StyleSheet.create({
   copyWrap: {
     flex: 1,
     minWidth: 0,
+    paddingTop: 2,
   },
   metaRow: {
-    marginTop: 5,
+    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
@@ -349,35 +365,40 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   title: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-    marginBottom: 3,
+    lineHeight: 20,
+    marginBottom: 6,
     fontFamily: 'Noto Sans',
   },
   content: {
     fontSize: 13,
-    lineHeight: 17,
+    lineHeight: 18,
     fontFamily: 'Noto Sans',
   },
   footer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     gap: 10,
+    justifyContent: 'space-between',
+    marginTop: 4,
+    paddingLeft: PREVIEW_FOOTER_OFFSET,
   },
   indexWrap: {
-    minWidth: 34,
+    minWidth: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   indexText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
     fontFamily: 'Noto Sans',
   },
   actionButton: {
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   actionText: {
     fontSize: 13,

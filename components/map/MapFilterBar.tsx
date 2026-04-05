@@ -15,7 +15,12 @@ import {
   mapMotionDurations,
   mapMotionPressTiming,
 } from './mapMotion';
-import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
+import {
+  getOverlayBorderColor,
+  getOverlayFallbackColor,
+  getOverlayMutedFillColor,
+  mapOverlayTokens,
+} from './overlayTokens';
 import type { MapFilterState, MapFilterType } from '../../hooks/map/mapDomain';
 
 interface MapFilterBarProps {
@@ -44,7 +49,7 @@ function FilterChip({ label, active, onPress, icon, testID, reduceMotionEnabled 
   const { colors, isDark } = useTheme();
   const activeProgress = useSharedValue(active ? 1 : 0);
   const pressScale = useSharedValue(1);
-  const inactiveChipBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.62)';
+  const inactiveChipBackground = getOverlayMutedFillColor(isDark);
   const inactiveChipBorderColor = getOverlayBorderColor(isDark);
 
   useEffect(() => {
@@ -94,6 +99,7 @@ function FilterChip({ label, active, onPress, icon, testID, reduceMotionEnabled 
         onPressOut={() => {
           pressScale.value = withTiming(1, mapMotionPressTiming);
         }}
+        hitSlop={4}
       >
         <Reanimated.View style={[styles.chipOuter, animatedChipStyle]}>
           {icon ? (
@@ -272,7 +278,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: mapOverlayTokens.overlayPadding,
-    gap: mapOverlayTokens.overlayGap,
+    gap: mapOverlayTokens.overlayCardGap,
   },
   headerRow: {
     flexDirection: 'row',
@@ -283,7 +289,7 @@ const styles = StyleSheet.create({
   countRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     flex: 1,
     minWidth: 0,
   },
@@ -291,35 +297,35 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   countDot: {
-    width: 7,
-    height: 7,
+    width: 8,
+    height: 8,
     borderRadius: 999,
   },
   countLabelWrap: {
-    minHeight: 18,
+    minHeight: 20,
     justifyContent: 'center',
   },
   countText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     fontFamily: 'Noto Sans',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     paddingRight: 2,
   },
   chipOuter: {
-    minHeight: 32,
+    minHeight: mapOverlayTokens.controlHeight,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 999,
-    paddingHorizontal: 12,
+    borderRadius: mapOverlayTokens.overlayCompactRadius,
+    paddingHorizontal: 13,
     borderWidth: 1,
   },
   chipIcon: {
-    marginRight: 5,
+    marginRight: 6,
   },
   chipText: {
     fontSize: 12,

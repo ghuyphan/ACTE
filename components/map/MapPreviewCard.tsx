@@ -17,29 +17,31 @@ import Animated, {
   interpolate,
   useAnimatedStyle,
   useSharedValue,
-  withTiming,
+  withSpring,
 } from 'react-native-reanimated';
 import { GlassView } from '../ui/GlassView';
 import type { MapPointGroup, NearbyNoteItem } from '../../hooks/map/mapDomain';
 import { useTheme } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
+import { getDistanceMeters } from '../../hooks/map/mapDomain';
 import { getTextNoteCardGradient } from '../../services/noteAppearance';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
 import { isOlderIOS } from '../../utils/platform';
-import {
-  getMapLayoutTransition,
-  mapMotionDurations,
-  mapMotionEasing,
-} from './mapMotion';
 import MapPreviewSheet from './MapPreviewSheet';
-import {
-  getOverlayBorderColor,
-  getOverlayFallbackColor,
-  mapOverlayTokens,
-} from './overlayTokens';
+import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
 
 const PREVIEW_HORIZONTAL_INSET = 14;
+const STATUS_HEIGHT = 76;
+const PREVIEW_HEIGHT = 168;
+const PREVIEW_MEDIA_SIZE = 56;
+const PREVIEW_ROW_GAP = 12;
+const PREVIEW_FOOTER_OFFSET = PREVIEW_MEDIA_SIZE + PREVIEW_ROW_GAP;
+const PREVIEW_MORPH_SPRING = {
+  damping: 26,
+  stiffness: 240,
+  mass: 0.88,
+} as const;
 
 type PreviewMode = 'group' | 'nearby';
 type BottomOverlayMode = 'preview' | 'status';
@@ -53,7 +55,11 @@ interface MapPreviewCardProps {
   nearbyItems: NearbyNoteItem[];
   activeNearbyNoteId: string | null;
   activeNoteReadyToOpen: boolean;
+  distanceAnchor?: { latitude: number; longitude: number } | null;
   bottomOffset: number;
+  statusTitle?: string;
+  statusSubtitle?: string;
+  statusIcon?: keyof typeof Ionicons.glyphMap;
   statusActionLabel?: string;
   statusActionTestID?: string;
   onStatusAction?: () => void;
@@ -93,22 +99,6 @@ function getPreviewText(note: Note, photoLabel: string, noContentLabel: string) 
   return displayText.substring(0, 120) + (displayText.length > 120 ? '…' : '');
 }
 
-function areGroupsEquivalent(left: MapPointGroup | null, right: MapPointGroup | null) {
-  if (left === right) {
-    return true;
-  }
-
-  if (!left || !right) {
-    return false;
-  }
-
-  if (left.id !== right.id || left.notes.length !== right.notes.length) {
-    return false;
-  }
-
-  return left.notes.every((note, index) => right.notes[index]?.id === note.id);
-}
-
 export default function MapPreviewCard({
   mode,
   previewMode,
@@ -118,7 +108,11 @@ export default function MapPreviewCard({
   nearbyItems,
   activeNearbyNoteId,
   activeNoteReadyToOpen,
+  distanceAnchor = null,
   bottomOffset,
+  statusTitle,
+  statusSubtitle,
+  statusIcon = 'albums-outline',
   statusActionLabel,
   statusActionTestID,
   onStatusAction,
@@ -132,11 +126,9 @@ export default function MapPreviewCard({
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
-  const hasAlignedInitialPreviewRef = useRef(false);
   const previewListRef = useRef<any>(null);
   const previewDraggingRef = useRef(false);
   const lastAlignedIndexRef = useRef<number | null>(null);
-  const prevPreviewModeRef = useRef(previewMode);
   const lastVisiblePreviewStateRef = useRef<{
     previewMode: PreviewMode;
     selectedGroup: MapPointGroup | null;
@@ -147,12 +139,19 @@ export default function MapPreviewCard({
     activeIndex: number;
     activePreviewItem: PreviewRailItem;
   } | null>(null);
+
   const [isMounted, setIsMounted] = useState(visible);
   const [cachedStatusAction, setCachedStatusAction] = useState<{
     label: string;
     testID?: string;
   } | null>(statusActionLabel ? { label: statusActionLabel, testID: statusActionTestID } : null);
-  const modeSettleProgress = useSharedValue(reduceMotionEnabled ? 1 : 0);
+
+  const previewProgress = useSharedValue(mode === 'preview' ? 1 : 0);
+  const fullSurfaceWidth = Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2);
+  const nearbyPageWidth = Math.max(0, fullSurfaceWidth - mapOverlayTokens.overlayPadding * 2);
+  const hasStatusCopy = Boolean(statusTitle || statusSubtitle);
+  const hasStatusSubtitle = Boolean(statusSubtitle);
+  const isPassiveStatusPill = mode === 'status' && Boolean(statusTitle) && !statusSubtitle && !statusActionLabel;
 
   useEffect(() => {
     if (!visible) {
@@ -167,11 +166,15 @@ export default function MapPreviewCard({
       };
     }
 
-    if (statusActionLabel) {
-      setCachedStatusAction({
-        label: statusActionLabel,
-        testID: statusActionTestID,
-      });
+    if (mode === 'status') {
+      if (statusActionLabel) {
+        setCachedStatusAction({
+          label: statusActionLabel,
+          testID: statusActionTestID,
+        });
+      } else {
+        setCachedStatusAction(null);
+      }
     }
   }, [mode, previewMode, selectedGroup, selectedNoteIndex, statusActionLabel, statusActionTestID, visible]);
 
@@ -186,27 +189,18 @@ export default function MapPreviewCard({
       return;
     }
 
+    const nextValue = mode === 'preview' ? 1 : 0;
     if (reduceMotionEnabled) {
-      modeSettleProgress.value = 1;
+      previewProgress.value = nextValue;
       return;
     }
 
-    modeSettleProgress.value = 0;
-    modeSettleProgress.value = withTiming(1, {
-      duration: mapMotionDurations.standard,
-      easing: mapMotionEasing.standard,
-    });
-  }, [mode, modeSettleProgress, reduceMotionEnabled, visible]);
+    previewProgress.value = withSpring(nextValue, PREVIEW_MORPH_SPRING);
+  }, [mode, previewProgress, reduceMotionEnabled, visible]);
 
   const handleFullyClosed = useCallback(() => {
     setIsMounted(false);
   }, []);
-
-  const nearbyPageWidth = useMemo(
-    () =>
-      Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2 - mapOverlayTokens.overlayPadding * 2),
-    [windowWidth]
-  );
 
   const shouldUseCurrentPreviewState = visible && mode === 'preview';
   const renderPreviewMode = shouldUseCurrentPreviewState
@@ -225,7 +219,13 @@ export default function MapPreviewCard({
       isGroupMode && renderSelectedGroup
         ? renderSelectedGroup.notes.map((note) => ({
             note,
-            distanceMeters: null,
+            distanceMeters:
+              distanceAnchor
+                ? getDistanceMeters(distanceAnchor, {
+                    latitude: note.latitude,
+                    longitude: note.longitude,
+                  })
+                : nearbyItems.find((item) => item.note.id === note.id)?.distanceMeters ?? null,
           }))
         : nearbyItems.map((item) => ({
             note: item.note,
@@ -273,40 +273,20 @@ export default function MapPreviewCard({
       : previewDataCacheRef.current;
 
   useEffect(() => {
-    const modeChanged = prevPreviewModeRef.current !== renderPreviewMode;
-    prevPreviewModeRef.current = renderPreviewMode;
-
     if (mode !== 'preview' || !previewListRef.current || activeIndex < 0) {
       return;
     }
 
-    if (
-      !modeChanged &&
-      hasAlignedInitialPreviewRef.current &&
-      lastAlignedIndexRef.current === activeIndex &&
-      areGroupsEquivalent(renderSelectedGroup, lastVisiblePreviewStateRef.current?.selectedGroup ?? null)
-    ) {
+    if (lastAlignedIndexRef.current === activeIndex) {
       return;
     }
 
     previewListRef.current.scrollToOffset({
       offset: activeIndex * nearbyPageWidth,
-      animated: hasAlignedInitialPreviewRef.current && !reduceMotionEnabled,
+      animated: lastAlignedIndexRef.current !== null && !reduceMotionEnabled,
     });
-    hasAlignedInitialPreviewRef.current = true;
     lastAlignedIndexRef.current = activeIndex;
-
-    if (modeChanged) {
-      previewDraggingRef.current = false;
-    }
-  }, [
-    activeIndex,
-    mode,
-    nearbyPageWidth,
-    renderPreviewMode,
-    renderSelectedGroup,
-    reduceMotionEnabled,
-  ]);
+  }, [activeIndex, mode, nearbyPageWidth, reduceMotionEnabled]);
 
   const commitNearbyFocus = useCallback(
     (nextIndex: number) => {
@@ -344,30 +324,51 @@ export default function MapPreviewCard({
     [onActivatePreviewNote, onInteraction]
   );
 
-  const animatedSurfaceStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(modeSettleProgress.value, [0, 1], [10, 0]) },
-      { scale: interpolate(modeSettleProgress.value, [0, 1], [0.985, 1]) },
-    ],
-  }));
-
-  if (!isMounted && !visible) {
-    return null;
-  }
-
   const previewActionLabel = activeNoteReadyToOpen
     ? t('map.openNoteAction', 'Open note')
     : t('map.centerOnMapAction', 'Center on map');
   const previewActionIcon = activeNoteReadyToOpen ? 'arrow-forward-circle' : 'locate';
   const showPreviewMode = mode === 'preview' && renderData;
   const showPreviewCount = showPreviewMode ? renderData.previewItems.length > 1 : false;
-  const showActionLabel = showPreviewMode ? isGroupMode : false;
   const previewCountLabel = showPreviewMode
     ? `${Math.max(renderData.activeIndex, 0) + 1}/${renderData.previewItems.length}`
     : '';
   const statusAction = cachedStatusAction;
+  const shouldShowStatusLayer = mode === 'status' && (hasStatusCopy || Boolean(statusAction));
+  const statusHeight = isPassiveStatusPill ? 48 : statusAction ? (hasStatusSubtitle ? 116 : 94) : hasStatusSubtitle ? 88 : STATUS_HEIGHT;
+  const compactWidth = isPassiveStatusPill ? Math.min(fullSurfaceWidth, 168) : fullSurfaceWidth;
 
-  if (mode === 'status' && !statusAction) {
+  const animatedShellStyle = useAnimatedStyle(() => ({
+    width: interpolate(previewProgress.value, [0, 1], [compactWidth, fullSurfaceWidth]),
+    height: interpolate(
+      previewProgress.value,
+      [0, 1],
+      [statusHeight, PREVIEW_HEIGHT]
+    ),
+    borderRadius: interpolate(
+      previewProgress.value,
+      [0, 1],
+      [mapOverlayTokens.overlayCompactRadius + 2, mapOverlayTokens.overlayRadius]
+    ),
+  }), [compactWidth, fullSurfaceWidth, statusHeight]);
+
+  const animatedCompactContentStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(previewProgress.value, [0, 0.24, 0.42], [1, 0.96, 0]),
+    transform: [{ translateY: interpolate(previewProgress.value, [0, 1], [0, 6]) }],
+  }));
+
+  const animatedPreviewContentStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(previewProgress.value, [0, 0.2, 0.44, 1], [0, 0, 0.86, 1]),
+    transform: [{ translateY: interpolate(previewProgress.value, [0, 1], [10, 0]) }],
+  }));
+
+  const showPlaceMeta = isGroupMode && renderData ? renderData.previewItems.length > 1 : false;
+
+  if (!isMounted && !visible) {
+    return null;
+  }
+
+  if (mode === 'status' && !shouldShowStatusLayer) {
     return null;
   }
 
@@ -382,19 +383,17 @@ export default function MapPreviewCard({
       onDismiss={onDismiss}
       reduceMotionEnabled={reduceMotionEnabled}
       allowDragDismiss={mode === 'preview'}
-      showHandle={mode === 'preview'}
+      handleVisible={mode === 'preview'}
     >
-      <Animated.View
-        layout={getMapLayoutTransition(reduceMotionEnabled)}
-        style={[
-          animatedSurfaceStyle,
-          mode === 'status' ? styles.compactSurface : styles.expandedSurface,
-        ]}
+      <View
+        style={[styles.surfaceHost, { width: fullSurfaceWidth, height: PREVIEW_HEIGHT }]}
+        pointerEvents="box-none"
       >
-        <View
+        <Animated.View
           style={[
-            styles.inner,
-            mode === 'status' ? styles.innerCompact : null,
+            styles.surface,
+            isPassiveStatusPill ? styles.surfacePill : null,
+            animatedShellStyle,
             {
               borderColor: getOverlayBorderColor(isDark),
               backgroundColor: getOverlayFallbackColor(isDark),
@@ -414,191 +413,239 @@ export default function MapPreviewCard({
                 StyleSheet.absoluteFill,
                 {
                   backgroundColor: getOverlayFallbackColor(isDark),
-                  borderRadius: mapOverlayTokens.overlayRadius,
                 },
               ]}
             />
           ) : null}
 
-          {mode === 'status' && statusAction ? (
+          {shouldShowStatusLayer ? (
             <Animated.View
-              layout={getMapLayoutTransition(reduceMotionEnabled)}
-              style={styles.statusContent}
+              style={[
+                styles.compactLayer,
+                isPassiveStatusPill ? styles.compactLayerPill : null,
+                animatedCompactContentStyle,
+              ]}
+              pointerEvents={mode === 'status' && statusAction ? 'auto' : 'none'}
             >
-              <Pressable
-                testID={statusAction.testID}
-                accessibilityRole="button"
-                onPress={() => {
-                  onInteraction?.();
-                  onStatusAction?.();
-                }}
-                style={({ pressed }) => [
-                  styles.statusActionButton,
-                  {
-                    opacity: pressed ? 0.94 : 1,
-                    backgroundColor: `${colors.primary}14`,
-                  },
-                ]}
-              >
-                <Ionicons name="albums-outline" size={15} color={colors.primary} />
-                <Text style={[styles.statusActionText, { color: colors.primary }]}>
-                  {statusAction.label}
-                </Text>
-              </Pressable>
-            </Animated.View>
-          ) : showPreviewMode ? (
-            <Animated.View
-              layout={getMapLayoutTransition(reduceMotionEnabled)}
-              style={styles.cardContent}
-            >
-              <FlashList
-                ref={previewListRef}
-                testID="map-preview-list"
-                horizontal
-                data={renderData.previewItems}
-                keyExtractor={(item) => item.note.id}
-                drawDistance={nearbyPageWidth * 2}
-                renderItem={({ item }) => {
-                  const cardPreview = getPreviewText(
-                    item.note,
-                    t('map.photoNote', 'Photo Note'),
-                    t('map.noContent', 'No note content')
-                  );
-                  const photoUri = item.note.type === 'photo' ? getNotePhotoUri(item.note) : '';
-                  const textTileGradient = getTextNoteCardGradient({
-                    text: item.note.content,
-                    noteId: item.note.id,
-                    emoji: item.note.moodEmoji,
-                    noteColor: item.note.noteColor,
-                  });
-                  const metaLabel = isGroupMode
-                    ? t('map.noteAtPlace', 'Saved here')
-                    : formatDistanceLabel(item.distanceMeters ?? 0);
-
-                  return (
+              {isPassiveStatusPill && statusTitle ? (
+                <View style={styles.statusPillRow}>
+                  <View style={[styles.statusPillDot, { backgroundColor: colors.primary }]} />
+                  <Text style={[styles.statusPillLabel, { color: colors.text }]} numberOfLines={1}>
+                    {statusTitle}
+                  </Text>
+                </View>
+              ) : hasStatusCopy ? (
+                <View style={styles.statusContent}>
+                  <View style={styles.statusHeaderRow}>
+                    <View style={[styles.statusActionIconWrap, { backgroundColor: `${colors.primary}18` }]}>
+                      <Ionicons name={statusIcon} size={15} color={colors.primary} />
+                    </View>
+                    <View style={styles.statusCopyWrap}>
+                      {statusTitle ? (
+                        <Text style={[styles.statusTitle, { color: colors.text }]} numberOfLines={2}>
+                          {statusTitle}
+                        </Text>
+                      ) : null}
+                      {statusSubtitle ? (
+                        <Text
+                          style={[styles.statusSubtitle, { color: colors.secondaryText }]}
+                          numberOfLines={2}
+                        >
+                          {statusSubtitle}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                  {statusAction ? (
                     <Pressable
-                      testID={`map-preview-item-${item.note.id}`}
+                      testID={statusAction.testID}
                       accessibilityRole="button"
-                      accessibilityState={{
-                        selected: item.note.id === renderData.activePreviewItem.note.id,
+                      onPress={() => {
+                        onInteraction?.();
+                        onStatusAction?.();
                       }}
-                      style={[styles.previewPage, { width: nearbyPageWidth }]}
-                      onPress={() => handlePreviewItemPress(item.note.id)}
+                      style={({ pressed }) => [
+                        styles.statusLinkButton,
+                        {
+                          opacity: pressed ? 0.72 : 1,
+                        },
+                      ]}
                     >
-                      <View style={styles.previewPageInner}>
-                        {photoUri ? (
-                          <View>
-                            <Image
-                              testID={`map-preview-image-${item.note.id}`}
-                              source={{ uri: photoUri }}
-                              style={[
-                                styles.photoThumb,
-                                {
-                                  backgroundColor: isDark
-                                    ? 'rgba(255,255,255,0.06)'
-                                    : 'rgba(0,0,0,0.04)',
-                                },
-                              ]}
-                              contentFit="cover"
-                              transition={0}
-                            />
-                          </View>
-                        ) : (
-                          <LinearGradient
-                            colors={textTileGradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.textThumb}
-                          >
-                            <View style={styles.textThumbPaper}>
-                              <View style={[styles.textThumbLine, styles.textThumbLineLong]} />
-                              <View style={[styles.textThumbLine, styles.textThumbLineMedium]} />
-                              <View style={[styles.textThumbLine, styles.textThumbLineShort]} />
-                            </View>
-                          </LinearGradient>
-                        )}
-                        <View style={styles.copyWrap}>
-                          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-                            {item.note.locationName || t('map.unknownLocation', 'Unknown')}
-                          </Text>
-                          <Text
-                            style={[styles.content, { color: colors.secondaryText }]}
-                            numberOfLines={1}
-                          >
-                            {cardPreview}
-                          </Text>
-                          <View style={styles.metaRow}>
-                            <Ionicons
-                              name={isGroupMode ? 'pin' : 'navigate'}
-                              size={12}
-                              color={colors.secondaryText}
-                            />
-                            <Text style={[styles.metaText, { color: colors.secondaryText }]}>
-                              {metaLabel}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
+                      <Text style={[styles.statusActionText, { color: colors.primary }]} numberOfLines={1}>
+                        {statusAction.label}
+                      </Text>
+                      <Ionicons name="arrow-forward" size={13} color={colors.primary} />
                     </Pressable>
-                  );
-                }}
-                style={styles.previewList}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.previewListContent}
-                snapToInterval={nearbyPageWidth > 0 ? nearbyPageWidth : undefined}
-                decelerationRate="fast"
-                snapToAlignment="start"
-                disableIntervalMomentum
-                bounces={false}
-                scrollEnabled={renderData.previewItems.length > 1}
-                onScrollBeginDrag={() => {
-                  previewDraggingRef.current = true;
-                }}
-                onScrollEndDrag={(event) => {
-                  const velocityX = event.nativeEvent.velocity?.x ?? 0;
-                  if (Math.abs(velocityX) > 0.05) {
-                    return;
-                  }
-
-                  handlePreviewMomentumEnd(event);
-                }}
-                onMomentumScrollEnd={handlePreviewMomentumEnd}
-              />
-
-              <View style={styles.footer}>
-                <View
-                  style={[
-                    styles.actionPill,
-                    !showActionLabel ? styles.actionPillIconOnly : null,
+                  ) : null}
+                </View>
+              ) : statusAction ? (
+                <Pressable
+                  testID={statusAction.testID}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    onInteraction?.();
+                    onStatusAction?.();
+                  }}
+                  style={({ pressed }) => [
+                    styles.statusInlineRow,
                     {
-                      backgroundColor: activeNoteReadyToOpen
-                        ? `${colors.primary}18`
-                        : isDark
-                          ? 'rgba(255,255,255,0.08)'
-                          : 'rgba(28,28,30,0.06)',
-                      borderColor: activeNoteReadyToOpen
-                        ? `${colors.primary}40`
-                        : getOverlayBorderColor(isDark),
+                      opacity: pressed ? 0.72 : 1,
                     },
                   ]}
                 >
-                  <Pressable
-                    testID="map-preview-primary-action"
-                    accessibilityRole="button"
-                    accessibilityLabel={previewActionLabel}
-                    onPress={() => {
-                      onInteraction?.();
-                      onPrimaryAction();
+                  <View style={styles.statusActionIconWrap}>
+                    <Ionicons name={statusIcon} size={15} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.statusActionText, { color: colors.primary }]} numberOfLines={1}>
+                    {statusAction.label}
+                  </Text>
+                  <Ionicons name="chevron-up" size={14} color={colors.primary} />
+                </Pressable>
+              ) : null}
+            </Animated.View>
+          ) : null}
+
+          {renderData ? (
+            <Animated.View
+              style={[styles.previewLayer, animatedPreviewContentStyle]}
+              pointerEvents={mode === 'preview' ? 'auto' : 'none'}
+            >
+              <View style={[styles.previewViewport, { width: fullSurfaceWidth }]}>
+                <View style={styles.cardContent}>
+                  <FlashList
+                    ref={previewListRef}
+                    testID="map-preview-list"
+                    horizontal
+                    data={renderData.previewItems}
+                    keyExtractor={(item) => item.note.id}
+                    drawDistance={nearbyPageWidth * 2}
+                    renderItem={({ item }) => {
+                      const cardPreview = getPreviewText(
+                        item.note,
+                        t('map.photoNote', 'Photo Note'),
+                        t('map.noContent', 'No note content')
+                      );
+                      const photoUri = item.note.type === 'photo' ? getNotePhotoUri(item.note) : '';
+                      const textTileGradient = getTextNoteCardGradient({
+                        text: item.note.content,
+                        noteId: item.note.id,
+                        emoji: item.note.moodEmoji,
+                        noteColor: item.note.noteColor,
+                      });
+                      const metaLabel =
+                        showPlaceMeta || item.distanceMeters == null
+                          ? t('map.noteAtPlace', 'Saved here')
+                          : formatDistanceLabel(item.distanceMeters);
+                      const isActive = item.note.id === renderData.activePreviewItem.note.id;
+
+                      return (
+                        <Pressable
+                          testID={`map-preview-item-${item.note.id}`}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: isActive }}
+                          style={[styles.previewPage, { width: nearbyPageWidth }]}
+                          onPress={() => handlePreviewItemPress(item.note.id)}
+                        >
+                          <View style={styles.previewPageInner}>
+                            {photoUri ? (
+                              <View>
+                                <Image
+                                  testID={`map-preview-image-${item.note.id}`}
+                                  source={{ uri: photoUri }}
+                                  style={[
+                                    styles.photoThumb,
+                                    {
+                                      backgroundColor: isDark
+                                        ? 'rgba(255,255,255,0.06)'
+                                        : 'rgba(0,0,0,0.04)',
+                                    },
+                                  ]}
+                                  contentFit="cover"
+                                  transition={0}
+                                />
+                              </View>
+                            ) : (
+                              <LinearGradient
+                                colors={textTileGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={styles.textThumb}
+                              >
+                                <View style={styles.textThumbPaper}>
+                                  <View style={[styles.textThumbLine, styles.textThumbLineLong]} />
+                                  <View style={[styles.textThumbLine, styles.textThumbLineMedium]} />
+                                  <View style={[styles.textThumbLine, styles.textThumbLineShort]} />
+                                </View>
+                              </LinearGradient>
+                            )}
+                            <View style={styles.copyWrap}>
+                              <Text
+                                style={[styles.title, { color: isActive ? colors.primary : colors.text }]}
+                                numberOfLines={1}
+                              >
+                                {item.note.locationName || t('map.unknownLocation', 'Unknown')}
+                              </Text>
+                              <Text
+                                style={[styles.content, { color: colors.secondaryText }]}
+                                numberOfLines={2}
+                              >
+                                {cardPreview}
+                              </Text>
+                              <View style={styles.metaRow}>
+                                <Ionicons
+                                  name={showPlaceMeta || item.distanceMeters == null ? 'pin' : 'navigate'}
+                                  size={12}
+                                  color={colors.secondaryText}
+                                />
+                                <Text style={[styles.metaText, { color: colors.secondaryText }]}>
+                                  {metaLabel}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        </Pressable>
+                      );
                     }}
-                    style={[styles.actionButton, !showActionLabel ? styles.actionButtonIconOnly : null]}
-                    hitSlop={8}
-                  >
-                    <Ionicons
-                      name={previewActionIcon}
-                      size={showActionLabel ? 13 : 16}
-                      color={activeNoteReadyToOpen ? colors.primary : colors.secondaryText}
-                    />
-                    {showActionLabel ? (
+                    style={styles.previewList}
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.previewListContent}
+                    snapToInterval={nearbyPageWidth > 0 ? nearbyPageWidth : undefined}
+                    decelerationRate="fast"
+                    snapToAlignment="start"
+                    disableIntervalMomentum
+                    bounces={false}
+                    scrollEnabled={renderData.previewItems.length > 1}
+                    onScrollBeginDrag={() => {
+                      previewDraggingRef.current = true;
+                    }}
+                    onScrollEndDrag={(event) => {
+                      const velocityX = event.nativeEvent.velocity?.x ?? 0;
+                      if (Math.abs(velocityX) > 0.05) {
+                        return;
+                      }
+
+                      handlePreviewMomentumEnd(event);
+                    }}
+                    onMomentumScrollEnd={handlePreviewMomentumEnd}
+                  />
+
+                  <View style={styles.footer}>
+                    <Pressable
+                      testID="map-preview-primary-action"
+                      accessibilityRole="button"
+                      accessibilityLabel={previewActionLabel}
+                      onPress={() => {
+                        onInteraction?.();
+                        onPrimaryAction();
+                      }}
+                      style={({ pressed }) => [styles.actionButton, { opacity: pressed ? 0.72 : 1 }]}
+                      hitSlop={8}
+                    >
+                      <Ionicons
+                        name={previewActionIcon}
+                        size={14}
+                        color={activeNoteReadyToOpen ? colors.primary : colors.secondaryText}
+                      />
                       <Text
                         testID="map-preview-action"
                         style={[
@@ -609,99 +656,170 @@ export default function MapPreviewCard({
                       >
                         {previewActionLabel}
                       </Text>
+                    </Pressable>
+                    {showPreviewCount ? (
+                      <View style={styles.indexLabelWrap}>
+                        <Text
+                          style={[styles.indexText, { color: colors.secondaryText }]}
+                          testID="map-preview-index"
+                        >
+                          {previewCountLabel}
+                        </Text>
+                      </View>
                     ) : null}
-                  </Pressable>
-                </View>
-                {showPreviewCount ? (
-                  <View style={styles.indexLabelWrap}>
-                    <Text
-                      style={[styles.indexText, { color: colors.secondaryText }]}
-                      testID="map-preview-index"
-                    >
-                      {previewCountLabel}
-                    </Text>
                   </View>
-                ) : null}
+                </View>
               </View>
             </Animated.View>
           ) : null}
-        </View>
-      </Animated.View>
+        </Animated.View>
+      </View>
     </MapPreviewSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  expandedSurface: {
-    width: '100%',
-  },
-  compactSurface: {
+  surfaceHost: {
     alignSelf: 'center',
-    maxWidth: '100%',
   },
-  inner: {
+  surface: {
+    position: 'absolute',
+    bottom: 0,
+    alignSelf: 'center',
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: mapOverlayTokens.overlayRadius,
     overflow: 'hidden',
     ...mapOverlayTokens.overlayShadow,
   },
-  innerCompact: {
-    borderRadius: 22,
+  surfacePill: {
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  compactLayer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    paddingHorizontal: mapOverlayTokens.overlayPadding,
+    paddingTop: 18,
+    paddingBottom: 12,
+  },
+  compactLayerPill: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   statusContent: {
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    gap: 10,
   },
-  statusActionButton: {
-    minHeight: 42,
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  statusHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  statusCopyWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  previewLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  previewViewport: {
+    minHeight: PREVIEW_HEIGHT,
+  },
+  statusActionIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusInlineRow: {
+    minHeight: 34,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
+  statusPillRow: {
+    minHeight: 24,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  statusPillDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+  },
+  statusPillLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: 'Noto Sans',
+  },
+  statusLinkButton: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
   statusActionText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  statusTitle: {
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+    marginBottom: 2,
+  },
+  statusSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
     fontFamily: 'Noto Sans',
   },
   cardContent: {
     paddingHorizontal: mapOverlayTokens.overlayPadding,
-    paddingTop: mapOverlayTokens.overlayPadding + 14,
-    paddingBottom: mapOverlayTokens.overlayPadding,
+    paddingTop: 20,
+    paddingBottom: 12,
   },
   previewList: {
-    marginBottom: 6,
+    marginBottom: 8,
   },
   previewListContent: {
     gap: 0,
   },
   previewPage: {
-    minHeight: 64,
+    minHeight: 76,
   },
   previewPageInner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: mapOverlayTokens.overlayGap,
-    minHeight: 64,
+    gap: PREVIEW_ROW_GAP,
+    minHeight: 76,
   },
   copyWrap: {
     flex: 1,
     minWidth: 0,
+    paddingTop: 2,
   },
   photoThumb: {
-    width: 54,
-    height: 54,
-    borderRadius: 14,
+    width: PREVIEW_MEDIA_SIZE,
+    height: PREVIEW_MEDIA_SIZE,
+    borderRadius: 15,
     borderCurve: 'continuous',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
   textThumb: {
-    width: 54,
-    height: 54,
-    borderRadius: 14,
+    width: PREVIEW_MEDIA_SIZE,
+    height: PREVIEW_MEDIA_SIZE,
+    borderRadius: 15,
     borderCurve: 'continuous',
     overflow: 'hidden',
     alignItems: 'center',
@@ -710,8 +828,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
   },
   textThumbPaper: {
-    width: 38,
-    height: 38,
+    width: 42,
+    height: 42,
     borderRadius: 11,
     borderCurve: 'continuous',
     backgroundColor: 'rgba(255,252,246,0.82)',
@@ -736,14 +854,15 @@ const styles = StyleSheet.create({
     width: '62%',
   },
   title: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-    marginBottom: 3,
+    lineHeight: 20,
+    marginBottom: 6,
     fontFamily: 'Noto Sans',
   },
   content: {
     fontSize: 13,
-    lineHeight: 17,
+    lineHeight: 18,
     fontFamily: 'Noto Sans',
   },
   metaRow: {
@@ -758,47 +877,32 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   footer: {
-    marginTop: 8,
+    marginTop: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  actionPill: {
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexShrink: 1,
-    maxWidth: '38%',
-  },
-  actionPillIconOnly: {
-    maxWidth: undefined,
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingLeft: PREVIEW_FOOTER_OFFSET,
   },
   actionButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    minHeight: 30,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  actionButtonIconOnly: {
-    width: 34,
-    height: 34,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    justifyContent: 'center',
-  },
   actionText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
   },
   indexLabelWrap: {
-    marginLeft: 'auto',
-    minWidth: 34,
-    alignItems: 'flex-end',
+    minWidth: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   indexText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
     fontFamily: 'Noto Sans',
   },
 });

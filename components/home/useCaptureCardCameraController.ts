@@ -14,6 +14,7 @@ import {
 } from 'react-native-reanimated';
 import type { CameraDevice } from 'react-native-vision-camera';
 import type { TFunction } from 'i18next';
+import { Layout } from '../../constants/theme';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../../services/livePhotoProcessing';
 
@@ -24,8 +25,9 @@ const CAMERA_ZOOM_PINCH_RANGE = 0.45;
 const CAMERA_ZOOM_LABEL_VISIBLE_MS = 1100;
 const CAMERA_TRANSITION_FADE_IN_MS = 140;
 const CAMERA_TRANSITION_FADE_OUT_MS = 240;
-const LIVE_PHOTO_RING_SIZE = 68;
-const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
+const LIVE_PHOTO_RING_STROKE_WIDTH = 6;
+const LIVE_PHOTO_CARD_PROGRESS_INSET = LIVE_PHOTO_RING_STROKE_WIDTH / 2;
+const SHUTTER_CORE_SIZE = 58;
 
 function clamp(value: number, minValue: number, maxValue: number) {
   return Math.min(maxValue, Math.max(minValue, value));
@@ -106,13 +108,24 @@ export function useCaptureCardCameraController({
   const previousCanShowLiveCameraPreviewRef = useRef(canShowLiveCameraPreview);
   const livePhotoProgressPath = useMemo(() => {
     const path = Skia.Path.Make();
-    path.addCircle(
-      LIVE_PHOTO_RING_SIZE / 2,
-      LIVE_PHOTO_RING_SIZE / 2,
-      (LIVE_PHOTO_RING_SIZE - LIVE_PHOTO_RING_STROKE_WIDTH) / 2
-    );
+    const left = LIVE_PHOTO_CARD_PROGRESS_INSET;
+    const top = LIVE_PHOTO_CARD_PROGRESS_INSET;
+    const right = cardSize - LIVE_PHOTO_CARD_PROGRESS_INSET;
+    const bottom = cardSize - LIVE_PHOTO_CARD_PROGRESS_INSET;
+    const radius = Math.max(Layout.cardRadius - LIVE_PHOTO_CARD_PROGRESS_INSET, 0);
+
+    path.moveTo(right - radius, top);
+    path.quadTo(right, top, right, top + radius);
+    path.lineTo(right, bottom - radius);
+    path.quadTo(right, bottom, right - radius, bottom);
+    path.lineTo(left + radius, bottom);
+    path.quadTo(left, bottom, left, bottom - radius);
+    path.lineTo(left, top + radius);
+    path.quadTo(left, top, left + radius, top);
+    path.lineTo(right - radius, top);
+
     return path;
-  }, []);
+  }, [cardSize]);
 
   const clearCameraZoomBadgeTimeout = useCallback(() => {
     if (cameraZoomBadgeTimeoutRef.current) {
@@ -311,11 +324,11 @@ export function useCaptureCardCameraController({
   }), [livePhotoHaloProgress, livePhotoVisualProgress, reduceMotionEnabled]);
 
   const shutterInnerAnimatedStyle = useAnimatedStyle(() => ({
-    width: 54 - livePhotoVisualProgress.value * 10,
-    height: 54 - livePhotoVisualProgress.value * 10,
-    borderRadius: 27 - livePhotoVisualProgress.value * 12,
-    transform: [{ scale: shutterScale.value * (1 - livePhotoVisualProgress.value * 0.04) }],
-  }), [livePhotoVisualProgress, shutterScale]);
+    width: SHUTTER_CORE_SIZE,
+    height: SHUTTER_CORE_SIZE,
+    borderRadius: SHUTTER_CORE_SIZE / 2,
+    transform: [{ scale: shutterScale.value }],
+  }), [shutterScale]);
 
   useEffect(() => {
     livePhotoVisualProgress.value = withTiming(isLivePhotoCaptureInProgress ? 1 : 0, {

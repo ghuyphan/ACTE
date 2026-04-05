@@ -10,6 +10,7 @@ const PHOTO_FILTER_BUTTON_SIZE = 38;
 const PHOTO_FILTER_PREVIEW_SIZE = 34;
 
 export type PhotoFilterCarouselProps = {
+  embedded?: boolean;
   sourceUri: string;
   selectedFilterId: PhotoFilterId;
   onSelectFilter: (filterId: PhotoFilterId) => void;
@@ -36,12 +37,54 @@ const PhotoFilterSwatch = memo(function PhotoFilterSwatch({
 });
 
 export const PhotoFilterCarousel = memo(function PhotoFilterCarousel({
+  embedded = false,
   sourceUri,
   selectedFilterId,
   onSelectFilter,
   t,
   colors,
 }: PhotoFilterCarouselProps) {
+  const content = (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={styles.photoFilterRow}
+      style={embedded ? styles.photoFilterEmbeddedScroll : undefined}
+    >
+      {PHOTO_FILTER_PRESETS.map((preset) => {
+        const isSelected = preset.id === selectedFilterId;
+
+        return (
+          <CaptureAnimatedPressable
+            key={preset.id}
+            testID={`capture-filter-${preset.id}`}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isSelected }}
+            accessibilityLabel={t(preset.labelKey, preset.defaultLabel)}
+            onPress={() => onSelectFilter(preset.id)}
+            pressedScale={0.985}
+            style={[
+              styles.photoFilterButton,
+              {
+                borderColor: isSelected ? colors.primary : colors.captureGlassBorder,
+                backgroundColor: colors.captureGlassFill,
+              },
+            ]}
+          >
+            <View style={styles.photoFilterPreviewClip}>
+              <PhotoFilterSwatch sourceUri={sourceUri} filterId={preset.id} />
+            </View>
+          </CaptureAnimatedPressable>
+        );
+      })}
+    </ScrollView>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
   return (
     <View
       style={[
@@ -52,39 +95,7 @@ export const PhotoFilterCarousel = memo(function PhotoFilterCarousel({
         },
       ]}
     >
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.photoFilterRow}
-      >
-        {PHOTO_FILTER_PRESETS.map((preset) => {
-          const isSelected = preset.id === selectedFilterId;
-
-          return (
-            <CaptureAnimatedPressable
-              key={preset.id}
-              testID={`capture-filter-${preset.id}`}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected }}
-              accessibilityLabel={t(preset.labelKey, preset.defaultLabel)}
-              onPress={() => onSelectFilter(preset.id)}
-              pressedScale={0.985}
-              style={[
-                styles.photoFilterButton,
-                {
-                  borderColor: isSelected ? colors.primary : colors.captureGlassBorder,
-                  backgroundColor: colors.captureGlassFill,
-                },
-              ]}
-            >
-              <View style={styles.photoFilterPreviewClip}>
-                <PhotoFilterSwatch sourceUri={sourceUri} filterId={preset.id} />
-              </View>
-            </CaptureAnimatedPressable>
-          );
-        })}
-      </ScrollView>
+      {content}
     </View>
   );
 });
@@ -102,6 +113,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  photoFilterEmbeddedScroll: {
+    maxWidth: 182,
   },
   photoFilterButton: {
     width: PHOTO_FILTER_BUTTON_SIZE,

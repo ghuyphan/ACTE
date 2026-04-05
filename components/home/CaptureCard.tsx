@@ -21,6 +21,7 @@ import { GestureDetector } from 'react-native-gesture-handler';
 import { Camera, type CameraDevice } from 'react-native-vision-camera';
 import Reanimated, {
   Easing,
+  LinearTransition,
   interpolateColor,
   type SharedValue,
   useAnimatedStyle,
@@ -37,7 +38,6 @@ import type { ThemeColors } from '../../hooks/useTheme';
 import {
   DEFAULT_NOTE_COLOR_ID,
   getCaptureNoteGradient,
-  getNoteColorCardGradient,
 } from '../../services/noteAppearance';
 import { type NoteStickerPlacement } from '../../services/noteStickers';
 import { isOlderIOS } from '../../utils/platform';
@@ -46,7 +46,6 @@ import {
 } from '../../services/photoFilters';
 import AppSheet from '../sheets/AppSheet';
 import AppSheetScaffold from '../sheets/AppSheetScaffold';
-import SheetFooterButton from '../sheets/SheetFooterButton';
 import NoteDoodleCanvas, { DoodleStroke } from '../notes/NoteDoodleCanvas';
 import PhotoMediaView from '../notes/PhotoMediaView';
 import NoteStickerCanvas from '../notes/NoteStickerCanvas';
@@ -80,7 +79,8 @@ const TOP_CONTROL_HEIGHT = 38;
 const TOP_CONTROL_RADIUS = 19;
 const DECORATE_OPTION_ACTIVE_SCALE = 1;
 const DECORATE_OPTION_CONTENT_SCALE = 1;
-const SHUTTER_OUTER_SIZE = 68;
+const SHUTTER_OUTER_SIZE = 74;
+const SHUTTER_INNER_SIZE = 58;
 const SIDE_ACTION_SIZE = 46;
 const SHUTTER_SIDE_ACTION_OFFSET = SHUTTER_OUTER_SIZE / 2 + 12 + SIDE_ACTION_SIZE;
 const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
@@ -315,7 +315,7 @@ function CaptureSaveButton({
             <Reanimated.View style={animatedSaveIconStyle}>
               <Ionicons
                 name={isSaveSuccessful ? 'checkmark-done' : 'checkmark'}
-                size={24}
+                size={26}
                 color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'}
               />
             </Reanimated.View>
@@ -345,7 +345,6 @@ interface TextCaptureSurfaceProps {
   handleSelectDoodleColor: CaptureCardDecorationState['selectDoodleColor'];
   handleSelectedStickerAction: (action: StickerAction) => void;
   handleSelectSticker: CaptureCardStickerFlowState['handleSelectSticker'];
-  handleShowStickerActions: CaptureCardStickerFlowState['handleShowStickerActions'];
   handleShowStickerSourceOptions: CaptureCardStickerFlowState['handleShowStickerSourceOptions'];
   handleToggleDoodleMode: () => void;
   handleToggleStickerMode: CaptureCardStickerFlowState['handleToggleStickerMode'];
@@ -354,11 +353,10 @@ interface TextCaptureSurfaceProps {
   inlinePasteLoading: CaptureCardStickerFlowState['inlinePasteLoading'];
   interactionsDisabled: boolean;
   noteInputRef: RefObject<TextInput | null>;
-  noteText: CaptureCardProps['noteText'];
   noteColor: CaptureCardProps['noteColor'];
+  noteText: CaptureCardProps['noteText'];
   recentAutoEmoji: CaptureCardTextInputState['recentAutoEmoji'];
   selectedStickerId: CaptureCardDecorationState['selectedStickerId'];
-  selectedStickerIsStamp: CaptureCardStickerFlowState['selectedStickerIsStamp'];
   setTextDoodleStrokes: CaptureCardDecorationState['setTextDoodleStrokes'];
   showInlinePasteButton: CaptureCardStickerFlowState['showInlinePasteButton'];
   stickerModeEnabled: CaptureCardDecorationState['stickerModeEnabled'];
@@ -389,7 +387,6 @@ function TextCaptureSurface({
   handleSelectDoodleColor,
   handleSelectedStickerAction,
   handleSelectSticker,
-  handleShowStickerActions,
   handleShowStickerSourceOptions,
   handleToggleDoodleMode,
   handleToggleStickerMode,
@@ -398,11 +395,10 @@ function TextCaptureSurface({
   inlinePasteLoading,
   interactionsDisabled,
   noteInputRef,
-  noteText,
   noteColor,
+  noteText,
   recentAutoEmoji,
   selectedStickerId,
-  selectedStickerIsStamp,
   setTextDoodleStrokes,
   showInlinePasteButton,
   stickerModeEnabled,
@@ -414,13 +410,16 @@ function TextCaptureSurface({
   useNativeInlinePasteButton,
 }: TextCaptureSurfaceProps) {
   const captureGradient = getCaptureNoteGradient({ noteColor });
+  const usesLightCaptureChrome = colors.captureGlassColorScheme === 'light';
 
   return (
     <LinearGradient
       style={[
         styles.textCard,
+        usesLightCaptureChrome ? styles.textCardLightContrast : null,
         {
           borderColor: colors.captureCardBorder,
+          shadowColor: usesLightCaptureChrome ? colors.text : '#000000',
         },
       ]}
       colors={captureGradient}
@@ -433,213 +432,6 @@ function TextCaptureSurface({
         interactive={false}
         previewMode="editor"
       />
-      <View pointerEvents="box-none" style={styles.cardTopOverlay}>
-        <View style={[styles.cardTopOverlayRow, styles.cardTopOverlayRowWrap]}>
-          <CaptureToggleIconButton
-            testID="capture-doodle-toggle"
-            onPress={handleToggleDoodleMode}
-            active={doodleModeEnabled}
-            activeIconName="create"
-            inactiveIconName="create-outline"
-            activeBackgroundColor={colors.captureButtonBg}
-            inactiveBackgroundColor={colors.captureGlassFill}
-            activeBorderColor="rgba(255,255,255,0.18)"
-            inactiveBorderColor={colors.captureGlassBorder}
-            activeIconColor={textCardActiveIconColor}
-            inactiveIconColor={colors.captureGlassText}
-            activeScale={DECORATE_OPTION_ACTIVE_SCALE}
-            activeTranslateY={0}
-            contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
-            contentActiveTranslateY={0}
-            style={styles.textCardActionButton}
-          />
-          {ENABLE_PHOTO_STICKERS ? (
-            <CaptureToggleIconButton
-              testID="capture-sticker-toggle"
-              accessibilityHint={t(
-                'capture.stickerPasteHint',
-                'Tap to edit stickers. Tap + to add from Clipboard or Photos.'
-              )}
-              onPress={handleToggleStickerMode}
-              active={stickerModeEnabled}
-              activeIconName="images"
-              inactiveIconName="images-outline"
-              activeBackgroundColor={colors.captureButtonBg}
-              inactiveBackgroundColor={colors.captureGlassFill}
-              activeBorderColor="rgba(255,255,255,0.18)"
-              inactiveBorderColor={colors.captureGlassBorder}
-              activeIconColor={textCardActiveIconColor}
-              inactiveIconColor={colors.captureGlassText}
-              activeScale={DECORATE_OPTION_ACTIVE_SCALE}
-              activeTranslateY={0}
-              contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
-              contentActiveTranslateY={0}
-              style={styles.textCardActionButton}
-            />
-          ) : null}
-          {doodleModeEnabled ? (
-            <>
-              <CaptureAnimatedPressable
-                testID="capture-doodle-undo"
-                onPress={handleUndoDoodle}
-                disabled={doodleStrokes.length === 0}
-                disabledOpacity={0.45}
-                style={[
-                  styles.textCardActionPill,
-                  {
-                    backgroundColor: colors.captureGlassFill,
-                    borderColor: colors.captureGlassBorder,
-                  },
-                ]}
-              >
-                <Ionicons name="arrow-undo-outline" size={14} color={colors.captureGlassText} />
-              </CaptureAnimatedPressable>
-              <CaptureAnimatedPressable
-                testID="capture-doodle-clear"
-                onPress={handleClearDoodle}
-                disabled={doodleStrokes.length === 0}
-                disabledOpacity={0.45}
-                style={[
-                  styles.textCardActionPill,
-                  {
-                    backgroundColor: colors.captureGlassFill,
-                    borderColor: colors.captureGlassBorder,
-                  },
-                ]}
-              >
-                <Ionicons name="close-outline" size={14} color={colors.captureGlassText} />
-              </CaptureAnimatedPressable>
-              <DoodleColorPalette
-                colors={doodleColorOptions}
-                selectedColor={doodleColor}
-                onSelectColor={handleSelectDoodleColor}
-                buttonBackgroundColor={colors.captureGlassFill}
-                buttonBorderColor={colors.captureGlassBorder}
-                selectedBorderColor={colors.captureButtonBg}
-                swatchBorderColor="rgba(43,38,33,0.16)"
-                testIDPrefix="capture-doodle-color"
-              />
-            </>
-          ) : null}
-          {stickerModeEnabled ? (
-            <>
-              <CaptureAnimatedPressable
-                testID="capture-sticker-import"
-                onPress={() => {
-                  void handleShowStickerSourceOptions();
-                }}
-                disabled={importingSticker}
-                disabledOpacity={0.45}
-                style={[
-                  styles.textCardActionPill,
-                  {
-                    backgroundColor: colors.captureGlassFill,
-                    borderColor: colors.captureGlassBorder,
-                  },
-                ]}
-              >
-                <Ionicons name="add-outline" size={14} color={colors.captureGlassText} />
-              </CaptureAnimatedPressable>
-              {selectedStickerId ? (
-                <CaptureAnimatedPressable
-                  testID="capture-sticker-more"
-                  accessibilityLabel={
-                    selectedStickerIsStamp
-                      ? t('capture.stampMore', 'More stamp options')
-                      : t('capture.stickerMore', 'More sticker options')
-                  }
-                  onPress={handleShowStickerActions}
-                  style={[
-                    styles.textCardActionPill,
-                    {
-                      backgroundColor: colors.captureGlassFill,
-                      borderColor: colors.captureGlassBorder,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="ellipsis-horizontal"
-                    size={14}
-                    color={colors.captureGlassText}
-                  />
-                </CaptureAnimatedPressable>
-              ) : null}
-              <CaptureAnimatedPressable
-                testID="capture-sticker-remove"
-                onPress={() => handleSelectedStickerAction('remove')}
-                disabled={!selectedStickerId}
-                disabledOpacity={0.45}
-                style={[
-                  styles.textCardActionPill,
-                  {
-                    backgroundColor: colors.captureGlassFill,
-                    borderColor: colors.captureGlassBorder,
-                  },
-                ]}
-              >
-                <Ionicons name="trash-outline" size={14} color={colors.captureGlassText} />
-              </CaptureAnimatedPressable>
-            </>
-          ) : null}
-          {showInlinePasteButton ? (
-            <View style={styles.inlinePasteStickerWrap}>
-              {inlinePasteLoading ? (
-                <CaptureAnimatedPressable
-                  testID="capture-inline-paste-sticker"
-                  accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
-                  disabled
-                  disabledOpacity={1}
-                  style={[
-                    styles.textCardActionButton,
-                    styles.inlinePasteStickerIconButton,
-                    {
-                      backgroundColor: colors.captureGlassFill,
-                      borderColor: colors.captureGlassBorder,
-                    },
-                  ]}
-                >
-                  <ActivityIndicator size="small" color={colors.captureGlassText} />
-                </CaptureAnimatedPressable>
-              ) : useNativeInlinePasteButton ? (
-                <ClipboardPasteButton
-                  testID="capture-inline-paste-sticker"
-                  accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
-                  acceptedContentTypes={['image']}
-                  imageOptions={{ format: 'png' }}
-                  displayMode="iconOnly"
-                  cornerStyle="capsule"
-                  backgroundColor={colors.captureGlassFill}
-                  foregroundColor={colors.captureGlassText}
-                  onPress={handleNativeInlinePasteStickerPress}
-                  style={styles.nativeInlinePasteStickerButton}
-                />
-              ) : (
-                <CaptureAnimatedPressable
-                  testID="capture-inline-paste-sticker"
-                  accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
-                  onPress={handleInlinePasteStickerPress}
-                  disabled={inlinePasteLoading}
-                  disabledOpacity={1}
-                  style={[
-                    styles.textCardActionButton,
-                    styles.inlinePasteStickerIconButton,
-                    {
-                      backgroundColor: colors.captureGlassFill,
-                      borderColor: colors.captureGlassBorder,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="clipboard-outline"
-                    size={16}
-                    color={colors.captureGlassText}
-                  />
-                </CaptureAnimatedPressable>
-              )}
-            </View>
-          ) : null}
-        </View>
-      </View>
 
       {ENABLE_PHOTO_STICKERS && (stickerPlacements.length > 0 || stickerModeEnabled) ? (
         <View
@@ -654,6 +446,8 @@ function TextCaptureSurface({
             selectedPlacementId={selectedStickerId}
             onChangeSelectedPlacementId={handleSelectSticker}
             onPressCanvas={handlePressStickerCanvas}
+            onToggleSelectedPlacementMotionLock={() => handleSelectedStickerAction('motion-lock-toggle')}
+            onToggleSelectedPlacementOutline={() => handleSelectedStickerAction('outline-toggle')}
           />
         </View>
       ) : null}
@@ -724,33 +518,21 @@ interface PhotoCaptureSurfaceProps {
   capturedPhoto: NonNullable<CaptureCardProps['capturedPhoto']>;
   colors: CaptureCardColors;
   doodleColor: CaptureCardDecorationState['doodleColor'];
-  doodleColorOptions: CaptureCardDecorationState['doodleColorOptions'];
   doodleModeEnabled: CaptureCardDecorationState['doodleModeEnabled'];
   doodleStrokes: CaptureCardDecorationState['doodleStrokes'];
   flashAnimatedStyle: CaptureCardAnimatedStyle;
   handleChangeStickerPlacements: CaptureCardDecorationState['changeStickerPlacements'];
-  handleClearDoodle: CaptureCardDecorationState['clearDoodle'];
   handleConfirmPasteFromPrompt: CaptureCardStickerFlowState['handleConfirmPasteFromPrompt'];
   handlePressStickerCanvas: () => void;
-  handleSelectDoodleColor: CaptureCardDecorationState['selectDoodleColor'];
   handleSelectedStickerAction: (action: StickerAction) => void;
   handleSelectSticker: CaptureCardStickerFlowState['handleSelectSticker'];
   handleShowCardPastePrompt: CaptureCardStickerFlowState['handleShowCardPastePrompt'];
-  handleShowStickerActions: CaptureCardStickerFlowState['handleShowStickerActions'];
-  handleShowStickerSourceOptions: CaptureCardStickerFlowState['handleShowStickerSourceOptions'];
-  handleToggleDoodleMode: () => void;
-  handleToggleStickerMode: CaptureCardStickerFlowState['handleToggleStickerMode'];
-  handleUndoDoodle: CaptureCardDecorationState['undoDoodle'];
   hasLivePhotoMotion: boolean;
-  importingSticker: CaptureCardStickerFlowState['importingSticker'];
   onChangePhotoFilter: CaptureCardProps['onChangePhotoFilter'];
-  onImportMotionClip: NonNullable<CaptureCardProps['onImportMotionClip']>;
-  onRemoveMotionClip: NonNullable<CaptureCardProps['onRemoveMotionClip']>;
   pastePrompt: CaptureCardStickerFlowState['pastePrompt'];
   photoDoodleStrokes: CaptureCardDecorationState['photoDoodleStrokes'];
   selectedPhotoFilterId: CaptureCardProps['selectedPhotoFilterId'];
   selectedStickerId: CaptureCardDecorationState['selectedStickerId'];
-  selectedStickerIsStamp: CaptureCardStickerFlowState['selectedStickerIsStamp'];
   setPhotoDoodleStrokes: CaptureCardDecorationState['setPhotoDoodleStrokes'];
   stickerModeEnabled: CaptureCardDecorationState['stickerModeEnabled'];
   stickerPlacements: CaptureCardDecorationState['stickerPlacements'];
@@ -763,48 +545,30 @@ function PhotoCaptureSurface({
   capturedPhoto,
   colors,
   doodleColor,
-  doodleColorOptions,
   doodleModeEnabled,
   doodleStrokes,
   flashAnimatedStyle,
   handleChangeStickerPlacements,
-  handleClearDoodle,
   handleConfirmPasteFromPrompt,
   handlePressStickerCanvas,
-  handleSelectDoodleColor,
   handleSelectedStickerAction,
   handleSelectSticker,
   handleShowCardPastePrompt,
-  handleShowStickerActions,
-  handleShowStickerSourceOptions,
-  handleToggleDoodleMode,
-  handleToggleStickerMode,
-  handleUndoDoodle,
   hasLivePhotoMotion,
-  importingSticker,
   onChangePhotoFilter,
-  onImportMotionClip,
-  onRemoveMotionClip,
   pastePrompt,
   photoDoodleStrokes,
   selectedPhotoFilterId,
   selectedStickerId,
-  selectedStickerIsStamp,
   setPhotoDoodleStrokes,
   stickerModeEnabled,
   stickerPlacements,
   t,
   dismissPastePrompt,
 }: PhotoCaptureSurfaceProps) {
-  const photoPreviewControlFill = hasLivePhotoMotion
-    ? (colors.captureGlassColorScheme === 'dark' ? 'rgba(22,22,24,0.74)' : 'rgba(255,250,242,0.78)')
-    : colors.captureCameraOverlay;
   const photoPreviewControlBorder = hasLivePhotoMotion
     ? (colors.captureGlassColorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.42)')
     : colors.captureCameraOverlayBorder;
-  const photoPreviewControlText = hasLivePhotoMotion ? colors.captureGlassText : colors.captureCameraOverlayText;
-  const photoPreviewActiveFill = colors.primary;
-  const photoPreviewActiveText = colors.captureCardText;
 
   return (
     <View
@@ -837,209 +601,6 @@ function PhotoCaptureSurface({
           delayLongPress={320}
         />
       ) : null}
-      <View pointerEvents="box-none" style={styles.cardTopOverlay}>
-        <View style={[styles.cardTopOverlayRow, styles.cardTopOverlayRowWrap]}>
-          <CaptureToggleIconButton
-            testID="capture-doodle-toggle"
-            accessibilityLabel={
-              doodleModeEnabled ? t('capture.doneDrawing', 'Done') : t('capture.draw', 'Draw')
-            }
-            onPress={handleToggleDoodleMode}
-            active={doodleModeEnabled}
-            activeIconName="create"
-            inactiveIconName="create-outline"
-            activeBackgroundColor={photoPreviewActiveFill}
-            inactiveBackgroundColor={photoPreviewControlFill}
-            activeBorderColor={photoPreviewActiveFill}
-            inactiveBorderColor={photoPreviewControlBorder}
-            activeIconColor={photoPreviewActiveText}
-            inactiveIconColor={photoPreviewControlText}
-            activeScale={DECORATE_OPTION_ACTIVE_SCALE}
-            activeTranslateY={0}
-            contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
-            contentActiveTranslateY={0}
-            style={[
-              styles.cameraOverlayButton,
-              styles.photoDoodleIconButton,
-            ]}
-          />
-          {ENABLE_PHOTO_STICKERS ? (
-            <CaptureToggleIconButton
-              testID="capture-sticker-toggle"
-              accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
-              accessibilityHint={t(
-                'capture.stickerPasteHint',
-                'Tap to edit stickers. Tap + to add from Clipboard or Photos.'
-              )}
-              onPress={handleToggleStickerMode}
-              active={stickerModeEnabled}
-              activeIconName="images"
-              inactiveIconName="images-outline"
-              activeBackgroundColor={photoPreviewActiveFill}
-              inactiveBackgroundColor={photoPreviewControlFill}
-              activeBorderColor={photoPreviewActiveFill}
-              inactiveBorderColor={photoPreviewControlBorder}
-              activeIconColor={photoPreviewActiveText}
-              inactiveIconColor={photoPreviewControlText}
-              activeScale={DECORATE_OPTION_ACTIVE_SCALE}
-              activeTranslateY={0}
-              contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
-              contentActiveTranslateY={0}
-              style={[
-                styles.cameraOverlayButton,
-                styles.photoDoodleIconButton,
-              ]}
-            />
-          ) : null}
-          <CaptureAnimatedPressable
-            testID="capture-live-photo-toggle"
-            accessibilityLabel={
-              hasLivePhotoMotion
-                ? t('capture.removeLivePhotoMotion', 'Remove live photo motion')
-                : t('capture.addLivePhotoMotion', 'Add live photo motion')
-            }
-            onPress={hasLivePhotoMotion ? onRemoveMotionClip : onImportMotionClip}
-            active={hasLivePhotoMotion}
-            activeScale={1.02}
-            activeTranslateY={0}
-            contentActiveScale={1}
-            contentActiveTranslateY={0}
-            style={[
-              styles.cameraOverlayButton,
-              styles.textCardActionPill,
-              styles.livePhotoTogglePill,
-              {
-                backgroundColor: hasLivePhotoMotion ? photoPreviewActiveFill : photoPreviewControlFill,
-                borderColor: hasLivePhotoMotion ? photoPreviewActiveFill : photoPreviewControlBorder,
-              },
-            ]}
-          >
-            <LivePhotoIcon
-              size={15}
-              color={hasLivePhotoMotion ? photoPreviewActiveText : photoPreviewControlText}
-            />
-            <Text
-              style={[
-                styles.livePhotoPillText,
-                { color: hasLivePhotoMotion ? photoPreviewActiveText : photoPreviewControlText },
-              ]}
-            >
-              {hasLivePhotoMotion
-                ? t('capture.removeLivePhotoShort', 'Remove Live')
-                : t('capture.addLivePhotoShort', 'Add Live')}
-            </Text>
-          </CaptureAnimatedPressable>
-          {doodleModeEnabled ? (
-            <>
-              <CaptureAnimatedPressable
-                testID="capture-doodle-undo"
-                onPress={handleUndoDoodle}
-                disabled={doodleStrokes.length === 0}
-                disabledOpacity={0.45}
-                style={[
-                  styles.cameraOverlayButton,
-                  styles.textCardActionPill,
-                  {
-                    backgroundColor: photoPreviewControlFill,
-                    borderColor: photoPreviewControlBorder,
-                  },
-                ]}
-              >
-                <Ionicons name="arrow-undo-outline" size={14} color={photoPreviewControlText} />
-              </CaptureAnimatedPressable>
-              <CaptureAnimatedPressable
-                testID="capture-doodle-clear"
-                onPress={handleClearDoodle}
-                disabled={doodleStrokes.length === 0}
-                disabledOpacity={0.45}
-                style={[
-                  styles.cameraOverlayButton,
-                  styles.textCardActionPill,
-                  {
-                    backgroundColor: photoPreviewControlFill,
-                    borderColor: photoPreviewControlBorder,
-                  },
-                ]}
-              >
-                <Ionicons name="close-outline" size={14} color={photoPreviewControlText} />
-              </CaptureAnimatedPressable>
-              <DoodleColorPalette
-                colors={doodleColorOptions}
-                selectedColor={doodleColor}
-                onSelectColor={handleSelectDoodleColor}
-                buttonBackgroundColor={photoPreviewControlFill}
-                buttonBorderColor={photoPreviewControlBorder}
-                selectedBorderColor={photoPreviewActiveFill}
-                swatchBorderColor="rgba(43,38,33,0.16)"
-                testIDPrefix="capture-doodle-color"
-              />
-            </>
-          ) : null}
-          {stickerModeEnabled ? (
-            <>
-              <CaptureAnimatedPressable
-                testID="capture-sticker-import"
-                onPress={() => {
-                  void handleShowStickerSourceOptions();
-                }}
-                disabled={importingSticker}
-                disabledOpacity={0.45}
-                style={[
-                  styles.cameraOverlayButton,
-                  styles.textCardActionPill,
-                  {
-                    backgroundColor: photoPreviewControlFill,
-                    borderColor: photoPreviewControlBorder,
-                  },
-                ]}
-              >
-                <Ionicons name="add-outline" size={14} color={photoPreviewControlText} />
-              </CaptureAnimatedPressable>
-              {selectedStickerId ? (
-                <CaptureAnimatedPressable
-                  testID="capture-sticker-more"
-                  accessibilityLabel={
-                    selectedStickerIsStamp
-                      ? t('capture.stampMore', 'More stamp options')
-                      : t('capture.stickerMore', 'More sticker options')
-                  }
-                  onPress={handleShowStickerActions}
-                  style={[
-                    styles.cameraOverlayButton,
-                    styles.textCardActionPill,
-                    {
-                      backgroundColor: photoPreviewControlFill,
-                      borderColor: photoPreviewControlBorder,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="ellipsis-horizontal"
-                    size={14}
-                    color={photoPreviewControlText}
-                  />
-                </CaptureAnimatedPressable>
-              ) : null}
-              <CaptureAnimatedPressable
-                testID="capture-sticker-remove"
-                onPress={() => handleSelectedStickerAction('remove')}
-                disabled={!selectedStickerId}
-                disabledOpacity={0.45}
-                style={[
-                  styles.cameraOverlayButton,
-                  styles.textCardActionPill,
-                  {
-                    backgroundColor: photoPreviewControlFill,
-                    borderColor: photoPreviewControlBorder,
-                  },
-                ]}
-              >
-                <Ionicons name="trash-outline" size={14} color={photoPreviewControlText} />
-              </CaptureAnimatedPressable>
-            </>
-          ) : null}
-        </View>
-      </View>
       {ENABLE_PHOTO_STICKERS && (stickerPlacements.length > 0 || stickerModeEnabled) ? (
         <View
           pointerEvents={stickerModeEnabled ? 'box-none' : 'none'}
@@ -1052,6 +613,8 @@ function PhotoCaptureSurface({
             selectedPlacementId={selectedStickerId}
             onChangeSelectedPlacementId={handleSelectSticker}
             onPressCanvas={handlePressStickerCanvas}
+            onToggleSelectedPlacementMotionLock={() => handleSelectedStickerAction('motion-lock-toggle')}
+            onToggleSelectedPlacementOutline={() => handleSelectedStickerAction('outline-toggle')}
           />
         </View>
       ) : null}
@@ -1118,7 +681,6 @@ interface LiveCameraSurfaceProps {
   cameraTransitionMaskAnimatedStyle: CaptureCardAnimatedStyle;
   cameraUnavailableDetail: CaptureCardCameraControllerState['cameraUnavailableDetail'];
   cameraZoomGesture: CaptureCardCameraControllerState['cameraZoomGesture'];
-  cameraZoomLabel: CaptureCardCameraControllerState['cameraZoomLabel'];
   canShowLiveCameraPreview: CaptureCardCameraControllerState['canShowLiveCameraPreview'];
   colors: CaptureCardColors;
   facing: CaptureCardProps['facing'];
@@ -1128,13 +690,12 @@ interface LiveCameraSurfaceProps {
   handleCameraRetryPress: () => void;
   handleCameraStartupFailure: CaptureCardCameraControllerState['handleCameraStartupFailure'];
   handleRequestCameraPermissionPress: () => void;
-  importingPhoto: boolean;
-  libraryImportLocked: boolean;
+  isLivePhotoCaptureInProgress: boolean;
+  livePhotoProgressPath: CaptureCardCameraControllerState['livePhotoProgressPath'];
+  livePhotoRingProgress: CaptureCardCameraControllerState['livePhotoRingProgress'];
   needsCameraPermission: boolean;
-  onOpenPhotoLibrary: CaptureCardProps['onOpenPhotoLibrary'];
   shouldRenderCameraPreview: CaptureCardCameraControllerState['shouldRenderCameraPreview'];
   showCameraUnavailableState: CaptureCardCameraControllerState['showCameraUnavailableState'];
-  showCameraZoomBadge: CaptureCardCameraControllerState['showCameraZoomBadge'];
   t: TFunction;
 }
 
@@ -1147,7 +708,6 @@ function LiveCameraSurface({
   cameraTransitionMaskAnimatedStyle,
   cameraUnavailableDetail,
   cameraZoomGesture,
-  cameraZoomLabel,
   canShowLiveCameraPreview,
   colors,
   facing,
@@ -1157,13 +717,12 @@ function LiveCameraSurface({
   handleCameraRetryPress,
   handleCameraStartupFailure,
   handleRequestCameraPermissionPress,
-  importingPhoto,
-  libraryImportLocked,
+  isLivePhotoCaptureInProgress,
+  livePhotoProgressPath,
+  livePhotoRingProgress,
   needsCameraPermission,
-  onOpenPhotoLibrary,
   shouldRenderCameraPreview,
   showCameraUnavailableState,
-  showCameraZoomBadge,
   t,
 }: LiveCameraSurfaceProps) {
   return (
@@ -1205,6 +764,21 @@ function LiveCameraSurface({
           cameraTransitionMaskAnimatedStyle,
         ]}
       />
+      {isLivePhotoCaptureInProgress ? (
+        <View pointerEvents="none" style={styles.cameraLiveProgressOverlay}>
+          <Canvas style={styles.cameraLiveProgressCanvas}>
+            <SkiaPath
+              path={livePhotoProgressPath}
+              start={0}
+              end={Math.max(livePhotoRingProgress, 0.001)}
+              color={colors.primary}
+              style="stroke"
+              strokeWidth={LIVE_PHOTO_RING_STROKE_WIDTH}
+              strokeCap="round"
+            />
+          </Canvas>
+        </View>
+      ) : null}
       {showCameraUnavailableState ? (
         <View style={styles.cameraUnavailableState}>
           <Ionicons name="camera-outline" size={42} color={colors.captureCameraOverlayText} />
@@ -1242,12 +816,6 @@ function LiveCameraSurface({
             style={styles.permissionButton}
           />
         </View>
-      ) : showCameraZoomBadge && canShowLiveCameraPreview ? (
-        <View pointerEvents="none" style={styles.cameraZoomBadge}>
-          <Text style={[styles.cameraZoomBadgeText, { color: colors.captureCameraOverlayText }]}>
-            {cameraZoomLabel}
-          </Text>
-        </View>
       ) : null}
       <Reanimated.View
         pointerEvents="none"
@@ -1257,267 +825,624 @@ function LiveCameraSurface({
           flashAnimatedStyle,
         ]}
       />
-      {!needsCameraPermission ? (
-        <CaptureAnimatedPressable
+    </View>
+  );
+}
+
+interface TextCaptureBottomBarProps {
+  colors: CaptureCardColors;
+  doodleColor: CaptureCardDecorationState['doodleColor'];
+  doodleColorOptions: CaptureCardDecorationState['doodleColorOptions'];
+  doodleModeEnabled: CaptureCardDecorationState['doodleModeEnabled'];
+  doodleStrokes: CaptureCardDecorationState['doodleStrokes'];
+  handleClearDoodle: CaptureCardDecorationState['clearDoodle'];
+  handleInlinePasteStickerPress: CaptureCardStickerFlowState['handleInlinePasteStickerPress'];
+  handleNativeInlinePasteStickerPress: CaptureCardStickerFlowState['handleNativeInlinePasteStickerPress'];
+  handleSelectDoodleColor: CaptureCardDecorationState['selectDoodleColor'];
+  handleSelectedStickerAction: (action: StickerAction) => void;
+  handleShowStickerSourceOptions: CaptureCardStickerFlowState['handleShowStickerSourceOptions'];
+  handleToggleDoodleMode: () => void;
+  handleToggleStickerMode: CaptureCardStickerFlowState['handleToggleStickerMode'];
+  handleUndoDoodle: CaptureCardDecorationState['undoDoodle'];
+  importingSticker: CaptureCardStickerFlowState['importingSticker'];
+  inlinePasteLoading: CaptureCardStickerFlowState['inlinePasteLoading'];
+  selectedStickerId: CaptureCardDecorationState['selectedStickerId'];
+  showInlinePasteButton: CaptureCardStickerFlowState['showInlinePasteButton'];
+  stickerModeEnabled: CaptureCardDecorationState['stickerModeEnabled'];
+  t: TFunction;
+  textCardActiveIconColor: string;
+  useNativeInlinePasteButton: CaptureCardStickerFlowState['useNativeInlinePasteButton'];
+}
+
+interface CaptureControlRailProps {
+  animationKey?: string;
+  borderColor: string;
+  colors: CaptureCardColors;
+  children: ReactNode;
+  style?: ComponentProps<typeof View>['style'];
+  rowStyle?: ComponentProps<typeof View>['style'];
+}
+
+function CaptureControlRail({
+  borderColor,
+  colors,
+  children,
+  style,
+  rowStyle,
+}: CaptureControlRailProps) {
+  const reduceMotionEnabled = useReducedMotion();
+  const railLayoutTransition = useMemo(
+    () =>
+      reduceMotionEnabled
+        ? undefined
+        : LinearTransition.springify().damping(19).stiffness(220).mass(0.9),
+    [reduceMotionEnabled]
+  );
+
+  return (
+    <Reanimated.View
+      layout={railLayoutTransition}
+      style={[styles.textBottomToolsBar, style, { borderColor }]}
+    >
+      {isOlderIOS ? (
+        <View
+          pointerEvents="none"
           style={[
-            styles.cameraOverlayButton,
-            styles.libraryBtn,
+            StyleSheet.absoluteFill,
             {
-              backgroundColor: colors.captureCameraOverlay,
-              borderColor: colors.captureCameraOverlayBorder,
+              backgroundColor: colors.captureGlassFill,
+              borderRadius: Radii.pill,
             },
           ]}
+        />
+      ) : null}
+      {!isOlderIOS ? (
+        <GlassView
+          pointerEvents="none"
+          style={StyleSheet.absoluteFill}
+          glassEffectStyle="regular"
+          colorScheme={colors.captureGlassColorScheme}
+        />
+      ) : null}
+      <Reanimated.View layout={railLayoutTransition} style={[styles.textBottomToolsRow, rowStyle]}>
+        {children}
+      </Reanimated.View>
+    </Reanimated.View>
+  );
+}
+
+interface CaptureDecorateRailTheme {
+  activeBackgroundColor: string;
+  activeBorderColor: string;
+  activeIconColor: string;
+  detailBackgroundColor: string;
+  detailBorderColor: string;
+  detailIconColor: string;
+  inactiveBackgroundColor: string;
+  inactiveBorderColor: string;
+  inactiveIconColor: string;
+  paletteButtonBackgroundColor: string;
+  paletteButtonBorderColor: string;
+  paletteSelectedBorderColor: string;
+  paletteSwatchBorderColor: string;
+  railBorderColor: string;
+}
+
+interface CaptureDecorateRailProps {
+  afterToggles?: ReactNode;
+  animationKey?: string;
+  colors: CaptureCardColors;
+  defaultActions?: ReactNode;
+  doodleColor: CaptureCardDecorationState['doodleColor'];
+  doodleColorOptions: CaptureCardDecorationState['doodleColorOptions'];
+  doodleModeEnabled: CaptureCardDecorationState['doodleModeEnabled'];
+  doodleStrokes: CaptureCardDecorationState['doodleStrokes'];
+  enableStickers?: boolean;
+  handleClearDoodle: CaptureCardDecorationState['clearDoodle'];
+  handleSelectDoodleColor: CaptureCardDecorationState['selectDoodleColor'];
+  handleSelectedStickerAction: (action: StickerAction) => void;
+  handleShowStickerSourceOptions: CaptureCardStickerFlowState['handleShowStickerSourceOptions'];
+  handleToggleDoodleMode: () => void;
+  handleToggleStickerMode: CaptureCardStickerFlowState['handleToggleStickerMode'];
+  handleUndoDoodle: CaptureCardDecorationState['undoDoodle'];
+  importingSticker: CaptureCardStickerFlowState['importingSticker'];
+  railStyle?: ComponentProps<typeof View>['style'];
+  rowStyle?: ComponentProps<typeof View>['style'];
+  selectedStickerId: CaptureCardDecorationState['selectedStickerId'];
+  stickerModeEnabled: CaptureCardDecorationState['stickerModeEnabled'];
+  t: TFunction;
+  theme: CaptureDecorateRailTheme;
+}
+
+function CaptureDecorateRail({
+  afterToggles = null,
+  animationKey,
+  colors,
+  defaultActions = null,
+  doodleColor,
+  doodleColorOptions,
+  doodleModeEnabled,
+  doodleStrokes,
+  enableStickers = ENABLE_PHOTO_STICKERS,
+  handleClearDoodle,
+  handleSelectDoodleColor,
+  handleSelectedStickerAction,
+  handleShowStickerSourceOptions,
+  handleToggleDoodleMode,
+  handleToggleStickerMode,
+  handleUndoDoodle,
+  importingSticker,
+  railStyle,
+  rowStyle,
+  selectedStickerId,
+  stickerModeEnabled,
+  t,
+  theme,
+}: CaptureDecorateRailProps) {
+  const isShowingDoodleControls = doodleModeEnabled;
+  const isShowingStickerControls = !isShowingDoodleControls && stickerModeEnabled;
+
+  return (
+    <CaptureControlRail
+      animationKey={animationKey}
+      borderColor={theme.railBorderColor}
+      colors={colors}
+      style={railStyle}
+      rowStyle={rowStyle}
+    >
+      <CaptureToggleIconButton
+        testID="capture-doodle-toggle"
+        accessibilityLabel={
+          doodleModeEnabled ? t('capture.doneDrawing', 'Done') : t('capture.draw', 'Draw')
+        }
+        onPress={handleToggleDoodleMode}
+        active={doodleModeEnabled}
+        activeIconName="create"
+        inactiveIconName="create-outline"
+        activeBackgroundColor={theme.activeBackgroundColor}
+        inactiveBackgroundColor={theme.inactiveBackgroundColor}
+        activeBorderColor={theme.activeBorderColor}
+        inactiveBorderColor={theme.inactiveBorderColor}
+        activeIconColor={theme.activeIconColor}
+        inactiveIconColor={theme.inactiveIconColor}
+        activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+        activeTranslateY={0}
+        contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+        contentActiveTranslateY={0}
+        style={styles.textBottomToolsButton}
+      />
+      {enableStickers ? (
+        <CaptureToggleIconButton
+          testID="capture-sticker-toggle"
+          accessibilityLabel={stickerModeEnabled ? t('capture.doneStickers', 'Done') : t('capture.stickers', 'Stickers')}
+          accessibilityHint={t(
+            'capture.stickerPasteHint',
+            'Tap to edit stickers. Tap + to add from Clipboard or Photos.'
+          )}
+          onPress={handleToggleStickerMode}
+          active={stickerModeEnabled}
+          activeIconName="images"
+          inactiveIconName="images-outline"
+          activeBackgroundColor={theme.activeBackgroundColor}
+          inactiveBackgroundColor={theme.inactiveBackgroundColor}
+          activeBorderColor={theme.activeBorderColor}
+          inactiveBorderColor={theme.inactiveBorderColor}
+          activeIconColor={theme.activeIconColor}
+          inactiveIconColor={theme.inactiveIconColor}
+          activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+          activeTranslateY={0}
+          contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+          contentActiveTranslateY={0}
+          style={styles.textBottomToolsButton}
+        />
+      ) : null}
+      {afterToggles}
+      {isShowingDoodleControls ? (
+        <>
+          <CaptureAnimatedPressable
+            testID="capture-doodle-undo"
+            onPress={handleUndoDoodle}
+            disabled={doodleStrokes.length === 0}
+            disabledOpacity={0.45}
+            style={[
+              styles.textCardActionPill,
+              {
+                backgroundColor: theme.detailBackgroundColor,
+                borderColor: theme.detailBorderColor,
+              },
+            ]}
+          >
+            <Ionicons name="arrow-undo-outline" size={14} color={theme.detailIconColor} />
+          </CaptureAnimatedPressable>
+          <CaptureAnimatedPressable
+            testID="capture-doodle-clear"
+            onPress={handleClearDoodle}
+            disabled={doodleStrokes.length === 0}
+            disabledOpacity={0.45}
+            style={[
+              styles.textCardActionPill,
+              {
+                backgroundColor: theme.detailBackgroundColor,
+                borderColor: theme.detailBorderColor,
+              },
+            ]}
+          >
+            <Ionicons name="close-outline" size={14} color={theme.detailIconColor} />
+          </CaptureAnimatedPressable>
+          <DoodleColorPalette
+            colors={doodleColorOptions}
+            selectedColor={doodleColor}
+            onSelectColor={handleSelectDoodleColor}
+            buttonBackgroundColor={theme.paletteButtonBackgroundColor}
+            buttonBorderColor={theme.paletteButtonBorderColor}
+            selectedBorderColor={theme.paletteSelectedBorderColor}
+            swatchBorderColor={theme.paletteSwatchBorderColor}
+            testIDPrefix="capture-doodle-color"
+          />
+        </>
+      ) : isShowingStickerControls ? (
+        <>
+          <CaptureAnimatedPressable
+            testID="capture-sticker-import"
+            onPress={() => {
+              void handleShowStickerSourceOptions();
+            }}
+            disabled={importingSticker}
+            disabledOpacity={0.45}
+            style={[
+              styles.textCardActionPill,
+              {
+                backgroundColor: theme.detailBackgroundColor,
+                borderColor: theme.detailBorderColor,
+              },
+            ]}
+          >
+            <Ionicons name="add-outline" size={14} color={theme.detailIconColor} />
+          </CaptureAnimatedPressable>
+          <CaptureAnimatedPressable
+            testID="capture-sticker-remove"
+            onPress={() => handleSelectedStickerAction('remove')}
+            disabled={!selectedStickerId}
+            disabledOpacity={0.45}
+            style={[
+              styles.textCardActionPill,
+              {
+                backgroundColor: theme.detailBackgroundColor,
+                borderColor: theme.detailBorderColor,
+              },
+            ]}
+          >
+            <Ionicons name="trash-outline" size={14} color={theme.detailIconColor} />
+          </CaptureAnimatedPressable>
+        </>
+      ) : (
+        defaultActions
+      )}
+    </CaptureControlRail>
+  );
+}
+
+function TextCaptureBottomBar({
+  colors,
+  doodleColor,
+  doodleColorOptions,
+  doodleModeEnabled,
+  doodleStrokes,
+  handleClearDoodle,
+  handleInlinePasteStickerPress,
+  handleNativeInlinePasteStickerPress,
+  handleSelectDoodleColor,
+  handleSelectedStickerAction,
+  handleShowStickerSourceOptions,
+  handleToggleDoodleMode,
+  handleToggleStickerMode,
+  handleUndoDoodle,
+  importingSticker,
+  inlinePasteLoading,
+  selectedStickerId,
+  showInlinePasteButton,
+  stickerModeEnabled,
+  t,
+  textCardActiveIconColor,
+  useNativeInlinePasteButton,
+}: TextCaptureBottomBarProps) {
+  return (
+    <View style={styles.textBottomToolsWrap}>
+      <CaptureDecorateRail
+        animationKey={
+          doodleModeEnabled
+            ? 'text-doodle'
+            : stickerModeEnabled
+              ? 'text-sticker'
+              : showInlinePasteButton
+                ? 'text-default-paste'
+                : 'text-default'
+        }
+        colors={colors}
+        doodleColor={doodleColor}
+        doodleColorOptions={doodleColorOptions}
+        doodleModeEnabled={doodleModeEnabled}
+        doodleStrokes={doodleStrokes}
+        handleClearDoodle={handleClearDoodle}
+        handleSelectDoodleColor={handleSelectDoodleColor}
+        handleSelectedStickerAction={handleSelectedStickerAction}
+        handleShowStickerSourceOptions={handleShowStickerSourceOptions}
+        handleToggleDoodleMode={handleToggleDoodleMode}
+        handleToggleStickerMode={handleToggleStickerMode}
+        handleUndoDoodle={handleUndoDoodle}
+        importingSticker={importingSticker}
+        selectedStickerId={selectedStickerId}
+        stickerModeEnabled={stickerModeEnabled}
+        t={t}
+        theme={{
+          activeBackgroundColor: colors.captureButtonBg,
+          activeBorderColor: 'rgba(255,255,255,0.18)',
+          activeIconColor: textCardActiveIconColor,
+          detailBackgroundColor: 'transparent',
+          detailBorderColor: 'transparent',
+          detailIconColor: colors.captureGlassText,
+          inactiveBackgroundColor: colors.captureGlassFill,
+          inactiveBorderColor: 'transparent',
+          inactiveIconColor: colors.captureGlassText,
+          paletteButtonBackgroundColor: colors.captureGlassFill,
+          paletteButtonBorderColor: colors.captureGlassBorder,
+          paletteSelectedBorderColor: colors.captureButtonBg,
+          paletteSwatchBorderColor: 'rgba(43,38,33,0.16)',
+          railBorderColor: colors.captureGlassBorder,
+        }}
+        defaultActions={
+          showInlinePasteButton ? (
+            <View style={styles.inlinePasteStickerWrap}>
+              {inlinePasteLoading ? (
+                <CaptureAnimatedPressable
+                  testID="capture-inline-paste-sticker"
+                  accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
+                  disabled
+                  disabledOpacity={1}
+                  style={[styles.textBottomToolsButton, styles.textBottomToolsAction]}
+                >
+                  <ActivityIndicator size="small" color={colors.captureGlassText} />
+                </CaptureAnimatedPressable>
+              ) : useNativeInlinePasteButton ? (
+                <ClipboardPasteButton
+                  testID="capture-inline-paste-sticker"
+                  accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
+                  acceptedContentTypes={['image']}
+                  imageOptions={{ format: 'png' }}
+                  displayMode="iconOnly"
+                  cornerStyle="capsule"
+                  backgroundColor={colors.captureGlassFill}
+                  foregroundColor={colors.captureGlassText}
+                  onPress={handleNativeInlinePasteStickerPress}
+                  style={styles.nativeInlinePasteStickerButton}
+                />
+              ) : (
+                <CaptureAnimatedPressable
+                  testID="capture-inline-paste-sticker"
+                  accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
+                  onPress={handleInlinePasteStickerPress}
+                  disabled={inlinePasteLoading}
+                  disabledOpacity={1}
+                  style={[styles.textBottomToolsButton, styles.textBottomToolsAction]}
+                >
+                  <Ionicons name="clipboard-outline" size={16} color={colors.captureGlassText} />
+                </CaptureAnimatedPressable>
+              )}
+            </View>
+          ) : null
+        }
+      />
+    </View>
+  );
+}
+
+interface LiveCameraActionBarProps {
+  cameraInstructionText?: string | null;
+  colors: CaptureCardColors;
+  importingPhoto: boolean;
+  libraryImportLocked: boolean;
+  needsCameraPermission: boolean;
+  onOpenPhotoLibrary: CaptureCardProps['onOpenPhotoLibrary'];
+  t: TFunction;
+}
+
+function LiveCameraActionBar({
+  cameraInstructionText = null,
+  colors,
+  importingPhoto,
+  libraryImportLocked,
+  needsCameraPermission,
+  onOpenPhotoLibrary,
+  t,
+}: LiveCameraActionBarProps) {
+  if (needsCameraPermission) {
+    return null;
+  }
+
+  return (
+    <View style={styles.captureActionBarWrap}>
+      <CaptureControlRail
+        animationKey={importingPhoto ? 'camera-live-importing' : libraryImportLocked ? 'camera-live-locked' : 'camera-live'}
+        borderColor={colors.captureGlassBorder}
+        colors={colors}
+      >
+        {cameraInstructionText ? (
+          <View style={styles.cameraActionHintWrap}>
+            <Text
+              numberOfLines={1}
+              style={[styles.cameraActionHintText, { color: colors.captureGlassText }]}
+            >
+              {cameraInstructionText}
+            </Text>
+          </View>
+        ) : null}
+        <CaptureAnimatedPressable
+          testID="capture-library-button"
+          accessibilityLabel={libraryImportLocked ? t('capture.plusLibraryLocked', 'Plus') : t('capture.importPhoto', 'Photos')}
           onPress={onOpenPhotoLibrary}
           active={importingPhoto}
           activeScale={1.015}
-          activeTranslateY={-1}
-          contentActiveScale={1.03}
+          activeTranslateY={0}
+          contentActiveScale={1}
+          style={[
+            styles.textCardActionPill,
+            styles.captureActionTextPill,
+            {
+              backgroundColor: colors.captureGlassFill,
+              borderColor: 'transparent',
+            },
+          ]}
         >
           {importingPhoto ? (
-            <ActivityIndicator size="small" color={colors.captureCameraOverlayText} />
+            <ActivityIndicator size="small" color={colors.captureGlassText} />
           ) : (
             <>
-              <Ionicons name={libraryImportLocked ? 'sparkles' : 'images'} size={18} color={colors.captureCameraOverlayText} />
-              <Text style={[styles.libraryBtnText, { color: colors.captureCameraOverlayText }]}>
+              <Ionicons
+                name={libraryImportLocked ? 'sparkles' : 'images-outline'}
+                size={16}
+                color={colors.captureGlassText}
+              />
+              <Text style={[styles.captureActionPillLabel, { color: colors.captureGlassText }]}>
                 {libraryImportLocked ? t('capture.plusLibraryLocked', 'Plus') : t('capture.importPhoto', 'Photos')}
               </Text>
             </>
           )}
         </CaptureAnimatedPressable>
-      ) : null}
+      </CaptureControlRail>
     </View>
   );
 }
 
-interface CaptureMetaSectionProps {
-  cameraHintAnimatedStyle: CaptureCardAnimatedStyle;
-  cameraInstructionText: CaptureCardProps['cameraInstructionText'];
-  cameraRadiusAnimatedStyle: CaptureCardAnimatedStyle;
-  cameraStatusText: CaptureCardProps['cameraStatusText'];
-  captureMode: CaptureCardProps['captureMode'];
+interface PhotoCaptureBottomBarProps {
   colors: CaptureCardColors;
-  handleOpenNoteColorSheet: () => void;
-  handleOpenRadiusSheet: () => void;
-  handleRestaurantInputBlur: CaptureCardTextInputState['handleRestaurantInputBlur'];
-  handleRestaurantInputFocus: CaptureCardTextInputState['handleRestaurantInputFocus'];
-  handleRestaurantInputSubmit: () => void;
-  hasVisibleCameraStatus: boolean;
-  inlineColorGradient: readonly [string, string];
-  onChangeNoteColor: CaptureCardProps['onChangeNoteColor'];
-  onChangeRestaurantName: CaptureCardProps['onChangeRestaurantName'];
-  radius: CaptureCardProps['radius'];
-  restaurantInputRef: RefObject<TextInput | null>;
-  restaurantName: CaptureCardProps['restaurantName'];
-  showCameraInstructionHint: CaptureCardCameraControllerState['showCameraInstructionHint'];
+  doodleColor: CaptureCardDecorationState['doodleColor'];
+  doodleColorOptions: CaptureCardDecorationState['doodleColorOptions'];
+  doodleModeEnabled: CaptureCardDecorationState['doodleModeEnabled'];
+  doodleStrokes: CaptureCardDecorationState['doodleStrokes'];
+  handleClearDoodle: CaptureCardDecorationState['clearDoodle'];
+  handleSelectDoodleColor: CaptureCardDecorationState['selectDoodleColor'];
+  handleSelectedStickerAction: (action: StickerAction) => void;
+  handleShowStickerSourceOptions: CaptureCardStickerFlowState['handleShowStickerSourceOptions'];
+  handleToggleDoodleMode: () => void;
+  handleToggleStickerMode: CaptureCardStickerFlowState['handleToggleStickerMode'];
+  handleUndoDoodle: CaptureCardDecorationState['undoDoodle'];
+  hasLivePhotoMotion: boolean;
+  importingSticker: CaptureCardStickerFlowState['importingSticker'];
+  onImportMotionClip: NonNullable<CaptureCardProps['onImportMotionClip']>;
+  onRemoveMotionClip: NonNullable<CaptureCardProps['onRemoveMotionClip']>;
+  selectedStickerId: CaptureCardDecorationState['selectedStickerId'];
+  stickerModeEnabled: CaptureCardDecorationState['stickerModeEnabled'];
   t: TFunction;
+  textCardActiveIconColor: string;
 }
 
-function CaptureMetaSection({
-  cameraHintAnimatedStyle,
-  cameraInstructionText,
-  cameraRadiusAnimatedStyle,
-  cameraStatusText,
-  captureMode,
+function PhotoCaptureBottomBar({
   colors,
-  handleOpenNoteColorSheet,
-  handleOpenRadiusSheet,
-  handleRestaurantInputBlur,
-  handleRestaurantInputFocus,
-  handleRestaurantInputSubmit,
-  hasVisibleCameraStatus,
-  inlineColorGradient,
-  onChangeNoteColor,
-  onChangeRestaurantName,
-  radius,
-  restaurantInputRef,
-  restaurantName,
-  showCameraInstructionHint,
+  doodleColor,
+  doodleColorOptions,
+  doodleModeEnabled,
+  doodleStrokes,
+  handleClearDoodle,
+  handleSelectDoodleColor,
+  handleSelectedStickerAction,
+  handleShowStickerSourceOptions,
+  handleToggleDoodleMode,
+  handleToggleStickerMode,
+  handleUndoDoodle,
+  hasLivePhotoMotion,
+  importingSticker,
+  onImportMotionClip,
+  onRemoveMotionClip,
+  selectedStickerId,
+  stickerModeEnabled,
   t,
-}: CaptureMetaSectionProps) {
+  textCardActiveIconColor,
+}: PhotoCaptureBottomBarProps) {
   return (
-    <>
-      {hasVisibleCameraStatus ? (
-        <View style={styles.cameraStatusSlot}>
-          <Text
-            numberOfLines={1}
+    <View style={styles.captureActionBarWrap}>
+      <CaptureDecorateRail
+        animationKey={
+          doodleModeEnabled
+            ? 'photo-doodle'
+            : stickerModeEnabled
+              ? 'photo-sticker'
+              : hasLivePhotoMotion
+                ? 'photo-live'
+                : 'photo-filter'
+        }
+        colors={colors}
+        doodleColor={doodleColor}
+        doodleColorOptions={doodleColorOptions}
+        doodleModeEnabled={doodleModeEnabled}
+        doodleStrokes={doodleStrokes}
+        handleClearDoodle={handleClearDoodle}
+        handleSelectDoodleColor={handleSelectDoodleColor}
+        handleSelectedStickerAction={handleSelectedStickerAction}
+        handleShowStickerSourceOptions={handleShowStickerSourceOptions}
+        handleToggleDoodleMode={handleToggleDoodleMode}
+        handleToggleStickerMode={handleToggleStickerMode}
+        handleUndoDoodle={handleUndoDoodle}
+        importingSticker={importingSticker}
+        selectedStickerId={selectedStickerId}
+        stickerModeEnabled={stickerModeEnabled}
+        t={t}
+        theme={{
+          activeBackgroundColor: colors.captureButtonBg,
+          activeBorderColor: 'rgba(255,255,255,0.18)',
+          activeIconColor: textCardActiveIconColor,
+          detailBackgroundColor: 'transparent',
+          detailBorderColor: 'transparent',
+          detailIconColor: colors.captureGlassText,
+          inactiveBackgroundColor: colors.captureGlassFill,
+          inactiveBorderColor: 'transparent',
+          inactiveIconColor: colors.captureGlassText,
+          paletteButtonBackgroundColor: colors.captureGlassFill,
+          paletteButtonBorderColor: colors.captureGlassBorder,
+          paletteSelectedBorderColor: colors.captureButtonBg,
+          paletteSwatchBorderColor: 'rgba(43,38,33,0.16)',
+          railBorderColor: colors.captureGlassBorder,
+        }}
+        afterToggles={
+          <CaptureAnimatedPressable
+            testID="capture-live-photo-toggle"
+            accessibilityLabel={
+              hasLivePhotoMotion
+                ? t('capture.removeLivePhotoMotion', 'Remove live photo motion')
+                : t('capture.addLivePhotoMotion', 'Add live photo motion')
+            }
+            onPress={hasLivePhotoMotion ? onRemoveMotionClip : onImportMotionClip}
+            active={hasLivePhotoMotion}
+            activeScale={1.02}
+            activeTranslateY={0}
+            contentActiveScale={1}
+            contentActiveTranslateY={0}
             style={[
-              styles.cameraStatusText,
-              { color: colors.secondaryText, opacity: cameraStatusText ? 1 : 0 },
+              styles.textCardActionPill,
+              styles.livePhotoTogglePill,
+              {
+                backgroundColor: hasLivePhotoMotion ? colors.captureButtonBg : colors.captureGlassFill,
+                borderColor: hasLivePhotoMotion ? colors.captureButtonBg : 'transparent',
+              },
             ]}
           >
-            {cameraStatusText ?? ' '}
-          </Text>
-        </View>
-      ) : null}
-      <View style={styles.belowCardMetaRow}>
-        <View style={styles.captureMetaStack}>
-          {captureMode === 'text' ? (
-            <View style={[styles.cardRestaurantPill, styles.captureMetaComposite, { borderColor: colors.captureGlassBorder }]}>
-              {isOlderIOS ? (
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      backgroundColor: colors.captureGlassFill,
-                      borderRadius: Radii.pill,
-                    },
-                  ]}
-                />
-              ) : null}
-              <GlassView
-                pointerEvents="none"
-                style={StyleSheet.absoluteFill}
-                glassEffectStyle="regular"
-                colorScheme={colors.captureGlassColorScheme}
-              />
-              <View style={styles.captureMetaInputWrap}>
-                <Ionicons
-                  name="restaurant-outline"
-                  size={13}
-                  color={colors.captureGlassIcon}
-                />
-                <TextInput
-                  ref={restaurantInputRef}
-                  testID="capture-restaurant-input"
-                  style={[styles.cardRestaurantInput, styles.cardRestaurantInputCompact, { color: colors.captureGlassText }]}
-                  placeholder={t('capture.restaurantPlaceholder', 'Restaurant name (e.g. Phở Hòa)')}
-                  placeholderTextColor={colors.captureGlassPlaceholder}
-                  value={restaurantName}
-                  onChangeText={onChangeRestaurantName}
-                  onFocus={handleRestaurantInputFocus}
-                  onBlur={handleRestaurantInputBlur}
-                  blurOnSubmit
-                  onSubmitEditing={handleRestaurantInputSubmit}
-                  returnKeyType="done"
-                  maxLength={100}
-                  selectionColor={colors.primary}
-                />
-              </View>
-              <View style={[styles.captureMetaDivider, { backgroundColor: colors.captureGlassBorder }]} />
-              <View style={styles.captureMetaActions}>
-                <CaptureAnimatedPressable
-                  testID="capture-radius-toggle"
-                  accessibilityRole="button"
-                  accessibilityLabel={`${t('capture.radiusLabel', 'Reminder radius')}: ${formatRadiusLabel(radius)}`}
-                  onPress={handleOpenRadiusSheet}
-                  hitSlop={10}
-                  style={[
-                    styles.captureInlineRadiusButton,
-                    {
-                      backgroundColor: colors.captureGlassFill,
-                      borderColor: colors.captureGlassBorder,
-                    },
-                  ]}
-                >
-                  <Ionicons name="radio-outline" size={16} color={colors.captureGlassText} />
-                </CaptureAnimatedPressable>
-                {onChangeNoteColor ? (
-                  <CaptureAnimatedPressable
-                    testID="capture-note-color-toggle"
-                    accessibilityRole="button"
-                    accessibilityLabel={t('capture.noteColor', 'Card color')}
-                    onPress={handleOpenNoteColorSheet}
-                    hitSlop={10}
-                    style={[
-                      styles.captureInlineColorButton,
-                      {
-                        backgroundColor: colors.captureGlassFill,
-                        borderColor: colors.captureGlassBorder,
-                      },
-                    ]}
-                  >
-                    <LinearGradient
-                      colors={inlineColorGradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.captureInlineColorPreview}
-                    />
-                  </CaptureAnimatedPressable>
-                ) : null}
-              </View>
-            </View>
-          ) : (
-            <View style={styles.cameraMetaSlot}>
-              {cameraInstructionText ? (
-                <Reanimated.View
-                  pointerEvents={showCameraInstructionHint ? 'auto' : 'none'}
-                  style={[styles.cameraMetaHintLayer, cameraHintAnimatedStyle]}
-                >
-                  <View
-                    accessibilityRole="text"
-                    accessibilityLabel={cameraInstructionText}
-                    style={[styles.cameraHintPill, { borderColor: colors.captureGlassBorder }]}
-                  >
-                    {isOlderIOS ? (
-                      <View
-                        style={[
-                          StyleSheet.absoluteFill,
-                          {
-                            backgroundColor: colors.captureGlassFill,
-                            borderRadius: Radii.pill,
-                          },
-                        ]}
-                      />
-                    ) : null}
-                    {!isOlderIOS ? (
-                      <GlassView
-                        pointerEvents="none"
-                        style={StyleSheet.absoluteFill}
-                        glassEffectStyle="regular"
-                        colorScheme={colors.captureGlassColorScheme}
-                      />
-                    ) : null}
-                    <View style={styles.cameraHintContent}>
-                      <Ionicons name="sparkles-outline" size={12} color={colors.captureGlassIcon} />
-                      <Text numberOfLines={1} style={[styles.cameraHintText, { color: colors.captureGlassIcon }]}>
-                        {t('capture.livePhotoCoachPhotoHint', 'Tap for photo')}
-                        <Text style={[styles.cameraHintSeparator, { color: colors.captureGlassBorder }]}>  •  </Text>
-                        <Text style={[styles.cameraHintAccentText, { color: colors.captureGlassText }]}>
-                          {t('capture.livePhotoCoachLiveHint', 'Hold for Live')}
-                        </Text>
-                      </Text>
-                    </View>
-                  </View>
-                </Reanimated.View>
-              ) : null}
-              <Reanimated.View
-                pointerEvents={showCameraInstructionHint ? 'none' : 'auto'}
-                style={[styles.cameraMetaButtonLayer, cameraRadiusAnimatedStyle]}
-              >
-                <CaptureAnimatedPressable
-                  testID="capture-radius-toggle"
-                  accessibilityRole="button"
-                  accessibilityLabel={`${t('capture.radiusLabel', 'Reminder radius')}: ${formatRadiusLabel(radius)}`}
-                  accessibilityElementsHidden={showCameraInstructionHint}
-                  importantForAccessibility={showCameraInstructionHint ? 'no-hide-descendants' : 'auto'}
-                  disabled={showCameraInstructionHint}
-                  onPress={handleOpenRadiusSheet}
-                  hitSlop={10}
-                  childrenContainerStyle={styles.captureStandaloneRadiusButtonContent}
-                  style={[
-                    styles.captureStandaloneRadiusButton,
-                    {
-                      borderColor: colors.captureGlassBorder,
-                      backgroundColor: isOlderIOS ? colors.captureGlassFill : 'transparent',
-                    },
-                  ]}
-                >
-                  {!isOlderIOS ? (
-                    <GlassView
-                      pointerEvents="none"
-                      style={StyleSheet.absoluteFill}
-                      glassEffectStyle="regular"
-                      colorScheme={colors.captureGlassColorScheme}
-                    />
-                  ) : null}
-                  <Ionicons name="radio-outline" size={16} color={colors.captureGlassIcon} />
-                </CaptureAnimatedPressable>
-              </Reanimated.View>
-            </View>
-          )}
-        </View>
-      </View>
-    </>
+            <LivePhotoIcon
+              size={15}
+              color={hasLivePhotoMotion ? textCardActiveIconColor : colors.captureGlassText}
+            />
+            <Text
+              style={[
+                styles.livePhotoPillText,
+                { color: hasLivePhotoMotion ? textCardActiveIconColor : colors.captureGlassText },
+              ]}
+            >
+              {hasLivePhotoMotion
+                ? t('capture.removeLivePhotoShort', 'Remove Live')
+                : t('capture.addLivePhotoShort', 'Add Live')}
+            </Text>
+          </CaptureAnimatedPressable>
+        }
+      />
+    </View>
   );
 }
 
@@ -1539,8 +1464,6 @@ interface CaptureActionRowProps {
   isSaveSuccessful: boolean;
   isSharedTarget: boolean;
   livePhotoCountdownSeconds: CaptureCardCameraControllerState['livePhotoCountdownSeconds'];
-  livePhotoProgressPath: CaptureCardCameraControllerState['livePhotoProgressPath'];
-  livePhotoRingProgress: CaptureCardCameraControllerState['livePhotoRingProgress'];
   onChangeShareTarget: CaptureCardProps['onChangeShareTarget'];
   onRetakePhoto: CaptureCardProps['onRetakePhoto'];
   onSaveNote: CaptureCardProps['onSaveNote'];
@@ -1576,8 +1499,6 @@ function CaptureActionRow({
   isSaveSuccessful,
   isSharedTarget,
   livePhotoCountdownSeconds,
-  livePhotoProgressPath,
-  livePhotoRingProgress,
   onChangeShareTarget,
   onRetakePhoto,
   onSaveNote,
@@ -1635,21 +1556,6 @@ function CaptureActionRow({
                   shutterCaptureHaloAnimatedStyle,
                 ]}
               />
-              {isLivePhotoCaptureInProgress ? (
-                <View pointerEvents="none" style={styles.shutterLiveProgressWrap}>
-                  <Canvas style={styles.shutterLiveProgressCanvas}>
-                    <SkiaPath
-                      path={livePhotoProgressPath}
-                      start={0}
-                      end={Math.max(livePhotoRingProgress, 0.001)}
-                      color={colors.primary}
-                      style="stroke"
-                      strokeWidth={LIVE_PHOTO_RING_STROKE_WIDTH}
-                      strokeCap="round"
-                    />
-                  </Canvas>
-                </View>
-              ) : null}
               <Reanimated.View
                 style={[
                   styles.shutterInner,
@@ -1754,8 +1660,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   lockedNoteColorIds = [],
   previewOnlyNoteColorIds = [],
   onPressLockedNoteColor,
-  restaurantName,
-  onChangeRestaurantName,
   capturedPhoto,
   capturedPairedVideo = null,
   onRetakePhoto,
@@ -1785,7 +1689,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   isLivePhotoCaptureInProgress = false,
   isLivePhotoCaptureSettling = false,
   isLivePhotoSaveGuardActive = false,
-  cameraStatusText,
   cameraInstructionText = null,
   remainingPhotoSlots,
   libraryImportLocked = false,
@@ -1804,6 +1707,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const isSharedTarget = shareTarget === 'shared';
   const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
   const textCardActiveIconColor = isDarkCaptureTheme ? colors.captureCardText : '#FFFFFF';
+  const textCaptureNoteColor = DEFAULT_NOTE_COLOR_ID;
+  const effectiveTextModeNoteColor = captureMode === 'text' ? textCaptureNoteColor : noteColor;
   const hasLivePhotoMotion = Boolean(capturedPairedVideo);
   const saveStateScale = useSharedValue(1);
   const saveSuccessProgress = useSharedValue(saveState === 'success' ? 1 : 0);
@@ -1828,7 +1733,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const isSaveSuccessful = saveState === 'success';
   const isSaveDisabled = isSaveBusy || isSaveSuccessful;
   const interactionsDisabled = isSaveBusy || isSaveSuccessful;
-  const hasVisibleCameraStatus = captureMode === 'camera' && Boolean(cameraStatusText);
   const noteInputRef = useRef<TextInput | null>(null);
   const restaurantInputRef = useRef<TextInput | null>(null);
   const {
@@ -1837,8 +1741,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     handleChangeNoteText,
     handleNoteInputBlur,
     handleNoteInputFocus,
-    handleRestaurantInputBlur,
-    handleRestaurantInputFocus,
     isNoteInputFocused,
     isTextEntryFocused,
     recentAutoEmoji,
@@ -1856,6 +1758,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   useEffect(() => {
     onTextEntryFocusChange?.(isTextEntryFocused);
   }, [isTextEntryFocused, onTextEntryFocusChange]);
+  useEffect(() => {
+    if (captureMode !== 'text' || !onChangeNoteColor) {
+      return;
+    }
+
+    if (noteColor !== textCaptureNoteColor) {
+      onChangeNoteColor(textCaptureNoteColor);
+    }
+  }, [captureMode, noteColor, onChangeNoteColor, textCaptureNoteColor]);
   useEffect(
     () => () => {
       onTextEntryFocusChange?.(false);
@@ -1864,10 +1775,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   );
   const dismissCaptureInputs = useCallback(() => {
     noteInputRef.current?.blur();
-    restaurantInputRef.current?.blur();
-    dismissCaptureInputsState();
-  }, [dismissCaptureInputsState]);
-  const handleRestaurantInputSubmit = useCallback(() => {
     restaurantInputRef.current?.blur();
     dismissCaptureInputsState();
   }, [dismissCaptureInputsState]);
@@ -1907,7 +1814,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const {
     closeStickerOverlays,
     dismissPastePrompt,
-    handleCloseStickerActionsSheet,
     handleCloseStickerSourceSheet,
     handleConfirmPasteFromPrompt,
     handleInlinePasteStickerPress,
@@ -1915,17 +1821,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     handleSelectedStickerAction,
     handleSelectSticker,
     handleShowCardPastePrompt,
-    handleShowStickerActions,
     handleShowStickerSourceOptions,
     handleToggleStickerMode,
     importingSticker,
     inlinePasteLoading,
     pastePrompt,
-    selectedStickerIsStamp,
-    selectedStickerMotionLocked,
-    selectedStickerOutlineEnabled,
     showInlinePasteButton,
-    showStickerActionsSheet,
     showStickerSourceSheet,
     stickerSourceActions,
     useNativeInlinePasteButton,
@@ -1950,8 +1851,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const {
     handleCloseNoteColorSheet,
     handleCloseRadiusSheet,
-    handleOpenNoteColorSheet,
-    handleOpenRadiusSheet,
     handlePressLockedNoteColor,
     handleSelectNoteColor,
     handleSelectRadius,
@@ -1967,13 +1866,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   });
   const {
     cameraKey,
-    cameraHintAnimatedStyle,
     cameraPreviewZoom,
-    cameraRadiusAnimatedStyle,
     cameraTransitionMaskAnimatedStyle,
     cameraUnavailableDetail,
     cameraZoomGesture,
-    cameraZoomLabel,
     canShowLiveCameraPreview,
     handleCameraInitialized,
     handleCameraPreviewStarted,
@@ -1988,9 +1884,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     restartCameraPreview,
     shouldRenderCameraPreview,
     shouldShowCameraCard,
-    showCameraInstructionHint,
     showCameraUnavailableState,
-    showCameraZoomBadge,
     shutterCaptureHaloAnimatedStyle,
     shutterInnerAnimatedStyle,
     shutterOuterAnimatedStyle,
@@ -2032,9 +1926,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     !isModeSwitchAnimating &&
     (captureMode === 'camera' || (captureMode === 'text' && isTextEntryFocused));
   const shouldUseSimpleKeyboardAvoidance =
-    Platform.OS === 'ios' && captureMode === 'text' && isTextEntryFocused;
+    Platform.OS === 'ios' && isTextEntryFocused;
   const androidTextEntryBottomInset =
-    Platform.OS === 'android' && captureMode === 'text' && isTextEntryFocused ? 96 : 0;
+    Platform.OS === 'android' && isTextEntryFocused ? 96 : 0;
   const captureKeyboardVerticalOffset = topInset + 76;
 
   useEffect(() => {
@@ -2260,11 +2154,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const savePressAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: savePressScale.value }],
   }), [savePressScale]);
-  const captureGradient = getCaptureNoteGradient({ noteColor });
-  const inlineColorGradient =
-    getNoteColorCardGradient(noteColor ?? DEFAULT_NOTE_COLOR_ID) ??
-    getNoteColorCardGradient(DEFAULT_NOTE_COLOR_ID) ??
-    captureGradient;
   const handleCameraRetryPress = useCallback(() => {
     triggerCaptureCardHaptic();
     restartCameraPreview(true);
@@ -2283,7 +2172,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     >
       <View>
         <NoteColorPicker
-          selectedColor={noteColor ?? DEFAULT_NOTE_COLOR_ID}
+          selectedColor={effectiveTextModeNoteColor ?? DEFAULT_NOTE_COLOR_ID}
           onSelectColor={handleSelectNoteColor}
           lockedColorIds={lockedNoteColorIds}
           previewOnlyColorIds={previewOnlyNoteColorIds}
@@ -2340,89 +2229,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       </View>
     </AppSheetScaffold>
   );
-  const stickerActionsSheetBody = selectedStickerId ? (
-    <AppSheetScaffold
-      headerVariant="none"
-      contentContainerStyle={styles.stickerActionsSheet}
-      useHorizontalPadding={false}
-      contentBottomPaddingWhenFooter={0}
-      footerTopSpacing={0}
-      footer={(
-        <View style={styles.stickerActionsSheetFooter}>
-          <SheetFooterButton
-            label={t('capture.cancel', 'Cancel')}
-            onPress={handleCloseStickerActionsSheet}
-            testID="capture-sticker-sheet-cancel"
-          />
-        </View>
-      )}
-    >
-      <View style={styles.stickerActionsSheetHeader}>
-        <Text style={[styles.stickerActionsSheetTitle, { color: colors.text }]}>
-          {selectedStickerIsStamp
-            ? t('capture.stampOptionsTitle', 'Stamp options')
-            : t('capture.stickerOptionsTitle', 'Sticker options')}
-        </Text>
-      </View>
-      <View style={styles.stickerActionsSheetList}>
-        {[
-          {
-            key: 'motion-lock',
-            testID: 'capture-sticker-sheet-motion-lock',
-            label: selectedStickerMotionLocked
-              ? t('capture.unlockStickerMotion', 'Unlock sticker motion')
-              : t('capture.lockStickerMotion', 'Lock sticker motion'),
-            icon: selectedStickerMotionLocked ? 'lock-closed' : 'lock-open-outline',
-            active: selectedStickerMotionLocked,
-            onPress: () => handleSelectedStickerAction('motion-lock-toggle'),
-          },
-          ...(!selectedStickerIsStamp ? [{
-            key: 'outline-toggle',
-            testID: 'capture-sticker-sheet-outline-toggle',
-            label: selectedStickerOutlineEnabled
-              ? t('capture.stickerOutlineDisable', 'Turn off outline')
-              : t('capture.stickerOutlineEnable', 'Turn on outline'),
-            icon: selectedStickerOutlineEnabled ? 'ellipse' : 'ellipse-outline',
-            active: selectedStickerOutlineEnabled,
-            onPress: () => handleSelectedStickerAction('outline-toggle'),
-          }] : []),
-        ].map((item, index, items) => (
-          <View key={item.key}>
-            <Pressable
-              testID={item.testID}
-              accessibilityRole="button"
-              onPress={() => {
-                item.onPress();
-                handleCloseStickerActionsSheet();
-              }}
-              style={({ pressed }) => [
-                styles.stickerActionsSheetRow,
-                pressed ? styles.stickerActionsSheetRowPressed : null,
-              ]}
-            >
-              <View style={styles.stickerActionsSheetRowContent}>
-                <View style={[styles.stickerActionsSheetIconBadge, { backgroundColor: `${colors.primary}18` }]}>
-                  <Ionicons name={item.icon as any} size={18} color={colors.primary} />
-                </View>
-                <Text
-                  style={[
-                    styles.stickerActionsSheetLabel,
-                    { color: colors.text },
-                  ]}
-                >
-                  {item.label}
-                </Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
-              </View>
-            </Pressable>
-            {index < items.length - 1 ? (
-              <View style={[styles.stickerActionsSheetDivider, { backgroundColor: colors.border }]} />
-            ) : null}
-          </View>
-        ))}
-      </View>
-    </AppSheetScaffold>
-  ) : null;
   return (
     <>
       <View
@@ -2469,7 +2275,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 handleSelectDoodleColor={handleSelectDoodleColor}
                 handleSelectedStickerAction={handleSelectedStickerAction}
                 handleSelectSticker={handleSelectSticker}
-                handleShowStickerActions={handleShowStickerActions}
                 handleShowStickerSourceOptions={handleShowStickerSourceOptions}
                 handleToggleDoodleMode={handleToggleDoodleMode}
                 handleToggleStickerMode={handleToggleStickerMode}
@@ -2478,11 +2283,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 inlinePasteLoading={inlinePasteLoading}
                 interactionsDisabled={interactionsDisabled}
                 noteInputRef={noteInputRef}
+                noteColor={effectiveTextModeNoteColor}
                 noteText={noteText}
-                noteColor={noteColor}
                 recentAutoEmoji={recentAutoEmoji}
                 selectedStickerId={selectedStickerId}
-                selectedStickerIsStamp={selectedStickerIsStamp}
                 setTextDoodleStrokes={setTextDoodleStrokes}
                 showInlinePasteButton={showInlinePasteButton}
                 stickerModeEnabled={stickerModeEnabled}
@@ -2499,33 +2303,21 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 capturedPhoto={capturedPhoto}
                 colors={colors}
                 doodleColor={doodleColor}
-                doodleColorOptions={doodleColorOptions}
                 doodleModeEnabled={doodleModeEnabled}
                 doodleStrokes={doodleStrokes}
                 flashAnimatedStyle={flashAnimatedStyle}
                 handleChangeStickerPlacements={handleChangeStickerPlacements}
-                handleClearDoodle={handleClearDoodle}
                 handleConfirmPasteFromPrompt={handleConfirmPasteFromPrompt}
                 handlePressStickerCanvas={handlePressStickerCanvas}
-                handleSelectDoodleColor={handleSelectDoodleColor}
                 handleSelectedStickerAction={handleSelectedStickerAction}
                 handleSelectSticker={handleSelectSticker}
                 handleShowCardPastePrompt={handleShowCardPastePrompt}
-                handleShowStickerActions={handleShowStickerActions}
-                handleShowStickerSourceOptions={handleShowStickerSourceOptions}
-                handleToggleDoodleMode={handleToggleDoodleMode}
-                handleToggleStickerMode={handleToggleStickerMode}
-                handleUndoDoodle={handleUndoDoodle}
                 hasLivePhotoMotion={hasLivePhotoMotion}
-                importingSticker={importingSticker}
                 onChangePhotoFilter={onChangePhotoFilter}
-                onImportMotionClip={onImportMotionClip}
-                onRemoveMotionClip={onRemoveMotionClip}
                 pastePrompt={pastePrompt}
                 photoDoodleStrokes={photoDoodleStrokes}
                 selectedPhotoFilterId={selectedPhotoFilterId}
                 selectedStickerId={selectedStickerId}
-                selectedStickerIsStamp={selectedStickerIsStamp}
                 setPhotoDoodleStrokes={setPhotoDoodleStrokes}
                 stickerModeEnabled={stickerModeEnabled}
                 stickerPlacements={stickerPlacements}
@@ -2542,7 +2334,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 cameraTransitionMaskAnimatedStyle={cameraTransitionMaskAnimatedStyle}
                 cameraUnavailableDetail={cameraUnavailableDetail}
                 cameraZoomGesture={cameraZoomGesture}
-                cameraZoomLabel={cameraZoomLabel}
                 canShowLiveCameraPreview={canShowLiveCameraPreview}
                 colors={colors}
                 facing={facing}
@@ -2552,13 +2343,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 handleCameraRetryPress={handleCameraRetryPress}
                 handleCameraStartupFailure={handleCameraStartupFailure}
                 handleRequestCameraPermissionPress={handleRequestCameraPermissionPress}
-                importingPhoto={importingPhoto}
-                libraryImportLocked={libraryImportLocked}
+                isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
+                livePhotoProgressPath={livePhotoProgressPath}
+                livePhotoRingProgress={livePhotoRingProgress}
                 needsCameraPermission={needsCameraPermission}
-                onOpenPhotoLibrary={onOpenPhotoLibrary}
                 shouldRenderCameraPreview={shouldRenderCameraPreview}
                 showCameraUnavailableState={showCameraUnavailableState}
-                showCameraZoomBadge={showCameraZoomBadge}
                 t={t}
               />
             ) : null}
@@ -2571,28 +2361,65 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             ]}
             pointerEvents={interactionsDisabled ? 'none' : 'auto'}
           >
-            <CaptureMetaSection
-              cameraHintAnimatedStyle={cameraHintAnimatedStyle}
-              cameraInstructionText={cameraInstructionText}
-              cameraRadiusAnimatedStyle={cameraRadiusAnimatedStyle}
-              cameraStatusText={cameraStatusText}
-              captureMode={captureMode}
-              colors={colors}
-              handleOpenNoteColorSheet={handleOpenNoteColorSheet}
-              handleOpenRadiusSheet={handleOpenRadiusSheet}
-              handleRestaurantInputBlur={handleRestaurantInputBlur}
-              handleRestaurantInputFocus={handleRestaurantInputFocus}
-              handleRestaurantInputSubmit={handleRestaurantInputSubmit}
-              hasVisibleCameraStatus={hasVisibleCameraStatus}
-              inlineColorGradient={inlineColorGradient}
-              onChangeNoteColor={onChangeNoteColor}
-              onChangeRestaurantName={onChangeRestaurantName}
-              radius={radius}
-              restaurantInputRef={restaurantInputRef}
-              restaurantName={restaurantName}
-              showCameraInstructionHint={showCameraInstructionHint}
-              t={t}
-            />
+            {captureMode === 'text' ? (
+              <TextCaptureBottomBar
+                colors={colors}
+                doodleColor={doodleColor}
+                doodleColorOptions={doodleColorOptions}
+                doodleModeEnabled={doodleModeEnabled}
+                doodleStrokes={doodleStrokes}
+                handleClearDoodle={handleClearDoodle}
+                handleInlinePasteStickerPress={handleInlinePasteStickerPress}
+                handleNativeInlinePasteStickerPress={handleNativeInlinePasteStickerPress}
+                handleSelectDoodleColor={handleSelectDoodleColor}
+                handleSelectedStickerAction={handleSelectedStickerAction}
+                handleShowStickerSourceOptions={handleShowStickerSourceOptions}
+                handleToggleDoodleMode={handleToggleDoodleMode}
+                handleToggleStickerMode={handleToggleStickerMode}
+                handleUndoDoodle={handleUndoDoodle}
+                importingSticker={importingSticker}
+                inlinePasteLoading={inlinePasteLoading}
+                selectedStickerId={selectedStickerId}
+                showInlinePasteButton={showInlinePasteButton}
+                stickerModeEnabled={stickerModeEnabled}
+                t={t}
+                textCardActiveIconColor={textCardActiveIconColor}
+                useNativeInlinePasteButton={useNativeInlinePasteButton}
+              />
+            ) : capturedPhoto ? (
+              <PhotoCaptureBottomBar
+                colors={colors}
+                doodleColor={doodleColor}
+                doodleColorOptions={doodleColorOptions}
+                doodleModeEnabled={doodleModeEnabled}
+                doodleStrokes={doodleStrokes}
+                handleClearDoodle={handleClearDoodle}
+                handleSelectDoodleColor={handleSelectDoodleColor}
+                handleSelectedStickerAction={handleSelectedStickerAction}
+                handleShowStickerSourceOptions={handleShowStickerSourceOptions}
+                handleToggleDoodleMode={handleToggleDoodleMode}
+                handleToggleStickerMode={handleToggleStickerMode}
+                handleUndoDoodle={handleUndoDoodle}
+                hasLivePhotoMotion={hasLivePhotoMotion}
+                importingSticker={importingSticker}
+                onImportMotionClip={onImportMotionClip}
+                onRemoveMotionClip={onRemoveMotionClip}
+                selectedStickerId={selectedStickerId}
+                stickerModeEnabled={stickerModeEnabled}
+                t={t}
+                textCardActiveIconColor={textCardActiveIconColor}
+              />
+            ) : (
+              <LiveCameraActionBar
+                cameraInstructionText={cameraInstructionText}
+                colors={colors}
+                importingPhoto={importingPhoto}
+                libraryImportLocked={libraryImportLocked}
+                needsCameraPermission={needsCameraPermission}
+                onOpenPhotoLibrary={onOpenPhotoLibrary}
+                t={t}
+              />
+            )}
             <CaptureActionRow
               animatedSaveHaloStyle={animatedSaveHaloStyle}
               animatedSaveIconStyle={animatedSaveIconStyle}
@@ -2611,8 +2438,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               isSaveSuccessful={isSaveSuccessful}
               isSharedTarget={isSharedTarget}
               livePhotoCountdownSeconds={livePhotoCountdownSeconds}
-              livePhotoProgressPath={livePhotoProgressPath}
-              livePhotoRingProgress={livePhotoRingProgress}
               onChangeShareTarget={onChangeShareTarget}
               onRetakePhoto={onRetakePhoto}
               onSaveNote={onSaveNote}
@@ -2650,13 +2475,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           {noteColorSheetBody}
         </AppSheet>
       ) : null}
-      <AppSheet
-        visible={showStickerActionsSheet}
-        onClose={handleCloseStickerActionsSheet}
-        iosColorScheme={colors.captureGlassColorScheme}
-      >
-        {stickerActionsSheetBody}
-      </AppSheet>
       <AppSheet
         visible={showRadiusSheet}
         onClose={handleCloseRadiusSheet}
@@ -2708,12 +2526,19 @@ const styles = StyleSheet.create({
     borderRadius: Layout.cardRadius,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 32,
+    padding: 28,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
     position: 'relative',
     ...(Platform.OS === 'android' ? {} : Shadows.card),
+  },
+  textCardLightContrast: {
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.12,
+    shadowRadius: 28,
+    elevation: 10,
   },
   cardPasteSurface: {
     ...StyleSheet.absoluteFill,
@@ -2795,19 +2620,20 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     gap: 8,
   },
-  textTopControlsDock: {
-    height: TOP_CONTROL_HEIGHT,
-    position: 'relative',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  textTopControlsLayer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-  },
   cardTopOverlayRowWrap: {
     flexWrap: 'wrap',
+  },
+  photoTopToolsBar: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  photoTopToolsRow: {
+    justifyContent: 'flex-start',
+    alignSelf: 'flex-start',
+  },
+  photoTopDetailAction: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
   },
   photoDoodleActionsCluster: {
     flexDirection: 'row',
@@ -2831,6 +2657,11 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  textCardInlineColorPreview: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
   decorateToggleButton: {
     width: 50,
@@ -2934,6 +2765,18 @@ const styles = StyleSheet.create({
     position: 'relative',
     zIndex: 3,
   },
+  cardRestaurantPillOverlay: {
+    width: 'auto',
+    maxWidth: CARD_SIZE - 140,
+    minWidth: 210,
+    alignSelf: 'center',
+    paddingHorizontal: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 3,
+  },
   cardRestaurantPillBelow: {
     marginTop: 0,
   },
@@ -2941,7 +2784,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 344,
     alignSelf: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
     gap: 0,
   },
   captureMetaStack: {
@@ -3032,6 +2875,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     zIndex: 1,
   },
+  cameraLiveProgressOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 3,
+  },
+  cameraLiveProgressCanvas: {
+    width: '100%',
+    height: '100%',
+  },
   cameraZoomBadge: {
     position: 'absolute',
     top: TOP_CONTROL_INSET,
@@ -3121,6 +2972,53 @@ const styles = StyleSheet.create({
     minHeight: 52,
     justifyContent: 'center',
   },
+  textBottomToolsWrap: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 8,
+  },
+  captureActionBarWrap: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  textBottomToolsBar: {
+    alignSelf: 'center',
+    minHeight: 46,
+    borderRadius: Radii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    position: 'relative',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  textBottomToolsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    flexWrap: 'nowrap',
+    minHeight: TOP_CONTROL_HEIGHT,
+    gap: 8,
+  },
+  textBottomToolsButton: {
+    width: TOP_CONTROL_HEIGHT,
+    height: TOP_CONTROL_HEIGHT,
+    borderRadius: TOP_CONTROL_RADIUS,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textBottomToolsAction: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textBottomDetailAction: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+  },
   captureStandaloneRadiusButton: {
     width: 38,
     height: 38,
@@ -3150,6 +3048,18 @@ const styles = StyleSheet.create({
   cameraInstructionText: {
     ...Typography.pill,
     textAlign: 'center',
+  },
+  cameraActionHintWrap: {
+    flex: 1,
+    minWidth: 0,
+    paddingLeft: 4,
+    paddingRight: 8,
+    justifyContent: 'center',
+  },
+  cameraActionHintText: {
+    ...Typography.pill,
+    fontSize: 12,
+    lineHeight: 15,
   },
   cameraControlsWrap: {
     width: '100%',
@@ -3289,22 +3199,10 @@ const styles = StyleSheet.create({
     height: SHUTTER_OUTER_SIZE + 18,
     borderRadius: (SHUTTER_OUTER_SIZE + 18) / 2,
   },
-  shutterLiveProgressWrap: {
-    position: 'absolute',
-    width: LIVE_PHOTO_RING_SIZE,
-    height: LIVE_PHOTO_RING_SIZE,
-    borderRadius: LIVE_PHOTO_RING_SIZE / 2,
-    overflow: 'hidden',
-    transform: [{ rotate: '-90deg' }],
-  },
-  shutterLiveProgressCanvas: {
-    width: LIVE_PHOTO_RING_SIZE,
-    height: LIVE_PHOTO_RING_SIZE,
-  },
   shutterInner: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: SHUTTER_INNER_SIZE,
+    height: SHUTTER_INNER_SIZE,
+    borderRadius: SHUTTER_INNER_SIZE / 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -3314,7 +3212,7 @@ const styles = StyleSheet.create({
   },
   saveHalo: {
     ...StyleSheet.absoluteFill,
-    borderRadius: 27,
+    borderRadius: SHUTTER_INNER_SIZE / 2,
   },
   shutterInnerCountText: {
     color: '#FFFFFF',

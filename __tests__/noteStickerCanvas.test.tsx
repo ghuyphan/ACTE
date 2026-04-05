@@ -189,4 +189,34 @@ describe('NoteStickerCanvas', () => {
     );
     expect(getByTestId('note-sticker-image-placement-1').props.transition).toBe(0);
   });
+
+  it('renders lock and outline controls on the selected editable sticker', () => {
+    const { getByTestId } = render(
+      <NoteStickerCanvas
+        placements={[stickerPlacement]}
+        editable
+        selectedPlacementId="placement-1"
+        onToggleSelectedPlacementMotionLock={jest.fn()}
+        onToggleSelectedPlacementOutline={jest.fn()}
+      />
+    );
+
+    expect(getByTestId('note-sticker-lock-toggle-placement-1')).toBeTruthy();
+    expect(getByTestId('note-sticker-outline-toggle-placement-1')).toBeTruthy();
+  });
+
+  it('hides the outline control for selected stamp stickers', () => {
+    const { getByTestId, queryByTestId } = render(
+      <NoteStickerCanvas
+        placements={[{ ...stickerPlacement, renderMode: 'stamp' }]}
+        editable
+        selectedPlacementId="placement-1"
+        onToggleSelectedPlacementMotionLock={jest.fn()}
+        onToggleSelectedPlacementOutline={jest.fn()}
+      />
+    );
+
+    expect(getByTestId('note-sticker-lock-toggle-placement-1')).toBeTruthy();
+    expect(queryByTestId('note-sticker-outline-toggle-placement-1')).toBeNull();
+  });
 });

@@ -326,7 +326,7 @@ async function hashStickerBytes(bytes: Uint8Array) {
   }
 
   const digestSource = Uint8Array.from(bytes);
-  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, digestSource.buffer);
+  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, digestSource);
   return bufferToHex(digest);
 }
 

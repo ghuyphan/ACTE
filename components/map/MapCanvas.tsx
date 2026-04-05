@@ -118,14 +118,14 @@ function getLeafMarkerBaseScale(
   const zoomProgress = Math.min(1, Math.max(0, (zoomLevel - 4) / 12));
 
   if (variant === 'photo') {
-    return 0.64 + zoomProgress * 0.36;
+    return 0.82 + zoomProgress * 0.14;
   }
 
   if (variant === 'group') {
-    return 0.72 + zoomProgress * 0.28;
+    return 0.86 + zoomProgress * 0.12;
   }
 
-  return 0.68 + zoomProgress * 0.32;
+  return 0.84 + zoomProgress * 0.14;
 }
 
 const MarkerContent = memo(function MarkerContent({
@@ -154,7 +154,6 @@ const MarkerContent = memo(function MarkerContent({
 }: MarkerContentProps) {
   const activeProgress = useSharedValue(selected ? 1 : 0);
   const pulseProgress = useSharedValue(0);
-  const enterProgress = useSharedValue(0);
 
   const size = useMemo(() => (isCluster ? getClusterSize(pointCount) : pointCount > 1 ? 33 : 18), [isCluster, pointCount]);
   const leafMarkerBaseScale = useMemo(() => {
@@ -173,12 +172,6 @@ const MarkerContent = memo(function MarkerContent({
     return getLeafMarkerBaseScale(zoomLevel, 'single');
   }, [isCluster, pointCount, showPhotoThumbnail, showRichPreview, showStackPreview, zoomLevel]);
   const scaleProgress = useSharedValue(leafMarkerBaseScale);
-
-  useEffect(() => {
-    enterProgress.value = reduceMotionEnabled
-      ? withTiming(1, { duration: mapMotionDurations.fast })
-      : withTiming(1, { duration: mapMotionDurations.slow });
-  }, [enterProgress, reduceMotionEnabled]);
 
   useEffect(() => {
     activeProgress.value = reduceMotionEnabled
@@ -212,17 +205,15 @@ const MarkerContent = memo(function MarkerContent({
   const containerStyle = useAnimatedStyle(() => {
     const focusProgress = Math.max(activeProgress.value, pulseProgress.value);
     const scaleBoost = isCluster
-      ? interpolate(pulseProgress.value, [0, 1], [1, 1.08])
-      : interpolate(focusProgress, [0, 1], [1, pointCount > 1 ? 1.06 : 1.1]);
-    const enterScale = interpolate(enterProgress.value, [0, 1], [0.88, 1]);
+      ? interpolate(pulseProgress.value, [0, 1], [1, 1.05])
+      : interpolate(focusProgress, [0, 1], [1, pointCount > 1 ? 1.04 : 1.07]);
     const lift = isCluster || showRichPreview || showStackPreview
       ? 0
       : interpolate(focusProgress, [0, 1], [0, pointCount > 1 ? -0.5 : -1]);
     return {
-      opacity: enterProgress.value,
       transform: [
         { translateY: lift },
-        { scale: enterScale * scaleBoost * scaleProgress.value },
+        { scale: scaleBoost * scaleProgress.value },
       ],
     };
   }, [isCluster, pointCount, scaleProgress, showRichPreview, showStackPreview]);
@@ -230,8 +221,8 @@ const MarkerContent = memo(function MarkerContent({
   const haloStyle = useAnimatedStyle(() => {
     const focusProgress = Math.max(activeProgress.value, pulseProgress.value);
     return {
-      opacity: interpolate(focusProgress, [0, 1], [0, isCluster ? 0.18 : 0.26]),
-      transform: [{ scale: interpolate(focusProgress, [0, 1], [0.9, isCluster ? 1.18 : 1.22]) }],
+      opacity: interpolate(focusProgress, [0, 1], [0, isCluster ? 0.14 : 0.2]),
+      transform: [{ scale: interpolate(focusProgress, [0, 1], [0.94, isCluster ? 1.12 : 1.16]) }],
     };
   });
 
@@ -618,7 +609,9 @@ function MapCanvas({
               testID={node.isCluster ? `cluster-marker-${node.id}` : `leaf-marker-${node.groupId ?? node.id}`}
               coordinate={{ latitude: node.latitude, longitude: node.longitude }}
               anchor={showSelectedCallout ? selectedCalloutAnchor : { x: 0.5, y: 0.5 }}
-              tracksViewChanges={androidShouldTrackMarkerViews || pulseActive || isSelected || reduceMotionEnabled}
+              tracksViewChanges={
+                isSelected || pulseActive || reduceMotionEnabled || (isAndroid && androidShouldTrackMarkerViews)
+              }
               onPress={(event) => {
                 event.stopPropagation?.();
                 if (node.isCluster) {
@@ -702,7 +695,9 @@ function MapCanvas({
               testID={`friend-marker-${post.id}`}
               coordinate={{ latitude: post.latitude, longitude: post.longitude }}
               anchor={{ x: 0.5, y: 0.5 }}
-              tracksViewChanges={androidShouldTrackMarkerViews || isSelected || reduceMotionEnabled}
+              tracksViewChanges={
+                isSelected || reduceMotionEnabled || (isAndroid && androidShouldTrackMarkerViews)
+              }
               zIndex={isSelected ? 20 : 10}
               onPress={(event) => {
                 event.stopPropagation?.();

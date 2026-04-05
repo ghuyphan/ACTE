@@ -19,8 +19,12 @@ import MapCanvas from '../map/MapCanvas';
 import MapFilterBar from '../map/MapFilterBar';
 import MapFriendsPreviewCard from '../map/MapFriendsPreviewCard';
 import MapPreviewCard from '../map/MapPreviewCard';
-import MapStatusCard from '../map/MapStatusCard';
-import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from '../map/overlayTokens';
+import {
+  getOverlayBorderColor,
+  getOverlayFallbackColor,
+  getOverlayMutedFillColor,
+  mapOverlayTokens,
+} from '../map/overlayTokens';
 import { useAuth } from '../../hooks/useAuth';
 import type { MapClusterNode, NearbyNoteItem } from '../../hooks/map/mapDomain';
 import { regionToZoom } from '../../hooks/map/mapDomain';
@@ -103,6 +107,7 @@ export default function MapScreenIOS() {
   const [isMapReady, setIsMapReady] = useState(false);
   const [activeNearbyNoteId, setActiveNearbyNoteId] = useState<string | null>(null);
   const [notesPreviewDismissed, setNotesPreviewDismissed] = useState(false);
+  const [notesPreviewCollapsed, setNotesPreviewCollapsed] = useState(false);
   const [markerPulseId, setMarkerPulseId] = useState<string | null>(null);
   const [markerPulseKey, setMarkerPulseKey] = useState(0);
   const [showFriendsPreview, setShowFriendsPreview] = useState(false);
@@ -163,6 +168,12 @@ export default function MapScreenIOS() {
 
   const previewBottomOffset = insets.bottom + 12;
   const previewMode = selectedGroup ? 'group' : 'nearby';
+  const distanceAnchor = location
+    ? {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      }
+    : null;
   const noteById = useMemo(() => new Map(notes.map((note) => [note.id, note] as const)), [notes]);
   const currentZoom = visibleRegion ? regionToZoom(visibleRegion) : regionToZoom(initialRegion);
   const nearbyItemById = useMemo(
@@ -213,11 +224,11 @@ export default function MapScreenIOS() {
   const activePreviewNoteId = activePreviewNote?.id ?? null;
   const friendsPreviewVisible = showFriendsPreview && friendPosts.length > 0;
   const hasFriendLayer = sharedEnabled && friendPosts.length > 0;
-  const hasMapContent = notes.length > 0 || friendMarkerPosts.length > 0;
+  const hasOwnNotes = notes.length > 0;
   const overlayState: OverlayState =
     !androidMapUiReady
       ? 'content'
-      : !hasMapContent
+      : !hasOwnNotes
       ? 'no-notes'
       : notes.length > 0 && filteredCount === 0
         ? 'no-filter-results'
@@ -228,11 +239,33 @@ export default function MapScreenIOS() {
     androidMapUiReady &&
     overlayState === 'content' &&
     nearbyPreviewItems.length > 0 &&
-    !notesPreviewDismissed;
+    !notesPreviewDismissed &&
+    !notesPreviewCollapsed;
+  const collapsedPreviewVisible =
+    androidMapUiReady &&
+    overlayState === 'content' &&
+    nearbyPreviewItems.length > 0 &&
+    !notesPreviewDismissed &&
+    notesPreviewCollapsed;
+  const noNotesStatusVisible =
+    androidMapUiReady && overlayState === 'no-notes' && !friendsPreviewVisible;
+  const filteredEmptyVisible =
+    androidMapUiReady && overlayState === 'no-filter-results' && !friendsPreviewVisible;
   const showAreaResultsAction =
     androidMapUiReady && overlayState === 'no-area-results' && !friendsPreviewVisible;
-  const bottomOverlayVisible = (previewVisible || showAreaResultsAction) && !friendsPreviewVisible;
-  const bottomOverlayMode = showAreaResultsAction ? 'status' : 'preview';
+  const bottomOverlayVisible =
+    (
+      previewVisible ||
+      collapsedPreviewVisible ||
+      showAreaResultsAction ||
+      filteredEmptyVisible ||
+      noNotesStatusVisible
+    ) &&
+    !friendsPreviewVisible;
+  const bottomOverlayMode =
+    showAreaResultsAction || collapsedPreviewVisible || filteredEmptyVisible || noNotesStatusVisible
+      ? 'status'
+      : 'preview';
 
   useEffect(() => {
     const shouldAdopt =
@@ -369,9 +402,12 @@ export default function MapScreenIOS() {
     if (!notesPreviewDismissed) {
       setNotesPreviewDismissed(true);
     }
+    if (notesPreviewCollapsed) {
+      setNotesPreviewCollapsed(false);
+    }
 
     handleMapPress();
-  }, [handleMapPress, notesPreviewDismissed, showFriendsPreview]);
+  }, [handleMapPress, notesPreviewCollapsed, notesPreviewDismissed, showFriendsPreview]);
 
   const handleChangeFilterType = useCallback(
     (nextType: Parameters<typeof setFilterType>[0]) => {
@@ -382,10 +418,13 @@ export default function MapScreenIOS() {
       if (notesPreviewDismissed) {
         setNotesPreviewDismissed(false);
       }
+      if (notesPreviewCollapsed) {
+        setNotesPreviewCollapsed(false);
+      }
       shouldAdoptNearbyPreviewItemsRef.current = true;
       setFilterType(nextType);
     },
-    [notesPreviewDismissed, setFilterType, showFriendsPreview]
+    [notesPreviewCollapsed, notesPreviewDismissed, setFilterType, showFriendsPreview]
   );
 
   const handleToggleFavorites = useCallback(() => {
@@ -396,9 +435,12 @@ export default function MapScreenIOS() {
     if (notesPreviewDismissed) {
       setNotesPreviewDismissed(false);
     }
+    if (notesPreviewCollapsed) {
+      setNotesPreviewCollapsed(false);
+    }
     shouldAdoptNearbyPreviewItemsRef.current = true;
     toggleFavoritesOnly();
-  }, [notesPreviewDismissed, showFriendsPreview, toggleFavoritesOnly]);
+  }, [notesPreviewCollapsed, notesPreviewDismissed, showFriendsPreview, toggleFavoritesOnly]);
 
   const goToMyLocation = useCallback(async () => {
     let target = location;
@@ -440,6 +482,9 @@ export default function MapScreenIOS() {
       if (notesPreviewDismissed) {
         setNotesPreviewDismissed(false);
       }
+      if (notesPreviewCollapsed) {
+        setNotesPreviewCollapsed(false);
+      }
       handleClusterMarkerPress();
       emitLightHaptic();
       triggerMarkerPulse(node.id);
@@ -469,6 +514,7 @@ export default function MapScreenIOS() {
       handleClusterMarkerPress,
       initialRegion,
       notesPreviewDismissed,
+      notesPreviewCollapsed,
       reduceMotionEnabled,
       showFriendsPreview,
       triggerMarkerPulse,
@@ -495,11 +541,15 @@ export default function MapScreenIOS() {
           }, 150);
         }
       }
+      if (notesPreviewCollapsed) {
+        setNotesPreviewCollapsed(false);
+      }
     },
     [
       emitLightHaptic,
       handleLeafMarkerPress,
       notesPreviewDismissed,
+      notesPreviewCollapsed,
       reduceMotionEnabled,
       showFriendsPreview,
       triggerMarkerPulse,
@@ -513,6 +563,9 @@ export default function MapScreenIOS() {
       }
       if (notesPreviewDismissed) {
         setNotesPreviewDismissed(false);
+      }
+      if (notesPreviewCollapsed) {
+        setNotesPreviewCollapsed(false);
       }
       const nearbyItem = nearbyItemById.get(noteId);
       if (!nearbyItem) {
@@ -542,6 +595,7 @@ export default function MapScreenIOS() {
       initialRegion,
       nearbyItemById,
       notesPreviewDismissed,
+      notesPreviewCollapsed,
       reduceMotionEnabled,
       showFriendsPreview,
       visibleRegion,
@@ -599,9 +653,8 @@ export default function MapScreenIOS() {
   const handleDismissNotesPreview = useCallback(() => {
     nearbyPreviewFocusGuardUntilRef.current = 0;
     emitLightHaptic();
-    setNotesPreviewDismissed(true);
-    clearSelection();
-  }, [clearSelection, emitLightHaptic]);
+    setNotesPreviewCollapsed(true);
+  }, [emitLightHaptic]);
 
   const handleDismissFriendsPreview = useCallback(() => {
     emitLightHaptic();
@@ -785,20 +838,12 @@ export default function MapScreenIOS() {
                     styles.friendsChip,
                     {
                       borderColor: friendsPreviewVisible ? `${colors.primary}55` : getOverlayBorderColor(isDark),
+                      backgroundColor: friendsPreviewVisible
+                        ? (isDark ? 'rgba(255,193,7,0.16)' : 'rgba(255,193,7,0.14)')
+                        : getOverlayMutedFillColor(isDark),
                     },
                   ]}
                 >
-                  {friendsPreviewVisible ? (
-                    <View
-                      pointerEvents="none"
-                      style={[
-                        StyleSheet.absoluteFill,
-                        {
-                          backgroundColor: isDark ? 'rgba(255,193,7,0.16)' : 'rgba(255,193,7,0.14)',
-                        },
-                      ]}
-                    />
-                  ) : null}
                   <GlassView
                     pointerEvents="none"
                     style={StyleSheet.absoluteFill}
@@ -879,7 +924,7 @@ export default function MapScreenIOS() {
                 style={[
                   StyleSheet.absoluteFill,
                   {
-                    borderRadius: 22,
+                    borderRadius: mapOverlayTokens.floatingButtonSize / 2,
                     backgroundColor: isDark ? 'rgba(24,24,28,0.24)' : 'rgba(255,255,255,0.44)',
                   },
                 ]}
@@ -890,7 +935,7 @@ export default function MapScreenIOS() {
                 style={[
                   StyleSheet.absoluteFill,
                   {
-                    borderRadius: 22,
+                    borderRadius: mapOverlayTokens.floatingButtonSize / 2,
                     backgroundColor: getOverlayFallbackColor(isDark),
                   },
                 ]}
@@ -901,7 +946,7 @@ export default function MapScreenIOS() {
         </Pressable>
       </View>
 
-      {androidMapUiReady && notes.length > 0 && !friendsPreviewVisible ? (
+      {androidMapUiReady && (notes.length > 0 || noNotesStatusVisible) && !friendsPreviewVisible ? (
         <MapPreviewCard
           mode={bottomOverlayMode}
           previewMode={previewMode}
@@ -911,10 +956,67 @@ export default function MapScreenIOS() {
           nearbyItems={nearbyPreviewItems}
           activeNearbyNoteId={activeNearbyNoteId}
           activeNoteReadyToOpen={activeNoteReadyToOpen}
+          distanceAnchor={distanceAnchor}
           bottomOffset={previewBottomOffset}
-          statusActionLabel={t('map.showAllResults', 'Show all results')}
-          statusActionTestID="map-show-all-results"
+          statusTitle={
+            noNotesStatusVisible
+              ? t('map.emptyTitleShort', 'No notes')
+              : filteredEmptyVisible
+              ? t('map.filteredEmptyTitle', 'No notes match these filters')
+              : undefined
+          }
+          statusSubtitle={
+            noNotesStatusVisible
+              ? undefined
+              : filteredEmptyVisible
+              ? t(
+                  'map.filteredEmptySubtitle',
+                  'Try another filter combination or reset to view all notes'
+                )
+              : undefined
+          }
+          statusIcon={
+            noNotesStatusVisible
+              ? 'pin-outline'
+              : filteredEmptyVisible
+                ? 'filter-outline'
+                : 'albums-outline'
+          }
+          statusActionLabel={
+            noNotesStatusVisible
+              ? undefined
+              : filteredEmptyVisible
+              ? t('map.clearFilters', 'Clear filters')
+              : collapsedPreviewVisible
+              ? t('map.showPreview', 'Show preview')
+              : t('map.showAllResults', 'Show all results')
+          }
+          statusActionTestID={
+            noNotesStatusVisible
+              ? undefined
+              : filteredEmptyVisible
+              ? 'map-clear-filters'
+              : collapsedPreviewVisible
+                ? 'map-show-preview'
+                : 'map-show-all-results'
+          }
           onStatusAction={() => {
+            if (noNotesStatusVisible) {
+              return;
+            }
+
+            if (filteredEmptyVisible) {
+              setNotesPreviewDismissed(false);
+              shouldAdoptNearbyPreviewItemsRef.current = true;
+              clearFilters();
+              return;
+            }
+
+            if (collapsedPreviewVisible) {
+              setNotesPreviewCollapsed(false);
+              return;
+            }
+
             setNotesPreviewDismissed(false);
             shouldAdoptNearbyPreviewItemsRef.current = true;
             showAllFilteredResults();
@@ -951,53 +1053,8 @@ export default function MapScreenIOS() {
             paddingBottom: previewBottomOffset,
           },
         ]}
-        pointerEvents={overlayState === 'content' || friendsPreviewVisible ? 'none' : 'box-none'}
-      >
-        {overlayState === 'no-notes' && !friendsPreviewVisible ? (
-          <MapStatusCard
-            overlayState="no-notes"
-            variant="pill"
-            isDark={isDark}
-            primaryColor={colors.primary}
-            textColor={colors.text}
-            secondaryTextColor={colors.secondaryText}
-            reduceMotionEnabled={reduceMotionEnabled}
-            title={t('map.emptyTitle', 'No notes on the map yet')}
-            subtitle={t('map.emptySubtitle', 'Your saved notes will appear as pins here')}
-            actionLabel={t('map.createFirstNote', 'Create first note')}
-            actionTestID="map-create-first-note"
-            onAction={() => {
-              emitLightHaptic();
-              router.replace('/(tabs)' as any);
-            }}
-          />
-        ) : null}
-
-        {overlayState === 'no-filter-results' && !friendsPreviewVisible ? (
-          <MapStatusCard
-            overlayState="no-filter-results"
-            isDark={isDark}
-            primaryColor={colors.primary}
-            textColor={colors.text}
-            secondaryTextColor={colors.secondaryText}
-            reduceMotionEnabled={reduceMotionEnabled}
-            title={t('map.filteredEmptyTitle', 'No notes match these filters')}
-            subtitle={t(
-              'map.filteredEmptySubtitle',
-              'Try another filter combination or reset to view all notes'
-            )}
-            actionLabel={t('map.clearFilters', 'Clear filters')}
-            actionTestID="map-clear-filters"
-            onAction={() => {
-              emitLightHaptic();
-              setNotesPreviewDismissed(false);
-              shouldAdoptNearbyPreviewItemsRef.current = true;
-              clearFilters();
-            }}
-          />
-        ) : null}
-
-      </View>
+        pointerEvents="none"
+      />
 
     </View>
   );
@@ -1021,9 +1078,9 @@ const styles = StyleSheet.create({
     zIndex: 12,
   },
   fab: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: mapOverlayTokens.floatingButtonSize,
+    height: mapOverlayTokens.floatingButtonSize,
+    borderRadius: mapOverlayTokens.floatingButtonSize / 2,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -1040,8 +1097,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   friendsChip: {
-    minHeight: 32,
-    borderRadius: 16,
+    minHeight: mapOverlayTokens.controlHeight,
+    borderRadius: mapOverlayTokens.overlayCompactRadius,
     overflow: 'hidden',
     borderWidth: 1,
   },
@@ -1049,8 +1106,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   friendsChipLabel: {
     fontSize: 12,

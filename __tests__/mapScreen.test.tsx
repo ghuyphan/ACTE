@@ -401,20 +401,46 @@ describe('MapScreen', () => {
     });
   });
 
-  it('routes to the home tab from the empty-map create-note pill', async () => {
+  it('shows a passive no-notes state without a create-note action', async () => {
     replaceMockNotes([]);
     resetMockSharedPosts();
     mockSharedPosts.splice(0, mockSharedPosts.length);
 
-    const { getByTestId } = render(<MapScreen />);
+    const { findByText, queryByTestId } = render(<MapScreen />);
 
-    await waitFor(() => {
-      expect(getByTestId('map-create-first-note')).toBeTruthy();
-    });
+    expect(await findByText('No notes')).toBeTruthy();
+    expect(queryByTestId('map-create-first-note')).toBeNull();
+  });
 
-    fireEvent.press(getByTestId('map-create-first-note'));
+  it('keeps the no-notes state visible even when shared markers exist on the map', async () => {
+    replaceMockNotes([]);
+    resetMockSharedPosts();
 
-    expect(mockRouterReplace).toHaveBeenCalledWith('/(tabs)');
+    const { findByText, getByTestId, queryByTestId } = render(<MapScreen />);
+
+    expect(await findByText('No notes')).toBeTruthy();
+    expect(getByTestId('friend-marker-shared-friend-1')).toBeTruthy();
+    expect(queryByTestId('map-create-first-note')).toBeNull();
+  });
+
+  it('clears stale status actions when transitioning into the no-notes state', async () => {
+    resetMockSharedPosts();
+    mockSharedPosts.splice(0, mockSharedPosts.length);
+
+    const { getByTestId, findByText, queryByTestId, rerender } = render(<MapScreen />);
+
+    fireEvent.press(getByTestId('map-filter-photo'));
+    fireEvent.press(getByTestId('map-filter-favorites'));
+
+    expect(await findByText('No notes match these filters')).toBeTruthy();
+    expect(getByTestId('map-clear-filters')).toBeTruthy();
+
+    replaceMockNotes([]);
+    rerender(<MapScreen />);
+
+    expect(await findByText('No notes')).toBeTruthy();
+    expect(queryByTestId('map-clear-filters')).toBeNull();
+    expect(queryByTestId('map-create-first-note')).toBeNull();
   });
 
   it('keeps the initial map entry static', () => {
@@ -702,9 +728,9 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(getByTestId('map-preview-list')).toBeTruthy();
-      expect(getByText('Saved here')).toBeTruthy();
-      expect(queryByTestId('map-preview-group-count')).toBeNull();
+      expect(getByText(/^\d+(?:\.\d)?(?:m|km)$/)).toBeTruthy();
       expect(queryByTestId('map-preview-index')).toBeNull();
+      expect(queryByTestId('map-preview-group-count')).toBeNull();
     });
     expect(mockImpactAsync).toHaveBeenCalledTimes(1);
 
@@ -736,7 +762,13 @@ describe('MapScreen', () => {
     await waitForPreviewCloseAnimation();
 
     await waitFor(() => {
-      expect(queryByTestId('map-preview-shell')).toBeNull();
+      expect(getByTestId('map-show-preview')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('map-show-preview'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-list')).toBeTruthy();
     });
 
     fireEvent.press(getAllByTestId(/leaf-marker-/)[0]);
@@ -838,6 +870,7 @@ describe('MapScreen', () => {
     await waitForPreviewCloseAnimation();
 
     await waitFor(() => {
+      expect(getByTestId('map-show-preview')).toBeTruthy();
       expect(getByTestId('photo-marker-photo-1')).toBeTruthy();
     });
   });
@@ -887,14 +920,14 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByTestId('note-marker-text-1')).toBeTruthy();
-      expect(getByText('Saved here')).toBeTruthy();
+      expect(getByText(/^\d+(?:\.\d)?(?:m|km)$/)).toBeTruthy();
     });
 
     now = 1100;
     fireEvent.press(getByTestId('mock-map-press'));
 
     expect(getByTestId('note-marker-text-1')).toBeTruthy();
-    expect(getByText('Saved here')).toBeTruthy();
+    expect(getByText(/^\d+(?:\.\d)?(?:m|km)$/)).toBeTruthy();
 
     nowSpy.mockRestore();
   });
@@ -986,14 +1019,14 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByTestId('note-marker-text-1')).toBeTruthy();
-      expect(getByText('Saved here')).toBeTruthy();
+      expect(getByText(/^\d+(?:\.\d)?(?:m|km)$/)).toBeTruthy();
     });
 
     now = 1400;
     fireEvent.press(getByTestId('mock-map-press'));
 
     expect(getByTestId('leaf-marker-10.76000:106.66000')).toBeTruthy();
-    expect(getByText('Saved here')).toBeTruthy();
+    expect(getByText(/^\d+(?:\.\d)?(?:m|km)$/)).toBeTruthy();
 
     nowSpy.mockRestore();
   });

@@ -8,6 +8,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
@@ -46,7 +47,7 @@ interface MapPreviewSheetProps {
   onDismiss: () => void;
   reduceMotionEnabled: boolean;
   allowDragDismiss?: boolean;
-  showHandle?: boolean;
+  handleVisible?: boolean;
   children: ReactNode;
 }
 
@@ -60,12 +61,13 @@ export default function MapPreviewSheet({
   onDismiss,
   reduceMotionEnabled,
   allowDragDismiss = true,
-  showHandle = true,
+  handleVisible = true,
   children,
 }: MapPreviewSheetProps) {
   const { t } = useTranslation();
   const translateY = useSharedValue(400);
   const dismissing = useSharedValue(false);
+  const handleVisibility = useSharedValue(handleVisible ? 1 : 0);
   const closeSequenceRef = useRef(0);
   const closeFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -104,6 +106,17 @@ export default function MapPreviewSheet({
   }, [clearCloseFallback]);
 
   useEffect(() => {
+    if (reduceMotionEnabled) {
+      handleVisibility.value = handleVisible ? 1 : 0;
+      return;
+    }
+
+    handleVisibility.value = withTiming(handleVisible ? 1 : 0, {
+      duration: 130,
+    });
+  }, [handleVisibility, handleVisible, reduceMotionEnabled]);
+
+  useEffect(() => {
     if (isVisible) {
       invalidateCloseSequence();
       dismissing.value = false;
@@ -116,30 +129,28 @@ export default function MapPreviewSheet({
           mass: 0.82,
         });
       }
-    } else {
-      if (!dismissing.value) {
-        dismissing.value = true;
-        if (reduceMotionEnabled) {
-          scheduleOnRN(onFullyClosed);
-        } else {
-          closeSequenceRef.current += 1;
-          scheduleCloseFallback(onFullyClosed, 260);
-          const sequence = closeSequenceRef.current;
-          translateY.value = withSpring(
-            800,
-            {
-              damping: 20,
-              stiffness: 160,
-              mass: 0.8,
-            },
-            (finished) => {
-              if (finished && closeSequenceRef.current === sequence) {
-                clearCloseFallback();
-                scheduleOnRN(onFullyClosed);
-              }
+    } else if (!dismissing.value) {
+      dismissing.value = true;
+      if (reduceMotionEnabled) {
+        scheduleOnRN(onFullyClosed);
+      } else {
+        closeSequenceRef.current += 1;
+        scheduleCloseFallback(onFullyClosed, 260);
+        const sequence = closeSequenceRef.current;
+        translateY.value = withSpring(
+          800,
+          {
+            damping: 20,
+            stiffness: 160,
+            mass: 0.8,
+          },
+          (finished) => {
+            if (finished && closeSequenceRef.current === sequence) {
+              clearCloseFallback();
+              scheduleOnRN(onFullyClosed);
             }
-          );
-        }
+          }
+        );
       }
     }
   }, [
@@ -191,7 +202,7 @@ export default function MapPreviewSheet({
       scheduleCloseFallback(onFullyClosed, 260);
       const sequence = closeSequenceRef.current;
       translateY.value = withSpring(
-        800, // 800 guarantees it physically falls fully out of the screen bounds
+        800,
         {
           damping: 20,
           stiffness: 160,
@@ -249,19 +260,22 @@ export default function MapPreviewSheet({
     [allowDragDismiss, dismissing, finishDismiss, resetPosition, translateY]
   );
 
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateY: translateY.value }],
-    };
-  }, [translateY]);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
 
   const handleAnimatedStyle = useAnimatedStyle(() => {
     const progress = Math.max(0, Math.min(translateY.value / DISMISS_TRAVEL, 1));
 
     return {
-      transform: [{ scaleX: interpolate(progress, [0, 1], [1, 1.08]) }],
+      opacity: handleVisibility.value,
+      transform: [
+        { scaleX: interpolate(progress, [0, 1], [1, 1.08]) },
+        { scale: interpolate(handleVisibility.value, [0, 1], [0.94, 1]) },
+        { translateY: interpolate(handleVisibility.value, [0, 1], [-4, 0]) },
+      ],
     };
-  }, [translateY]);
+  });
 
   return (
     <Animated.View
@@ -277,25 +291,26 @@ export default function MapPreviewSheet({
     >
       <GestureDetector gesture={panGesture}>
         <View pointerEvents="box-none">
-          {showHandle ? (
-            <View style={styles.handleGestureZone} pointerEvents="auto">
-              <Pressable
-                testID={dismissTestID}
-                accessibilityRole="button"
-                accessibilityLabel={t('map.dismissPreview', 'Dismiss map preview')}
-                onPress={handlePressDismiss}
-                style={styles.dismissHandlePressable}
-              >
-                <Animated.View
-                  style={[
-                    styles.dismissHandle,
-                    { backgroundColor: handleColor },
-                    handleAnimatedStyle,
-                  ]}
-                />
-              </Pressable>
-            </View>
-          ) : null}
+          <View
+            style={styles.handleGestureZone}
+            pointerEvents={handleVisible ? 'auto' : 'none'}
+          >
+            <Pressable
+              testID={dismissTestID}
+              accessibilityRole="button"
+              accessibilityLabel={t('map.dismissPreview', 'Dismiss map preview')}
+              onPress={handlePressDismiss}
+              style={styles.dismissHandlePressable}
+            >
+              <Animated.View
+                style={[
+                  styles.dismissHandle,
+                  { backgroundColor: handleColor },
+                  handleAnimatedStyle,
+                ]}
+              />
+            </Pressable>
+          </View>
           {children}
         </View>
       </GestureDetector>

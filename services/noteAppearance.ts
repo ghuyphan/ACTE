@@ -17,7 +17,7 @@ type NotePalette = {
   card: GradientPair;
 };
 
-const DEFAULT_CAPTURE_GRADIENT: GradientPair = ['#D8C9B5', '#BCA48A'];
+const DEFAULT_CAPTURE_GRADIENT: GradientPair = ['#F6D365', '#FDA085'];
 
 const NOTE_COLOR_PRESET_MAP = new Map<NoteColorId, NoteColorPreset>(
   NOTE_COLOR_PRESETS.map((preset) => [preset.id, preset])

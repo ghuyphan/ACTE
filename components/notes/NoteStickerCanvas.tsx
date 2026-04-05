@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import {
   Canvas,
   Group,
@@ -51,6 +52,8 @@ interface NoteStickerCanvasProps {
   sharedCache?: boolean;
   sizeMultiplier?: number;
   minimumBaseSize?: number;
+  onToggleSelectedPlacementMotionLock?: (placementId: string) => void;
+  onToggleSelectedPlacementOutline?: (placementId: string) => void;
 }
 
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
@@ -150,6 +153,8 @@ function EditableSticker({
   onCommit,
   sizeMultiplier,
   minimumBaseSize,
+  onToggleSelectedPlacementMotionLock,
+  onToggleSelectedPlacementOutline,
 }: {
   placement: NoteStickerPlacement;
   layout: CanvasLayout;
@@ -160,6 +165,8 @@ function EditableSticker({
   onCommit: (nextPlacement: NoteStickerPlacement) => void;
   sizeMultiplier: number;
   minimumBaseSize: number;
+  onToggleSelectedPlacementMotionLock?: (placementId: string) => void;
+  onToggleSelectedPlacementOutline?: (placementId: string) => void;
 }) {
   const panStartRef = useRef<{ x: number; y: number }>({ x: placement.x, y: placement.y });
   const pinchStartScaleRef = useRef(placement.scale);
@@ -181,6 +188,7 @@ function EditableSticker({
       : null;
   const outlineSize = getStickerOutlineSize(baseDimensions.width, baseDimensions.height);
   const showOutline = activePlacement.renderMode !== 'stamp' && activePlacement.outlineEnabled !== false;
+  const showOutlineToggle = activePlacement.renderMode !== 'stamp' && Boolean(onToggleSelectedPlacementOutline);
   const frameWidth = stampMetrics
     ? stampMetrics.outerWidth
     : baseDimensions.width + outlineSize * 2;
@@ -402,6 +410,48 @@ function EditableSticker({
       ]}
     >
       {showSelection ? <View pointerEvents="none" style={styles.selectionRing} /> : null}
+      {showSelection ? (
+        <View style={styles.selectionControls}>
+          <Pressable
+            testID={`note-sticker-lock-toggle-${placement.id}`}
+            accessibilityRole="button"
+            accessibilityLabel={
+              activePlacement.motionLocked === true ? 'Unlock sticker motion' : 'Lock sticker motion'
+            }
+            onPress={() => onToggleSelectedPlacementMotionLock?.(placement.id)}
+            style={[
+              styles.selectionControlButton,
+              activePlacement.motionLocked === true ? styles.selectionControlButtonActive : null,
+            ]}
+          >
+            <Ionicons
+              name={activePlacement.motionLocked === true ? 'lock-closed' : 'lock-open-outline'}
+              size={14}
+              color={activePlacement.motionLocked === true ? '#1C1C1E' : '#FFFFFF'}
+            />
+          </Pressable>
+          {showOutlineToggle ? (
+            <Pressable
+              testID={`note-sticker-outline-toggle-${placement.id}`}
+              accessibilityRole="button"
+              accessibilityLabel={
+                activePlacement.outlineEnabled === false ? 'Turn on outline' : 'Turn off outline'
+              }
+              onPress={() => onToggleSelectedPlacementOutline?.(placement.id)}
+              style={[
+                styles.selectionControlButton,
+                activePlacement.outlineEnabled !== false ? styles.selectionControlButtonActive : null,
+              ]}
+            >
+              <Ionicons
+                name={activePlacement.outlineEnabled === false ? 'ellipse-outline' : 'ellipse'}
+                size={14}
+                color={activePlacement.outlineEnabled === false ? '#FFFFFF' : '#1C1C1E'}
+              />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       <Pressable
         accessibilityRole="button"
         onPress={handleSelect}
@@ -434,6 +484,8 @@ function NoteStickerCanvas({
   sharedCache = false,
   sizeMultiplier = 1,
   minimumBaseSize = 68,
+  onToggleSelectedPlacementMotionLock,
+  onToggleSelectedPlacementOutline,
 }: NoteStickerCanvasProps) {
   const [layout, setLayout] = useState<CanvasLayout>({ width: 1, height: 1 });
   const [hydratedPlacements, setHydratedPlacements] = useState(placements);
@@ -517,6 +569,8 @@ function NoteStickerCanvas({
           onCommit={commitPlacement}
           sizeMultiplier={sizeMultiplier}
           minimumBaseSize={minimumBaseSize}
+          onToggleSelectedPlacementMotionLock={onToggleSelectedPlacementMotionLock}
+          onToggleSelectedPlacementOutline={onToggleSelectedPlacementOutline}
         />
       ))}
     </View>
@@ -559,6 +613,27 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.88)',
     backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  selectionControls: {
+    position: 'absolute',
+    top: -14,
+    right: -14,
+    gap: 8,
+    zIndex: 2,
+  },
+  selectionControlButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.32)',
+    backgroundColor: 'rgba(28,28,30,0.86)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectionControlButtonActive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(255,255,255,0.9)',
   },
   stickerLayerImage: {
     position: 'absolute',

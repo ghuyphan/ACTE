@@ -17,7 +17,7 @@ import AppSheet from '../sheets/AppSheet';
 import AppSheetScaffold from '../sheets/AppSheetScaffold';
 import { GlassView } from '../ui/GlassView';
 import { TFunction } from 'i18next';
-import { ComponentProps, useEffect, useRef, useState } from 'react';
+import { ComponentProps, useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
   Easing,
@@ -29,6 +29,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Sheet } from '../../constants/theme';
 import { isIOS26OrNewer } from '../../utils/platform';
+import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
 import GlassHeader from '../ui/GlassHeader';
 
 const HEADER_BUTTON_HIT_SLOP = { top: 8, right: 8, bottom: 8, left: 8 } as const;
@@ -46,7 +47,7 @@ interface HomeHeaderSearchProps {
   showSharedButton?: boolean;
   showNotesButton?: boolean;
   onOpenShared?: () => void;
-  onOpenNotes?: () => void;
+  onOpenNotes?: (origin?: NotesRouteTransitionRect) => void;
   sharedButtonMode?: 'manage' | 'filter';
   sharedButtonActive?: boolean;
   sharedFilterValue?: 'all' | 'friends';
@@ -100,6 +101,7 @@ export default function HomeHeaderSearch({
   const useIconOnlyHeaderControls = Platform.OS === 'ios';
   const androidHeaderControlBackgroundColor = isDark ? 'rgba(255,255,255,0.08)' : `${colors.primary}14`;
   const androidHeaderControlBorderColor = isDark ? 'rgba(255,255,255,0.08)' : `${colors.primary}18`;
+  const notesButtonRef = useRef<View>(null);
 
   useEffect(() => {
     if (!didMountRef.current) {
@@ -154,6 +156,26 @@ export default function HomeHeaderSearch({
     opacity: searchAnim.value,
     transform: [{ translateY: interpolate(searchAnim.value, [0, 1], [10, 0]) }],
   }));
+  const handleOpenNotesPress = useCallback(() => {
+    if (!onOpenNotes) {
+      return;
+    }
+
+    const notesButtonNode = notesButtonRef.current;
+    if (!notesButtonNode?.measureInWindow) {
+      onOpenNotes();
+      return;
+    }
+
+    notesButtonNode.measureInWindow((x, y, width, height) => {
+      if (width > 0 && height > 0) {
+        onOpenNotes({ x, y, width, height });
+        return;
+      }
+
+      onOpenNotes();
+    });
+  }, [onOpenNotes]);
 
   const getHeaderControlMetrics = (size: 'regular' | 'large' = 'regular') => ({
     verticalPadding: size === 'large' ? 11 : 9,
@@ -518,36 +540,40 @@ export default function HomeHeaderSearch({
 
     if (Platform.OS === 'ios') {
       return (
-        <Host
-          matchContents
-          colorScheme={isDark ? 'dark' : 'light'}
-          style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
-        >
-          <Button onPress={onOpenNotes} modifiers={getHeaderControlModifiers(notesLabel)}>
-            {renderHeaderControlLabel('square.grid.2x2', notesLabel, size)}
-          </Button>
-        </Host>
+        <View ref={notesButtonRef} collapsable={false}>
+          <Host
+            matchContents
+            colorScheme={isDark ? 'dark' : 'light'}
+            style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
+          >
+            <Button onPress={handleOpenNotesPress} modifiers={getHeaderControlModifiers(notesLabel)}>
+              {renderHeaderControlLabel('square.grid.2x2', notesLabel, size)}
+            </Button>
+          </Host>
+        </View>
       );
     }
 
     return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={notesLabel}
-        hitSlop={HEADER_BUTTON_HIT_SLOP}
-        onPress={onOpenNotes}
-        pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
-        style={[
-          styles.modeToggleBtn,
-          styles.androidHeaderActionButton,
-          {
-            backgroundColor: androidHeaderControlBackgroundColor,
-            borderColor: androidHeaderControlBorderColor,
-          },
-        ]}
-      >
-        <Ionicons name="grid-outline" size={20} color={colors.primary} />
-      </Pressable>
+      <View ref={notesButtonRef} collapsable={false}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={notesLabel}
+          hitSlop={HEADER_BUTTON_HIT_SLOP}
+          onPress={handleOpenNotesPress}
+          pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
+          style={[
+            styles.modeToggleBtn,
+            styles.androidHeaderActionButton,
+            {
+              backgroundColor: androidHeaderControlBackgroundColor,
+              borderColor: androidHeaderControlBorderColor,
+            },
+          ]}
+        >
+          <Ionicons name="grid-outline" size={20} color={colors.primary} />
+        </Pressable>
+      </View>
     );
   };
 
@@ -597,11 +623,13 @@ export default function HomeHeaderSearch({
             )
           ) : null}
           {showNotesButton && onOpenNotes ? (
-            renderDetachedGlassIconButton({
-              label: t('notes.viewAllButton', 'View all notes'),
-              systemImage: 'square.grid.2x2',
-              onPress: onOpenNotes,
-            })
+            <View ref={notesButtonRef} collapsable={false}>
+              {renderDetachedGlassIconButton({
+                label: t('notes.viewAllButton', 'View all notes'),
+                systemImage: 'square.grid.2x2',
+                onPress: handleOpenNotesPress,
+              })}
+            </View>
           ) : null}
           {renderDetachedGlassIconButton({
             label: modeLabel,
