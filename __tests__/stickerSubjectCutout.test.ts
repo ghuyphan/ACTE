@@ -30,6 +30,9 @@ jest.mock('react-native', () => ({
   Image: {
     getSize: (...args: unknown[]) => mockImageGetSize(...args),
   },
+  Platform: {
+    OS: 'android',
+  },
 }));
 
 describe('stickerSubjectCutout', () => {
@@ -61,8 +64,8 @@ describe('stickerSubjectCutout', () => {
     );
     mockManipulateAsync.mockResolvedValue({
       uri: 'file:///cache/subject-cutout-source.jpg',
-      width: 2048,
-      height: 1536,
+      width: 1280,
+      height: 960,
     });
 
     const { createStickerImportSourceFromSubjectCutout } = loadModule();
@@ -75,7 +78,7 @@ describe('stickerSubjectCutout', () => {
 
     expect(mockManipulateAsync).toHaveBeenCalledWith(
       'file:///photo.heic',
-      [{ resize: { width: 2048 } }],
+      [{ resize: { width: 1280 } }],
       expect.objectContaining({
         compress: 0.92,
         format: 'jpeg',

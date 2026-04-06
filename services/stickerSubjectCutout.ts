@@ -1,6 +1,6 @@
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { requireOptionalNativeModule } from 'expo-modules-core';
-import { Image } from 'react-native';
+import { Image, Platform } from 'react-native';
 import * as FileSystem from '../utils/fileSystem';
 import type { StickerImportSource } from './noteStickers';
 import { cleanupStickerTempUri } from './stickerTempFiles';
@@ -81,6 +81,7 @@ const SUBJECT_CUTOUT_TEMP_DIRECTORY = FileSystem.cacheDirectory
   ? `${FileSystem.cacheDirectory}sticker-cutouts/`
   : null;
 const SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION = 2048;
+const ANDROID_SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION = 1280;
 const SUBJECT_CUTOUT_NORMALIZED_SOURCE_QUALITY = 0.92;
 
 function normalizeNativeCutoutError(error: unknown) {
@@ -135,12 +136,16 @@ async function getImageSize(uri: string) {
 }
 
 async function prepareSubjectCutoutSource(sourceUri: string) {
+  const maxSourceDimension =
+    Platform.OS === 'android'
+      ? ANDROID_SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION
+      : SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION;
   const imageSize = await getImageSize(sourceUri).catch(() => null);
   if (
     !imageSize ||
     (
-      imageSize.width <= SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION &&
-      imageSize.height <= SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION
+      imageSize.width <= maxSourceDimension &&
+      imageSize.height <= maxSourceDimension
     )
   ) {
     return {
@@ -151,10 +156,11 @@ async function prepareSubjectCutoutSource(sourceUri: string) {
 
   const resizeActions =
     imageSize.width >= imageSize.height
-      ? [{ resize: { width: SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION } }]
-      : [{ resize: { height: SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION } }];
+      ? [{ resize: { width: maxSourceDimension } }]
+      : [{ resize: { height: maxSourceDimension } }];
 
   // Resize large photos before invoking native segmentation to avoid uncatchable OOM crashes.
+  // Android needs a stricter ceiling because ML Kit can still OOM well below the old 2048px limit.
   const normalizedSource = await manipulateAsync(
     sourceUri,
     resizeActions,
