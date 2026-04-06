@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Canvas, Path } from '@shopify/react-native-skia';
 import * as Haptics from 'expo-haptics';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { memo, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -33,15 +32,10 @@ import {
   STAMP_CUTTER_OVERLAY_ASPECT_RATIO,
   STAMP_CUTTER_MAX_ZOOM,
   STAMP_CUTTER_MIN_ZOOM,
+  STAMP_CUTTER_ROTATION_SNAP_DEGREES,
   type StampCutterDraft,
   type StampCutterTransform,
 } from '../../../services/stampCutter';
-import {
-  createStampFramePath,
-  getStampFrameMetrics,
-  STAMP_OUTLINE_COLOR,
-  STAMP_PAPER_BORDER_COLOR,
-} from '../../notes/stampFrameMetrics';
 import PrimaryButton from '../../ui/PrimaryButton';
 import { triggerCaptureCardHaptic } from './captureMotion';
 
@@ -52,6 +46,7 @@ const RESET_TRANSFORM: StampCutterTransform = {
   zoom: 1,
   offsetX: 0,
   offsetY: 0,
+  rotation: 0,
 };
 
 function clamp(value: number, minValue: number, maxValue: number) {
@@ -60,46 +55,71 @@ function clamp(value: number, minValue: number, maxValue: number) {
   return Math.min(maxValue, Math.max(minValue, value));
 }
 
-function normalizePreviewTransformWorklet(
-  sourceSize: { width: number; height: number },
-  cropSize: { width: number; height: number },
-  transform: Partial<StampCutterTransform>
-) {
+function normalizePreviewRotation(rotation: number | null | undefined) {
+  const safeRotation = Number.isFinite(rotation) ? rotation ?? 0 : 0;
+  const normalized = ((((safeRotation + 180) % 360) + 360) % 360) - 180;
+
+  return Math.abs(normalized) < 0.0001 ? 0 : normalized;
+}
+
+function snapPreviewRotation(rotation: number | null | undefined) {
+  const normalized = normalizePreviewRotation(rotation);
+  return Math.abs(normalized) <= STAMP_CUTTER_ROTATION_SNAP_DEGREES ? 0 : normalized;
+}
+
+function normalizePreviewRotationWorklet(rotation: number | null | undefined) {
   'worklet';
 
-  const safeWidth = Math.max(1, sourceSize.width);
-  const safeHeight = Math.max(1, sourceSize.height);
-  const safeCropWidth = Math.max(1, cropSize.width);
-  const safeCropHeight = Math.max(1, cropSize.height);
+  const safeRotation = Number.isFinite(rotation) ? rotation ?? 0 : 0;
+  const normalized = ((((safeRotation + 180) % 360) + 360) % 360) - 180;
+
+  return Math.abs(normalized) < 0.0001 ? 0 : normalized;
+}
+
+function snapPreviewRotationWorklet(rotation: number | null | undefined) {
+  'worklet';
+
+  const normalized = normalizePreviewRotationWorklet(rotation);
+  return Math.abs(normalized) <= STAMP_CUTTER_ROTATION_SNAP_DEGREES ? 0 : normalized;
+}
+
+function normalizePreviewTransform(transform: Partial<StampCutterTransform>): StampCutterTransform {
   const zoom = clamp(
     Number.isFinite(transform.zoom) ? transform.zoom ?? 1 : 1,
     STAMP_CUTTER_MIN_ZOOM,
     STAMP_CUTTER_MAX_ZOOM
   );
-  const baseScale = Math.max(safeCropWidth / safeWidth, safeCropHeight / safeHeight);
-  const imageWidth = safeWidth * baseScale * zoom;
-  const imageHeight = safeHeight * baseScale * zoom;
-  const maxOffsetX = Math.max(0, (imageWidth - safeCropWidth) / 2);
-  const maxOffsetY = Math.max(0, (imageHeight - safeCropHeight) / 2);
+  const rotation = normalizePreviewRotation(transform.rotation);
 
   return {
     zoom,
-    offsetX: clamp(
-      Number.isFinite(transform.offsetX) ? transform.offsetX ?? 0 : 0,
-      -maxOffsetX,
-      maxOffsetX
-    ),
-    offsetY: clamp(
-      Number.isFinite(transform.offsetY) ? transform.offsetY ?? 0 : 0,
-      -maxOffsetY,
-      maxOffsetY
-    ),
+    rotation,
+    offsetX: Number.isFinite(transform.offsetX) ? transform.offsetX ?? 0 : 0,
+    offsetY: Number.isFinite(transform.offsetY) ? transform.offsetY ?? 0 : 0,
+  };
+}
+
+function normalizePreviewTransformWorklet(transform: Partial<StampCutterTransform>) {
+  'worklet';
+
+  const zoom = clamp(
+    Number.isFinite(transform.zoom) ? transform.zoom ?? 1 : 1,
+    STAMP_CUTTER_MIN_ZOOM,
+    STAMP_CUTTER_MAX_ZOOM
+  );
+  const rotation = normalizePreviewRotationWorklet(transform.rotation);
+
+  return {
+    zoom,
+    rotation,
+    offsetX: Number.isFinite(transform.offsetX) ? transform.offsetX ?? 0 : 0,
+    offsetY: Number.isFinite(transform.offsetY) ? transform.offsetY ?? 0 : 0,
   };
 }
 
 function resolveZoomPreviewTransformWorklet(
   sourceSize: { width: number; height: number },
-  cropSize: { width: number; height: number },
+  viewportSize: { width: number; height: number },
   nextZoom: number,
   anchorX: number,
   anchorY: number,
@@ -107,31 +127,33 @@ function resolveZoomPreviewTransformWorklet(
 ) {
   'worklet';
 
-  const startNormalized = normalizePreviewTransformWorklet(sourceSize, cropSize, startTransform);
+  const startNormalized = normalizePreviewTransformWorklet(startTransform);
   const baseScale = Math.max(
-    Math.max(1, cropSize.width) / Math.max(1, sourceSize.width),
-    Math.max(1, cropSize.height) / Math.max(1, sourceSize.height)
+    Math.max(1, viewportSize.width) / Math.max(1, sourceSize.width),
+    Math.max(1, viewportSize.height) / Math.max(1, sourceSize.height)
   );
   const startImageWidth = Math.max(1, sourceSize.width) * baseScale * startNormalized.zoom;
   const startImageHeight = Math.max(1, sourceSize.height) * baseScale * startNormalized.zoom;
-  const startLeft = (cropSize.width - startImageWidth) / 2 + startNormalized.offsetX;
-  const startTop = (cropSize.height - startImageHeight) / 2 + startNormalized.offsetY;
+  const startLeft = (viewportSize.width - startImageWidth) / 2 + startNormalized.offsetX;
+  const startTop = (viewportSize.height - startImageHeight) / 2 + startNormalized.offsetY;
   const relativeX =
     startImageWidth > 0 ? clamp((anchorX - startLeft) / startImageWidth, 0, 1) : 0.5;
   const relativeY =
     startImageHeight > 0 ? clamp((anchorY - startTop) / startImageHeight, 0, 1) : 0.5;
-  const provisional = normalizePreviewTransformWorklet(sourceSize, cropSize, {
+  const provisional = normalizePreviewTransformWorklet({
     zoom: nextZoom,
     offsetX: startTransform.offsetX,
     offsetY: startTransform.offsetY,
+    rotation: startTransform.rotation,
   });
   const provisionalImageWidth = Math.max(1, sourceSize.width) * baseScale * provisional.zoom;
   const provisionalImageHeight = Math.max(1, sourceSize.height) * baseScale * provisional.zoom;
 
-  return normalizePreviewTransformWorklet(sourceSize, cropSize, {
+  return normalizePreviewTransformWorklet({
     zoom: nextZoom,
-    offsetX: anchorX - cropSize.width / 2 + (0.5 - relativeX) * provisionalImageWidth,
-    offsetY: anchorY - cropSize.height / 2 + (0.5 - relativeY) * provisionalImageHeight,
+    offsetX: anchorX - viewportSize.width / 2 + (0.5 - relativeX) * provisionalImageWidth,
+    offsetY: anchorY - viewportSize.height / 2 + (0.5 - relativeY) * provisionalImageHeight,
+    rotation: startTransform.rotation,
   });
 }
 
@@ -145,7 +167,8 @@ interface StampCutterEditorProps {
   confirmLabel: string;
   onClose: () => void;
   onConfirm: (payload: {
-    cropSize: { width: number; height: number };
+    viewportSize: { width: number; height: number };
+    selectionRect: { x: number; y: number; width: number; height: number };
     transform: StampCutterTransform;
   }) => void | Promise<void>;
 }
@@ -154,41 +177,12 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const StampGuideOverlay = memo(function StampGuideOverlay({
-  width,
-  height,
-}: {
-  width: number;
-  height: number;
-}) {
-  const metrics = useMemo(() => getStampFrameMetrics(width, height), [height, width]);
-  const stampPath = useMemo(() => createStampFramePath(metrics), [metrics]);
-  const stampOutlineWidth = Math.max(2.4, metrics.perforationRadius * 0.66);
-  const stampBorderWidth = Math.max(1, metrics.perforationRadius * 0.18);
-
-  return (
-    <Canvas pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-      <Path
-        path={stampPath}
-        color={STAMP_OUTLINE_COLOR}
-        style="stroke"
-        strokeWidth={stampOutlineWidth}
-      />
-      <Path
-        path={stampPath}
-        color={STAMP_PAPER_BORDER_COLOR}
-        style="stroke"
-        strokeWidth={stampBorderWidth}
-      />
-    </Canvas>
-  );
-});
-
 function StampCutterEditor({
   visible,
   draft,
   loading = false,
   title,
+  subtitle,
   cancelLabel,
   confirmLabel,
   onClose,
@@ -204,25 +198,37 @@ function StampCutterEditor({
   const zoomValue = useSharedValue(1);
   const offsetXValue = useSharedValue(0);
   const offsetYValue = useSharedValue(0);
+  const rotationValue = useSharedValue(0);
   const panStartXValue = useSharedValue(0);
   const panStartYValue = useSharedValue(0);
   const pinchStartZoomValue = useSharedValue(1);
   const pinchStartOffsetXValue = useSharedValue(0);
   const pinchStartOffsetYValue = useSharedValue(0);
+  const rotationStartValue = useSharedValue(0);
+  const activeGestureCountValue = useSharedValue(0);
 
   useEffect(() => {
     zoomValue.value = RESET_TRANSFORM.zoom;
     offsetXValue.value = RESET_TRANSFORM.offsetX;
     offsetYValue.value = RESET_TRANSFORM.offsetY;
+    rotationValue.value = RESET_TRANSFORM.rotation;
+    activeGestureCountValue.value = 0;
     cutProgress.value = 0;
     setCutAnimating(false);
-  }, [cutProgress, draft?.source.uri, offsetXValue, offsetYValue, visible, zoomValue]);
+  }, [activeGestureCountValue, cutProgress, draft?.source.uri, offsetXValue, offsetYValue, rotationValue, visible, zoomValue]);
 
-  const overlayWidth = Math.min(windowWidth - 8, EDITOR_STAGE_MAX_WIDTH);
-  const overlayHeight = overlayWidth / STAMP_CUTTER_OVERLAY_ASPECT_RATIO;
+  const stageWidth = Math.min(windowWidth - 8, EDITOR_STAGE_MAX_WIDTH);
+  const stageHeight = stageWidth / STAMP_CUTTER_OVERLAY_ASPECT_RATIO;
+  const viewportSize = useMemo(
+    () => ({
+      width: stageWidth,
+      height: stageHeight,
+    }),
+    [stageHeight, stageWidth]
+  );
   const cropRect = useMemo(
-    () => getStampCutterWindowRect({ width: overlayWidth, height: overlayHeight }),
-    [overlayHeight, overlayWidth]
+    () => getStampCutterWindowRect({ width: stageWidth, height: stageHeight }),
+    [stageHeight, stageWidth]
   );
   const sourceSize = useMemo(
     () => ({
@@ -233,21 +239,23 @@ function StampCutterEditor({
   );
   const baseScale = useMemo(
     () =>
-      normalizeStampCutterTransform(sourceSize, cropRect, {
+      normalizeStampCutterTransform(sourceSize, viewportSize, {
         zoom: 1,
         offsetX: 0,
         offsetY: 0,
+        rotation: 0,
       }).baseScale,
-    [cropRect, sourceSize]
+    [sourceSize, viewportSize]
   );
   const busy = loading || cutAnimating;
   const baseImageWidth = sourceSize.width * baseScale;
   const baseImageHeight = sourceSize.height * baseScale;
-  const previewBaseLeft = (cropRect.width - baseImageWidth) / 2;
-  const previewBaseTop = (cropRect.height - baseImageHeight) / 2;
+  const previewBaseLeft = (viewportSize.width - baseImageWidth) / 2;
+  const previewBaseTop = (viewportSize.height - baseImageHeight) / 2;
 
   const animateToTransform = useCallback(
     (nextTransform: StampCutterTransform) => {
+      const normalizedTransform = normalizePreviewTransform(nextTransform);
       const config = reduceMotionEnabled
         ? { duration: 120 }
         : {
@@ -256,17 +264,51 @@ function StampCutterEditor({
             mass: 0.7,
           };
       zoomValue.value = reduceMotionEnabled
-        ? withTiming(nextTransform.zoom, config)
-        : withSpring(nextTransform.zoom, config);
+        ? withTiming(normalizedTransform.zoom, config)
+        : withSpring(normalizedTransform.zoom, config);
       offsetXValue.value = reduceMotionEnabled
-        ? withTiming(nextTransform.offsetX, config)
-        : withSpring(nextTransform.offsetX, config);
+        ? withTiming(normalizedTransform.offsetX, config)
+        : withSpring(normalizedTransform.offsetX, config);
       offsetYValue.value = reduceMotionEnabled
-        ? withTiming(nextTransform.offsetY, config)
-        : withSpring(nextTransform.offsetY, config);
+        ? withTiming(normalizedTransform.offsetY, config)
+        : withSpring(normalizedTransform.offsetY, config);
+      rotationValue.value = reduceMotionEnabled
+        ? withTiming(normalizedTransform.rotation, config)
+        : withSpring(normalizedTransform.rotation, config);
     },
-    [offsetXValue, offsetYValue, reduceMotionEnabled, zoomValue]
+    [offsetXValue, offsetYValue, reduceMotionEnabled, rotationValue, zoomValue]
   );
+
+  const beginInteractionWorklet = useCallback(() => {
+    'worklet';
+
+    activeGestureCountValue.value += 1;
+  }, [activeGestureCountValue]);
+
+  const finalizeInteractionWorklet = useCallback(() => {
+    'worklet';
+
+    activeGestureCountValue.value = Math.max(0, activeGestureCountValue.value - 1);
+    if (activeGestureCountValue.value > 0) {
+      return;
+    }
+
+    const snappedRotation = snapPreviewRotationWorklet(rotationValue.value);
+    if (snappedRotation === rotationValue.value) {
+      return;
+    }
+
+    if (reduceMotionEnabled) {
+      rotationValue.value = withTiming(snappedRotation, { duration: 120 });
+      return;
+    }
+
+    rotationValue.value = withSpring(snappedRotation, {
+      damping: 18,
+      stiffness: 220,
+      mass: 0.7,
+    });
+  }, [activeGestureCountValue, reduceMotionEnabled, rotationValue]);
 
   const handleReset = useCallback(() => {
     if (busy) {
@@ -285,19 +327,24 @@ function StampCutterEditor({
         .minDistance(1)
         .shouldCancelWhenOutside(false)
         .onBegin(() => {
+          beginInteractionWorklet();
           panStartXValue.value = offsetXValue.value;
           panStartYValue.value = offsetYValue.value;
         })
         .onUpdate((event) => {
-          const nextTransform = normalizePreviewTransformWorklet(sourceSize, cropRect, {
+          const nextTransform = normalizePreviewTransformWorklet({
             zoom: zoomValue.value,
             offsetX: panStartXValue.value + event.translationX,
             offsetY: panStartYValue.value + event.translationY,
+            rotation: rotationValue.value,
           });
           offsetXValue.value = nextTransform.offsetX;
           offsetYValue.value = nextTransform.offsetY;
+        })
+        .onFinalize(() => {
+          finalizeInteractionWorklet();
         }),
-    [busy, cropRect, offsetXValue, offsetYValue, panStartXValue, panStartYValue, sourceSize, zoomValue]
+    [beginInteractionWorklet, busy, finalizeInteractionWorklet, offsetXValue, offsetYValue, panStartXValue, panStartYValue, rotationValue, zoomValue]
   );
 
   const pinchGesture = useMemo(
@@ -305,7 +352,8 @@ function StampCutterEditor({
       Gesture.Pinch()
         .enabled(!busy)
         .shouldCancelWhenOutside(false)
-        .onBegin((event) => {
+        .onBegin(() => {
+          beginInteractionWorklet();
           pinchStartZoomValue.value = zoomValue.value;
           pinchStartOffsetXValue.value = offsetXValue.value;
           pinchStartOffsetYValue.value = offsetYValue.value;
@@ -313,7 +361,7 @@ function StampCutterEditor({
         .onUpdate((event) => {
           const nextTransform = resolveZoomPreviewTransformWorklet(
             sourceSize,
-            cropRect,
+            viewportSize,
             pinchStartZoomValue.value * event.scale,
             event.focalX,
             event.focalY,
@@ -321,13 +369,43 @@ function StampCutterEditor({
               zoom: pinchStartZoomValue.value,
               offsetX: pinchStartOffsetXValue.value,
               offsetY: pinchStartOffsetYValue.value,
+              rotation: rotationValue.value,
             }
           );
           zoomValue.value = nextTransform.zoom;
           offsetXValue.value = nextTransform.offsetX;
           offsetYValue.value = nextTransform.offsetY;
+        })
+        .onFinalize(() => {
+          finalizeInteractionWorklet();
         }),
-    [busy, cropRect, offsetXValue, offsetYValue, pinchStartOffsetXValue, pinchStartOffsetYValue, pinchStartZoomValue, sourceSize, zoomValue]
+    [beginInteractionWorklet, busy, finalizeInteractionWorklet, offsetXValue, offsetYValue, pinchStartOffsetXValue, pinchStartOffsetYValue, pinchStartZoomValue, rotationValue, sourceSize, viewportSize, zoomValue]
+  );
+
+  const rotationGesture = useMemo(
+    () =>
+      Gesture.Rotation()
+        .enabled(!busy)
+        .shouldCancelWhenOutside(false)
+        .onBegin(() => {
+          beginInteractionWorklet();
+          rotationStartValue.value = rotationValue.value;
+        })
+        .onUpdate((event) => {
+          const nextTransform = normalizePreviewTransformWorklet({
+            zoom: zoomValue.value,
+            offsetX: offsetXValue.value,
+            offsetY: offsetYValue.value,
+            rotation: rotationStartValue.value + (event.rotation * 180) / Math.PI,
+          });
+          rotationValue.value = nextTransform.rotation ?? 0;
+          offsetXValue.value = nextTransform.offsetX;
+          offsetYValue.value = nextTransform.offsetY;
+        })
+        .onFinalize(() => {
+          finalizeInteractionWorklet();
+        }),
+    [beginInteractionWorklet, busy, finalizeInteractionWorklet, offsetXValue, offsetYValue, rotationStartValue, rotationValue, zoomValue]
   );
 
   const doubleTapGesture = useMemo(
@@ -345,6 +423,7 @@ function StampCutterEditor({
             zoom: zoomValue.value,
             offsetX: offsetXValue.value,
             offsetY: offsetYValue.value,
+            rotation: rotationValue.value,
           };
 
           if (currentTransform.zoom > 1.25) {
@@ -354,7 +433,7 @@ function StampCutterEditor({
 
           const nextTransform = resolveZoomPreviewTransformWorklet(
             sourceSize,
-            cropRect,
+            viewportSize,
             currentTransform.zoom * 1.8,
             event.x,
             event.y,
@@ -365,18 +444,19 @@ function StampCutterEditor({
             zoom: nextTransform.zoom,
             offsetX: nextTransform.offsetX,
             offsetY: nextTransform.offsetY,
+            rotation: snapPreviewRotation(nextTransform.rotation),
           });
         });
     },
-    [animateToTransform, busy, cropRect, handleReset, offsetXValue, offsetYValue, sourceSize, zoomValue]
+    [animateToTransform, busy, handleReset, offsetXValue, offsetYValue, rotationValue, sourceSize, viewportSize, zoomValue]
   );
 
   const gesture = useMemo(
     () =>
       doubleTapGesture
-        ? Gesture.Simultaneous(panGesture, pinchGesture, doubleTapGesture)
-        : Gesture.Simultaneous(panGesture, pinchGesture),
-    [doubleTapGesture, panGesture, pinchGesture]
+        ? Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture, doubleTapGesture)
+        : Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture),
+    [doubleTapGesture, panGesture, pinchGesture, rotationGesture]
   );
 
   const runConfirm = async () => {
@@ -385,15 +465,14 @@ function StampCutterEditor({
     }
 
     const payload = {
-      cropSize: {
-        width: cropRect.width,
-        height: cropRect.height,
-      },
-      transform: {
+      viewportSize,
+      selectionRect: cropRect,
+      transform: normalizePreviewTransform({
         zoom: zoomValue.value,
         offsetX: offsetXValue.value,
         offsetY: offsetYValue.value,
-      },
+        rotation: snapPreviewRotation(rotationValue.value),
+      }),
     };
 
     setCutAnimating(true);
@@ -418,23 +497,10 @@ function StampCutterEditor({
     }
   };
 
-  const stageAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: interpolate(cutProgress.value, [0, 1], [1, 0.985]) },
-      { translateY: interpolate(cutProgress.value, [0, 1], [0, 4]) },
-    ],
-  }));
-
   const cutterAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
       { translateY: interpolate(cutProgress.value, [0, 1], [0, 26]) },
       { scale: interpolate(cutProgress.value, [0, 1], [1, 0.992]) },
-    ],
-  }));
-
-  const previewAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: interpolate(cutProgress.value, [0, 1], [1, 0.97]) },
     ],
   }));
 
@@ -443,10 +509,11 @@ function StampCutterEditor({
       transform: [
         { translateX: offsetXValue.value },
         { translateY: offsetYValue.value },
+        { rotateZ: `${rotationValue.value}deg` },
         { scale: zoomValue.value },
       ],
     };
-  }, [offsetXValue, offsetYValue, zoomValue]);
+  }, [offsetXValue, offsetYValue, rotationValue, zoomValue]);
 
   const flashAnimatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(cutProgress.value, [0, 0.8, 1], [0, isDark ? 0.08 : 0.14, 0]),
@@ -464,123 +531,131 @@ function StampCutterEditor({
   const bottomInset = Math.max(insets.bottom, 14);
 
   const content = (
-      <View style={[styles.screen, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { paddingTop: topInset }]}>
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            onPress={onClose}
-            style={({ pressed }) => [
-              styles.headerButton,
-              {
-                backgroundColor: buttonFill,
-                borderColor,
-                opacity: busy ? 0.5 : 1,
-              },
-              pressed && !busy ? styles.headerButtonPressed : null,
-            ]}
-            testID="stamp-cutter-cancel"
-          >
-            <Ionicons name="close" size={18} color={textColor} />
-          </Pressable>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { paddingTop: topInset }]}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onClose}
+          style={({ pressed }) => [
+            styles.headerButton,
+            {
+              backgroundColor: buttonFill,
+              borderColor,
+              opacity: busy ? 0.5 : 1,
+            },
+            pressed && !busy ? styles.headerButtonPressed : null,
+          ]}
+          testID="stamp-cutter-cancel"
+        >
+          <Ionicons name="close" size={18} color={textColor} />
+        </Pressable>
 
-          <View style={styles.headerTitleWrap}>
-            <Text style={[styles.headerTitle, { color: textColor }]}>{title}</Text>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            onPress={handleReset}
-            style={({ pressed }) => [
-              styles.resetButton,
-              {
-                backgroundColor: buttonFill,
-                borderColor,
-                opacity: busy ? 0.5 : 1,
-              },
-              pressed && !busy ? styles.headerButtonPressed : null,
-            ]}
-            testID="stamp-cutter-reset"
-          >
-            <Ionicons name="refresh" size={16} color={textColor} />
-          </Pressable>
+        <View style={styles.headerTitleWrap}>
+          <Text style={[styles.headerTitle, { color: textColor }]}>{title}</Text>
         </View>
 
-        <View style={styles.stageArea}>
-          <Reanimated.View
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={handleReset}
+          style={({ pressed }) => [
+            styles.resetButton,
+            {
+              backgroundColor: buttonFill,
+              borderColor,
+              opacity: busy ? 0.5 : 1,
+            },
+            pressed && !busy ? styles.headerButtonPressed : null,
+          ]}
+          testID="stamp-cutter-reset"
+        >
+          <Ionicons name="refresh" size={16} color={textColor} />
+        </Pressable>
+      </View>
+
+      <View style={styles.stageArea}>
+        <Reanimated.View
+          style={[
+            styles.stageShell,
+            {
+              width: stageWidth,
+            },
+          ]}
+        >
+          <View
             style={[
-              styles.stageShell,
-              stageAnimatedStyle,
+              styles.overlayFrame,
               {
-                width: overlayWidth,
+                width: stageWidth,
+                height: stageHeight,
               },
             ]}
           >
-            <View
-              style={[
-                styles.overlayFrame,
-                {
-                  width: overlayWidth,
-                  height: overlayHeight,
-                },
-              ]}
-            >
-              <GestureDetector gesture={gesture}>
-                <View
-                  collapsable={false}
-                  pointerEvents={busy ? 'none' : 'auto'}
-                  style={[
-                    styles.cropWindow,
-                    {
-                      left: cropRect.x,
-                      top: cropRect.y,
-                      width: cropRect.width,
-                      height: cropRect.height,
-                    },
-                  ]}
-                >
-                  <Reanimated.View style={[styles.cropGestureSurface, previewAnimatedStyle]}>
-                    <Reanimated.Image
+            <GestureDetector gesture={gesture}>
+              <View
+                collapsable={false}
+                pointerEvents={busy ? 'none' : 'auto'}
+                style={[
+                  styles.previewViewport,
+                  {
+                    width: viewportSize.width,
+                    height: viewportSize.height,
+                  },
+                ]}
+              >
+                <Reanimated.View style={styles.cropGestureSurface}>
+                  <View
+                      pointerEvents="none"
                       style={[
-                        styles.previewImage,
+                        styles.previewSurfaceBackground,
                         {
-                          width: baseImageWidth,
-                          height: baseImageHeight,
-                          left: previewBaseLeft,
-                          top: previewBaseTop,
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.35)',
                         },
-                        previewImageAnimatedStyle,
                       ]}
-                      source={{ uri: draft.source.uri }}
-                      resizeMode="cover"
                     />
-                    <StampGuideOverlay width={cropRect.width} height={cropRect.height} />
-                  </Reanimated.View>
-                </View>
-              </GestureDetector>
+                  <Reanimated.Image
+                    style={[
+                      styles.previewImage,
+                      {
+                        width: baseImageWidth,
+                        height: baseImageHeight,
+                        left: previewBaseLeft,
+                        top: previewBaseTop,
+                      },
+                      previewImageAnimatedStyle,
+                    ]}
+                    source={{ uri: draft.source.uri }}
+                    resizeMode="cover"
+                  />
+                </Reanimated.View>
+              </View>
+            </GestureDetector>
 
-              <Reanimated.View pointerEvents="none" style={[styles.overlayImageWrap, cutterAnimatedStyle]}>
-                <Image
-                  source={STAMP_CUTTER_OVERLAY_IMAGE}
-                  style={styles.overlayImage}
-                  resizeMode="contain"
-                />
-              </Reanimated.View>
+            <Reanimated.View pointerEvents="none" style={[styles.overlayImage, cutterAnimatedStyle]}>
+              <Image
+                source={STAMP_CUTTER_OVERLAY_IMAGE}
+                style={styles.overlayImage}
+                resizeMode="contain"
+              />
+            </Reanimated.View>
 
-              <Reanimated.View pointerEvents="none" style={[styles.flashOverlay, flashAnimatedStyle]} />
+            <Reanimated.View pointerEvents="none" style={[styles.flashOverlay, flashAnimatedStyle]} />
 
-              {busy ? (
-                <View style={styles.loadingOverlay} pointerEvents="none">
-                  <ActivityIndicator size="large" color={textColor} />
-                </View>
-              ) : null}
-            </View>
-          </Reanimated.View>
-        </View>
+            {busy ? (
+              <View style={styles.loadingOverlay} pointerEvents="none">
+                <ActivityIndicator size="large" color={textColor} />
+              </View>
+            ) : null}
+          </View>
+        </Reanimated.View>
+      </View>
 
-        <View style={[styles.controlsArea, { paddingBottom: bottomInset }]}>
-          <View style={[styles.actionBar, { borderColor, backgroundColor: actionBarBackground }]}>
+      <View style={[styles.controlsArea, { paddingBottom: bottomInset }]}>
+        <Text style={[styles.subtitle, { color: colors.secondaryText ?? textColor }]}>
+          {subtitle}
+        </Text>
+        <View style={[styles.actionBar, { borderColor, backgroundColor: actionBarBackground }]}>
           <Pressable
             accessibilityRole="button"
             disabled={busy}
@@ -588,31 +663,31 @@ function StampCutterEditor({
             style={({ pressed }) => [
               styles.secondaryButton,
               {
-                borderColor: `${borderColor}`,
+                borderColor,
                 backgroundColor: colors.card,
                 opacity: busy ? 0.5 : 1,
               },
               pressed && !busy ? styles.headerButtonPressed : null,
-              ]}
-            >
-              <Text style={[styles.secondaryButtonLabel, { color: textColor }]}>{cancelLabel}</Text>
-            </Pressable>
-            <PrimaryButton
-              label={confirmLabel}
-              onPress={() => {
-                void runConfirm();
-              }}
-              loading={busy}
-              style={styles.confirmButton}
-              testID="stamp-cutter-confirm"
-            />
-          </View>
+            ]}
+          >
+            <Text style={[styles.secondaryButtonLabel, { color: textColor }]}>{cancelLabel}</Text>
+          </Pressable>
+          <PrimaryButton
+            label={confirmLabel}
+            onPress={() => {
+              void runConfirm();
+            }}
+            loading={busy}
+            style={styles.confirmButton}
+            testID="stamp-cutter-confirm"
+          />
         </View>
       </View>
+    </View>
   );
 
   if (Platform.OS === 'web') {
-    return content;
+    return <GestureHandlerRootView style={styles.gestureRoot}>{content}</GestureHandlerRootView>;
   }
 
   return (
@@ -623,7 +698,7 @@ function StampCutterEditor({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      {content}
+      <GestureHandlerRootView style={styles.gestureRoot}>{content}</GestureHandlerRootView>
     </Modal>
   );
 }
@@ -634,6 +709,9 @@ const styles = StyleSheet.create({
   screen: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 40,
+  },
+  gestureRoot: {
+    flex: 1,
   },
   header: {
     position: 'absolute',
@@ -692,27 +770,28 @@ const styles = StyleSheet.create({
   overlayFrame: {
     position: 'relative',
   },
-  cropWindow: {
+  previewViewport: {
     position: 'absolute',
+    top: 0,
+    left: 0,
     overflow: 'hidden',
   },
   cropGestureSurface: {
     width: '100%',
     height: '100%',
   },
+  previewSurfaceBackground: {
+    ...StyleSheet.absoluteFillObject,
+  },
   previewImage: {
     position: 'absolute',
     width: '100%',
     height: '100%',
   },
-  overlayImageWrap: {
+  overlayImage: {
     position: 'absolute',
     top: 0,
-    right: 0,
-    bottom: 0,
     left: 0,
-  },
-  overlayImage: {
     width: '100%',
     height: '100%',
   },
@@ -732,6 +811,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: SCREEN_HORIZONTAL_PADDING,
     zIndex: 3,
+  },
+  subtitle: {
+    ...Typography.body,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 12,
   },
   actionBar: {
     borderRadius: Radii.card,

@@ -948,10 +948,12 @@ export function useCaptureCardStickerFlow({
 
   const handleConfirmStampCutter = useCallback(
     async ({
-      cropSize,
+      viewportSize,
+      selectionRect,
       transform,
     }: {
-      cropSize: { width: number; height: number };
+      viewportSize: { width: number; height: number };
+      selectionRect: { x: number; y: number; width: number; height: number };
       transform: StampCutterTransform;
     }) => {
       if (!stampCutterDraft) {
@@ -960,12 +962,19 @@ export function useCaptureCardStickerFlow({
 
       setImportingSticker(true);
       let cleanupUri: string | null = null;
+      let intermediateCleanupUri: string | null = null;
       const draftCleanupUri = stampCutterDraft.cleanupUri;
       let shouldCloseDraft = false;
 
       try {
-        const exported = await exportStampCutoutImageSource(stampCutterDraft, cropSize, transform);
+        const exported = await exportStampCutoutImageSource(
+          stampCutterDraft,
+          viewportSize,
+          selectionRect,
+          transform
+        );
         cleanupUri = exported.cleanupUri;
+        intermediateCleanupUri = exported.intermediateCleanupUri ?? null;
         await importStickerFromSource(exported.source, 'stamp');
         shouldCloseDraft = true;
         setStampCutterDraft(null);
@@ -977,6 +986,7 @@ export function useCaptureCardStickerFlow({
         );
       } finally {
         await cleanupSubjectCutoutImportSource(cleanupUri);
+        await cleanupSubjectCutoutImportSource(intermediateCleanupUri);
         if (shouldCloseDraft) {
           await cleanupSubjectCutoutImportSource(draftCleanupUri);
         }

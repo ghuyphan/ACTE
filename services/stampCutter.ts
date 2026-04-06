@@ -15,6 +15,7 @@ export interface StampCutterTransform {
   zoom: number;
   offsetX: number;
   offsetY: number;
+  rotation: number;
 }
 
 export interface StampCutterDraft {
@@ -36,6 +37,7 @@ const STAMP_CUTTER_OVERLAY_SOURCE_HEIGHT = 1536;
 
 export const STAMP_CUTTER_MIN_ZOOM = 1;
 export const STAMP_CUTTER_MAX_ZOOM = 4;
+export const STAMP_CUTTER_ROTATION_SNAP_DEGREES = 2.5;
 export const STAMP_CUTTER_OVERLAY_ASPECT_RATIO =
   STAMP_CUTTER_OVERLAY_SOURCE_WIDTH / STAMP_CUTTER_OVERLAY_SOURCE_HEIGHT;
 export const STAMP_CUTTER_WINDOW = {
@@ -44,6 +46,9 @@ export const STAMP_CUTTER_WINDOW = {
   width: 0.256,
   height: 0.175,
 } as const;
+export const STAMP_CUTTER_PREVIEW_ASPECT_RATIO =
+  (STAMP_CUTTER_WINDOW.width * STAMP_CUTTER_OVERLAY_SOURCE_WIDTH)
+  / (STAMP_CUTTER_WINDOW.height * STAMP_CUTTER_OVERLAY_SOURCE_HEIGHT);
 
 export function getStampCutterWindowRect(overlaySize: StampCutterSize): StampCutterRect {
   return {
@@ -54,20 +59,41 @@ export function getStampCutterWindowRect(overlaySize: StampCutterSize): StampCut
   };
 }
 
+export function normalizeStampCutterRotation(
+  rotation: number | null | undefined,
+  signed = false
+) {
+  const safeRotation = Number.isFinite(rotation) ? rotation ?? 0 : 0;
+  const normalized = signed
+    ? ((((safeRotation + 180) % 360) + 360) % 360) - 180
+    : ((safeRotation % 360) + 360) % 360;
+
+  return Math.abs(normalized) < 0.0001 ? 0 : normalized;
+}
+
+export function snapStampCutterRotation(
+  rotation: number | null | undefined,
+  threshold = STAMP_CUTTER_ROTATION_SNAP_DEGREES
+) {
+  const normalized = normalizeStampCutterRotation(rotation, true);
+  return Math.abs(normalized) <= threshold ? 0 : normalized;
+}
+
 export function normalizeStampCutterTransform(
   sourceSize: StampCutterSize,
-  cropSize: StampCutterSize,
+  viewportSize: StampCutterSize,
   transform: Partial<StampCutterTransform>
 ) {
   const safeWidth = Math.max(1, sourceSize.width);
   const safeHeight = Math.max(1, sourceSize.height);
-  const safeCropWidth = Math.max(1, cropSize.width);
-  const safeCropHeight = Math.max(1, cropSize.height);
+  const safeCropWidth = Math.max(1, viewportSize.width);
+  const safeCropHeight = Math.max(1, viewportSize.height);
   const zoom = clamp(
     Number.isFinite(transform.zoom) ? transform.zoom ?? 1 : 1,
     STAMP_CUTTER_MIN_ZOOM,
     STAMP_CUTTER_MAX_ZOOM
   );
+  const rotation = normalizeStampCutterRotation(transform.rotation);
   const baseScale = Math.max(safeCropWidth / safeWidth, safeCropHeight / safeHeight);
   const totalScale = baseScale * zoom;
   const imageWidth = safeWidth * totalScale;
@@ -77,6 +103,7 @@ export function normalizeStampCutterTransform(
 
   return {
     zoom,
+    rotation,
     offsetX: clamp(
       Number.isFinite(transform.offsetX) ? transform.offsetX ?? 0 : 0,
       -maxOffsetX,
@@ -96,24 +123,38 @@ export function normalizeStampCutterTransform(
   };
 }
 
-export function calculateStampCutterCropRect(
-  sourceSize: StampCutterSize,
-  cropSize: StampCutterSize,
-  transform: Partial<StampCutterTransform>
-): StampCutterRect {
-  const normalized = normalizeStampCutterTransform(sourceSize, cropSize, transform);
-  const visibleWidth = Math.max(1, cropSize.width / normalized.totalScale);
-  const visibleHeight = Math.max(1, cropSize.height / normalized.totalScale);
-  const unclampedX =
-    sourceSize.width / 2 - visibleWidth / 2 - normalized.offsetX / normalized.totalScale;
-  const unclampedY =
-    sourceSize.height / 2 - visibleHeight / 2 - normalized.offsetY / normalized.totalScale;
+function getRotatedSize(sourceSize: StampCutterSize, rotation: number): StampCutterSize {
+  const radians = (rotation * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(radians));
+  const sin = Math.abs(Math.sin(radians));
 
   return {
-    x: clamp(unclampedX, 0, Math.max(0, sourceSize.width - visibleWidth)),
-    y: clamp(unclampedY, 0, Math.max(0, sourceSize.height - visibleHeight)),
-    width: Math.min(visibleWidth, sourceSize.width),
-    height: Math.min(visibleHeight, sourceSize.height),
+    width: sourceSize.width * cos + sourceSize.height * sin,
+    height: sourceSize.width * sin + sourceSize.height * cos,
+  };
+}
+
+export function calculateStampCutterCropRect(
+  sourceSize: StampCutterSize,
+  viewportSize: StampCutterSize,
+  selectionRect: StampCutterRect,
+  transform: Partial<StampCutterTransform>
+): StampCutterRect {
+  const rotation = normalizeStampCutterRotation(transform.rotation);
+  const rotatedSize = getRotatedSize(sourceSize, rotation);
+  const normalized = normalizeStampCutterTransform(rotatedSize, viewportSize, transform);
+  const viewportImageLeft = (viewportSize.width - normalized.imageWidth) / 2 + normalized.offsetX;
+  const viewportImageTop = (viewportSize.height - normalized.imageHeight) / 2 + normalized.offsetY;
+  const visibleWidth = Math.max(1, selectionRect.width / normalized.totalScale);
+  const visibleHeight = Math.max(1, selectionRect.height / normalized.totalScale);
+  const unclampedX = (selectionRect.x - viewportImageLeft) / normalized.totalScale;
+  const unclampedY = (selectionRect.y - viewportImageTop) / normalized.totalScale;
+
+  return {
+    x: clamp(unclampedX, 0, Math.max(0, rotatedSize.width - visibleWidth)),
+    y: clamp(unclampedY, 0, Math.max(0, rotatedSize.height - visibleHeight)),
+    width: Math.min(visibleWidth, rotatedSize.width),
+    height: Math.min(visibleHeight, rotatedSize.height),
   };
 }
 
@@ -189,25 +230,57 @@ export async function prepareStampCutterDraft(
 
 export async function exportStampCutoutImageSource(
   draft: StampCutterDraft,
-  cropSize: StampCutterSize,
+  viewportSize: StampCutterSize,
+  selectionRect: StampCutterRect,
   transform: Partial<StampCutterTransform>
 ) {
+  const normalizedRotation = normalizeStampCutterRotation(transform.rotation);
+  const needsRotation = Math.abs(normalizedRotation) > 0.001;
+
+  let workingUri = draft.source.uri;
+  let workingSize = {
+    width: draft.width,
+    height: draft.height,
+  };
+  let cleanupUri: string | null = null;
+
+  if (needsRotation) {
+    const rotated = await manipulateAsync(
+      draft.source.uri,
+      [{ rotate: normalizedRotation }],
+      {
+        compress: 1,
+        format: SaveFormat.JPEG,
+      }
+    );
+    workingUri = rotated.uri;
+    workingSize = {
+      width: Math.max(1, Math.round(rotated.width ?? 0) || Math.round(getRotatedSize(workingSize, normalizedRotation).width)),
+      height: Math.max(1, Math.round(rotated.height ?? 0) || Math.round(getRotatedSize(workingSize, normalizedRotation).height)),
+    };
+    cleanupUri = rotated.uri;
+  }
+
   const cropRect = calculateStampCutterCropRect(
+    workingSize,
+    viewportSize,
+    selectionRect,
     {
-      width: draft.width,
-      height: draft.height,
-    },
-    cropSize,
-    transform
+      ...transform,
+      rotation: 0,
+    }
   );
   const roundedCropRect = {
-    originX: Math.round(cropRect.x),
-    originY: Math.round(cropRect.y),
+    originX: clamp(Math.round(cropRect.x), 0, Math.max(0, workingSize.width - 1)),
+    originY: clamp(Math.round(cropRect.y), 0, Math.max(0, workingSize.height - 1)),
     width: Math.max(1, Math.round(cropRect.width)),
     height: Math.max(1, Math.round(cropRect.height)),
   };
+  roundedCropRect.width = Math.min(roundedCropRect.width, Math.max(1, workingSize.width - roundedCropRect.originX));
+  roundedCropRect.height = Math.min(roundedCropRect.height, Math.max(1, workingSize.height - roundedCropRect.originY));
+
   const result = await manipulateAsync(
-    draft.source.uri,
+    workingUri,
     [{ crop: roundedCropRect }],
     {
       compress: 0.94,
@@ -223,5 +296,6 @@ export async function exportStampCutoutImageSource(
     },
     cleanupUri: result.uri,
     cropRect: roundedCropRect,
+    intermediateCleanupUri: cleanupUri,
   };
 }
