@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type GestureResponderEvent, Platform } from 'react-native';
+import { type GestureResponderEvent, Image, Platform } from 'react-native';
 import {
   addClipboardListener,
   isPasteButtonAvailable,
@@ -40,10 +40,21 @@ import {
   prepareStickerSubjectCutout,
   SubjectCutoutError,
 } from '../../services/stickerSubjectCutout';
+import {
+  exportStampCutoutImageSource,
+  type StampCutterDraft,
+  type StampCutterTransform,
+} from '../../services/stampCutter';
 
 const STICKER_SOURCE_SHEET_DISMISS_DELAY_MS = 250;
 
 type StickerImportIntent = 'sticker' | 'stamp';
+type StickerSourceIntent = StickerImportIntent | 'stamp-cut';
+type PickedStickerImportSource = {
+  source: StickerImportSource;
+  width: number | null;
+  height: number | null;
+};
 
 export type StickerPastePromptState = {
   visible: boolean;
@@ -53,7 +64,7 @@ export type StickerPastePromptState = {
 
 export type StickerSourceAction = {
   key: string;
-  iconName: 'images-outline' | 'pricetag-outline' | 'clipboard-outline';
+  iconName: 'images-outline' | 'pricetag-outline' | 'clipboard-outline' | 'scan-outline';
   renderIcon?: ({ color, size }: { color: string; size: number }) => ReactNode;
   label: string;
   description: string;
@@ -240,6 +251,28 @@ function getClipboardStickerTransparencyMessage(t: TFunction) {
   );
 }
 
+async function getImageDimensions(uri: string, fallbackWidth?: number | null, fallbackHeight?: number | null) {
+  if (
+    typeof fallbackWidth === 'number' &&
+    fallbackWidth > 0 &&
+    typeof fallbackHeight === 'number' &&
+    fallbackHeight > 0
+  ) {
+    return {
+      width: fallbackWidth,
+      height: fallbackHeight,
+    };
+  }
+
+  return new Promise<{ width: number; height: number }>((resolve, reject) => {
+    Image.getSize(
+      uri,
+      (width, height) => resolve({ width, height }),
+      (error) => reject(error)
+    );
+  });
+}
+
 export function useCaptureCardStickerFlow({
   captureMode,
   t,
@@ -261,7 +294,8 @@ export function useCaptureCardStickerFlow({
   const [importingSticker, setImportingSticker] = useState(false);
   const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
   const [showStickerActionsSheet, setShowStickerActionsSheet] = useState(false);
-  const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<StickerImportIntent | null>(null);
+  const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<StickerSourceIntent | null>(null);
+  const [stampCutterDraft, setStampCutterDraft] = useState<StampCutterDraft | null>(null);
   const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
   const [inlinePasteCanPasteFromClipboard, setInlinePasteCanPasteFromClipboard] = useState(false);
   const [inlinePasteLoading, setInlinePasteLoading] = useState(false);
@@ -359,15 +393,8 @@ export function useCaptureCardStickerFlow({
     [applyImportedSticker, stickerPlacements]
   );
 
-  const handleImportSticker = useCallback(
-    async (intent: StickerImportIntent = 'sticker') => {
-      if (!enablePhotoStickers || importingSticker) {
-        return;
-      }
-
-      dismissOverlay();
-      dismissPastePrompt();
-
+  const pickStickerImportSource = useCallback(
+    async (): Promise<PickedStickerImportSource | null> => {
       let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
       if (mediaPermission.status !== 'granted') {
         mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -386,32 +413,54 @@ export function useCaptureCardStickerFlow({
               'Allow photo library access so you can import an image into this note.'
             )
         );
+        return null;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 1,
+        selectionLimit: 1,
+      });
+
+      if (result.canceled || !result.assets?.[0]?.uri) {
+        return null;
+      }
+
+      const selectedAsset = result.assets[0];
+      return {
+        source: {
+          uri: selectedAsset.uri,
+          mimeType: selectedAsset.mimeType,
+          name: selectedAsset.fileName,
+        },
+        width: typeof selectedAsset.width === 'number' ? selectedAsset.width : null,
+        height: typeof selectedAsset.height === 'number' ? selectedAsset.height : null,
+      };
+    },
+    [t]
+  );
+
+  const handleImportSticker = useCallback(
+    async (intent: StickerImportIntent = 'sticker') => {
+      if (!enablePhotoStickers || importingSticker) {
         return;
       }
 
+      dismissOverlay();
+      dismissPastePrompt();
+
       setImportingSticker(true);
       try {
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          allowsEditing: false,
-          quality: 1,
-          selectionLimit: 1,
-        });
-
-        if (result.canceled || !result.assets?.[0]?.uri) {
+        const pickedSource = await pickStickerImportSource();
+        if (!pickedSource) {
           return;
         }
 
-        const importSource = {
-          uri: result.assets[0].uri,
-          mimeType: result.assets[0].mimeType,
-          name: result.assets[0].fileName,
-        };
-
         try {
-          await importStickerFromSource(importSource, intent);
+          await importStickerFromSource(pickedSource.source, intent);
         } catch (error) {
-          logStickerImportFailure('import-sticker', importSource, intent, error);
+          logStickerImportFailure('import-sticker', pickedSource.source, intent, error);
           if (shouldOfferStampFallback(error)) {
             showAppAlert(
               t('capture.stickerCutoutFallbackTitle', 'Could not make a sticker'),
@@ -425,9 +474,9 @@ export function useCaptureCardStickerFlow({
                   text: t('capture.importAsStamp', 'Import as stamp'),
                   onPress: () => {
                     setImportingSticker(true);
-                    void importStickerFromSource(importSource, 'stamp')
+                    void importStickerFromSource(pickedSource.source, 'stamp')
                       .catch((stampError) => {
-                        logStickerImportFailure('stamp-fallback', importSource, 'stamp', stampError);
+                        logStickerImportFailure('stamp-fallback', pickedSource.source, 'stamp', stampError);
                         showAppAlert(
                           t('capture.error', 'Error'),
                           getStickerImportErrorMessage(t, stampError)
@@ -467,9 +516,55 @@ export function useCaptureCardStickerFlow({
       enablePhotoStickers,
       importStickerFromSource,
       importingSticker,
+      pickStickerImportSource,
       t,
     ]
   );
+
+  const handlePrepareStampCutout = useCallback(async () => {
+    if (!enablePhotoStickers || importingSticker) {
+      return;
+    }
+
+    dismissOverlay();
+    dismissPastePrompt();
+    setImportingSticker(true);
+
+    try {
+      const pickedSource = await pickStickerImportSource();
+      if (!pickedSource) {
+        return;
+      }
+
+      const dimensions = await getImageDimensions(
+        pickedSource.source.uri,
+        pickedSource.width,
+        pickedSource.height
+      );
+      setStampCutterDraft({
+        source: pickedSource.source,
+        width: dimensions.width,
+        height: dimensions.height,
+      });
+    } catch (error) {
+      console.warn('[stickers] stamp cutter setup failed', error);
+      showAppAlert(
+        t('capture.error', 'Error'),
+        error instanceof Error
+          ? error.message
+          : t('capture.photoImportFailed', 'We could not import that photo right now.')
+      );
+    } finally {
+      setImportingSticker(false);
+    }
+  }, [
+    dismissOverlay,
+    dismissPastePrompt,
+    enablePhotoStickers,
+    importingSticker,
+    pickStickerImportSource,
+    t,
+  ]);
 
   useEffect(() => {
     if (!enablePhotoStickers || subjectCutoutPrewarmRequestedRef.current) {
@@ -488,11 +583,16 @@ export function useCaptureCardStickerFlow({
     const timer = setTimeout(() => {
       const nextAction = pendingStickerSourceAction;
       setPendingStickerSourceAction(null);
+      if (nextAction === 'stamp-cut') {
+        void handlePrepareStampCutout();
+        return;
+      }
+
       void handleImportSticker(nextAction);
     }, STICKER_SOURCE_SHEET_DISMISS_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [handleImportSticker, pendingStickerSourceAction, showStickerSourceSheet]);
+  }, [handleImportSticker, handlePrepareStampCutout, pendingStickerSourceAction, showStickerSourceSheet]);
 
   const handlePasteStickerFromClipboard = useCallback(async () => {
     if (!enablePhotoStickers || importingSticker) {
@@ -693,6 +793,12 @@ export function useCaptureCardStickerFlow({
     dismissOverlay();
   }, [dismissOverlay]);
 
+  const handleSelectStickerSourceStampCut = useCallback(() => {
+    setPendingStickerSourceAction('stamp-cut');
+    setShowStickerSourceSheet(false);
+    dismissOverlay();
+  }, [dismissOverlay]);
+
   const stickerSourceActions = useMemo<StickerSourceAction[]>(
     () => {
       const actions: StickerSourceAction[] = [
@@ -706,11 +812,19 @@ export function useCaptureCardStickerFlow({
           testID: 'sticker-source-option-create-sticker',
         },
         {
+          key: 'cut-stamp',
+          iconName: 'scan-outline',
+          label: t('capture.cutStampLabel', 'Cut stamp'),
+          description: t('capture.cutStampDescription', 'Frame just part of a photo inside the cutter'),
+          onPress: handleSelectStickerSourceStampCut,
+          testID: 'sticker-source-option-cut-stamp',
+        },
+        {
           key: 'create-stamp',
           iconName: 'pricetag-outline',
           renderIcon: renderStickerSourceSheetStampIcon,
           label: t('capture.createStampLabel', 'Create stamp'),
-          description: t('capture.createStampDescription', 'Turn any photo into a perforated stamp'),
+          description: t('capture.createStampDescription', 'Use the whole photo as a perforated stamp'),
           onPress: handleSelectStickerSourceStamp,
           testID: 'sticker-source-option-create-stamp',
         },
@@ -731,6 +845,7 @@ export function useCaptureCardStickerFlow({
     },
     [
       handleSelectStickerSourceClipboard,
+      handleSelectStickerSourceStampCut,
       handleSelectStickerSourceStamp,
       handleSelectStickerSourceSticker,
       stickerSourceCanPasteFromClipboard,
@@ -841,22 +956,71 @@ export function useCaptureCardStickerFlow({
     [selectSticker]
   );
 
+  const handleCloseStampCutterEditor = useCallback(() => {
+    if (importingSticker) {
+      return;
+    }
+
+    setStampCutterDraft(null);
+  }, [importingSticker]);
+
+  const handleConfirmStampCutter = useCallback(
+    async ({
+      cropSize,
+      transform,
+    }: {
+      cropSize: { width: number; height: number };
+      transform: StampCutterTransform;
+    }) => {
+      if (!stampCutterDraft) {
+        return;
+      }
+
+      setImportingSticker(true);
+      let cleanupUri: string | null = null;
+
+      try {
+        const exported = await exportStampCutoutImageSource(stampCutterDraft, cropSize, transform);
+        cleanupUri = exported.cleanupUri;
+        await importStickerFromSource(exported.source, 'stamp');
+        setStampCutterDraft(null);
+      } catch (error) {
+        console.warn('[stickers] stamp cutter export failed', error);
+        showAppAlert(
+          t('capture.error', 'Error'),
+          getStickerImportErrorMessage(t, error)
+        );
+      } finally {
+        await cleanupSubjectCutoutImportSource(cleanupUri);
+        setImportingSticker(false);
+      }
+    },
+    [importStickerFromSource, stampCutterDraft, t]
+  );
+
   const closeStickerOverlays = useCallback(() => {
     dismissPastePrompt();
     setShowStickerSourceSheet(false);
     setShowStickerActionsSheet(false);
     setPendingStickerSourceAction(null);
+    setStampCutterDraft(null);
     dismissOverlay();
   }, [dismissOverlay, dismissPastePrompt]);
 
   useEffect(() => {
-    if (importingSticker || interactionsDisabled) {
+    if (importingSticker || interactionsDisabled || stampCutterDraft) {
       setShowStickerSourceSheet(false);
     }
-  }, [importingSticker, interactionsDisabled]);
+  }, [importingSticker, interactionsDisabled, stampCutterDraft]);
 
   useEffect(() => {
-    if (doodleModeEnabled || stickerModeEnabled || importingSticker || interactionsDisabled) {
+    if (
+      doodleModeEnabled ||
+      stickerModeEnabled ||
+      importingSticker ||
+      interactionsDisabled ||
+      stampCutterDraft
+    ) {
       dismissPastePrompt();
     }
   }, [
@@ -864,6 +1028,7 @@ export function useCaptureCardStickerFlow({
     doodleModeEnabled,
     importingSticker,
     interactionsDisabled,
+    stampCutterDraft,
     stickerModeEnabled,
   ]);
 
@@ -916,8 +1081,12 @@ export function useCaptureCardStickerFlow({
       handleNativeInlinePasteStickerPress,
       showStickerSourceSheet,
       handleCloseStickerSourceSheet,
+      handleCloseStampCutterEditor,
+      handleConfirmStampCutter,
       handleShowStickerSourceOptions,
       stickerSourceActions,
+      showStampCutterEditor: Boolean(stampCutterDraft),
+      stampCutterDraft,
       showStickerActionsSheet,
       handleCloseStickerActionsSheet,
       handleShowStickerActions,
@@ -934,7 +1103,9 @@ export function useCaptureCardStickerFlow({
       closeStickerOverlays,
       dismissPastePrompt,
       handleCloseStickerActionsSheet,
+      handleCloseStampCutterEditor,
       handleCloseStickerSourceSheet,
+      handleConfirmStampCutter,
       handleConfirmPasteFromPrompt,
       handleInlinePasteStickerPress,
       handleNativeInlinePasteStickerPress,
@@ -951,9 +1122,11 @@ export function useCaptureCardStickerFlow({
       selectedStickerMotionLocked,
       selectedStickerOutlineEnabled,
       selectedStickerPlacement,
+      Boolean(stampCutterDraft),
       showInlinePasteButton,
       showStickerActionsSheet,
       showStickerSourceSheet,
+      stampCutterDraft,
       stickerSourceActions,
       useNativeInlinePasteButton,
     ]

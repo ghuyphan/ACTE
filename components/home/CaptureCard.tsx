@@ -67,6 +67,7 @@ import {
   PhotoFilterCarousel,
   triggerCaptureCardHaptic,
 } from './capture/CaptureControls';
+import StampCutterEditor from './capture/StampCutterEditor';
 import { useCaptureCardCameraController } from './useCaptureCardCameraController';
 import { useCaptureCardDecorations } from './useCaptureCardDecorations';
 import { useCaptureCardMetaSheets } from './useCaptureCardMetaSheets';
@@ -1837,7 +1838,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const {
     closeStickerOverlays,
     dismissPastePrompt,
+    handleCloseStampCutterEditor,
     handleCloseStickerSourceSheet,
+    handleConfirmStampCutter,
     handleConfirmPasteFromPrompt,
     handleInlinePasteStickerPress,
     handleNativeInlinePasteStickerPress,
@@ -1850,7 +1853,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     inlinePasteLoading,
     pastePrompt,
     showInlinePasteButton,
+    showStampCutterEditor,
     showStickerSourceSheet,
+    stampCutterDraft,
     stickerSourceActions,
     useNativeInlinePasteButton,
   } = useCaptureCardStickerFlow({
@@ -2507,6 +2512,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       >
         {radiusSheetBody}
       </AppSheet>
+      <StampCutterEditor
+        visible={showStampCutterEditor}
+        draft={stampCutterDraft}
+        loading={importingSticker}
+        title={t('capture.stampCutterTitle', 'Cut stamp')}
+        subtitle={t('capture.stampCutterHint', 'Drag and pinch to frame the part of the photo you want on the stamp.')}
+        cancelLabel={t('common.cancel', 'Cancel')}
+        confirmLabel={t('capture.stampCutterConfirm', 'Use stamp')}
+        onClose={handleCloseStampCutterEditor}
+        onConfirm={handleConfirmStampCutter}
+      />
     </>
   );
 });

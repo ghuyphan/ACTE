@@ -23,6 +23,7 @@ let mockClipboardListeners: Array<() => void> = [];
 const mockCreateStickerImportSourceFromSubjectCutout = jest.fn();
 const mockPrepareStickerSubjectCutout = jest.fn();
 const mockCleanupSubjectCutoutImportSource = jest.fn();
+const mockExportStampCutoutImageSource = jest.fn();
 
 jest.mock('@expo/vector-icons', () => {
   const React = require('react');
@@ -169,9 +170,9 @@ jest.mock('../components/ui/GlassView', () => {
 jest.mock('../components/ui/PrimaryButton', () => {
   const React = require('react');
   const { Pressable, Text } = require('react-native');
-  return function MockPrimaryButton({ label, onPress }: any) {
+  return function MockPrimaryButton({ label, onPress, testID }: any) {
     return (
-      <Pressable onPress={onPress}>
+      <Pressable onPress={onPress} testID={testID}>
         <Text>{label}</Text>
       </Pressable>
     );
@@ -316,6 +317,14 @@ jest.mock('../services/stickerSubjectCutout', () => ({
   cleanupSubjectCutoutImportSource: (...args: unknown[]) =>
     mockCleanupSubjectCutoutImportSource(...args),
 }));
+
+jest.mock('../services/stampCutter', () => {
+  const actual = jest.requireActual('../services/stampCutter');
+  return {
+    ...actual,
+    exportStampCutoutImageSource: (...args: unknown[]) => mockExportStampCutoutImageSource(...args),
+  };
+});
 
 const mockClipboardHasImageAsync = hasImageAsync as jest.MockedFunction<typeof hasImageAsync>;
 const mockClipboardGetImageAsync = getImageAsync as jest.MockedFunction<typeof getImageAsync>;
@@ -473,6 +482,20 @@ describe('CaptureCard doodle handle', () => {
     }));
     mockPrepareStickerSubjectCutout.mockResolvedValue({ available: true, ready: true });
     mockCleanupSubjectCutoutImportSource.mockResolvedValue(undefined);
+    mockExportStampCutoutImageSource.mockResolvedValue({
+      source: {
+        uri: 'file:///cache/photo-stamp.jpg',
+        mimeType: 'image/jpeg',
+        name: 'photo-stamp.jpg',
+      },
+      cleanupUri: 'file:///cache/photo-stamp.jpg',
+      cropRect: {
+        originX: 10,
+        originY: 12,
+        width: 320,
+        height: 420,
+      },
+    });
   });
 
   it('removes the restaurant field in text mode and keeps the action row', () => {
@@ -1490,6 +1513,63 @@ describe('CaptureCard doodle handle', () => {
       },
       undefined
     );
+  });
+
+  it('opens the stamp cutter editor and imports the cropped result as a stamp', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri: 'file:///photo.jpg',
+          mimeType: 'image/jpeg',
+          fileName: 'photo.jpg',
+          width: 1600,
+          height: 1200,
+        },
+      ],
+    });
+
+    const { getByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///photo.jpg',
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-sticker-toggle'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-sticker-import'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-source-option-cut-stamp'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('stamp-cutter-confirm')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('stamp-cutter-confirm'));
+    });
+
+    await waitFor(() => {
+      expect(mockExportStampCutoutImageSource).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+    });
+
+    expect(ref.current?.getStickerSnapshot().placements[0]?.renderMode).toBe('stamp');
+    expect(mockImportStickerAsset).toHaveBeenCalledWith(
+      {
+        uri: 'file:///cache/photo-stamp.jpg',
+        mimeType: 'image/jpeg',
+        name: 'photo-stamp.jpg',
+      },
+      undefined
+    );
+    expect(mockCleanupSubjectCutoutImportSource).toHaveBeenCalledWith('file:///cache/photo-stamp.jpg');
   });
 
   it('hides the outline toggle on selected stamp stickers', async () => {

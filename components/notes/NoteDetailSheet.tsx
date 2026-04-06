@@ -1043,7 +1043,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 iconName: 'pricetag-outline',
                 renderIcon: renderStickerSourceSheetStampIcon,
                 label: t('capture.createStampLabel', 'Create stamp'),
-                description: t('capture.createStampDescription', 'Turn any photo into a perforated stamp'),
+                description: t('capture.createStampDescription', 'Use the whole photo as a perforated stamp'),
                 onPress: handleSelectStickerSourceStamp,
                 testID: 'sticker-source-option-create-stamp',
             },
