@@ -8,7 +8,6 @@ import android.os.Build
 import android.util.Log
 import com.google.mlkit.common.MlKitException
 import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.segmentation.subject.Subject
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmenter
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
@@ -32,12 +31,6 @@ class NotoSubjectCutoutModule : Module() {
     SubjectSegmenterOptions.Builder()
       .enableForegroundBitmap()
       .enableForegroundConfidenceMask()
-      .enableMultipleSubjects(
-        SubjectSegmenterOptions.SubjectResultOptions.Builder()
-          .enableConfidenceMask()
-          .enableSubjectBitmap()
-          .build()
-      )
       .build()
   }
 
@@ -97,48 +90,27 @@ class NotoSubjectCutoutModule : Module() {
         segmenter.getInitTask().await()
 
         val result = segmenter.process(InputImage.fromFilePath(context, Uri.fromFile(sourceFile))).await()
+        val foregroundMask = result.foregroundConfidenceMask
         Log.d(
           LOG_TAG,
-          "cutOutAsync: subjectCount=${result.subjects.size} hasForegroundMask=${result.foregroundConfidenceMask != null}"
+          "cutOutAsync: hasForegroundMask=${foregroundMask != null}"
         )
-        if (result.subjects.isEmpty()) {
-          val foregroundMask = result.foregroundConfidenceMask
-          val cutoutBitmap = foregroundMask?.let { mask ->
-            applyConfidenceMaskToBitmap(sourceBitmap, mask, sourceBitmap.width, sourceBitmap.height)
-          }
+        val cutoutBitmap = foregroundMask?.let { mask ->
+          applyConfidenceMaskToBitmap(sourceBitmap, mask, sourceBitmap.width, sourceBitmap.height)
+        }
 
-          if (cutoutBitmap == null) {
-            Log.w(LOG_TAG, "cutOutAsync: no visible pixels in fallback foreground mask")
-            throw SubjectCutoutException(
-              "no-subject",
-              "No clear foreground subject was found in this image."
-            )
-          }
-
-          val croppedBitmap = cropBitmapToVisiblePixels(cutoutBitmap) ?: cutoutBitmap
-          Log.d(
-            LOG_TAG,
-            "cutOutAsync: using fallback foreground mask output=${croppedBitmap.width}x${croppedBitmap.height}"
-          )
-          writeCutoutBitmap(croppedBitmap, destinationFile)
-          return@Coroutine mapOf(
-            "uri" to Uri.fromFile(destinationFile).toString(),
-            "mimeType" to "image/png",
-            "width" to croppedBitmap.width,
-            "height" to croppedBitmap.height
+        if (cutoutBitmap == null) {
+          Log.w(LOG_TAG, "cutOutAsync: no visible pixels in foreground mask")
+          throw SubjectCutoutException(
+            "no-subject",
+            "No clear foreground subject was found in this image."
           )
         }
 
-        val primarySubject = selectPrimarySubject(result.subjects)
+        val croppedBitmap = cropBitmapToVisiblePixels(cutoutBitmap) ?: cutoutBitmap
         Log.d(
           LOG_TAG,
-          "cutOutAsync: selected subject bounds=${primarySubject.startX},${primarySubject.startY} ${primarySubject.width}x${primarySubject.height}"
-        )
-        val subjectBitmap = buildSubjectBitmap(primarySubject)
-        val croppedBitmap = cropBitmapToVisiblePixels(subjectBitmap) ?: subjectBitmap
-        Log.d(
-          LOG_TAG,
-          "cutOutAsync: subject bitmap=${subjectBitmap.width}x${subjectBitmap.height} cropped=${croppedBitmap.width}x${croppedBitmap.height}"
+          "cutOutAsync: foreground bitmap=${cutoutBitmap.width}x${cutoutBitmap.height} cropped=${croppedBitmap.width}x${croppedBitmap.height}"
         )
         writeCutoutBitmap(croppedBitmap, destinationFile)
 
@@ -168,39 +140,6 @@ class NotoSubjectCutoutModule : Module() {
     warmBitmap.eraseColor(Color.WHITE)
     Log.d(LOG_TAG, "warmSubjectCutout: warming with ${PREPARE_BITMAP_SIZE}x${PREPARE_BITMAP_SIZE} bitmap")
     segmenter.process(InputImage.fromBitmap(warmBitmap, 0)).await()
-  }
-
-  private fun selectPrimarySubject(subjects: List<Subject>): Subject {
-    return subjects.maxByOrNull { subject ->
-      val areaScore = subject.width * subject.height
-      val centeredBonus =
-        1_000_000 -
-          kotlin.math.abs(subject.startX + subject.width / 2) -
-          kotlin.math.abs(subject.startY + subject.height / 2)
-      areaScore + centeredBonus
-    } ?: throw SubjectCutoutException(
-      "no-subject",
-      "No clear foreground subject was found in this image."
-    )
-  }
-
-  private fun buildSubjectBitmap(subject: Subject): Bitmap {
-    val subjectBitmap = subject.bitmap
-      ?: throw SubjectCutoutException(
-        "processing-failed",
-        "Unable to build a sticker cutout from this image."
-      )
-    val confidenceMask = subject.confidenceMask
-      ?: throw SubjectCutoutException(
-        "processing-failed",
-        "Unable to build a sticker cutout from this image."
-      )
-
-    return applyConfidenceMaskToBitmap(subjectBitmap, confidenceMask, subject.width, subject.height)
-      ?: throw SubjectCutoutException(
-        "processing-failed",
-        "Unable to build a sticker cutout from this image."
-      )
   }
 
   private fun applyConfidenceMaskToBitmap(

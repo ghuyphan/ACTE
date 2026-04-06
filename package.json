@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@expo-google-fonts/noto-sans": "^0.4.2",
-    "@expo/metro-config": "^55.0.9",
     "@expo/ui": "~55.0.6",
     "@expo/vector-icons": "^15.0.3",
     "@gorhom/bottom-sheet": "^5.2.8",
@@ -94,6 +93,48 @@
     "typescript": "~5.9.2"
   },
   "private": true,
+  "expo": {
+    "install": {
+      "exclude": [
+        "@react-native-community/netinfo",
+        "@shopify/flash-list",
+        "@shopify/react-native-skia",
+        "expo",
+        "@expo/ui",
+        "expo-build-properties",
+        "expo-clipboard",
+        "expo-constants",
+        "expo-crypto",
+        "expo-file-system",
+        "expo-font",
+        "expo-glass-effect",
+        "expo-haptics",
+        "expo-image",
+        "expo-image-manipulator",
+        "expo-image-picker",
+        "expo-linear-gradient",
+        "expo-linking",
+        "expo-localization",
+        "expo-location",
+        "expo-notifications",
+        "expo-router",
+        "expo-secure-store",
+        "expo-sensors",
+        "expo-splash-screen",
+        "expo-sqlite",
+        "expo-status-bar",
+        "expo-symbols",
+        "expo-system-ui",
+        "expo-task-manager",
+        "expo-updates",
+        "expo-video",
+        "expo-web-browser",
+        "react-native",
+        "react-native-maps",
+        "jest-expo"
+      ]
+    }
+  },
   "reanimated": {
     "staticFeatureFlags": {
       "ENABLE_SHARED_ELEMENT_TRANSITIONS": true

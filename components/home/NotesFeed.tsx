@@ -25,7 +25,7 @@ import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
 
 const MAX_STAGGERED_ENTRANCE_INDEX = 2;
 const ENTRANCE_DELAY_MS = 24;
-const DOCKED_HEADER_CONTENT_OVERLAP = 8;
+const DOCKED_HEADER_CONTENT_OVERLAP = 22;
 function getEntranceDelay(index: number) {
   return Math.min(index, MAX_STAGGERED_ENTRANCE_INDEX) * ENTRANCE_DELAY_MS;
 }

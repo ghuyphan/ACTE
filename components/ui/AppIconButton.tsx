@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { Shadows } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 
 type AppIconButtonProps = {
@@ -34,10 +33,9 @@ export default function AppIconButton({
       style={({ pressed }) => [
         styles.button,
         {
-          backgroundColor: colors.card,
+          backgroundColor: colors.surface,
           borderColor: colors.border,
-          opacity: disabled ? 0.45 : 1,
-          transform: [{ scale: pressed && !disabled ? 0.97 : 1 }],
+          opacity: disabled ? 0.45 : pressed ? 0.82 : 1,
         },
         style,
       ]}
@@ -50,12 +48,11 @@ export default function AppIconButton({
 
 const styles = StyleSheet.create({
   button: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    ...Shadows.floating,
   },
 });

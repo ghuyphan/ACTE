@@ -154,7 +154,7 @@ export default function PlusScreen() {
         ]}
         contentContainerStyle={styles.contentContainer}
       >
-        <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.heroSection}>
           <View style={styles.iconContainer}>
             <Image source={appIconSource} style={styles.appIcon} />
           </View>
@@ -171,7 +171,7 @@ export default function PlusScreen() {
           </Text>
         </View>
 
-        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.featuresList}>
           {!isOnline ? (
             <OfflineNotice
               title={t('plus.offlineTitle', 'Offline right now')}
@@ -204,7 +204,7 @@ export default function PlusScreen() {
           />
         </View>
 
-        <View style={[styles.footerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.footerActions}>
           <PrimaryButton
             label={
               tier === 'plus'
@@ -306,24 +306,19 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: Layout.screenPadding,
+    paddingHorizontal: Layout.screenPadding + 12,
   },
   contentContainer: {
-    gap: 18,
+    gap: 24,
   },
-  heroCard: {
+  heroSection: {
     alignItems: 'center',
-    borderRadius: 30,
-    borderWidth: 1,
-    paddingHorizontal: 22,
-    paddingVertical: 24,
-    gap: 12,
   },
   iconContainer: {
-    width: 104,
-    height: 104,
+    width: 120,
+    height: 120,
     overflow: 'hidden',
-    marginBottom: 2,
+    marginBottom: 32,
   },
   appIcon: {
     width: '100%',
@@ -333,39 +328,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginBottom: 12,
   },
   title: {
     ...Typography.heroTitle,
-    fontSize: 40,
-    letterSpacing: -1.1,
+    fontSize: 42,
+    letterSpacing: -1,
   },
   plusBadge: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '900',
     fontFamily: Typography.screenTitle.fontFamily,
     textTransform: 'uppercase',
-    letterSpacing: -0.8,
+    letterSpacing: -1,
   },
   subtitle: {
     ...Typography.heroSubtitle,
     textAlign: 'center',
     opacity: 0.8,
-    maxWidth: 280,
   },
-  sectionCard: {
-    borderRadius: 28,
-    borderWidth: 1,
-    padding: 18,
+  featuresList: {
     gap: 16,
+    marginBottom: 20,
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 14,
+    gap: 16,
   },
   featureIconContainer: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
@@ -384,10 +377,8 @@ const styles = StyleSheet.create({
     fontFamily: Typography.screenTitle.fontFamily,
     lineHeight: 20,
   },
-  footerCard: {
-    borderRadius: 28,
-    borderWidth: 1,
-    padding: 18,
+  footerActions: {
     gap: 12,
+    paddingBottom: 12,
   },
 });

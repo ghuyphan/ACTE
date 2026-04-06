@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useIsFocused, useScrollToTop } from '@react-navigation/native';
 import * as FileSystem from '../../utils/fileSystem';
-import { BlurTargetView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -26,6 +25,7 @@ import { buildHomeFeedItems, findHomeFeedItemIndex, type HomeFeedItem } from '..
 import HomeHeaderSearch from '../home/HomeHeaderSearch';
 import NotesFeed from '../home/NotesFeed';
 import SharedManageSheet from '../home/SharedManageSheet';
+import BlurTargetView from '../ui/BlurTargetView';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';

@@ -23,6 +23,7 @@ let mockClipboardListeners: Array<() => void> = [];
 const mockCreateStickerImportSourceFromSubjectCutout = jest.fn();
 const mockPrepareStickerSubjectCutout = jest.fn();
 const mockCleanupSubjectCutoutImportSource = jest.fn();
+const mockPrepareStampCutterDraft = jest.fn();
 const mockExportStampCutoutImageSource = jest.fn();
 
 jest.mock('@expo/vector-icons', () => {
@@ -322,6 +323,7 @@ jest.mock('../services/stampCutter', () => {
   const actual = jest.requireActual('../services/stampCutter');
   return {
     ...actual,
+    prepareStampCutterDraft: (...args: unknown[]) => mockPrepareStampCutterDraft(...args),
     exportStampCutoutImageSource: (...args: unknown[]) => mockExportStampCutoutImageSource(...args),
   };
 });
@@ -482,6 +484,16 @@ describe('CaptureCard doodle handle', () => {
     }));
     mockPrepareStickerSubjectCutout.mockResolvedValue({ available: true, ready: true });
     mockCleanupSubjectCutoutImportSource.mockResolvedValue(undefined);
+    mockPrepareStampCutterDraft.mockResolvedValue({
+      source: {
+        uri: 'file:///cache/photo-normalized.jpg',
+        mimeType: 'image/jpeg',
+        name: 'photo.jpg',
+      },
+      width: 1600,
+      height: 1200,
+      cleanupUri: 'file:///cache/photo-normalized.jpg',
+    });
     mockExportStampCutoutImageSource.mockResolvedValue({
       source: {
         uri: 'file:///cache/photo-stamp.jpg',

@@ -62,12 +62,8 @@ export default function SearchScreen() {
     return filterNotesByQuery(notes, deferredQuery);
   }, [deferredQuery, hasDeferredQuery, notes]);
   const shouldShowEmptyState = filteredNotes.length === 0;
-  const resultCountLabel = t('home.count', '{{count}} notes saved', {
-    count: hasDeferredQuery ? filteredNotes.length : notes.length,
-  });
-  const searchTitle = hasQuery ? query.trim() : t('home.searchPlaceholder', 'Search notes...');
 
-  const openNote = useCallback(
+const openNote = useCallback(
     (noteId: string) => {
       router.push(`/note/${noteId}` as any);
     },
@@ -92,17 +88,14 @@ export default function SearchScreen() {
 
       return (
         <Pressable
-          style={({ pressed }) => [
-            styles.resultPress,
-            pressed ? styles.resultPressPressed : null,
-          ]}
+          style={styles.resultPress}
           onPress={() => openNote(item.id)}
         >
           <View
             style={[
               styles.resultCard,
               {
-                backgroundColor: colors.card,
+                backgroundColor: colors.surface,
                 borderColor: colors.border,
               },
             ]}
@@ -168,7 +161,7 @@ export default function SearchScreen() {
         </Pressable>
       );
     },
-    [colors.border, colors.card, colors.danger, colors.secondaryText, colors.text, isDark, openNote, t]
+    [colors.border, colors.danger, colors.secondaryText, colors.surface, colors.text, isDark, openNote, t]
   );
 
   const renderSeparator = useCallback(() => <View style={styles.resultSeparator} />, []);
@@ -203,31 +196,24 @@ export default function SearchScreen() {
             },
           ]}
         >
-          <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.emptyState}>
-              <View
-                style={[
-                  styles.emptyIconWrap,
-                  { backgroundColor: colors.primarySoft },
-                ]}
-              >
-                <Ionicons
-                  name="search-outline"
-                  size={Platform.OS === 'ios' ? 30 : 26}
-                  color={colors.primary}
-                />
-              </View>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                {hasQuery
-                  ? t('home.noResults', 'No notes found')
-                  : t('home.searchPlaceholder', 'Search notes...')}
-              </Text>
-              <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-                {hasQuery
-                  ? t('home.noResultsMsg', 'Try a different keyword')
-                  : t('home.count', '{{count}} notes saved', { count: notes.length })}
-              </Text>
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconWrap}>
+              <Ionicons
+                name="search-outline"
+                size={Platform.OS === 'ios' ? 54 : 30}
+                color={colors.secondaryText}
+              />
             </View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              {hasQuery
+                ? t('home.noResults', 'No notes found')
+                : t('home.searchPlaceholder', 'Search notes...')}
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
+              {hasQuery
+                ? t('home.noResultsMsg', 'Try a different keyword')
+                : t('home.count', '{{count}} notes saved', { count: notes.length })}
+            </Text>
           </View>
         </View>
       ) : (
@@ -236,19 +222,6 @@ export default function SearchScreen() {
           keyExtractor={(item) => item.id}
           getItemType={(item) => item.type}
           drawDistance={440}
-          ListHeaderComponent={
-            <View
-              style={[
-                styles.heroCard,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <Text style={[styles.heroEyebrow, { color: colors.secondaryText }]}>{resultCountLabel}</Text>
-              <Text style={[styles.heroTitle, { color: colors.text }]} numberOfLines={2}>
-                {searchTitle}
-              </Text>
-            </View>
-          }
           renderItem={renderNote}
           ItemSeparatorComponent={renderSeparator}
           contentInsetAdjustmentBehavior="never"
@@ -277,27 +250,24 @@ const styles = StyleSheet.create({
   resultPress: {
     width: '100%',
   },
-  resultPressPressed: {
-    transform: [{ scale: 0.992 }],
-  },
   resultCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 14,
-    ...Shadows.card,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 12,
+    ...Shadows.floating,
   },
   resultSeparator: {
-    height: 16,
+    height: 14,
   },
   resultTopRow: {
     flexDirection: 'row',
-    gap: 14,
-    alignItems: 'flex-start',
+    gap: 12,
+    alignItems: 'center',
   },
   previewFrame: {
-    width: 88,
-    height: 88,
-    borderRadius: 20,
+    width: 84,
+    height: 84,
+    borderRadius: 18,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
@@ -316,26 +286,24 @@ const styles = StyleSheet.create({
   },
   resultCopy: {
     flex: 1,
-    gap: 6,
-    paddingTop: 2,
+    gap: 4,
   },
   locationText: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
   },
   contentText: {
     fontSize: 14,
-    lineHeight: 21,
+    lineHeight: 20,
     fontFamily: 'Noto Sans',
   },
   metaRow: {
-    marginTop: 12,
+    marginTop: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 2,
-    flexWrap: 'wrap',
   },
   metaText: {
     fontSize: 12,
@@ -363,7 +331,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Layout.screenPadding,
+    paddingHorizontal: 20,
   },
   emptyScreen: {
     paddingHorizontal: Layout.screenPadding,
@@ -372,58 +340,26 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 26,
-    paddingVertical: 28,
-    gap: 10,
+    paddingHorizontal: 24,
+    marginTop: -48,
   },
   emptyIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '600',
     fontFamily: 'Noto Sans',
     textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 14,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 20,
     fontFamily: 'Noto Sans',
-    marginTop: 2,
-    maxWidth: 260,
-  },
-  emptyCard: {
-    width: '100%',
-    borderRadius: 28,
-    borderWidth: 1,
-    padding: 4,
-    ...Shadows.card,
-  },
-  heroCard: {
-    borderRadius: 28,
-    borderWidth: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-    marginBottom: 18,
-  },
-  heroEyebrow: {
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  heroTitle: {
-    fontSize: 26,
-    lineHeight: 31,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
+    marginTop: 8,
+    maxWidth: 240,
   },
 });

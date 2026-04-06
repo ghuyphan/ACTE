@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type GestureResponderEvent, Image, Platform } from 'react-native';
+import { type GestureResponderEvent, Platform } from 'react-native';
 import {
   addClipboardListener,
   isPasteButtonAvailable,
@@ -42,6 +42,7 @@ import {
 } from '../../services/stickerSubjectCutout';
 import {
   exportStampCutoutImageSource,
+  prepareStampCutterDraft,
   type StampCutterDraft,
   type StampCutterTransform,
 } from '../../services/stampCutter';
@@ -251,28 +252,6 @@ function getClipboardStickerTransparencyMessage(t: TFunction) {
   );
 }
 
-async function getImageDimensions(uri: string, fallbackWidth?: number | null, fallbackHeight?: number | null) {
-  if (
-    typeof fallbackWidth === 'number' &&
-    fallbackWidth > 0 &&
-    typeof fallbackHeight === 'number' &&
-    fallbackHeight > 0
-  ) {
-    return {
-      width: fallbackWidth,
-      height: fallbackHeight,
-    };
-  }
-
-  return new Promise<{ width: number; height: number }>((resolve, reject) => {
-    Image.getSize(
-      uri,
-      (width, height) => resolve({ width, height }),
-      (error) => reject(error)
-    );
-  });
-}
-
 export function useCaptureCardStickerFlow({
   captureMode,
   t,
@@ -307,6 +286,7 @@ export function useCaptureCardStickerFlow({
   const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stickerSourceClipboardRequestIdRef = useRef(0);
   const subjectCutoutPrewarmRequestedRef = useRef(false);
+  const stampCutterCleanupUriRef = useRef<string | null>(null);
 
   const useNativeInlinePasteButton = Platform.OS === 'ios' && isPasteButtonAvailable;
   const useFallbackInlinePasteButton = Platform.OS === 'android';
@@ -332,6 +312,11 @@ export function useCaptureCardStickerFlow({
   const showInlinePasteButton =
     inlinePasteLoading ||
     (shouldCheckInlinePasteClipboard && inlinePasteCanPasteFromClipboard);
+  const hasStampCutterDraft = Boolean(stampCutterDraft);
+
+  useEffect(() => {
+    stampCutterCleanupUriRef.current = stampCutterDraft?.cleanupUri ?? null;
+  }, [stampCutterDraft?.cleanupUri]);
 
   const clearPastePromptTimeout = useCallback(() => {
     if (pastePromptTimeoutRef.current) {
@@ -536,16 +521,12 @@ export function useCaptureCardStickerFlow({
         return;
       }
 
-      const dimensions = await getImageDimensions(
-        pickedSource.source.uri,
+      const preparedDraft = await prepareStampCutterDraft(
+        pickedSource.source,
         pickedSource.width,
         pickedSource.height
       );
-      setStampCutterDraft({
-        source: pickedSource.source,
-        width: dimensions.width,
-        height: dimensions.height,
-      });
+      setStampCutterDraft(preparedDraft);
     } catch (error) {
       console.warn('[stickers] stamp cutter setup failed', error);
       showAppAlert(
@@ -794,10 +775,10 @@ export function useCaptureCardStickerFlow({
   }, [dismissOverlay]);
 
   const handleSelectStickerSourceStampCut = useCallback(() => {
-    setPendingStickerSourceAction('stamp-cut');
     setShowStickerSourceSheet(false);
     dismissOverlay();
-  }, [dismissOverlay]);
+    void handlePrepareStampCutout();
+  }, [dismissOverlay, handlePrepareStampCutout]);
 
   const stickerSourceActions = useMemo<StickerSourceAction[]>(
     () => {
@@ -961,6 +942,7 @@ export function useCaptureCardStickerFlow({
       return;
     }
 
+    void cleanupSubjectCutoutImportSource(stampCutterCleanupUriRef.current);
     setStampCutterDraft(null);
   }, [importingSticker]);
 
@@ -978,11 +960,14 @@ export function useCaptureCardStickerFlow({
 
       setImportingSticker(true);
       let cleanupUri: string | null = null;
+      const draftCleanupUri = stampCutterDraft.cleanupUri;
+      let shouldCloseDraft = false;
 
       try {
         const exported = await exportStampCutoutImageSource(stampCutterDraft, cropSize, transform);
         cleanupUri = exported.cleanupUri;
         await importStickerFromSource(exported.source, 'stamp');
+        shouldCloseDraft = true;
         setStampCutterDraft(null);
       } catch (error) {
         console.warn('[stickers] stamp cutter export failed', error);
@@ -992,6 +977,9 @@ export function useCaptureCardStickerFlow({
         );
       } finally {
         await cleanupSubjectCutoutImportSource(cleanupUri);
+        if (shouldCloseDraft) {
+          await cleanupSubjectCutoutImportSource(draftCleanupUri);
+        }
         setImportingSticker(false);
       }
     },
@@ -1003,6 +991,7 @@ export function useCaptureCardStickerFlow({
     setShowStickerSourceSheet(false);
     setShowStickerActionsSheet(false);
     setPendingStickerSourceAction(null);
+    void cleanupSubjectCutoutImportSource(stampCutterCleanupUriRef.current);
     setStampCutterDraft(null);
     dismissOverlay();
   }, [dismissOverlay, dismissPastePrompt]);
@@ -1085,7 +1074,7 @@ export function useCaptureCardStickerFlow({
       handleConfirmStampCutter,
       handleShowStickerSourceOptions,
       stickerSourceActions,
-      showStampCutterEditor: Boolean(stampCutterDraft),
+      showStampCutterEditor: hasStampCutterDraft,
       stampCutterDraft,
       showStickerActionsSheet,
       handleCloseStickerActionsSheet,
@@ -1122,7 +1111,7 @@ export function useCaptureCardStickerFlow({
       selectedStickerMotionLocked,
       selectedStickerOutlineEnabled,
       selectedStickerPlacement,
-      Boolean(stampCutterDraft),
+      hasStampCutterDraft,
       showInlinePasteButton,
       showStickerActionsSheet,
       showStickerSourceSheet,

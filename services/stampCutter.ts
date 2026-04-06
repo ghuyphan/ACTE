@@ -1,4 +1,5 @@
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { Image } from 'react-native';
 import type { StickerImportSource } from './noteStickers';
 
 function clamp(value: number, minValue: number, maxValue: number) {
@@ -20,6 +21,7 @@ export interface StampCutterDraft {
   source: StickerImportSource;
   width: number;
   height: number;
+  cleanupUri: string | null;
 }
 
 export interface StampCutterRect {
@@ -37,10 +39,10 @@ export const STAMP_CUTTER_MAX_ZOOM = 4;
 export const STAMP_CUTTER_OVERLAY_ASPECT_RATIO =
   STAMP_CUTTER_OVERLAY_SOURCE_WIDTH / STAMP_CUTTER_OVERLAY_SOURCE_HEIGHT;
 export const STAMP_CUTTER_WINDOW = {
-  x: 0.313,
-  y: 0.305,
-  width: 0.374,
-  height: 0.326,
+  x: 0.385,
+  y: 0.367,
+  width: 0.256,
+  height: 0.175,
 } as const;
 
 export function getStampCutterWindowRect(overlaySize: StampCutterSize): StampCutterRect {
@@ -125,13 +127,76 @@ function buildStampCutoutFileName(name: string | null | undefined) {
   return `${baseName}-stamp.jpg`;
 }
 
+async function getImageSize(uri: string) {
+  return new Promise<StampCutterSize>((resolve, reject) => {
+    Image.getSize(
+      uri,
+      (width, height) => resolve({ width, height }),
+      (error) => reject(error)
+    );
+  });
+}
+
+export async function prepareStampCutterDraft(
+  source: StickerImportSource,
+  fallbackWidth?: number | null,
+  fallbackHeight?: number | null
+): Promise<StampCutterDraft> {
+  const normalizedSource = await manipulateAsync(
+    source.uri,
+    [],
+    {
+      compress: 1,
+      format: SaveFormat.JPEG,
+    }
+  );
+  const normalizedSize =
+    typeof normalizedSource.width === 'number' &&
+    normalizedSource.width > 0 &&
+    typeof normalizedSource.height === 'number' &&
+    normalizedSource.height > 0
+      ? {
+          width: normalizedSource.width,
+          height: normalizedSource.height,
+        }
+      : await getImageSize(normalizedSource.uri).catch((error) => {
+          if (
+            typeof fallbackWidth === 'number' &&
+            fallbackWidth > 0 &&
+            typeof fallbackHeight === 'number' &&
+            fallbackHeight > 0
+          ) {
+            return {
+              width: fallbackWidth,
+              height: fallbackHeight,
+            };
+          }
+
+          throw error;
+        });
+
+  return {
+    source: {
+      ...source,
+      uri: normalizedSource.uri,
+      mimeType: 'image/jpeg',
+    },
+    width: normalizedSize.width,
+    height: normalizedSize.height,
+    cleanupUri: normalizedSource.uri !== source.uri ? normalizedSource.uri : null,
+  };
+}
+
 export async function exportStampCutoutImageSource(
   draft: StampCutterDraft,
   cropSize: StampCutterSize,
   transform: Partial<StampCutterTransform>
 ) {
   const cropRect = calculateStampCutterCropRect(
-    { width: draft.width, height: draft.height },
+    {
+      width: draft.width,
+      height: draft.height,
+    },
     cropSize,
     transform
   );

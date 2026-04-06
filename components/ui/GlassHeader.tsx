@@ -1,11 +1,6 @@
 import { ReactNode, RefObject } from 'react';
 import { Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import Animated, {
-  Extrapolation,
-  interpolate,
-  type SharedValue,
-  useAnimatedStyle,
-} from 'react-native-reanimated';
+import Animated, { type SharedValue } from 'react-native-reanimated';
 import { Layout, Shadows } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { GlassView } from './GlassView';
@@ -32,16 +27,15 @@ export default function GlassHeader({
   dockedBlurred = false,
   dockedBlurScrollOffset,
 }: GlassHeaderProps) {
-  const { isDark } = useTheme();
+  const { colors, isDark } = useTheme();
   const isAndroid = Platform.OS === 'android';
-  const dockedBlurAnimatedStyle = useAnimatedStyle(() => {
-    const offsetY = dockedBlurScrollOffset?.value ?? 0;
-    return {
-      opacity: dockedBlurred
-        ? interpolate(offsetY, [0, 8, 28, 64], [0, 0, 0.55, 1], Extrapolation.CLAMP)
-        : 0,
-    };
-  });
+  const dockedBackdropColor = isDark
+    ? isAndroid
+      ? 'rgba(18,13,10,0.34)'
+      : 'rgba(18,13,10,0.22)'
+    : isAndroid
+      ? 'rgba(255,251,244,0.36)'
+      : 'rgba(255,251,244,0.24)';
 
   if (docked) {
     return (
@@ -63,14 +57,29 @@ export default function GlassHeader({
         >
           {dockedBlurred ? (
             <AnimatedBlurView
-              intensity={isAndroid ? 26 : 14}
+              intensity={isAndroid ? 56 : 24}
               tint={isDark ? 'dark' : 'light'}
               blurTarget={isAndroid ? blurTarget : undefined}
               blurReductionFactor={isAndroid ? 1 : undefined}
               blurMethod={isAndroid ? 'dimezisBlurViewSdk31Plus' : undefined}
-              style={[StyleSheet.absoluteFill, dockedBlurAnimatedStyle]}
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  backgroundColor: dockedBackdropColor,
+                },
+              ]}
             />
           ) : null}
+          <View
+            pointerEvents="none"
+            style={[
+              styles.dockedSeparator,
+              {
+                backgroundColor: colors.border,
+                opacity: dockedBlurred ? 0.42 : 0,
+              },
+            ]}
+          />
           <View style={{ height: topInset }} />
           <View style={styles.content}>{children}</View>
         </View>
@@ -130,6 +139,13 @@ const styles = StyleSheet.create({
   dockedContainer: {
     borderRadius: 0,
     overflow: 'visible',
+  },
+  dockedSeparator: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: StyleSheet.hairlineWidth,
   },
   content: {
     flex: 1,

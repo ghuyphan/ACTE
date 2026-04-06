@@ -610,22 +610,20 @@ export default function LoginScreen() {
         />
 
         <View style={[styles.content, { paddingTop: insets.top }]}>
-          <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.iconContainer}>
-              <Image source={appIconSource} style={styles.appIcon} />
-            </View>
-            <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
-            <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-              {landingSubtitle}
+          <View style={styles.iconContainer}>
+            <Image source={appIconSource} style={styles.appIcon} />
+          </View>
+          <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
+          <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
+            {landingSubtitle}
+          </Text>
+          <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.infoTitle, { color: colors.text }]}>
+              {t('auth.signedInAs', 'Signed in as')}
             </Text>
-            <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.infoTitle, { color: colors.text }]}>
-                {t('auth.signedInAs', 'Signed in as')}
-              </Text>
-              <Text style={[styles.infoText, { color: colors.secondaryText }]}>
-                {user.displayName || user.email || t('settings.signedIn', 'Signed in')}
-              </Text>
-            </View>
+            <Text style={[styles.infoText, { color: colors.secondaryText }]}>
+              {user.displayName || user.email || t('settings.signedIn', 'Signed in')}
+            </Text>
           </View>
         </View>
 
@@ -663,42 +661,40 @@ export default function LoginScreen() {
           landingAnimatedStyle,
         ]}
       >
-        <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.iconContainer}>
-            <Image source={appIconSource} style={styles.appIcon} />
-          </View>
-          <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
-          <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-            {landingSubtitle}
-          </Text>
-
-          {!isAuthAvailable ? (
-            <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.infoTitle, { color: colors.text }]}>
-                {t('auth.localModeTitle', 'Local mode is ready')}
-              </Text>
-              <Text style={[styles.infoText, { color: colors.secondaryText }]}>
-                {t(
-                  'auth.localModeMsg',
-                  'This build is using local-first mode. You can keep capturing notes without signing in.'
-                )}
-              </Text>
-            </View>
-          ) : null}
-
-          {authMessage && !isFormVisible ? (
-            <Text style={[styles.errorText, { color: colors.danger }]}>{authMessage}</Text>
-          ) : null}
-
-          {!isOnline && isAuthAvailable ? (
-            <View style={styles.landingNoticeWrap}>
-              <OfflineNotice
-                title={t('auth.offlineTitle', 'You are offline')}
-                body={t('auth.offlineBody', 'Sign-in and account recovery need a connection. You can still keep using local mode.')}
-              />
-            </View>
-          ) : null}
+        <View style={styles.iconContainer}>
+          <Image source={appIconSource} style={styles.appIcon} />
         </View>
+        <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
+        <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
+          {landingSubtitle}
+        </Text>
+
+        {!isAuthAvailable ? (
+          <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.infoTitle, { color: colors.text }]}>
+              {t('auth.localModeTitle', 'Local mode is ready')}
+            </Text>
+            <Text style={[styles.infoText, { color: colors.secondaryText }]}>
+              {t(
+                'auth.localModeMsg',
+                'This build is using local-first mode. You can keep capturing notes without signing in.'
+              )}
+            </Text>
+          </View>
+        ) : null}
+
+        {authMessage && !isFormVisible ? (
+          <Text style={[styles.errorText, { color: colors.danger }]}>{authMessage}</Text>
+        ) : null}
+
+        {!isOnline && isAuthAvailable ? (
+          <View style={styles.landingNoticeWrap}>
+            <OfflineNotice
+              title={t('auth.offlineTitle', 'You are offline')}
+              body={t('auth.offlineBody', 'Sign-in and account recovery need a connection. You can still keep using local mode.')}
+            />
+          </View>
+        ) : null}
       </Animated.View>
 
       <Animated.View
@@ -810,22 +806,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: Layout.screenPadding,
-  },
-  heroCard: {
-    width: '100%',
-    borderRadius: 30,
-    borderWidth: 1,
-    paddingHorizontal: 22,
-    paddingVertical: 24,
-    alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: Layout.screenPadding + 12,
   },
   iconContainer: {
-    width: 108,
-    height: 108,
+    width: 120,
+    height: 120,
     overflow: 'hidden',
-    marginBottom: 4,
+    marginBottom: 32,
   },
   appIcon: {
     width: '100%',
@@ -833,20 +820,17 @@ const styles = StyleSheet.create({
   },
   title: {
     ...Typography.heroTitle,
-    marginBottom: 2,
-    fontSize: 40,
-    letterSpacing: -1.2,
+    marginBottom: 12,
   },
   subtitle: {
     ...Typography.heroSubtitle,
     textAlign: 'center',
-    maxWidth: 300,
   },
   infoCard: {
     width: '100%',
-    marginTop: 10,
-    padding: 16,
-    borderRadius: 22,
+    marginTop: 28,
+    padding: 20,
+    borderRadius: 24,
     borderWidth: 1,
   },
   infoTitle: {
@@ -867,11 +851,11 @@ const styles = StyleSheet.create({
   },
   landingNoticeWrap: {
     width: '100%',
-    marginTop: 10,
+    marginTop: 18,
   },
   bottom: {
     width: '100%',
-    paddingHorizontal: Layout.screenPadding,
+    paddingHorizontal: Layout.screenPadding + 4,
     gap: 12,
   },
   linkButton: {
@@ -891,8 +875,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    borderTopLeftRadius: 34,
+    borderTopRightRadius: 34,
     borderWidth: 1,
     borderBottomWidth: 0,
     minHeight: 380,
@@ -906,15 +890,15 @@ const styles = StyleSheet.create({
   },
   formContent: {
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: 16,
-    gap: 14,
+    paddingTop: 18,
+    gap: 16,
   },
   nativeFormContent: {
-    paddingBottom: 22,
+    paddingBottom: 24,
   },
   formHeader: {
-    gap: 12,
-    marginBottom: 6,
+    gap: 14,
+    marginBottom: 8,
   },
   formBackButton: {
     width: 44,
@@ -925,7 +909,7 @@ const styles = StyleSheet.create({
   },
   formTitle: {
     ...Typography.screenTitle,
-    fontSize: 23,
+    fontSize: 24,
   },
   formDescription: {
     ...Typography.body,
@@ -933,10 +917,10 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   messageCard: {
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
     paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingVertical: 14,
   },
   messageText: {
     ...Typography.body,
@@ -951,8 +935,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   fieldInput: {
-    minHeight: 54,
-    borderRadius: 16,
+    minHeight: 56,
+    borderRadius: 18,
     borderWidth: 1,
     paddingHorizontal: 16,
     ...Typography.body,

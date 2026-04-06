@@ -16,45 +16,45 @@ export const Spacing = {
 } as const;
 
 export const Radii = {
-  sm: 10,
-  md: 18,
-  lg: 26,
-  xl: 34,
-  card: 30,      // Card corners
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  card: 28,      // Card corners
   pill: 999,     // Pill buttons
 } as const;
 
 export const Layout = {
   screenPadding: 20,
   floatingGap: 8,
-  headerHeight: 58,
-  buttonHeight: 54,
+  headerHeight: 60,
+  buttonHeight: 56,
   iconBadge: 30,
-  cardRadius: 52,
-  pillRadius: 22,
+  cardRadius: 60,
+  pillRadius: 20,
 } as const;
 
 export const Shadows = {
   floating: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
   card: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
     elevation: 8,
   },
   button: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.09,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
   },
 } as const;
 
@@ -82,20 +82,20 @@ export const Sheet = {
 
 export const Typography = {
   screenTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700' as const,
     fontFamily: 'Noto Sans',
   },
   heroTitle: {
-    fontSize: 44,
-    fontWeight: '800' as const,
-    letterSpacing: 1.2,
+    fontSize: 48,
+    fontWeight: '900' as const,
+    letterSpacing: 2,
     fontFamily: 'Noto Sans',
   },
   heroSubtitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '500' as const,
-    lineHeight: 25,
+    lineHeight: 26,
     fontFamily: 'Noto Sans',
   },
   body: {
