@@ -2517,9 +2517,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         draft={stampCutterDraft}
         loading={importingSticker}
         title={t('capture.stampCutterTitle', 'Cut stamp')}
-        subtitle={t('capture.stampCutterHint', 'Drag and pinch to frame the part of the photo you want on the stamp.')}
+        subtitle={t('capture.stampCutterHint', 'Drag, pinch, or use the controls to frame the part of the photo you want on the stamp.')}
         cancelLabel={t('common.cancel', 'Cancel')}
-        confirmLabel={t('capture.stampCutterConfirm', 'Use stamp')}
+        confirmLabel={t('capture.stampCutterConfirm', 'Cut stamp')}
         onClose={handleCloseStampCutterEditor}
         onConfirm={handleConfirmStampCutter}
       />

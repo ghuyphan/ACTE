@@ -26,7 +26,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Layout } from '../../../constants/theme';
+import { Layout, Shadows } from '../../../constants/theme';
 import { DOODLE_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
 import { useAuth } from '../../../hooks/useAuth';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
@@ -233,7 +233,7 @@ const GridTile = memo(function GridTile({
   return (
     <Pressable
       onPress={onPress}
-      style={[
+      style={({ pressed }) => [
         styles.tilePressable,
         {
           width: size,
@@ -241,6 +241,7 @@ const GridTile = memo(function GridTile({
           marginRight: index % 3 === 2 ? 0 : gap,
           marginBottom: gap,
         },
+        pressed ? styles.tilePressablePressed : null,
       ]}
     >
       <Reanimated.View
@@ -383,10 +384,15 @@ export default function NotesIndexScreen() {
     [friendPosts, notes]
   );
 
-  const gridGap = 8;
+  const gridGap = 10;
   const gridSize = Math.floor((width - Layout.screenPadding * 2 - gridGap * 2) / 3);
   const isLoading = loading || (sharedLoading && items.length === 0);
   const hasRecapNotes = notes.length > 0;
+  const headerTitle =
+    mode === 'recap'
+      ? t('notes.recap.recapLabel', 'Calendar')
+      : t('notes.viewAllButton', 'View all notes');
+  const headerCountLabel = t('home.count', '{{count}} notes saved', { count: items.length });
   const shouldRenderRecap = hasRecapNotes && (hasPreparedRecap || mode === 'recap');
   const shouldRenderAllMode = showAllModeLayer;
   const shouldAnimateGridTiles =
@@ -574,6 +580,33 @@ export default function NotesIndexScreen() {
         </View>
       ) : (
         <>
+          <View style={[styles.headerSection, { paddingHorizontal: Layout.screenPadding }]}>
+            <View
+              style={[
+                styles.headerCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <View style={[styles.headerBadge, { backgroundColor: colors.primarySoft }]}>
+                <Ionicons
+                  name={mode === 'recap' ? 'calendar-outline' : 'grid-outline'}
+                  size={20}
+                  color={colors.primary}
+                />
+              </View>
+              <View style={styles.headerCopy}>
+                <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
+                  {headerTitle}
+                </Text>
+                <Text style={[styles.headerSubtitle, { color: colors.secondaryText }]}>
+                  {headerCountLabel}
+                </Text>
+              </View>
+            </View>
+          </View>
           {modeSwitch}
           <GestureDetector gesture={modeContentGesture}>
             <View style={styles.modeContentStack}>
@@ -594,8 +627,17 @@ export default function NotesIndexScreen() {
                         },
                       ]}
                     >
-                      <View style={styles.emptyState}>
-                        <View style={styles.emptyIconWrap}>
+                      <View
+                        style={[
+                          styles.emptyState,
+                          styles.emptyCard,
+                          {
+                            backgroundColor: colors.card,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      >
+                        <View style={[styles.emptyIconWrap, { backgroundColor: colors.primarySoft }]}>
                           <Ionicons name="document-text-outline" size={44} color={colors.secondaryText} />
                         </View>
                         <Text style={[styles.emptyTitle, { color: colors.text }]}>
@@ -663,6 +705,41 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  headerSection: {
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  headerCard: {
+    borderRadius: 28,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  headerBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+    fontFamily: 'Noto Sans',
+  },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -673,7 +750,7 @@ const styles = StyleSheet.create({
   },
   modeSwitchWrap: {
     paddingTop: 4,
-    paddingBottom: 18,
+    paddingBottom: 16,
   },
   modeContentStack: {
     flex: 1,
@@ -686,14 +763,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tilePressable: {
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: 'hidden',
+  },
+  tilePressablePressed: {
+    transform: [{ scale: 0.99 }],
   },
   tile: {
     flex: 1,
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
   },
   tileImage: {
     width: '100%',
@@ -715,11 +795,11 @@ const styles = StyleSheet.create({
   },
   photoPlaceholder: {
     flex: 1,
-    borderRadius: 24,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
   },
   photoPlaceholderBadge: {
     width: 38,
@@ -735,15 +815,15 @@ const styles = StyleSheet.create({
   },
   tileTextFill: {
     flex: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tileText: {
     color: '#FFFFFF',
-    fontSize: 13,
-    lineHeight: 17,
+    fontSize: 14,
+    lineHeight: 18,
     fontWeight: '700',
     textAlign: 'center',
     fontFamily: 'Noto Sans',
@@ -754,24 +834,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+    paddingVertical: 28,
+  },
+  emptyCard: {
+    borderRadius: 28,
+    borderWidth: 1,
+    ...Shadows.card,
   },
   emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 22,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: '700',
     textAlign: 'center',
     fontFamily: 'Noto Sans',
   },
   emptyBody: {
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 22,
     textAlign: 'center',
     fontFamily: 'Noto Sans',
-    marginTop: 8,
-    maxWidth: 240,
+    marginTop: 10,
+    maxWidth: 250,
   },
 });

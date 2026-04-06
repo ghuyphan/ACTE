@@ -40,19 +40,22 @@ export default function PrimaryButton({
         ? colors.card
         : variant === 'destructive'
           ? colors.danger
-          : colors.text;
+          : colors.primarySoft;
 
   const borderColor =
-    variant === 'secondary' ? colors.border : 'transparent';
+    variant === 'primary'
+      ? `${colors.primary}55`
+      : variant === 'destructive'
+        ? `${colors.danger}55`
+        : colors.border;
 
   const labelColor =
     variant === 'destructive'
       ? '#FFFFFF'
       : variant === 'primary'
-        ? '#1C1C1E'
-        : variant === 'secondary'
-          ? colors.text
-          : colors.background;
+        ? '#2B1D0E'
+        : colors.text;
+  const useElevatedShadow = variant === 'primary' || variant === 'destructive';
 
   return (
     <Pressable
@@ -61,6 +64,7 @@ export default function PrimaryButton({
       pressRetentionOffset={BUTTON_PRESS_RETENTION_OFFSET}
       style={({ pressed }) => [
         styles.button,
+        useElevatedShadow ? styles.elevatedButton : styles.secondaryButton,
         {
           backgroundColor,
           borderColor,
@@ -88,25 +92,33 @@ export default function PrimaryButton({
 const styles = StyleSheet.create({
   button: {
     minHeight: Layout.buttonHeight,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 22,
+  },
+  elevatedButton: {
     ...Shadows.button,
   },
+  secondaryButton: {
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   buttonPressed: {
-    transform: [{ scale: 0.98 }],
+    transform: [{ scale: 0.985 }],
   },
   label: {
     ...Typography.button,
+    letterSpacing: 0.2,
   },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
   },
   leadingIcon: {
-    marginRight: 10,
+    marginRight: 0,
   },
 });

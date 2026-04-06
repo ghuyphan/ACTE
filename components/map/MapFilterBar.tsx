@@ -68,7 +68,7 @@ function FilterChip({ label, active, onPress, icon, testID, reduceMotionEnabled 
       [0, 1],
       [
         inactiveChipBackground,
-        `${colors.primary}1A`,
+        `${colors.primary}22`,
       ]
     ),
     borderColor: interpolateColor(
@@ -223,7 +223,15 @@ export default function MapFilterBar({
 
         <View style={styles.content}>
           <View style={styles.headerRow}>
-            <View style={styles.countRow}>
+            <View
+              style={[
+                styles.countRow,
+                {
+                  backgroundColor: isDark ? 'rgba(255,244,230,0.08)' : 'rgba(255,255,255,0.64)',
+                  borderColor: getOverlayBorderColor(isDark),
+                },
+              ]}
+            >
               <View style={[styles.countDot, { backgroundColor: colors.primary }]} />
               <View style={styles.countLabelWrap}>
                 <Text testID="map-inline-count" style={[styles.countText, { color: colors.text }]}>
@@ -267,7 +275,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   container: {
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderRadius: mapOverlayTokens.overlayRadius,
     minHeight: mapOverlayTokens.overlayMinHeight,
     overflow: 'hidden',
@@ -277,7 +285,7 @@ const styles = StyleSheet.create({
     borderRadius: mapOverlayTokens.overlayRadius,
   },
   content: {
-    padding: mapOverlayTokens.overlayPadding,
+    padding: mapOverlayTokens.overlayPadding - 1,
     gap: mapOverlayTokens.overlayCardGap,
   },
   headerRow: {
@@ -292,28 +300,32 @@ const styles = StyleSheet.create({
     gap: 8,
     flex: 1,
     minWidth: 0,
+    minHeight: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    paddingHorizontal: 10,
   },
   headerAccessoryWrap: {
     flexShrink: 0,
   },
   countDot: {
-    width: 8,
-    height: 8,
+    width: 9,
+    height: 9,
     borderRadius: 999,
   },
   countLabelWrap: {
-    minHeight: 20,
+    minHeight: 22,
     justifyContent: 'center',
   },
   countText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     fontFamily: 'Noto Sans',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     paddingRight: 2,
   },
   chipOuter: {
@@ -321,15 +333,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: mapOverlayTokens.overlayCompactRadius,
-    paddingHorizontal: 13,
+    paddingHorizontal: 14,
     borderWidth: 1,
   },
   chipIcon: {
     marginRight: 6,
   },
   chipText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
+    letterSpacing: 0.2,
   },
 });

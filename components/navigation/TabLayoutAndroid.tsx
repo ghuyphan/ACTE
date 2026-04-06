@@ -6,10 +6,10 @@ import { useTheme } from '../../hooks/useTheme';
 export default function TabLayoutAndroid() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
-  const barBackground = isDark ? '#18120E' : '#F4EDE3';
-  const indicatorColor = isDark ? 'rgba(255, 247, 232, 0.12)' : 'rgba(255, 251, 245, 0.96)';
-  const activeColor = isDark ? '#FFF7E8' : '#6B4F0E';
-  const inactiveColor = isDark ? 'rgba(255, 247, 232, 0.68)' : '#8B7B68';
+  const barBackground = colors.tabBarBg;
+  const indicatorColor = isDark ? 'rgba(255, 247, 232, 0.12)' : 'rgba(255, 252, 247, 0.96)';
+  const activeColor = isDark ? colors.primary : colors.accent;
+  const inactiveColor = colors.secondaryText;
   const shadowColor = isDark ? 'rgba(0,0,0,0)' : 'rgba(108, 84, 36, 0.08)';
 
   return (

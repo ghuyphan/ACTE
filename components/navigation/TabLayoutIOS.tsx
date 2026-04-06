@@ -10,7 +10,7 @@ export default function TabLayoutIOS() {
 
   const dynamicPrimary =
     Platform.OS === 'ios'
-      ? DynamicColorIOS({ light: Colors.light.primary, dark: Colors.dark.primary })
+      ? DynamicColorIOS({ light: Colors.light.accent, dark: Colors.dark.primary })
       : colors.primary;
 
   const dynamicSecondaryText =
