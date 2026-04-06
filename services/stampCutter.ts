@@ -85,11 +85,11 @@ export const STAMP_CUTTER_ROTATION_SNAP_DEGREES = 2.5;
 export const STAMP_CUTTER_OVERLAY_ASPECT_RATIO =
   STAMP_CUTTER_OVERLAY_SOURCE_WIDTH / STAMP_CUTTER_OVERLAY_SOURCE_HEIGHT;
 export const STAMP_CUTTER_WINDOW = {
-  // Measured from the transparent inner stamp window in stamp-cutter.png.
-  x: 0.3837890625,
-  y: 0.365234375,
-  width: 0.2607421875,
-  height: 0.18424479166666666,
+  // Measured from the visible inner stamp hole in stamp-cutter.png.
+  x: 0.380859375,
+  y: 0.3404947916666667,
+  width: 0.265625,
+  height: 0.201171875,
 } as const;
 export const STAMP_CUTTER_PREVIEW_ASPECT_RATIO =
   (STAMP_CUTTER_WINDOW.width * STAMP_CUTTER_OVERLAY_SOURCE_WIDTH)

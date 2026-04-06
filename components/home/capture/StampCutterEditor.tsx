@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { Canvas, Path as SkiaPath } from '@shopify/react-native-skia';
 import Reanimated, {
   Easing,
   interpolate,
@@ -37,6 +38,11 @@ import {
   type StampCutterDraft,
   type StampCutterTransform,
 } from '../../../services/stampCutter';
+import {
+  createStampFramePath,
+  getStampFrameMetrics,
+  STAMP_PAPER_BORDER_COLOR,
+} from '../../notes/stampFrameMetrics';
 import PrimaryButton from '../../ui/PrimaryButton';
 import { triggerCaptureCardHaptic } from './captureMotion';
 
@@ -139,6 +145,15 @@ function StampCutterEditor({
   const baseImageHeight = sourceSize.height * baseScale;
   const previewBaseLeft = (viewportSize.width - baseImageWidth) / 2;
   const previewBaseTop = (viewportSize.height - baseImageHeight) / 2;
+  const stampMetrics = useMemo(
+    () => getStampFrameMetrics(cropRect.width, cropRect.height),
+    [cropRect.height, cropRect.width]
+  );
+  const stampPath = useMemo(
+    () => createStampFramePath(stampMetrics),
+    [stampMetrics]
+  );
+  const stampGuideBorderWidth = Math.max(1, stampMetrics.perforationRadius * 0.16);
 
   const animateToTransform = useCallback(
     (nextTransform: StampCutterTransform) => {
@@ -531,6 +546,27 @@ function StampCutterEditor({
                     transition={0}
                   />
                 </Reanimated.View>
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.stampGuide,
+                    {
+                      left: cropRect.x,
+                      top: cropRect.y,
+                      width: cropRect.width,
+                      height: cropRect.height,
+                    },
+                  ]}
+                >
+                  <Canvas style={styles.stampGuideCanvas} testID="stamp-cutter-live-outline">
+                    <SkiaPath
+                      path={stampPath}
+                      color={STAMP_PAPER_BORDER_COLOR}
+                      style="stroke"
+                      strokeWidth={stampGuideBorderWidth}
+                    />
+                  </Canvas>
+                </View>
               </View>
             </GestureDetector>
 
@@ -682,6 +718,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   previewImageFill: {
+    width: '100%',
+    height: '100%',
+  },
+  stampGuide: {
+    position: 'absolute',
+  },
+  stampGuideCanvas: {
     width: '100%',
     height: '100%',
   },

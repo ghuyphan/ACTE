@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 import { act, fireEvent, render } from '@testing-library/react-native';
 import LoginScreen from '../app/auth/index';
 
@@ -15,6 +16,8 @@ const mockRegisterWithEmail = jest.fn<Promise<{ status: 'success' }>, [unknown]>
 const mockSendPasswordReset = jest.fn<Promise<{ status: 'success' }>, [string]>(
   async () => ({ status: 'success' })
 );
+const mockOpenPrivacyPolicy = jest.fn();
+const mockOpenSupport = jest.fn();
 
 const mockAuthState = {
   user: null,
@@ -40,6 +43,19 @@ jest.mock('@expo/vector-icons', () => ({
 }));
 
 jest.mock('@expo/ui/swift-ui', () => ({
+  Toggle: ({ isOn, onIsOnChange }: { isOn?: boolean; onIsOnChange?: (value: boolean) => void }) => {
+    const React = require('react');
+    const { Pressable, Text } = require('react-native');
+    return (
+      <Pressable
+        accessibilityRole="switch"
+        accessibilityState={{ checked: Boolean(isOn) }}
+        onPress={() => onIsOnChange?.(!isOn)}
+      >
+        <Text>{isOn ? 'on' : 'off'}</Text>
+      </Pressable>
+    );
+  },
   BottomSheet: ({ children, isPresented }: { children?: React.ReactNode; isPresented: boolean }) => {
     const React = require('react');
     const { View } = require('react-native');
@@ -59,6 +75,27 @@ jest.mock('@expo/ui/swift-ui', () => ({
     const React = require('react');
     const { View } = require('react-native');
     return <View>{children}</View>;
+  },
+}));
+
+jest.mock('@expo/ui/jetpack-compose', () => ({
+  Host: ({ children }: { children?: React.ReactNode }) => {
+    const React = require('react');
+    const { View } = require('react-native');
+    return <View>{children}</View>;
+  },
+  Checkbox: ({ value, onCheckedChange }: { value: boolean; onCheckedChange?: (value: boolean) => void }) => {
+    const React = require('react');
+    const { Pressable, Text } = require('react-native');
+    return (
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: value }}
+        onPress={() => onCheckedChange?.(!value)}
+      >
+        <Text>{value ? 'checked' : 'unchecked'}</Text>
+      </Pressable>
+    );
   },
 }));
 
@@ -146,6 +183,13 @@ jest.mock('../hooks/useAuth', () => ({
   }),
 }));
 
+jest.mock('../services/legalLinks', () => ({
+  hasPrivacyPolicyLink: () => true,
+  hasSupportLink: () => true,
+  openPrivacyPolicy: () => mockOpenPrivacyPolicy(),
+  openSupport: () => mockOpenSupport(),
+}));
+
 describe('LoginScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -163,6 +207,9 @@ describe('LoginScreen', () => {
     expect(getByTestId('auth-google-button')).toBeTruthy();
     expect(getByTestId('auth-continue-email')).toBeTruthy();
     expect(getByTestId('auth-continue-local')).toBeTruthy();
+    expect(getByTestId('auth-privacy-policy-link')).toBeTruthy();
+    expect(getByTestId('auth-support-link')).toBeTruthy();
+    expect(getByTestId('auth-landing-policy-consent')).toBeTruthy();
   });
 
   it('opens the slide-up email form from the landing screen', () => {
@@ -191,6 +238,99 @@ describe('LoginScreen', () => {
     expect(getByTestId('auth-email-input')).toBeTruthy();
     expect(queryByTestId('auth-password-input')).toBeNull();
     expect(getByTestId('auth-back-to-signin')).toBeTruthy();
+  });
+
+  it('requires privacy consent before creating an account', async () => {
+    const { getByTestId, findByText } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-continue-email'));
+    fireEvent.press(getByTestId('auth-switch-register'));
+    fireEvent.changeText(getByTestId('auth-email-input'), 'user@example.com');
+    fireEvent.changeText(getByTestId('auth-password-input'), 'secret123');
+    fireEvent.changeText(getByTestId('auth-confirm-password-input'), 'secret123');
+    fireEvent.press(getByTestId('auth-form-submit'));
+
+    expect(await findByText('Accept the privacy policy before creating your account.')).toBeTruthy();
+    expect(mockRegisterWithEmail).not.toHaveBeenCalled();
+  });
+
+  it('submits registration after consent is checked', async () => {
+    const { getByTestId } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-continue-email'));
+    fireEvent.press(getByTestId('auth-switch-register'));
+    fireEvent.changeText(getByTestId('auth-display-name-input'), 'Taylor');
+    fireEvent.changeText(getByTestId('auth-email-input'), 'user@example.com');
+    fireEvent.changeText(getByTestId('auth-password-input'), 'secret123');
+    fireEvent.changeText(getByTestId('auth-confirm-password-input'), 'secret123');
+    fireEvent.press(getByTestId('auth-privacy-consent'));
+    fireEvent.press(getByTestId('auth-form-submit'));
+
+    await act(async () => undefined);
+
+    expect(mockRegisterWithEmail).toHaveBeenCalledWith({
+      email: 'user@example.com',
+      password: 'secret123',
+      displayName: 'Taylor',
+    });
+  });
+
+  it('validates email format for sign-in and reset flows', async () => {
+    const { getByTestId, findByText } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-continue-email'));
+    fireEvent.changeText(getByTestId('auth-email-input'), 'not-an-email');
+    fireEvent.changeText(getByTestId('auth-password-input'), 'secret123');
+    fireEvent.press(getByTestId('auth-form-submit'));
+
+    expect(await findByText('Enter a valid email address.')).toBeTruthy();
+    expect(mockSignInWithEmail).not.toHaveBeenCalled();
+
+    fireEvent.press(getByTestId('auth-forgot-password'));
+    fireEvent.press(getByTestId('auth-form-submit'));
+
+    expect(await findByText('Enter a valid email address.')).toBeTruthy();
+    expect(mockSendPasswordReset).not.toHaveBeenCalled();
+  });
+
+  it('opens the privacy policy and support links from auth', () => {
+    const { getByTestId } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-privacy-policy-link'));
+    fireEvent.press(getByTestId('auth-support-link'));
+
+    expect(mockOpenPrivacyPolicy).toHaveBeenCalled();
+    expect(mockOpenSupport).toHaveBeenCalled();
+  });
+
+  it('requires landing policy consent before continuing in local mode', async () => {
+    const { getByTestId, findByText } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-continue-local'));
+
+    expect(
+      await findByText('Review and accept the privacy policy before continuing in local mode.')
+    ).toBeTruthy();
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    fireEvent.press(getByTestId('auth-landing-policy-consent'));
+    fireEvent.press(getByTestId('auth-continue-local'));
+
+    expect(mockReplace).toHaveBeenCalledWith('/');
+  });
+
+  it('requires landing policy consent before Google sign-in', async () => {
+    const { getByTestId, findByText } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-google-button'));
+
+    expect(await findByText('Accept the privacy policy before continuing.')).toBeTruthy();
+    expect(mockSignInWithGoogle).not.toHaveBeenCalled();
+
+    fireEvent.press(getByTestId('auth-landing-policy-consent'));
+    fireEvent.press(getByTestId('auth-google-button'));
+
+    expect(mockSignInWithGoogle).toHaveBeenCalled();
   });
 
   it('steps back through the auth flow when navigation back is prevented', () => {

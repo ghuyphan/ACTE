@@ -1,18 +1,28 @@
 import { PathOp, Skia, type SkPath } from '@shopify/react-native-skia';
 
-function clamp(value: number, minValue: number, maxValue: number) {
-  return Math.min(maxValue, Math.max(minValue, value));
+const STAMP_TEMPLATE_WIDTH = 272;
+const STAMP_TEMPLATE_HEIGHT = 309;
+const STAMP_TEMPLATE_PERFORATION_RADIUS = 15;
+const STAMP_TEMPLATE_PERFORATION_OFFSET = STAMP_TEMPLATE_PERFORATION_RADIUS * 0.18;
+const STAMP_TEMPLATE_BORDER_RADIUS = 11;
+const STAMP_TEMPLATE_TOP_COUNT = 9;
+const STAMP_TEMPLATE_SIDE_COUNT = 10;
+
+function buildPerforationCenters(length: number, radius: number, count: number) {
+  const safeCount = Math.max(5, Math.round(count));
+  const start = radius * 0.58;
+  const end = length - radius * 0.58;
+  const step = safeCount <= 1 ? 0 : (end - start) / (safeCount - 1);
+
+  return Array.from({ length: safeCount }, (_, index) => start + step * index);
 }
 
-function buildPerforationCenters(length: number, radius: number) {
-  const safeLength = Math.max(length, radius * 4);
-  const preferredSpacing = Math.max(radius * 1.95, 10);
-  const count = Math.max(5, Math.floor(safeLength / preferredSpacing));
-  const start = radius * 0.58;
-  const end = safeLength - radius * 0.58;
-  const step = count <= 1 ? 0 : (end - start) / (count - 1);
-
-  return Array.from({ length: count }, (_, index) => start + step * index);
+function getTemplatePerforationCount(
+  normalizedLength: number,
+  templateLength: number,
+  templateCount: number
+) {
+  return Math.max(5, Math.round((normalizedLength / Math.max(templateLength, 1)) * templateCount));
 }
 
 export interface StampFrameMetrics {
@@ -49,6 +59,10 @@ export interface StampCutoutPathOptions {
   borderRadius: number;
   perforationOffset?: number;
   perforationRadius: number;
+  topCenters?: number[];
+  bottomCenters?: number[];
+  leftCenters?: number[];
+  rightCenters?: number[];
 }
 
 export const STAMP_PAPER_COLOR = '#FBF5E6';
@@ -59,11 +73,17 @@ export const STAMP_DROP_SHADOW_COLOR = 'rgba(76, 57, 31, 0.16)';
 export const STAMP_TEXT_COLOR = '#6F5C44';
 
 export function getStampFrameMetrics(contentWidth: number, contentHeight: number): StampFrameMetrics {
-  const shortestEdge = Math.max(Math.min(contentWidth, contentHeight), 1);
+  const safeWidth = Math.max(contentWidth, 1);
+  const safeHeight = Math.max(contentHeight, 1);
+  const renderScale = Math.min(safeWidth / STAMP_TEMPLATE_WIDTH, safeHeight / STAMP_TEMPLATE_HEIGHT);
+  const safeRenderScale = Math.max(renderScale, 1 / Math.max(STAMP_TEMPLATE_WIDTH, STAMP_TEMPLATE_HEIGHT));
+  const templateScale = Math.min(STAMP_TEMPLATE_WIDTH / safeWidth, STAMP_TEMPLATE_HEIGHT / safeHeight);
+  const templateWidth = contentWidth * templateScale;
+  const templateHeight = contentHeight * templateScale;
   const paperPadding = 0;
-  const perforationRadius = clamp(shortestEdge * 0.048, 4, 6.6);
-  const perforationOffset = perforationRadius * 0.18;
-  const borderRadius = clamp(shortestEdge * 0.02, 1.5, 3.5);
+  const perforationRadius = STAMP_TEMPLATE_PERFORATION_RADIUS * safeRenderScale;
+  const perforationOffset = STAMP_TEMPLATE_PERFORATION_OFFSET * safeRenderScale;
+  const borderRadius = STAMP_TEMPLATE_BORDER_RADIUS * safeRenderScale;
   const imageBorderRadius = 0;
   const footerHeight = 0;
   const captionFontSize = 0;
@@ -76,6 +96,16 @@ export function getStampFrameMetrics(contentWidth: number, contentHeight: number
   const imageWidth = paperWidth;
   const imageHeight = paperHeight;
   const captionY = 0;
+  const topCount = getTemplatePerforationCount(
+    templateWidth,
+    STAMP_TEMPLATE_WIDTH,
+    STAMP_TEMPLATE_TOP_COUNT
+  );
+  const sideCount = getTemplatePerforationCount(
+    templateHeight,
+    STAMP_TEMPLATE_HEIGHT,
+    STAMP_TEMPLATE_SIDE_COUNT
+  );
 
   return {
     borderRadius,
@@ -97,10 +127,10 @@ export function getStampFrameMetrics(contentWidth: number, contentHeight: number
     paperWidth,
     perforationOffset,
     perforationRadius,
-    bottomCenters: buildPerforationCenters(paperWidth, perforationRadius),
-    leftCenters: buildPerforationCenters(paperHeight, perforationRadius),
-    rightCenters: buildPerforationCenters(paperHeight, perforationRadius),
-    topCenters: buildPerforationCenters(paperWidth, perforationRadius),
+    bottomCenters: buildPerforationCenters(paperWidth, perforationRadius, topCount),
+    leftCenters: buildPerforationCenters(paperHeight, perforationRadius, sideCount),
+    rightCenters: buildPerforationCenters(paperHeight, perforationRadius, sideCount),
+    topCenters: buildPerforationCenters(paperWidth, perforationRadius, topCount),
   };
 }
 
@@ -113,6 +143,10 @@ export function createStampFramePath(metrics: StampFrameMetrics): SkPath {
     borderRadius: metrics.borderRadius,
     perforationOffset: metrics.perforationOffset,
     perforationRadius: metrics.perforationRadius,
+    topCenters: metrics.topCenters,
+    bottomCenters: metrics.bottomCenters,
+    leftCenters: metrics.leftCenters,
+    rightCenters: metrics.rightCenters,
   });
 }
 
@@ -156,6 +190,10 @@ export function createStampCutoutPath({
   borderRadius,
   perforationOffset = 0,
   perforationRadius,
+  topCenters,
+  bottomCenters,
+  leftCenters,
+  rightCenters,
 }: StampCutoutPathOptions): SkPath {
   const path = createRoundedRectPath(x, y, width, height, borderRadius);
 
@@ -173,11 +211,24 @@ export function createStampCutoutPath({
     path.op(cutoutPath, PathOp.Difference);
   };
 
-  buildPerforationCenters(width, perforationRadius).forEach((centerX) => {
+  const horizontalCenters =
+    bottomCenters && bottomCenters.length > 0
+      ? bottomCenters
+      : topCenters && topCenters.length > 0
+      ? topCenters
+      : buildPerforationCenters(width, perforationRadius, STAMP_TEMPLATE_TOP_COUNT);
+  const verticalCenters =
+    leftCenters && leftCenters.length > 0
+      ? leftCenters
+      : rightCenters && rightCenters.length > 0
+      ? rightCenters
+      : buildPerforationCenters(height, perforationRadius, STAMP_TEMPLATE_SIDE_COUNT);
+
+  horizontalCenters.forEach((centerX) => {
     subtractCircle(x + centerX, y - perforationOffset);
     subtractCircle(x + centerX, y + height + perforationOffset);
   });
-  buildPerforationCenters(height, perforationRadius).forEach((centerY) => {
+  verticalCenters.forEach((centerY) => {
     subtractCircle(x - perforationOffset, y + centerY);
     subtractCircle(x + width + perforationOffset, y + centerY);
   });

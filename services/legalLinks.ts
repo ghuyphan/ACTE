@@ -1,15 +1,35 @@
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import { Linking } from 'react-native';
 
+const DEV_PRIVACY_POLICY_URL = 'https://example.com/privacy';
+const DEV_SUPPORT_URL = 'https://example.com/support';
+const DEV_ACCOUNT_DELETION_URL = 'https://example.com/account-deletion';
+const DEV_SUPPORT_EMAIL = 'support@example.com';
+
 function normalizeUrl(value: string | undefined) {
   const trimmed = value?.trim() ?? '';
   return trimmed.length > 0 ? trimmed : '';
 }
 
-export const PRIVACY_POLICY_URL = normalizeUrl(process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL);
-export const SUPPORT_URL = normalizeUrl(process.env.EXPO_PUBLIC_SUPPORT_URL);
-export const ACCOUNT_DELETION_URL = normalizeUrl(process.env.EXPO_PUBLIC_ACCOUNT_DELETION_URL);
-export const SUPPORT_EMAIL = normalizeUrl(process.env.EXPO_PUBLIC_SUPPORT_EMAIL);
+function resolveLegalValue(value: string | undefined, fallback: string) {
+  const normalizedValue = normalizeUrl(value);
+  if (normalizedValue) {
+    return normalizedValue;
+  }
+
+  return __DEV__ ? fallback : '';
+}
+
+export const PRIVACY_POLICY_URL = resolveLegalValue(
+  process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL,
+  DEV_PRIVACY_POLICY_URL
+);
+export const SUPPORT_URL = resolveLegalValue(process.env.EXPO_PUBLIC_SUPPORT_URL, DEV_SUPPORT_URL);
+export const ACCOUNT_DELETION_URL = resolveLegalValue(
+  process.env.EXPO_PUBLIC_ACCOUNT_DELETION_URL,
+  DEV_ACCOUNT_DELETION_URL
+);
+export const SUPPORT_EMAIL = resolveLegalValue(process.env.EXPO_PUBLIC_SUPPORT_EMAIL, DEV_SUPPORT_EMAIL);
 
 function buildMailtoUrl(address: string, subject: string) {
   return `mailto:${address}?subject=${encodeURIComponent(subject)}`;

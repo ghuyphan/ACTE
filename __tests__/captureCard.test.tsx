@@ -1569,6 +1569,7 @@ describe('CaptureCard doodle handle', () => {
     await waitFor(() => {
       expect(getByTestId('stamp-cutter-confirm')).toBeTruthy();
     });
+    expect(getByTestId('stamp-cutter-live-outline')).toBeTruthy();
 
     await act(async () => {
       fireEvent.press(getByTestId('stamp-cutter-confirm'));
