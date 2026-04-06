@@ -22,6 +22,9 @@ const mockImportStickerAssetFromClipboard = jest.fn<Promise<unknown>, [unknown]>
   updatedAt: null,
   source: 'clipboard',
 }));
+const mockCreateStickerImportSourceFromSubjectCutout = jest.fn();
+const mockPrepareStickerSubjectCutout = jest.fn();
+const mockCleanupSubjectCutoutImportSource = jest.fn();
 const mockRouterPush = jest.fn();
 const mockImpactAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockNotificationAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
@@ -262,6 +265,22 @@ jest.mock('../utils/stickerClipboard', () => ({
   importStickerAssetFromClipboard: (messages: unknown) => mockImportStickerAssetFromClipboard(messages),
 }));
 
+jest.mock('../services/stickerSubjectCutout', () => ({
+  SubjectCutoutError: class SubjectCutoutError extends Error {
+    code: string;
+
+    constructor(code: string, message: string) {
+      super(message);
+      this.code = code;
+    }
+  },
+  createStickerImportSourceFromSubjectCutout: (...args: unknown[]) =>
+    mockCreateStickerImportSourceFromSubjectCutout(...args),
+  prepareStickerSubjectCutout: () => mockPrepareStickerSubjectCutout(),
+  cleanupSubjectCutoutImportSource: (...args: unknown[]) =>
+    mockCleanupSubjectCutoutImportSource(...args),
+}));
+
 jest.mock('../utils/interactionFeedback', () => ({
   emitInteractionFeedback: jest.fn(),
 }));
@@ -361,6 +380,16 @@ beforeEach(() => {
   });
   jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as any);
+  mockCreateStickerImportSourceFromSubjectCutout.mockImplementation(async (source: any) => ({
+    source: {
+      uri: 'file:///cache/detail-subject-cutout.png',
+      mimeType: 'image/png',
+      name: source?.name ?? 'subject-cutout.png',
+    },
+    cleanupUri: 'file:///cache/detail-subject-cutout.png',
+  }));
+  mockPrepareStickerSubjectCutout.mockResolvedValue({ available: true, ready: true });
+  mockCleanupSubjectCutoutImportSource.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -425,11 +454,14 @@ describe('NoteDetailSheet', () => {
       fireEvent.press(getByTestId('note-detail-edit'));
     });
 
-    expect(mockUpdateNote).toHaveBeenCalledWith('note-1', {
-      content: 'Updated note',
-      locationName: 'New place',
-      radius: 250,
-    });
+    expect(mockUpdateNote).toHaveBeenCalledWith(
+      'note-1',
+      expect.objectContaining({
+        content: 'Updated note',
+        locationName: 'New place',
+        radius: 250,
+      })
+    );
   });
 
   it('uses keyboard-aware scrolling on iOS', async () => {

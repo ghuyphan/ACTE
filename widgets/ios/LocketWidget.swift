@@ -262,6 +262,7 @@ private struct LocketWidgetStickerPlacement: Identifiable {
     let rotation: Double
     let zIndex: Int
     let opacity: Double
+    let renderMode: String
     let outlineEnabled: Bool
     let assetWidth: CGFloat
     let assetHeight: CGFloat
@@ -418,6 +419,7 @@ private func parseStickerPlacements(from stickerPlacementsJson: String?) -> [Loc
         let rotation = (item["rotation"] as? NSNumber)?.doubleValue ?? 0
         let zIndex = (item["zIndex"] as? NSNumber)?.intValue ?? 0
         let opacity = (item["opacity"] as? NSNumber)?.doubleValue ?? 1
+        let renderMode = (item["renderMode"] as? String) == "stamp" ? "stamp" : "default"
         let outlineEnabled = (item["outlineEnabled"] as? NSNumber)?.boolValue ?? true
 
         return LocketWidgetStickerPlacement(
@@ -428,11 +430,239 @@ private func parseStickerPlacements(from stickerPlacementsJson: String?) -> [Loc
             rotation: rotation,
             zIndex: zIndex,
             opacity: min(max(0, opacity), 1),
+            renderMode: renderMode,
             outlineEnabled: outlineEnabled,
             assetWidth: assetWidth,
             assetHeight: assetHeight,
             assetLocalUri: assetLocalUri
         )
+    }
+}
+
+private struct LocketWidgetStampMetrics {
+    let borderRadius: CGFloat
+    let outerWidth: CGFloat
+    let outerHeight: CGFloat
+    let perforationOffset: CGFloat
+    let perforationRadius: CGFloat
+}
+
+private func clampWidgetScalar(_ value: CGFloat, min minValue: CGFloat, max maxValue: CGFloat) -> CGFloat {
+    Swift.min(maxValue, Swift.max(minValue, value))
+}
+
+private func buildWidgetStampPerforationCenters(length: CGFloat, radius: CGFloat) -> [CGFloat] {
+    let safeLength = max(length, radius * 4)
+    let preferredSpacing = max(radius * 1.95, 10)
+    let count = max(5, Int(floor(safeLength / preferredSpacing)))
+    let start = radius * 0.58
+    let end = safeLength - radius * 0.58
+    let step = count <= 1 ? 0 : (end - start) / CGFloat(count - 1)
+
+    return (0..<count).map { index in
+        start + (step * CGFloat(index))
+    }
+}
+
+private func getWidgetStampMetrics(width: CGFloat, height: CGFloat) -> LocketWidgetStampMetrics {
+    let shortestEdge = max(min(width, height), 1)
+    let perforationRadius = clampWidgetScalar(shortestEdge * 0.048, min: 4, max: 6.6)
+    let perforationOffset = perforationRadius * 0.18
+    let borderRadius = clampWidgetScalar(shortestEdge * 0.02, min: 1.5, max: 3.5)
+
+    return LocketWidgetStampMetrics(
+        borderRadius: borderRadius,
+        outerWidth: width,
+        outerHeight: height,
+        perforationOffset: perforationOffset,
+        perforationRadius: perforationRadius
+    )
+}
+
+private func createWidgetStampPath(in rect: CGRect, metrics: LocketWidgetStampMetrics) -> Path {
+    var path = Path(roundedRect: rect, cornerRadius: metrics.borderRadius)
+
+    for centerX in buildWidgetStampPerforationCenters(length: rect.width, radius: metrics.perforationRadius) {
+        let topRect = CGRect(
+            x: rect.minX + centerX - metrics.perforationRadius,
+            y: rect.minY - metrics.perforationOffset - metrics.perforationRadius,
+            width: metrics.perforationRadius * 2,
+            height: metrics.perforationRadius * 2
+        )
+        let bottomRect = CGRect(
+            x: rect.minX + centerX - metrics.perforationRadius,
+            y: rect.maxY + metrics.perforationOffset - metrics.perforationRadius,
+            width: metrics.perforationRadius * 2,
+            height: metrics.perforationRadius * 2
+        )
+
+        path.addEllipse(in: topRect)
+        path.addEllipse(in: bottomRect)
+    }
+
+    for centerY in buildWidgetStampPerforationCenters(length: rect.height, radius: metrics.perforationRadius) {
+        let leftRect = CGRect(
+            x: rect.minX - metrics.perforationOffset - metrics.perforationRadius,
+            y: rect.minY + centerY - metrics.perforationRadius,
+            width: metrics.perforationRadius * 2,
+            height: metrics.perforationRadius * 2
+        )
+        let rightRect = CGRect(
+            x: rect.maxX + metrics.perforationOffset - metrics.perforationRadius,
+            y: rect.minY + centerY - metrics.perforationRadius,
+            width: metrics.perforationRadius * 2,
+            height: metrics.perforationRadius * 2
+        )
+
+        path.addEllipse(in: leftRect)
+        path.addEllipse(in: rightRect)
+    }
+
+    return path
+}
+
+private func createWidgetStampBezierPath(in rect: CGRect, metrics: LocketWidgetStampMetrics) -> UIBezierPath {
+    let path = UIBezierPath(roundedRect: rect, cornerRadius: metrics.borderRadius)
+
+    for centerX in buildWidgetStampPerforationCenters(length: rect.width, radius: metrics.perforationRadius) {
+        let topRect = CGRect(
+            x: rect.minX + centerX - metrics.perforationRadius,
+            y: rect.minY - metrics.perforationOffset - metrics.perforationRadius,
+            width: metrics.perforationRadius * 2,
+            height: metrics.perforationRadius * 2
+        )
+        let bottomRect = CGRect(
+            x: rect.minX + centerX - metrics.perforationRadius,
+            y: rect.maxY + metrics.perforationOffset - metrics.perforationRadius,
+            width: metrics.perforationRadius * 2,
+            height: metrics.perforationRadius * 2
+        )
+
+        path.append(UIBezierPath(ovalIn: topRect))
+        path.append(UIBezierPath(ovalIn: bottomRect))
+    }
+
+    for centerY in buildWidgetStampPerforationCenters(length: rect.height, radius: metrics.perforationRadius) {
+        let leftRect = CGRect(
+            x: rect.minX - metrics.perforationOffset - metrics.perforationRadius,
+            y: rect.minY + centerY - metrics.perforationRadius,
+            width: metrics.perforationRadius * 2,
+            height: metrics.perforationRadius * 2
+        )
+        let rightRect = CGRect(
+            x: rect.maxX + metrics.perforationOffset - metrics.perforationRadius,
+            y: rect.minY + centerY - metrics.perforationRadius,
+            width: metrics.perforationRadius * 2,
+            height: metrics.perforationRadius * 2
+        )
+
+        path.append(UIBezierPath(ovalIn: leftRect))
+        path.append(UIBezierPath(ovalIn: rightRect))
+    }
+
+    path.usesEvenOddFillRule = true
+    return path
+}
+
+private func getAspectFillRect(sourceSize: CGSize, destinationSize: CGSize) -> CGRect {
+    let sourceWidth = max(sourceSize.width, 1)
+    let sourceHeight = max(sourceSize.height, 1)
+    let scale = max(destinationSize.width / sourceWidth, destinationSize.height / sourceHeight)
+    let scaledWidth = sourceWidth * scale
+    let scaledHeight = sourceHeight * scale
+
+    return CGRect(
+        x: (destinationSize.width - scaledWidth) / 2,
+        y: (destinationSize.height - scaledHeight) / 2,
+        width: scaledWidth,
+        height: scaledHeight
+    )
+}
+
+private func renderWidgetStampImage(_ image: UIImage, width: CGFloat, height: CGFloat, opacity: Double) -> UIImage? {
+    guard width > 0, height > 0 else {
+        return nil
+    }
+
+    let metrics = getWidgetStampMetrics(width: width, height: height)
+    let stampRect = CGRect(origin: .zero, size: CGSize(width: metrics.outerWidth, height: metrics.outerHeight))
+    let stampPath = createWidgetStampBezierPath(in: stampRect, metrics: metrics)
+    let normalizedOpacity = min(max(opacity, 0), 1)
+    let outlineWidth = max(2.6, metrics.perforationRadius * 0.72)
+    let borderWidth = max(1, metrics.perforationRadius * 0.18)
+    let drawRect = getAspectFillRect(sourceSize: image.size, destinationSize: stampRect.size)
+    let format = UIGraphicsImageRendererFormat.default()
+    format.opaque = false
+    format.scale = 0
+
+    return UIGraphicsImageRenderer(size: stampRect.size, format: format).image { _ in
+        let cgContext = UIGraphicsGetCurrentContext()
+        let outlineColor = UIColor(
+            red: 1,
+            green: 250.0 / 255.0,
+            blue: 240.0 / 255.0,
+            alpha: 0.98 * normalizedOpacity
+        )
+        let borderColor = UIColor(
+            red: 143.0 / 255.0,
+            green: 112.0 / 255.0,
+            blue: 72.0 / 255.0,
+            alpha: 0.1 * normalizedOpacity
+        )
+
+        cgContext?.saveGState()
+        cgContext?.clip(to: stampRect)
+        cgContext?.addPath(stampPath.cgPath)
+        cgContext?.eoClip()
+        cgContext?.setAlpha(normalizedOpacity)
+        image.draw(in: drawRect)
+        cgContext?.restoreGState()
+
+        cgContext?.saveGState()
+        cgContext?.clip(to: stampRect)
+        cgContext?.addPath(stampPath.cgPath)
+        cgContext?.eoClip()
+        cgContext?.addPath(stampPath.cgPath)
+        cgContext?.setStrokeColor(outlineColor.cgColor)
+        cgContext?.setLineWidth(outlineWidth)
+        cgContext?.setLineJoin(.round)
+        cgContext?.setLineCap(.round)
+        cgContext?.strokePath()
+        cgContext?.restoreGState()
+
+        cgContext?.saveGState()
+        cgContext?.clip(to: stampRect)
+        cgContext?.addPath(stampPath.cgPath)
+        cgContext?.eoClip()
+        cgContext?.addPath(stampPath.cgPath)
+        cgContext?.setStrokeColor(borderColor.cgColor)
+        cgContext?.setLineWidth(borderWidth)
+        cgContext?.setLineJoin(.round)
+        cgContext?.setLineCap(.round)
+        cgContext?.strokePath()
+        cgContext?.restoreGState()
+    }
+}
+
+private struct LocketWidgetStampStickerView: View {
+    let image: UIImage
+    let width: CGFloat
+    let height: CGFloat
+    let opacity: Double
+
+    var body: some View {
+        if let renderedStamp = renderWidgetStampImage(image, width: width, height: height, opacity: opacity) {
+            Image(uiImage: renderedStamp)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: width, height: height)
+        } else {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: width, height: height)
+                .opacity(opacity)
+        }
     }
 }
 
@@ -502,9 +732,10 @@ private struct LocketWidgetStickerOverlay: View {
                         let outlineSize = getWidgetStickerOutlineSize(width: stickerWidth, height: stickerHeight)
                         let renderedImage = image.withRenderingMode(.alwaysOriginal)
                         let outlineImage = image.withRenderingMode(.alwaysTemplate)
+                        let isStamp = placement.renderMode == "stamp"
 
                         ZStack {
-                            if placement.outlineEnabled {
+                            if !isStamp && placement.outlineEnabled {
                                 ForEach(Array(locketWidgetStickerOutlineOffsets.enumerated()), id: \.offset) { _, offset in
                                     Image(uiImage: outlineImage)
                                         .resizable()
@@ -520,11 +751,20 @@ private struct LocketWidgetStickerOverlay: View {
                                 }
                             }
 
-                            Image(uiImage: renderedImage)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: stickerWidth, height: stickerHeight)
-                                .opacity(placement.opacity * overlayOpacity)
+                            if isStamp {
+                                LocketWidgetStampStickerView(
+                                    image: renderedImage,
+                                    width: stickerWidth,
+                                    height: stickerHeight,
+                                    opacity: placement.opacity * overlayOpacity
+                                )
+                            } else {
+                                Image(uiImage: renderedImage)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: stickerWidth, height: stickerHeight)
+                                    .opacity(placement.opacity * overlayOpacity)
+                            }
                         }
                         .rotationEffect(.degrees(placement.rotation))
                         .position(

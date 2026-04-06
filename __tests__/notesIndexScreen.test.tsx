@@ -1,13 +1,14 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { InteractionManager, StyleSheet } from 'react-native';
 import NotesIndexScreen, { resolveNotesModeFromSwipe } from '../app/notes/index';
 
 const mockRouterReplace = jest.fn();
 const mockRouterPush = jest.fn();
 const mockRequestFeedFocus = jest.fn();
 const mockDownloadPhotoFromStorage = jest.fn();
+const mockDynamicStickerCanvas = jest.fn();
 
 const mockNotes: any[] = [
   {
@@ -108,6 +109,29 @@ jest.mock('expo-linear-gradient', () => {
   };
 });
 
+jest.mock('../components/notes/DynamicStickerCanvas', () => {
+  const React = require('react');
+  const { Text, View } = require('react-native');
+  return function MockDynamicStickerCanvas(props: any) {
+    mockDynamicStickerCanvas(props);
+    return (
+      <View testID="mock-dynamic-sticker-canvas">
+        <Text testID="mock-dynamic-sticker-min-size">
+          {String(props.minimumBaseSize ?? 'default')}
+        </Text>
+      </View>
+    );
+  };
+});
+
+jest.mock('../components/notes/NoteDoodleCanvas', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return function MockNoteDoodleCanvas() {
+    return <View testID="mock-note-doodle-canvas" />;
+  };
+});
+
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),
   selectionAsync: jest.fn(),
@@ -179,6 +203,7 @@ jest.mock('../hooks/useSharedFeed', () => ({
 describe('NotesIndexScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDynamicStickerCanvas.mockClear();
     mockNotes.splice(
       0,
       mockNotes.length,
@@ -424,6 +449,81 @@ describe('NotesIndexScreen', () => {
     await waitFor(() => {
       expect(queryByTestId('shared-photo-grid-placeholder')).toBeNull();
     });
+  });
+
+  it('re-renders tiles when grid decorations are revealed in all mode', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    const runAfterInteractionsSpy = jest
+      .spyOn(InteractionManager, 'runAfterInteractions')
+      .mockImplementation((task: any) => {
+        task?.();
+        return { cancel: jest.fn() } as any;
+      });
+
+    process.env.NODE_ENV = 'production';
+    mockNotes.splice(0, mockNotes.length, {
+      id: 'note-with-decorations',
+      type: 'text',
+      content: 'Decorated note',
+      locationName: 'District 1',
+      latitude: 10.7,
+      longitude: 106.6,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: true,
+      doodleStrokesJson: JSON.stringify([{ color: '#FFFFFF', points: [0.1, 0.1, 0.2, 0.2] }]),
+      hasStickers: true,
+      stickerPlacementsJson: JSON.stringify([
+        {
+          id: 'placement-1',
+          assetId: 'asset-1',
+          x: 0.5,
+          y: 0.5,
+          scale: 1,
+          rotation: 0,
+          zIndex: 1,
+          opacity: 1,
+          asset: {
+            id: 'asset-1',
+            localUri: 'file:///sticker-1.png',
+            mimeType: 'image/png',
+          },
+        },
+      ]),
+      createdAt: '2026-03-11T00:00:00.000Z',
+      updatedAt: null,
+    });
+
+    jest.useFakeTimers();
+    global.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = jest.fn();
+
+    try {
+      const { queryAllByTestId } = render(<NotesIndexScreen />);
+
+      expect(queryAllByTestId('mock-dynamic-sticker-canvas')).toHaveLength(0);
+      expect(queryAllByTestId('mock-note-doodle-canvas')).toHaveLength(0);
+
+      await act(async () => {
+        jest.advanceTimersByTime(220);
+      });
+
+      await waitFor(() => {
+        expect(queryAllByTestId('mock-dynamic-sticker-canvas')).toHaveLength(1);
+        expect(queryAllByTestId('mock-note-doodle-canvas')).toHaveLength(1);
+      });
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+      global.requestAnimationFrame = originalRequestAnimationFrame;
+      global.cancelAnimationFrame = originalCancelAnimationFrame;
+      runAfterInteractionsSpy.mockRestore();
+      jest.useRealTimers();
+    }
   });
 
   it('resolves left and right swipes into the expected modes', () => {

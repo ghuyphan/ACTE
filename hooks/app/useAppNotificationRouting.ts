@@ -1,13 +1,15 @@
 import * as Notifications from 'expo-notifications';
-import { useRouter } from 'expo-router';
+import { useRootNavigationState, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
 import { useFeedFocus } from '../state/useFeedFocus';
 
 export function useAppNotificationRouting() {
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
   const { requestFeedFocus } = useFeedFocus();
   const notificationResponseListener = useRef<Notifications.EventSubscription | null>(null);
   const lastHandledNotificationIdRef = useRef<string | null>(null);
+  const isNavigationReady = Boolean(rootNavigationState?.key);
 
   const handleNotificationResponse = useCallback(
     async (response: Notifications.NotificationResponse | null) => {
@@ -46,6 +48,10 @@ export function useAppNotificationRouting() {
   );
 
   useEffect(() => {
+    if (!isNavigationReady) {
+      return;
+    }
+
     let cancelled = false;
 
     void Notifications.getLastNotificationResponseAsync().then((response) => {
@@ -63,5 +69,5 @@ export function useAppNotificationRouting() {
       cancelled = true;
       notificationResponseListener.current?.remove();
     };
-  }, [handleNotificationResponse]);
+  }, [handleNotificationResponse, isNavigationReady]);
 }

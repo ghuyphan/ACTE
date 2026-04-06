@@ -325,6 +325,8 @@ const GridTile = memo(function GridTile({
     </Pressable>
   );
 }, (prevProps, nextProps) => (
+  prevProps.animateOnMount === nextProps.animateOnMount &&
+  prevProps.showDecorations === nextProps.showDecorations &&
   prevProps.index === nextProps.index &&
   prevProps.size === nextProps.size &&
   prevProps.gap === nextProps.gap &&

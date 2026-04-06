@@ -28,6 +28,11 @@ export type ClipboardStickerMessages = {
   permissionDenied: string;
 };
 
+export type ClipboardStickerImportOptions = {
+  requiresTransparency?: boolean;
+  transparencyRequiredMessage?: string;
+};
+
 export class ClipboardStickerError extends Error {
   code:
     | 'requires-update'
@@ -205,13 +210,22 @@ async function importStickerAssetFromClipboardBase64(
 
 export async function importStickerAssetFromClipboardImageData(
   base64DataUri: string,
-  messages: ClipboardStickerMessages
+  messages: ClipboardStickerMessages,
+  options: ClipboardStickerImportOptions = {}
 ): Promise<StickerAsset> {
+  if (options.requiresTransparency && !clipboardImageDataHasTransparency(base64DataUri)) {
+    throw new ClipboardStickerError(
+      'unsupported',
+      options.transparencyRequiredMessage ?? messages.unsupported
+    );
+  }
+
   return importStickerAssetFromClipboardBase64(base64DataUri, messages);
 }
 
 export async function importStickerAssetFromClipboard(
-  messages: ClipboardStickerMessages
+  messages: ClipboardStickerMessages,
+  options: ClipboardStickerImportOptions = {}
 ): Promise<StickerAsset> {
   const clipboardModule = await loadClipboardModule();
   if (!clipboardModule?.hasImageAsync || !clipboardModule?.getImageAsync) {
@@ -237,6 +251,13 @@ export async function importStickerAssetFromClipboard(
 
   if (!clipboardImage?.data) {
     throw new ClipboardStickerError('unavailable', messages.unavailable);
+  }
+
+  if (options.requiresTransparency && !clipboardImageDataHasTransparency(clipboardImage.data)) {
+    throw new ClipboardStickerError(
+      'unsupported',
+      options.transparencyRequiredMessage ?? messages.unsupported
+    );
   }
 
   return importStickerAssetFromClipboardBase64(clipboardImage.data, messages);

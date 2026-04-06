@@ -10,6 +10,7 @@ const PHOTO_BACKGROUND_PATH = 'app/src/main/res/drawable/noto_widget_photo_backg
 const PHOTO_SCRIM_PATH = 'app/src/main/res/drawable/noto_widget_photo_scrim.xml';
 const OVERLAY_CHIP_DARK_PATH = 'app/src/main/res/drawable/noto_widget_overlay_chip_dark.xml';
 const COUNT_BADGE_DARK_PATH = 'app/src/main/res/drawable/noto_widget_count_badge_dark.xml';
+const PROVIDER_SOURCE_PATH = path.join('widgets', 'android', 'NotoWidgetProvider.kt');
 
 const OVERLAY_CHIP_DARK_CONTENT = `<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
@@ -295,11 +296,19 @@ const withCustomAndroidWidget = (config) =>
   withFinalizedMod(config, [
     'android',
     async (config) => {
+      const projectRoot = config.modRequest.projectRoot;
       const androidRoot = config.modRequest.platformProjectRoot;
+      const providerSourcePath = path.join(projectRoot, PROVIDER_SOURCE_PATH);
+      const providerTargetPath = path.join(androidRoot, PROVIDER_PATH);
+
+      if (fs.existsSync(providerSourcePath)) {
+        fs.mkdirSync(path.dirname(providerTargetPath), { recursive: true });
+        fs.copyFileSync(providerSourcePath, providerTargetPath);
+      }
 
       patchFile(path.join(androidRoot, SMALL_LAYOUT_PATH), patchSmallLayout);
       patchFile(path.join(androidRoot, MEDIUM_LAYOUT_PATH), patchMediumLayout);
-      patchFile(path.join(androidRoot, PROVIDER_PATH), patchProvider);
+      patchFile(providerTargetPath, patchProvider);
       patchFile(path.join(androidRoot, TEXT_BACKGROUND_PATH), removeRoundedCorners);
       patchFile(path.join(androidRoot, PHOTO_BACKGROUND_PATH), removeRoundedCorners);
       patchFile(path.join(androidRoot, PHOTO_SCRIM_PATH), removeRoundedCorners);

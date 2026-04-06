@@ -84,10 +84,13 @@ const DECORATE_OPTION_CONTENT_SCALE = 1;
 const SHUTTER_OUTER_SIZE = 74;
 const SHUTTER_INNER_SIZE = 58;
 const SIDE_ACTION_SIZE = 46;
-const SHUTTER_SIDE_ACTION_OFFSET = SHUTTER_OUTER_SIZE / 2 + 12 + SIDE_ACTION_SIZE;
+const SHUTTER_SIDE_ACTION_GAP = 24;
+const SHUTTER_SIDE_ACTION_OFFSET =
+  SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP + SIDE_ACTION_SIZE;
 const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
 const LIVE_PHOTO_RING_SIZE = SHUTTER_OUTER_SIZE;
 const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
+const DOCKED_HEADER_CONTENT_OVERLAP = 8;
 const SHEET_HORIZONTAL_PADDING =
   Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
 const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
@@ -1103,7 +1106,15 @@ function CaptureDecorateRail({
               },
             ]}
           >
-            <Ionicons name="add-outline" size={14} color={theme.detailIconColor} />
+            {importingSticker ? (
+              <ActivityIndicator
+                testID="capture-sticker-import-loading"
+                size="small"
+                color={theme.detailIconColor}
+              />
+            ) : (
+              <Ionicons name="add-outline" size={14} color={theme.detailIconColor} />
+            )}
           </CaptureAnimatedPressable>
           <CaptureAnimatedPressable
             testID="capture-sticker-remove"
@@ -1207,7 +1218,11 @@ function TextCaptureBottomBar({
                   disabledOpacity={1}
                   style={[styles.textBottomToolsButton, styles.textBottomToolsAction]}
                 >
-                  <ActivityIndicator size="small" color={colors.captureGlassText} />
+                  <ActivityIndicator
+                    testID="capture-inline-paste-sticker-loading"
+                    size="small"
+                    color={colors.captureGlassText}
+                  />
                 </CaptureAnimatedPressable>
               ) : useNativeInlinePasteButton ? (
                 <ClipboardPasteButton
@@ -2245,7 +2260,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           styles.snapItem,
           {
             height: snapHeight,
-            paddingTop: topInset + 60,
+            paddingTop: topInset + Layout.headerHeight - DOCKED_HEADER_CONTENT_OVERLAP,
             paddingBottom: androidTextEntryBottomInset,
           },
         ]}
@@ -3181,7 +3196,7 @@ const styles = StyleSheet.create({
   belowCardTrailingAction: {
     position: 'absolute',
     left: '50%',
-    marginLeft: SHUTTER_OUTER_SIZE / 2 + 12,
+    marginLeft: SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP,
   },
   belowCardSideActionSpacer: {
     width: SIDE_ACTION_SIZE,

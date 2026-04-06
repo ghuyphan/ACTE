@@ -25,7 +25,7 @@ import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
 
 const MAX_STAGGERED_ENTRANCE_INDEX = 2;
 const ENTRANCE_DELAY_MS = 24;
-
+const DOCKED_HEADER_CONTENT_OVERLAP = 8;
 function getEntranceDelay(index: number) {
   return Math.min(index, MAX_STAGGERED_ENTRANCE_INDEX) * ENTRANCE_DELAY_MS;
 }
@@ -289,6 +289,7 @@ interface NotesFeedProps {
   revealedNoteId?: string | null;
   revealToken?: number;
   onSettledArchiveItemChange?: (item: { id: string; kind: 'note' | 'shared-post' } | null) => void;
+  onScrollOffsetChange?: (offsetY: number) => void;
 }
 
 export default function NotesFeed({
@@ -313,6 +314,7 @@ export default function NotesFeed({
   revealedNoteId = null,
   revealToken = 0,
   onSettledArchiveItemChange,
+  onScrollOffsetChange,
 }: NotesFeedProps) {
   const { height } = useWindowDimensions();
   const captureVisibilityRef = useRef(true);
@@ -536,7 +538,15 @@ export default function NotesFeed({
 
       if (item.kind === 'shared-post') {
         return (
-          <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
+          <View
+            style={[
+              styles.snapItem,
+              {
+                height: snapHeight,
+                paddingTop: topInset + Layout.headerHeight - DOCKED_HEADER_CONTENT_OVERLAP,
+              },
+            ]}
+          >
             <View style={styles.cardStage}>
               <AnimatedSharedPostCard
                 item={item.post}
@@ -552,7 +562,15 @@ export default function NotesFeed({
       }
 
       return (
-        <View style={[styles.snapItem, { height: snapHeight, paddingTop: topInset + 60 }]}>
+        <View
+          style={[
+            styles.snapItem,
+            {
+              height: snapHeight,
+              paddingTop: topInset + Layout.headerHeight - DOCKED_HEADER_CONTENT_OVERLAP,
+            },
+          ]}
+        >
           <View style={styles.cardStage}>
             <AnimatedNoteCard
               item={item.note}
@@ -602,6 +620,7 @@ export default function NotesFeed({
         const offsetY = event.nativeEvent.contentOffset.y;
         lastOffsetYRef.current = offsetY;
         reportCaptureVisibility(offsetY);
+        onScrollOffsetChange?.(offsetY);
       }}
       scrollEventThrottle={16}
       onScrollBeginDrag={() => {

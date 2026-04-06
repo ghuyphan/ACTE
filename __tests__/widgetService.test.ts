@@ -949,6 +949,8 @@ describe('widgetService', () => {
             rotation: 8,
             zIndex: 1,
             opacity: 0.95,
+            renderMode: 'stamp',
+            outlineEnabled: false,
             asset: {
               id: 'asset-1',
               ownerUid: '__local__',
@@ -978,6 +980,8 @@ describe('widgetService', () => {
       })
     );
     expect(stickerPayload).toHaveLength(1);
+    expect(stickerPayload[0]?.renderMode).toBe('stamp');
+    expect(stickerPayload[0]?.outlineEnabled).toBe(false);
     expect(String(stickerPayload[0]?.asset?.localUri ?? '')).toContain('file:///mock-group/widget-stickers/');
   });
 

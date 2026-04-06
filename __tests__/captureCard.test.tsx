@@ -20,6 +20,9 @@ let mockClipboardPastePayload: any = {
   size: { width: 120, height: 120 },
 };
 let mockClipboardListeners: Array<() => void> = [];
+const mockCreateStickerImportSourceFromSubjectCutout = jest.fn();
+const mockPrepareStickerSubjectCutout = jest.fn();
+const mockCleanupSubjectCutoutImportSource = jest.fn();
 
 jest.mock('@expo/vector-icons', () => {
   const React = require('react');
@@ -298,6 +301,22 @@ jest.mock('../services/noteStickers', () => ({
   updateStickerPlacementTransform: jest.fn((placements: any[]) => placements),
 }));
 
+jest.mock('../services/stickerSubjectCutout', () => ({
+  SubjectCutoutError: class SubjectCutoutError extends Error {
+    code: string;
+
+    constructor(code: string, message: string) {
+      super(message);
+      this.code = code;
+    }
+  },
+  createStickerImportSourceFromSubjectCutout: (...args: unknown[]) =>
+    mockCreateStickerImportSourceFromSubjectCutout(...args),
+  prepareStickerSubjectCutout: () => mockPrepareStickerSubjectCutout(),
+  cleanupSubjectCutoutImportSource: (...args: unknown[]) =>
+    mockCleanupSubjectCutoutImportSource(...args),
+}));
+
 const mockClipboardHasImageAsync = hasImageAsync as jest.MockedFunction<typeof hasImageAsync>;
 const mockClipboardGetImageAsync = getImageAsync as jest.MockedFunction<typeof getImageAsync>;
 const mockWriteAsStringAsync = writeAsStringAsync as jest.MockedFunction<typeof writeAsStringAsync>;
@@ -444,6 +463,16 @@ describe('CaptureCard doodle handle', () => {
       updatedAt: null,
       source: 'import',
     });
+    mockCreateStickerImportSourceFromSubjectCutout.mockImplementation(async (source: any) => ({
+      source: {
+        uri: 'file:///cache/subject-cutout.png',
+        mimeType: 'image/png',
+        name: source?.name ?? 'subject-cutout.png',
+      },
+      cleanupUri: 'file:///cache/subject-cutout.png',
+    }));
+    mockPrepareStickerSubjectCutout.mockResolvedValue({ available: true, ready: true });
+    mockCleanupSubjectCutoutImportSource.mockResolvedValue(undefined);
   });
 
   it('removes the restaurant field in text mode and keeps the action row', () => {
@@ -1213,6 +1242,62 @@ describe('CaptureCard doodle handle', () => {
     expect(queryByTestId('capture-inline-paste-sticker')).toBeNull();
   });
 
+  it('keeps the inline paste control visible in loading state until the paste finishes', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    let resolveImport: ((value: any) => void) | undefined;
+
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardPastePayload = {
+      type: 'image',
+      data: `data:image/png;base64,${transparentPngBase64}`,
+      size: { width: 120, height: 120 },
+    };
+    mockImportStickerAsset.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveImport = resolve;
+        }) as any
+    );
+
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('capture-inline-paste-sticker')).toBeTruthy();
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-inline-paste-sticker'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('capture-inline-paste-sticker')).toBeTruthy();
+      expect(getByTestId('capture-inline-paste-sticker-loading')).toBeTruthy();
+      expect(resolveImport).toBeDefined();
+    });
+
+    await act(async () => {
+      resolveImport?.({
+        id: 'asset-1',
+        ownerUid: '__local__',
+        localUri: 'file:///documents/stickers/asset-1.png',
+        remotePath: null,
+        mimeType: 'image/png',
+        width: 120,
+        height: 120,
+        createdAt: '2026-03-27T00:00:00.000Z',
+        updatedAt: null,
+        source: 'import',
+      });
+    });
+
+    await waitFor(() => {
+      expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+      expect(queryByTestId('capture-inline-paste-sticker')).toBeNull();
+    });
+  });
+
   it('shows the inline paste action on an empty text card when the clipboard has an image', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockClipboardHasImageAsync.mockResolvedValue(true);
@@ -1226,21 +1311,44 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
-  it('hides the inline paste action when the clipboard image has no transparency', async () => {
+  it('shows the inline paste action for any clipboard image and rejects opaque ones only after paste', async () => {
+    const originalPlatform = Platform.OS;
     const ref = React.createRef<CaptureCardHandle>();
-    mockClipboardHasImageAsync.mockResolvedValue(true);
-    mockClipboardGetImageAsync.mockResolvedValue({
-      data: `data:image/png;base64,${opaquePngBase64}`,
-      size: { width: 120, height: 120 },
-    });
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    Platform.OS = 'android';
 
-    const { queryByTestId } = renderCaptureCard(ref, {
-      noteText: '',
-    });
+    try {
+      mockClipboardHasImageAsync.mockResolvedValue(true);
+      mockClipboardGetImageAsync.mockResolvedValue({
+        data: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/',
+        size: { width: 120, height: 120 },
+      });
 
-    await waitFor(() => {
-      expect(queryByTestId('capture-inline-paste-sticker')).toBeNull();
-    });
+      const { getByTestId } = renderCaptureCard(ref, {
+        noteText: '',
+      });
+
+      await waitFor(() => {
+        expect(getByTestId('capture-inline-paste-sticker')).toBeTruthy();
+      });
+
+      expect(mockClipboardGetImageAsync).not.toHaveBeenCalled();
+
+      await act(async () => {
+        fireEvent.press(getByTestId('capture-inline-paste-sticker'));
+      });
+
+      expect(mockImportStickerAsset).not.toHaveBeenCalled();
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Error',
+        'If you want a floating sticker, use a transparent PNG or WebP. Regular photos will import as stamps.',
+        undefined
+      );
+      expect(ref.current?.getStickerSnapshot().placements).toHaveLength(0);
+    } finally {
+      Platform.OS = originalPlatform;
+      alertSpy.mockRestore();
+    }
   });
 
   it('hides the inline paste action on an empty text card when the clipboard has no image', async () => {
@@ -1424,9 +1532,43 @@ describe('CaptureCard doodle handle', () => {
 
   it('opens the sticker source sheet from a tap on the add button', async () => {
     const ref = React.createRef<CaptureCardHandle>();
-    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardHasImageAsync.mockImplementation(
+      () => new Promise<boolean>(() => undefined)
+    );
 
     const { getByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-sticker-toggle'));
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-sticker-import'));
+    });
+
+    expect(getByTestId('sticker-source-option-create-sticker')).toBeTruthy();
+    expect(getByTestId('sticker-source-option-create-stamp')).toBeTruthy();
+  });
+
+  it('shows a loading indicator while pasting a sticker from the source sheet clipboard action', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    let resolveImport: ((asset: any) => void) | undefined;
+
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardGetImageAsync.mockResolvedValue({
+      data: `data:image/png;base64,${transparentPngBase64}`,
+      size: { width: 120, height: 120 },
+    } as any);
+    mockImportStickerAsset.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveImport = resolve;
+        }) as any
+    );
+
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
       noteText: '',
     });
 
@@ -1438,9 +1580,31 @@ describe('CaptureCard doodle handle', () => {
       fireEvent.press(getByTestId('capture-sticker-import'));
     });
 
-    expect(getByTestId('sticker-source-option-create-sticker')).toBeTruthy();
-    expect(getByTestId('sticker-source-option-create-stamp')).toBeTruthy();
-    expect(getByTestId('sticker-source-option-clipboard')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-source-option-clipboard'));
+    });
+
+    expect(getByTestId('capture-sticker-import-loading')).toBeTruthy();
+
+    await act(async () => {
+      resolveImport?.({
+        id: 'asset-1',
+        ownerUid: '__local__',
+        localUri: 'file:///documents/stickers/asset-1.png',
+        remotePath: null,
+        mimeType: 'image/png',
+        width: 120,
+        height: 120,
+        createdAt: '2026-03-27T00:00:00.000Z',
+        updatedAt: null,
+        source: 'import',
+      });
+    });
+
+    await waitFor(() => {
+      expect(queryByTestId('capture-sticker-import-loading')).toBeNull();
+      expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+    });
   });
 
   it('requests a transparent asset when creating a floating sticker from photos', async () => {
@@ -1471,9 +1635,14 @@ describe('CaptureCard doodle handle', () => {
     });
 
     await waitFor(() => {
+      expect(mockCreateStickerImportSourceFromSubjectCutout).toHaveBeenCalledWith({
+        uri: 'file:///sticker.png',
+        mimeType: 'image/png',
+        name: 'sticker.png',
+      });
       expect(mockImportStickerAsset).toHaveBeenCalledWith(
         {
-          uri: 'file:///sticker.png',
+          uri: 'file:///cache/subject-cutout.png',
           mimeType: 'image/png',
           name: 'sticker.png',
         },

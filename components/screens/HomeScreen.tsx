@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useIsFocused, useScrollToTop } from '@react-navigation/native';
 import * as FileSystem from '../../utils/fileSystem';
+import { BlurTargetView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -70,7 +71,6 @@ import { getPersistentItem, setPersistentItem } from '../../utils/appStorage';
 import { setAndroidSoftInputMode } from '../../utils/androidSoftInputMode';
 
 const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
-
 type SaveButtonState = 'idle' | 'saving' | 'success';
 
 export default function HomeScreen() {
@@ -158,7 +158,9 @@ export default function HomeScreen() {
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const searchAnim = useSharedValue(0);
+  const headerBlurScrollOffset = useSharedValue(0);
   const flatListRef = useRef<any>(null);
+  const headerBlurTargetRef = useRef<View | null>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
   const lastFreeNoteColorRef = useRef<string>(DEFAULT_NOTE_COLOR_ID);
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -313,21 +315,39 @@ export default function HomeScreen() {
   useEffect(() => {
     const isCameraHintEligible =
       captureMode === 'camera' &&
+      isCameraPreviewActive &&
+      !isModeSwitchAnimating &&
       !capturedPhoto &&
       !(tier !== 'plus' && remainingPhotoSlots === 0);
 
-    if (hasSeenLivePhotoCameraHint !== false) {
+    if (hasSeenLivePhotoCameraHint !== false || !isCameraHintEligible) {
       setShowLivePhotoCameraHint((current) => (current ? false : current));
       return;
     }
 
-    setShowLivePhotoCameraHint((current) =>
-      current === isCameraHintEligible ? current : isCameraHintEligible
-    );
+    let cancelled = false;
+    let revealTimeout: ReturnType<typeof setTimeout> | null = null;
+    const idleHandle = scheduleOnIdle(() => {
+      revealTimeout = setTimeout(() => {
+        if (!cancelled) {
+          setShowLivePhotoCameraHint(true);
+        }
+      }, 140);
+    });
+
+    return () => {
+      cancelled = true;
+      idleHandle.cancel();
+      if (revealTimeout) {
+        clearTimeout(revealTimeout);
+      }
+    };
   }, [
     captureMode,
     capturedPhoto,
     hasSeenLivePhotoCameraHint,
+    isCameraPreviewActive,
+    isModeSwitchAnimating,
     remainingPhotoSlots,
     tier,
   ]);
@@ -1817,6 +1837,68 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <BlurTargetView ref={headerBlurTargetRef} style={styles.blurTarget}>
+        <NotesFeed
+          flatListRef={flatListRef}
+          captureHeader={captureHeader}
+          captureMode={captureMode}
+          screenActive={isScreenFocused}
+          items={visibleFeedItems}
+          notes={displayedNotes}
+          sharedPosts={visibleSharedPosts}
+          refreshing={refreshing}
+          onRefresh={() => {
+            void onRefresh();
+          }}
+          topInset={insets.top}
+          snapHeight={snapHeight}
+          onOpenNote={openNote}
+          onOpenSharedPost={openSharedPost}
+          colors={colors}
+          t={t}
+          revealedNoteId={null}
+          revealToken={0}
+          onSettledArchiveItemChange={handleSettledArchiveItemChange}
+          onCaptureVisibilityChange={setIsCaptureVisible}
+          scrollEnabled={
+            !captureEditorScrollLocked &&
+            !captureInteractionScrollLocked &&
+            !isCaptureTextEntryFocused
+          }
+          capturePageLocked={shouldLockCapturePage}
+          onScrollOffsetChange={(offsetY) => {
+            headerBlurScrollOffset.value = offsetY;
+          }}
+        />
+
+        {useInlineHeaderSearch && isSearching && filteredNotes.length === 0 && searchQuery.trim() ? (
+          <View
+            style={[
+              styles.center,
+              {
+                gap: 8,
+                backgroundColor: colors.background,
+                position: 'absolute',
+                top: snapHeight,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 10,
+              },
+            ]}
+          pointerEvents="none"
+        >
+          <Ionicons name="search-outline" size={48} color={colors.secondaryText} style={{ opacity: 0.5 }} />
+          <Text style={[styles.emptyTitle, { color: colors.text, marginTop: 12 }]}>
+            {t('home.noResults', 'No notes found')}
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
+            {t('home.noResultsMsg', 'Try a different keyword')}
+          </Text>
+        </View>
+        ) : null}
+      </BlurTargetView>
+
       <HomeHeaderSearch
         topInset={insets.top}
         isSearching={isSearching}
@@ -1843,62 +1925,9 @@ export default function HomeScreen() {
         colors={colors}
         isDark={isDark}
         t={t}
-      />
-
-      {useInlineHeaderSearch && isSearching && filteredNotes.length === 0 && searchQuery.trim() ? (
-          <View
-            style={[
-              styles.center,
-              {
-                gap: 8,
-                backgroundColor: colors.background,
-                position: 'absolute',
-                top: snapHeight,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                zIndex: 10,
-              },
-            ]}
-          pointerEvents="none"
-        >
-          <Ionicons name="search-outline" size={48} color={colors.secondaryText} style={{ opacity: 0.5 }} />
-          <Text style={[styles.emptyTitle, { color: colors.text, marginTop: 12 }]}>
-            {t('home.noResults', 'No notes found')}
-          </Text>
-          <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-            {t('home.noResultsMsg', 'Try a different keyword')}
-          </Text>
-        </View>
-      ) : null}
-      <NotesFeed
-        flatListRef={flatListRef}
-        captureHeader={captureHeader}
-        captureMode={captureMode}
-        screenActive={isScreenFocused}
-        items={visibleFeedItems}
-        notes={displayedNotes}
-        sharedPosts={visibleSharedPosts}
-        refreshing={refreshing}
-        onRefresh={() => {
-          void onRefresh();
-        }}
-        topInset={insets.top}
-        snapHeight={snapHeight}
-        onOpenNote={openNote}
-        onOpenSharedPost={openSharedPost}
-        colors={colors}
-        t={t}
-        revealedNoteId={null}
-        revealToken={0}
-        onSettledArchiveItemChange={handleSettledArchiveItemChange}
-        onCaptureVisibilityChange={setIsCaptureVisible}
-        scrollEnabled={
-          !captureEditorScrollLocked &&
-          !captureInteractionScrollLocked &&
-          !isCaptureTextEntryFocused
-        }
-        capturePageLocked={shouldLockCapturePage}
+        blurTargetRef={headerBlurTargetRef}
+        showDockedBlur
+        dockedBlurScrollOffset={headerBlurScrollOffset}
       />
 
       <SharedManageSheet
@@ -1927,6 +1956,9 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  blurTarget: {
     flex: 1,
   },
   captureItemWrapper: {

@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Dimensions, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { Layout, Radii, Typography } from '../../constants/theme';
+import { useRelativeTimeNow } from '../../hooks/useRelativeTimeNow';
 import { Note } from '../../services/database';
 import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { getNotePhotoUri } from '../../services/photoStorage';
@@ -60,7 +61,8 @@ export function NoteMemoryCard({
   containerStyle,
   isActive = false,
 }: NoteMemoryCardProps) {
-  const dateStr = formatNoteTimestamp(note.createdAt, 'card');
+  const now = useRelativeTimeNow();
+  const dateStr = formatNoteTimestamp(note.createdAt, 'card', now);
   const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
   const locationLabel = note.locationName ?? t('home.unknownLocation', 'Unknown location');
 
@@ -329,7 +331,7 @@ const styles = StyleSheet.create({
   },
   metaContainer: {
     alignSelf: 'center',
-    alignItems: 'stretch',
+    alignItems: 'center',
     justifyContent: 'center',
     minHeight: 56,
     paddingTop: 16,
@@ -356,29 +358,28 @@ const styles = StyleSheet.create({
   },
   metadataPill: {
     minHeight: 42,
-    width: '100%',
-    maxWidth: '100%',
+    maxWidth: '85%',
     paddingHorizontal: 10,
     paddingVertical: 0,
     borderRadius: Radii.pill,
   },
   metadataPressable: {
-    width: '100%',
-    maxWidth: '100%',
+    alignSelf: 'center',
+    maxWidth: '85%',
   },
   metadataPressablePressed: {
     opacity: 0.84,
   },
   metadataPillText: {
     ...Typography.pill,
-    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
   },
   metadataLocationGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
   },
   metadataPillDate: {
@@ -397,15 +398,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    width: '100%',
     maxWidth: '100%',
+    minWidth: 0,
   },
   metadataPillMain: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     minWidth: 0,
-    flex: 1,
+    flexShrink: 1,
   },
   metadataPillAction: {
     flexDirection: 'row',

@@ -18,6 +18,11 @@ const mockAuthState = {
 };
 
 jest.mock('expo-router', () => ({
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const React = require('react');
+
+    React.useEffect(() => callback(), [callback]);
+  },
   useRouter: () => ({
     replace: (...args: unknown[]) => mockReplace(...args),
   }),

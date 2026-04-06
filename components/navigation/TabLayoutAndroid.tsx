@@ -6,21 +6,23 @@ import { useTheme } from '../../hooks/useTheme';
 export default function TabLayoutAndroid() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
-  const barBackground = isDark ? '#19130E' : '#EDE3D6';
-  const indicatorColor = isDark ? 'rgba(255, 193, 7, 0.26)' : '#F4DEAE';
-  const activeColor = isDark ? '#FFF7E8' : '#5F4300';
-  const inactiveColor = isDark ? 'rgba(255, 247, 232, 0.68)' : '#817466';
+  const barBackground = isDark ? '#18120E' : '#F4EDE3';
+  const indicatorColor = isDark ? 'rgba(255, 247, 232, 0.12)' : 'rgba(255, 251, 245, 0.96)';
+  const activeColor = isDark ? '#FFF7E8' : '#6B4F0E';
+  const inactiveColor = isDark ? 'rgba(255, 247, 232, 0.68)' : '#8B7B68';
+  const shadowColor = isDark ? 'rgba(0,0,0,0)' : 'rgba(108, 84, 36, 0.08)';
 
   return (
     <NativeTabs
       backgroundColor={barBackground}
       indicatorColor={indicatorColor}
+      shadowColor={shadowColor}
       iconColor={{ default: inactiveColor, selected: activeColor }}
       labelStyle={{
-        default: { color: inactiveColor },
-        selected: { color: activeColor },
+        default: { color: inactiveColor, fontSize: 11, fontWeight: '600' },
+        selected: { color: activeColor, fontSize: 11, fontWeight: '700' },
       }}
-      rippleColor={colors.primarySoft}
+      rippleColor={isDark ? 'rgba(255, 247, 232, 0.16)' : `${colors.primary}12`}
       labelVisibilityMode="labeled"
       backBehavior="history"
     >

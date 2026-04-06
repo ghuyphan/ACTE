@@ -18,6 +18,7 @@ import Animated from 'react-native-reanimated';
 import { STICKER_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
 import { ENABLE_PHOTO_STICKERS } from '../../../constants/experiments';
 import { Layout, Typography } from '../../../constants/theme';
+import { useRelativeTimeNow } from '../../../hooks/useRelativeTimeNow';
 import type { DoodleStroke } from '../NoteDoodleCanvas';
 import type { Note } from '../../../services/database';
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
@@ -222,7 +223,8 @@ export default function NoteDetailSheetContent({
         );
     }
 
-    const dateStr = formatNoteTimestamp(note.createdAt, 'detail');
+    const now = useRelativeTimeNow();
+    const dateStr = formatNoteTimestamp(note.createdAt, 'detail', now);
     const gradient = getTextNoteCardGradient({
         text: isEditing ? editContent : note.content,
         noteId: note.id,

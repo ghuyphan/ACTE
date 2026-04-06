@@ -118,7 +118,7 @@ const config = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.acte.app',
-    icon: './Untitled.icon',
+    icon: './assets/images/icon/icon-default.png',
     googleServicesFile: iosGoogleServicesFile,
   },
   android: {

@@ -16,7 +16,7 @@ import {
 import {
   clipboardImageDataHasTransparency,
   ClipboardStickerError,
-  hasTransparentClipboardStickerImage,
+  hasClipboardStickerImage,
   importStickerAssetFromClipboard,
   importStickerAssetFromClipboardImageData,
 } from '../../utils/stickerClipboard';
@@ -30,8 +30,16 @@ import {
   setStickerPlacementRenderMode,
   updateStickerPlacementTransform,
   type NoteStickerPlacement,
+  type StickerImportSource,
   StickerImportError,
 } from '../../services/noteStickers';
+import {
+  cleanupSubjectCutoutImportSource,
+  createStickerImportSourceFromSubjectCutout,
+  getSubjectCutoutErrorLogDetails,
+  prepareStickerSubjectCutout,
+  SubjectCutoutError,
+} from '../../services/stickerSubjectCutout';
 
 const STICKER_SOURCE_SHEET_DISMISS_DELAY_MS = 250;
 
@@ -85,6 +93,48 @@ interface UseCaptureCardStickerFlowOptions {
 }
 
 function getStickerImportErrorMessage(t: TFunction, error: unknown) {
+  if (error instanceof SubjectCutoutError) {
+    if (error.code === 'platform-unavailable') {
+      return t(
+        'capture.stickerCutoutPlatformUnavailable',
+        'Foreground cutout is not available on this device yet. You can still import it as a stamp.'
+      );
+    }
+
+    if (error.code === 'module-unavailable') {
+      return t(
+        'capture.stickerCutoutUnavailable',
+        'Foreground cutout is unavailable in this app build. You can still import it as a stamp.'
+      );
+    }
+
+    if (error.code === 'model-unavailable') {
+      return t(
+        'capture.stickerCutoutModelUnavailable',
+        'The on-device cutout model is still getting ready. Try again in a moment, or import this image as a stamp.'
+      );
+    }
+
+    if (error.code === 'no-subject') {
+      return t(
+        'capture.stickerCutoutNoSubject',
+        'We could not find a clear foreground subject in that image. You can still import it as a stamp.'
+      );
+    }
+
+    if (error.code === 'source-unavailable') {
+      return t(
+        'capture.stickerFileUnavailable',
+        'Sticker file is not available on this device.'
+      );
+    }
+
+    return t(
+      'capture.stickerCutoutFailed',
+      'We could not isolate the subject from that image. You can still import it as a stamp.'
+    );
+  }
+
   if (error instanceof StickerImportError) {
     if (error.code === 'unsupported-format') {
       return t(
@@ -111,6 +161,35 @@ function getStickerImportErrorMessage(t: TFunction, error: unknown) {
   return error instanceof Error
     ? error.message
     : t('capture.photoImportFailed', 'We could not import that photo right now.');
+}
+
+function shouldOfferStampFallback(error: unknown) {
+  return (
+    error instanceof SubjectCutoutError &&
+    (
+      error.code === 'module-unavailable' ||
+      error.code === 'platform-unavailable' ||
+      error.code === 'model-unavailable' ||
+      error.code === 'no-subject' ||
+      error.code === 'processing-failed'
+    )
+  );
+}
+
+function logStickerImportFailure(
+  stage: string,
+  source: StickerImportSource,
+  intent: StickerImportIntent,
+  error: unknown
+) {
+  console.warn('[stickers] import failed', {
+    stage,
+    intent,
+    sourceUri: source.uri,
+    mimeType: source.mimeType ?? null,
+    name: source.name ?? null,
+    error: getSubjectCutoutErrorLogDetails(error),
+  });
 }
 
 function getClipboardStickerMessages(t: TFunction) {
@@ -154,6 +233,13 @@ function getClipboardStickerAlertTitle(t: TFunction, error: unknown) {
   return t('capture.error', 'Error');
 }
 
+function getClipboardStickerTransparencyMessage(t: TFunction) {
+  return t(
+    'capture.stickerMissingTransparency',
+    'If you want a floating sticker, use a transparent PNG or WebP. Regular photos will import as stamps.'
+  );
+}
+
 export function useCaptureCardStickerFlow({
   captureMode,
   t,
@@ -185,6 +271,8 @@ export function useCaptureCardStickerFlow({
     y: cardSize / 2,
   });
   const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stickerSourceClipboardRequestIdRef = useRef(0);
+  const subjectCutoutPrewarmRequestedRef = useRef(false);
 
   const useNativeInlinePasteButton = Platform.OS === 'ios' && isPasteButtonAvailable;
   const useFallbackInlinePasteButton = Platform.OS === 'android';
@@ -208,8 +296,8 @@ export function useCaptureCardStickerFlow({
     !importingSticker;
 
   const showInlinePasteButton =
-    shouldCheckInlinePasteClipboard &&
-    (inlinePasteCanPasteFromClipboard || inlinePasteLoading);
+    inlinePasteLoading ||
+    (shouldCheckInlinePasteClipboard && inlinePasteCanPasteFromClipboard);
 
   const clearPastePromptTimeout = useCallback(() => {
     if (pastePromptTimeoutRef.current) {
@@ -230,6 +318,46 @@ export function useCaptureCardStickerFlow({
       pastePromptTimeoutRef.current = null;
     }, 2600);
   }, [clearPastePromptTimeout]);
+
+  const importStickerFromSource = useCallback(
+    async (source: StickerImportSource, intent: StickerImportIntent) => {
+      let preparedSource = source;
+      let cleanupUri: string | null = null;
+
+      try {
+        if (intent === 'sticker') {
+          let cutoutSource;
+          try {
+            cutoutSource = await createStickerImportSourceFromSubjectCutout(source);
+          } catch (error) {
+            if (error instanceof SubjectCutoutError && error.code === 'model-unavailable') {
+              logStickerImportFailure('cutout-first-attempt', source, intent, error);
+              await prepareStickerSubjectCutout().catch(() => undefined);
+              cutoutSource = await createStickerImportSourceFromSubjectCutout(source);
+            } else {
+              throw error;
+            }
+          }
+          preparedSource = cutoutSource.source;
+          cleanupUri = cutoutSource.cleanupUri;
+        }
+
+        const importedAsset = await importStickerAsset(
+          preparedSource,
+          intent === 'sticker' ? { requiresTransparency: true } : undefined
+        );
+        const nextPlacement = createStickerPlacement(
+          importedAsset,
+          stickerPlacements,
+          intent === 'stamp' ? { renderMode: 'stamp' } : undefined
+        );
+        applyImportedSticker(nextPlacement);
+      } finally {
+        await cleanupSubjectCutoutImportSource(cleanupUri);
+      }
+    },
+    [applyImportedSticker, stickerPlacements]
+  );
 
   const handleImportSticker = useCallback(
     async (intent: StickerImportIntent = 'sticker') => {
@@ -274,37 +402,83 @@ export function useCaptureCardStickerFlow({
           return;
         }
 
-        const importedAsset = await importStickerAsset(
-          {
-            uri: result.assets[0].uri,
-            mimeType: result.assets[0].mimeType,
-            name: result.assets[0].fileName,
-          },
-          intent === 'sticker' ? { requiresTransparency: true } : undefined
-        );
-        const nextPlacement = createStickerPlacement(
-          importedAsset,
-          stickerPlacements,
-          intent === 'stamp' ? { renderMode: 'stamp' } : undefined
-        );
-        applyImportedSticker(nextPlacement);
+        const importSource = {
+          uri: result.assets[0].uri,
+          mimeType: result.assets[0].mimeType,
+          name: result.assets[0].fileName,
+        };
+
+        try {
+          await importStickerFromSource(importSource, intent);
+        } catch (error) {
+          logStickerImportFailure('import-sticker', importSource, intent, error);
+          if (shouldOfferStampFallback(error)) {
+            showAppAlert(
+              t('capture.stickerCutoutFallbackTitle', 'Could not make a sticker'),
+              getStickerImportErrorMessage(t, error),
+              [
+                {
+                  text: t('capture.cancel', 'Cancel'),
+                  style: 'cancel',
+                },
+                {
+                  text: t('capture.importAsStamp', 'Import as stamp'),
+                  onPress: () => {
+                    setImportingSticker(true);
+                    void importStickerFromSource(importSource, 'stamp')
+                      .catch((stampError) => {
+                        logStickerImportFailure('stamp-fallback', importSource, 'stamp', stampError);
+                        showAppAlert(
+                          t('capture.error', 'Error'),
+                          getStickerImportErrorMessage(t, stampError)
+                        );
+                      })
+                      .finally(() => {
+                        setImportingSticker(false);
+                      });
+                  },
+                },
+              ]
+            );
+            return;
+          }
+
+          throw error;
+        }
       } catch (error) {
-        console.warn('Sticker import failed:', error);
+        logStickerImportFailure(
+          'handle-import-sticker',
+          {
+            uri: 'unknown',
+            mimeType: null,
+            name: null,
+          },
+          intent,
+          error
+        );
         showAppAlert(t('capture.error', 'Error'), getStickerImportErrorMessage(t, error));
       } finally {
         setImportingSticker(false);
       }
     },
     [
-      applyImportedSticker,
       dismissOverlay,
       dismissPastePrompt,
       enablePhotoStickers,
+      importStickerFromSource,
       importingSticker,
-      stickerPlacements,
       t,
     ]
   );
+
+  useEffect(() => {
+    if (!enablePhotoStickers || subjectCutoutPrewarmRequestedRef.current) {
+      return;
+    }
+
+    subjectCutoutPrewarmRequestedRef.current = true;
+    void prepareStickerSubjectCutout().catch(() => undefined);
+  }, [enablePhotoStickers]);
 
   useEffect(() => {
     if (showStickerSourceSheet || !pendingStickerSourceAction) {
@@ -330,7 +504,10 @@ export function useCaptureCardStickerFlow({
     setImportingSticker(true);
 
     try {
-      const importedAsset = await importStickerAssetFromClipboard(getClipboardStickerMessages(t));
+      const importedAsset = await importStickerAssetFromClipboard(getClipboardStickerMessages(t), {
+        requiresTransparency: true,
+        transparencyRequiredMessage: getClipboardStickerTransparencyMessage(t),
+      });
       const nextPlacement = createStickerPlacement(importedAsset, stickerPlacements);
       applyImportedSticker(nextPlacement);
     } catch (error) {
@@ -380,7 +557,11 @@ export function useCaptureCardStickerFlow({
 
         const importedAsset = await importStickerAssetFromClipboardImageData(
           payload.data,
-          getClipboardStickerMessages(t)
+          getClipboardStickerMessages(t),
+          {
+            requiresTransparency: true,
+            transparencyRequiredMessage: getClipboardStickerTransparencyMessage(t),
+          }
         );
         const nextPlacement = createStickerPlacement(importedAsset, stickerPlacements);
         applyImportedSticker(nextPlacement);
@@ -431,7 +612,7 @@ export function useCaptureCardStickerFlow({
       const locationX = typeof event.nativeEvent.locationX === 'number' ? event.nativeEvent.locationX : cardSize / 2;
       const locationY = typeof event.nativeEvent.locationY === 'number' ? event.nativeEvent.locationY : cardSize / 2;
 
-      const canPasteFromClipboard = await hasTransparentClipboardStickerImage();
+      const canPasteFromClipboard = await hasClipboardStickerImage();
       if (!canPasteFromClipboard) {
         dismissPastePrompt();
         return;
@@ -469,16 +650,30 @@ export function useCaptureCardStickerFlow({
     setShowStickerActionsSheet(false);
   }, []);
 
-  const handleShowStickerSourceOptions = useCallback(async () => {
+  const handleShowStickerSourceOptions = useCallback(() => {
     if (!enablePhotoStickers || importingSticker) {
       return;
     }
 
     dismissOverlay();
     dismissPastePrompt();
-    const canPasteFromClipboard = await hasTransparentClipboardStickerImage();
-    setStickerSourceCanPasteFromClipboard(canPasteFromClipboard);
+    setStickerSourceCanPasteFromClipboard(false);
     setShowStickerSourceSheet(true);
+
+    const requestId = stickerSourceClipboardRequestIdRef.current + 1;
+    stickerSourceClipboardRequestIdRef.current = requestId;
+
+    void hasClipboardStickerImage()
+      .then((canPasteFromClipboard) => {
+        if (stickerSourceClipboardRequestIdRef.current === requestId) {
+          setStickerSourceCanPasteFromClipboard(canPasteFromClipboard);
+        }
+      })
+      .catch(() => {
+        if (stickerSourceClipboardRequestIdRef.current === requestId) {
+          setStickerSourceCanPasteFromClipboard(false);
+        }
+      });
   }, [dismissOverlay, dismissPastePrompt, enablePhotoStickers, importingSticker]);
 
   const handleSelectStickerSourceClipboard = useCallback(() => {
@@ -682,7 +877,7 @@ export function useCaptureCardStickerFlow({
     let subscription: Subscription | null = null;
 
     const syncClipboardAvailability = async () => {
-      const canPasteFromClipboard = await hasTransparentClipboardStickerImage();
+      const canPasteFromClipboard = await hasClipboardStickerImage();
       if (active) {
         setInlinePasteCanPasteFromClipboard(canPasteFromClipboard);
       }

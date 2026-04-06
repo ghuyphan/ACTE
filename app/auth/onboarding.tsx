@@ -1,7 +1,7 @@
 import { GlassView } from '../../components/ui/GlassView';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -80,33 +80,38 @@ export default function OnboardingScreen() {
     const [isCompleting, setIsCompleting] = useState(false);
     const isNotificationStep = step === SLIDES.length - 1;
 
-    useEffect(() => {
-        let cancelled = false;
+    useFocusEffect(
+        useCallback(() => {
+            let cancelled = false;
 
-        if (user) {
-            void completeOnboardingAndEnterApp((route) => {
-                if (!cancelled) {
-                    router.replace(route);
-                }
-            })
-                .catch((error) => {
-                    console.warn('Failed to persist onboarding state:', error);
-                });
-            return;
-        }
+            if (user) {
+                void completeOnboardingAndEnterApp((route) => {
+                    if (!cancelled) {
+                        router.replace(route);
+                    }
+                })
+                    .catch((error) => {
+                        console.warn('Failed to persist onboarding state:', error);
+                    });
 
-        void getPersistentItem(HAS_LAUNCHED_KEY)
-            .then((hasLaunched) => {
-                if (!cancelled && hasLaunched === 'true') {
-                    router.replace('/');
-                }
-            })
-            .catch(() => undefined);
+                return () => {
+                    cancelled = true;
+                };
+            }
 
-        return () => {
-            cancelled = true;
-        };
-    }, [router, user]);
+            void getPersistentItem(HAS_LAUNCHED_KEY)
+                .then((hasLaunched) => {
+                    if (!cancelled && hasLaunched === 'true') {
+                        router.replace('/');
+                    }
+                })
+                .catch(() => undefined);
+
+            return () => {
+                cancelled = true;
+            };
+        }, [router, user])
+    );
 
     const completeOnboarding = async (options?: { allowWhileCompleting?: boolean; keepLoadingState?: boolean }) => {
         if (isCompleting && !options?.allowWhileCompleting) {

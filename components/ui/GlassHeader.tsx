@@ -1,18 +1,82 @@
-import { ReactNode } from 'react';
+import { ReactNode, RefObject } from 'react';
 import { Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  type SharedValue,
+  useAnimatedStyle,
+} from 'react-native-reanimated';
 import { Layout, Shadows } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
-import { isOlderIOS } from '../../utils/platform';
 import { GlassView } from './GlassView';
+import { BlurView } from 'expo-blur';
+
+const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 interface GlassHeaderProps {
   topInset: number;
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  docked?: boolean;
+  blurTarget?: RefObject<View | null>;
+  dockedBlurred?: boolean;
+  dockedBlurScrollOffset?: SharedValue<number>;
 }
 
-export default function GlassHeader({ topInset, children, style }: GlassHeaderProps) {
-  const { colors, isDark } = useTheme();
+export default function GlassHeader({
+  topInset,
+  children,
+  style,
+  docked = false,
+  blurTarget,
+  dockedBlurred = false,
+  dockedBlurScrollOffset,
+}: GlassHeaderProps) {
+  const { isDark } = useTheme();
+  const isAndroid = Platform.OS === 'android';
+  const dockedBlurAnimatedStyle = useAnimatedStyle(() => {
+    const offsetY = dockedBlurScrollOffset?.value ?? 0;
+    return {
+      opacity: dockedBlurred
+        ? interpolate(offsetY, [0, 8, 28, 64], [0, 0, 0.55, 1], Extrapolation.CLAMP)
+        : 0,
+    };
+  });
+
+  if (docked) {
+    return (
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.wrapper,
+          styles.dockedWrapper,
+          style,
+        ]}
+      >
+        <View
+          style={[
+            styles.dockedContainer,
+            {
+              height: topInset + Layout.headerHeight,
+            },
+          ]}
+        >
+          {dockedBlurred ? (
+            <AnimatedBlurView
+              intensity={isAndroid ? 26 : 14}
+              tint={isDark ? 'dark' : 'light'}
+              blurTarget={isAndroid ? blurTarget : undefined}
+              blurReductionFactor={isAndroid ? 1 : undefined}
+              blurMethod={isAndroid ? 'dimezisBlurViewSdk31Plus' : undefined}
+              style={[StyleSheet.absoluteFill, dockedBlurAnimatedStyle]}
+            />
+          ) : null}
+          <View style={{ height: topInset }} />
+          <View style={styles.content}>{children}</View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -31,18 +95,7 @@ export default function GlassHeader({ topInset, children, style }: GlassHeaderPr
         glassEffectStyle="regular"
         colorScheme={isDark ? 'dark' : 'light'}
       >
-        {isOlderIOS ? (
-          <View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFill,
-              {
-                backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)',
-              },
-            ]}
-          />
-        ) : null}
-        <View style={[styles.content, { borderColor: colors.border }]}>{children}</View>
+        <View style={styles.content}>{children}</View>
       </GlassView>
     </View>
   );
@@ -57,6 +110,10 @@ const styles = StyleSheet.create({
     zIndex: 100,
     paddingBottom: Layout.floatingGap,
   },
+  dockedWrapper: {
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+  },
   container: {
     borderRadius: 30,
     overflow: 'hidden',
@@ -69,6 +126,10 @@ const styles = StyleSheet.create({
           elevation: 2,
         }
       : Shadows.floating),
+  },
+  dockedContainer: {
+    borderRadius: 0,
+    overflow: 'visible',
   },
   content: {
     flex: 1,

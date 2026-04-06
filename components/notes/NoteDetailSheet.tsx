@@ -52,9 +52,17 @@ import {
     StickerImportError,
     setStickerPlacementOutlineEnabled,
     type NoteStickerPlacement,
+    type StickerImportSource,
     updateStickerPlacementTransform,
 } from '../../services/noteStickers';
 import { getNotePhotoUri } from '../../services/photoStorage';
+import {
+    cleanupSubjectCutoutImportSource,
+    createStickerImportSourceFromSubjectCutout,
+    getSubjectCutoutErrorLogDetails,
+    prepareStickerSubjectCutout,
+    SubjectCutoutError,
+} from '../../services/stickerSubjectCutout';
 import {
     getFallbackFreeNoteColor,
     getPremiumNoteSaveDecision,
@@ -89,6 +97,48 @@ function getStickerImportErrorMessage(
     t: ReturnType<typeof useTranslation>['t'],
     error: unknown
 ) {
+    if (error instanceof SubjectCutoutError) {
+        if (error.code === 'platform-unavailable') {
+            return t(
+                'capture.stickerCutoutPlatformUnavailable',
+                'Foreground cutout is not available on this device yet. You can still import it as a stamp.'
+            );
+        }
+
+        if (error.code === 'module-unavailable') {
+            return t(
+                'capture.stickerCutoutUnavailable',
+                'Foreground cutout is unavailable in this app build. You can still import it as a stamp.'
+            );
+        }
+
+        if (error.code === 'model-unavailable') {
+            return t(
+                'capture.stickerCutoutModelUnavailable',
+                'The on-device cutout model is still getting ready. Try again in a moment, or import this image as a stamp.'
+            );
+        }
+
+        if (error.code === 'no-subject') {
+            return t(
+                'capture.stickerCutoutNoSubject',
+                'We could not find a clear foreground subject in that image. You can still import it as a stamp.'
+            );
+        }
+
+        if (error.code === 'source-unavailable') {
+            return t(
+                'capture.stickerFileUnavailable',
+                'Sticker file is not available on this device.'
+            );
+        }
+
+        return t(
+            'capture.stickerCutoutFailed',
+            'We could not isolate the subject from that image. You can still import it as a stamp.'
+        );
+    }
+
     if (error instanceof StickerImportError) {
         if (error.code === 'unsupported-format') {
             return t(
@@ -115,6 +165,35 @@ function getStickerImportErrorMessage(
     return error instanceof Error
         ? error.message
         : t('capture.photoImportFailed', 'We could not import that photo right now.');
+}
+
+function shouldOfferStampFallback(error: unknown) {
+    return (
+        error instanceof SubjectCutoutError &&
+        (
+            error.code === 'module-unavailable' ||
+            error.code === 'platform-unavailable' ||
+            error.code === 'model-unavailable' ||
+            error.code === 'no-subject' ||
+            error.code === 'processing-failed'
+        )
+    );
+}
+
+function logStickerImportFailure(
+    stage: string,
+    source: StickerImportSource,
+    intent: StickerImportIntent,
+    error: unknown
+) {
+    console.warn('[stickers] detail import failed', {
+        stage,
+        intent,
+        sourceUri: source.uri,
+        mimeType: source.mimeType ?? null,
+        name: source.name ?? null,
+        error: getSubjectCutoutErrorLogDetails(error),
+    });
 }
 
 interface FeedbackState {
@@ -184,6 +263,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const closeCompletionHandledRef = useRef(false);
     const activeNoteKeyRef = useRef(`note-detail-${Math.random().toString(36).slice(2)}`);
     const lastFreeEditNoteColorRef = useRef('marigold-glow');
+    const subjectCutoutPrewarmRequestedRef = useRef(false);
     const lockedPremiumNoteColorIds = useMemo(
         () => (tier === 'plus' ? [] : PREMIUM_NOTE_COLOR_IDS),
         [tier]
@@ -633,6 +713,49 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }, 120);
     }, [isEditing]);
 
+    const importStickerFromSource = useCallback(async (
+        source: StickerImportSource,
+        intent: StickerImportIntent
+    ) => {
+        let preparedSource = source;
+        let cleanupUri: string | null = null;
+
+        try {
+            if (intent === 'sticker') {
+                let cutoutSource;
+                try {
+                    cutoutSource = await createStickerImportSourceFromSubjectCutout(source);
+                } catch (error) {
+                    if (error instanceof SubjectCutoutError && error.code === 'model-unavailable') {
+                        logStickerImportFailure('cutout-first-attempt', source, intent, error);
+                        await prepareStickerSubjectCutout().catch(() => undefined);
+                        cutoutSource = await createStickerImportSourceFromSubjectCutout(source);
+                    } else {
+                        throw error;
+                    }
+                }
+                preparedSource = cutoutSource.source;
+                cleanupUri = cutoutSource.cleanupUri;
+            }
+
+            const importedAsset = await importStickerAsset(
+                preparedSource,
+                intent === 'sticker' ? { requiresTransparency: true } : undefined
+            );
+            const nextPlacement = createStickerPlacement(
+                importedAsset,
+                editStickerPlacements,
+                intent === 'stamp' ? { renderMode: 'stamp' } : undefined
+            );
+            setEditStickerPlacements((current) => [...current, nextPlacement]);
+            setSelectedStickerId(nextPlacement.id);
+            setStickerModeEnabled(true);
+            setDoodleModeEnabled(false);
+        } finally {
+            await cleanupSubjectCutoutImportSource(cleanupUri);
+        }
+    }, [editStickerPlacements]);
+
     const handleImportSticker = useCallback(async (intent: StickerImportIntent = 'sticker') => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
             return;
@@ -675,23 +798,60 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 return;
             }
 
-            const importedAsset = await importStickerAsset({
+            const importSource = {
                 uri: result.assets[0].uri,
                 mimeType: result.assets[0].mimeType,
                 name: result.assets[0].fileName,
-            }, intent === 'sticker' ? { requiresTransparency: true } : undefined);
+            };
 
-            const nextPlacement = createStickerPlacement(
-                importedAsset,
-                editStickerPlacements,
-                intent === 'stamp' ? { renderMode: 'stamp' } : undefined
-            );
-            setEditStickerPlacements((current) => [...current, nextPlacement]);
-            setSelectedStickerId(nextPlacement.id);
-            setStickerModeEnabled(true);
-            setDoodleModeEnabled(false);
+            try {
+                await importStickerFromSource(importSource, intent);
+            } catch (error) {
+                logStickerImportFailure('import-sticker', importSource, intent, error);
+                if (shouldOfferStampFallback(error)) {
+                    showAppAlert(
+                        t('capture.stickerCutoutFallbackTitle', 'Could not make a sticker'),
+                        getStickerImportErrorMessage(t, error),
+                        [
+                            {
+                                text: t('capture.cancel', 'Cancel'),
+                                style: 'cancel',
+                            },
+                            {
+                                text: t('capture.importAsStamp', 'Import as stamp'),
+                                onPress: () => {
+                                    setImportingSticker(true);
+                                    void importStickerFromSource(importSource, 'stamp')
+                                        .catch((stampError) => {
+                                            logStickerImportFailure('stamp-fallback', importSource, 'stamp', stampError);
+                                            showAppAlert(
+                                                t('capture.error', 'Error'),
+                                                getStickerImportErrorMessage(t, stampError)
+                                            );
+                                        })
+                                        .finally(() => {
+                                            setImportingSticker(false);
+                                        });
+                                },
+                            },
+                        ]
+                    );
+                    return;
+                }
+
+                throw error;
+            }
         } catch (error) {
-            console.warn('Sticker import failed:', error);
+            logStickerImportFailure(
+                'handle-import-sticker',
+                {
+                    uri: 'unknown',
+                    mimeType: null,
+                    name: null,
+                },
+                intent,
+                error
+            );
             showAppAlert(
                 t('capture.error', 'Error'),
                 getStickerImportErrorMessage(t, error)
@@ -699,7 +859,16 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         } finally {
             setImportingSticker(false);
         }
-    }, [dismissPastePrompt, editStickerPlacements, importingSticker, isEditing, note, t]);
+    }, [dismissPastePrompt, importStickerFromSource, importingSticker, isEditing, note, t]);
+
+    useEffect(() => {
+        if (!ENABLE_PHOTO_STICKERS || subjectCutoutPrewarmRequestedRef.current) {
+            return;
+        }
+
+        subjectCutoutPrewarmRequestedRef.current = true;
+        void prepareStickerSubjectCutout().catch(() => undefined);
+    }, []);
     useEffect(() => {
         if (showStickerSourceSheet || !pendingStickerSourceAction) {
             return;
@@ -742,6 +911,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 permissionDenied: t(
                     'capture.clipboardStickerPermissionDeniedMsg',
                     'This device will not let Noto read that clipboard image right now. Try copying it again, or import it from Photos instead.'
+                ),
+            }, {
+                requiresTransparency: true,
+                transparencyRequiredMessage: t(
+                    'capture.stickerMissingTransparency',
+                    'If you want a floating sticker, use a transparent PNG or WebP. Regular photos will import as stamps.'
                 ),
             });
 
