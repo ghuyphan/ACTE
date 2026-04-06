@@ -13,6 +13,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import Reanimated, {
   Easing,
   interpolate,
@@ -27,12 +28,12 @@ import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import {
+  getStampCutterBaseScale,
   getStampCutterWindowRect,
-  normalizeStampCutterTransform,
+  normalizeStampCutterPreviewTransform,
+  resolveStampCutterPreviewZoomTransform,
+  snapStampCutterRotation,
   STAMP_CUTTER_OVERLAY_ASPECT_RATIO,
-  STAMP_CUTTER_MAX_ZOOM,
-  STAMP_CUTTER_MIN_ZOOM,
-  STAMP_CUTTER_ROTATION_SNAP_DEGREES,
   type StampCutterDraft,
   type StampCutterTransform,
 } from '../../../services/stampCutter';
@@ -48,114 +49,6 @@ const RESET_TRANSFORM: StampCutterTransform = {
   offsetY: 0,
   rotation: 0,
 };
-
-function clamp(value: number, minValue: number, maxValue: number) {
-  'worklet';
-
-  return Math.min(maxValue, Math.max(minValue, value));
-}
-
-function normalizePreviewRotation(rotation: number | null | undefined) {
-  const safeRotation = Number.isFinite(rotation) ? rotation ?? 0 : 0;
-  const normalized = ((((safeRotation + 180) % 360) + 360) % 360) - 180;
-
-  return Math.abs(normalized) < 0.0001 ? 0 : normalized;
-}
-
-function snapPreviewRotation(rotation: number | null | undefined) {
-  const normalized = normalizePreviewRotation(rotation);
-  return Math.abs(normalized) <= STAMP_CUTTER_ROTATION_SNAP_DEGREES ? 0 : normalized;
-}
-
-function normalizePreviewRotationWorklet(rotation: number | null | undefined) {
-  'worklet';
-
-  const safeRotation = Number.isFinite(rotation) ? rotation ?? 0 : 0;
-  const normalized = ((((safeRotation + 180) % 360) + 360) % 360) - 180;
-
-  return Math.abs(normalized) < 0.0001 ? 0 : normalized;
-}
-
-function snapPreviewRotationWorklet(rotation: number | null | undefined) {
-  'worklet';
-
-  const normalized = normalizePreviewRotationWorklet(rotation);
-  return Math.abs(normalized) <= STAMP_CUTTER_ROTATION_SNAP_DEGREES ? 0 : normalized;
-}
-
-function normalizePreviewTransform(transform: Partial<StampCutterTransform>): StampCutterTransform {
-  const zoom = clamp(
-    Number.isFinite(transform.zoom) ? transform.zoom ?? 1 : 1,
-    STAMP_CUTTER_MIN_ZOOM,
-    STAMP_CUTTER_MAX_ZOOM
-  );
-  const rotation = normalizePreviewRotation(transform.rotation);
-
-  return {
-    zoom,
-    rotation,
-    offsetX: Number.isFinite(transform.offsetX) ? transform.offsetX ?? 0 : 0,
-    offsetY: Number.isFinite(transform.offsetY) ? transform.offsetY ?? 0 : 0,
-  };
-}
-
-function normalizePreviewTransformWorklet(transform: Partial<StampCutterTransform>) {
-  'worklet';
-
-  const zoom = clamp(
-    Number.isFinite(transform.zoom) ? transform.zoom ?? 1 : 1,
-    STAMP_CUTTER_MIN_ZOOM,
-    STAMP_CUTTER_MAX_ZOOM
-  );
-  const rotation = normalizePreviewRotationWorklet(transform.rotation);
-
-  return {
-    zoom,
-    rotation,
-    offsetX: Number.isFinite(transform.offsetX) ? transform.offsetX ?? 0 : 0,
-    offsetY: Number.isFinite(transform.offsetY) ? transform.offsetY ?? 0 : 0,
-  };
-}
-
-function resolveZoomPreviewTransformWorklet(
-  sourceSize: { width: number; height: number },
-  viewportSize: { width: number; height: number },
-  nextZoom: number,
-  anchorX: number,
-  anchorY: number,
-  startTransform: StampCutterTransform
-) {
-  'worklet';
-
-  const startNormalized = normalizePreviewTransformWorklet(startTransform);
-  const baseScale = Math.max(
-    Math.max(1, viewportSize.width) / Math.max(1, sourceSize.width),
-    Math.max(1, viewportSize.height) / Math.max(1, sourceSize.height)
-  );
-  const startImageWidth = Math.max(1, sourceSize.width) * baseScale * startNormalized.zoom;
-  const startImageHeight = Math.max(1, sourceSize.height) * baseScale * startNormalized.zoom;
-  const startLeft = (viewportSize.width - startImageWidth) / 2 + startNormalized.offsetX;
-  const startTop = (viewportSize.height - startImageHeight) / 2 + startNormalized.offsetY;
-  const relativeX =
-    startImageWidth > 0 ? clamp((anchorX - startLeft) / startImageWidth, 0, 1) : 0.5;
-  const relativeY =
-    startImageHeight > 0 ? clamp((anchorY - startTop) / startImageHeight, 0, 1) : 0.5;
-  const provisional = normalizePreviewTransformWorklet({
-    zoom: nextZoom,
-    offsetX: startTransform.offsetX,
-    offsetY: startTransform.offsetY,
-    rotation: startTransform.rotation,
-  });
-  const provisionalImageWidth = Math.max(1, sourceSize.width) * baseScale * provisional.zoom;
-  const provisionalImageHeight = Math.max(1, sourceSize.height) * baseScale * provisional.zoom;
-
-  return normalizePreviewTransformWorklet({
-    zoom: nextZoom,
-    offsetX: anchorX - viewportSize.width / 2 + (0.5 - relativeX) * provisionalImageWidth,
-    offsetY: anchorY - viewportSize.height / 2 + (0.5 - relativeY) * provisionalImageHeight,
-    rotation: startTransform.rotation,
-  });
-}
 
 interface StampCutterEditorProps {
   visible: boolean;
@@ -219,15 +112,15 @@ function StampCutterEditor({
 
   const stageWidth = Math.min(windowWidth - 8, EDITOR_STAGE_MAX_WIDTH);
   const stageHeight = stageWidth / STAMP_CUTTER_OVERLAY_ASPECT_RATIO;
+  const cropRect = useMemo(
+    () => getStampCutterWindowRect({ width: stageWidth, height: stageHeight }),
+    [stageHeight, stageWidth]
+  );
   const viewportSize = useMemo(
     () => ({
       width: stageWidth,
       height: stageHeight,
     }),
-    [stageHeight, stageWidth]
-  );
-  const cropRect = useMemo(
-    () => getStampCutterWindowRect({ width: stageWidth, height: stageHeight }),
     [stageHeight, stageWidth]
   );
   const sourceSize = useMemo(
@@ -238,13 +131,7 @@ function StampCutterEditor({
     [draft?.height, draft?.width]
   );
   const baseScale = useMemo(
-    () =>
-      normalizeStampCutterTransform(sourceSize, viewportSize, {
-        zoom: 1,
-        offsetX: 0,
-        offsetY: 0,
-        rotation: 0,
-      }).baseScale,
+    () => getStampCutterBaseScale(sourceSize, viewportSize),
     [sourceSize, viewportSize]
   );
   const busy = loading || cutAnimating;
@@ -255,13 +142,18 @@ function StampCutterEditor({
 
   const animateToTransform = useCallback(
     (nextTransform: StampCutterTransform) => {
-      const normalizedTransform = normalizePreviewTransform(nextTransform);
+      const normalizedTransform = normalizeStampCutterPreviewTransform(
+        sourceSize,
+        viewportSize,
+        cropRect,
+        nextTransform
+      );
       const config = reduceMotionEnabled
         ? { duration: 120 }
         : {
-            damping: 18,
-            stiffness: 220,
-            mass: 0.7,
+            damping: 24,
+            stiffness: 170,
+            mass: 0.85,
           };
       zoomValue.value = reduceMotionEnabled
         ? withTiming(normalizedTransform.zoom, config)
@@ -276,7 +168,7 @@ function StampCutterEditor({
         ? withTiming(normalizedTransform.rotation, config)
         : withSpring(normalizedTransform.rotation, config);
     },
-    [offsetXValue, offsetYValue, reduceMotionEnabled, rotationValue, zoomValue]
+    [cropRect, offsetXValue, offsetYValue, reduceMotionEnabled, rotationValue, sourceSize, viewportSize, zoomValue]
   );
 
   const beginInteractionWorklet = useCallback(() => {
@@ -293,7 +185,7 @@ function StampCutterEditor({
       return;
     }
 
-    const snappedRotation = snapPreviewRotationWorklet(rotationValue.value);
+    const snappedRotation = snapStampCutterRotation(rotationValue.value);
     if (snappedRotation === rotationValue.value) {
       return;
     }
@@ -304,9 +196,9 @@ function StampCutterEditor({
     }
 
     rotationValue.value = withSpring(snappedRotation, {
-      damping: 18,
-      stiffness: 220,
-      mass: 0.7,
+      damping: 24,
+      stiffness: 170,
+      mass: 0.85,
     });
   }, [activeGestureCountValue, reduceMotionEnabled, rotationValue]);
 
@@ -332,19 +224,24 @@ function StampCutterEditor({
           panStartYValue.value = offsetYValue.value;
         })
         .onUpdate((event) => {
-          const nextTransform = normalizePreviewTransformWorklet({
-            zoom: zoomValue.value,
-            offsetX: panStartXValue.value + event.translationX,
-            offsetY: panStartYValue.value + event.translationY,
-            rotation: rotationValue.value,
-          });
+          const nextTransform = normalizeStampCutterPreviewTransform(
+            sourceSize,
+            viewportSize,
+            cropRect,
+            {
+              zoom: zoomValue.value,
+              offsetX: panStartXValue.value + event.translationX,
+              offsetY: panStartYValue.value + event.translationY,
+              rotation: rotationValue.value,
+            }
+          );
           offsetXValue.value = nextTransform.offsetX;
           offsetYValue.value = nextTransform.offsetY;
         })
         .onFinalize(() => {
           finalizeInteractionWorklet();
         }),
-    [beginInteractionWorklet, busy, finalizeInteractionWorklet, offsetXValue, offsetYValue, panStartXValue, panStartYValue, rotationValue, zoomValue]
+    [beginInteractionWorklet, busy, cropRect, finalizeInteractionWorklet, offsetXValue, offsetYValue, panStartXValue, panStartYValue, rotationValue, sourceSize, viewportSize, zoomValue]
   );
 
   const pinchGesture = useMemo(
@@ -359,9 +256,10 @@ function StampCutterEditor({
           pinchStartOffsetYValue.value = offsetYValue.value;
         })
         .onUpdate((event) => {
-          const nextTransform = resolveZoomPreviewTransformWorklet(
+          const nextTransform = resolveStampCutterPreviewZoomTransform(
             sourceSize,
             viewportSize,
+            cropRect,
             pinchStartZoomValue.value * event.scale,
             event.focalX,
             event.focalY,
@@ -379,7 +277,7 @@ function StampCutterEditor({
         .onFinalize(() => {
           finalizeInteractionWorklet();
         }),
-    [beginInteractionWorklet, busy, finalizeInteractionWorklet, offsetXValue, offsetYValue, pinchStartOffsetXValue, pinchStartOffsetYValue, pinchStartZoomValue, rotationValue, sourceSize, viewportSize, zoomValue]
+    [beginInteractionWorklet, busy, cropRect, finalizeInteractionWorklet, offsetXValue, offsetYValue, pinchStartOffsetXValue, pinchStartOffsetYValue, pinchStartZoomValue, rotationValue, sourceSize, viewportSize, zoomValue]
   );
 
   const rotationGesture = useMemo(
@@ -392,12 +290,17 @@ function StampCutterEditor({
           rotationStartValue.value = rotationValue.value;
         })
         .onUpdate((event) => {
-          const nextTransform = normalizePreviewTransformWorklet({
-            zoom: zoomValue.value,
-            offsetX: offsetXValue.value,
-            offsetY: offsetYValue.value,
-            rotation: rotationStartValue.value + (event.rotation * 180) / Math.PI,
-          });
+          const nextTransform = normalizeStampCutterPreviewTransform(
+            sourceSize,
+            viewportSize,
+            cropRect,
+            {
+              zoom: zoomValue.value,
+              offsetX: offsetXValue.value,
+              offsetY: offsetYValue.value,
+              rotation: rotationStartValue.value + (event.rotation * 180) / Math.PI,
+            }
+          );
           rotationValue.value = nextTransform.rotation ?? 0;
           offsetXValue.value = nextTransform.offsetX;
           offsetYValue.value = nextTransform.offsetY;
@@ -405,7 +308,7 @@ function StampCutterEditor({
         .onFinalize(() => {
           finalizeInteractionWorklet();
         }),
-    [beginInteractionWorklet, busy, finalizeInteractionWorklet, offsetXValue, offsetYValue, rotationStartValue, rotationValue, zoomValue]
+    [beginInteractionWorklet, busy, cropRect, finalizeInteractionWorklet, offsetXValue, offsetYValue, rotationStartValue, rotationValue, sourceSize, viewportSize, zoomValue]
   );
 
   const doubleTapGesture = useMemo(
@@ -431,9 +334,10 @@ function StampCutterEditor({
             return;
           }
 
-          const nextTransform = resolveZoomPreviewTransformWorklet(
+          const nextTransform = resolveStampCutterPreviewZoomTransform(
             sourceSize,
             viewportSize,
+            cropRect,
             currentTransform.zoom * 1.8,
             event.x,
             event.y,
@@ -444,11 +348,11 @@ function StampCutterEditor({
             zoom: nextTransform.zoom,
             offsetX: nextTransform.offsetX,
             offsetY: nextTransform.offsetY,
-            rotation: snapPreviewRotation(nextTransform.rotation),
+            rotation: snapStampCutterRotation(nextTransform.rotation),
           });
         });
     },
-    [animateToTransform, busy, handleReset, offsetXValue, offsetYValue, rotationValue, sourceSize, viewportSize, zoomValue]
+    [animateToTransform, busy, cropRect, handleReset, offsetXValue, offsetYValue, rotationValue, sourceSize, viewportSize, zoomValue]
   );
 
   const gesture = useMemo(
@@ -467,11 +371,11 @@ function StampCutterEditor({
     const payload = {
       viewportSize,
       selectionRect: cropRect,
-      transform: normalizePreviewTransform({
+      transform: normalizeStampCutterPreviewTransform(sourceSize, viewportSize, cropRect, {
         zoom: zoomValue.value,
         offsetX: offsetXValue.value,
         offsetY: offsetYValue.value,
-        rotation: snapPreviewRotation(rotationValue.value),
+        rotation: snapStampCutterRotation(rotationValue.value),
       }),
     };
 
@@ -507,10 +411,11 @@ function StampCutterEditor({
   const previewImageAnimatedStyle = useAnimatedStyle(() => {
     return {
       transform: [
-        { translateX: offsetXValue.value },
-        { translateY: offsetYValue.value },
         { rotateZ: `${rotationValue.value}deg` },
         { scale: zoomValue.value },
+        // Keep panning in viewport coordinates so the preview matches export cropping.
+        { translateX: offsetXValue.value },
+        { translateY: offsetYValue.value },
       ],
     };
   }, [offsetXValue, offsetYValue, rotationValue, zoomValue]);
@@ -596,37 +501,34 @@ function StampCutterEditor({
               <View
                 collapsable={false}
                 pointerEvents={busy ? 'none' : 'auto'}
-                style={[
-                  styles.previewViewport,
-                  {
-                    width: viewportSize.width,
-                    height: viewportSize.height,
-                  },
-                ]}
+                style={styles.gestureStage}
               >
-                <Reanimated.View style={styles.cropGestureSurface}>
-                  <View
-                      pointerEvents="none"
-                      style={[
-                        styles.previewSurfaceBackground,
-                        {
-                          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.35)',
-                        },
-                      ]}
-                    />
-                  <Reanimated.Image
-                    style={[
-                      styles.previewImage,
-                      {
-                        width: baseImageWidth,
-                        height: baseImageHeight,
-                        left: previewBaseLeft,
-                        top: previewBaseTop,
-                      },
-                      previewImageAnimatedStyle,
-                    ]}
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.previewSurfaceBackground,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.35)',
+                    },
+                  ]}
+                />
+                <Reanimated.View
+                  style={[
+                    styles.previewImage,
+                    {
+                      width: baseImageWidth,
+                      height: baseImageHeight,
+                      left: previewBaseLeft,
+                      top: previewBaseTop,
+                    },
+                    previewImageAnimatedStyle,
+                  ]}
+                >
+                  <ExpoImage
                     source={{ uri: draft.source.uri }}
-                    resizeMode="cover"
+                    style={styles.previewImageFill}
+                    contentFit="cover"
+                    transition={0}
                   />
                 </Reanimated.View>
               </View>
@@ -770,21 +672,16 @@ const styles = StyleSheet.create({
   overlayFrame: {
     position: 'relative',
   },
-  previewViewport: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    overflow: 'hidden',
-  },
-  cropGestureSurface: {
-    width: '100%',
-    height: '100%',
+  gestureStage: {
+    ...StyleSheet.absoluteFillObject,
   },
   previewSurfaceBackground: {
     ...StyleSheet.absoluteFillObject,
   },
   previewImage: {
     position: 'absolute',
+  },
+  previewImageFill: {
     width: '100%',
     height: '100%',
   },

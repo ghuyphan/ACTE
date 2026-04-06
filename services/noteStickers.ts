@@ -17,6 +17,7 @@ import {
   requireSupabase,
 } from '../utils/supabase';
 import { NOTE_MEDIA_BUCKET } from './remoteMedia';
+import { cleanupStickerTempUris } from './stickerTempFiles';
 
 export type StickerSource = 'import';
 export type StickerRenderMode = 'default' | 'stamp';
@@ -107,6 +108,7 @@ interface NoteStickerRow {
 }
 
 type RemoteStickerContainerType = 'note' | 'shared_post';
+type StickerOptimizationTargetMimeType = 'image/webp' | 'image/jpeg';
 
 interface RemoteStickerAssetRow {
   id: string;
@@ -646,13 +648,37 @@ function buildStickerResizeActions(
     : [{ resize: { height: maxDimension } }];
 }
 
-async function optimizeStickerForImport(uri: string, mimeType: string) {
+function getStickerOptimizationSaveFormat(targetMimeType: StickerOptimizationTargetMimeType) {
+  return targetMimeType === 'image/jpeg' ? SaveFormat.JPEG : SaveFormat.WEBP;
+}
+
+async function optimizeStickerForImport(
+  uri: string,
+  mimeType: string,
+  suggestedRenderMode: StickerRenderMode
+) {
   const originalInfo = await getStickerFileInfo(uri);
+  const targetMimeType: StickerOptimizationTargetMimeType =
+    suggestedRenderMode === 'stamp' ? 'image/jpeg' : 'image/webp';
+  const shouldNormalizeStampFormat =
+    suggestedRenderMode === 'stamp' && mimeType !== 'image/jpeg';
   if (!needsStickerOptimization(originalInfo)) {
+    if (!shouldNormalizeStampFormat) {
+      return {
+        uri,
+        mimeType,
+        cleanupUris: [] as string[],
+      };
+    }
+
+    const normalizedStamp = await manipulateAsync(uri, [], {
+      compress: 0.94,
+      format: getStickerOptimizationSaveFormat(targetMimeType),
+    });
     return {
-      uri,
-      mimeType,
-      cleanupUris: [] as string[],
+      uri: normalizedStamp.uri,
+      mimeType: targetMimeType,
+      cleanupUris: normalizedStamp.uri !== uri ? [normalizedStamp.uri] : [],
     };
   }
 
@@ -667,7 +693,7 @@ async function optimizeStickerForImport(uri: string, mimeType: string) {
       buildStickerResizeActions(currentInfo, preset.maxDimension),
       {
         compress: preset.compress,
-        format: SaveFormat.WEBP,
+        format: getStickerOptimizationSaveFormat(targetMimeType),
       }
     );
 
@@ -693,7 +719,7 @@ async function optimizeStickerForImport(uri: string, mimeType: string) {
     if (isStickerWithinLimits(optimizedInfo)) {
       return {
         uri: result.uri,
-        mimeType: 'image/webp',
+        mimeType: targetMimeType,
         cleanupUris,
       };
     }
@@ -709,7 +735,7 @@ async function optimizeStickerForImport(uri: string, mimeType: string) {
   ) {
     return {
       uri: bestUri,
-      mimeType: 'image/webp',
+      mimeType: targetMimeType,
       cleanupUris,
     };
   }
@@ -1101,7 +1127,11 @@ export async function importStickerAsset(
 
   const mimeType = normalizeMimeType(source.mimeType) || getMimeTypeFromName(source.name);
   const validation = await validateStickerFile(sourceUri, mimeType, options);
-  const preparedSticker = await optimizeStickerForImport(sourceUri, mimeType);
+  const preparedSticker = await optimizeStickerForImport(
+    sourceUri,
+    mimeType,
+    validation.suggestedRenderMode
+  );
   const ownerUid = getActiveNotesScope();
 
   try {
@@ -1165,9 +1195,7 @@ export async function importStickerAsset(
     await upsertStickerAsset(asset);
     return asset;
   } finally {
-    for (const cleanupUri of new Set(preparedSticker.cleanupUris)) {
-      await FileSystem.deleteAsync(cleanupUri, { idempotent: true }).catch(() => undefined);
-    }
+    await cleanupStickerTempUris(preparedSticker.cleanupUris);
   }
 }
 

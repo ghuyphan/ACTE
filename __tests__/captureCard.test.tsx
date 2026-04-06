@@ -23,6 +23,8 @@ let mockClipboardListeners: Array<() => void> = [];
 const mockCreateStickerImportSourceFromSubjectCutout = jest.fn();
 const mockPrepareStickerSubjectCutout = jest.fn();
 const mockCleanupSubjectCutoutImportSource = jest.fn();
+const mockCleanupStickerTempUri = jest.fn();
+const mockCleanupStickerTempUris = jest.fn();
 const mockPrepareStampCutterDraft = jest.fn();
 const mockExportStampCutoutImageSource = jest.fn();
 
@@ -319,6 +321,11 @@ jest.mock('../services/stickerSubjectCutout', () => ({
     mockCleanupSubjectCutoutImportSource(...args),
 }));
 
+jest.mock('../services/stickerTempFiles', () => ({
+  cleanupStickerTempUri: (...args: unknown[]) => mockCleanupStickerTempUri(...args),
+  cleanupStickerTempUris: (...args: unknown[]) => mockCleanupStickerTempUris(...args),
+}));
+
 jest.mock('../services/stampCutter', () => {
   const actual = jest.requireActual('../services/stampCutter');
   return {
@@ -484,6 +491,8 @@ describe('CaptureCard doodle handle', () => {
     }));
     mockPrepareStickerSubjectCutout.mockResolvedValue({ available: true, ready: true });
     mockCleanupSubjectCutoutImportSource.mockResolvedValue(undefined);
+    mockCleanupStickerTempUri.mockResolvedValue(undefined);
+    mockCleanupStickerTempUris.mockResolvedValue(undefined);
     mockPrepareStampCutterDraft.mockResolvedValue({
       source: {
         uri: 'file:///cache/photo-normalized.jpg',
@@ -1581,7 +1590,7 @@ describe('CaptureCard doodle handle', () => {
       },
       undefined
     );
-    expect(mockCleanupSubjectCutoutImportSource).toHaveBeenCalledWith('file:///cache/photo-stamp.jpg');
+    expect(mockCleanupStickerTempUris).toHaveBeenCalledWith(['file:///cache/photo-stamp.jpg', null]);
   });
 
   it('hides the outline toggle on selected stamp stickers', async () => {

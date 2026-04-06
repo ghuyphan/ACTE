@@ -1,21 +1,16 @@
-import { ReactNode, RefObject } from 'react';
+import { ReactNode } from 'react';
 import { Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import Animated, { type SharedValue } from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
 import { Layout, Shadows } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { GlassView } from './GlassView';
-import { BlurView } from 'expo-blur';
-
-const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 interface GlassHeaderProps {
   topInset: number;
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
   docked?: boolean;
-  blurTarget?: RefObject<View | null>;
   dockedBlurred?: boolean;
-  dockedBlurScrollOffset?: SharedValue<number>;
 }
 
 export default function GlassHeader({
@@ -23,12 +18,11 @@ export default function GlassHeader({
   children,
   style,
   docked = false,
-  blurTarget,
   dockedBlurred = false,
-  dockedBlurScrollOffset,
 }: GlassHeaderProps) {
   const { colors, isDark } = useTheme();
   const isAndroid = Platform.OS === 'android';
+  const showDockedMaterial = dockedBlurred && !isAndroid;
   const dockedBackdropColor = isDark
     ? isAndroid
       ? 'rgba(18,13,10,0.34)'
@@ -55,20 +49,17 @@ export default function GlassHeader({
             },
           ]}
         >
-          {dockedBlurred ? (
-            <AnimatedBlurView
-              intensity={isAndroid ? 56 : 24}
-              tint={isDark ? 'dark' : 'light'}
-              blurTarget={isAndroid ? blurTarget : undefined}
-              blurReductionFactor={isAndroid ? 1 : undefined}
-              blurMethod={isAndroid ? 'dimezisBlurViewSdk31Plus' : undefined}
-              style={[
-                StyleSheet.absoluteFill,
-                {
-                  backgroundColor: dockedBackdropColor,
-                },
-              ]}
-            />
+          {showDockedMaterial ? (
+              <BlurView
+                intensity={24}
+                tint={isDark ? 'dark' : 'light'}
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    backgroundColor: dockedBackdropColor,
+                  },
+                ]}
+              />
           ) : null}
           <View
             pointerEvents="none"
@@ -76,7 +67,7 @@ export default function GlassHeader({
               styles.dockedSeparator,
               {
                 backgroundColor: colors.border,
-                opacity: dockedBlurred ? 0.42 : 0,
+                opacity: showDockedMaterial ? 0.42 : 0,
               },
             ]}
           />

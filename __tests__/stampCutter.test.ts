@@ -35,7 +35,7 @@ describe('stampCutter', () => {
     expect(normalized.maxOffsetX).toBeGreaterThan(0);
     expect(normalized.maxOffsetY).toBeGreaterThanOrEqual(0);
     expect(normalized.offsetX).toBe(normalized.maxOffsetX);
-    expect(normalized.offsetY).toBe(-normalized.maxOffsetY);
+    expect(normalized.offsetY).toBeCloseTo(-normalized.maxOffsetY, 8);
   });
 
   it('normalizes rotation into a stable signed and unsigned range', () => {
@@ -81,6 +81,26 @@ describe('stampCutter', () => {
     expect(shiftedCrop.height).toBeCloseTo(centeredCrop.height, 5);
   });
 
+  it('lets the editor zoom out to the stamp window instead of the full viewport', () => {
+    const { getMinimumStampCutterZoom, normalizeStampCutterTransform } = loadModule();
+
+    const sourceSize = { width: 1600, height: 1200 };
+    const viewportSize = { width: 320, height: 420 };
+    const selectionRect = { x: 96, y: 120, width: 128, height: 90 };
+    const minZoom = getMinimumStampCutterZoom(sourceSize, viewportSize, selectionRect);
+    const normalized = normalizeStampCutterTransform(
+      sourceSize,
+      viewportSize,
+      { zoom: 0.01, offsetX: 0, offsetY: 0 },
+      selectionRect
+    );
+
+    expect(minZoom).toBeLessThan(1);
+    expect(normalized.zoom).toBeCloseTo(minZoom, 6);
+    expect(normalized.imageWidth).toBeCloseTo(selectionRect.width, 6);
+    expect(normalized.imageHeight).toBeGreaterThan(selectionRect.height);
+  });
+
   it('exports a rounded JPEG crop for import', async () => {
     const { exportStampCutoutImageSource } = loadModule();
 
@@ -120,6 +140,110 @@ describe('stampCutter', () => {
       uri: 'file:///cache/stamp-cut.jpg',
       mimeType: 'image/jpeg',
       name: 'photo-stamp.jpg',
+    });
+  });
+
+  it('reuses small sources directly when preparing a cutter draft', async () => {
+    const { prepareStampCutterDraft } = loadModule();
+
+    const result = await prepareStampCutterDraft(
+      {
+        uri: 'file:///photo.jpg',
+        mimeType: 'image/jpeg',
+        name: 'photo.jpg',
+      },
+      1200,
+      900
+    );
+
+    expect(mockManipulateAsync).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      source: {
+        uri: 'file:///photo.jpg',
+        mimeType: 'image/jpeg',
+        name: 'photo.jpg',
+      },
+      width: 1200,
+      height: 900,
+      cleanupUri: null,
+    });
+  });
+
+  it('normalizes small heic sources before opening the cutter', async () => {
+    mockManipulateAsync.mockResolvedValueOnce({
+      uri: 'file:///cache/normalized-stamp-source.jpg',
+      width: 1200,
+      height: 900,
+    });
+
+    const { prepareStampCutterDraft } = loadModule();
+
+    const result = await prepareStampCutterDraft(
+      {
+        uri: 'file:///photo.heic',
+        mimeType: 'image/heic',
+        name: 'photo.heic',
+      },
+      1200,
+      900
+    );
+
+    expect(mockManipulateAsync).toHaveBeenCalledWith(
+      'file:///photo.heic',
+      [],
+      expect.objectContaining({
+        compress: 0.94,
+        format: 'jpeg',
+      })
+    );
+    expect(result).toEqual({
+      source: {
+        uri: 'file:///cache/normalized-stamp-source.jpg',
+        mimeType: 'image/jpeg',
+        name: 'photo.heic',
+      },
+      width: 1200,
+      height: 900,
+      cleanupUri: 'file:///cache/normalized-stamp-source.jpg',
+    });
+  });
+
+  it('downscales oversized sources before opening the cutter', async () => {
+    mockManipulateAsync.mockResolvedValueOnce({
+      uri: 'file:///cache/normalized-stamp-source.jpg',
+      width: 2048,
+      height: 1536,
+    });
+
+    const { prepareStampCutterDraft } = loadModule();
+
+    const result = await prepareStampCutterDraft(
+      {
+        uri: 'file:///large-photo.jpg',
+        mimeType: 'image/heic',
+        name: 'large-photo.heic',
+      },
+      4032,
+      3024
+    );
+
+    expect(mockManipulateAsync).toHaveBeenCalledWith(
+      'file:///large-photo.jpg',
+      [{ resize: { width: 2048 } }],
+      expect.objectContaining({
+        compress: 0.94,
+        format: 'jpeg',
+      })
+    );
+    expect(result).toEqual({
+      source: {
+        uri: 'file:///cache/normalized-stamp-source.jpg',
+        mimeType: 'image/jpeg',
+        name: 'large-photo.heic',
+      },
+      width: 2048,
+      height: 1536,
+      cleanupUri: 'file:///cache/normalized-stamp-source.jpg',
     });
   });
 

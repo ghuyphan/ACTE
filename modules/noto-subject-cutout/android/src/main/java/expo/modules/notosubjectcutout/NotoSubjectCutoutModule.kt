@@ -70,13 +70,6 @@ class NotoSubjectCutoutModule : Module() {
         throw SubjectCutoutException("source-unavailable", "The source image is unavailable.")
       }
 
-      val sourceBitmap = BitmapFactory.decodeFile(sourceFile.absolutePath)
-        ?: throw SubjectCutoutException("source-unavailable", "Unable to decode the source image.")
-      Log.d(
-        LOG_TAG,
-        "cutOutAsync: source=${sourceFile.absolutePath} size=${sourceBitmap.width}x${sourceBitmap.height}"
-      )
-
       val destinationBaseFile = fileFromRawUri(destinationBasePath)
       val destinationFile = File(destinationBaseFile.parentFile, "${destinationBaseFile.name}.png")
       destinationFile.parentFile?.mkdirs()
@@ -87,6 +80,13 @@ class NotoSubjectCutoutModule : Module() {
       val segmenter = getOrCreateSegmenter()
 
       try {
+        val sourceBitmap = BitmapFactory.decodeFile(sourceFile.absolutePath)
+          ?: throw SubjectCutoutException("source-unavailable", "Unable to decode the source image.")
+        Log.d(
+          LOG_TAG,
+          "cutOutAsync: source=${sourceFile.absolutePath} size=${sourceBitmap.width}x${sourceBitmap.height}"
+        )
+
         segmenter.getInitTask().await()
 
         val result = segmenter.process(InputImage.fromFilePath(context, Uri.fromFile(sourceFile))).await()
@@ -252,6 +252,13 @@ class NotoSubjectCutoutModule : Module() {
   private fun mapSubjectCutoutError(error: Throwable): Throwable {
     if (error is SubjectCutoutException) {
       return error
+    }
+
+    if (error is OutOfMemoryError) {
+      return SubjectCutoutException(
+        "processing-failed",
+        "This photo is too large to isolate safely. Try a smaller image or import it as a stamp."
+      )
     }
 
     if (error is MlKitException) {

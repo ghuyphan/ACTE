@@ -25,7 +25,6 @@ import { buildHomeFeedItems, findHomeFeedItemIndex, type HomeFeedItem } from '..
 import HomeHeaderSearch from '../home/HomeHeaderSearch';
 import NotesFeed from '../home/NotesFeed';
 import SharedManageSheet from '../home/SharedManageSheet';
-import BlurTargetView from '../ui/BlurTargetView';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
@@ -158,9 +157,7 @@ export default function HomeScreen() {
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const searchAnim = useSharedValue(0);
-  const headerBlurScrollOffset = useSharedValue(0);
   const flatListRef = useRef<any>(null);
-  const headerBlurTargetRef = useRef<View | null>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
   const lastFreeNoteColorRef = useRef<string>(DEFAULT_NOTE_COLOR_ID);
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1837,7 +1834,7 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <BlurTargetView ref={headerBlurTargetRef} style={styles.blurTarget}>
+      <View style={styles.blurTarget}>
         <NotesFeed
           flatListRef={flatListRef}
           captureHeader={captureHeader}
@@ -1866,9 +1863,6 @@ export default function HomeScreen() {
             !isCaptureTextEntryFocused
           }
           capturePageLocked={shouldLockCapturePage}
-          onScrollOffsetChange={(offsetY) => {
-            headerBlurScrollOffset.value = offsetY;
-          }}
         />
 
         {useInlineHeaderSearch && isSearching && filteredNotes.length === 0 && searchQuery.trim() ? (
@@ -1897,7 +1891,7 @@ export default function HomeScreen() {
           </Text>
         </View>
         ) : null}
-      </BlurTargetView>
+      </View>
 
       <HomeHeaderSearch
         topInset={insets.top}
@@ -1925,9 +1919,7 @@ export default function HomeScreen() {
         colors={colors}
         isDark={isDark}
         t={t}
-        blurTargetRef={headerBlurTargetRef}
         showDockedBlur
-        dockedBlurScrollOffset={headerBlurScrollOffset}
       />
 
       <SharedManageSheet

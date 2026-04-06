@@ -56,6 +56,7 @@ jest.mock('expo-image-manipulator', () => ({
   manipulateAsync: mockManipulateAsync,
   SaveFormat: {
     WEBP: 'webp',
+    JPEG: 'jpeg',
   },
 }));
 
@@ -302,6 +303,50 @@ describe('importStickerAsset', () => {
       name: 'not-a-sticker.jpg',
     });
 
+    expect(asset.mimeType).toBe('image/jpeg');
+    expect(asset.localUri.endsWith('.jpg')).toBe(true);
+    expect(asset.suggestedRenderMode).toBe('stamp');
+  });
+
+  it('normalizes heic photo stamps into jpeg before saving', async () => {
+    const importStickerAsset = loadImportStickerAsset();
+
+    mockGetInfoAsync.mockImplementation(async (uri: string) => {
+      if (uri === 'file:///imports/photo.heic') {
+        return { exists: true, isDirectory: false, size: 80 * 1024 };
+      }
+
+      if (uri === 'file:///cache/normalized-stamp.jpg') {
+        return { exists: true, isDirectory: false, size: 70 * 1024 };
+      }
+
+      return { exists: true, isDirectory: false, size: 80 * 1024 };
+    });
+    mockManipulateAsync.mockResolvedValueOnce({
+      uri: 'file:///cache/normalized-stamp.jpg',
+    });
+
+    const asset = await importStickerAsset({
+      uri: 'file:///imports/photo.heic',
+      mimeType: 'image/heic',
+      name: 'photo.heic',
+    });
+
+    expect(mockManipulateAsync).toHaveBeenCalledWith(
+      'file:///imports/photo.heic',
+      [],
+      expect.objectContaining({
+        compress: 0.94,
+        format: 'jpeg',
+      })
+    );
+    expect(mockCopyAsync).toHaveBeenCalledWith({
+      from: 'file:///cache/normalized-stamp.jpg',
+      to: expect.stringMatching(/^file:\/\/\/documents\/stickers\/.+\.jpg$/),
+    });
+    expect(mockDeleteAsync).toHaveBeenCalledWith('file:///cache/normalized-stamp.jpg', {
+      idempotent: true,
+    });
     expect(asset.mimeType).toBe('image/jpeg');
     expect(asset.localUri.endsWith('.jpg')).toBe(true);
     expect(asset.suggestedRenderMode).toBe('stamp');

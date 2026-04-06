@@ -17,7 +17,7 @@ import AppSheet from '../sheets/AppSheet';
 import AppSheetScaffold from '../sheets/AppSheetScaffold';
 import { GlassView } from '../ui/GlassView';
 import { TFunction } from 'i18next';
-import { ComponentProps, RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { ComponentProps, useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
   Easing,
@@ -65,9 +65,7 @@ interface HomeHeaderSearchProps {
   };
   isDark: boolean;
   t: TFunction;
-  blurTargetRef?: RefObject<View | null>;
   showDockedBlur?: boolean;
-  dockedBlurScrollOffset?: SharedValue<number>;
 }
 
 export default function HomeHeaderSearch({
@@ -93,9 +91,7 @@ export default function HomeHeaderSearch({
   colors,
   isDark,
   t,
-  blurTargetRef,
   showDockedBlur = false,
-  dockedBlurScrollOffset,
 }: HomeHeaderSearchProps) {
   const modeIconScale = useSharedValue(1);
   const sharedModeProgress = useSharedValue(sharedButtonMode === 'filter' ? 1 : 0);
@@ -822,9 +818,7 @@ export default function HomeHeaderSearch({
       <GlassHeader
         topInset={topInset}
         docked={useDockedHeader}
-        blurTarget={blurTargetRef}
         dockedBlurred={showDockedBlur}
-        dockedBlurScrollOffset={dockedBlurScrollOffset}
         style={useDetachedWordmark ? styles.detachedHeaderOffset : undefined}
       >
       <Animated.View

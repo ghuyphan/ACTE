@@ -1,6 +1,9 @@
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { requireOptionalNativeModule } from 'expo-modules-core';
+import { Image } from 'react-native';
 import * as FileSystem from '../utils/fileSystem';
 import type { StickerImportSource } from './noteStickers';
+import { cleanupStickerTempUri } from './stickerTempFiles';
 
 type NativeSubjectCutoutResult = {
   uri: string;
@@ -77,6 +80,8 @@ const nativeModule =
 const SUBJECT_CUTOUT_TEMP_DIRECTORY = FileSystem.cacheDirectory
   ? `${FileSystem.cacheDirectory}sticker-cutouts/`
   : null;
+const SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION = 2048;
+const SUBJECT_CUTOUT_NORMALIZED_SOURCE_QUALITY = 0.92;
 
 function normalizeNativeCutoutError(error: unknown) {
   if (error instanceof SubjectCutoutError) {
@@ -119,6 +124,52 @@ function buildSubjectCutoutDestinationBasePath(directory: string) {
   return `${directory}subject-cutout-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+async function getImageSize(uri: string) {
+  return new Promise<{ width: number; height: number }>((resolve, reject) => {
+    Image.getSize(
+      uri,
+      (width, height) => resolve({ width, height }),
+      (error) => reject(error)
+    );
+  });
+}
+
+async function prepareSubjectCutoutSource(sourceUri: string) {
+  const imageSize = await getImageSize(sourceUri).catch(() => null);
+  if (
+    !imageSize ||
+    (
+      imageSize.width <= SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION &&
+      imageSize.height <= SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION
+    )
+  ) {
+    return {
+      uri: sourceUri,
+      cleanupUri: null as string | null,
+    };
+  }
+
+  const resizeActions =
+    imageSize.width >= imageSize.height
+      ? [{ resize: { width: SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION } }]
+      : [{ resize: { height: SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION } }];
+
+  // Resize large photos before invoking native segmentation to avoid uncatchable OOM crashes.
+  const normalizedSource = await manipulateAsync(
+    sourceUri,
+    resizeActions,
+    {
+      compress: SUBJECT_CUTOUT_NORMALIZED_SOURCE_QUALITY,
+      format: SaveFormat.JPEG,
+    }
+  );
+
+  return {
+    uri: normalizedSource.uri,
+    cleanupUri: normalizedSource.uri !== sourceUri ? normalizedSource.uri : null,
+  };
+}
+
 export async function createStickerImportSourceFromSubjectCutout(
   source: StickerImportSource
 ): Promise<SubjectCutoutImportSource> {
@@ -135,20 +186,26 @@ export async function createStickerImportSourceFromSubjectCutout(
   }
 
   const directory = await ensureSubjectCutoutTempDirectory();
-  const result = await nativeModule
-    .cutOutAsync(sourceUri, buildSubjectCutoutDestinationBasePath(directory))
-    .catch((error) => {
-      throw normalizeNativeCutoutError(error);
-    });
+  const preparedSource = await prepareSubjectCutoutSource(sourceUri);
 
-  return {
-    source: {
-      uri: result.uri,
-      mimeType: result.mimeType ?? 'image/png',
-      name: source.name ?? 'subject-cutout.png',
-    },
-    cleanupUri: result.uri,
-  };
+  try {
+    const result = await nativeModule
+      .cutOutAsync(preparedSource.uri, buildSubjectCutoutDestinationBasePath(directory))
+      .catch((error) => {
+        throw normalizeNativeCutoutError(error);
+      });
+
+    return {
+      source: {
+        uri: result.uri,
+        mimeType: result.mimeType ?? 'image/png',
+        name: source.name ?? 'subject-cutout.png',
+      },
+      cleanupUri: result.uri,
+    };
+  } finally {
+    await cleanupSubjectCutoutImportSource(preparedSource.cleanupUri);
+  }
 }
 
 export async function prepareStickerSubjectCutout() {
@@ -165,9 +222,5 @@ export async function prepareStickerSubjectCutout() {
 }
 
 export async function cleanupSubjectCutoutImportSource(cleanupUri: string | null | undefined) {
-  if (!cleanupUri) {
-    return;
-  }
-
-  await FileSystem.deleteAsync(cleanupUri, { idempotent: true }).catch(() => undefined);
+  await cleanupStickerTempUri(cleanupUri);
 }
