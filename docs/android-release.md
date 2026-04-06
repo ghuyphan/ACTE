@@ -9,6 +9,7 @@
 - Set `EXPO_PUBLIC_PRIVACY_POLICY_URL` and either `EXPO_PUBLIC_SUPPORT_URL` or `EXPO_PUBLIC_SUPPORT_EMAIL`.
 - Set either `EXPO_PUBLIC_ACCOUNT_DELETION_URL` or `EXPO_PUBLIC_SUPPORT_EMAIL`.
 - Set `EXPO_PUBLIC_ENABLE_PLACE_REMINDERS=false` if you want a Play-bound build without background geofence reminders.
+- Provide Firebase config through a repo-root `google-services.json` or the `GOOGLE_SERVICES_JSON` file-path env used by [`app.config.js`](../app.config.js).
 
 ## Signing
 
@@ -19,7 +20,8 @@ Provide the Android upload signing values before Play-bound release builds:
 - `ACTE_UPLOAD_KEY_ALIAS`
 - `ACTE_UPLOAD_KEY_PASSWORD`
 
-Release builds now fail fast when signing values are missing.
+Release builds fail fast when signing values are missing because [`plugins/withAndroidReleaseHardening.js`](../plugins/withAndroidReleaseHardening.js) patches the generated Gradle project during prebuild.
+
 Local smoke tests can still opt into the debug keystore with `ACTE_ALLOW_DEBUG_SIGNED_RELEASE=true`.
 
 ## Play Console Prep
@@ -41,12 +43,13 @@ Local smoke tests can still opt into the debug keystore with `ACTE_ALLOW_DEBUG_S
 ## QA Focus
 
 - Fresh install: onboarding, auth, and first note creation.
-- Capture: text note, photo note, retake, and photo-library import for Plus.
+- Capture: text note, photo note, retake, live photo handling, and photo-library import for Plus.
 - Billing: paywall, purchase, restore, and sign-in/sign-out transitions.
-- Sharing: invite acceptance, shared feed rendering, and shared post detail.
+- Sharing: invite acceptance, shared feed rendering, shared post detail, and social push delivery.
 - Reminders: permission escalation, geofence notification, and deep-link open.
 - Settings: theme, language, account links, and delete-all flow.
-- Android native alerts: delete note, clear-all, and permission/error dialogs render without Compose bridge crashes.
+- Widget: Android widget snapshot still matches the checked-in source in [`widgets/android/NotoWidgetProvider.kt`](../widgets/android/NotoWidgetProvider.kt).
+- Android native alerts: delete note, clear-all, and permission/error dialogs render without bridge crashes.
 
 ## Recommended Checks
 
@@ -55,4 +58,13 @@ npm run android
 npm run lint
 npm run typecheck
 npm test -- --runInBand
+```
+
+## JS-Only Follow-Up
+
+If the release is JavaScript-only and does not require a new native binary, publish the matching OTA update channel after validation:
+
+```bash
+npm run update:preview
+npm run update:production
 ```

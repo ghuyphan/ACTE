@@ -2,60 +2,73 @@
 
 ## Project Overview
 
-Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo memories. The current app is local-first and uses SQLite for core persistence, with optional Supabase auth/sync, friend sharing, geofence reminders, widgets, and RevenueCat-backed `Noto Plus`.
+Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo memories. The current app is local-first and uses SQLite for core persistence, with optional Supabase auth/sync, friend sharing, social push notifications, geofence reminders, widgets, live photo support, and RevenueCat-backed `Noto Plus`.
 
 ## Repo Map
 
 - `app/`: Expo Router routes and screen entry points.
 - `app/(tabs)/`: Main app tabs for home/capture, map, search, and settings.
 - `app/auth/`: Onboarding, auth entry, and profile/account screens.
-- `app/notes/`: Notes grid that can mix local notes and shared posts.
+- `app/notes/`: Notes grid and recap entry point that can mix local notes and shared posts.
 - `app/shared/`: Shared moments list and shared post detail.
 - `app/friends/`: Friend invite join flow.
 - `app/widget/`: Widget deep-link entry points.
 - `app/plus.tsx`: Route entry for the subscription / purchase screen.
-- `components/`: Reusable UI, with most feature-owned pieces under `home/`, `map/`, `notes/`, `settings/`, `sheets/`, `screens/`, and `ui/`.
+- `components/`: Reusable UI, with most feature-owned pieces under `app/`, `friends/`, `home/`, `map/`, `navigation/`, `notes/`, `screens/`, `settings/`, `shared/`, `sheets/`, and `ui/`.
 - `components/app/`: App-wide composition such as provider wiring.
 - `components/friends/`: Friend invite/join feature UI.
-- `hooks/`: Shared hooks and providers, now grouped by concern under `app/`, `state/`, `ui/`, and top-level cross-cutting hooks.
+- `components/navigation/`: Platform-specific tab layout implementations.
+- `hooks/`: Shared hooks and providers, grouped under `app/`, `map/`, `state/`, `ui/`, and top-level public import surfaces.
 - `hooks/map/`: Map-only domain and screen-state logic.
-- `services/`: SQLite, sync, geofence, widget, media, search, and sharing logic.
-- `constants/`: Theme tokens, i18n setup, note color defaults, radius defaults, and subscription config.
+- `services/`: SQLite, sync, geofence, widget, notification, recap, live photo, media, search, and sharing logic.
+- `constants/`: Theme tokens, i18n setup, note color defaults, radius defaults, subscription config, and experiments.
 - `utils/`: Background tasks and smaller platform/storage helpers.
-- `widgets/`: Expo widget registration and the checked-in Swift widget source.
-- `plugins/`: Custom Expo config plugins for widget/native fixes.
+- `plugins/`: Custom Expo config plugins for widget/native fixes and Android release hardening.
+- `modules/`: Local Expo modules for live photo motion transcoding and subject cutout.
+- `native/`: Checked-in native bridge source used by the custom modules.
+- `widgets/`: Expo widget registration plus the checked-in iOS and Android widget source.
+- `supabase/`: SQL migrations and edge functions for account cleanup, sticker cleanup, and social push delivery.
 - `assets/images/`: App icons, splash assets, and image resources.
-- `docs/`: Short maintenance docs for release, Supabase, RevenueCat, and widget work.
+- `docs/`: Maintenance docs for release, Android release, Supabase, RevenueCat, FCM/push, and widget work.
 - `__tests__/`: Jest coverage for hooks, services, screens, widgets, and map logic.
-- `ios/`, `android/`: Generated local native folders that still matter for widget/auth/native debugging.
+- `ios/`, `android/`: Generated local native folders that may exist for widget/auth/native debugging, but are git-ignored in this repo.
 
 ## Important Entry Points
 
 - `package.json`: `expo-router/entry` app entry and supported scripts.
-- `app/_layout.tsx`: Root Expo Router layout, splash flow, and app-startup hook wiring.
+- `app/_layout.tsx`: Root Expo Router layout, splash flow, notification routing, and app-startup hook wiring.
 - `app/index.tsx`: First-launch redirect into onboarding or tabs.
-- `app/(tabs)/_layout.tsx`: Native tab layout setup.
+- `app/(tabs)/_layout.tsx`: Platform switch for the native tab layout.
 - `components/app/AppProviders.tsx`: Root provider composition extracted from the app layout.
+- `components/navigation/TabLayoutIOS.tsx`: iOS tab shell.
+- `components/navigation/TabLayoutAndroid.tsx`: Android tab shell.
 - `components/screens/auth/AuthScreen.tsx`: Landing, sign-in, register, and password-reset flow.
-- `components/screens/notes/NotesScreen.tsx`: Combined notes and shared-posts grid.
+- `components/screens/notes/NotesScreen.tsx`: Combined notes and shared-posts grid plus recap entry points.
 - `components/screens/search/SearchScreen.tsx`: Native search tab implementation.
 - `components/screens/shared/SharedFeedScreen.tsx`: Shared moments feed implementation.
 - `components/screens/friends/FriendJoinScreen.tsx`: Friend invite join implementation.
 - `components/screens/plus/PlusScreen.tsx`: `Noto Plus` upsell and purchase UI.
-- `app.config.ts`: Expo config, permissions, widgets, Google Maps wiring, custom plugins, and native IDs.
+- `components/screens/profile/ProfileScreen.ios.tsx` and `components/screens/profile/ProfileScreen.android.tsx`: Platform-specific profile/account UI.
+- `components/screens/settings/SettingsScreen.ios.tsx` and `components/screens/settings/SettingsScreen.android.tsx`: Platform-specific settings UI.
+- `components/screens/MapScreen.ios.tsx` and `components/screens/MapScreen.android.tsx`: Platform-specific map UI.
+- `app.config.js`: Expo config, permissions, widgets, Google Maps wiring, build gating, custom plugins, and native IDs.
 - `services/database.ts`: SQLite schema, note model, local cache tables, and migrations.
 - `services/sharedFeedService.ts`: Friend invites, shared post CRUD, and shared feed refresh logic.
+- `services/socialPushService.ts`: Expo push token registration and social notification invokes.
 - `services/syncService.ts`: Supabase sync pipeline.
 - `services/geofenceService.ts`: Reminder permission checks and monitored region selection.
 - `services/widgetService.ts`: Widget timeline building, candidate selection, and media bridging.
+- `services/monthlyRecap.ts`: Monthly recap aggregation logic.
 - `hooks/app/useAppStartupBootstrap.ts`: DB bootstrap, startup sync, and early app setup.
 - `hooks/app/useAppNotificationRouting.ts`: Notification open handling and deep-link routing.
 - `hooks/app/useAppWidgetRefresh.ts`: App foreground and widget refresh wiring.
+- `hooks/app/useSocialPushRegistration.ts`: Auth-aware social push registration.
 - `hooks/state/useNotesStore.tsx`: The main note mutation path.
 - `hooks/useNotes.ts`: Public notes hook/provider entry point.
 - `hooks/useSharedFeedStore.tsx`: Shared feed state and sharing actions.
 - `hooks/useSubscription.tsx`: RevenueCat subscription state and purchase actions.
 - `widgets/ios/LocketWidget.swift`: Source of truth for real iOS widget rendering.
+- `widgets/android/NotoWidgetProvider.kt`: Source of truth for Android widget rendering.
 
 ## Commands
 
@@ -64,8 +77,10 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - `npm run android`: Run the native Android build.
 - `npm run web`: Start the web target.
 - `npm run lint`: Run Expo/ESLint checks.
+- `npm run typecheck`: Run TypeScript typechecking.
 - `npm test`: Run Jest tests.
-- `npx tsc --noEmit`: Run TypeScript typechecking.
+- `npm run update:preview`: Publish an OTA update to the preview channel.
+- `npm run update:production`: Publish an OTA update to the production channel.
 - `npm run reset-project`: Run the bundled reset helper.
 
 ## Conventions
@@ -80,6 +95,7 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - Subscription state should flow through `useSubscription`.
 - Widget refreshes are already wired to note mutations; preserve that behavior when adding new mutation paths.
 - Map-specific clustering/filtering logic belongs in `hooks/map/` and `components/map/`.
+- Social push token registration and notification sends should continue to flow through `services/socialPushService.ts` and the app-level hooks that already wrap it.
 
 ## Where To Add New Code
 
@@ -90,12 +106,14 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - Domain or integration logic: `services/`.
 - Smaller helpers or platform utilities: `utils/`.
 - Theme/i18n/subscription constants: `constants/`.
+- Supabase schema or edge work: `supabase/`.
+- Custom native module work: `modules/` and `native/`.
 - Tests: `__tests__/`, named after the feature area.
 
 ## Warnings
 
-- Treat `app.config.ts`, `plugins/`, `ios/`, and `android/` as native-build-sensitive.
+- Treat `app.config.js`, `plugins/`, `modules/`, `native/`, `ios/`, and `android/` as native-build-sensitive.
 - `ios/` and `android/` are git-ignored here, so durable native behavior should be expressed through checked-in config/plugins/source files.
-- Persistent widget changes belong in `widgets/ios/LocketWidget.swift`; the copy under `ios/ExpoWidgetsTarget/` is generated.
-- Be careful in `services/database.ts`, `services/syncService.ts`, `services/sharedFeedService.ts`, and `utils/backgroundGeofence.ts`; they are core persistence/reminder/social paths with existing tests.
-- Auth and billing env values are project-specific. Do not rotate or replace them casually.
+- Persistent iOS widget changes belong in `widgets/ios/LocketWidget.swift`; persistent Android widget changes belong in `widgets/android/NotoWidgetProvider.kt` plus the supporting plugins that re-apply those assets during prebuild.
+- Be careful in `services/database.ts`, `services/syncService.ts`, `services/sharedFeedService.ts`, `services/socialPushService.ts`, and `utils/backgroundGeofence.ts`; they are core persistence/reminder/social paths with existing tests.
+- Auth, push, and billing env values are project-specific. Do not rotate or replace them casually.

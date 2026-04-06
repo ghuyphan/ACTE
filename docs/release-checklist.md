@@ -14,7 +14,7 @@
 - [ ] Photo note capture works, including retake and permission-denied states.
 - [ ] Notes grid opens both local notes and shared posts correctly.
 - [ ] Favorite, archive, delete, and edit flows still behave correctly.
-- [ ] Text notes preserve note color, doodles, stickers, and mood presentation.
+- [ ] Text notes preserve note color, doodles, stickers, stamps, and mood presentation.
 - [ ] Delete-all from settings removes note records and local media.
 
 ## Search, Map, Reminders, Widget
@@ -23,17 +23,20 @@
 - [ ] Map first load centers on the user or a note fallback.
 - [ ] Map marker interaction opens the correct note detail on iOS and Android.
 - [ ] Reminder flow shows the background-location explanation before escalation.
-- [ ] Notification deep-link opens the related note detail.
+- [ ] Notification deep-link opens the related note detail or shared post.
 - [ ] Widget updates after create, edit, delete, and app relaunch flows.
 - [ ] Widget deep links open the correct local note or shared post.
+- [ ] Android widget snapshot and iOS widget timeline both render current content after app updates.
 
-## Sharing
+## Sharing And Social Push
 
 - [ ] Shared feed degrades gracefully when auth is unavailable.
 - [ ] Signed-in users can create an invite, accept an invite, and remove a friend.
 - [ ] Shared posts appear in Home and `/shared` with correct author metadata.
 - [ ] Sharing a note preserves photo, doodles, stickers, and note color where expected.
 - [ ] Offline mode shows cached shared content and blocks write actions with clear messaging.
+- [ ] Expo push token registration succeeds after sign-in when push is configured.
+- [ ] Friend-accepted and shared-post notifications deliver and deep-link correctly on physical devices.
 
 ## Plus / Billing
 
@@ -58,16 +61,16 @@
 ## Platform QA
 
 - [ ] iOS: widget render still matches the latest checked-in Swift implementation.
-- [ ] iOS: compact and large devices keep auth, settings, and Plus screens readable.
-- [ ] Android: capture, map, shared feed, and settings remain readable in both themes.
+- [ ] iOS: compact and large devices keep auth, settings, profile, and Plus screens readable.
+- [ ] Android: capture, map, shared feed, settings, and profile remain readable in both themes.
 - [ ] Android: native alert dialogs open and dismiss cleanly in note delete, clear-all, and permission/error flows.
 - [ ] Android: background location and notification permission recovery flows still work.
 
 ## OTA / EAS Update
 
-- [ ] Publish app-store builds from the intended EAS channel (`preview` or `production`).
-- [ ] For native changes, bump the Expo `version` in `app.config.ts` before shipping a new build.
-- [ ] For JavaScript-only changes, publish an OTA update to the matching channel.
+- [ ] Publish store-bound builds from the intended EAS channel (`preview` or `production`).
+- [ ] For native changes, bump the Expo `version` in `app.config.js` before shipping a new build.
+- [ ] For JavaScript-only changes, publish an OTA update to the matching channel with `npm run update:preview` or `npm run update:production`.
 
 ## Quality Gates
 

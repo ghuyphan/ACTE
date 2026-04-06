@@ -21,6 +21,8 @@ Backward-compatible `PLUS` env aliases still work, but the primary names are the
 
 ## Environment Variables
 
+Set these in `.env.local` for local native work or in your EAS environment for build/release:
+
 ```env
 EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=appl_xxx
 EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=goog_xxx
@@ -69,6 +71,7 @@ EXPO_PUBLIC_REVENUECAT_PLUS_OFFERING_ID=default
 
 ## Relevant Files
 
+- `.env.example`
 - `constants/subscription.ts`
 - `hooks/useSubscription.tsx`
 - `app/plus.tsx`

@@ -7,9 +7,11 @@ This is the shortest path back into the widget code.
 1. `services/widgetService.ts`
 2. `widgets/LocketWidget.tsx`
 3. `widgets/ios/LocketWidget.swift`
-4. `hooks/app/useAppWidgetRefresh.ts`
-5. `hooks/useNotes.ts`
-6. `__tests__/widgetService.test.ts`
+4. `widgets/android/NotoWidgetProvider.kt`
+5. `hooks/app/useAppWidgetRefresh.ts`
+6. `plugins/withCustomAndroidWidget.js`
+7. `plugins/withAndroidWidgetTypography.js`
+8. `__tests__/widgetService.test.ts`
 
 ## What Each File Owns
 
@@ -23,12 +25,13 @@ It owns:
 - choosing timeline entries
 - deduping repeats across recent slots
 - preparing shared-container image assets for iOS
-- pushing the iOS timeline or Android snapshot
+- pushing the iOS timeline or Android snapshot bridge update
 
 Current behavior at a glance:
 
 - iOS receives a `4` entry timeline
 - entries advance in `6` hour slots
+- Android receives the first resolved entry as a JSON snapshot
 - candidates can come from nearby notes, favorites, photos, resurfaced older notes, shared posts, or latest notes
 - the service keeps short history to avoid showing the same item too often
 
@@ -53,11 +56,38 @@ It owns:
 - rendering the real Home Screen and Lock Screen widget layouts
 - iOS-specific background and family behavior
 
-Persistent changes belong here, not in the generated native copy.
+Persistent iOS visual changes belong here, not in the generated native copy.
+
+### `widgets/android/NotoWidgetProvider.kt`
+
+This is the source of truth for the Android widget runtime.
+
+It owns:
+
+- parsing the bridged JSON snapshot
+- binding snapshot data into Android `RemoteViews`
+- image, gradient, doodle, sticker, and badge rendering for the Android widget
+- per-size layout behavior and click intents back into the app
+
+Persistent Android visual and binding changes belong here, not only in the generated `android/` copy.
+
+### `plugins/withCustomAndroidWidget.js`
+
+This plugin re-applies the checked-in Android widget source and layout patches during prebuild.
+
+It owns:
+
+- copying the checked-in provider source into the generated Android project
+- patching widget layouts and drawable resources
+- keeping prebuild output aligned with the checked-in Android widget implementation
+
+### `plugins/withAndroidWidgetTypography.js`
+
+This plugin normalizes Android widget typography to the app's Noto Sans font setup after prebuild.
 
 ### `__tests__/widgetService.test.ts`
 
-This is the safety net for selection logic, media fallbacks, and timeline output.
+This is the safety net for selection logic, media fallbacks, and timeline/snapshot output.
 
 Update these tests when changing:
 
@@ -65,15 +95,17 @@ Update these tests when changing:
 - repeat-avoidance rules
 - shared-content behavior
 - image copy and fallback logic
+- iOS timeline or Android snapshot bridge payload shape
 
 ## Data Flow
 
-1. `app/_layout.tsx` and `components/app/AppProviders.tsx` wire startup through `hooks/app/useAppStartupBootstrap.ts` and `hooks/app/useAppWidgetRefresh.ts`.
-2. `useAppStartupBootstrap` initializes the DB and performs the early widget-ready bootstrap work.
+1. `app/_layout.tsx` wires startup through `hooks/app/useAppStartupBootstrap.ts`, `hooks/app/useAppWidgetRefresh.ts`, and the shared provider shell.
+2. `useAppWidgetRefresh` refreshes widget data on launch, foreground, and auth/connectivity changes.
 3. Note mutations in `hooks/state/useNotesStore.tsx` also refresh widget data. Import the public notes API from `hooks/useNotes.ts`; the state folder is the implementation detail.
-4. `updateWidgetData()` builds timeline props from local notes and optional shared-feed content.
-5. Expo Widgets stores the payload.
-6. `widgets/ios/LocketWidget.swift` reads the payload and renders it.
+4. `updateWidgetData()` builds widget props from local notes and optional shared-feed content.
+5. iOS receives a timeline through `updateTimeline(...)`.
+6. Android receives the first resolved entry through `NotoWidgetModule.updateSnapshot(...)`.
+7. `widgets/ios/LocketWidget.swift` renders the iOS timeline and `widgets/android/NotoWidgetProvider.kt` renders the Android snapshot.
 
 ## Common Change Map
 
@@ -82,16 +114,22 @@ Change widget selection or rotation rules:
 - edit `services/widgetService.ts`
 - update `__tests__/widgetService.test.ts`
 
-Change widget visuals:
+Change iOS widget visuals:
 
 - edit `widgets/ios/LocketWidget.swift`
 - keep `widgets/LocketWidget.tsx` roughly aligned for fallback/dev previews
+
+Change Android widget visuals or binding:
+
+- edit `widgets/android/NotoWidgetProvider.kt`
+- update `plugins/withCustomAndroidWidget.js` or `plugins/withAndroidWidgetTypography.js` if the generated layout/resources also need to change
 
 Fix image problems:
 
 1. Check `services/widgetService.ts`
 2. Check `widgets/ios/LocketWidget.swift`
-3. Verify the file was copied into the shared app-group container
+3. Check `widgets/android/NotoWidgetProvider.kt`
+4. Verify the file was copied into the iOS app-group container when applicable
 
 Fix deep-link behavior:
 
@@ -100,9 +138,9 @@ Fix deep-link behavior:
 
 ## Known Gotchas
 
-### Generated native copy is disposable
+### Generated native copies are disposable
 
-`ios/ExpoWidgetsTarget/LocketWidget.swift` is generated. Durable edits must be copied back into `widgets/ios/LocketWidget.swift`.
+The checked-in sources under `widgets/` are durable. Generated files under `ios/` or `android/` can be replaced by prebuild.
 
 ### Payload shape can be nested
 
@@ -110,11 +148,15 @@ The iOS payload path still needs to tolerate the nested bridge structure used by
 
 ### Shared media must be made extension-safe
 
-The widget cannot rely on arbitrary app-sandbox file paths. Shared photos and avatar assets must be copied into the app-group container first.
+The iOS widget cannot rely on arbitrary app-sandbox file paths. Shared photos and avatar assets must be copied into the app-group container first.
 
 ### Android is snapshot-based
 
-Android currently receives the first resolved entry as a snapshot rather than the full iOS-style timeline.
+Android currently renders a single resolved entry rather than the full iOS-style timeline.
+
+### Plugins are part of the Android widget surface
+
+If you change Android widget layouts, drawables, or provider wiring, update the supporting plugins so those changes survive prebuild.
 
 ### Native caches can mislead you
 
@@ -129,6 +171,7 @@ After changing native widget layout or parsing:
 ```bash
 npm test -- --runInBand __tests__/widgetService.test.ts
 npm run lint
-npx tsc --noEmit
+npm run typecheck
 npm run ios
+npm run android
 ```
