@@ -14,7 +14,7 @@ The client-side subscription flow is already wired. Most remaining work is Reven
 
 Unless overridden by env vars, the app expects:
 
-- Entitlement ID: `noto_pro`
+- Entitlement ID: `Noto Pro`
 - Offering ID: `default`
 
 Backward-compatible `PLUS` env aliases still work, but the primary names are the non-`PLUS` variants.
@@ -26,20 +26,20 @@ Set these in `.env.local` for local native work or in your EAS environment for b
 ```env
 EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=
 EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=
-EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID=noto_pro
+EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID=Noto Pro
 EXPO_PUBLIC_REVENUECAT_OFFERING_ID=default
 ```
 
 - Set the iOS public SDK key from RevenueCat `Project settings > API keys` for iOS native builds.
 - Set the Android public SDK key from RevenueCat `Project settings > API keys` for Android native builds.
-- The entitlement env value must exactly match the RevenueCat entitlement identifier. If the dashboard uses a different identifier, use that exact string instead of `noto_pro`.
+- The entitlement env value must exactly match the RevenueCat entitlement identifier. If the dashboard uses a different identifier, use that exact string instead of `Noto Pro`.
 
 For EAS production, this repo's [`eas.json`](../eas.json) maps the `production` build profile to the `production` environment. A matching CLI setup looks like:
 
 ```bash
 eas env:create --environment production --name EXPO_PUBLIC_REVENUECAT_IOS_API_KEY --value appl_your_public_sdk_key
 eas env:create --environment production --name EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY --value goog_your_public_sdk_key
-eas env:create --environment production --name EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID --value noto_pro
+eas env:create --environment production --name EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID --value "Noto Pro"
 eas env:create --environment production --name EXPO_PUBLIC_REVENUECAT_OFFERING_ID --value default
 ```
 
@@ -48,7 +48,7 @@ Repeat the same RevenueCat env setup for `preview` and `development` if you plan
 Also supported for backward compatibility:
 
 ```env
-EXPO_PUBLIC_REVENUECAT_PLUS_ENTITLEMENT_ID=noto_pro
+EXPO_PUBLIC_REVENUECAT_PLUS_ENTITLEMENT_ID=Noto Pro
 EXPO_PUBLIC_REVENUECAT_PLUS_OFFERING_ID=default
 ```
 
@@ -57,7 +57,7 @@ EXPO_PUBLIC_REVENUECAT_PLUS_OFFERING_ID=default
 1. Create the RevenueCat project for this app.
 2. Connect the iOS and Android apps.
 3. Import the store products you plan to sell.
-4. Create an entitlement named `noto_pro`, unless you override it with env vars.
+4. Create an entitlement named `Noto Pro`, unless you override it with env vars.
 5. Create an offering named `default`, unless you override it with env vars.
 6. Attach the packages you want surfaced in the paywall.
 

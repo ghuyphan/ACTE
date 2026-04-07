@@ -68,14 +68,14 @@ RevenueCat production template:
 ```env
 EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=
 EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=
-EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID=noto_pro
+EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID=Noto Pro
 EXPO_PUBLIC_REVENUECAT_OFFERING_ID=default
 ```
 
 - Set both public SDK keys for the native platforms you ship or test.
 - iOS keys start with `appl_`; Android keys start with `goog_`.
 - Mirror those RevenueCat vars into each EAS environment you use for billing QA, not only `production`.
-- Keep the entitlement value aligned with the exact RevenueCat entitlement identifier. If the dashboard identifier differs from `noto_pro`, set that exact value here instead.
+- Keep the entitlement value aligned with the exact RevenueCat entitlement identifier. If the dashboard identifier differs from `Noto Pro`, set that exact value here instead.
 
 Android release signing env:
 
