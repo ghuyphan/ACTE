@@ -51,4 +51,5 @@ app-example
 
 # local Android build outputs
 /build-*.apk
+/build-*.aab
 **/android/build/

@@ -94,8 +94,6 @@ export default function HomeHeaderSearch({
   showDockedBlur = false,
 }: HomeHeaderSearchProps) {
   const modeIconScale = useSharedValue(1);
-  const sharedModeProgress = useSharedValue(sharedButtonMode === 'filter' ? 1 : 0);
-  const sharedFilterProgress = useSharedValue(sharedButtonActive ? 1 : 0);
   const didMountRef = useRef(false);
   const [showAndroidSharedMenuSheet, setShowAndroidSharedMenuSheet] = useState(false);
   const isAndroid = Platform.OS === 'android';
@@ -123,37 +121,8 @@ export default function HomeHeaderSearch({
     });
   }, [captureMode, modeIconScale]);
 
-  useEffect(() => {
-    sharedModeProgress.value = withTiming(sharedButtonMode === 'filter' ? 1 : 0, {
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [sharedButtonMode, sharedModeProgress]);
-
-  useEffect(() => {
-    sharedFilterProgress.value = withTiming(sharedButtonActive ? 1 : 0, {
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [sharedButtonActive, sharedFilterProgress]);
-
   const modeIconAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: modeIconScale.value }],
-  }));
-  const sharedButtonContainerAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        scale: interpolate(sharedModeProgress.value, [0, 1], [1, 1.04]),
-      },
-    ],
-  }));
-  const sharedButtonBadgeAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: sharedModeProgress.value * (0.35 + sharedFilterProgress.value * 0.65),
-    transform: [
-      {
-        scale: 0.72 + sharedModeProgress.value * (0.18 + sharedFilterProgress.value * 0.1),
-      },
-    ],
   }));
   const defaultHeaderAnimatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(searchAnim.value, [0, 1], [1, 0]),
@@ -376,24 +345,33 @@ export default function HomeHeaderSearch({
     }
 
     const sharedLabel = t('shared.manageTitle', 'Friends');
+    const isSharedFilterControl = sharedButtonMode === 'filter' && hasFriendsForFilter;
     const sharedA11yLabel =
-      sharedButtonMode === 'filter'
+      isSharedFilterControl
         ? sharedButtonActive
           ? t('home.friendsFilterActive', 'Friends filter on')
           : t('home.friendsFilterInactive', 'Filter by friends')
         : sharedLabel;
     const canShowFilterMenu =
-      sharedButtonMode === 'filter' && Boolean(onChangeSharedFilter) && hasFriendsForFilter;
+      isSharedFilterControl && Boolean(onChangeSharedFilter);
     const sharedSystemName =
-      sharedButtonMode === 'filter' && sharedButtonActive ? 'person.2.fill' : 'person.2';
+      isSharedFilterControl
+        ? sharedButtonActive
+          ? 'line.3.horizontal.decrease.circle.fill'
+          : 'line.3.horizontal.decrease.circle'
+        : 'person.2';
     const sharedAndroidIcon =
-      sharedButtonMode === 'filter' && sharedButtonActive ? 'people' : 'people-outline';
+      isSharedFilterControl
+        ? sharedButtonActive
+          ? 'filter'
+          : 'filter-outline'
+        : 'people-outline';
     if (Platform.OS === 'ios') {
       const controlLabel = renderHeaderControlLabel(sharedSystemName, sharedLabel, size);
 
       if (canShowFilterMenu) {
         return (
-          <Animated.View style={[styles.sharedButtonContainer, sharedButtonContainerAnimatedStyle]}>
+          <View style={styles.sharedButtonContainer}>
             <Host
               matchContents
               colorScheme={isDark ? 'dark' : 'light'}
@@ -420,26 +398,12 @@ export default function HomeHeaderSearch({
                 />
               </Menu>
             </Host>
-            <Animated.View
-              pointerEvents="none"
-              style={[
-              styles.sharedButtonBadge,
-              styles.sharedButtonChevronBadge,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: `${colors.primary}2E`,
-                },
-                sharedButtonBadgeAnimatedStyle,
-              ]}
-            >
-              <Ionicons name="chevron-down" size={9} color={colors.primary} />
-            </Animated.View>
-          </Animated.View>
+          </View>
         );
       }
 
       return (
-        <Animated.View style={[styles.sharedButtonContainer, sharedButtonContainerAnimatedStyle]}>
+        <View style={styles.sharedButtonContainer}>
           <Host
             matchContents
             colorScheme={isDark ? 'dark' : 'light'}
@@ -449,23 +413,13 @@ export default function HomeHeaderSearch({
               {controlLabel}
             </Button>
           </Host>
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.sharedButtonBadge,
-              {
-                backgroundColor: colors.primary,
-              },
-              sharedButtonBadgeAnimatedStyle,
-            ]}
-          />
-        </Animated.View>
+        </View>
       );
     }
 
     if (canShowFilterMenu) {
       return (
-        <Animated.View style={sharedButtonContainerAnimatedStyle}>
+        <View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={sharedA11yLabel}
@@ -489,28 +443,13 @@ export default function HomeHeaderSearch({
             ]}
           >
             <Ionicons name={sharedAndroidIcon} size={20} color={colors.primary} />
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.sharedButtonBadge,
-                styles.sharedButtonBadgeAndroid,
-                styles.sharedButtonChevronBadge,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: `${colors.primary}2A`,
-                },
-                sharedButtonBadgeAnimatedStyle,
-              ]}
-            >
-              <Ionicons name="chevron-down" size={9} color={colors.primary} />
-            </Animated.View>
           </Pressable>
-        </Animated.View>
+        </View>
       );
     }
 
     return (
-      <Animated.View style={sharedButtonContainerAnimatedStyle}>
+      <View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={sharedA11yLabel}
@@ -524,22 +463,11 @@ export default function HomeHeaderSearch({
               backgroundColor: androidHeaderControlBackgroundColor,
               borderColor: androidHeaderControlBorderColor,
             },
-          ]}
-        >
-          <Ionicons name={sharedAndroidIcon} size={20} color={colors.primary} />
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.sharedButtonBadge,
-              styles.sharedButtonBadgeAndroid,
-              {
-                backgroundColor: colors.primary,
-              },
-              sharedButtonBadgeAnimatedStyle,
             ]}
-          />
-        </Pressable>
-      </Animated.View>
+          >
+            <Ionicons name={sharedAndroidIcon} size={20} color={colors.primary} />
+          </Pressable>
+      </View>
     );
   };
 
@@ -600,14 +528,18 @@ export default function HomeHeaderSearch({
       <Host matchContents colorScheme={isDark ? 'dark' : 'light'} style={styles.detachedSwiftControlsHost}>
         <HStack spacing={10} alignment="center">
           {showSharedButton && onOpenShared ? (
-            sharedButtonMode === 'filter' && onChangeSharedFilter ? (
+            sharedButtonMode === 'filter' && onChangeSharedFilter && hasFriendsForFilter ? (
               <Menu
                 label={
                   sharedButtonActive
                     ? t('home.friendsFilterActive', 'Friends filter on')
                     : t('home.friendsFilterInactive', 'Filter by friends')
                 }
-                systemImage={sharedButtonActive ? 'person.2.fill' : 'person.2'}
+                systemImage={
+                  sharedButtonActive
+                    ? 'line.3.horizontal.decrease.circle.fill'
+                    : 'line.3.horizontal.decrease.circle'
+                }
                 modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
               >
                 <Button
@@ -686,11 +618,12 @@ export default function HomeHeaderSearch({
 
         {showSharedButton && onOpenShared ? (
           <>
-            <Animated.View style={[styles.sharedButtonContainer, sharedButtonContainerAnimatedStyle]}>
+            <View style={styles.sharedButtonContainer}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={
                   sharedButtonMode === 'filter'
+                    && hasFriendsForFilter
                     ? sharedButtonActive
                       ? t('home.friendsFilterActive', 'Friends filter on')
                       : t('home.friendsFilterInactive', 'Filter by friends')
@@ -707,43 +640,20 @@ export default function HomeHeaderSearch({
                 }}
                 pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
                 style={({ pressed }) => [styles.androidGroupedAction, pressed ? styles.androidGroupedActionPressed : null]}
-              >
-                <Ionicons
-                  name={sharedButtonMode === 'filter' && sharedButtonActive ? 'people' : 'people-outline'}
-                  size={18}
-                  color={androidHeaderControlForegroundColor}
-                />
-                {sharedButtonMode === 'filter' && onChangeSharedFilter ? (
-                  <Animated.View
-                    pointerEvents="none"
-                    style={[
-                      styles.sharedButtonBadge,
-                      styles.sharedButtonBadgeAndroidGrouped,
-                      styles.sharedButtonChevronBadge,
-                      {
-                        backgroundColor: isDark ? 'rgba(20,16,12,0.95)' : 'rgba(255,250,242,0.95)',
-                        borderColor: androidHeaderControlBorderColor,
-                      },
-                      sharedButtonBadgeAnimatedStyle,
-                    ]}
-                  >
-                    <Ionicons name="chevron-down" size={8} color={androidHeaderControlForegroundColor} />
-                  </Animated.View>
-                ) : (
-                  <Animated.View
-                    pointerEvents="none"
-                    style={[
-                      styles.sharedButtonBadge,
-                      styles.sharedButtonBadgeAndroidGrouped,
-                      {
-                        backgroundColor: colors.primary,
-                      },
-                      sharedButtonBadgeAnimatedStyle,
-                    ]}
+                >
+                  <Ionicons
+                    name={
+                      sharedButtonMode === 'filter' && hasFriendsForFilter
+                        ? sharedButtonActive
+                          ? 'filter'
+                          : 'filter-outline'
+                        : 'people-outline'
+                    }
+                    size={18}
+                    color={androidHeaderControlForegroundColor}
                   />
-                )}
               </Pressable>
-            </Animated.View>
+            </View>
             <View style={[styles.androidGroupedActionDivider, { backgroundColor: androidHeaderControlBorderColor }]} />
           </>
         ) : null}
@@ -1052,30 +962,6 @@ const styles = StyleSheet.create({
   },
   sharedButtonContainer: {
     position: 'relative',
-  },
-  sharedButtonBadge: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  sharedButtonBadgeAndroid: {
-    right: 8,
-    bottom: 8,
-  },
-  sharedButtonBadgeAndroidGrouped: {
-    right: 6,
-    bottom: 6,
-  },
-  sharedButtonChevronBadge: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
   },
   searchHeader: {
     paddingHorizontal: 20,
