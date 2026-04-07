@@ -24,23 +24,26 @@ Backward-compatible `PLUS` env aliases still work, but the primary names are the
 Set these in `.env.local` for local native work or in your EAS environment for build/release:
 
 ```env
-EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=appl_mock_replace_me
-EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=goog_mock_replace_me
+EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=
+EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=
 EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID=noto_pro
 EXPO_PUBLIC_REVENUECAT_OFFERING_ID=default
 ```
 
-- Replace `goog_mock_replace_me` with the Android public SDK key from RevenueCat `Project settings > API keys`.
-- Replace `appl_mock_replace_me` later when the iOS app is wired.
+- Set the iOS public SDK key from RevenueCat `Project settings > API keys` for iOS native builds.
+- Set the Android public SDK key from RevenueCat `Project settings > API keys` for Android native builds.
 - The entitlement env value must exactly match the RevenueCat entitlement identifier. If the dashboard uses a different identifier, use that exact string instead of `noto_pro`.
 
 For EAS production, this repo's [`eas.json`](../eas.json) maps the `production` build profile to the `production` environment. A matching CLI setup looks like:
 
 ```bash
-eas env:create --environment production --name EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY --value goog_mock_replace_me
+eas env:create --environment production --name EXPO_PUBLIC_REVENUECAT_IOS_API_KEY --value appl_your_public_sdk_key
+eas env:create --environment production --name EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY --value goog_your_public_sdk_key
 eas env:create --environment production --name EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID --value noto_pro
 eas env:create --environment production --name EXPO_PUBLIC_REVENUECAT_OFFERING_ID --value default
 ```
+
+Repeat the same RevenueCat env setup for `preview` and `development` if you plan to validate purchases there.
 
 Also supported for backward compatibility:
 

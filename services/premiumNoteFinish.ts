@@ -34,7 +34,7 @@ export function getPremiumNoteSaveDecision({
   selectedNoteColor,
   existingNoteColor,
 }: GetPremiumNoteSaveDecisionOptions): PremiumNoteSaveDecision {
-  if (!isHologramNoteColor(selectedNoteColor)) {
+  if (!isPremiumNoteColor(selectedNoteColor)) {
     return 'allow_save';
   }
 
@@ -42,7 +42,10 @@ export function getPremiumNoteSaveDecision({
     return 'allow_save';
   }
 
-  if (isHologramNoteColor(existingNoteColor)) {
+  if (
+    isPremiumNoteColor(existingNoteColor) &&
+    normalizeSavedTextNoteColor(existingNoteColor) === normalizeSavedTextNoteColor(selectedNoteColor)
+  ) {
     return 'preserve_existing_premium';
   }
 

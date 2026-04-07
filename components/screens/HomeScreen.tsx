@@ -1086,10 +1086,12 @@ export default function HomeScreen() {
                 showAlert({
                   variant: 'warning',
                   title: t('plus.restoreFailedTitle', 'Could not restore purchases'),
-                  message: t(
-                    'plus.restoreFailedMessage',
-                    'We could not refresh your purchases right now. Please try again later.'
-                  ),
+                  message:
+                    result.message ??
+                    t(
+                      'plus.restoreFailedMessage',
+                      'We could not refresh your purchases right now. Please try again later.'
+                    ),
                   primaryAction: {
                     label: t('common.done', 'Done'),
                   },

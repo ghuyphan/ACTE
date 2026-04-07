@@ -337,11 +337,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                 'Your Noto Plus access has been refreshed for this device.'
                             )
                             : (
-                                result.message ??
-                                t(
-                                    'plus.restoreFailedMessage',
-                                    'We could not refresh your purchases right now. Please try again later.'
-                                )
+                              result.message ??
+                              t(
+                                'plus.restoreFailedMessage',
+                                'We could not refresh your purchases right now. Please try again later.'
+                              )
                             )
                     );
                 })();

@@ -8,6 +8,12 @@ const mockAuthState = {
   isReady: true,
   user: null as { id: string; uid: string } | null,
 };
+const mockConnectivityState = {
+  status: 'online',
+  isOnline: true,
+  isInternetReachable: true,
+  lastChangedAt: null as string | null,
+};
 
 const mockSubscriptionConfig = {
   testApiKey: '',
@@ -41,12 +47,7 @@ jest.mock('../hooks/useAuth', () => ({
 }));
 
 jest.mock('../hooks/useConnectivity', () => ({
-  useConnectivity: () => ({
-    status: 'online',
-    isOnline: true,
-    isInternetReachable: true,
-    lastChangedAt: null,
-  }),
+  useConnectivity: () => mockConnectivityState,
 }));
 
 const mockSupabaseChannel = {} as MockSupabaseChannel;
@@ -162,6 +163,10 @@ describe('useSubscription', () => {
     setPlatformOS('android');
     mockAuthState.isReady = true;
     mockAuthState.user = null;
+    mockConnectivityState.status = 'online';
+    mockConnectivityState.isOnline = true;
+    mockConnectivityState.isInternetReachable = true;
+    mockConnectivityState.lastChangedAt = null;
     mockRemoteUsage.photoNoteCount = null;
     mockSubscriptionConfig.testApiKey = '';
     mockSubscriptionConfig.iosApiKey = '';
@@ -260,6 +265,54 @@ describe('useSubscription', () => {
     await waitFor(() => {
       expect(hook.result.current.remotePhotoNoteCount).toBe(7);
     });
+  });
+
+  it('reloads offerings after an anonymous offline launch reconnects', async () => {
+    mockConnectivityState.status = 'offline';
+    mockConnectivityState.isOnline = false;
+    mockConnectivityState.isInternetReachable = false;
+
+    const hook = renderHook(() => useSubscription(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.isPurchaseAvailable).toBe(false);
+    });
+
+    expect(mockPurchases.getOfferings).not.toHaveBeenCalled();
+
+    await act(async () => {
+      mockConnectivityState.status = 'online';
+      mockConnectivityState.isOnline = true;
+      mockConnectivityState.isInternetReachable = true;
+      hook.rerender();
+    });
+
+    await waitFor(() => {
+      expect(hook.result.current.isPurchaseAvailable).toBe(true);
+      expect(hook.result.current.plusPriceLabel).toBe('$4.99');
+    });
+  });
+
+  it('reports restore as inactive when no plus entitlement is found', async () => {
+    mockPurchases.restorePurchases.mockResolvedValue({
+      entitlements: { active: {} },
+    } as any);
+
+    const hook = renderHook(() => useSubscription(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+    });
+
+    let restoreResult!: { status: string; message?: string };
+    await act(async () => {
+      restoreResult = await hook.result.current.restorePurchases();
+    });
+
+    expect(restoreResult.status).toBe('inactive');
+    expect(restoreResult.message).toBe('No active Noto Plus purchase was found to restore.');
+    expect(hook.result.current.tier).toBe('free');
   });
 
   it('presents RevenueCat paywall and customer center helpers', async () => {

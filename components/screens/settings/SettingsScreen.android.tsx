@@ -236,7 +236,7 @@ export default function SettingsScreenAndroid() {
               title={t('settings.plusTitle', 'Noto Plus')}
               subtitle={plusSubtitle}
               value={plusEntryValue}
-              onPress={isPurchaseAvailable ? openPlusScreen : undefined}
+              onPress={openPlusScreen}
             />
           </SettingsCard>
         </View>

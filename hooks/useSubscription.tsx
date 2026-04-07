@@ -22,7 +22,7 @@ import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
 
 export interface SubscriptionActionResult {
-  status: 'success' | 'cancelled' | 'unavailable' | 'error';
+  status: 'success' | 'cancelled' | 'inactive' | 'unavailable' | 'error';
   message?: string;
   customerInfo?: CustomerInfo;
 }
@@ -66,8 +66,12 @@ interface SubscriptionSnapshot {
   cachedAt: string;
 }
 
+function hasActiveProEntitlement(customerInfo: CustomerInfo | null) {
+  return Boolean(customerInfo?.entitlements.active?.[REVENUECAT_PRO_ENTITLEMENT_ID]);
+}
+
 function getTierFromCustomerInfo(customerInfo: CustomerInfo | null): PlanTier {
-  if (customerInfo?.entitlements.active?.[REVENUECAT_PRO_ENTITLEMENT_ID]) {
+  if (hasActiveProEntitlement(customerInfo)) {
     return 'plus';
   }
 
@@ -236,6 +240,33 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   }, [isConfigured, isOnline, loadRevenueCatState, revenueCatApiKey]);
 
   useEffect(() => {
+    if (!isConfigured || !authReady || !isOnline || !isInitializedRef.current) {
+      return;
+    }
+
+    const nextUserId = user?.uid ?? null;
+    if (currentRevenueCatUserIdRef.current !== nextUserId) {
+      return;
+    }
+
+    if (currentOffering && customerInfo) {
+      return;
+    }
+
+    void loadRevenueCatState().catch((error) => {
+      console.warn('[subscription] Failed to refresh RevenueCat state:', error);
+    });
+  }, [
+    authReady,
+    currentOffering,
+    customerInfo,
+    isConfigured,
+    isOnline,
+    loadRevenueCatState,
+    user?.uid,
+  ]);
+
+  useEffect(() => {
     if (!authReady) {
       return;
     }
@@ -332,8 +363,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    currentRevenueCatUserIdRef.current = nextUserId;
-
     void (async () => {
       try {
         if (nextUserId) {
@@ -345,6 +374,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         }
 
         await loadRevenueCatState();
+        currentRevenueCatUserIdRef.current = nextUserId;
       } catch (error) {
         console.warn('[subscription] Failed to refresh RevenueCat user state:', error);
       }
@@ -441,6 +471,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         try {
           const customerInfo = await Purchases.restorePurchases();
           setCustomerInfo(customerInfo);
+          if (!hasActiveProEntitlement(customerInfo)) {
+            return {
+              status: 'inactive',
+              customerInfo,
+              message: 'No active Noto Plus purchase was found to restore.',
+            };
+          }
+
           return { status: 'success', customerInfo };
         } catch (error) {
           console.warn('[subscription] Restore failed:', error);

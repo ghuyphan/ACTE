@@ -1,70 +1,53 @@
-import { DEFAULT_NOTE_COLOR_ID } from '../constants/noteColors';
-import {
-  HOLOGRAM_NOTE_COLOR_ID,
-  getFallbackFreeNoteColor,
-  getPremiumNoteSaveDecision,
-  isHologramNoteColor,
-  isPreviewablePremiumNoteColor,
-} from '../services/premiumNoteFinish';
+import { getPremiumNoteSaveDecision } from '../services/premiumNoteFinish';
 
-describe('premiumNoteFinish', () => {
-  it('only treats the hologram finish as previewable premium content', () => {
-    expect(isHologramNoteColor(HOLOGRAM_NOTE_COLOR_ID)).toBe(true);
-    expect(isHologramNoteColor('aurora-rgb')).toBe(false);
-    expect(isPreviewablePremiumNoteColor(HOLOGRAM_NOTE_COLOR_ID)).toBe(true);
-    expect(isPreviewablePremiumNoteColor('chrome-rare')).toBe(false);
-    expect(isPreviewablePremiumNoteColor(null)).toBe(false);
-  });
-
-  it('allows saves when the selected finish is not hologram gated', () => {
-    expect(
-      getPremiumNoteSaveDecision({
-        tier: 'free',
-        selectedNoteColor: 'sunset-coral',
-      })
-    ).toBe('allow_save');
-
+describe('premium note finish gating', () => {
+  it('requires Plus for every premium finish on new free notes', () => {
     expect(
       getPremiumNoteSaveDecision({
         tier: 'free',
         selectedNoteColor: 'aurora-rgb',
       })
-    ).toBe('allow_save');
-  });
-
-  it('requires an upsell when a free user selects hologram for a standard note', () => {
+    ).toBe('upsell_required');
     expect(
       getPremiumNoteSaveDecision({
         tier: 'free',
-        selectedNoteColor: HOLOGRAM_NOTE_COLOR_ID,
-        existingNoteColor: 'jade-pop',
+        selectedNoteColor: 'holo-foil',
+      })
+    ).toBe('upsell_required');
+    expect(
+      getPremiumNoteSaveDecision({
+        tier: 'free',
+        selectedNoteColor: 'chrome-rare',
       })
     ).toBe('upsell_required');
   });
 
-  it('preserves an existing hologram finish for free users editing old notes', () => {
+  it('lets free users keep the same premium finish they already own', () => {
     expect(
       getPremiumNoteSaveDecision({
         tier: 'free',
-        selectedNoteColor: HOLOGRAM_NOTE_COLOR_ID,
-        existingNoteColor: HOLOGRAM_NOTE_COLOR_ID,
+        existingNoteColor: 'aurora-rgb',
+        selectedNoteColor: 'aurora-rgb',
       })
     ).toBe('preserve_existing_premium');
+  });
 
+  it('does not let free users switch between premium finishes', () => {
+    expect(
+      getPremiumNoteSaveDecision({
+        tier: 'free',
+        existingNoteColor: 'aurora-rgb',
+        selectedNoteColor: 'chrome-rare',
+      })
+    ).toBe('upsell_required');
+  });
+
+  it('allows Plus users to save premium finishes', () => {
     expect(
       getPremiumNoteSaveDecision({
         tier: 'plus',
-        selectedNoteColor: HOLOGRAM_NOTE_COLOR_ID,
-        existingNoteColor: 'jade-pop',
+        selectedNoteColor: 'chrome-rare',
       })
     ).toBe('allow_save');
-  });
-
-  it('falls back to the last known free color before using the default color', () => {
-    expect(getFallbackFreeNoteColor('sunset-coral', HOLOGRAM_NOTE_COLOR_ID)).toBe('sunset-coral');
-    expect(getFallbackFreeNoteColor('unknown-color', 'jade-pop')).toBe(DEFAULT_NOTE_COLOR_ID);
-    expect(getFallbackFreeNoteColor('chrome-rare', 'jade-pop')).toBe('jade-pop');
-    expect(getFallbackFreeNoteColor('chrome-rare', HOLOGRAM_NOTE_COLOR_ID)).toBe(DEFAULT_NOTE_COLOR_ID);
-    expect(getFallbackFreeNoteColor(null, null)).toBe(DEFAULT_NOTE_COLOR_ID);
   });
 });

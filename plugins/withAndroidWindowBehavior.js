@@ -14,6 +14,8 @@ function withAndroidActivityOrientation(config) {
 
     // Keep the shared Expo orientation lock for iOS, but let Android rotate on large screens.
     delete mainActivity.$['android:screenOrientation'];
+    // RevenueCat requires `standard` or `singleTop` to avoid cancelled purchase flows.
+    mainActivity.$['android:launchMode'] = 'singleTop';
 
     return config;
   });

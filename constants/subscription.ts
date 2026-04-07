@@ -19,6 +19,10 @@ export const REVENUECAT_OFFERING_ID =
 // Backward-compatible aliases for older app code that still uses "plus" naming.
 export const REVENUECAT_PLUS_ENTITLEMENT_ID = REVENUECAT_PRO_ENTITLEMENT_ID;
 export const REVENUECAT_PLUS_OFFERING_ID = REVENUECAT_OFFERING_ID;
+const REVENUECAT_PLACEHOLDER_API_KEYS = new Set([
+  'appl_mock_replace_me',
+  'goog_mock_replace_me',
+]);
 
 export function getRevenueCatApiKey(platformOS = Platform.OS) {
   if (platformOS === 'ios') {
@@ -33,7 +37,8 @@ export function getRevenueCatApiKey(platformOS = Platform.OS) {
 }
 
 export function isRevenueCatConfigured(platformOS = Platform.OS) {
-  return getRevenueCatApiKey(platformOS).trim().length > 0;
+  const apiKey = getRevenueCatApiKey(platformOS).trim();
+  return apiKey.length > 0 && !REVENUECAT_PLACEHOLDER_API_KEYS.has(apiKey);
 }
 
 export function getPhotoNoteLimitForTier(tier: PlanTier) {
