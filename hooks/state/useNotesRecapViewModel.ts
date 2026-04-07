@@ -381,11 +381,13 @@ export function useNotesRecapViewModel({
       const dayNotes = day.noteIds
         .map((noteId) => noteById.get(noteId) ?? null)
         .filter((note): note is Note => Boolean(note));
-      const dayPhotoPreviewUri =
-        dayNotes
-          .filter((note) => note.type === 'photo')
-          .map((note) => getNotePhotoUri(note))
-          .find((uri): uri is string => Boolean(uri)) ?? undefined;
+      const dayPhotoPreviewUris = dayNotes
+        .filter((note) => note.type === 'photo')
+        .map((note) => getNotePhotoUri(note))
+        .filter((uri): uri is string => Boolean(uri));
+      const dayPhotoPreviewUri = dayPhotoPreviewUris[0];
+      const photoCount = dayNotes.filter((note) => note.type === 'photo').length;
+      const textCount = dayNotes.length - photoCount;
 
       dayNotesByKey.set(day.dateKey, dayNotes);
 
@@ -395,6 +397,9 @@ export function useNotesRecapViewModel({
         dayNumber: day.dayOfMonth,
         count: day.noteCount,
         photoPreviewUri: dayPhotoPreviewUri,
+        photoPreviewUris: dayPhotoPreviewUris.slice(0, 2),
+        photoCount,
+        textCount,
         markers: Array.from({ length: day.stampCount }, (_, index) => ({
           key: `${day.dateKey}:marker:${index}`,
           color:

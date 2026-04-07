@@ -5,7 +5,7 @@ import {
 } from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TFunction } from 'i18next';
-import { forwardRef, type ComponentProps, type ReactNode, RefObject, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { forwardRef, type ComponentProps, type ReactNode, RefObject, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -358,6 +358,7 @@ interface TextCaptureSurfaceProps {
   importingSticker: CaptureCardStickerFlowState['importingSticker'];
   inlinePasteLoading: CaptureCardStickerFlowState['inlinePasteLoading'];
   interactionsDisabled: boolean;
+  onCanvasGestureActiveChange: (active: boolean) => void;
   noteInputRef: RefObject<TextInput | null>;
   noteColor: CaptureCardProps['noteColor'];
   noteText: CaptureCardProps['noteText'];
@@ -400,6 +401,7 @@ function TextCaptureSurface({
   importingSticker,
   inlinePasteLoading,
   interactionsDisabled,
+  onCanvasGestureActiveChange,
   noteInputRef,
   noteColor,
   noteText,
@@ -449,6 +451,7 @@ function TextCaptureSurface({
             editable={stickerModeEnabled}
             stampShadowEnabled={false}
             onChangePlacements={handleChangeStickerPlacements}
+            onGestureActiveChange={onCanvasGestureActiveChange}
             selectedPlacementId={selectedStickerId}
             onChangeSelectedPlacementId={handleSelectSticker}
             onPressCanvas={handlePressStickerCanvas}
@@ -467,6 +470,7 @@ function TextCaptureSurface({
             editable={doodleModeEnabled}
             activeColor={doodleColor}
             onChangeStrokes={setTextDoodleStrokes}
+            onGestureActiveChange={onCanvasGestureActiveChange}
           />
         </View>
       ) : null}
@@ -537,6 +541,7 @@ interface PhotoCaptureSurfaceProps {
   onChangePhotoFilter: CaptureCardProps['onChangePhotoFilter'];
   pastePrompt: CaptureCardStickerFlowState['pastePrompt'];
   photoDoodleStrokes: CaptureCardDecorationState['photoDoodleStrokes'];
+  onCanvasGestureActiveChange: (active: boolean) => void;
   selectedPhotoFilterId: CaptureCardProps['selectedPhotoFilterId'];
   selectedStickerId: CaptureCardDecorationState['selectedStickerId'];
   setPhotoDoodleStrokes: CaptureCardDecorationState['setPhotoDoodleStrokes'];
@@ -564,6 +569,7 @@ function PhotoCaptureSurface({
   onChangePhotoFilter,
   pastePrompt,
   photoDoodleStrokes,
+  onCanvasGestureActiveChange,
   selectedPhotoFilterId,
   selectedStickerId,
   setPhotoDoodleStrokes,
@@ -616,6 +622,7 @@ function PhotoCaptureSurface({
             placements={stickerPlacements}
             editable={stickerModeEnabled}
             onChangePlacements={handleChangeStickerPlacements}
+            onGestureActiveChange={onCanvasGestureActiveChange}
             selectedPlacementId={selectedStickerId}
             onChangeSelectedPlacementId={handleSelectSticker}
             onPressCanvas={handlePressStickerCanvas}
@@ -634,6 +641,7 @@ function PhotoCaptureSurface({
             editable={doodleModeEnabled}
             activeColor={doodleColor}
             onChangeStrokes={setPhotoDoodleStrokes}
+            onGestureActiveChange={onCanvasGestureActiveChange}
           />
         </View>
       ) : null}
@@ -1959,6 +1967,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const androidTextEntryBottomInset =
     Platform.OS === 'android' && isTextEntryFocused ? 96 : 0;
   const captureKeyboardVerticalOffset = topInset + 76;
+  const [canvasGestureActive, setCanvasGestureActive] = useState(false);
 
   useEffect(() => {
     if (saveState === 'success') {
@@ -2047,7 +2056,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   useEffect(() => {
     closeDecorateControls();
     closeStickerOverlays();
+    setCanvasGestureActive(false);
   }, [captureMode, capturedPhoto, closeDecorateControls, closeStickerOverlays]);
+
+  useEffect(() => {
+    if (!doodleModeEnabled && !stickerModeEnabled) {
+      setCanvasGestureActive(false);
+    }
+  }, [doodleModeEnabled, stickerModeEnabled]);
 
   useEffect(() => {
     const wasTextDraftEmpty = previousTextDraftEmptyRef.current;
@@ -2065,17 +2081,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
   useEffect(() => {
     onInteractionLockChange?.(
-      ((captureMode === 'text' || Boolean(capturedPhoto)) &&
-        (doodleModeEnabled || stickerModeEnabled)) ||
-      isLivePhotoCaptureInProgress
+      canvasGestureActive || isLivePhotoCaptureInProgress
     );
   }, [
-    captureMode,
-    capturedPhoto,
-    doodleModeEnabled,
+    canvasGestureActive,
     isLivePhotoCaptureInProgress,
     onInteractionLockChange,
-    stickerModeEnabled,
   ]);
 
   useEffect(() => {
@@ -2311,6 +2322,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 importingSticker={importingSticker}
                 inlinePasteLoading={inlinePasteLoading}
                 interactionsDisabled={interactionsDisabled}
+                onCanvasGestureActiveChange={setCanvasGestureActive}
                 noteInputRef={noteInputRef}
                 noteColor={effectiveTextModeNoteColor}
                 noteText={noteText}
@@ -2343,6 +2355,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 handleShowCardPastePrompt={handleShowCardPastePrompt}
                 hasLivePhotoMotion={hasLivePhotoMotion}
                 onChangePhotoFilter={onChangePhotoFilter}
+                onCanvasGestureActiveChange={setCanvasGestureActive}
                 pastePrompt={pastePrompt}
                 photoDoodleStrokes={photoDoodleStrokes}
                 selectedPhotoFilterId={selectedPhotoFilterId}

@@ -765,6 +765,32 @@ async function ensureSharedStickerCacheDirectory() {
   return SHARED_STICKER_CACHE_DIRECTORY;
 }
 
+export async function shouldImportSourceDirectlyAsSticker(
+  source: StickerImportSource
+): Promise<boolean> {
+  const sourceUri = typeof source.uri === 'string' ? source.uri.trim() : '';
+  if (!sourceUri) {
+    return false;
+  }
+
+  const mimeType = normalizeMimeType(source.mimeType) || getMimeTypeFromName(source.name);
+  if (!mimeTypeSupportsTransparencyDetection(mimeType)) {
+    return false;
+  }
+
+  const fileInfo = await FileSystem.getInfoAsync(sourceUri).catch(() => null);
+  if (!fileInfo?.exists || fileInfo.isDirectory) {
+    return false;
+  }
+
+  const bytes = await readStickerBytes(sourceUri).catch(() => null);
+  if (!bytes) {
+    return false;
+  }
+
+  return hasTransparency(bytes, mimeType);
+}
+
 async function validateStickerFile(
   uri: string,
   mimeType: string,

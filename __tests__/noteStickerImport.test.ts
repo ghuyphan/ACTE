@@ -308,6 +308,37 @@ describe('importStickerAsset', () => {
     expect(asset.suggestedRenderMode).toBe('stamp');
   });
 
+  it('detects when a source can be imported directly as a floating sticker', async () => {
+    const { shouldImportSourceDirectlyAsSticker } = loadNoteStickersModule();
+
+    mockGetInfoAsync.mockResolvedValue({ exists: true, isDirectory: false, size: 80 * 1024 });
+
+    await expect(
+      shouldImportSourceDirectlyAsSticker({
+        uri: 'file:///imports/transparent-sticker.png',
+        mimeType: 'image/png',
+        name: 'transparent-sticker.png',
+      })
+    ).resolves.toBe(true);
+  });
+
+  it('does not bypass subject cutout for opaque png sources', async () => {
+    const { shouldImportSourceDirectlyAsSticker } = loadNoteStickersModule();
+    const opaquePngBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+
+    mockGetInfoAsync.mockResolvedValue({ exists: true, isDirectory: false, size: 80 * 1024 });
+    mockReadAsBytesAsync.mockResolvedValue(Uint8Array.from(Buffer.from(opaquePngBase64, 'base64')));
+
+    await expect(
+      shouldImportSourceDirectlyAsSticker({
+        uri: 'file:///imports/opaque-sticker.png',
+        mimeType: 'image/png',
+        name: 'opaque-sticker.png',
+      })
+    ).resolves.toBe(false);
+  });
+
   it('normalizes heic photo stamps into jpeg before saving', async () => {
     const importStickerAsset = loadImportStickerAsset();
 

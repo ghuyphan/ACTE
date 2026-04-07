@@ -318,10 +318,12 @@ export default function NotesFeed({
 }: NotesFeedProps) {
   const { height } = useWindowDimensions();
   const captureVisibilityRef = useRef(true);
+  const refreshGestureActiveRef = useRef(false);
   const isAdjustingSnapRef = useRef(false);
   const lastOffsetYRef = useRef(0);
   const previousItemKeysRef = useRef<string[] | null>(null);
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null);
+  const [refreshGestureActive, setRefreshGestureActive] = useState(false);
   const listData = useMemo<HomeFeedItem[]>(
     () => items ?? buildHomeFeedItems(notes, sharedPosts),
     [items, notes, sharedPosts]
@@ -331,6 +333,16 @@ export default function NotesFeed({
     [listData]
   );
   const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
+  const snapSuspended = refreshGestureActive || refreshing;
+
+  const updateRefreshGestureActive = useCallback((nextActive: boolean) => {
+    if (refreshGestureActiveRef.current === nextActive) {
+      return;
+    }
+
+    refreshGestureActiveRef.current = nextActive;
+    setRefreshGestureActive(nextActive);
+  }, []);
 
   const reportCaptureVisibility = useCallback(
     (offsetY: number) => {
@@ -351,6 +363,12 @@ export default function NotesFeed({
     captureVisibilityRef.current = true;
     onCaptureVisibilityChange?.(true);
   }, [onCaptureVisibilityChange]);
+
+  useEffect(() => {
+    if (!refreshing && lastOffsetYRef.current >= 0) {
+      updateRefreshGestureActive(false);
+    }
+  }, [refreshing, updateRefreshGestureActive]);
 
   const settleCaptureVisibility = useCallback((offsetY: number) => {
     reportCaptureVisibility(offsetY);
@@ -610,15 +628,16 @@ export default function NotesFeed({
       getItemType={(item) => item.kind}
       drawDistance={snapHeight * 2}
       removeClippedSubviews={Platform.OS === 'android' && captureMode !== 'camera'}
-      snapToInterval={snapHeight}
-      disableIntervalMomentum={Platform.OS === 'android'}
+      snapToInterval={snapSuspended ? undefined : snapHeight}
+      disableIntervalMomentum={Platform.OS === 'android' && !snapSuspended}
       snapToAlignment="start"
-      decelerationRate="fast"
+      decelerationRate={snapSuspended ? 'normal' : 'fast'}
       showsVerticalScrollIndicator={false}
       ListHeaderComponent={captureHeader}
       onScroll={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
         lastOffsetYRef.current = offsetY;
+        updateRefreshGestureActive(offsetY < -6 || refreshing);
         reportCaptureVisibility(offsetY);
         onScrollOffsetChange?.(offsetY);
       }}
@@ -632,9 +651,21 @@ export default function NotesFeed({
           return;
         }
 
+        const offsetY = event.nativeEvent.contentOffset.y;
+        if (offsetY <= 0) {
+          lastOffsetYRef.current = offsetY;
+          settleCaptureVisibility(0);
+          reportActiveCard(0);
+          reportSettledArchiveItem(0);
+
+          if (!refreshing) {
+            updateRefreshGestureActive(false);
+          }
+          return;
+        }
+
         const velocityY = event.nativeEvent.velocity?.y ?? 0;
         if (Math.abs(velocityY) < 0.05) {
-          const offsetY = event.nativeEvent.contentOffset.y;
           lastOffsetYRef.current = offsetY;
           settleCaptureVisibility(offsetY);
           reportActiveCard(offsetY);
@@ -651,6 +682,18 @@ export default function NotesFeed({
         }
 
         const offsetY = event.nativeEvent.contentOffset.y;
+        if (offsetY <= 0) {
+          lastOffsetYRef.current = offsetY;
+          settleCaptureVisibility(0);
+          reportActiveCard(0);
+          reportSettledArchiveItem(0);
+
+          if (!refreshing) {
+            updateRefreshGestureActive(false);
+          }
+          return;
+        }
+
         lastOffsetYRef.current = offsetY;
         settleCaptureVisibility(offsetY);
         settleAndroidSnap(offsetY);

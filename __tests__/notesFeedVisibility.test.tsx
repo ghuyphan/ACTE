@@ -634,6 +634,113 @@ describe('NotesFeed capture visibility', () => {
     expect(list.props.removeClippedSubviews).toBe(false);
   });
 
+  it('suspends snapping while a top refresh pull is active', () => {
+    const { UNSAFE_getByType } = render(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="text"
+        notes={[]}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    const getList = () => UNSAFE_getByType(FlatList);
+
+    expect(getList().props.snapToInterval).toBe(700);
+
+    act(() => {
+      getList().props.onScroll({
+        nativeEvent: {
+          contentOffset: { y: -24 },
+        },
+      });
+    });
+
+    expect(getList().props.snapToInterval).toBeUndefined();
+    expect(getList().props.decelerationRate).toBe('normal');
+
+    act(() => {
+      getList().props.onMomentumScrollEnd({
+        nativeEvent: {
+          contentOffset: { y: 0 },
+        },
+      });
+    });
+
+    expect(getList().props.snapToInterval).toBe(700);
+    expect(getList().props.decelerationRate).toBe('fast');
+  });
+
+  it('keeps snapping suspended while refresh is active', () => {
+    const { UNSAFE_getByType, rerender } = render(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="text"
+        notes={[]}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    rerender(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="text"
+        notes={[]}
+        sharedPosts={[]}
+        refreshing
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    const list = UNSAFE_getByType(FlatList);
+
+    expect(list.props.snapToInterval).toBeUndefined();
+    expect(list.props.decelerationRate).toBe('normal');
+  });
+
   it('re-snaps halfway android momentum stops to the nearest interval', () => {
     const originalPlatform = Platform.OS;
     Platform.OS = 'android';

@@ -22,9 +22,11 @@ const mockImportStickerAssetFromClipboard = jest.fn<Promise<unknown>, [unknown]>
   updatedAt: null,
   source: 'clipboard',
 }));
+const mockImportStickerAsset = jest.fn();
 const mockCreateStickerImportSourceFromSubjectCutout = jest.fn();
 const mockPrepareStickerSubjectCutout = jest.fn();
 const mockCleanupSubjectCutoutImportSource = jest.fn();
+const mockShouldImportSourceDirectlyAsSticker = jest.fn();
 const mockRouterPush = jest.fn();
 const mockImpactAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockNotificationAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
@@ -228,7 +230,7 @@ jest.mock('../services/noteStickers', () => ({
     asset,
   })),
   duplicateStickerPlacement: jest.fn((placements: any[]) => placements),
-  importStickerAsset: jest.fn(),
+  importStickerAsset: (...args: unknown[]) => mockImportStickerAsset(...args),
   parseNoteStickerPlacements: jest.fn((placementsJson: string | null | undefined) => {
     if (!placementsJson) {
       return [];
@@ -236,6 +238,8 @@ jest.mock('../services/noteStickers', () => ({
 
     return JSON.parse(placementsJson);
   }),
+  shouldImportSourceDirectlyAsSticker: (...args: unknown[]) =>
+    mockShouldImportSourceDirectlyAsSticker(...args),
   saveNoteStickerPlacementsWithAssets: (noteId: string, placements: unknown) =>
     mockSaveNoteStickerPlacementsWithAssets(noteId, placements),
   clearNoteStickers: jest.fn(async () => undefined),
@@ -380,6 +384,18 @@ beforeEach(() => {
   });
   jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as any);
+  mockImportStickerAsset.mockResolvedValue({
+    id: 'detail-sticker-asset-1',
+    ownerUid: '__local__',
+    localUri: 'file:///documents/stickers/detail-sticker-asset-1.png',
+    remotePath: null,
+    mimeType: 'image/png',
+    width: 120,
+    height: 120,
+    createdAt: '2026-03-27T00:00:00.000Z',
+    updatedAt: null,
+    source: 'import',
+  });
   mockCreateStickerImportSourceFromSubjectCutout.mockImplementation(async (source: any) => ({
     source: {
       uri: 'file:///cache/detail-subject-cutout.png',
@@ -390,6 +406,7 @@ beforeEach(() => {
   }));
   mockPrepareStickerSubjectCutout.mockResolvedValue({ available: true, ready: true });
   mockCleanupSubjectCutoutImportSource.mockResolvedValue(undefined);
+  mockShouldImportSourceDirectlyAsSticker.mockResolvedValue(false);
 });
 
 afterEach(() => {
@@ -766,6 +783,60 @@ describe('NoteDetailSheet', () => {
         motionLocked: true,
       },
     ]);
+  });
+
+  it('imports transparent png stickers directly without subject cutout while editing', async () => {
+    const mockImagePicker = jest.requireMock('expo-image-picker') as {
+      getMediaLibraryPermissionsAsync: jest.Mock;
+      requestMediaLibraryPermissionsAsync: jest.Mock;
+      launchImageLibraryAsync: jest.Mock;
+    };
+    mockShouldImportSourceDirectlyAsSticker.mockResolvedValue(true);
+    mockImagePicker.getMediaLibraryPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+      canAskAgain: true,
+    });
+    mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri: 'file:///transparent-detail-sticker.png',
+          mimeType: 'image/png',
+          fileName: 'transparent-detail-sticker.png',
+        },
+      ],
+    });
+
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+    fireEvent.press(getByTestId('note-detail-sticker-toggle'));
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-sticker-import'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-source-option-create-sticker'));
+    });
+
+    await waitFor(() => {
+      expect(mockImportStickerAsset).toHaveBeenCalledWith(
+        {
+          uri: 'file:///transparent-detail-sticker.png',
+          mimeType: 'image/png',
+          name: 'transparent-detail-sticker.png',
+        },
+        { requiresTransparency: true }
+      );
+    });
+
+    expect(mockCreateStickerImportSourceFromSubjectCutout).not.toHaveBeenCalled();
+    expect(mockCleanupSubjectCutoutImportSource).toHaveBeenCalledWith(null);
   });
 
   it('anchors the photo location cursor at the start when edit mode opens', async () => {

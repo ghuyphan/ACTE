@@ -135,7 +135,6 @@ export default function HomeScreen() {
   const [appState, setAppState] = useState(AppState.currentState);
   const [isCaptureTextEntryFocused, setIsCaptureTextEntryFocused] = useState(false);
   const [lockedCaptureSnapHeight, setLockedCaptureSnapHeight] = useState<number | null>(null);
-  const [captureEditorScrollLocked, setCaptureEditorScrollLocked] = useState(false);
   const [captureInteractionScrollLocked, setCaptureInteractionScrollLocked] = useState(false);
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
   const [isFriendsFilterEnabled, setIsFriendsFilterEnabled] = useState(false);
@@ -258,6 +257,11 @@ export default function HomeScreen() {
     needsCameraPermission,
     resetCapture,
   } = useCaptureFlow();
+  const isCameraPreviewActive =
+    captureMode === 'camera' &&
+    isScreenFocused &&
+    appState === 'active' &&
+    Boolean(permission?.granted);
 
   const liveSnapHeight = windowHeight - insets.top - 90;
   const shouldLockCapturePage = Platform.OS === 'android' && isCaptureTextEntryFocused;
@@ -383,11 +387,6 @@ export default function HomeScreen() {
     return baseNotes.filter((note) => !suppressedHomeNoteIdSet.has(note.id));
   }, [filteredNotes, isFriendsFilterActive, isSearching, notes, suppressedHomeNoteIdSet, useInlineHeaderSearch]);
   const hasSearchableNotes = notes.length > 0;
-  const isCameraPreviewActive =
-    captureMode === 'camera' &&
-    isScreenFocused &&
-    appState === 'active' &&
-    Boolean(permission?.granted);
   const cameraPermissionRequiresSettings =
     captureMode === 'camera' &&
     permission?.granted === false &&
@@ -1627,7 +1626,6 @@ export default function HomeScreen() {
   const handleToggleCaptureMode = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     captureCardRef.current?.closeDecorateControls();
-    setCaptureEditorScrollLocked(false);
     setCaptureInteractionScrollLocked(false);
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     toggleCaptureMode();
@@ -1763,7 +1761,6 @@ export default function HomeScreen() {
           onChangeRadius={setRadius}
           shareTarget={captureTarget}
           onChangeShareTarget={handleCaptureTargetChange}
-          onDoodleModeChange={setCaptureEditorScrollLocked}
           onInteractionLockChange={setCaptureInteractionScrollLocked}
           onTextEntryFocusChange={handleCaptureTextEntryFocusChange}
         />
@@ -1858,7 +1855,6 @@ export default function HomeScreen() {
           onSettledArchiveItemChange={handleSettledArchiveItemChange}
           onCaptureVisibilityChange={setIsCaptureVisible}
           scrollEnabled={
-            !captureEditorScrollLocked &&
             !captureInteractionScrollLocked &&
             !isCaptureTextEntryFocused
           }

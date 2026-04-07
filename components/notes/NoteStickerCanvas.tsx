@@ -54,6 +54,7 @@ interface NoteStickerCanvasProps {
   minimumBaseSize?: number;
   onToggleSelectedPlacementMotionLock?: (placementId: string) => void;
   onToggleSelectedPlacementOutline?: (placementId: string) => void;
+  onGestureActiveChange?: (active: boolean) => void;
 }
 
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
@@ -155,6 +156,7 @@ function EditableSticker({
   minimumBaseSize,
   onToggleSelectedPlacementMotionLock,
   onToggleSelectedPlacementOutline,
+  onGestureActiveChange,
 }: {
   placement: NoteStickerPlacement;
   layout: CanvasLayout;
@@ -167,6 +169,7 @@ function EditableSticker({
   minimumBaseSize: number;
   onToggleSelectedPlacementMotionLock?: (placementId: string) => void;
   onToggleSelectedPlacementOutline?: (placementId: string) => void;
+  onGestureActiveChange?: (active: boolean) => void;
 }) {
   const panStartRef = useRef<{ x: number; y: number }>({ x: placement.x, y: placement.y });
   const pinchStartScaleRef = useRef(placement.scale);
@@ -221,6 +224,9 @@ function EditableSticker({
 
   const beginGesture = useCallback(
     (type: 'pan' | 'pinch' | 'rotation') => {
+      if (activeGestureCountRef.current === 0) {
+        onGestureActiveChange?.(true);
+      }
       activeGestureCountRef.current += 1;
       const currentPlacement = livePlacementRef.current;
       if (type === 'pan') {
@@ -232,15 +238,16 @@ function EditableSticker({
       }
       handleSelect();
     },
-    [handleSelect]
+    [handleSelect, onGestureActiveChange]
   );
 
   const finalizeGesture = useCallback(() => {
     activeGestureCountRef.current = Math.max(0, activeGestureCountRef.current - 1);
     if (activeGestureCountRef.current === 0) {
+      onGestureActiveChange?.(false);
       onCommit(livePlacementRef.current);
     }
-  }, [onCommit]);
+  }, [onCommit, onGestureActiveChange]);
 
   const panGesture = useMemo(
     () =>
@@ -486,6 +493,7 @@ function NoteStickerCanvas({
   minimumBaseSize = 68,
   onToggleSelectedPlacementMotionLock,
   onToggleSelectedPlacementOutline,
+  onGestureActiveChange,
 }: NoteStickerCanvasProps) {
   const [layout, setLayout] = useState<CanvasLayout>({ width: 1, height: 1 });
   const [hydratedPlacements, setHydratedPlacements] = useState(placements);
@@ -571,6 +579,7 @@ function NoteStickerCanvas({
           minimumBaseSize={minimumBaseSize}
           onToggleSelectedPlacementMotionLock={onToggleSelectedPlacementMotionLock}
           onToggleSelectedPlacementOutline={onToggleSelectedPlacementOutline}
+          onGestureActiveChange={onGestureActiveChange}
         />
       ))}
     </View>

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { memo, useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Image } from 'expo-image';
@@ -19,6 +20,9 @@ export interface RecapCalendarDay {
   count: number;
   markers: RecapCalendarDayMarker[];
   photoPreviewUri?: string;
+  photoPreviewUris?: string[];
+  photoCount?: number;
+  textCount?: number;
   disabled?: boolean;
   isToday?: boolean;
   accessibilityLabel?: string;
@@ -36,11 +40,13 @@ const DEFAULT_WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const COMPACT_COLUMN_WIDTH = 56;
 
 type CalendarPalette = {
+  accent: string;
   card: string;
   border: string;
   primary: string;
   primarySoft: string;
   secondaryText: string;
+  surface: string;
   text: string;
 };
 
@@ -65,9 +71,29 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
     }
   }, [day.dateKey, onSelectDay]);
 
-  const hasPhotoPreview = Boolean(day.photoPreviewUri);
+  const photoPreviewUris = day.photoPreviewUris?.filter(Boolean) ?? [];
+  const primaryPhotoUri = photoPreviewUris[0] ?? day.photoPreviewUri;
+  const photoCount = day.photoCount ?? (primaryPhotoUri ? 1 : 0);
+  const textCount = day.textCount ?? Math.max(day.count - photoCount, 0);
+  const hasPhotoPreview = Boolean(primaryPhotoUri);
+  const hasTextContent = textCount > 0;
+  const isTextOnlyDay = !hasPhotoPreview && hasTextContent;
   const isEmptyDay = day.count === 0;
   const isInteractive = Boolean(day.dateKey && day.count > 0 && !day.disabled);
+  const visibleContentCount = hasPhotoPreview
+    ? 1
+    : hasTextContent
+      ? 1
+      : Math.min(day.markers.length, 1);
+  const overflowCount = Math.max(day.count - visibleContentCount, 0);
+  const contentMode = isEmptyDay
+    ? 'empty'
+    : hasPhotoPreview
+      ? 'photo'
+      : isTextOnlyDay
+        ? 'text'
+        : 'marker';
+  const isPhotoMode = contentMode === 'photo';
   const haloAnimatedStyle = useAnimatedStyle(
     () => ({
       opacity: withTiming(isSelected ? 1 : 0, { duration: 180 }),
@@ -119,6 +145,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
       accessibilityLabel={day.accessibilityLabel}
       disabled={!isInteractive}
       onPress={isInteractive ? handlePress : undefined}
+      testID={day.dateKey ? `notes-recap-day-${day.dateKey}` : undefined}
       style={({ pressed }) => [
         styles.dayPressable,
         compact ? styles.dayPressableCompact : null,
@@ -126,36 +153,33 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
         pressed && isInteractive ? styles.dayPressed : null,
       ]}
     >
-      <View
-        style={[
-          styles.dayFrame,
-        ]}
-      >
+      <View style={styles.dayFrame}>
         <Animated.View style={cardAnimatedStyle}>
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.daySelectionHalo,
-              compact ? styles.daySelectionHaloCompact : null,
-              { borderColor: palette.primary },
-              haloAnimatedStyle,
-            ]}
-          />
-          <View
-            style={[
-              styles.dayCard,
-              compact ? styles.dayCardCompact : null,
-              isEmptyDay ? styles.dayCardEmpty : null,
-              {
-                backgroundColor: palette.card,
-                borderColor: isSelected ? 'transparent' : `${palette.border}88`,
-              },
-            ]}
-          >
-            {hasPhotoPreview ? (
-              <>
+          {isPhotoMode ? (
+            <>
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.daySelectionHalo,
+                  compact ? styles.daySelectionHaloCompact : null,
+                  { borderColor: palette.primary },
+                  haloAnimatedStyle,
+                ]}
+              />
+              <View
+                style={[
+                  styles.dayCard,
+                  compact ? styles.dayCardCompact : null,
+                  styles.dayCardPhoto,
+                  compact ? styles.dayCardPhotoCompact : null,
+                  {
+                    backgroundColor: palette.card,
+                    borderColor: isSelected ? 'transparent' : `${palette.border}CC`,
+                  },
+                ]}
+              >
                 <Image
-                  source={{ uri: day.photoPreviewUri }}
+                  source={{ uri: primaryPhotoUri }}
                   style={styles.dayPhotoFill}
                   contentFit="cover"
                 />
@@ -168,36 +192,135 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                     },
                   ]}
                 />
-              </>
-            ) : null}
-            <Text
-              style={[
-                styles.dayNumber,
-                compact ? styles.dayNumberCompact : null,
-                isEmptyDay ? styles.dayNumberEmpty : null,
-                {
-                  color: hasPhotoPreview
-                    ? '#FFFFFF'
-                    : isSelected
-                      ? palette.primary
-                      : palette.text,
-                },
-              ]}
-              numberOfLines={1}
-            >
-              {day.dayNumber}
-            </Text>
-            {!isEmptyDay ? (
+                <Text
+                  style={[
+                    styles.dayNumber,
+                    compact ? styles.dayNumberCompact : null,
+                    { color: '#FFFFFF' },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {day.dayNumber}
+                </Text>
+                {overflowCount > 0 ? (
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.photoBadge,
+                      compact ? styles.photoBadgeCompact : null,
+                      {
+                        backgroundColor: palette.primary,
+                        borderColor: palette.card,
+                      },
+                    ]}
+                    testID={day.dateKey ? `notes-recap-day-secondary-photo-${day.dateKey}` : undefined}
+                  >
+                    <Text
+                      style={[
+                        styles.photoBadgeText,
+                        compact ? styles.photoBadgeTextCompact : null,
+                      ]}
+                    >
+                      +{overflowCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </>
+          ) : (
+            <>
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.daySelectionHalo,
+                  compact ? styles.daySelectionHaloCompact : null,
+                  { borderColor: palette.primary },
+                  haloAnimatedStyle,
+                ]}
+              />
               <View
                 style={[
-                  styles.markerRow,
-                  compact ? styles.markerRowCompact : null,
-                  hasPhotoPreview ? styles.markerRowPhoto : null,
-                  hasPhotoPreview && compact ? styles.markerRowPhotoCompact : null,
+                  styles.dayCard,
+                  compact ? styles.dayCardCompact : null,
+                  isTextOnlyDay ? styles.dayCardTextOnly : null,
+                  isTextOnlyDay && compact ? styles.dayCardTextOnlyCompact : null,
+                  isEmptyDay ? styles.dayCardEmpty : null,
+                  {
+                    backgroundColor: palette.card,
+                    borderColor: isSelected ? 'transparent' : `${palette.border}CC`,
+                  },
                 ]}
               >
-                {!hasPhotoPreview
-                  ? day.markers.slice(0, 1).map((marker) => (
+                <Text
+                  style={[
+                    styles.dayNumber,
+                    compact ? styles.dayNumberCompact : null,
+                    isEmptyDay ? styles.dayNumberEmpty : null,
+                    {
+                      color: isSelected ? palette.primary : palette.text,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {day.dayNumber}
+                </Text>
+                {!isEmptyDay ? (
+                  <View
+                    style={[
+                      styles.dayBody,
+                      compact ? styles.dayBodyCompact : null,
+                      isTextOnlyDay ? styles.dayBodyTextOnly : null,
+                    ]}
+                  >
+                    {contentMode === 'text' ? (
+                  <View
+                    style={[
+                      styles.textDaySheet,
+                      compact ? styles.textDaySheetCompact : null,
+                      {
+                        backgroundColor: palette.primarySoft,
+                        borderColor: `${palette.border}D0`,
+                      },
+                    ]}
+                    testID={day.dateKey ? `notes-recap-day-text-body-${day.dateKey}` : undefined}
+                  >
+                    <View style={styles.textDayIconWrap}>
+                      <Ionicons
+                        name="document-text"
+                        size={compact ? 16 : 18}
+                        color={isSelected ? palette.primary : palette.text}
+                      />
+                    </View>
+                    {overflowCount > 0 ? (
+                      <View
+                        style={[
+                          styles.textDayOverflowBadge,
+                          compact ? styles.textDayOverflowBadgeCompact : null,
+                          {
+                            backgroundColor: palette.primarySoft,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.overflowText,
+                            compact ? styles.overflowTextCompact : null,
+                            { color: palette.primary },
+                          ]}
+                        >
+                          +{overflowCount}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                    ) : contentMode === 'marker' ? (
+                  <View
+                    style={[
+                      styles.markerRow,
+                      compact ? styles.markerRowCompact : null,
+                    ]}
+                  >
+                    {day.markers.slice(0, 1).map((marker) => (
                       marker.type === 'polaroid' && marker.previewUri ? (
                         <View
                           key={marker.key}
@@ -229,33 +352,36 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                           ]}
                         />
                       )
-                    ))
-                  : null}
-                {day.count > 1 ? (
-                  <View
-                    style={[
-                      styles.overflowBadge,
-                      compact ? styles.overflowBadgeCompact : null,
-                      {
-                        backgroundColor: hasPhotoPreview ? palette.card : palette.primarySoft,
-                        borderColor: hasPhotoPreview ? `${palette.border}88` : 'transparent',
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.overflowText,
-                        compact ? styles.overflowTextCompact : null,
-                        { color: hasPhotoPreview ? palette.text : palette.primary },
-                      ]}
-                    >
-                      +{day.count - 1}
-                    </Text>
+                    ))}
+                    {overflowCount > 0 ? (
+                      <View
+                        style={[
+                          styles.overflowBadge,
+                          compact ? styles.overflowBadgeCompact : null,
+                          {
+                            backgroundColor: hasPhotoPreview ? palette.card : palette.primarySoft,
+                            borderColor: hasPhotoPreview ? `${palette.border}88` : 'transparent',
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.overflowText,
+                            compact ? styles.overflowTextCompact : null,
+                            { color: hasPhotoPreview ? palette.text : palette.primary },
+                          ]}
+                        >
+                          +{overflowCount}
+                        </Text>
+                      </View>
+                    ) : null}
+                      </View>
+                    ) : null}
                   </View>
                 ) : null}
               </View>
-            ) : null}
-          </View>
+            </>
+          )}
         </Animated.View>
       </View>
     </Pressable>
@@ -280,14 +406,25 @@ function RecapCalendarGrid({
   const [calendarWidth, setCalendarWidth] = useState(0);
   const palette = useMemo<CalendarPalette>(
     () => ({
+      accent: colors.accent,
       card: colors.card,
       border: colors.border,
       primary: colors.primary,
       primarySoft: colors.primarySoft,
       secondaryText: colors.secondaryText,
+      surface: colors.surface,
       text: colors.text,
     }),
-    [colors.border, colors.card, colors.primary, colors.primarySoft, colors.secondaryText, colors.text]
+    [
+      colors.accent,
+      colors.border,
+      colors.card,
+      colors.primary,
+      colors.primarySoft,
+      colors.secondaryText,
+      colors.surface,
+      colors.text,
+    ]
   );
   const measuredCompact = calendarWidth > 0 ? calendarWidth / 7 < COMPACT_COLUMN_WIDTH : false;
   const isCompact = compact || measuredCompact;
@@ -402,6 +539,22 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     gap: 4,
   },
+  dayCardPhoto: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  dayCardPhotoCompact: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  dayCardTextOnly: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  dayCardTextOnlyCompact: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
   dayCardEmpty: {
     justifyContent: 'center',
   },
@@ -436,27 +589,272 @@ const styles = StyleSheet.create({
   dayPhotoOverlay: {
     ...StyleSheet.absoluteFillObject,
   },
-  dayNumber: {
+  photoDayShell: {
+    minHeight: 56,
+    position: 'relative',
+  },
+  photoDayShellCompact: {
+    minHeight: 52,
+  },
+  photoSelectionHalo: {
+    position: 'absolute',
+    top: 2,
+    left: 5,
+    right: 5,
+    height: 42,
+    borderRadius: 18,
+    borderWidth: 2.5,
+  },
+  photoSelectionHaloCompact: {
+    top: 2,
+    left: 4,
+    right: 4,
+    height: 38,
+    borderRadius: 16,
+    borderWidth: 2,
+  },
+  photoDayMediaArea: {
+    position: 'absolute',
+    top: 12,
+    left: 0,
+    right: 0,
+    height: 38,
     width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoDayMediaAreaCompact: {
+    height: 34,
+  },
+  photoSingleWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoSingleWrapCompact: {},
+  photoSingleFrame: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    borderCurve: 'continuous',
+    borderWidth: 1.5,
+    padding: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  photoSingleFrameCompact: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    padding: 1,
+  },
+  photoStackWrap: {
+    width: 60,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoStackWrapCompact: {
+    width: 54,
+    height: 38,
+  },
+  photoStackBackFrame: {
+    position: 'absolute',
+    top: 2,
+    left: 4,
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    borderCurve: 'continuous',
+    borderWidth: 1.5,
+    padding: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  photoStackBackFrameCompact: {
+    top: 2,
+    left: 3,
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    padding: 1,
+  },
+  photoStackFrontFrame: {
+    position: 'absolute',
+    top: 9,
+    left: 22,
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    borderCurve: 'continuous',
+    borderWidth: 1.5,
+    padding: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  photoStackFrontFrameCompact: {
+    top: 8,
+    left: 19,
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    padding: 1,
+  },
+  photoStackImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  photoStackCountBadge: {
+    position: 'absolute',
+    top: -2,
+    left: 38,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  photoStackCountBadgeCompact: {
+    top: -1,
+    left: 33,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 3,
+  },
+  photoStackCountText: {
+    ...Typography.pill,
+    fontSize: 9,
+    lineHeight: 10,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    includeFontPadding: false,
+  },
+  photoStackCountTextCompact: {
+    fontSize: 8,
+    lineHeight: 9,
+  },
+  dayBody: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingTop: 14,
+  },
+  dayBodyCompact: {
+    paddingTop: 12,
+  },
+  dayBodyPhoto: {
+    paddingTop: 18,
+    paddingBottom: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayBodyPhotoCompact: {
+    paddingTop: 16,
+    paddingBottom: 3,
+  },
+  dayBodyTextOnly: {
+    flex: 1,
+    paddingTop: 0,
+    justifyContent: 'stretch',
+    alignItems: 'stretch',
+  },
+  dayNumber: {
+    position: 'absolute',
+    top: 7,
+    left: 12,
+    right: 12,
     fontSize: 15,
     lineHeight: 18,
     fontWeight: '800',
     fontFamily: 'Noto Sans',
     textAlign: 'left',
     includeFontPadding: false,
-    zIndex: 1,
+    zIndex: 4,
     textShadowColor: 'rgba(0,0,0,0.16)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
   dayNumberCompact: {
+    top: 6,
+    left: 10,
+    right: 10,
     fontSize: 14,
     lineHeight: 16,
   },
   dayNumberEmpty: {
-    textAlign: 'center',
     textShadowColor: 'transparent',
     textShadowRadius: 0,
+  },
+  photoBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+    zIndex: 5,
+  },
+  photoBadgeCompact: {
+    top: 5,
+    right: 5,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 3,
+  },
+  photoBadgeText: {
+    ...Typography.pill,
+    fontSize: 9,
+    lineHeight: 10,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    includeFontPadding: false,
+  },
+  photoBadgeTextCompact: {
+    fontSize: 8,
+    lineHeight: 9,
+  },
+  photoDayNumber: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    ...Typography.pill,
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+  photoDayNumberCompact: {
+    fontSize: 14,
+    lineHeight: 16,
   },
   markerRow: {
     flexDirection: 'row',
@@ -469,18 +867,42 @@ const styles = StyleSheet.create({
     gap: 3,
     minHeight: 10,
   },
-  markerRowPhoto: {
-    position: 'absolute',
-    right: 6,
-    bottom: 6,
-    left: 6,
-    justifyContent: 'flex-end',
-    zIndex: 2,
+  textDaySheet: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    borderRadius: 21,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 9,
+    paddingTop: 24,
+    paddingBottom: 7,
+    justifyContent: 'space-between',
   },
-  markerRowPhotoCompact: {
-    right: 4,
-    bottom: 4,
-    left: 4,
+  textDaySheetCompact: {
+    borderRadius: 18,
+    paddingHorizontal: 7,
+    paddingTop: 21,
+    paddingBottom: 5,
+  },
+  textDayIconWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textDayOverflowBadge: {
+    minWidth: 22,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  textDayOverflowBadgeCompact: {
+    minWidth: 20,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
   },
   marker: {
     width: 11,

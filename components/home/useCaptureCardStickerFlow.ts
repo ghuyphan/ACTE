@@ -6,6 +6,7 @@ import {
   createStickerPlacement,
   importStickerAsset,
   type NoteStickerPlacement,
+  shouldImportSourceDirectlyAsSticker,
   type StickerImportSource,
   StickerImportError,
 } from '../../services/noteStickers';
@@ -249,7 +250,10 @@ export function useCaptureCardStickerFlow({
       let cleanupUri: string | null = null;
 
       try {
-        if (intent === 'sticker') {
+        const shouldBypassSubjectCutout =
+          intent === 'sticker' && (await shouldImportSourceDirectlyAsSticker(source));
+
+        if (intent === 'sticker' && !shouldBypassSubjectCutout) {
           let cutoutSource;
           try {
             cutoutSource = await createStickerImportSourceFromSubjectCutout(source);

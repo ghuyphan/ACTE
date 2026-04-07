@@ -4,7 +4,6 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 import { memo, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Modal,
   Platform,
   Pressable,
@@ -41,12 +40,12 @@ import {
 import {
   createStampFramePath,
   getStampFrameMetrics,
+  STAMP_OUTLINE_COLOR,
   STAMP_PAPER_BORDER_COLOR,
 } from '../../notes/stampFrameMetrics';
 import PrimaryButton from '../../ui/PrimaryButton';
 import { triggerCaptureCardHaptic } from './captureMotion';
 
-const STAMP_CUTTER_OVERLAY_IMAGE = require('../../../assets/images/icon/stamp-cutter.png');
 const SCREEN_HORIZONTAL_PADDING = 18;
 const EDITOR_STAGE_MAX_WIDTH = 520;
 const RESET_TRANSFORM: StampCutterTransform = {
@@ -153,7 +152,9 @@ function StampCutterEditor({
     () => createStampFramePath(stampMetrics),
     [stampMetrics]
   );
+  const stampGuideFillColor = isDark ? 'rgba(251,245,230,0.14)' : 'rgba(251,245,230,0.34)';
   const stampGuideBorderWidth = Math.max(1, stampMetrics.perforationRadius * 0.16);
+  const stampGuideOutlineWidth = Math.max(2.2, stampMetrics.perforationRadius * 0.62);
 
   const animateToTransform = useCallback(
     (nextTransform: StampCutterTransform) => {
@@ -416,13 +417,6 @@ function StampCutterEditor({
     }
   };
 
-  const cutterAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(cutProgress.value, [0, 1], [0, 26]) },
-      { scale: interpolate(cutProgress.value, [0, 1], [1, 0.992]) },
-    ],
-  }));
-
   const previewImageAnimatedStyle = useAnimatedStyle(() => {
     return {
       transform: [
@@ -546,7 +540,7 @@ function StampCutterEditor({
                     transition={0}
                   />
                 </Reanimated.View>
-                <View
+                <Reanimated.View
                   pointerEvents="none"
                   style={[
                     styles.stampGuide,
@@ -561,22 +555,25 @@ function StampCutterEditor({
                   <Canvas style={styles.stampGuideCanvas} testID="stamp-cutter-live-outline">
                     <SkiaPath
                       path={stampPath}
+                      color={stampGuideFillColor}
+                      style="fill"
+                    />
+                    <SkiaPath
+                      path={stampPath}
+                      color={STAMP_OUTLINE_COLOR}
+                      style="stroke"
+                      strokeWidth={stampGuideOutlineWidth}
+                    />
+                    <SkiaPath
+                      path={stampPath}
                       color={STAMP_PAPER_BORDER_COLOR}
                       style="stroke"
                       strokeWidth={stampGuideBorderWidth}
                     />
                   </Canvas>
-                </View>
+                </Reanimated.View>
               </View>
             </GestureDetector>
-
-            <Reanimated.View pointerEvents="none" style={[styles.overlayImage, cutterAnimatedStyle]}>
-              <Image
-                source={STAMP_CUTTER_OVERLAY_IMAGE}
-                style={styles.overlayImage}
-                resizeMode="contain"
-              />
-            </Reanimated.View>
 
             <Reanimated.View pointerEvents="none" style={[styles.flashOverlay, flashAnimatedStyle]} />
 
@@ -725,13 +722,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   stampGuideCanvas: {
-    width: '100%',
-    height: '100%',
-  },
-  overlayImage: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
     width: '100%',
     height: '100%',
   },

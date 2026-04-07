@@ -27,6 +27,7 @@ const mockCleanupStickerTempUri = jest.fn();
 const mockCleanupStickerTempUris = jest.fn();
 const mockPrepareStampCutterDraft = jest.fn();
 const mockExportStampCutoutImageSource = jest.fn();
+const mockShouldImportSourceDirectlyAsSticker = jest.fn();
 
 jest.mock('@expo/vector-icons', () => {
   const React = require('react');
@@ -218,6 +219,14 @@ jest.mock('../components/notes/NoteDoodleCanvas', () => {
           <Text testID="mock-doodle-editable">{String(props.editable)}</Text>
           <Text testID="mock-doodle-active-color">{String(props.activeColor)}</Text>
           <Pressable
+            testID="mock-doodle-gesture-start"
+            onPress={() => props.onGestureActiveChange?.(true)}
+          />
+          <Pressable
+            testID="mock-doodle-gesture-end"
+            onPress={() => props.onGestureActiveChange?.(false)}
+          />
+          <Pressable
             testID="mock-doodle-commit"
             onPress={() =>
               props.onChangeStrokes?.([
@@ -244,6 +253,14 @@ jest.mock('../components/notes/NoteStickerCanvas', () => {
         <View testID="mock-sticker-canvas">
           <Text testID="mock-sticker-editable">{String(props.editable)}</Text>
           <Text testID="mock-sticker-selected">{String(props.selectedPlacementId ?? 'null')}</Text>
+          <Pressable
+            testID="mock-sticker-gesture-start"
+            onPress={() => props.onGestureActiveChange?.(true)}
+          />
+          <Pressable
+            testID="mock-sticker-gesture-end"
+            onPress={() => props.onGestureActiveChange?.(false)}
+          />
           <Pressable
             testID="mock-sticker-select-first"
             onPress={() => props.onChangeSelectedPlacementId?.(props.placements?.[0]?.id ?? null)}
@@ -287,6 +304,8 @@ jest.mock('../services/noteStickers', () => ({
   })),
   duplicateStickerPlacement: jest.fn((placements: any[]) => placements),
   importStickerAsset: jest.fn(),
+  shouldImportSourceDirectlyAsSticker: (...args: unknown[]) =>
+    mockShouldImportSourceDirectlyAsSticker(...args),
   setStickerPlacementMotionLocked: jest.fn((placements: any[], placementId: string, motionLocked: boolean) =>
     placements.map((placement) =>
       placement.id === placementId ? { ...placement, motionLocked } : placement
@@ -469,6 +488,7 @@ describe('CaptureCard doodle handle', () => {
       canceled: true,
       assets: [],
     });
+    mockShouldImportSourceDirectlyAsSticker.mockResolvedValue(false);
     mockImportStickerAsset.mockResolvedValue({
       id: 'sticker-asset-1',
       ownerUid: '__local__',
@@ -1753,12 +1773,57 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
-  it('treats sticker edit mode like doodle mode for parent scroll locking', () => {
+  it('imports transparent png stickers directly without subject cutout', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockShouldImportSourceDirectlyAsSticker.mockResolvedValue(true);
+    mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri: 'file:///transparent-sticker.png',
+          mimeType: 'image/png',
+          fileName: 'transparent-sticker.png',
+        },
+      ],
+    });
+
+    const { getByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-sticker-toggle'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-sticker-import'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-source-option-create-sticker'));
+    });
+
+    await waitFor(() => {
+      expect(mockImportStickerAsset).toHaveBeenCalledWith(
+        {
+          uri: 'file:///transparent-sticker.png',
+          mimeType: 'image/png',
+          name: 'transparent-sticker.png',
+        },
+        { requiresTransparency: true }
+      );
+    });
+
+    expect(mockCreateStickerImportSourceFromSubjectCutout).not.toHaveBeenCalled();
+    expect(mockCleanupSubjectCutoutImportSource).toHaveBeenCalledWith(null);
+  });
+
+  it('does not lock parent scrolling just by opening sticker edit mode', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const onDoodleModeChange = jest.fn();
+    const onInteractionLockChange = jest.fn();
     const { getByTestId } = renderCaptureCard(ref, {
       noteText: '',
       onDoodleModeChange,
+      onInteractionLockChange,
     });
 
     act(() => {
@@ -1766,12 +1831,34 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(onDoodleModeChange).toHaveBeenLastCalledWith(true);
+    expect(onInteractionLockChange).not.toHaveBeenCalledWith(true);
+  });
 
-    act(() => {
-      fireEvent.press(getByTestId('capture-sticker-toggle'));
+  it('locks parent scrolling only while a doodle gesture is active', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const onInteractionLockChange = jest.fn();
+    const { getByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+      onInteractionLockChange,
     });
 
-    expect(onDoodleModeChange).toHaveBeenLastCalledWith(false);
+    act(() => {
+      fireEvent.press(getByTestId('capture-doodle-toggle'));
+    });
+
+    expect(onInteractionLockChange).not.toHaveBeenCalledWith(true);
+
+    act(() => {
+      fireEvent.press(getByTestId('mock-doodle-gesture-start'));
+    });
+
+    expect(onInteractionLockChange).toHaveBeenLastCalledWith(true);
+
+    act(() => {
+      fireEvent.press(getByTestId('mock-doodle-gesture-end'));
+    });
+
+    expect(onInteractionLockChange).toHaveBeenLastCalledWith(false);
   });
 
   it('clears sticker selection first, then exits sticker mode on empty-card taps', async () => {

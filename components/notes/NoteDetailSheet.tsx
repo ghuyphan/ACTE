@@ -48,6 +48,7 @@ import {
     parseNoteStickerPlacements,
     saveNoteStickerPlacementsWithAssets,
     clearNoteStickers,
+    shouldImportSourceDirectlyAsSticker,
     setStickerPlacementMotionLocked,
     StickerImportError,
     setStickerPlacementOutlineEnabled,
@@ -721,7 +722,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         let cleanupUri: string | null = null;
 
         try {
-            if (intent === 'sticker') {
+            const shouldBypassSubjectCutout =
+                intent === 'sticker' && (await shouldImportSourceDirectlyAsSticker(source));
+
+            if (intent === 'sticker' && !shouldBypassSubjectCutout) {
                 let cutoutSource;
                 try {
                     cutoutSource = await createStickerImportSourceFromSubjectCutout(source);

@@ -199,7 +199,7 @@ jest.mock('../components/home/CaptureCard', () => {
         getStickerSnapshot: jest.fn(() => ({ enabled: false, placements: [] })),
         resetDoodle: jest.fn(),
         resetStickers: jest.fn(),
-        closeDecorateControls: jest.fn(() => props.onDoodleModeChange?.(false)),
+        closeDecorateControls: jest.fn(() => props.onInteractionLockChange?.(false)),
       };
       React.useImperativeHandle(ref, () => mockCaptureCardHandle, [props]);
       return <Text testID="camera-preview-state">{String(props.isCameraPreviewActive)}</Text>;
@@ -353,13 +353,13 @@ describe('HomeScreen camera lifecycle', () => {
     expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(false);
   });
 
-  it('releases capture scroll lock before switching modes', () => {
+  it('releases active capture gesture locks before switching modes', () => {
     const { getByTestId } = render(<HomeScreen />);
 
     expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
 
     act(() => {
-      mockCaptureCardProps?.onDoodleModeChange?.(true);
+      mockCaptureCardProps?.onInteractionLockChange?.(true);
     });
     expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('false');
 

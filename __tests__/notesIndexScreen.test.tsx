@@ -285,6 +285,58 @@ describe('NotesIndexScreen', () => {
     expect(queryByText('Shared memory')).toBeNull();
   });
 
+  it('shows an overflow badge for multi-photo days and a note tile for text-only days', () => {
+    mockNotes.splice(
+      0,
+      mockNotes.length,
+      {
+        id: 'photo-1',
+        type: 'photo',
+        content: 'photos/photo-1.jpg',
+        photoLocalUri: 'photos/photo-1.jpg',
+        locationName: 'District 1',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'photo-2',
+        type: 'photo',
+        content: 'photos/photo-2.jpg',
+        photoLocalUri: 'photos/photo-2.jpg',
+        locationName: 'District 1',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-11T08:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'text-1',
+        type: 'text',
+        content: 'Text-only memory',
+        locationName: 'District 3',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-07T00:00:00.000Z',
+        updatedAt: null,
+      }
+    );
+
+    const { getByTestId } = render(<NotesIndexScreen />);
+
+    fireEvent.press(getByTestId('notes-mode-recap'));
+
+    expect(getByTestId('notes-recap-day-secondary-photo-2026-03-11')).toBeTruthy();
+    expect(getByTestId('notes-recap-day-text-body-2026-03-07')).toBeTruthy();
+  });
+
   it('renders the active mode pill with width immediately', () => {
     const { getByTestId } = render(<NotesIndexScreen />);
 

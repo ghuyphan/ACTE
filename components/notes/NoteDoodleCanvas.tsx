@@ -13,6 +13,7 @@ interface NoteDoodleCanvasProps {
   editable?: boolean;
   activeColor?: string;
   onChangeStrokes?: (nextStrokes: DoodleStroke[]) => void;
+  onGestureActiveChange?: (active: boolean) => void;
   style?: StyleProp<ViewStyle>;
   strokeWidth?: number;
 }
@@ -552,6 +553,7 @@ function NoteDoodleCanvas({
   editable = false,
   activeColor = '#1C1C1E',
   onChangeStrokes,
+  onGestureActiveChange,
   style,
   strokeWidth = DEFAULT_STROKE_WIDTH,
 }: NoteDoodleCanvasProps) {
@@ -802,6 +804,10 @@ function NoteDoodleCanvas({
         .onBegin((event) => {
           const point = normalizeTouchPoint(event.x, event.y, draftDimensionsValue.value);
 
+          if (onGestureActiveChange) {
+            runOnJS(onGestureActiveChange)(true);
+          }
+
           if (canUseSkia) {
             draftCommitQueuedValue.value = 0;
             draftPointsValue.value = [point.x, point.y];
@@ -847,6 +853,10 @@ function NoteDoodleCanvas({
           }
         })
         .onFinalize((_, success) => {
+          if (onGestureActiveChange) {
+            runOnJS(onGestureActiveChange)(false);
+          }
+
           if (canUseSkia) {
             if (draftCommitQueuedValue.value === 1) {
               return;
@@ -871,6 +881,7 @@ function NoteDoodleCanvas({
       canEdit,
       finalizeFallbackDraftStroke,
       moveFallbackDraftStroke,
+      onGestureActiveChange,
       resetDraftState,
     ]
   );

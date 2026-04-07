@@ -190,6 +190,7 @@ const config = {
     ],
     './plugins/withExpoWidgetsBundleFix.js',
     './plugins/withAndroidReleaseHardening.js',
+    './plugins/withAndroidWindowBehavior.js',
     './plugins/withAndroidWidgetTypography.js',
     './plugins/withCustomAndroidWidget.js',
     './plugins/withLivePhotoMotionTranscoder.js',
