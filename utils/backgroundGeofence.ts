@@ -105,6 +105,7 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
                         notes: allNotes,
                         includeLocationLookup: false,
                         currentLocation: widgetRefreshLocation,
+                        preferredNoteId: note.id,
                     }).catch((widgetError) => {
                         console.warn('Widget geofence refresh failed:', widgetError);
                     });

@@ -186,6 +186,7 @@ describe('backgroundGeofence', () => {
       notes: [buildNote()],
       includeLocationLookup: false,
       currentLocation: { latitude: 10.77, longitude: 106.69 },
+      preferredNoteId: 'note-1',
     });
     expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
       content: {

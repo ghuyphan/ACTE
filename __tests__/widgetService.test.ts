@@ -344,6 +344,39 @@ describe('widgetService', () => {
     );
   });
 
+  it('can anchor the current slot to the place that triggered a geofence refresh', () => {
+    const result = selectWidgetNote({
+      notes: [
+        buildNote({
+          id: 'closer-photo',
+          type: 'photo',
+          content: 'file:///mock-documents/photos/latest.jpg',
+          locationName: 'Cafe A',
+          latitude: 10.0,
+          longitude: 106.0,
+          radius: 250,
+          createdAt: '2026-03-10T11:00:00.000Z',
+        }),
+        buildNote({
+          id: 'triggered-note',
+          content: 'Get the iced tea again',
+          locationName: 'Cafe B',
+          latitude: 10.0008,
+          longitude: 106.0,
+          radius: 250,
+          createdAt: '2026-03-10T09:00:00.000Z',
+        }),
+      ],
+      currentLocation: { latitude: 10.0, longitude: 106.0 },
+      preferredNoteId: 'triggered-note',
+      referenceDate: new Date('2026-03-10T00:00:00.000Z'),
+    });
+
+    expect(result.selectedNote?.id).toBe('triggered-note');
+    expect(result.selectedLocationName).toBe('Cafe B');
+    expect(result.selectionMode).toBe('nearest_memory');
+  });
+
   it('prefers nearby visual notes over plain text notes when they share the same place', () => {
     const result = selectWidgetNote({
       notes: [

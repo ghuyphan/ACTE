@@ -13,6 +13,7 @@ import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import { getNotePhotoUri, resolveStoredPhotoUri } from './photoStorage';
 import { downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET } from './remoteMedia';
 import { getDistanceMeters } from './reminderSelection';
+import { compareByReminderUtility, getPlaceGroups } from './placeRanking';
 import { getCachedSharedFeedSnapshot } from './sharedFeedCache';
 import { getSharedFeedErrorMessage, refreshSharedFeed, SharedPost } from './sharedFeedService';
 
@@ -63,6 +64,7 @@ export interface UpdateWidgetDataOptions {
     referenceDate?: Date;
     includeSharedRefresh?: boolean;
     currentLocation?: LocationCoords | null;
+    preferredNoteId?: string | null;
 }
 
 interface LocationCoords {
@@ -126,6 +128,22 @@ interface WidgetCandidate {
     noteColor?: string | null;
     authorDisplayName: string | null;
     authorPhotoURLSnapshot: string | null;
+}
+
+interface RankedWidgetNearbyCandidate {
+    id: string;
+    type: 'text' | 'photo';
+    content: string;
+    locationName: string | null;
+    latitude: number;
+    longitude: number;
+    radius: number | null;
+    isFavorite: boolean;
+    hasDoodle: boolean;
+    hasStickers: boolean;
+    createdAt: string;
+    updatedAt: string | null;
+    candidate: WidgetCandidate;
 }
 
 type WidgetModule = {
@@ -285,6 +303,7 @@ function buildWidgetRequestKey(options: UpdateWidgetDataOptions) {
         includeLocationLookup: options.includeLocationLookup !== false,
         includeSharedRefresh: options.includeSharedRefresh === true,
         referenceDate: options.referenceDate?.toISOString() ?? 'live',
+        preferredNoteId: options.preferredNoteId ?? null,
         currentLocation:
             options.currentLocation === undefined
                 ? 'auto'
@@ -437,45 +456,31 @@ function compareOldestWidgetNotes(left: WidgetCandidate, right: WidgetCandidate)
     return left.candidateKey.localeCompare(right.candidateKey);
 }
 
-function getWidgetPlaceKey(candidate: Pick<WidgetCandidate, 'locationName' | 'latitude' | 'longitude'>) {
-    return [
-        candidate.locationName?.trim().toLowerCase() ?? '',
-        candidate.latitude?.toFixed(4) ?? '',
-        candidate.longitude?.toFixed(4) ?? '',
-    ].join(':');
+function hasWidgetCandidateCoordinates(candidate: WidgetCandidate): candidate is WidgetCandidate & {
+    latitude: number;
+    longitude: number;
+} {
+    return Number.isFinite(candidate.latitude) && Number.isFinite(candidate.longitude);
 }
 
-function compareNearbyWidgetNotes(
-    left: { note: WidgetCandidate; distanceMeters: number },
-    right: { note: WidgetCandidate; distanceMeters: number }
-) {
-    const distanceDelta = left.distanceMeters - right.distanceMeters;
-    if (distanceDelta !== 0) {
-        return distanceDelta;
-    }
-
-    const visualPriorityDelta = getWidgetVisualPriority(right.note) - getWidgetVisualPriority(left.note);
-    if (visualPriorityDelta !== 0) {
-        return visualPriorityDelta;
-    }
-
-    return compareRecentWidgetNotes(left.note, right.note);
-}
-
-function getWidgetVisualPriority(note: Pick<WidgetCandidate, 'noteType' | 'hasDoodle' | 'hasStickers'>) {
-    if (note.noteType === 'photo') {
-        return 3;
-    }
-
-    if (note.hasStickers) {
-        return 2;
-    }
-
-    if (note.hasDoodle) {
-        return 1;
-    }
-
-    return 0;
+function toRankedWidgetNearbyCandidate(
+    candidate: WidgetCandidate & { latitude: number; longitude: number }
+): RankedWidgetNearbyCandidate {
+    return {
+        id: candidate.id,
+        type: candidate.noteType,
+        content: candidate.text,
+        locationName: candidate.locationName,
+        latitude: candidate.latitude,
+        longitude: candidate.longitude,
+        radius: candidate.radius,
+        isFavorite: candidate.isFavorite,
+        hasDoodle: candidate.hasDoodle,
+        hasStickers: candidate.hasStickers,
+        createdAt: candidate.createdAt,
+        updatedAt: candidate.updatedAt,
+        candidate,
+    };
 }
 
 function getTranslatedWidgetStrings(
@@ -825,13 +830,16 @@ export function selectWidgetNote(options: {
     nearbyRadiusMeters?: number;
     referenceDate?: Date;
     recentHistory?: WidgetHistoryEntry[];
+    preferredNoteId?: string | null;
 }): WidgetSelectionResult {
     const {
         notes,
         sharedPosts = [],
         currentLocation = null,
+        nearbyRadiusMeters,
         referenceDate = new Date(),
         recentHistory = [],
+        preferredNoteId = null,
     } = options;
 
     if (notes.length === 0 && sharedPosts.length === 0) {
@@ -863,29 +871,49 @@ export function selectWidgetNote(options: {
         };
     }
 
-    const nearestCandidates = currentLocation
-        ? personalCandidates
-            .map((note) => ({
-                note,
+    const nearbyPlaces = currentLocation
+        ? getPlaceGroups(
+            personalCandidates
+                .filter(hasWidgetCandidateCoordinates)
+                .map(toRankedWidgetNearbyCandidate)
+          )
+            .map((group) => ({
+                group,
                 distanceMeters: getDistanceMeters(currentLocation, {
-                    latitude: note.latitude ?? 0,
-                    longitude: note.longitude ?? 0,
+                    latitude: group.latitude,
+                    longitude: group.longitude,
                 }),
+                isPreferred: Boolean(preferredNoteId && group.notes.some((note) => note.id === preferredNoteId)),
             }))
-            .filter((entry) => entry.distanceMeters <= Math.max(1, entry.note.radius ?? 0))
-            .sort(compareNearbyWidgetNotes)
+            .filter((entry) =>
+                entry.distanceMeters <= Math.max(1, nearbyRadiusMeters ?? entry.group.radiusMeters)
+            )
+            .sort((left, right) => {
+                if (left.isPreferred !== right.isPreferred) {
+                    return left.isPreferred ? -1 : 1;
+                }
+
+                const distanceDelta = left.distanceMeters - right.distanceMeters;
+                if (distanceDelta !== 0) {
+                    return distanceDelta;
+                }
+
+                return compareByReminderUtility(left.group.bestReminderNote, right.group.bestReminderNote);
+            })
         : [];
 
-    if (nearestCandidates.length > 0) {
-        const nearbyPlaceKeys = new Set(
-            nearestCandidates.map((entry) => getWidgetPlaceKey(entry.note)).filter(Boolean)
-        );
+    if (nearbyPlaces.length > 0) {
+        const selectedPlace = nearbyPlaces[0]?.group ?? null;
+        const selectedCandidate =
+            selectedPlace?.bestWidgetNote.candidate ??
+            selectedPlace?.bestReminderNote.candidate ??
+            null;
         return {
-            selectedNote: nearestCandidates[0]?.note ?? null,
-            selectedCandidate: nearestCandidates[0]?.note ?? null,
-            selectedLocationName: nearestCandidates[0]?.note.locationName ?? null,
-            nearbyPlacesCount: Math.max(0, nearbyPlaceKeys.size - 1),
-            isIdleState: false,
+            selectedNote: selectedCandidate,
+            selectedCandidate,
+            selectedLocationName: selectedPlace?.locationName ?? selectedCandidate?.locationName ?? null,
+            nearbyPlacesCount: Math.max(0, nearbyPlaces.length - 1),
+            isIdleState: !selectedCandidate,
             selectionMode: 'nearest_memory',
         };
     }
@@ -1558,6 +1586,7 @@ async function buildWidgetEntryForDate(options: {
     referenceDate: Date;
     recentHistory: WidgetHistoryEntry[];
     readablePhotoUrisByCandidateKey: Map<string, string>;
+    preferredNoteId?: string | null;
 }) {
     const {
         noteCount,
@@ -1567,6 +1596,7 @@ async function buildWidgetEntryForDate(options: {
         referenceDate,
         recentHistory,
         readablePhotoUrisByCandidateKey,
+        preferredNoteId = null,
     } = options;
 
     const excludedCandidateKeys = new Set<string>();
@@ -1579,6 +1609,7 @@ async function buildWidgetEntryForDate(options: {
             currentLocation,
             referenceDate,
             recentHistory,
+            preferredNoteId,
         });
 
         if (!selection.selectedCandidate || selection.isIdleState) {
@@ -1635,8 +1666,9 @@ async function buildWidgetTimeline(options: {
     sharedPosts?: SharedPost[];
     currentLocation?: LocationCoords | null;
     referenceDate: Date;
+    preferredNoteId?: string | null;
 }) {
-    const { notes, sharedPosts = [], currentLocation = null, referenceDate } = options;
+    const { notes, sharedPosts = [], currentLocation = null, referenceDate, preferredNoteId = null } = options;
     const {
         personalCandidates,
         sharedCandidates,
@@ -1644,6 +1676,7 @@ async function buildWidgetTimeline(options: {
     } = await getEligibleWidgetCandidates(notes, sharedPosts);
     const history = await loadWidgetHistory(referenceDate);
     const timelineDates = buildTimelineDates(referenceDate);
+    const firstTimelineDate = timelineDates[0]?.getTime() ?? null;
     const nextHistory = [...history];
     const entries: WidgetTimelineEntry[] = [];
 
@@ -1671,6 +1704,7 @@ async function buildWidgetTimeline(options: {
             referenceDate: date,
             recentHistory: nextHistory,
             readablePhotoUrisByCandidateKey,
+            preferredNoteId: firstTimelineDate != null && date.getTime() === firstTimelineDate ? preferredNoteId : null,
         });
 
         entries.push({
@@ -1707,6 +1741,7 @@ async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<v
             sharedPosts: sharedFeedSnapshot.sharedPosts,
             currentLocation,
             referenceDate: options.referenceDate ?? new Date(),
+            preferredNoteId: options.preferredNoteId ?? null,
         });
 
         updatePlatformWidgetTimeline(entries);
