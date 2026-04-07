@@ -580,7 +580,7 @@
         "errorProviderConflict": "This email is already linked to a different sign-in method.",
         "errorInProgress": "Sign-in is already in progress.",
         "errorPlayServices": "Google Play Services are unavailable on this device.",
-        "errorGoogleConfig": "Google sign-in is not configured correctly for this build yet.",
+        "errorGoogleConfig": "Google sign-in is not configured correctly for this build yet. Check the Android package name and SHA fingerprint, or the iOS URL scheme and client IDs.",
         "errorMissingGoogleToken": "Google sign-in could not be completed. Please try again.",
         "errorGeneric": "Unable to sign in right now. Please try again later.",
         "signingIn": "Signing in...",

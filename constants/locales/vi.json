@@ -580,7 +580,7 @@
         "errorProviderConflict": "Email này đã gắn với một cách đăng nhập khác.",
         "errorInProgress": "Đăng nhập đang được xử lý.",
         "errorPlayServices": "Dịch vụ Google Play không khả dụng trên thiết bị này.",
-        "errorGoogleConfig": "Đăng nhập bằng Google chưa được cấu hình đúng cho bản dựng này.",
+        "errorGoogleConfig": "Đăng nhập bằng Google chưa được cấu hình đúng cho bản dựng này. Hãy kiểm tra package name và SHA trên Android, hoặc URL scheme và client ID trên iOS.",
         "errorMissingGoogleToken": "Không thể hoàn tất đăng nhập bằng Google. Vui lòng thử lại.",
         "errorGeneric": "Hiện chưa thể đăng nhập. Vui lòng thử lại sau.",
         "signingIn": "Đang đăng nhập...",
