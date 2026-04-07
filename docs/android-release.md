@@ -6,6 +6,7 @@
 - Set `EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY` for map-enabled Android builds.
 - Set `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` for Android billing.
 - Keep `EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID` and `EXPO_PUBLIC_REVENUECAT_OFFERING_ID` aligned with RevenueCat.
+- In EAS, set those RevenueCat values in the `production` environment used by the `production` build profile.
 - Set `EXPO_PUBLIC_PRIVACY_POLICY_URL` and either `EXPO_PUBLIC_SUPPORT_URL` or `EXPO_PUBLIC_SUPPORT_EMAIL`.
 - Set either `EXPO_PUBLIC_ACCOUNT_DELETION_URL` or `EXPO_PUBLIC_SUPPORT_EMAIL`.
 - Set `EXPO_PUBLIC_ENABLE_PLACE_REMINDERS=false` if you want a Play-bound build without background geofence reminders.

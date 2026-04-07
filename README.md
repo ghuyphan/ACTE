@@ -63,6 +63,17 @@ App/runtime env:
 - `EXPO_PUBLIC_ACCOUNT_DELETION_URL`
 - `EXPO_PUBLIC_SUPPORT_EMAIL`
 
+RevenueCat production template:
+
+```env
+EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=goog_mock_replace_me
+EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID=noto_pro
+EXPO_PUBLIC_REVENUECAT_OFFERING_ID=default
+```
+
+- Replace the mock Android key with the RevenueCat public SDK key that starts with `goog_`.
+- Keep the entitlement value aligned with the exact RevenueCat entitlement identifier. If the dashboard identifier differs from `noto_pro`, set that exact value here instead.
+
 Android release signing env:
 
 - `ACTE_UPLOAD_STORE_FILE`
