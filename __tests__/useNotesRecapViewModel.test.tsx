@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from '@testing-library/react-native';
 import * as ReactNative from 'react-native';
-import { useNotesRecapViewModel } from '../hooks/state/useNotesRecapViewModel';
+import { useNotesRecapViewModel } from '../hooks/useNotesRecapViewModel';
 import type { Note } from '../services/database';
 
 let mockLanguage = 'en';

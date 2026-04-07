@@ -49,9 +49,10 @@ import {
 import { parseNoteDoodleStrokes } from '../../../services/noteDoodles';
 import { parseNoteStickerPlacements } from '../../../services/noteStickers';
 import { getNotePhotoUri } from '../../../services/photoStorage';
-import { downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET } from '../../../services/remoteMedia';
+import { SHARED_POST_MEDIA_BUCKET } from '../../../services/remoteMedia';
 import { Note } from '../../../services/database';
 import { SharedPost } from '../../../services/sharedFeedService';
+import { useNotesGridSharedPhotoHydration } from './useNotesGridSharedPhotoHydration';
 
 type NoteGridItem =
   | { id: string; kind: 'note'; createdAt: string; note: Note }
@@ -114,6 +115,20 @@ function getGridTileEntering(index: number, shouldAnimate: boolean) {
   return FadeInUp.delay(delay).springify().damping(18).stiffness(210).mass(0.72);
 }
 
+function areStringArraysEqual(left: readonly string[], right: readonly string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 const GridTile = memo(function GridTile({
   item,
   size,
@@ -124,6 +139,7 @@ const GridTile = memo(function GridTile({
   photoFallbackLabel,
   animateOnMount,
   showDecorations,
+  sharedPhotoUri,
 }: {
   item: NoteGridItem;
   size: number;
@@ -139,48 +155,8 @@ const GridTile = memo(function GridTile({
   photoFallbackLabel: string;
   animateOnMount: boolean;
   showDecorations: boolean;
+  sharedPhotoUri: string | null;
 }) {
-  const [sharedPhotoUri, setSharedPhotoUri] = useState(
-    item.kind === 'shared-post' ? item.post.photoLocalUri ?? null : null
-  );
-
-  useEffect(() => {
-    if (item.kind !== 'shared-post') {
-      setSharedPhotoUri(null);
-      return;
-    }
-
-    setSharedPhotoUri(item.post.photoLocalUri ?? null);
-  }, [item]);
-
-  useEffect(() => {
-    if (item.kind !== 'shared-post' || item.post.type !== 'photo' || sharedPhotoUri || !item.post.photoPath) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void downloadPhotoFromStorage(
-      SHARED_POST_MEDIA_BUCKET,
-      item.post.photoPath,
-      `shared-grid-${item.post.id}`
-    )
-      .then((nextUri) => {
-        if (!cancelled && nextUri) {
-          setSharedPhotoUri(nextUri);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.warn('[notes-grid] Failed to hydrate shared photo:', error);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [item, sharedPhotoUri]);
-
   const imageUri =
     item.kind === 'note'
       ? getNotePhotoUri(item.note)
@@ -333,6 +309,7 @@ const GridTile = memo(function GridTile({
   prevProps.gap === nextProps.gap &&
   prevProps.colors === nextProps.colors &&
   prevProps.photoFallbackLabel === nextProps.photoFallbackLabel &&
+  prevProps.sharedPhotoUri === nextProps.sharedPhotoUri &&
   prevProps.item.id === nextProps.item.id &&
   prevProps.item.kind === nextProps.item.kind &&
   prevProps.item.createdAt === nextProps.item.createdAt &&
@@ -359,11 +336,20 @@ export default function NotesIndexScreen() {
   const [showGridDecorations, setShowGridDecorations] = useState(process.env.NODE_ENV === 'test');
   const [showAllModeLayer, setShowAllModeLayer] = useState(true);
   const [isRecapPhysicsSuspended, setIsRecapPhysicsSuspended] = useState(false);
+  const [visibleSharedPhotoIds, setVisibleSharedPhotoIds] = useState<string[]>([]);
   const modeProgress = useSharedValue(0);
 
   const friendPosts = useMemo(
     () => sharedPosts.filter((post) => post.authorUid !== user?.uid),
     [sharedPosts, user?.uid]
+  );
+  const sharedPhotoPosts = useMemo(
+    () => friendPosts.filter((post) => post.type === 'photo'),
+    [friendPosts]
+  );
+  const sharedPhotoUrisById = useNotesGridSharedPhotoHydration(
+    sharedPhotoPosts,
+    visibleSharedPhotoIds
   );
   const items = useMemo<NoteGridItem[]>(
     () =>
@@ -382,6 +368,30 @@ export default function NotesIndexScreen() {
         })),
       ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
     [friendPosts, notes]
+  );
+
+  const handleViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: Array<{ item: NoteGridItem }> }) => {
+      const nextVisibleSharedPhotoIds = viewableItems
+        .map(({ item }) => item)
+        .filter(
+          (item): item is Extract<NoteGridItem, { kind: 'shared-post' }> =>
+            item.kind === 'shared-post' && item.post.type === 'photo'
+        )
+        .map((item) => item.post.id)
+        .sort();
+
+      setVisibleSharedPhotoIds((current) =>
+        areStringArraysEqual(current, nextVisibleSharedPhotoIds) ? current : nextVisibleSharedPhotoIds
+      );
+    },
+    []
+  );
+  const gridViewabilityConfig = useMemo(
+    () => ({
+      itemVisiblePercentThreshold: 60,
+    }),
+    []
   );
 
   const gridGap = 10;
@@ -624,9 +634,16 @@ export default function NotesIndexScreen() {
                           photoFallbackLabel={t('shared.photoMemory', 'Photo memory')}
                           animateOnMount={shouldAnimateGridTiles}
                           showDecorations={showGridDecorations && mode === 'all'}
+                          sharedPhotoUri={
+                            item.kind === 'shared-post'
+                              ? sharedPhotoUrisById[item.post.id] ?? item.post.photoLocalUri ?? null
+                              : null
+                          }
                           onPress={() => openItem(item)}
                         />
                       )}
+                      onViewableItemsChanged={handleViewableItemsChanged}
+                      viewabilityConfig={gridViewabilityConfig}
                       numColumns={3}
                       showsVerticalScrollIndicator={false}
                       contentContainerStyle={{

@@ -9,7 +9,6 @@ import {
   loadStartupRoute,
   type StartupRoute,
 } from '../../services/startupRouting';
-import { updateWidgetData } from '../../services/widgetService';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
 export function useAppStartupBootstrap() {
@@ -75,7 +74,6 @@ export function useAppStartupBootstrap() {
 
         startupIdleHandle = scheduleOnIdle(() => {
           startupTimeout = setTimeout(() => {
-            updateWidgetData().catch((err) => console.warn('Widget init failed:', err));
             syncGeofenceRegions().catch((err) => console.warn('Geofence sync failed:', err));
             runMediaCacheEviction().catch((err) => console.warn('Cache eviction failed:', err));
           }, 400);

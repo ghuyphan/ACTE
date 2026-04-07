@@ -55,10 +55,78 @@ function removeLivePhotoTextView(layout) {
 }
 
 function patchSmallLayout(layout) {
-  return removeLivePhotoTextView(layout).replace(
+  let patched = removeLivePhotoTextView(layout).replace(
     'android:background="@drawable/noto_widget_badge_dark"',
     'android:background="@drawable/noto_widget_overlay_chip_dark"'
   );
+
+  patched = patched
+    .replace(
+      `            <TextView
+                android:id="@+id/widget_location"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="@font/xml_noto_sans"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:paddingBottom="8dp"
+                android:textColor="#6E5E4F"
+                android:textSize="10sp"
+                android:visibility="gone" />`,
+      `            <TextView
+                android:id="@+id/widget_location"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/noto_widget_badge_light"
+                android:ellipsize="end"
+                android:fontFamily="@font/xml_noto_sans"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:maxWidth="132dp"
+                android:layout_marginBottom="8dp"
+                android:paddingLeft="10dp"
+                android:paddingTop="5dp"
+                android:paddingRight="10dp"
+                android:paddingBottom="5dp"
+                android:textColor="#6E5E4F"
+                android:textSize="10sp"
+                android:visibility="gone" />`
+    )
+    .replace(
+      `        </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_badge"`,
+      `        </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_caption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:background="@drawable/noto_widget_overlay_chip_dark"
+            android:ellipsize="end"
+            android:fontFamily="@font/noto_sans_600semi_bold"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="2"
+            android:maxWidth="132dp"
+            android:paddingLeft="10dp"
+            android:paddingTop="6dp"
+            android:paddingRight="10dp"
+            android:paddingBottom="6dp"
+            android:textColor="#FFF8F0"
+            android:textSize="11sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_badge"`
+    );
+
+  return patched;
 }
 
 function patchMediumLayout(layout) {
@@ -87,13 +155,21 @@ function patchMediumLayout(layout) {
                 android:visibility="gone" />`,
       `            <TextView
                 android:id="@+id/widget_location"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:background="@drawable/noto_widget_badge_light"
                 android:ellipsize="end"
                 android:fontFamily="@font/xml_noto_sans"
+                android:gravity="center"
                 android:includeFontPadding="false"
                 android:maxLines="1"
-                android:paddingBottom="10dp"
+                android:maxWidth="160dp"
+                android:layout_marginBottom="10dp"
+                android:paddingLeft="10dp"
+                android:paddingTop="5dp"
+                android:paddingRight="10dp"
+                android:paddingBottom="5dp"
                 android:textColor="#6E5E4F"
                 android:textSize="11sp"
                 android:visibility="gone" />`
@@ -132,6 +208,32 @@ function patchMediumLayout(layout) {
                 android:textColor="#6E5E4F"
                 android:textSize="10sp"
                 android:visibility="gone" />`
+    )
+    .replace(
+      `        </LinearLayout>
+    </RelativeLayout>`,
+      `        </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_caption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:background="@drawable/noto_widget_overlay_chip_dark"
+            android:ellipsize="end"
+            android:fontFamily="@font/noto_sans_600semi_bold"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="2"
+            android:maxWidth="184dp"
+            android:paddingLeft="12dp"
+            android:paddingTop="6dp"
+            android:paddingRight="12dp"
+            android:paddingBottom="6dp"
+            android:textColor="#FFF8F0"
+            android:textSize="12sp"
+            android:visibility="gone" />
+    </RelativeLayout>`
     );
 
   return patched;
@@ -279,6 +381,77 @@ function patchProvider(provider) {
         }
       )
     }`
+    );
+
+  patched = patched
+    .replace(
+      `      val bodyText = if (showIdle) {
+        snapshot.idleText.ifBlank { context.getString(R.string.noto_widget_idle_fallback) }
+      } else if (hasVisualOnlyContent || shouldHidePhotoBodyText) {
+        ""
+      } else {
+        snapshot.text.ifBlank { snapshot.memoryReminderText.ifBlank { context.getString(R.string.noto_widget_memory_fallback) } }
+      }`,
+      `      val photoCaptionText = if (!showIdle && snapshot.noteType == "photo" && hasImage) {
+        snapshot.text.trim()
+      } else {
+        ""
+      }
+      val bodyText = if (showIdle) {
+        snapshot.idleText.ifBlank { context.getString(R.string.noto_widget_idle_fallback) }
+      } else if (hasVisualOnlyContent || shouldHidePhotoBodyText) {
+        ""
+      } else {
+        snapshot.text.ifBlank { snapshot.memoryReminderText.ifBlank { context.getString(R.string.noto_widget_memory_fallback) } }
+      }`
+    )
+    .replace(
+      `      views.setTextViewText(R.id.widget_body, bodyText)
+      views.setViewVisibility(R.id.widget_body, if (bodyText.isBlank()) View.GONE else View.VISIBLE)
+      views.setTextColor(
+        R.id.widget_body,
+        if (usesTextSurface) Color.parseColor("#2A1A11") else Color.parseColor("#FFF8F0")
+      )`,
+      `      views.setTextViewText(R.id.widget_body, bodyText)
+      views.setViewVisibility(R.id.widget_body, if (bodyText.isBlank()) View.GONE else View.VISIBLE)
+      views.setTextColor(
+        R.id.widget_body,
+        if (usesTextSurface) Color.parseColor("#2A1A11") else Color.parseColor("#FFF8F0")
+      )
+      views.setViewVisibility(R.id.widget_caption, if (photoCaptionText.isBlank()) View.GONE else View.VISIBLE)
+      if (photoCaptionText.isNotBlank()) {
+        views.setTextViewText(R.id.widget_caption, photoCaptionText)
+        views.setInt(
+          R.id.widget_caption,
+          "setBackgroundResource",
+          if (usesTextSurface) R.drawable.noto_widget_badge_light else R.drawable.noto_widget_overlay_chip_dark
+        )
+        views.setTextColor(
+          R.id.widget_caption,
+          if (usesTextSurface) Color.parseColor("#2A1A11") else Color.parseColor("#FFF8F0")
+        )
+      }`
+    )
+    .replace(
+      `      if (locationVisible && !showLocationOverlay) {
+        views.setTextViewText(R.id.widget_location, compactLocationName)
+        views.setTextColor(
+          R.id.widget_location,
+          if (usesTextSurface) Color.parseColor("#6E5E4F") else Color.parseColor("#D9CEC2")
+        )
+      }`,
+      `      if (locationVisible && !showLocationOverlay) {
+        views.setTextViewText(R.id.widget_location, compactLocationName)
+        views.setInt(
+          R.id.widget_location,
+          "setBackgroundResource",
+          if (usesTextSurface) R.drawable.noto_widget_badge_light else R.drawable.noto_widget_overlay_chip_dark
+        )
+        views.setTextColor(
+          R.id.widget_location,
+          if (usesTextSurface) Color.parseColor("#6E5E4F") else Color.parseColor("#FFF8F0")
+        )
+      }`
     );
 
   if (!patched.includes('import android.os.Build')) {

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { type TFunction } from 'i18next';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import type { Note } from '../../../services/database';
 import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../../../constants/noteRadius';
 import { Typography } from '../../../constants/theme';
@@ -27,6 +27,7 @@ type NoteDetailInfoSectionProps = {
     note: Note;
     onChangeLocationText: (value: string) => void;
     onFocusLocation: () => void;
+    onLocationFieldLayout?: (event: LayoutChangeEvent) => void;
     onLockedColorPress: () => void;
     onLocationSelectionChange: (event: any) => void;
     onSelectColor: (nextColor: string | null) => void;
@@ -50,6 +51,7 @@ export default function NoteDetailInfoSection({
     note,
     onChangeLocationText,
     onFocusLocation,
+    onLocationFieldLayout,
     onLockedColorPress,
     onLocationSelectionChange,
     onSelectColor,
@@ -59,102 +61,110 @@ export default function NoteDetailInfoSection({
 }: NoteDetailInfoSectionProps) {
     return (
         <View style={styles.infoSection}>
-            {isEditing && note.type === 'text' ? (
-                <NoteColorPicker
-                    label={t('noteDetail.colorField', 'Color')}
-                    selectedColor={editNoteColor}
-                    onSelectColor={onSelectColor}
-                    lockedColorIds={lockedPremiumNoteColorIds}
-                    previewOnlyColorIds={previewOnlyNoteColorIds}
-                    onLockedColorPress={onLockedColorPress}
-                    testIDPrefix="note-detail-color"
-                    compact
-                />
-            ) : null}
             {isEditing ? (
-                <Text style={[styles.editFieldLabel, { color: colors.secondaryText }]}>
-                    {t('noteDetail.locationField', 'Place')}
-                </Text>
-            ) : null}
-            <View
-                style={[
-                    styles.infoRow,
-                    isEditing
-                        ? [
-                            styles.infoRowEditing,
-                            {
-                                backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)',
-                                borderColor: `${colors.primary}66`,
-                            },
-                        ]
-                        : null,
-                ]}
-            >
-                <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
-                {isEditing ? (
-                    <InputComponent
-                        ref={locationInputRef}
-                        testID="note-detail-location-input"
-                        style={[styles.editLocationInput, { color: colors.text }]}
-                        value={editLocation}
-                        onChangeText={onChangeLocationText}
-                        onFocus={onFocusLocation}
-                        onSelectionChange={onLocationSelectionChange}
-                        editable
-                        placeholder={t('noteDetail.editLocation', 'Edit location name...')}
-                        placeholderTextColor={colors.secondaryText}
-                        maxLength={100}
-                        selectionColor={colors.primary}
-                        selection={locationSelection}
-                    />
-                ) : (
-                    <Text
-                        style={[styles.infoText, { color: colors.text }]}
-                        numberOfLines={1}
-                    >
-                        {note.locationName || t('noteDetail.unknownLocation', 'Unknown Location')}
-                    </Text>
-                )}
-                {isEditing ? <Ionicons name="create-outline" size={16} color={colors.primary} /> : null}
-            </View>
-
-            <View style={styles.infoRowRadius}>
-                <Ionicons name="radio-outline" size={20} color={colors.secondaryText} />
-                {isEditing ? (
-                    <View style={styles.radiusChipsRow}>
-                        {NOTE_RADIUS_OPTIONS.map((option) => {
-                            const isSelected = editRadius === option;
-                            return (
-                                <Pressable
-                                    key={option}
-                                    testID={`note-detail-radius-${option}`}
-                                    style={[
-                                        styles.radiusChip,
-                                        {
-                                            backgroundColor: isSelected ? `${colors.primary}20` : 'transparent',
-                                            borderColor: isSelected ? colors.primary : colors.border,
-                                        },
-                                    ]}
-                                    onPress={() => onSelectRadius(option)}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.radiusChipText,
-                                            { color: isSelected ? colors.primary : colors.secondaryText },
-                                        ]}
-                                    >
-                                        {formatRadiusLabel(option)}
-                                    </Text>
-                                </Pressable>
-                            );
-                        })}
+                <>
+                    <View style={styles.editMetaSection} onLayout={onLocationFieldLayout}>
+                        <Text style={[styles.editFieldLabel, { color: colors.secondaryText }]}>
+                            {t('noteDetail.locationField', 'Place')}
+                        </Text>
+                        <View
+                            style={[
+                                styles.infoRow,
+                                styles.infoRowEditing,
+                                {
+                                    backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.58)',
+                                    borderColor: `${colors.primary}66`,
+                                },
+                            ]}
+                        >
+                            <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
+                            <InputComponent
+                                ref={locationInputRef}
+                                testID="note-detail-location-input"
+                                style={[styles.editLocationInput, { color: colors.text }]}
+                                value={editLocation}
+                                onChangeText={onChangeLocationText}
+                                onFocus={onFocusLocation}
+                                onSelectionChange={onLocationSelectionChange}
+                                editable
+                                placeholder={t('noteDetail.editLocation', 'Edit location name...')}
+                                placeholderTextColor={colors.secondaryText}
+                                maxLength={100}
+                                selectionColor={colors.primary}
+                                selection={locationSelection}
+                            />
+                            <Ionicons name="create-outline" size={16} color={colors.primary} />
+                        </View>
                     </View>
-                ) : (
-                    <Text style={[styles.infoText, { color: colors.secondaryText }]}>
-                        {t('noteDetail.radiusValue', { value: formatRadiusLabel(note.radius) })}
-                    </Text>
-                )}
-            </View>
+
+                    {note.type === 'text' ? (
+                        <View style={styles.editMetaSection}>
+                            <NoteColorPicker
+                                label={t('noteDetail.colorField', 'Color')}
+                                selectedColor={editNoteColor}
+                                onSelectColor={onSelectColor}
+                                lockedColorIds={lockedPremiumNoteColorIds}
+                                previewOnlyColorIds={previewOnlyNoteColorIds}
+                                onLockedColorPress={onLockedColorPress}
+                                testIDPrefix="note-detail-color"
+                            />
+                        </View>
+                    ) : null}
+
+                    <View style={styles.editMetaSection}>
+                        <Text style={[styles.editFieldLabel, { color: colors.secondaryText }]}>
+                            {t('capture.radiusLabel', 'Reminder radius')}
+                        </Text>
+                        <View style={styles.radiusChipsRow}>
+                            {NOTE_RADIUS_OPTIONS.map((option) => {
+                                const isSelected = editRadius === option;
+                                return (
+                                    <Pressable
+                                        key={option}
+                                        testID={`note-detail-radius-${option}`}
+                                        style={[
+                                            styles.radiusChip,
+                                            {
+                                                backgroundColor: isSelected ? `${colors.primary}20` : 'transparent',
+                                                borderColor: isSelected ? colors.primary : colors.border,
+                                            },
+                                        ]}
+                                        onPress={() => onSelectRadius(option)}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.radiusChipText,
+                                                { color: isSelected ? colors.primary : colors.secondaryText },
+                                            ]}
+                                        >
+                                            {formatRadiusLabel(option)}
+                                        </Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+                    </View>
+                </>
+            ) : (
+                <>
+                    <View style={styles.infoRow}>
+                        <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
+                        <Text
+                            style={[styles.infoText, { color: colors.text }]}
+                            numberOfLines={1}
+                        >
+                            {note.locationName || t('noteDetail.unknownLocation', 'Unknown Location')}
+                        </Text>
+                    </View>
+
+                    <View style={styles.infoRowRadius}>
+                        <Ionicons name="radio-outline" size={20} color={colors.secondaryText} />
+                        <Text style={[styles.infoText, { color: colors.secondaryText }]}>
+                            {t('noteDetail.radiusValue', { value: formatRadiusLabel(note.radius) })}
+                        </Text>
+                    </View>
+                </>
+            )}
 
             <View style={styles.infoRow}>
                 <Ionicons name="time-outline" size={20} color={colors.secondaryText} />
@@ -174,6 +184,9 @@ export default function NoteDetailInfoSection({
 const styles = StyleSheet.create({
     infoSection: {
         gap: 14,
+    },
+    editMetaSection: {
+        gap: 8,
     },
     editFieldLabel: {
         fontSize: 14,
@@ -208,6 +221,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         lineHeight: 22,
         fontFamily: Typography.body.fontFamily,
+        fontWeight: '700',
         paddingVertical: 0,
         minHeight: 22,
     },

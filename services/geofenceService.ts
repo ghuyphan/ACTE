@@ -74,14 +74,14 @@ export async function getReminderPermissionState(): Promise<ReminderPermissionSt
   };
 }
 
-export async function syncGeofenceRegions(): Promise<boolean> {
+export async function syncGeofenceRegions(options: { notes?: Note[] | null } = {}): Promise<boolean> {
   const { remindersEnabled } = await getReminderPermissionState();
   if (!remindersEnabled) {
     await clearGeofenceRegions();
     return false;
   }
 
-  const notes = await getNotesForReminderSelection();
+  const notes = options.notes ?? await getNotesForReminderSelection();
   const maxRegions = getMaxGeofenceRegionCount();
   const selectionSummary = summarizeGeofenceSelection(notes, maxRegions);
   const notesToMonitor = prioritizeNotesForGeofencing(notes, maxRegions);

@@ -133,7 +133,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
         if ((result.importedCount ?? 0) > 0) {
           suppressNextNotesEffectRef.current = true;
-          await refreshNotes(false);
+          await refreshNotes(false, { updateWidget: true });
         }
 
         return;

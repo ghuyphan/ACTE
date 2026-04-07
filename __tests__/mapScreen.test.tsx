@@ -150,7 +150,7 @@ jest.mock('../hooks/useReducedMotion', () => ({
   useReducedMotion: () => mockReduceMotionEnabled,
 }));
 
-jest.mock('../hooks/ui/useNoteDetailSheet', () => ({
+jest.mock('../hooks/useNoteDetailSheet', () => ({
   useNoteDetailSheet: () => ({
     openNoteDetail: (...args: unknown[]) => mockOpenNoteDetail(...args),
   }),
@@ -1096,6 +1096,73 @@ describe('MapScreen', () => {
       expect(String(getByTestId('map-preview-index').props.children)).toBe('1/3');
       expect(queryByTestId('stack-marker-same-1')).toBeNull();
       expect(queryByTestId('note-marker-same-1')).toBeNull();
+    });
+  });
+
+  it('separates same-place notes into individual pins at high zoom', async () => {
+    replaceMockNotes([
+      {
+        id: 'same-1',
+        type: 'photo',
+        content: 'file:///same-1.jpg',
+        locationName: 'Phu Nhuan',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-12T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'same-2',
+        type: 'text',
+        content: 'Coffee note',
+        locationName: 'Phu Nhuan',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: true,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'same-3',
+        type: 'text',
+        content: 'Dinner note',
+        locationName: 'Phu Nhuan',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-10T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ]);
+
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.8,
+        longitude: 106.7,
+        latitudeDelta: 0.001,
+        longitudeDelta: 0.001,
+      });
+    });
+
+    await waitFor(() => {
+      expect(queryByTestId('leaf-marker-10.80000:106.70000')).toBeNull();
+      expect(getByTestId('leaf-marker-same-1')).toBeTruthy();
+      expect(getByTestId('leaf-marker-same-2')).toBeTruthy();
+      expect(getByTestId('leaf-marker-same-3')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-same-2'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-shell')).toBeTruthy();
+      expect(String(getByTestId('map-preview-index').props.children)).toBe('2/3');
+      expect(getByTestId('map-preview-item-same-2')).toBeTruthy();
     });
   });
 

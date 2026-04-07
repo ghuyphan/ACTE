@@ -83,7 +83,7 @@ jest.mock('../hooks/useTheme', () => ({
   }),
 }));
 
-jest.mock('../hooks/ui/useNoteDetailSheet', () => ({
+jest.mock('../hooks/useNoteDetailSheet', () => ({
   useNoteDetailSheet: () => ({
     openNoteDetail: jest.fn(),
   }),

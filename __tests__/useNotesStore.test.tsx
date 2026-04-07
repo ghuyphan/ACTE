@@ -1,13 +1,12 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ReactNode } from 'react';
-import { NotesProvider, useNotesStore } from '../hooks/useNotesStore';
+import { NotesProvider, useNotesStore } from '../hooks/useNotes';
 import { Note } from '../services/database';
 
 const mockSyncGeofenceRegions = jest.fn();
 const mockClearGeofenceRegions = jest.fn();
 const mockSkipImmediateReminderForNewNote = jest.fn();
 const mockUpdateWidgetData = jest.fn();
-const mockRecordChange = jest.fn();
 const mockCleanupOrphanMediaFiles = jest.fn();
 const mockGetInfoAsync = jest.fn();
 const mockDeleteAsync = jest.fn();
@@ -36,13 +35,6 @@ jest.mock('../services/widgetService', () => ({
 
 jest.mock('../services/mediaIntegrity', () => ({
   cleanupOrphanMediaFiles: (...args: unknown[]) => mockCleanupOrphanMediaFiles(...args),
-}));
-
-jest.mock('../services/syncService', () => ({
-  getSyncService: () => ({
-    isAvailable: false,
-    recordChange: (...args: unknown[]) => mockRecordChange(...args),
-  }),
 }));
 
 jest.mock('../services/database', () => ({
@@ -130,7 +122,6 @@ beforeEach(() => {
   mockClearGeofenceRegions.mockResolvedValue(undefined);
   mockSkipImmediateReminderForNewNote.mockResolvedValue(undefined);
   mockUpdateWidgetData.mockResolvedValue(undefined);
-  mockRecordChange.mockResolvedValue(undefined);
 });
 
 describe('useNotesStore', () => {
@@ -164,37 +155,36 @@ describe('useNotesStore', () => {
     });
 
     expect(result.current.notes).toHaveLength(2);
-    expect(mockRecordChange).toHaveBeenCalledWith(expect.objectContaining({ type: 'create' }));
+    await waitFor(() => {
+      expect(mockUpdateWidgetData).toHaveBeenCalled();
+    });
   });
 
-  it('sets the skip-enter flag before syncing geofences for a new note', async () => {
+  it('does not fail note creation when the skip-enter flag is still pending', async () => {
     const deferred = createDeferred<void>();
     mockSkipImmediateReminderForNewNote.mockImplementation(() => deferred.promise);
 
     const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    let createPromise!: Promise<Note>;
     await act(async () => {
-      createPromise = result.current.createNote({
+      await result.current.createNote({
         type: 'text',
         content: 'Reminder ordering',
         locationName: 'District 1',
         latitude: 10.1,
         longitude: 106.1,
       });
-      await Promise.resolve();
     });
 
+    expect(result.current.notes[0]?.id).toBe('note-1');
+    expect(result.current.notes).toHaveLength(1);
     expect(mockSkipImmediateReminderForNewNote).toHaveBeenCalledWith('note-1');
-    expect(mockSyncGeofenceRegions).not.toHaveBeenCalled();
+    expect(mockSyncGeofenceRegions).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       deferred.resolve();
-      await createPromise;
     });
-
-    expect(mockSyncGeofenceRegions).toHaveBeenCalledTimes(1);
   });
 
   it('updates and favorites a note', async () => {
@@ -247,7 +237,7 @@ describe('useNotesStore', () => {
     });
 
     expect(result.current.notes[0].isFavorite).toBe(true);
-    expect(mockRecordChange).toHaveBeenCalledWith(expect.objectContaining({ type: 'update' }));
+    expect(mockSyncGeofenceRegions).toHaveBeenCalled();
   });
 
   it('deletes a photo note and clears all notes', async () => {
@@ -294,6 +284,5 @@ describe('useNotesStore', () => {
 
     expect(result.current.notes).toHaveLength(0);
     expect(mockClearGeofenceRegions).toHaveBeenCalled();
-    expect(mockRecordChange).toHaveBeenCalledWith(expect.objectContaining({ type: 'deleteAll' }));
   });
 });

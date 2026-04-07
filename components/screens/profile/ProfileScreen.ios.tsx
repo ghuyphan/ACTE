@@ -79,14 +79,8 @@ export default function ProfileScreenIOS() {
     isDeletingAccount,
     isSigningOut,
     membershipLabel,
-    openAccountDeletionHelpLink,
-    openPrivacyPolicyLink,
     openSignIn,
-    openSupportLink,
     profileName,
-    showAccountDeletionLink,
-    showPrivacyPolicyLink,
-    showSupportLink,
     t,
     tier,
     user,
@@ -137,44 +131,6 @@ export default function ProfileScreenIOS() {
                   <KeyValueRow colors={colors} label={t('profile.email', 'Email')} value={user.email} />
                 ) : null}
               </Section>
-
-              {(showPrivacyPolicyLink || showSupportLink || showAccountDeletionLink) ? (
-                <Section title={t('profile.legalTitle', 'Privacy & support')}>
-                  {showPrivacyPolicyLink ? (
-                    <Button onPress={openPrivacyPolicyLink}>
-                      <HStack>
-                        <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                          {t('settings.privacyPolicy', 'Privacy Policy')}
-                        </SwiftUIText>
-                        <Spacer />
-                        <SwiftUIImage systemName="arrow.up.right" color={colors.secondaryText} size={14} />
-                      </HStack>
-                    </Button>
-                  ) : null}
-                  {showSupportLink ? (
-                    <Button onPress={openSupportLink}>
-                      <HStack>
-                        <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                          {t('settings.support', 'Support')}
-                        </SwiftUIText>
-                        <Spacer />
-                        <SwiftUIImage systemName="arrow.up.right" color={colors.secondaryText} size={14} />
-                      </HStack>
-                    </Button>
-                  ) : null}
-                  {showAccountDeletionLink ? (
-                    <Button onPress={openAccountDeletionHelpLink}>
-                      <HStack>
-                        <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                          {t('settings.accountDeletion', 'Account deletion help')}
-                        </SwiftUIText>
-                        <Spacer />
-                        <SwiftUIImage systemName="arrow.up.right" color={colors.secondaryText} size={14} />
-                      </HStack>
-                    </Button>
-                  ) : null}
-                </Section>
-              ) : null}
 
               <Section title={t('profile.actionsTitle', 'Actions')}>
                 <Button onPress={handleSignOut}>

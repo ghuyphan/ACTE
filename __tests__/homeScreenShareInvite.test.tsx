@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Share } from 'react-native';
-import { ActiveFeedTargetProvider } from '../hooks/state/useActiveFeedTarget';
+import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
 
 const mockCreateFriendInvite = jest.fn();
 let mockSharedManageSheetProps: any = null;
@@ -98,20 +98,20 @@ jest.mock('../hooks/useGeofence', () => ({
   }),
 }));
 
-jest.mock('../hooks/ui/useAppSheetAlert', () => ({
+jest.mock('../hooks/useAppSheetAlert', () => ({
   useAppSheetAlert: () => ({
     alertProps: {},
     showAlert: jest.fn(),
   }),
 }));
 
-jest.mock('../hooks/ui/useNoteDetailSheet', () => ({
+jest.mock('../hooks/useNoteDetailSheet', () => ({
   useNoteDetailSheet: () => ({
     openNoteDetail: jest.fn(),
   }),
 }));
 
-jest.mock('../hooks/state/useFeedFocus', () => ({
+jest.mock('../hooks/useFeedFocus', () => ({
   useFeedFocus: () => ({
     consumeFeedFocus: jest.fn(() => null),
   }),

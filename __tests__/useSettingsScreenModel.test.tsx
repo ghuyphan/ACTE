@@ -104,7 +104,7 @@ jest.mock('react-native-safe-area-context', () => ({
   }),
 }));
 
-jest.mock('../hooks/ui/useAppSheetAlert', () => ({
+jest.mock('../hooks/useAppSheetAlert', () => ({
   useAppSheetAlert: () => ({
     alertProps: null,
     showAlert: mockShowAlert,

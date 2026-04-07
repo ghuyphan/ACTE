@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
 import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
+import type { SyncChange } from './syncService';
 import { buildNoteSearchText, tokenizeSearchQuery } from './noteSearch';
 import { normalizeSavedTextNoteColor } from './noteAppearance';
 import { resolveStoredPhotoUri } from './photoStorage';
@@ -105,6 +106,11 @@ export type NoteUpdates = Partial<
 >;
 
 export type UpsertNoteInput = Omit<Note, 'isFavorite'> & { isFavorite?: boolean };
+type DatabaseSyncChange = Pick<SyncChange, 'entity' | 'entityId' | 'payload' | 'timestamp' | 'type'>;
+
+interface DatabaseMutationOptions {
+    syncChange?: DatabaseSyncChange;
+}
 
 interface NoteRow {
     id: string;
@@ -343,6 +349,44 @@ async function persistNoteDecorationRows(
     } else {
         await executor.runAsync('DELETE FROM note_stickers WHERE note_id = ?', noteId);
     }
+}
+
+async function enqueueSyncChange(
+    executor: Pick<SQLite.SQLiteDatabase, 'runAsync'>,
+    ownerScope: string,
+    change: DatabaseSyncChange | undefined,
+    fallbackEntityId?: string
+) {
+    if (!change) {
+        return;
+    }
+
+    const serializedPayload =
+        change.payload === undefined ? null : JSON.stringify(change.payload);
+
+    await executor.runAsync(
+        `INSERT INTO sync_queue (
+            owner_uid,
+            entity,
+            entity_id,
+            operation,
+            payload,
+            status,
+            attempts,
+            last_error,
+            next_retry_at,
+            terminal,
+            blocked_reason,
+            created_at
+        )
+         VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, 0, NULL, ?)`,
+        ownerScope,
+        change.entity,
+        change.entityId ?? fallbackEntityId ?? null,
+        change.type,
+        serializedPayload,
+        change.timestamp
+    );
 }
 
 export async function migrateNotesScope(sourceScope: string, targetScope: string): Promise<void> {
@@ -1181,7 +1225,10 @@ function scheduleMonthlyRecapCacheClear(scope: string) {
 }
 
 // ─── CRUD Operations ────────────────────────────────────────────────
-export async function createNote(input: CreateNoteInput): Promise<Note> {
+export async function createNote(
+    input: CreateNoteInput,
+    options: DatabaseMutationOptions = {}
+): Promise<Note> {
     const scope = getCurrentScope();
     const id = input.id ?? generateNoteId();
     const now = new Date().toISOString();
@@ -1269,6 +1316,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         );
         await upsertNoteSearchDocument(txn, id, scope, searchText);
         await persistNoteDecorationRows(txn, id, noteDecorations, now);
+        await enqueueSyncChange(txn, scope, options.syncChange, id);
     });
 
     const createdNote = {
@@ -1349,7 +1397,11 @@ export async function getNoteByIdForScope(
     return row ? rowToNote(row) : null;
 }
 
-export async function updateNote(id: string, updates: NoteUpdates): Promise<void> {
+export async function updateNote(
+    id: string,
+    updates: NoteUpdates,
+    options: DatabaseMutationOptions = {}
+): Promise<void> {
     const scope = getCurrentScope();
     const existing = await getNoteByIdForScope(id, scope);
     if (!existing) {
@@ -1498,6 +1550,7 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         );
         await upsertNoteSearchDocument(txn, id, scope, searchText);
         await persistNoteDecorationRows(txn, id, nextDecorations, now);
+        await enqueueSyncChange(txn, scope, options.syncChange, id);
     });
 
     scheduleMonthlyRecapCacheRefreshForMonthKey(
@@ -1506,7 +1559,10 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
     );
 }
 
-export async function toggleFavorite(id: string): Promise<boolean> {
+export async function toggleFavorite(
+    id: string,
+    options: DatabaseMutationOptions = {}
+): Promise<boolean> {
     const database = await getDB();
     const scope = getCurrentScope();
     const row = await database.getFirstAsync<{ is_favorite: number }>(
@@ -1516,13 +1572,16 @@ export async function toggleFavorite(id: string): Promise<boolean> {
     );
     if (!row) return false;
     const newValue = row.is_favorite === 1 ? 0 : 1;
-    await database.runAsync(
-        'UPDATE notes SET is_favorite = ?, updated_at = ? WHERE id = ? AND owner_uid = ?',
-        newValue,
-        new Date().toISOString(),
-        id,
-        scope
-    );
+    await withDatabaseTransaction(async (txn) => {
+        await txn.runAsync(
+            'UPDATE notes SET is_favorite = ?, updated_at = ? WHERE id = ? AND owner_uid = ?',
+            newValue,
+            new Date().toISOString(),
+            id,
+            scope
+        );
+        await enqueueSyncChange(txn, scope, options.syncChange, id);
+    });
     const note = await getNoteByIdForScope(id, scope, database);
     if (note) {
         scheduleMonthlyRecapCacheRefreshForMonthKey(
@@ -1580,16 +1639,17 @@ export async function getNotesForReminderSelection(): Promise<Note[]> {
     return rows.map(rowToReminderSelectionNote);
 }
 
-export async function deleteNote(id: string): Promise<void> {
+export async function deleteNote(id: string, options: DatabaseMutationOptions = {}): Promise<void> {
     const database = await getDB();
     const scope = getCurrentScope();
-    await deleteNoteForScope(id, scope, database);
+    await deleteNoteForScope(id, scope, database, options);
 }
 
 export async function deleteNoteForScope(
     id: string,
     scope: string,
-    database?: SQLite.SQLiteDatabase
+    database?: SQLite.SQLiteDatabase,
+    options: DatabaseMutationOptions = {}
 ): Promise<void> {
     const activeDatabase = database ?? (await getDB());
     const note = await getNoteByIdForScope(id, scope, activeDatabase);
@@ -1606,6 +1666,7 @@ export async function deleteNoteForScope(
         );
         await deleteNoteSearchDocument(txn, id);
         await txn.runAsync('DELETE FROM notes WHERE id = ? AND owner_uid = ?', id, scope);
+        await enqueueSyncChange(txn, scope, options.syncChange, id);
     });
     if (note) {
         scheduleMonthlyRecapCacheRefreshForMonthKey(
@@ -1615,12 +1676,15 @@ export async function deleteNoteForScope(
     }
 }
 
-export async function deleteAllNotes(): Promise<void> {
+export async function deleteAllNotes(options: DatabaseMutationOptions = {}): Promise<void> {
     const scope = getCurrentScope();
-    await deleteAllNotesForScope(scope);
+    await deleteAllNotesForScope(scope, options);
 }
 
-export async function deleteAllNotesForScope(scope: string): Promise<void> {
+export async function deleteAllNotesForScope(
+    scope: string,
+    options: DatabaseMutationOptions = {}
+): Promise<void> {
     await withDatabaseTransaction(async (txn) => {
         await txn.runAsync(
             'DELETE FROM note_doodles WHERE note_id IN (SELECT id FROM notes WHERE owner_uid = ?)',
@@ -1632,6 +1696,7 @@ export async function deleteAllNotesForScope(scope: string): Promise<void> {
         );
         await deleteNoteSearchDocumentsForScope(txn, scope);
         await txn.runAsync('DELETE FROM notes WHERE owner_uid = ?', scope);
+        await enqueueSyncChange(txn, scope, options.syncChange);
     });
     scheduleMonthlyRecapCacheClear(scope);
 }

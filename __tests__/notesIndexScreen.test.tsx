@@ -180,7 +180,7 @@ jest.mock('../hooks/useTheme', () => ({
   }),
 }));
 
-jest.mock('../hooks/state/useFeedFocus', () => ({
+jest.mock('../hooks/useFeedFocus', () => ({
   useFeedFocus: () => ({
     requestFeedFocus: (...args: unknown[]) => mockRequestFeedFocus(...args),
   }),
@@ -504,7 +504,8 @@ describe('NotesIndexScreen', () => {
   });
 
   it('re-renders tiles when grid decorations are revealed in all mode', async () => {
-    const previousNodeEnv = process.env.NODE_ENV;
+    const processEnv = process.env as NodeJS.ProcessEnv & { NODE_ENV?: string };
+    const previousNodeEnv = processEnv.NODE_ENV;
     const originalRequestAnimationFrame = global.requestAnimationFrame;
     const originalCancelAnimationFrame = global.cancelAnimationFrame;
     const runAfterInteractionsSpy = jest
@@ -514,7 +515,7 @@ describe('NotesIndexScreen', () => {
         return { cancel: jest.fn() } as any;
       });
 
-    process.env.NODE_ENV = 'production';
+    processEnv.NODE_ENV = 'production';
     mockNotes.splice(0, mockNotes.length, {
       id: 'note-with-decorations',
       type: 'text',
@@ -570,7 +571,7 @@ describe('NotesIndexScreen', () => {
         expect(queryAllByTestId('mock-note-doodle-canvas')).toHaveLength(1);
       });
     } finally {
-      process.env.NODE_ENV = previousNodeEnv;
+      processEnv.NODE_ENV = previousNodeEnv;
       global.requestAnimationFrame = originalRequestAnimationFrame;
       global.cancelAnimationFrame = originalCancelAnimationFrame;
       runAfterInteractionsSpy.mockRestore();

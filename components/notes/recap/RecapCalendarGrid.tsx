@@ -39,6 +39,8 @@ interface RecapCalendarGridProps {
 const DEFAULT_WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const COMPACT_COLUMN_WIDTH = 56;
 
+const mergeStyles = (...styles: any[]) => styles;
+
 type CalendarPalette = {
   accent: string;
   card: string;
@@ -128,11 +130,11 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
   if (day.dayNumber === null) {
     return (
       <View
-        style={[
+        style={mergeStyles(
           styles.dayPressable,
           compact ? styles.dayPressableCompact : null,
-          columnWidth ? { width: columnWidth } : null,
-        ]}
+          columnWidth ? { width: columnWidth } : null
+        )}
       >
         <View style={styles.emptySlot} />
       </View>
@@ -146,12 +148,13 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
       disabled={!isInteractive}
       onPress={isInteractive ? handlePress : undefined}
       testID={day.dateKey ? `notes-recap-day-${day.dateKey}` : undefined}
-      style={({ pressed }) => [
+      style={({ pressed }) =>
+        mergeStyles(
         styles.dayPressable,
         compact ? styles.dayPressableCompact : null,
         columnWidth ? { width: columnWidth } : null,
-        pressed && isInteractive ? styles.dayPressed : null,
-      ]}
+        pressed && isInteractive ? styles.dayPressed : null
+      )}
     >
       <View style={styles.dayFrame}>
         <Animated.View style={cardAnimatedStyle}>
@@ -159,15 +162,15 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
             <>
               <Animated.View
                 pointerEvents="none"
-                style={[
+                style={mergeStyles(
                   styles.daySelectionHalo,
                   compact ? styles.daySelectionHaloCompact : null,
                   { borderColor: palette.primary },
-                  haloAnimatedStyle,
-                ]}
+                  haloAnimatedStyle
+                )}
               />
               <View
-                style={[
+                style={mergeStyles(
                   styles.dayCard,
                   compact ? styles.dayCardCompact : null,
                   styles.dayCardPhoto,
@@ -175,8 +178,8 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                   {
                     backgroundColor: palette.card,
                     borderColor: isSelected ? 'transparent' : `${palette.border}CC`,
-                  },
-                ]}
+                  }
+                )}
               >
                 <Image
                   source={{ uri: primaryPhotoUri }}
@@ -185,19 +188,19 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                 />
                 <View
                   pointerEvents="none"
-                  style={[
+                  style={mergeStyles(
                     styles.dayPhotoOverlay,
                     {
                       backgroundColor: 'rgba(24, 18, 14, 0.18)',
-                    },
-                  ]}
+                    }
+                  )}
                 />
                 <Text
-                  style={[
+                  style={mergeStyles(
                     styles.dayNumber,
                     compact ? styles.dayNumberCompact : null,
-                    { color: '#FFFFFF' },
-                  ]}
+                    { color: '#FFFFFF' }
+                  )}
                   numberOfLines={1}
                 >
                   {day.dayNumber}
@@ -205,21 +208,21 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                 {overflowCount > 0 ? (
                   <View
                     pointerEvents="none"
-                    style={[
+                    style={mergeStyles(
                       styles.photoBadge,
                       compact ? styles.photoBadgeCompact : null,
                       {
                         backgroundColor: palette.primary,
                         borderColor: palette.card,
-                      },
-                    ]}
+                      }
+                    )}
                     testID={day.dateKey ? `notes-recap-day-secondary-photo-${day.dateKey}` : undefined}
                   >
                     <Text
-                      style={[
+                      style={mergeStyles(
                         styles.photoBadgeText,
-                        compact ? styles.photoBadgeTextCompact : null,
-                      ]}
+                        compact ? styles.photoBadgeTextCompact : null
+                      )}
                     >
                       +{overflowCount}
                     </Text>
@@ -231,15 +234,15 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
             <>
               <Animated.View
                 pointerEvents="none"
-                style={[
+                style={mergeStyles(
                   styles.daySelectionHalo,
                   compact ? styles.daySelectionHaloCompact : null,
                   { borderColor: palette.primary },
-                  haloAnimatedStyle,
-                ]}
+                  haloAnimatedStyle
+                )}
               />
               <View
-                style={[
+                style={mergeStyles(
                   styles.dayCard,
                   compact ? styles.dayCardCompact : null,
                   isTextOnlyDay ? styles.dayCardTextOnly : null,
@@ -248,133 +251,133 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                   {
                     backgroundColor: palette.card,
                     borderColor: isSelected ? 'transparent' : `${palette.border}CC`,
-                  },
-                ]}
+                  }
+                )}
               >
                 <Text
-                  style={[
+                  style={mergeStyles(
                     styles.dayNumber,
                     compact ? styles.dayNumberCompact : null,
                     isEmptyDay ? styles.dayNumberEmpty : null,
                     {
                       color: isSelected ? palette.primary : palette.text,
-                    },
-                  ]}
+                    }
+                  )}
                   numberOfLines={1}
                 >
                   {day.dayNumber}
                 </Text>
                 {!isEmptyDay ? (
                   <View
-                    style={[
+                    style={mergeStyles(
                       styles.dayBody,
                       compact ? styles.dayBodyCompact : null,
-                      isTextOnlyDay ? styles.dayBodyTextOnly : null,
-                    ]}
+                      isTextOnlyDay ? styles.dayBodyTextOnly : null
+                    )}
                   >
                     {contentMode === 'text' ? (
-                  <View
-                    style={[
-                      styles.textDaySheet,
-                      compact ? styles.textDaySheetCompact : null,
-                      {
-                        backgroundColor: palette.primarySoft,
-                        borderColor: `${palette.border}D0`,
-                      },
-                    ]}
-                    testID={day.dateKey ? `notes-recap-day-text-body-${day.dateKey}` : undefined}
-                  >
-                    <View style={styles.textDayIconWrap}>
-                      <Ionicons
-                        name="document-text"
-                        size={compact ? 16 : 18}
-                        color={isSelected ? palette.primary : palette.text}
-                      />
-                    </View>
-                    {overflowCount > 0 ? (
                       <View
-                        style={[
-                          styles.textDayOverflowBadge,
-                          compact ? styles.textDayOverflowBadgeCompact : null,
+                        style={mergeStyles(
+                          styles.textDaySheet,
+                          compact ? styles.textDaySheetCompact : null,
                           {
                             backgroundColor: palette.primarySoft,
-                          },
-                        ]}
+                            borderColor: `${palette.border}D0`,
+                          }
+                        )}
+                        testID={day.dateKey ? `notes-recap-day-text-body-${day.dateKey}` : undefined}
                       >
-                        <Text
-                          style={[
-                            styles.overflowText,
-                            compact ? styles.overflowTextCompact : null,
-                            { color: palette.primary },
-                          ]}
-                        >
-                          +{overflowCount}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                    ) : contentMode === 'marker' ? (
-                  <View
-                    style={[
-                      styles.markerRow,
-                      compact ? styles.markerRowCompact : null,
-                    ]}
-                  >
-                    {day.markers.slice(0, 1).map((marker) => (
-                      marker.type === 'polaroid' && marker.previewUri ? (
-                        <View
-                          key={marker.key}
-                          style={[
-                            styles.photoMarker,
-                            compact ? styles.photoMarkerCompact : null,
-                            {
-                              borderColor: isSelected ? palette.primary : `${palette.border}AA`,
-                              backgroundColor: palette.card,
-                            },
-                          ]}
-                        >
-                          <Image
-                            source={{ uri: marker.previewUri }}
-                            style={styles.photoMarkerImage}
-                            contentFit="cover"
+                        <View style={styles.textDayIconWrap}>
+                          <Ionicons
+                            name="document-text"
+                            size={compact ? 16 : 18}
+                            color={isSelected ? palette.primary : palette.text}
                           />
                         </View>
-                      ) : (
-                        <View
-                          key={marker.key}
-                          style={[
-                            styles.marker,
-                            compact ? styles.markerCompact : null,
-                            {
-                              backgroundColor: marker.color,
-                              borderColor: marker.color,
-                            },
-                          ]}
-                        />
-                      )
-                    ))}
-                    {overflowCount > 0 ? (
-                      <View
-                        style={[
-                          styles.overflowBadge,
-                          compact ? styles.overflowBadgeCompact : null,
-                          {
-                            backgroundColor: hasPhotoPreview ? palette.card : palette.primarySoft,
-                            borderColor: hasPhotoPreview ? `${palette.border}88` : 'transparent',
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.overflowText,
-                            compact ? styles.overflowTextCompact : null,
-                            { color: hasPhotoPreview ? palette.text : palette.primary },
-                          ]}
-                        >
-                          +{overflowCount}
-                        </Text>
+                        {overflowCount > 0 ? (
+                          <View
+                            style={mergeStyles(
+                              styles.textDayOverflowBadge,
+                              compact ? styles.textDayOverflowBadgeCompact : null,
+                              {
+                                backgroundColor: palette.primarySoft,
+                              }
+                            )}
+                          >
+                            <Text
+                              style={mergeStyles(
+                                styles.overflowText,
+                                compact ? styles.overflowTextCompact : null,
+                                { color: palette.primary }
+                              )}
+                            >
+                              +{overflowCount}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
-                    ) : null}
+                    ) : contentMode === 'marker' ? (
+                      <View
+                        style={mergeStyles(
+                          styles.markerRow,
+                          compact ? styles.markerRowCompact : null
+                        )}
+                      >
+                        {day.markers.slice(0, 1).map((marker) =>
+                          marker.type === 'polaroid' && marker.previewUri ? (
+                            <View
+                              key={marker.key}
+                              style={mergeStyles(
+                                styles.photoMarker,
+                                compact ? styles.photoMarkerCompact : null,
+                                {
+                                  borderColor: isSelected ? palette.primary : `${palette.border}AA`,
+                                  backgroundColor: palette.card,
+                                }
+                              )}
+                            >
+                              <Image
+                                source={{ uri: marker.previewUri }}
+                                style={styles.photoMarkerImage}
+                                contentFit="cover"
+                              />
+                            </View>
+                          ) : (
+                            <View
+                              key={marker.key}
+                              style={mergeStyles(
+                                styles.marker,
+                                compact ? styles.markerCompact : null,
+                                {
+                                  backgroundColor: marker.color,
+                                  borderColor: marker.color,
+                                }
+                              )}
+                            />
+                          )
+                        )}
+                        {overflowCount > 0 ? (
+                          <View
+                            style={mergeStyles(
+                              styles.overflowBadge,
+                              compact ? styles.overflowBadgeCompact : null,
+                              {
+                                backgroundColor: hasPhotoPreview ? palette.card : palette.primarySoft,
+                                borderColor: hasPhotoPreview ? `${palette.border}88` : 'transparent',
+                              }
+                            )}
+                          >
+                            <Text
+                              style={mergeStyles(
+                                styles.overflowText,
+                                compact ? styles.overflowTextCompact : null,
+                                { color: hasPhotoPreview ? palette.text : palette.primary }
+                              )}
+                            >
+                              +{overflowCount}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                     ) : null}
                   </View>
@@ -439,19 +442,23 @@ function RecapCalendarGrid({
   }, []);
 
   return (
-    <View style={[styles.section, isCompact ? styles.sectionCompact : null]} onLayout={handleCalendarLayout}>
+    <View style={mergeStyles(styles.section, isCompact ? styles.sectionCompact : null)} onLayout={handleCalendarLayout}>
       <View style={styles.weekRow}>
         {weekDayLabels.map((label, index) => (
           <View
             key={`${label}:${index}`}
-            style={[
+            style={mergeStyles(
               styles.weekCell,
               isCompact ? styles.weekCellCompact : null,
-              columnWidth ? { width: columnWidth } : null,
-            ]}
+              columnWidth ? { width: columnWidth } : null
+            )}
           >
             <Text
-              style={[styles.weekLabel, isCompact ? styles.weekLabelCompact : null, { color: palette.secondaryText }]}
+              style={mergeStyles(
+                styles.weekLabel,
+                isCompact ? styles.weekLabelCompact : null,
+                { color: palette.secondaryText }
+              )}
             >
               {label}
             </Text>
@@ -771,7 +778,7 @@ const styles = StyleSheet.create({
   dayBodyTextOnly: {
     flex: 1,
     paddingTop: 0,
-    justifyContent: 'stretch',
+    justifyContent: 'center',
     alignItems: 'stretch',
   },
   dayNumber: {

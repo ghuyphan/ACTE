@@ -7,6 +7,7 @@ import {
     Dimensions,
     type GestureResponderEvent,
     Keyboard,
+    type LayoutChangeEvent,
     Platform,
     Share,
 } from 'react-native';
@@ -258,6 +259,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const contentInputRef = useRef<any>(null);
     const locationInputRef = useRef<any>(null);
     const scrollContainerRef = useRef<any>(null);
+    const infoSectionOffsetYRef = useRef(0);
+    const locationFieldOffsetYRef = useRef(0);
+    const shouldScrollLocationIntoViewRef = useRef(false);
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingDeleteNoteIdRef = useRef<string | null>(null);
@@ -302,9 +306,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const saveIconAnimatedStyle = useAnimatedStyle(() => ({
         opacity: interpolate(editModeAnim.value, [0, 1], [0, 1]),
         transform: [{ scale: interpolate(editModeAnim.value, [0, 1], [0.72, 1]) }],
-    }));
-    const editingHintAnimatedStyle = useAnimatedStyle(() => ({
-        opacity: editModeAnim.value,
     }));
     const infoSectionAnimatedStyle = useAnimatedStyle(() => ({
         transform: [{ translateY: infoTranslateY.value }],
@@ -704,15 +705,66 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
     }, [locationSelection]);
 
+    const scrollLocationFieldIntoView = useCallback((animated = true) => {
+        if (Platform.OS !== 'android') {
+            return;
+        }
+
+        const targetY = Math.max(0, infoSectionOffsetYRef.current + locationFieldOffsetYRef.current - 28);
+        scrollContainerRef.current?.scrollTo?.({ y: targetY, animated });
+    }, []);
+
+    const handleInfoSectionLayout = useCallback((event: LayoutChangeEvent) => {
+        infoSectionOffsetYRef.current = event.nativeEvent.layout.y;
+    }, []);
+
+    const handleLocationFieldLayout = useCallback((event: LayoutChangeEvent) => {
+        locationFieldOffsetYRef.current = event.nativeEvent.layout.y;
+    }, []);
+
     const handleLocationFocus = useCallback(() => {
-        if (!isEditing || Platform.OS !== 'ios') {
+        if (!isEditing) {
+            return;
+        }
+
+        if (Platform.OS === 'android') {
+            shouldScrollLocationIntoViewRef.current = true;
+            setTimeout(() => {
+                scrollLocationFieldIntoView();
+            }, 120);
             return;
         }
 
         setTimeout(() => {
             scrollContainerRef.current?.scrollToEnd?.({ animated: true });
         }, 120);
-    }, [isEditing]);
+    }, [isEditing, scrollLocationFieldIntoView]);
+
+    useEffect(() => {
+        if (Platform.OS !== 'android') {
+            return;
+        }
+
+        const keyboardDidShowSubscription = Keyboard.addListener('keyboardDidShow', () => {
+            if (!shouldScrollLocationIntoViewRef.current) {
+                return;
+            }
+
+            setTimeout(() => {
+                scrollLocationFieldIntoView();
+                shouldScrollLocationIntoViewRef.current = false;
+            }, 60);
+        });
+
+        const keyboardDidHideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+            shouldScrollLocationIntoViewRef.current = false;
+        });
+
+        return () => {
+            keyboardDidShowSubscription.remove();
+            keyboardDidHideSubscription.remove();
+        };
+    }, [scrollLocationFieldIntoView]);
 
     const importStickerFromSource = useCallback(async (
         source: StickerImportSource,
@@ -1524,7 +1576,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             cardAnimatedStyle={cardAnimatedStyle}
             editIconAnimatedStyle={editIconAnimatedStyle}
             saveIconAnimatedStyle={saveIconAnimatedStyle}
-            editingHintAnimatedStyle={editingHintAnimatedStyle}
             infoSectionAnimatedStyle={infoSectionAnimatedStyle}
             favoriteFilledTintStyle={favoriteFilledTintStyle}
             favoriteOutlineIconStyle={favoriteOutlineIconStyle}
@@ -1556,6 +1607,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             onSaveEdit={handleSaveEdit}
             onShare={handleShare}
             onDelete={handleDelete}
+            onInfoSectionLayout={handleInfoSectionLayout}
+            onLocationFieldLayout={handleLocationFieldLayout}
             scrollContainerRef={scrollContainerRef}
             showPremiumColorAlert={showPremiumColorAlert}
         />
@@ -1564,7 +1617,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     if (Platform.OS === 'android') {
         return (
             <>
-                <AppSheet visible={visible} onClose={handleSheetDismiss} androidScrollable>
+                <AppSheet
+                    visible={visible}
+                    onClose={handleSheetDismiss}
+                    androidScrollable
+                    androidKeyboardBehavior="fillParent"
+                >
                     {renderBody()}
                 </AppSheet>
                 <StickerSourceSheet

@@ -36,7 +36,7 @@ function ImageMemoryCard({
   isActive = false,
   debugTiltOverride,
 }: ImageMemoryCardProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const doodleStrokes = useMemo(
     () => parseNoteDoodleStrokes(doodleStrokesJson),
     [doodleStrokesJson]
@@ -81,8 +81,16 @@ function ImageMemoryCard({
           pointerEvents="none"
           style={styles.captionOverlay}
         >
-          <View style={styles.captionField}>
-            <Text style={styles.captionText} numberOfLines={2}>
+          <View
+            style={[
+              styles.captionField,
+              {
+                backgroundColor: isDark ? 'rgba(20,20,20,0.5)' : 'rgba(255,255,255,0.72)',
+                borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.42)',
+              },
+            ]}
+          >
+            <Text style={[styles.captionText, { color: colors.text }]} numberOfLines={1}>
               {normalizedCaption}
             </Text>
           </View>
@@ -125,18 +133,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   captionField: {
-    width: '84%',
+    maxWidth: '72%',
     minHeight: 38,
     borderRadius: 19,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.34)',
-    backgroundColor: 'rgba(255,252,246,0.74)',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 8,
   },
   captionText: {
-    color: '#2B2621',
+    flexShrink: 1,
     fontSize: 13.5,
     lineHeight: 18,
     fontWeight: '600',

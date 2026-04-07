@@ -157,7 +157,7 @@ jest.mock('../hooks/useTheme', () => ({
   }),
 }));
 
-jest.mock('../hooks/state/useActiveNote', () => ({
+jest.mock('../hooks/useActiveNote', () => ({
   useActiveNote: () => ({
     setActiveNote: mockSetActiveNote,
     clearActiveNote: mockClearActiveNote,
@@ -976,7 +976,7 @@ describe('NoteDetailSheet', () => {
       resolveSecondNote = resolve;
     }));
 
-    const { queryByDisplayValue, rerender } = render(
+    const { queryByText, rerender } = render(
       <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
     );
 
@@ -1003,7 +1003,7 @@ describe('NoteDetailSheet', () => {
     });
 
     await waitFor(() => {
-      expect(queryByDisplayValue('Second note')).toBeTruthy();
+      expect(queryByText('Second note')).toBeTruthy();
     });
 
     await act(async () => {
@@ -1024,7 +1024,7 @@ describe('NoteDetailSheet', () => {
       });
     });
 
-    expect(queryByDisplayValue('Second note')).toBeTruthy();
-    expect(queryByDisplayValue('First note')).toBeNull();
+    expect(queryByText('Second note')).toBeTruthy();
+    expect(queryByText('First note')).toBeNull();
   });
 });

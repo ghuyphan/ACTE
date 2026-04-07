@@ -4,18 +4,11 @@ import type { Region } from 'react-native-maps';
 import type { Note } from '../../services/database';
 import {
   applyMapFilters,
-  buildClusterIndex,
-  buildMapPointGroups,
-  DEFAULT_REGION,
+  buildMapGeometry,
+  buildMapViewportState,
   getInitialMapRegion,
-  getMapClusterNodes,
-  getNearbyNoteItems,
-  getNotesInRegion,
-  getPointGroupMap,
-  getRegionCenter,
   MapFilterState,
   MapFilterType,
-  MapPointGroup,
   regionToZoom,
 } from './mapDomain';
 
@@ -63,23 +56,12 @@ export function useMapScreenState({
     [filterState, notes]
   );
 
-  const pointGroups = useMemo<MapPointGroup[]>(
-    () => (enableHeavyCalculations ? buildMapPointGroups(filteredNotes) : []),
+  const mapGeometry = useMemo(
+    () => (enableHeavyCalculations ? buildMapGeometry(filteredNotes) : buildMapGeometry([])),
     [enableHeavyCalculations, filteredNotes]
   );
-  const pointGroupMap = useMemo(() => getPointGroupMap(pointGroups), [pointGroups]);
-
-  const clusterIndex = useMemo(
-    () => (enableHeavyCalculations ? buildClusterIndex(pointGroups) : null),
-    [enableHeavyCalculations, pointGroups]
-  );
-
-  const clusteringRegion = visibleRegion ?? initialRegion ?? DEFAULT_REGION;
-
-  const clusterNodes = useMemo(
-    () => (enableHeavyCalculations ? getMapClusterNodes(clusterIndex, clusteringRegion, pointGroupMap) : []),
-    [clusterIndex, clusteringRegion, enableHeavyCalculations, pointGroupMap]
-  );
+  const pointGroups = mapGeometry.pointGroups;
+  const pointGroupMap = mapGeometry.pointGroupMap;
 
   const selectedGroup = useMemo(
     () => (selectedGroupId ? pointGroupMap.get(selectedGroupId) ?? null : null),
@@ -87,71 +69,34 @@ export function useMapScreenState({
   );
 
   const selectedNote = selectedGroup?.notes[selectedNoteIndex] ?? null;
-  const nearbyReferenceRegion = nearbyBrowseRegion ?? visibleRegion;
-
-  const nearbyAnchor = useMemo(() => {
-    if (location) {
-      return {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      };
-    }
-
-    if (nearbyReferenceRegion) {
-      return getRegionCenter(nearbyReferenceRegion);
-    }
-
-    return getRegionCenter(initialRegion);
-  }, [initialRegion, location, nearbyReferenceRegion]);
-
-  const notesInVisibleRegion = useMemo(() => {
-    if (!enableHeavyCalculations) {
-      return [];
-    }
-
-    if (!visibleRegion) {
-      return filteredNotes;
-    }
-
-    return getNotesInRegion(filteredNotes, visibleRegion);
-  }, [enableHeavyCalculations, filteredNotes, visibleRegion]);
-
-  const nearbyNotesInBrowseRegion = useMemo(() => {
-    if (!enableHeavyCalculations) {
-      return [];
-    }
-
-    if (!nearbyReferenceRegion) {
-      return filteredNotes;
-    }
-
-    if (visibleRegion && areRegionsEquivalent(visibleRegion, nearbyReferenceRegion)) {
-      return notesInVisibleRegion;
-    }
-
-    return getNotesInRegion(filteredNotes, nearbyReferenceRegion);
-  }, [enableHeavyCalculations, filteredNotes, nearbyReferenceRegion, notesInVisibleRegion, visibleRegion]);
-
-  const nearbyCandidates = useMemo(() => {
-    if (!nearbyReferenceRegion) {
-      return filteredNotes;
-    }
-
-    if (nearbyNotesInBrowseRegion.length > 0) {
-      return nearbyNotesInBrowseRegion;
-    }
-
-    return allowOffscreenResults ? filteredNotes : [];
-  }, [allowOffscreenResults, filteredNotes, nearbyNotesInBrowseRegion, nearbyReferenceRegion]);
-
-  const nearbyItems = useMemo(
-    () => (enableHeavyCalculations ? getNearbyNoteItems(nearbyCandidates, nearbyAnchor, 30) : []),
-    [enableHeavyCalculations, nearbyAnchor, nearbyCandidates]
+  const viewportState = useMemo(
+    () =>
+      buildMapViewportState({
+        filteredNotes,
+        geometry: mapGeometry,
+        initialRegion,
+        visibleRegion,
+        nearbyBrowseRegion,
+        allowOffscreenResults,
+        location,
+        enableHeavyCalculations,
+      }),
+    [
+      allowOffscreenResults,
+      enableHeavyCalculations,
+      filteredNotes,
+      initialRegion,
+      location,
+      mapGeometry,
+      nearbyBrowseRegion,
+      visibleRegion,
+    ]
   );
-  const allFilteredNearbyItems = useMemo(
-    () => (enableHeavyCalculations ? getNearbyNoteItems(filteredNotes, nearbyAnchor, 30) : []),
-    [enableHeavyCalculations, filteredNotes, nearbyAnchor]
-  );
+  const clusterNodes = viewportState.clusterNodes;
+  const nearbyItems = viewportState.nearbyItems;
+  const allFilteredNearbyItems = viewportState.allFilteredNearbyItems;
+  const nearbyAnchor = viewportState.nearbyAnchor;
+  const notesInVisibleRegion = viewportState.notesInVisibleRegion;
 
   useEffect(() => {
     if (!selectedGroup) {

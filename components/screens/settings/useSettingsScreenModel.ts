@@ -11,14 +11,7 @@ import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useSubscription } from '../../../hooks/useSubscription';
 import { useSyncStatus } from '../../../hooks/useSyncStatus';
 import { useTheme } from '../../../hooks/useTheme';
-import {
-  hasAccountDeletionLink,
-  hasPrivacyPolicyLink,
-  hasSupportLink,
-  openAccountDeletionHelp,
-  openPrivacyPolicy,
-  openSupport,
-} from '../../../services/legalLinks';
+import { createLegalLinkActions, getLegalLinkAvailability } from '../shared/legalLinkActions';
 import { getThemeLabel } from '../../settings/settingsSelectionOptions';
 
 export function useSettingsScreenModel() {
@@ -43,6 +36,8 @@ export function useSettingsScreenModel() {
   const insets = useSafeAreaInsets();
   const { alertProps, showAlert } = useAppSheetAlert();
   const appVersion = Constants.expoConfig?.version?.trim() || '1.0.0';
+  const legalLinkAvailability = useMemo(getLegalLinkAvailability, []);
+  const legalLinkActions = useMemo(createLegalLinkActions, []);
 
   const [showTheme, setShowTheme] = useState(false);
   const [showLanguage, setShowLanguage] = useState(false);
@@ -72,18 +67,6 @@ export function useSettingsScreenModel() {
 
     setShowSync(true);
   }, [isAuthAvailable, openAccountScreen, user]);
-
-  const openPrivacyPolicyLink = () => {
-    void openPrivacyPolicy();
-  };
-
-  const openSupportLink = () => {
-    void openSupport();
-  };
-
-  const openAccountDeletionHelpLink = () => {
-    void openAccountDeletionHelp();
-  };
 
   const themeLabel = getThemeLabel(theme, t);
 
@@ -138,17 +121,17 @@ export function useSettingsScreenModel() {
     }
 
     if (photoNoteLimit === null) {
-    return t(
-      'settings.plusHint',
-      'Upgrade to Noto Plus to unlock unlimited photo notes, interactive hologram cards, premium finishes, and import from your photo library.'
-    );
-  }
+      return t(
+        'settings.plusHint',
+        'Upgrade to Noto Plus to unlock unlimited photo notes, interactive hologram cards, premium finishes, and import from your photo library.'
+      );
+    }
 
-  return t(
-    'settings.plusHintWithLimit',
-    'Free plan includes up to {{count}} photo notes. Upgrade to Noto Plus for unlimited photo notes, interactive hologram cards, premium finishes, and library import.',
-    { count: photoNoteLimit }
-  );
+    return t(
+      'settings.plusHintWithLimit',
+      'Free plan includes up to {{count}} photo notes. Upgrade to Noto Plus for unlimited photo notes, interactive hologram cards, premium finishes, and library import.',
+      { count: photoNoteLimit }
+    );
   }, [photoNoteLimit, t, tier]);
 
   const accountHint = useMemo(() => {
@@ -256,6 +239,8 @@ export function useSettingsScreenModel() {
   };
 
   return {
+    ...legalLinkActions,
+    ...legalLinkAvailability,
     accountHint,
     accountValue,
     appVersion,
@@ -268,11 +253,8 @@ export function useSettingsScreenModel() {
     isPurchaseAvailable,
     notes,
     openAccountScreen,
-    openAccountDeletionHelpLink,
     openPlusScreen,
-    openPrivacyPolicyLink,
     openSyncScreen,
-    openSupportLink,
     plusHint,
     plusValue,
     promptClearAll,
@@ -283,9 +265,6 @@ export function useSettingsScreenModel() {
     showSyncEntry: Boolean(user),
     showSync,
     showTheme,
-    showAccountDeletionLink: hasAccountDeletionLink(),
-    showPrivacyPolicyLink: hasPrivacyPolicyLink(),
-    showSupportLink: hasSupportLink(),
     syncEnabled,
     pendingCount,
     failedCount,

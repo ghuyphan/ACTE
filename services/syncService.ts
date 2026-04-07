@@ -1816,7 +1816,15 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
   async getStats() {
     const db = await getDB();
     const scope = resolveScope();
-    await sqliteSyncRepository.recoverProcessing();
+    await db.runAsync(
+      `UPDATE sync_queue
+       SET status = 'pending',
+           last_error = NULL,
+           next_retry_at = NULL,
+           blocked_reason = NULL
+       WHERE owner_uid = ? AND status = 'processing'`,
+      scope
+    );
     const row = await db.getFirstAsync<{
       pending_count: number | null;
       failed_count: number | null;

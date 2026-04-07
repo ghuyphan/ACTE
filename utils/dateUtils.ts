@@ -74,16 +74,16 @@ function formatRelativeNoteTime(deltaMs: number): string {
     const absDeltaMs = Math.abs(deltaMs);
 
     if (absDeltaMs < HOUR_MS) {
-        const minutes = Math.max(1, Math.round(deltaMs / MINUTE_MS));
+        const minutes = Math.max(1, Math.floor(absDeltaMs / MINUTE_MS));
         return formatRelativeNoteTimeFallback(minutes, 'minute');
     }
 
     if (absDeltaMs < DAY_MS) {
-        const hours = Math.round(deltaMs / HOUR_MS);
+        const hours = Math.max(1, Math.floor(absDeltaMs / HOUR_MS));
         return formatRelativeNoteTimeFallback(hours, 'hour');
     }
 
-    const days = Math.round(deltaMs / DAY_MS);
+    const days = Math.max(1, Math.floor(absDeltaMs / DAY_MS));
     return formatRelativeNoteTimeFallback(days, 'day');
 }
 

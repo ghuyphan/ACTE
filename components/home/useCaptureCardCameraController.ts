@@ -1,6 +1,6 @@
 import { Skia } from '@shopify/react-native-skia';
 import type { TFunction } from 'i18next';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Gesture } from 'react-native-gesture-handler';
 import {
   cancelAnimation,
@@ -13,7 +13,7 @@ import {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import type { CameraDevice } from 'react-native-vision-camera';
+import type { Camera, CameraDevice } from 'react-native-vision-camera';
 import { Layout } from '../../constants/theme';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../../services/livePhotoProcessing';
@@ -25,6 +25,10 @@ const CAMERA_ZOOM_PINCH_RANGE = 0.45;
 const CAMERA_ZOOM_LABEL_VISIBLE_MS = 1100;
 const CAMERA_TRANSITION_FADE_IN_MS = 140;
 const CAMERA_TRANSITION_FADE_OUT_MS = 240;
+const CAMERA_FOCUS_RING_VISIBLE_MS = 640;
+const CAMERA_FOCUS_RING_FADE_IN_MS = 170;
+const CAMERA_FOCUS_RING_SETTLE_MS = 110;
+const CAMERA_FOCUS_RING_FADE_OUT_MS = 300;
 const SHUTTER_CORE_SIZE = 58;
 
 function clamp(value: number, minValue: number, maxValue: number) {
@@ -34,6 +38,7 @@ function clamp(value: number, minValue: number, maxValue: number) {
 interface UseCaptureCardCameraControllerOptions {
   captureMode: 'text' | 'camera';
   capturedPhoto: string | null;
+  cameraRef: RefObject<Camera | null>;
   cameraDevice?: CameraDevice;
   cameraSessionKey: number;
   permissionGranted: boolean;
@@ -57,6 +62,7 @@ interface UseCaptureCardCameraControllerOptions {
 export function useCaptureCardCameraController({
   captureMode,
   capturedPhoto,
+  cameraRef,
   cameraDevice,
   cameraSessionKey,
   permissionGranted,
@@ -87,14 +93,18 @@ export function useCaptureCardCameraController({
   const [cameraActivationNonce, setCameraActivationNonce] = useState(0);
   const [cameraZoom, setCameraZoom] = useState(0);
   const [showCameraZoomBadge, setShowCameraZoomBadge] = useState(false);
+  const [cameraFocusPoint, setCameraFocusPoint] = useState<{ x: number; y: number } | null>(null);
   const shutterLongPressTriggeredRef = useRef(false);
   const cameraAutoRecoveryCountRef = useRef(0);
   const cameraZoomRef = useRef(0);
   const cameraPanZoomStartRef = useRef(0);
   const cameraPinchZoomStartRef = useRef(0);
   const cameraZoomBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cameraFocusRingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraHintVisibility = useSharedValue(Boolean(cameraInstructionText) && !capturedPhoto ? 1 : 0);
   const cameraTransitionMaskOpacity = useSharedValue(0);
+  const cameraFocusRingOpacity = useSharedValue(0);
+  const cameraFocusRingScale = useSharedValue(1.08);
   const livePhotoVisualProgress = useSharedValue(isLivePhotoCaptureInProgress ? 1 : 0);
   const livePhotoHaloProgress = useSharedValue(0);
   const showCameraInstructionHint = Boolean(cameraInstructionText) && !capturedPhoto;
@@ -151,6 +161,13 @@ export function useCaptureCardCameraController({
     }
   }, []);
 
+  const clearCameraFocusRingTimeout = useCallback(() => {
+    if (cameraFocusRingTimeoutRef.current) {
+      clearTimeout(cameraFocusRingTimeoutRef.current);
+      cameraFocusRingTimeoutRef.current = null;
+    }
+  }, []);
+
   const scheduleHideCameraZoomBadge = useCallback(() => {
     clearCameraZoomBadgeTimeout();
     cameraZoomBadgeTimeoutRef.current = setTimeout(() => {
@@ -176,6 +193,76 @@ export function useCaptureCardCameraController({
     setCameraZoom(0);
     setShowCameraZoomBadge(false);
   }, [clearCameraZoomBadgeTimeout]);
+
+  const showCameraFocusRing = useCallback(
+    (x: number, y: number) => {
+      clearCameraFocusRingTimeout();
+      setCameraFocusPoint({ x, y });
+      cameraFocusRingScale.value = 0.82;
+      cameraFocusRingOpacity.value = 0;
+      cameraFocusRingScale.value = withSequence(
+        withTiming(1.04, {
+          duration: reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_FADE_IN_MS,
+          easing: Easing.out(Easing.cubic),
+        }),
+        withTiming(0.98, {
+          duration: reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_SETTLE_MS,
+          easing: Easing.out(Easing.quad),
+        })
+      );
+      cameraFocusRingOpacity.value = withTiming(1, {
+        duration: reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_FADE_IN_MS,
+        easing: Easing.out(Easing.cubic),
+      });
+      cameraFocusRingTimeoutRef.current = setTimeout(() => {
+        cameraFocusRingScale.value = withTiming(1.06, {
+          duration: reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_FADE_OUT_MS,
+          easing: Easing.out(Easing.cubic),
+        });
+        cameraFocusRingOpacity.value = withTiming(0, {
+          duration: reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_FADE_OUT_MS,
+          easing: Easing.out(Easing.cubic),
+        });
+        cameraFocusRingTimeoutRef.current = null;
+      }, CAMERA_FOCUS_RING_VISIBLE_MS);
+    },
+    [
+      cameraFocusRingOpacity,
+      cameraFocusRingScale,
+      clearCameraFocusRingTimeout,
+      reduceMotionEnabled,
+    ]
+  );
+
+  const handleCameraFocusTap = useCallback(
+    async (x: number, y: number) => {
+      if (
+        !cameraRef.current ||
+        !cameraDevice?.supportsFocus ||
+        !canShowLiveCameraPreview ||
+        cameraUnavailable ||
+        interactionsDisabled
+      ) {
+        return;
+      }
+
+      showCameraFocusRing(x, y);
+
+      try {
+        await cameraRef.current.focus({ x, y });
+      } catch {
+        // Ignore focus failures so the rest of the preview remains responsive.
+      }
+    },
+    [
+      cameraDevice?.supportsFocus,
+      cameraRef,
+      cameraUnavailable,
+      canShowLiveCameraPreview,
+      interactionsDisabled,
+      showCameraFocusRing,
+    ]
+  );
 
   const restartCameraPreview = useCallback((manual = false) => {
     if (manual) {
@@ -279,8 +366,9 @@ export function useCaptureCardCameraController({
   useEffect(
     () => () => {
       clearCameraZoomBadgeTimeout();
+      clearCameraFocusRingTimeout();
     },
-    [clearCameraZoomBadgeTimeout]
+    [clearCameraFocusRingTimeout, clearCameraZoomBadgeTimeout]
   );
 
   useEffect(() => {
@@ -322,6 +410,11 @@ export function useCaptureCardCameraController({
   const cameraTransitionMaskAnimatedStyle = useAnimatedStyle(() => ({
     opacity: cameraTransitionMaskOpacity.value,
   }), [cameraTransitionMaskOpacity]);
+
+  const cameraFocusRingAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: cameraFocusRingOpacity.value,
+    transform: [{ scale: cameraFocusRingScale.value }],
+  }), [cameraFocusRingOpacity, cameraFocusRingScale]);
 
   const shutterOuterAnimatedStyle = useAnimatedStyle(() => ({
     borderColor: interpolateColor(
@@ -422,6 +515,8 @@ export function useCaptureCardCameraController({
     );
   const cameraZoomGesturesEnabled =
     canShowLiveCameraPreview && !showCameraUnavailableState && !interactionsDisabled;
+  const cameraFocusGesturesEnabled =
+    cameraZoomGesturesEnabled && Boolean(cameraDevice?.supportsFocus);
 
   const handleSwitchCameraPress = useCallback(() => {
     cameraTransitionMaskOpacity.value = withTiming(1, {
@@ -477,8 +572,21 @@ export function useCaptureCardCameraController({
 
   const cameraZoomLabel = `${cameraPreviewZoom.toFixed(1)}x`;
   const cameraZoomGesture = useMemo(
-    () =>
-      Gesture.Simultaneous(
+    () => {
+      const tapGesture = Gesture.Tap()
+        .enabled(cameraFocusGesturesEnabled)
+        .runOnJS(true)
+        .maxDuration(250)
+        .onEnd((event, success) => {
+          if (success === false) {
+            return;
+          }
+
+          void handleCameraFocusTap(event.x, event.y);
+        });
+
+      return Gesture.Simultaneous(
+        tapGesture,
         Gesture.Pan()
           .enabled(cameraZoomGesturesEnabled)
           .runOnJS(true)
@@ -513,14 +621,24 @@ export function useCaptureCardCameraController({
           .onEnd(() => {
             scheduleHideCameraZoomBadge();
           })
-      ),
-    [cameraZoomGesturesEnabled, cardSize, scheduleHideCameraZoomBadge, updateCameraZoom]
+      );
+    },
+    [
+      cameraFocusGesturesEnabled,
+      cameraZoomGesturesEnabled,
+      cardSize,
+      handleCameraFocusTap,
+      scheduleHideCameraZoomBadge,
+      updateCameraZoom,
+    ]
   );
 
   const cameraKey = `camera-session-${cameraSessionKey}-${cameraRetryNonce}-${cameraActivationNonce}-${cameraDevice?.id ?? 'none'}`;
 
   return useMemo(
     () => ({
+      cameraFocusPoint,
+      cameraFocusRingAnimatedStyle,
       cameraHintAnimatedStyle,
       cameraKey,
       cameraPreviewZoom,
@@ -551,6 +669,8 @@ export function useCaptureCardCameraController({
       shutterOuterAnimatedStyle,
     }),
     [
+      cameraFocusPoint,
+      cameraFocusRingAnimatedStyle,
       cameraHintAnimatedStyle,
       cameraKey,
       cameraPreviewZoom,

@@ -3,6 +3,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { AppState } from 'react-native';
 let mockCaptureCardProps: any = null;
 let mockCaptureCardHandle: any = null;
+const mockNotes: any[] = [];
 const mockOpenAppSettings = jest.fn(async () => undefined);
 const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
 const mockShowAlert = jest.fn();
@@ -103,27 +104,27 @@ jest.mock('../hooks/useGeofence', () => ({
   }),
 }));
 
-jest.mock('../hooks/ui/useAppSheetAlert', () => ({
+jest.mock('../hooks/useAppSheetAlert', () => ({
   useAppSheetAlert: () => ({
     alertProps: {},
     showAlert: mockShowAlert,
   }),
 }));
 
-jest.mock('../hooks/state/useActiveFeedTarget', () => ({
+jest.mock('../hooks/useActiveFeedTarget', () => ({
   useActiveFeedTarget: () => ({
     setActiveFeedTarget: jest.fn(),
     clearActiveFeedTarget: jest.fn(),
   }),
 }));
 
-jest.mock('../hooks/ui/useNoteDetailSheet', () => ({
+jest.mock('../hooks/useNoteDetailSheet', () => ({
   useNoteDetailSheet: () => ({
     openNoteDetail: jest.fn(),
   }),
 }));
 
-jest.mock('../hooks/state/useFeedFocus', () => ({
+jest.mock('../hooks/useFeedFocus', () => ({
   useFeedFocus: () => ({
     consumeFeedFocus: jest.fn(() => null),
   }),
@@ -141,9 +142,10 @@ jest.mock('../utils/appStorage', () => ({
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
-    notes: [],
+    notes: mockNotes,
     refreshNotes: jest.fn(async () => undefined),
     createNote: jest.fn(async () => undefined),
+    searchNotes: jest.fn(async () => mockNotes),
   }),
 }));
 
@@ -323,7 +325,7 @@ describe('HomeScreen camera lifecycle', () => {
     (global as any).cancelIdleCallback = originalCancelIdleCallback;
   });
 
-  it('keeps the camera preview mounted while capture visibility changes', async () => {
+  it('pauses the camera preview when the capture card scrolls out of view', async () => {
     const { getByTestId } = render(<HomeScreen />);
 
     expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
@@ -332,8 +334,8 @@ describe('HomeScreen camera lifecycle', () => {
     fireEvent.press(getByTestId('hide-capture'));
 
     await waitFor(() => {
-      expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
-      expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(true);
+      expect(getByTestId('camera-preview-state')).toHaveTextContent('false');
+      expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(false);
     });
 
     fireEvent.press(getByTestId('show-capture'));

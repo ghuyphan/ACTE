@@ -14,6 +14,7 @@ let mockClipboardPasteButtonAvailable = true;
 let mockCameraViewProps: any = null;
 let mockCameraMountCount = 0;
 let mockCameraUnmountCount = 0;
+let mockCameraFocus = jest.fn();
 let mockClipboardPastePayload: any = {
   type: 'image',
   data: `data:image/png;base64,${transparentPngBase64}`,
@@ -70,6 +71,7 @@ jest.mock('react-native-vision-camera', () => {
       startRecording: jest.fn(),
       stopRecording: jest.fn(),
       cancelRecording: jest.fn(),
+      focus: mockCameraFocus,
     }));
     return <View testID="mock-camera-view" />;
   });
@@ -85,6 +87,7 @@ jest.mock('react-native-vision-camera', () => {
       position: 'back',
       neutralZoom: 1,
       maxZoom: 4,
+      supportsFocus: true,
     }),
   };
 });
@@ -463,6 +466,7 @@ describe('CaptureCard doodle handle', () => {
     mockCameraViewProps = null;
     mockCameraMountCount = 0;
     mockCameraUnmountCount = 0;
+    mockCameraFocus = jest.fn();
     mockClipboardListeners = [];
     mockClipboardPastePayload = {
       type: 'image',

@@ -39,6 +39,8 @@ interface DownloadMediaOptions {
   preferCached?: boolean;
 }
 
+type DownloadBuilder = (directory: string, normalizedPath: string, normalizedLocalId: string) => string;
+
 interface PreparedUpload {
   uri: string;
   cleanupUri: string | null;
@@ -47,6 +49,12 @@ interface PreparedUpload {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const inFlightDownloads = new Map<string, Promise<string | null>>();
+
+function getDownloadCacheKey(bucket: string, path: string, localId: string) {
+  return `${bucket}::${path}::${localId}`;
 }
 
 function getFileExtension(path: string | null | undefined, fallbackExtension: string) {
@@ -292,40 +300,69 @@ async function createSignedDownloadUrl(bucket: string, path: string) {
   return data.signedUrl;
 }
 
+async function downloadMediaFromStorage(
+  bucket: string,
+  path: string | null | undefined,
+  localId: string,
+  options: DownloadMediaOptions,
+  resolveDirectory: () => Promise<string | null>,
+  buildDestinationPath: DownloadBuilder
+) {
+  const normalizedPath = typeof path === 'string' ? path.trim() : '';
+  const normalizedLocalId = typeof localId === 'string' ? localId.trim() : '';
+  if (!normalizedPath || !normalizedLocalId) {
+    return null;
+  }
+
+  const cacheKey = getDownloadCacheKey(bucket, normalizedPath, normalizedLocalId);
+  const inFlight = inFlightDownloads.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const request = (async () => {
+    const directory = await resolveDirectory();
+    if (!directory) {
+      return null;
+    }
+
+    const destinationPath = buildDestinationPath(directory, normalizedPath, normalizedLocalId);
+    if (options.preferCached !== false) {
+      const cachedInfo = await FileSystem.getInfoAsync(destinationPath).catch(() => null);
+      if (cachedInfo?.exists && !cachedInfo.isDirectory) {
+        return destinationPath;
+      }
+    }
+
+    const signedUrl = await createSignedDownloadUrl(bucket, normalizedPath);
+    if (!signedUrl) {
+      return null;
+    }
+
+    const result = await FileSystem.downloadAsync(signedUrl, destinationPath);
+    return result.uri ?? destinationPath;
+  })().finally(() => {
+    inFlightDownloads.delete(cacheKey);
+  });
+
+  inFlightDownloads.set(cacheKey, request);
+  return request;
+}
+
 export async function downloadPhotoFromStorage(
   bucket: string,
   path: string | null | undefined,
   localId: string,
   options: DownloadMediaOptions = {}
 ) {
-  if (!path?.trim()) {
-    return null;
-  }
-
-  const directory =
-    bucket === NOTE_MEDIA_BUCKET
-      ? await ensurePhotoDirectory()
-      : await ensureSharedPhotoCacheDirectory();
-
-  if (!directory) {
-    return null;
-  }
-
-  const destinationPath = `${directory}${localId}.jpg`;
-  if (options.preferCached !== false) {
-    const cachedInfo = await FileSystem.getInfoAsync(destinationPath).catch(() => null);
-    if (cachedInfo?.exists && !cachedInfo.isDirectory) {
-      return destinationPath;
-    }
-  }
-
-  const signedUrl = await createSignedDownloadUrl(bucket, path);
-  if (!signedUrl) {
-    return null;
-  }
-
-  const result = await FileSystem.downloadAsync(signedUrl, destinationPath);
-  return result.uri ?? destinationPath;
+  return downloadMediaFromStorage(
+    bucket,
+    path,
+    localId,
+    options,
+    bucket === NOTE_MEDIA_BUCKET ? ensurePhotoDirectory : ensureSharedPhotoCacheDirectory,
+    (directory, _normalizedPath, normalizedLocalId) => `${directory}${normalizedLocalId}.jpg`
+  );
 }
 
 export async function downloadPairedVideoFromStorage(
@@ -334,35 +371,17 @@ export async function downloadPairedVideoFromStorage(
   localId: string,
   options: DownloadMediaOptions = {}
 ) {
-  if (!path?.trim()) {
-    return null;
-  }
-
-  const directory =
+  return downloadMediaFromStorage(
+    bucket,
+    path,
+    localId,
+    options,
     bucket === NOTE_MEDIA_BUCKET
-      ? await ensureLivePhotoVideoDirectory()
-      : await ensureSharedLivePhotoVideoCacheDirectory();
-
-  if (!directory) {
-    return null;
-  }
-
-  const extension = getFileExtension(path, '.mp4');
-  const destinationPath = `${directory}${localId}${extension}`;
-  if (options.preferCached !== false) {
-    const cachedInfo = await FileSystem.getInfoAsync(destinationPath).catch(() => null);
-    if (cachedInfo?.exists && !cachedInfo.isDirectory) {
-      return destinationPath;
-    }
-  }
-
-  const signedUrl = await createSignedDownloadUrl(bucket, path);
-  if (!signedUrl) {
-    return null;
-  }
-
-  const result = await FileSystem.downloadAsync(signedUrl, destinationPath);
-  return result.uri ?? destinationPath;
+      ? ensureLivePhotoVideoDirectory
+      : ensureSharedLivePhotoVideoCacheDirectory,
+    (directory, normalizedPath, normalizedLocalId) =>
+      `${directory}${normalizedLocalId}${getFileExtension(normalizedPath, '.mp4')}`
+  );
 }
 
 async function deleteObjectFromStorage(bucket: string, path: string | null | undefined) {

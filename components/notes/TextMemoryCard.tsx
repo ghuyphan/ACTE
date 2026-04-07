@@ -14,6 +14,7 @@ import { parseNoteStickerPlacements } from '../../services/noteStickers';
 import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
 import NoteDoodleCanvas from './NoteDoodleCanvas';
 import DynamicStickerCanvas from './DynamicStickerCanvas';
+import { getNoteCardTextSizeStyle, noteCardTextStyles } from './noteCardTextStyles';
 import type { DebugTiltState } from './StickerPhysicsDebugControls';
 import PremiumNoteFinishOverlay from '../ui/PremiumNoteFinishOverlay';
 import type { SharedValue } from 'react-native-reanimated';
@@ -92,9 +93,8 @@ function TextMemoryCard({
                 ) : null}
                 <Text 
                     style={[
-                        styles.memoryText, 
-                        displayText.length > 200 ? styles.memoryTextSmall :
-                        displayText.length > 100 ? styles.memoryTextMedium : null
+                        noteCardTextStyles.memoryText,
+                        getNoteCardTextSizeStyle(displayText),
                     ]} 
                     numberOfLines={8}
                 >
@@ -132,26 +132,5 @@ const styles = StyleSheet.create({
         ...STICKER_ARTBOARD_FRAME,
         opacity: 0.5,
         zIndex: 0,
-    },
-    memoryText: {
-        color: '#FFFFFF',
-        fontSize: 24,
-        fontWeight: '700',
-        letterSpacing: -0.5,
-        textAlign: 'center',
-        lineHeight: 32,
-        fontFamily: 'Noto Sans',
-        textShadowColor: 'rgba(0,0,0,0.2)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 4,
-        zIndex: 1,
-    },
-    memoryTextMedium: {
-        fontSize: 18,
-        lineHeight: 26,
-    },
-    memoryTextSmall: {
-        fontSize: 16,
-        lineHeight: 22,
     },
 });

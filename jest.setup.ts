@@ -118,6 +118,9 @@ jest.mock('react-native-gesture-handler', () => {
     const chain = {
       runOnJS: () => chain,
       enabled: () => chain,
+      maxDuration: () => chain,
+      maxDistance: () => chain,
+      numberOfTaps: () => chain,
       maxPointers: () => chain,
       activeOffsetX: () => chain,
       minDistance: () => chain,
@@ -138,9 +141,11 @@ jest.mock('react-native-gesture-handler', () => {
     GestureHandlerRootView: ({ children, ...props }: any) => React.createElement(View, props, children),
     GestureDetector: ({ children, ...props }: any) => React.createElement(View, props, children),
     Gesture: {
+      Tap: () => createGestureChain(),
       Pan: () => createGestureChain(),
       Pinch: () => createGestureChain(),
       Rotation: () => createGestureChain(),
+      Exclusive: () => createGestureChain(),
       Simultaneous: () => createGestureChain(),
     },
   };

@@ -3,7 +3,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
-import { useCallback, useDeferredValue, useMemo, useState, useTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -18,7 +18,6 @@ import { Layout, Shadows } from '../../../constants/theme';
 import { CardGradients, useTheme } from '../../../hooks/useTheme';
 import { useNotesStore } from '../../../hooks/useNotes';
 import { Note } from '../../../services/database';
-import { filterNotesByQuery } from '../../../services/noteSearch';
 import { getNotePhotoUri } from '../../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../../services/noteTextPresentation';
 import { formatDate } from '../../../utils/dateUtils';
@@ -47,23 +46,44 @@ export default function SearchScreen() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { notes, loading } = useNotesStore();
+  const { notes, loading, searchNotes } = useNotesStore();
   const router = useRouter();
   const [query, setQuery] = useState('');
+  const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
   const [, startSearchTransition] = useTransition();
   const deferredQuery = useDeferredValue(query);
   const hasQuery = query.trim().length > 0;
   const hasDeferredQuery = deferredQuery.trim().length > 0;
 
-  const filteredNotes = useMemo(() => {
+  useEffect(() => {
     if (!hasDeferredQuery) {
-      return [];
+      setFilteredNotes([]);
+      return;
     }
-    return filterNotesByQuery(notes, deferredQuery);
-  }, [deferredQuery, hasDeferredQuery, notes]);
+
+    let cancelled = false;
+
+    void searchNotes(deferredQuery)
+      .then((results) => {
+        if (!cancelled) {
+          setFilteredNotes(results);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn('Search query failed:', error);
+          setFilteredNotes([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deferredQuery, hasDeferredQuery, notes, searchNotes]);
+
   const shouldShowEmptyState = filteredNotes.length === 0;
 
-const openNote = useCallback(
+  const openNote = useCallback(
     (noteId: string) => {
       router.push(`/note/${noteId}` as any);
     },

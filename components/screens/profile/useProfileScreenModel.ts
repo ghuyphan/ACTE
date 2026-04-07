@@ -8,14 +8,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useNotes } from '../../../hooks/useNotes';
 import { useSubscription } from '../../../hooks/useSubscription';
 import { useTheme } from '../../../hooks/useTheme';
-import {
-  hasAccountDeletionLink,
-  hasPrivacyPolicyLink,
-  hasSupportLink,
-  openAccountDeletionHelp,
-  openPrivacyPolicy,
-  openSupport,
-} from '../../../services/legalLinks';
+import { createLegalLinkActions, getLegalLinkAvailability } from '../shared/legalLinkActions';
 
 export function useProfileScreenModel() {
   const { t } = useTranslation();
@@ -25,6 +18,8 @@ export function useProfileScreenModel() {
   const { tier } = useSubscription();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const legalLinkAvailability = useMemo(getLegalLinkAvailability, []);
+  const legalLinkActions = useMemo(createLegalLinkActions, []);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
@@ -36,18 +31,6 @@ export function useProfileScreenModel() {
 
   const membershipLabel =
     tier === 'plus' ? t('settings.plusTitle', 'Noto Plus') : t('settings.plusInactive', 'Standard');
-
-  const openPrivacyPolicyLink = () => {
-    void openPrivacyPolicy();
-  };
-
-  const openSupportLink = () => {
-    void openSupport();
-  };
-
-  const openAccountDeletionHelpLink = () => {
-    void openAccountDeletionHelp();
-  };
 
   const openSignIn = () => {
     router.replace('/auth');
@@ -117,7 +100,7 @@ export function useProfileScreenModel() {
               const result = await deleteAccount();
 
               if (result.status !== 'success') {
-                if (hasAccountDeletionLink()) {
+                if (legalLinkAvailability.showAccountDeletionLink) {
                   showAppAlert(
                     t('profile.deleteAccountNeedsSupportTitle', 'Need help deleting your account?'),
                     result.message ??
@@ -129,9 +112,7 @@ export function useProfileScreenModel() {
                       { text: t('common.cancel', 'Cancel'), style: 'cancel' },
                       {
                         text: t('profile.deleteAccountHelp', 'Open deletion help'),
-                        onPress: () => {
-                          void openAccountDeletionHelp();
-                        },
+                        onPress: legalLinkActions.openAccountDeletionHelpLink,
                       },
                     ]
                   );
@@ -176,14 +157,8 @@ export function useProfileScreenModel() {
     isDeletingAccount,
     isSigningOut,
     membershipLabel,
-    openAccountDeletionHelpLink,
-    openPrivacyPolicyLink,
     openSignIn,
-    openSupportLink,
     profileName,
-    showAccountDeletionLink: hasAccountDeletionLink(),
-    showPrivacyPolicyLink: hasPrivacyPolicyLink(),
-    showSupportLink: hasSupportLink(),
     t,
     tier,
     user,

@@ -75,6 +75,20 @@ export interface CoordinatePoint {
 
 export type MapClusterIndex = Supercluster<ClusterPointProperties, ClusterAggregateProperties>;
 
+export interface MapGeometryState {
+  pointGroups: MapPointGroup[];
+  pointGroupMap: Map<string, MapPointGroup>;
+  clusterIndex: MapClusterIndex | null;
+}
+
+export interface MapViewportState {
+  clusterNodes: MapClusterNode[];
+  nearbyAnchor: CoordinatePoint;
+  notesInVisibleRegion: Note[];
+  nearbyItems: NearbyNoteItem[];
+  allFilteredNearbyItems: NearbyNoteItem[];
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -170,6 +184,15 @@ export function buildMapPointGroups(notes: Note[]): MapPointGroup[] {
 
 export function getPointGroupMap(groups: MapPointGroup[]) {
   return new Map(groups.map((group) => [group.id, group] as const));
+}
+
+export function buildMapGeometry(notes: Note[]): MapGeometryState {
+  const pointGroups = buildMapPointGroups(notes);
+  return {
+    pointGroups,
+    pointGroupMap: getPointGroupMap(pointGroups),
+    clusterIndex: buildClusterIndex(pointGroups),
+  };
 }
 
 export function buildClusterIndex(groups: MapPointGroup[]): MapClusterIndex | null {
@@ -359,4 +382,86 @@ export function getNearbyNoteItems(
   });
 
   return nearbyItems;
+}
+
+interface BuildMapViewportStateParams {
+  filteredNotes: Note[];
+  geometry: MapGeometryState;
+  initialRegion: Region;
+  visibleRegion: Region | null;
+  nearbyBrowseRegion: Region | null;
+  allowOffscreenResults: boolean;
+  location: Location.LocationObject | null;
+  enableHeavyCalculations?: boolean;
+}
+
+export function buildMapViewportState({
+  filteredNotes,
+  geometry,
+  initialRegion,
+  visibleRegion,
+  nearbyBrowseRegion,
+  allowOffscreenResults,
+  location,
+  enableHeavyCalculations = true,
+}: BuildMapViewportStateParams): MapViewportState {
+  const clusteringRegion = visibleRegion ?? initialRegion ?? DEFAULT_REGION;
+  const nearbyReferenceRegion = nearbyBrowseRegion ?? visibleRegion;
+  const nearbyAnchor = location
+    ? {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      }
+    : nearbyReferenceRegion
+      ? getRegionCenter(nearbyReferenceRegion)
+      : getRegionCenter(initialRegion);
+
+  if (!enableHeavyCalculations) {
+    return {
+      clusterNodes: [],
+      nearbyAnchor,
+      notesInVisibleRegion: [],
+      nearbyItems: [],
+      allFilteredNearbyItems: [],
+    };
+  }
+
+  const notesInVisibleRegion = visibleRegion
+    ? getNotesInRegion(filteredNotes, visibleRegion)
+    : filteredNotes;
+
+  const nearbyNotesInBrowseRegion = !nearbyReferenceRegion
+    ? filteredNotes
+    : visibleRegion && areRegionsEquivalent(visibleRegion, nearbyReferenceRegion)
+      ? notesInVisibleRegion
+      : getNotesInRegion(filteredNotes, nearbyReferenceRegion);
+
+  const nearbyCandidates = !nearbyReferenceRegion
+    ? filteredNotes
+    : nearbyNotesInBrowseRegion.length > 0
+      ? nearbyNotesInBrowseRegion
+      : allowOffscreenResults
+        ? filteredNotes
+        : [];
+
+  return {
+    clusterNodes: getMapClusterNodes(geometry.clusterIndex, clusteringRegion, geometry.pointGroupMap),
+    nearbyAnchor,
+    notesInVisibleRegion,
+    nearbyItems: getNearbyNoteItems(nearbyCandidates, nearbyAnchor, 30),
+    allFilteredNearbyItems: getNearbyNoteItems(filteredNotes, nearbyAnchor, 30),
+  };
+}
+
+function areRegionsEquivalent(left: Region | null, right: Region) {
+  if (!left) {
+    return false;
+  }
+
+  return (
+    Math.abs(left.latitude - right.latitude) < 0.00001 &&
+    Math.abs(left.longitude - right.longitude) < 0.00001 &&
+    Math.abs(left.latitudeDelta - right.latitudeDelta) < 0.00001 &&
+    Math.abs(left.longitudeDelta - right.longitudeDelta) < 0.00001
+  );
 }

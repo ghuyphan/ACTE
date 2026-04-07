@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { ActiveFeedTargetProvider } from '../hooks/state/useActiveFeedTarget';
+import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
 
 const mockCreateNote = jest.fn(async (input?: any) => {
   const createdNote = {
@@ -136,20 +136,20 @@ jest.mock('../hooks/useGeofence', () => ({
   }),
 }));
 
-jest.mock('../hooks/ui/useAppSheetAlert', () => ({
+jest.mock('../hooks/useAppSheetAlert', () => ({
   useAppSheetAlert: () => ({
     alertProps: {},
     showAlert: mockShowAlert,
   }),
 }));
 
-jest.mock('../hooks/ui/useNoteDetailSheet', () => ({
+jest.mock('../hooks/useNoteDetailSheet', () => ({
   useNoteDetailSheet: () => ({
     openNoteDetail: jest.fn(),
   }),
 }));
 
-jest.mock('../hooks/state/useFeedFocus', () => ({
+jest.mock('../hooks/useFeedFocus', () => ({
   useFeedFocus: () => ({
     consumeFeedFocus: jest.fn(() => null),
   }),

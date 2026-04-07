@@ -22,7 +22,7 @@ import {
   mapMotionMarkerSettleSpring,
   mapMotionMarkerSpring,
 } from './mapMotion';
-import { photoOrbMinZoom } from './mapMarkerTokens';
+import { photoOrbMinZoom, samePlaceSplitMinZoom } from './mapMarkerTokens';
 import MapSelectedNoteCallout from './MapSelectedNoteCallout';
 
 type SharedPostWithCoordinates = SharedPost & {
@@ -53,10 +53,34 @@ interface MapCanvasProps {
   onMapReady: () => void;
   onRegionChangeComplete: (region: Region, details?: MapRegionChangeDetails) => void;
   onLeafPress: (groupId: string) => void;
+  onNotePress: (noteId: string) => void;
   onClusterPress: (node: MapClusterNode) => void;
   onFriendPress: (postId: string) => void;
   preferLiteMarkers?: boolean;
   colors: ThemeColors;
+}
+
+interface MarkerRenderItem {
+  key: string;
+  testID: string;
+  coordinate: {
+    latitude: number;
+    longitude: number;
+  };
+  node: MapClusterNode;
+  pointCount: number;
+  isSelected: boolean;
+  markerColor: string;
+  pulseActive: boolean;
+  showRichPreviewMarker: boolean;
+  showStackPreviewMarker: boolean;
+  previewNoteId: string | null;
+  photoNoteId: string | null;
+  photoUri: string | null;
+  previewTitle: string | null;
+  previewText: string | null;
+  countBadgeLabel: string | null;
+  noteId: string | null;
 }
 
 interface MarkerContentProps {
@@ -126,6 +150,33 @@ function getLeafMarkerBaseScale(
   }
 
   return 0.84 + zoomProgress * 0.14;
+}
+
+function getSeparatedNoteCoordinate(
+  latitude: number,
+  longitude: number,
+  index: number,
+  count: number,
+  zoomLevel: number
+) {
+  if (count <= 1) {
+    return { latitude, longitude };
+  }
+
+  const earthMetersPerDegree = 111111;
+  const metersPerPixel = 156543.03392 / Math.pow(2, zoomLevel);
+  const ringRadiusMeters = Math.max(5, Math.min(14, metersPerPixel * (count === 2 ? 22 : 26)));
+  const angleOffset = count === 2 ? 0 : -Math.PI / 2;
+  const angle = angleOffset + (index / count) * Math.PI * 2;
+  const longitudeMetersPerDegree = Math.max(
+    1,
+    Math.cos((latitude * Math.PI) / 180) * earthMetersPerDegree
+  );
+
+  return {
+    latitude: latitude + (ringRadiusMeters * Math.sin(angle)) / earthMetersPerDegree,
+    longitude: longitude + (ringRadiusMeters * Math.cos(angle)) / longitudeMetersPerDegree,
+  };
 }
 
 const MarkerContent = memo(function MarkerContent({
@@ -463,6 +514,7 @@ function MapCanvas({
   onMapReady,
   onRegionChangeComplete,
   onLeafPress,
+  onNotePress,
   onClusterPress,
   onFriendPress,
   preferLiteMarkers = false,
@@ -476,17 +528,61 @@ function MapCanvas({
   // Android applies map color scheme only from initial props, so remount on theme flips.
   const mapViewKey = isAndroid ? `map-${isDark ? 'dark' : 'light'}` : 'map';
 
-  const markerRenderItems = useMemo(
+  const markerRenderItems = useMemo<MarkerRenderItem[]>(
     () =>
-      markerNodes.map((node) => {
-        const isSelected = node.groupId != null && node.groupId === selectedGroupId;
+      markerNodes.reduce<MarkerRenderItem[]>((items, node) => {
         const markerColor = node.primaryType === 'photo' ? palette.photo : palette.text;
+        const showRichPreviewMarker = false;
+        const showStackPreviewMarker = false;
+        const shouldSplitSamePlaceGroup =
+          !node.isCluster &&
+          !preferLiteMarkers &&
+          node.pointCount > 1 &&
+          currentZoom >= samePlaceSplitMinZoom;
+
+        if (shouldSplitSamePlaceGroup) {
+          const splitNotes = node.noteIds
+            .map((noteId) => noteById.get(noteId) ?? null)
+            .filter((note): note is Note => note != null);
+
+          if (splitNotes.length > 1) {
+            return items.concat(splitNotes.map<MarkerRenderItem>((note, index) => {
+              const canShowPhotoThumbnail = note.type === 'photo' && currentZoom >= photoOrbMinZoom;
+
+              return {
+                key: `split-${note.id}`,
+                testID: `leaf-marker-${note.id}`,
+                coordinate: getSeparatedNoteCoordinate(
+                  node.latitude,
+                  node.longitude,
+                  index,
+                  splitNotes.length,
+                  currentZoom
+                ),
+                node,
+                pointCount: 1,
+                isSelected: selectedNote?.id === note.id,
+                markerColor: note.type === 'photo' ? palette.photo : palette.text,
+                pulseActive: markerPulseId === note.id,
+                showRichPreviewMarker,
+                showStackPreviewMarker,
+                previewNoteId: null,
+                photoNoteId: canShowPhotoThumbnail ? note.id : null,
+                photoUri: canShowPhotoThumbnail ? getNotePhotoUri(note) : null,
+                previewTitle: null,
+                previewText: null,
+                countBadgeLabel: null,
+                noteId: note.id,
+              };
+            }));
+          }
+        }
+
+        const isSelected = node.groupId != null && node.groupId === selectedGroupId;
         const markerId = node.isCluster ? node.id : node.groupId ?? node.id;
         const pulseActive = markerPulseId === markerId;
         const representativeNote =
           !node.isCluster && node.noteIds.length > 0 ? noteById.get(node.noteIds[0]) ?? null : null;
-        const showRichPreviewMarker = false;
-        const showStackPreviewMarker = false;
         const canShowPhotoThumbnail =
           !preferLiteMarkers &&
           !showRichPreviewMarker &&
@@ -496,8 +592,12 @@ function MapCanvas({
           node.noteIds.length === 1 &&
           currentZoom >= photoOrbMinZoom;
 
-        return {
+        return items.concat({
+          key: node.id,
+          testID: node.isCluster ? `cluster-marker-${node.id}` : `leaf-marker-${node.groupId ?? node.id}`,
+          coordinate: { latitude: node.latitude, longitude: node.longitude },
           node,
+          pointCount: node.pointCount,
           isSelected,
           markerColor,
           pulseActive,
@@ -505,13 +605,25 @@ function MapCanvas({
           showStackPreviewMarker,
           previewNoteId: null,
           photoNoteId: canShowPhotoThumbnail ? representativeNote?.id ?? null : null,
-          photoUri: canShowPhotoThumbnail && representativeNote ? getNotePhotoUri(representativeNote) : null,
+          photoUri:
+            canShowPhotoThumbnail && representativeNote ? getNotePhotoUri(representativeNote) : null,
           previewTitle: null,
           previewText: null,
           countBadgeLabel: node.pointCount > 1 ? String(node.pointCount) : null,
-        };
-      }),
-    [currentZoom, markerNodes, markerPulseId, noteById, palette.photo, palette.text, preferLiteMarkers, selectedGroupId]
+          noteId: null,
+        });
+      }, []),
+    [
+      currentZoom,
+      markerNodes,
+      markerPulseId,
+      noteById,
+      palette.photo,
+      palette.text,
+      preferLiteMarkers,
+      selectedGroupId,
+      selectedNote?.id,
+    ]
   );
   useEffect(() => {
     return () => {
@@ -568,7 +680,11 @@ function MapCanvas({
     >
       {markerRenderItems.map(
         ({
+          key,
+          testID,
+          coordinate,
           node,
+          pointCount,
           isSelected,
           markerColor,
           pulseActive,
@@ -580,6 +696,7 @@ function MapCanvas({
           previewTitle,
           previewText,
           countBadgeLabel,
+          noteId,
         }) => {
         const showSelectedCallout =
           !preferLiteMarkers &&
@@ -592,22 +709,24 @@ function MapCanvas({
         return (
           preferLiteMarkers && !node.isCluster ? (
             <Marker
-              key={node.id}
-              testID={`leaf-marker-${node.groupId ?? node.id}`}
-              coordinate={{ latitude: node.latitude, longitude: node.longitude }}
+              key={key}
+              testID={testID}
+              coordinate={coordinate}
               pinColor={isSelected ? palette.focus : markerColor}
               onPress={(event) => {
                 event.stopPropagation?.();
-                if (node.groupId) {
+                if (noteId) {
+                  onNotePress(noteId);
+                } else if (node.groupId) {
                   onLeafPress(node.groupId);
                 }
               }}
             />
           ) : (
             <Marker
-              key={node.id}
-              testID={node.isCluster ? `cluster-marker-${node.id}` : `leaf-marker-${node.groupId ?? node.id}`}
-              coordinate={{ latitude: node.latitude, longitude: node.longitude }}
+              key={key}
+              testID={testID}
+              coordinate={coordinate}
               anchor={showSelectedCallout ? selectedCalloutAnchor : { x: 0.5, y: 0.5 }}
               tracksViewChanges={
                 isSelected || pulseActive || reduceMotionEnabled || (isAndroid && androidShouldTrackMarkerViews)
@@ -619,7 +738,9 @@ function MapCanvas({
                   return;
                 }
 
-                if (node.groupId) {
+                if (noteId) {
+                  onNotePress(noteId);
+                } else if (node.groupId) {
                   onLeafPress(node.groupId);
                 }
               }}
@@ -646,7 +767,7 @@ function MapCanvas({
                 ) : null}
                 <MarkerContent
                   isCluster={node.isCluster}
-                  pointCount={node.pointCount}
+                  pointCount={pointCount}
                   zoomLevel={currentZoom}
                   showRichPreview={showRichPreviewMarker}
                   showStackPreview={showStackPreviewMarker}

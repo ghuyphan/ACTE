@@ -304,6 +304,11 @@ class NotoWidgetProvider : AppWidgetProvider() {
         !showIdle &&
         snapshot.noteType == "photo" &&
         hasImage
+      val photoCaptionText = if (!showIdle && snapshot.noteType == "photo" && hasImage) {
+        snapshot.text.trim()
+      } else {
+        ""
+      }
       val bodyText = if (showIdle) {
         snapshot.idleText.ifBlank { context.getString(R.string.noto_widget_idle_fallback) }
       } else if (hasVisualOnlyContent || shouldHidePhotoBodyText) {
@@ -340,6 +345,19 @@ class NotoWidgetProvider : AppWidgetProvider() {
         R.id.widget_body,
         if (usesTextSurface) Color.parseColor("#2A1A11") else Color.parseColor("#FFF8F0")
       )
+      views.setViewVisibility(R.id.widget_caption, if (photoCaptionText.isBlank()) View.GONE else View.VISIBLE)
+      if (photoCaptionText.isNotBlank()) {
+        views.setTextViewText(R.id.widget_caption, photoCaptionText)
+        views.setInt(
+          R.id.widget_caption,
+          "setBackgroundResource",
+          if (usesTextSurface) R.drawable.noto_widget_badge_light else R.drawable.noto_widget_overlay_chip_dark
+        )
+        views.setTextColor(
+          R.id.widget_caption,
+          if (usesTextSurface) Color.parseColor("#2A1A11") else Color.parseColor("#FFF8F0")
+        )
+      }
 
       val locationVisible = !showIdle && compactLocationName.isNotBlank()
       val showLocationOverlay = locationVisible && (hasVisualOnlyContent || shouldHidePhotoBodyText)
@@ -360,9 +378,14 @@ class NotoWidgetProvider : AppWidgetProvider() {
       )
       if (locationVisible && !showLocationOverlay) {
         views.setTextViewText(R.id.widget_location, compactLocationName)
+        views.setInt(
+          R.id.widget_location,
+          "setBackgroundResource",
+          if (usesTextSurface) R.drawable.noto_widget_badge_light else R.drawable.noto_widget_overlay_chip_dark
+        )
         views.setTextColor(
           R.id.widget_location,
-          if (usesTextSurface) Color.parseColor("#6E5E4F") else Color.parseColor("#D9CEC2")
+          if (usesTextSurface) Color.parseColor("#6E5E4F") else Color.parseColor("#FFF8F0")
         )
       }
       if (showLocationOverlay) {

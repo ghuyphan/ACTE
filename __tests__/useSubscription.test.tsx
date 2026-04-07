@@ -285,7 +285,7 @@ describe('useSubscription', () => {
       mockConnectivityState.status = 'online';
       mockConnectivityState.isOnline = true;
       mockConnectivityState.isInternetReachable = true;
-      hook.rerender();
+      hook.rerender({});
     });
 
     await waitFor(() => {

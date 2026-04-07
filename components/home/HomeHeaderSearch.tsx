@@ -102,10 +102,10 @@ export default function HomeHeaderSearch({
   const useDockedHeader = Platform.OS === 'android' || (Platform.OS === 'ios' && !isIOS26OrNewer);
   const useNativeLiquidGlassControls = Platform.OS === 'ios' && isIOS26OrNewer;
   const useIconOnlyHeaderControls = Platform.OS === 'ios';
-  const androidHeaderControlBackgroundColor = isDark ? 'rgba(255,247,232,0.08)' : 'rgba(255,255,255,0.72)';
-  const androidHeaderControlBorderColor = isDark ? 'rgba(255,247,232,0.12)' : 'rgba(113,86,26,0.10)';
+  const androidHeaderControlBackgroundColor = isDark ? 'rgba(255,247,232,0.20)' : 'rgba(255,255,255,0.72)';
+  const androidHeaderControlBorderColor = isDark ? 'rgba(255,247,232,0.22)' : 'rgba(113,86,26,0.10)';
   const androidHeaderControlForegroundColor = isDark ? '#FFF7E8' : '#6D530F';
-  const androidHeaderSearchBackgroundColor = isDark ? 'rgba(255,247,232,0.1)' : 'rgba(255,255,255,0.88)';
+  const androidHeaderSearchBackgroundColor = isDark ? 'rgba(255,247,232,0.22)' : 'rgba(255,255,255,0.88)';
   const notesButtonRef = useRef<View>(null);
 
   useEffect(() => {

@@ -34,7 +34,7 @@ jest.mock('expo-notifications', () => ({
     mockAddNotificationResponseReceivedListener(listener),
 }));
 
-jest.mock('../hooks/state/useFeedFocus', () => ({
+jest.mock('../hooks/useFeedFocus', () => ({
   useFeedFocus: () => ({
     requestFeedFocus: (...args: unknown[]) => mockRequestFeedFocus(...args),
   }),

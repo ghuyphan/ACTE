@@ -50,11 +50,15 @@ export function ConnectivityProvider({ children }: { children: ReactNode }) {
     setConnectivity((current) => {
       const nextStatus = deriveConnectivityStatus(state);
       const changed = hasMeaningfulConnectivityChanged(current, state);
+      if (!changed) {
+        return current;
+      }
+
       return {
         status: nextStatus,
         isOnline: nextStatus === 'online',
         isInternetReachable: state.isInternetReachable,
-        lastChangedAt: changed ? new Date().toISOString() : current.lastChangedAt,
+        lastChangedAt: new Date().toISOString(),
       };
     });
   }, []);

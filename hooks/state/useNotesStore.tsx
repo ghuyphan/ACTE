@@ -29,13 +29,13 @@ import {
 import { cleanupOrphanMediaFiles } from '../../services/mediaIntegrity';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
-import { getSyncService, type SyncChange } from '../../services/syncService';
 import { updateWidgetData } from '../../services/widgetService';
+import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
 interface NotesStoreValue {
   notes: Note[];
   loading: boolean;
-  refreshNotes: (showLoading?: boolean) => Promise<void>;
+  refreshNotes: (showLoading?: boolean, options?: { updateWidget?: boolean }) => Promise<void>;
   createNote: (input: CreateNoteInput) => Promise<Note>;
   updateNote: (id: string, updates: NoteUpdates) => Promise<void>;
   toggleFavorite: (id: string) => Promise<boolean>;
@@ -51,7 +51,6 @@ function useNotesStoreValue(): NotesStoreValue {
   const { user, isReady: authReady } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
-  const syncService = getSyncService();
   const notesRef = useRef<Note[]>([]);
   const activeScopeRef = useRef<string>(user?.uid ?? LOCAL_NOTES_SCOPE);
   const widgetSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,17 +82,6 @@ function useNotesStoreValue(): NotesStoreValue {
     [scheduleWidgetUpdate]
   );
 
-  const recordNoteChange = useCallback(
-    (change: Omit<SyncChange, 'timestamp' | 'ownerScope'>) => {
-      void syncService.recordChange({
-        ...change,
-        ownerScope: activeScopeRef.current,
-        timestamp: new Date().toISOString(),
-      });
-    },
-    [syncService]
-  );
-
   const deletePhotoFileIfPresent = useCallback(async (note: Note | null | undefined) => {
     const photoUri = getNotePhotoUri(note);
     const pairedVideoUri = getNotePairedVideoUri(note);
@@ -113,7 +101,7 @@ function useNotesStoreValue(): NotesStoreValue {
     }
   }, []);
 
-  const refreshNotes = useCallback(async (showLoading = true) => {
+  const refreshNotes = useCallback(async (showLoading = true, options?: { updateWidget?: boolean }) => {
     try {
       if (showLoading) {
         setLoading(true);
@@ -121,6 +109,9 @@ function useNotesStoreValue(): NotesStoreValue {
       const allNotes = await getAllNotes();
       notesRef.current = allNotes;
       setNotes(allNotes);
+      if (options?.updateWidget) {
+        scheduleWidgetUpdate(allNotes);
+      }
     } catch (error) {
       console.error('Failed to load notes:', error);
     } finally {
@@ -128,26 +119,30 @@ function useNotesStoreValue(): NotesStoreValue {
         setLoading(false);
       }
     }
-  }, []);
+  }, [scheduleWidgetUpdate]);
 
   useEffect(() => {
     let cancelled = false;
+    let cleanupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
     let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
     (async () => {
       await refreshNotes(true);
-      cleanupTimeout = setTimeout(() => {
-        if (cancelled) {
-          return;
-        }
+      cleanupIdleHandle = scheduleOnIdle(() => {
+        cleanupTimeout = setTimeout(() => {
+          if (cancelled) {
+            return;
+          }
 
-        void cleanupOrphanMediaFiles().catch((error) => {
-          console.warn('Failed to clean orphan media:', error);
-        });
-      }, 300);
+          void cleanupOrphanMediaFiles().catch((error) => {
+            console.warn('Failed to clean orphan media:', error);
+          });
+        }, 1200);
+      }, { timeout: 2000 });
     })();
 
     return () => {
       cancelled = true;
+      cleanupIdleHandle?.cancel();
       if (cleanupTimeout) {
         clearTimeout(cleanupTimeout);
       }
@@ -168,7 +163,11 @@ function useNotesStoreValue(): NotesStoreValue {
     notesRef.current = [];
     setNotes([]);
     setLoading(true);
-    void refreshNotes(true);
+    void refreshNotes(true, { updateWidget: true }).finally(() => {
+      void syncGeofenceRegions().catch((error) => {
+        console.warn('Failed to sync geofence regions after scope change:', error);
+      });
+    });
   }, [authReady, refreshNotes, user?.uid]);
 
   useEffect(() => () => {
@@ -179,59 +178,76 @@ function useNotesStoreValue(): NotesStoreValue {
 
   const createNote = useCallback(
     async (input: CreateNoteInput): Promise<Note> => {
-      const note = await dbCreate(input);
+      const timestamp = new Date().toISOString();
+      const note = await dbCreate(input, {
+        syncChange: {
+          type: 'create',
+          entity: 'note',
+          payload: input,
+          timestamp,
+        },
+      });
       const nextNotes = prependNote(notesRef.current, note);
       commitNotes(nextNotes);
 
-      await skipImmediateReminderForNewNote(note.id);
-      void syncGeofenceRegions();
-      recordNoteChange({
-        type: 'create',
-        entity: 'note',
-        entityId: note.id,
-        payload: input,
+      void skipImmediateReminderForNewNote(note.id).catch((error) => {
+        console.warn('Failed to suppress immediate reminder for new note:', error);
+      });
+      void syncGeofenceRegions({ notes: nextNotes }).catch((error) => {
+        console.warn('Failed to sync geofence regions after note creation:', error);
       });
 
       return note;
     },
-    [commitNotes, recordNoteChange]
+    [commitNotes]
   );
 
   const updateNote = useCallback(
     async (id: string, updates: NoteUpdates) => {
-      await dbUpdate(id, updates);
+      await dbUpdate(id, updates, {
+        syncChange: {
+          type: 'update',
+          entity: 'note',
+          entityId: id,
+          payload: updates,
+          timestamp: new Date().toISOString(),
+        },
+      });
       const nextNotes = updateNoteInCollection(notesRef.current, id, updates);
       commitNotes(nextNotes);
 
-      void syncGeofenceRegions();
-      recordNoteChange({
-        type: 'update',
-        entity: 'note',
-        entityId: id,
-        payload: updates,
+      void syncGeofenceRegions({ notes: nextNotes }).catch((error) => {
+        console.warn('Failed to sync geofence regions after note update:', error);
       });
     },
-    [commitNotes, recordNoteChange]
+    [commitNotes]
   );
 
   const toggleFavorite = useCallback(
     async (id: string) => {
-      const newValue = await dbToggleFav(id);
+      const currentNote = notesRef.current.find((note) => note.id === id);
+      const nextFavoriteValue = currentNote ? !currentNote.isFavorite : true;
+      const timestamp = new Date().toISOString();
+      const newValue = await dbToggleFav(id, {
+        syncChange: {
+          type: 'update',
+          entity: 'note',
+          entityId: id,
+          payload: { isFavorite: nextFavoriteValue },
+          timestamp,
+        },
+      });
       const nextNotes = replaceNoteInCollection(notesRef.current, id, (note) => ({
         ...note,
         isFavorite: newValue,
       }));
       commitNotes(nextNotes);
-      void syncGeofenceRegions();
-      recordNoteChange({
-        type: 'update',
-        entity: 'note',
-        entityId: id,
-        payload: { isFavorite: newValue },
+      void syncGeofenceRegions({ notes: nextNotes }).catch((error) => {
+        console.warn('Failed to sync geofence regions after favorite change:', error);
       });
       return newValue;
     },
-    [commitNotes, recordNoteChange]
+    [commitNotes]
   );
 
   const searchNotes = useCallback(async (query: string) => {
@@ -242,26 +258,36 @@ function useNotesStoreValue(): NotesStoreValue {
     async (id: string) => {
       const note = await dbGetById(id);
 
-      await dbDelete(id);
+      await dbDelete(id, {
+        syncChange: {
+          type: 'delete',
+          entity: 'note',
+          entityId: id,
+          timestamp: new Date().toISOString(),
+        },
+      });
       const nextNotes = removeNoteFromCollection(notesRef.current, id);
       commitNotes(nextNotes);
 
       await deletePhotoFileIfPresent(note);
 
-      void syncGeofenceRegions();
-      recordNoteChange({
-        type: 'delete',
-        entity: 'note',
-        entityId: id,
+      void syncGeofenceRegions({ notes: nextNotes }).catch((error) => {
+        console.warn('Failed to sync geofence regions after note deletion:', error);
       });
     },
-    [commitNotes, deletePhotoFileIfPresent, recordNoteChange]
+    [commitNotes, deletePhotoFileIfPresent]
   );
 
   const deleteAllNotes = useCallback(async () => {
     const allNotes = await getAllNotes();
 
-    await dbDeleteAll();
+    await dbDeleteAll({
+      syncChange: {
+        type: 'deleteAll',
+        entity: 'note',
+        timestamp: new Date().toISOString(),
+      },
+    });
     commitNotes([]);
 
     for (const note of allNotes) {
@@ -269,11 +295,7 @@ function useNotesStoreValue(): NotesStoreValue {
     }
 
     await clearGeofenceRegions();
-    recordNoteChange({
-      type: 'deleteAll',
-      entity: 'note',
-    });
-  }, [commitNotes, deletePhotoFileIfPresent, recordNoteChange]);
+  }, [commitNotes, deletePhotoFileIfPresent]);
 
   const getNoteById = useCallback(async (id: string) => {
     const inMemory = notesRef.current.find((n) => n.id === id);

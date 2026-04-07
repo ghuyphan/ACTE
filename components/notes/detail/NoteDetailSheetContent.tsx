@@ -6,6 +6,7 @@ import React from 'react';
 import {
     Dimensions,
     KeyboardAvoidingView,
+    type LayoutChangeEvent,
     Platform,
     Pressable,
     ScrollView,
@@ -41,6 +42,7 @@ import PhotoMediaView from '../PhotoMediaView';
 import PremiumNoteFinishOverlay from '../../ui/PremiumNoteFinishOverlay';
 import StickerPastePopover from '../../ui/StickerPastePopover';
 import TransientStatusChip from '../../ui/TransientStatusChip';
+import { getNoteCardTextSizeStyle, noteCardTextStyles } from '../noteCardTextStyles';
 import NoteDetailActionSection from './NoteDetailActionSection';
 import NoteDetailEditToolbar from './NoteDetailEditToolbar';
 import NoteDetailInfoSection from './NoteDetailInfoSection';
@@ -62,7 +64,6 @@ type NoteDetailSheetContentProps = {
     dismissPastePrompt: () => void;
     doodleModeEnabled: boolean;
     editContent: string;
-    editingHintAnimatedStyle: any;
     editDoodleStrokes: DoodleStroke[];
     editIconAnimatedStyle: any;
     editLocation: string;
@@ -87,7 +88,9 @@ type NoteDetailSheetContentProps = {
     onClose: () => void;
     onConfirmPasteFromPrompt: () => void;
     onDelete: () => void;
+    onInfoSectionLayout?: (event: LayoutChangeEvent) => void;
     onLocationChangeText: (value: string) => void;
+    onLocationFieldLayout?: (event: LayoutChangeEvent) => void;
     onLocationFocus: () => void;
     onLocationSelectionChange: (event: any) => void;
     onPressStickerCanvas: () => void;
@@ -146,7 +149,6 @@ export default function NoteDetailSheetContent({
     dismissPastePrompt,
     doodleModeEnabled,
     editContent,
-    editingHintAnimatedStyle,
     editDoodleStrokes,
     editIconAnimatedStyle,
     editLocation,
@@ -171,7 +173,9 @@ export default function NoteDetailSheetContent({
     onClose,
     onConfirmPasteFromPrompt,
     onDelete,
+    onInfoSectionLayout,
     onLocationChangeText,
+    onLocationFieldLayout,
     onLocationFocus,
     onLocationSelectionChange,
     onPressStickerCanvas,
@@ -244,6 +248,9 @@ export default function NoteDetailSheetContent({
     const selectedStickerMotionLocked = selectedStickerPlacement?.motionLocked === true;
     const displayedPhotoCaption = note.type === 'photo'
         ? (isEditing ? editContent : note.caption ?? '')
+        : '';
+    const displayedText = note.type === 'text'
+        ? formatNoteTextWithEmoji(isEditing ? editContent : note.content, note.moodEmoji)
         : '';
 
     const cardContent = note.type === 'photo' ? (
@@ -370,6 +377,9 @@ export default function NoteDetailSheetContent({
                         <View
                             style={[
                                 styles.photoCaptionOverlayField,
+                                isEditing
+                                    ? styles.photoCaptionOverlayFieldEditing
+                                    : styles.photoCaptionOverlayFieldDisplay,
                                 {
                                     backgroundColor: isDark ? 'rgba(20,20,20,0.5)' : 'rgba(255,255,255,0.72)',
                                     borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.42)',
@@ -519,28 +529,46 @@ export default function NoteDetailSheetContent({
                 ) : null}
                 <View
                     pointerEvents={stickerModeEnabled ? 'none' : 'auto'}
-                    style={stickerModeEnabled ? styles.editTextInputWrapInactive : null}
+                    style={[
+                        styles.editTextInputWrap,
+                        stickerModeEnabled ? styles.editTextInputWrapInactive : null,
+                    ]}
                 >
-                    <SheetTextInput
-                        ref={contentInputRef}
-                        testID="note-detail-content-input"
-                        style={[
-                            styles.editTextInput,
-                            isEditing ? styles.editTextInputActive : null,
-                            stickerModeEnabled ? styles.editTextInputInactive : null,
-                            editContent.length > 200 ? { fontSize: 16, lineHeight: 22 } :
-                                editContent.length > 100 ? { fontSize: 18, lineHeight: 26 } : null,
-                        ]}
-                        value={isEditing ? editContent : formatNoteTextWithEmoji(note.content, note.moodEmoji)}
-                        onChangeText={isEditing ? setEditContent : undefined}
-                        editable={isEditing && !doodleModeEnabled && !stickerModeEnabled}
-                        multiline
-                        scrollEnabled={false}
-                        placeholder={isEditing ? t('noteDetail.editContent', 'Edit note content...') : undefined}
-                        placeholderTextColor="rgba(255,255,255,0.5)"
-                        maxLength={300}
-                        selectionColor="#FFFFFF"
-                    />
+                    {isEditing ? (
+                        <SheetTextInput
+                            ref={contentInputRef}
+                            testID="note-detail-content-input"
+                            style={[
+                                styles.editTextInput,
+                                noteCardTextStyles.memoryText,
+                                getNoteCardTextSizeStyle(displayedText),
+                                styles.editTextInputActive,
+                                stickerModeEnabled ? styles.editTextInputInactive : null,
+                            ]}
+                            value={editContent}
+                            onChangeText={setEditContent}
+                            editable={!doodleModeEnabled && !stickerModeEnabled}
+                            multiline
+                            scrollEnabled={false}
+                            autoCorrect={false}
+                            spellCheck={false}
+                            placeholder={t('noteDetail.editContent', 'Edit note content...')}
+                            placeholderTextColor="rgba(255,255,255,0.5)"
+                            maxLength={300}
+                            selectionColor="#FFFFFF"
+                        />
+                    ) : (
+                        <Text
+                            testID="note-detail-content-input"
+                            numberOfLines={8}
+                            style={[
+                                noteCardTextStyles.memoryText,
+                                getNoteCardTextSizeStyle(displayedText),
+                            ]}
+                        >
+                            {displayedText}
+                        </Text>
+                    )}
                 </View>
                 <StickerPastePopover
                     visible={pastePrompt.visible}
@@ -572,19 +600,16 @@ export default function NoteDetailSheetContent({
 
             <NoteDetailActionSection
                 colors={colors}
-                editingHintAnimatedStyle={editingHintAnimatedStyle}
                 editIconAnimatedStyle={editIconAnimatedStyle}
                 isDark={isDark}
                 isDeleting={isDeleting}
-                isEditing={isEditing}
                 onDelete={onDelete}
                 onPrimaryPress={isEditing ? onSaveEdit : onStartEditing}
                 onShare={onShare}
                 saveIconAnimatedStyle={saveIconAnimatedStyle}
-                t={t}
             />
 
-            <Animated.View style={infoSectionAnimatedStyle}>
+            <Animated.View style={infoSectionAnimatedStyle} onLayout={onInfoSectionLayout}>
                 <NoteDetailInfoSection
                     colors={colors}
                     dateStr={dateStr}
@@ -594,6 +619,7 @@ export default function NoteDetailSheetContent({
                     inputComponent={SheetTextInput}
                     isDark={isDark}
                     isEditing={isEditing}
+                    onLocationFieldLayout={onLocationFieldLayout}
                     locationInputRef={locationInputRef}
                     locationSelection={locationSelection}
                     lockedPremiumNoteColorIds={lockedPremiumNoteColorIds}
@@ -705,7 +731,6 @@ const styles = StyleSheet.create({
         zIndex: 6,
     },
     photoCaptionOverlayField: {
-        width: '84%',
         minHeight: 38,
         borderRadius: 19,
         borderWidth: StyleSheet.hairlineWidth,
@@ -714,12 +739,21 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
     },
+    photoCaptionOverlayFieldEditing: {
+        width: '84%',
+    },
+    photoCaptionOverlayFieldDisplay: {
+        width: undefined,
+        maxWidth: '72%',
+        paddingHorizontal: 16,
+    },
     photoCaptionOverlayInput: {
         flex: 1,
         height: 20,
         fontSize: 13.5,
         lineHeight: 18,
         fontFamily: Typography.body.fontFamily,
+        fontWeight: '600',
         paddingVertical: 0,
         includeFontPadding: false,
         textAlignVertical: 'center',
@@ -730,7 +764,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     photoCaptionOverlayText: {
-        flex: 1,
+        flexShrink: 1,
         fontSize: 13.5,
         lineHeight: 18,
         fontFamily: Typography.body.fontFamily,
@@ -776,19 +810,22 @@ const styles = StyleSheet.create({
     doodleOverlayActive: {
         opacity: 1,
     },
+    editTextInputWrap: {
+        width: '100%',
+        alignSelf: 'stretch',
+    },
     editTextInputWrapInactive: {
         opacity: 0.9,
     },
     editTextInput: {
-        color: '#FFFFFF',
         width: '100%',
-        textAlign: 'center',
-        fontSize: 24,
-        lineHeight: 32,
-        fontFamily: Typography.body.fontFamily,
+        minWidth: 0,
+        paddingVertical: 0,
     },
     editTextInputActive: {
-        minHeight: 160,
+        alignSelf: 'stretch',
+        paddingHorizontal: 24,
+        minHeight: 72,
     },
     editTextInputInactive: {
         opacity: 0.62,

@@ -1,6 +1,15 @@
 const mockUpload = jest.fn(
   async (_path: string, _payload: ArrayBuffer, _options: unknown) => ({ error: null })
 );
+const mockDownloadAsync = jest.fn();
+const mockCreateSignedUrl = jest.fn(async () => ({
+  data: { signedUrl: 'https://signed.example/mock' },
+  error: null,
+}));
+const mockEnsurePhotoDirectory = jest.fn();
+const mockEnsureSharedPhotoCacheDirectory = jest.fn();
+const mockEnsureLivePhotoVideoDirectory = jest.fn();
+const mockEnsureSharedLivePhotoVideoCacheDirectory = jest.fn();
 const mockGetInfoAsync = jest.fn(async (_uri: string) => ({
   exists: true,
   isDirectory: false,
@@ -16,7 +25,7 @@ const mockReadPairedVideoAsArrayBuffer = jest.fn(
 jest.mock('../utils/fileSystem', () => ({
   getInfoAsync: (uri: string) => mockGetInfoAsync(uri),
   deleteAsync: (uri: string, options?: unknown) => mockDeleteAsync(uri, options),
-  downloadAsync: jest.fn(),
+  downloadAsync: (...args: unknown[]) => mockDownloadAsync(...args),
 }));
 
 jest.mock('expo-image-manipulator', () => ({
@@ -27,16 +36,18 @@ jest.mock('expo-image-manipulator', () => ({
 }));
 
 jest.mock('../services/photoStorage', () => ({
-  ensurePhotoDirectory: jest.fn(),
-  ensureSharedPhotoCacheDirectory: jest.fn(),
+  ensurePhotoDirectory: (...args: unknown[]) => mockEnsurePhotoDirectory(...args),
+  ensureSharedPhotoCacheDirectory: (...args: unknown[]) =>
+    mockEnsureSharedPhotoCacheDirectory(...args),
   MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES: 700 * 1024,
   readPhotoAsArrayBuffer: (uri: string) => mockReadPhotoAsArrayBuffer(uri),
   resolveStoredPhotoUri: (uri: string) => uri,
 }));
 
 jest.mock('../services/livePhotoStorage', () => ({
-  ensureLivePhotoVideoDirectory: jest.fn(),
-  ensureSharedLivePhotoVideoCacheDirectory: jest.fn(),
+  ensureLivePhotoVideoDirectory: (...args: unknown[]) => mockEnsureLivePhotoVideoDirectory(...args),
+  ensureSharedLivePhotoVideoCacheDirectory: (...args: unknown[]) =>
+    mockEnsureSharedLivePhotoVideoCacheDirectory(...args),
   MAX_SYNCABLE_LIVE_PHOTO_VIDEO_FILE_SIZE_BYTES: 2.5 * 1024 * 1024,
   readPairedVideoAsArrayBuffer: (uri: string) => mockReadPairedVideoAsArrayBuffer(uri),
   resolveStoredPairedVideoUri: (uri: string) => uri,
@@ -52,7 +63,7 @@ jest.mock('../utils/supabase', () => ({
       from: () => ({
         upload: (path: string, payload: ArrayBuffer, options: unknown) =>
           mockUpload(path, payload, options),
-        createSignedUrl: jest.fn(),
+        createSignedUrl: mockCreateSignedUrl,
         remove: jest.fn(),
       }),
     },
@@ -60,11 +71,19 @@ jest.mock('../utils/supabase', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { uploadPairedVideoToStorage, uploadPhotoToStorage } = require('../services/remoteMedia') as typeof import('../services/remoteMedia');
+const {
+  downloadPhotoFromStorage,
+  uploadPairedVideoToStorage,
+  uploadPhotoToStorage,
+} = require('../services/remoteMedia') as typeof import('../services/remoteMedia');
 
 describe('remoteMedia uploads', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockEnsureSharedPhotoCacheDirectory.mockResolvedValue('/cache/shared-photos/');
+    mockEnsurePhotoDirectory.mockResolvedValue('/cache/photos/');
+    mockEnsureLivePhotoVideoDirectory.mockResolvedValue('/cache/live-videos/');
+    mockEnsureSharedLivePhotoVideoCacheDirectory.mockResolvedValue('/cache/shared-live-videos/');
     mockGetInfoAsync.mockResolvedValue({
       exists: true,
       isDirectory: false,
@@ -73,6 +92,34 @@ describe('remoteMedia uploads', () => {
     });
     mockReadPhotoAsArrayBuffer.mockResolvedValue(Uint8Array.from([1, 2, 3]).buffer);
     mockReadPairedVideoAsArrayBuffer.mockResolvedValue(Uint8Array.from([4, 5, 6]).buffer);
+  });
+
+  it('dedupes concurrent shared photo downloads for the same cache key', async () => {
+    mockGetInfoAsync.mockResolvedValue({
+      exists: false,
+      isDirectory: false,
+      size: 0,
+      uri: 'file:///cache/shared-photo.jpg',
+    });
+    mockDownloadAsync.mockResolvedValue({
+      uri: 'file:///cache/shared-photo.jpg',
+    });
+
+    const firstDownload = downloadPhotoFromStorage(
+      'shared-post-media',
+      'friends/shared-photo.jpg',
+      'shared-photo-1'
+    );
+    const secondDownload = downloadPhotoFromStorage(
+      'shared-post-media',
+      'friends/shared-photo.jpg',
+      'shared-photo-1'
+    );
+
+    await expect(firstDownload).resolves.toBe('file:///cache/shared-photo.jpg');
+    await expect(secondDownload).resolves.toBe('file:///cache/shared-photo.jpg');
+    expect(mockCreateSignedUrl).toHaveBeenCalledTimes(1);
+    expect(mockDownloadAsync).toHaveBeenCalledTimes(1);
   });
 
   it('uploads photos using raw array buffers instead of base64 payloads', async () => {

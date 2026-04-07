@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { useRootNavigationState, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
-import { useFeedFocus } from '../state/useFeedFocus';
+import { useFeedFocus } from '../useFeedFocus';
 
 export function useAppNotificationRouting() {
   const router = useRouter();

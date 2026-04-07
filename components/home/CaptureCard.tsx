@@ -92,6 +92,7 @@ const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
 const PHOTO_CAPTION_MAX_LENGTH = 60;
 const LIVE_PHOTO_RING_SIZE = SHUTTER_OUTER_SIZE;
 const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
+const CAMERA_FOCUS_RING_SIZE = 64;
 const DOCKED_HEADER_CONTENT_OVERLAP = 8;
 const SHEET_HORIZONTAL_PADDING =
   Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
@@ -754,6 +755,8 @@ function PhotoCaptureSurface({
 
 interface LiveCameraSurfaceProps {
   cameraDevice: CaptureCardProps['cameraDevice'];
+  cameraFocusPoint: CaptureCardCameraControllerState['cameraFocusPoint'];
+  cameraFocusRingAnimatedStyle: CaptureCardAnimatedStyle;
   cameraKey: CaptureCardCameraControllerState['cameraKey'];
   cameraPermissionRequiresSettings: boolean;
   cameraPreviewZoom: CaptureCardCameraControllerState['cameraPreviewZoom'];
@@ -781,6 +784,8 @@ interface LiveCameraSurfaceProps {
 
 function LiveCameraSurface({
   cameraDevice,
+  cameraFocusPoint,
+  cameraFocusRingAnimatedStyle,
   cameraKey,
   cameraPermissionRequiresSettings,
   cameraPreviewZoom,
@@ -833,6 +838,20 @@ function LiveCameraSurface({
                 handleCameraStartupFailure(error.message);
               }}
             />
+            {cameraFocusPoint ? (
+              <Reanimated.View
+                pointerEvents="none"
+                style={[
+                  styles.cameraFocusRing,
+                  {
+                    borderColor: colors.primary,
+                    left: cameraFocusPoint.x - CAMERA_FOCUS_RING_SIZE / 2,
+                    top: cameraFocusPoint.y - CAMERA_FOCUS_RING_SIZE / 2,
+                  },
+                  cameraFocusRingAnimatedStyle,
+                ]}
+              />
+            ) : null}
           </View>
         </GestureDetector>
       ) : null}
@@ -1973,6 +1992,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     onHaptic: triggerCaptureCardHaptic,
   });
   const {
+    cameraFocusPoint,
+    cameraFocusRingAnimatedStyle,
     cameraKey,
     cameraPreviewZoom,
     cameraTransitionMaskAnimatedStyle,
@@ -1999,6 +2020,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   } = useCaptureCardCameraController({
     captureMode,
     capturedPhoto,
+    cameraRef,
     cameraDevice,
     cameraSessionKey,
     permissionGranted,
@@ -2447,6 +2469,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             ) : shouldShowCameraCard ? (
               <LiveCameraSurface
                 cameraDevice={cameraDevice}
+                cameraFocusPoint={cameraFocusPoint}
+                cameraFocusRingAnimatedStyle={cameraFocusRingAnimatedStyle}
                 cameraKey={cameraKey}
                 cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
                 cameraPreviewZoom={cameraPreviewZoom}
@@ -2996,6 +3020,15 @@ const styles = StyleSheet.create({
   cameraGestureLayer: {
     ...StyleSheet.absoluteFillObject,
   },
+  cameraFocusRing: {
+    position: 'absolute',
+    width: CAMERA_FOCUS_RING_SIZE,
+    height: CAMERA_FOCUS_RING_SIZE,
+    borderRadius: CAMERA_FOCUS_RING_SIZE / 2,
+    borderWidth: 2,
+    backgroundColor: 'transparent',
+    zIndex: 6,
+  },
   cameraTransitionOverlay: {
     ...StyleSheet.absoluteFill,
     backgroundColor: '#000000',
@@ -3089,7 +3122,7 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    minHeight: 162,
+    height: 162,
     gap: 10,
   },
   belowCardMetaRow: {
@@ -3275,7 +3308,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    minHeight: 92,
+    paddingTop: 12,
+    paddingBottom: 14,
     width: '100%',
     position: 'relative',
   },

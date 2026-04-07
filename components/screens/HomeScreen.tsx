@@ -53,14 +53,13 @@ import {
   persistLivePhotoVideo,
 } from '../../services/livePhotoProcessing';
 import { saveNoteStickerPlacementsWithAssets } from '../../services/noteStickers';
-import { filterNotesByQuery } from '../../services/noteSearch';
 import {
   getFallbackFreeNoteColor,
   getPremiumNoteSaveDecision,
   isPreviewablePremiumNoteColor,
   PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
 } from '../../services/premiumNoteFinish';
-import { generateNoteId } from '../../services/database';
+import { generateNoteId, type Note } from '../../services/database';
 import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
 import { isIOS26OrNewer } from '../../utils/platform';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
@@ -79,7 +78,7 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const reduceMotionEnabled = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { notes, loading, refreshNotes, createNote } = useNotesStore();
+  const { notes, loading, refreshNotes, createNote, searchNotes: searchLocalNotes } = useNotesStore();
   const { user, isAuthAvailable } = useAuth();
   const {
     enabled: sharedEnabled,
@@ -152,6 +151,7 @@ export default function HomeScreen() {
   const [pendingSavedNoteScrollTargetId, setPendingSavedNoteScrollTargetId] = useState<string | null>(null);
   const [hasSeenLivePhotoCameraHint, setHasSeenLivePhotoCameraHint] = useState<boolean | null>(null);
   const [showLivePhotoCameraHint, setShowLivePhotoCameraHint] = useState(false);
+  const [searchedNotes, setSearchedNotes] = useState<Note[]>([]);
   const [, startSearchTransition] = useTransition();
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -259,6 +259,7 @@ export default function HomeScreen() {
   } = useCaptureFlow();
   const isCameraPreviewActive =
     captureMode === 'camera' &&
+    isCaptureVisible &&
     isScreenFocused &&
     appState === 'active' &&
     Boolean(permission?.granted);
@@ -268,9 +269,31 @@ export default function HomeScreen() {
   const snapHeight =
     shouldLockCapturePage && lockedCaptureSnapHeight != null ? lockedCaptureSnapHeight : liveSnapHeight;
 
-  const filteredNotes = useMemo(() => {
-    return filterNotesByQuery(notes, deferredSearchQuery);
-  }, [deferredSearchQuery, notes]);
+  useEffect(() => {
+    if (!deferredSearchQuery.trim()) {
+      setSearchedNotes(notes);
+      return;
+    }
+
+    let cancelled = false;
+
+    void searchLocalNotes(deferredSearchQuery)
+      .then((results) => {
+        if (!cancelled) {
+          setSearchedNotes(results);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn('Home search query failed:', error);
+          setSearchedNotes([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deferredSearchQuery, notes, searchLocalNotes]);
   const friendPosts = useMemo(
     () => sharedPosts.filter((post) => post.authorUid !== user?.uid),
     [sharedPosts, user?.uid]
@@ -378,14 +401,14 @@ export default function HomeScreen() {
       return [];
     }
 
-    const baseNotes = useInlineHeaderSearch && isSearching ? filteredNotes : notes;
+    const baseNotes = useInlineHeaderSearch && isSearching ? searchedNotes : notes;
 
     if (suppressedHomeNoteIdSet.size === 0) {
       return baseNotes;
     }
 
     return baseNotes.filter((note) => !suppressedHomeNoteIdSet.has(note.id));
-  }, [filteredNotes, isFriendsFilterActive, isSearching, notes, suppressedHomeNoteIdSet, useInlineHeaderSearch]);
+  }, [isFriendsFilterActive, isSearching, notes, searchedNotes, suppressedHomeNoteIdSet, useInlineHeaderSearch]);
   const hasSearchableNotes = notes.length > 0;
   const cameraPermissionRequiresSettings =
     captureMode === 'camera' &&
@@ -1864,7 +1887,7 @@ export default function HomeScreen() {
           capturePageLocked={shouldLockCapturePage}
         />
 
-        {useInlineHeaderSearch && isSearching && filteredNotes.length === 0 && searchQuery.trim() ? (
+        {useInlineHeaderSearch && isSearching && searchedNotes.length === 0 && searchQuery.trim() ? (
           <View
             style={[
               styles.center,

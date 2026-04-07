@@ -175,14 +175,8 @@ export default function ProfileScreenAndroid() {
     isDeletingAccount,
     isSigningOut,
     membershipLabel,
-    openAccountDeletionHelpLink,
-    openPrivacyPolicyLink,
     openSignIn,
-    openSupportLink,
     profileName,
-    showAccountDeletionLink,
-    showPrivacyPolicyLink,
-    showSupportLink,
     t,
     tier,
     user,
@@ -277,45 +271,6 @@ export default function ProfileScreenAndroid() {
                 ) : null}
               </SurfaceCard>
             </View>
-
-            {showPrivacyPolicyLink || showSupportLink || showAccountDeletionLink ? (
-              <View style={styles.section}>
-                <SectionTitle colors={colors} title={t('profile.legalTitle', 'Privacy & support')} />
-                <SurfaceCard colors={colors}>
-                  {showPrivacyPolicyLink ? (
-                    <ProfileListItem
-                      colors={colors}
-                      icon="shield-checkmark-outline"
-                      title={t('settings.privacyPolicy', 'Privacy Policy')}
-                      onPress={openPrivacyPolicyLink}
-                      external
-                    />
-                  ) : null}
-                  {showPrivacyPolicyLink && (showSupportLink || showAccountDeletionLink) ? (
-                    <CardDivider colors={colors} />
-                  ) : null}
-                  {showSupportLink ? (
-                    <ProfileListItem
-                      colors={colors}
-                      icon="help-circle-outline"
-                      title={t('settings.support', 'Support')}
-                      onPress={openSupportLink}
-                      external
-                    />
-                  ) : null}
-                  {showSupportLink && showAccountDeletionLink ? <CardDivider colors={colors} /> : null}
-                  {showAccountDeletionLink ? (
-                    <ProfileListItem
-                      colors={colors}
-                      icon="person-remove-outline"
-                      title={t('settings.accountDeletion', 'Account deletion help')}
-                      onPress={openAccountDeletionHelpLink}
-                      external
-                    />
-                  ) : null}
-                </SurfaceCard>
-              </View>
-            ) : null}
 
             <View style={styles.section}>
               <SectionTitle colors={colors} title={t('profile.actionsTitle', 'Actions')} />
