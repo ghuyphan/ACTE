@@ -57,7 +57,12 @@ export function useCaptureFlow() {
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [selectedPhotoFilterId, setSelectedPhotoFilterId] = useState<PhotoFilterId>('original');
   const { hasPermission, requestPermission: requestCameraPermission } = useCameraPermission();
-  const cameraDevice = useCameraDevice(facing);
+  const cameraDevice = useCameraDevice(
+    facing,
+    facing === 'back'
+      ? { physicalDevices: ['wide-angle-camera'] }
+      : undefined
+  );
   const [cameraPermissionGranted, setCameraPermissionGranted] = useState(() => hasPermission);
   const [cameraPermissionStatus, setCameraPermissionStatus] = useState<CameraPermissionStatus>(() =>
     Camera.getCameraPermissionStatus()

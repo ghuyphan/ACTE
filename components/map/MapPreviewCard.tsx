@@ -87,7 +87,12 @@ function formatDistanceLabel(distanceMeters: number) {
 
 function getPreviewText(note: Note, photoLabel: string, noContentLabel: string) {
   if (note.type === 'photo') {
-    return photoLabel;
+    const caption = note.caption?.trim();
+    if (!caption) {
+      return photoLabel;
+    }
+
+    return caption.substring(0, 120) + (caption.length > 120 ? '…' : '');
   }
 
   const normalized = note.content.trim();
@@ -152,6 +157,7 @@ export default function MapPreviewCard({
   const hasStatusCopy = Boolean(statusTitle || statusSubtitle);
   const hasStatusSubtitle = Boolean(statusSubtitle);
   const isPassiveStatusPill = mode === 'status' && Boolean(statusTitle) && !statusSubtitle && !statusActionLabel;
+  const isActionOnlyStatus = mode === 'status' && !hasStatusCopy && Boolean(statusActionLabel);
 
   useEffect(() => {
     if (!visible) {
@@ -335,7 +341,17 @@ export default function MapPreviewCard({
     : '';
   const statusAction = cachedStatusAction;
   const shouldShowStatusLayer = mode === 'status' && (hasStatusCopy || Boolean(statusAction));
-  const statusHeight = isPassiveStatusPill ? 48 : statusAction ? (hasStatusSubtitle ? 116 : 94) : hasStatusSubtitle ? 88 : STATUS_HEIGHT;
+  const statusHeight = isPassiveStatusPill
+    ? 48
+    : isActionOnlyStatus
+      ? 72
+      : statusAction
+        ? hasStatusSubtitle
+          ? 116
+          : 94
+        : hasStatusSubtitle
+          ? 88
+          : STATUS_HEIGHT;
   const compactWidth = isPassiveStatusPill ? Math.min(fullSurfaceWidth, 168) : fullSurfaceWidth;
 
   const animatedShellStyle = useAnimatedStyle(() => ({
@@ -423,6 +439,7 @@ export default function MapPreviewCard({
               style={[
                 styles.compactLayer,
                 isPassiveStatusPill ? styles.compactLayerPill : null,
+                isActionOnlyStatus ? styles.compactLayerActionOnly : null,
                 animatedCompactContentStyle,
               ]}
               pointerEvents={mode === 'status' && statusAction ? 'auto' : 'none'}
@@ -709,6 +726,11 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: 0,
   },
+  compactLayerActionOnly: {
+    justifyContent: 'center',
+    paddingTop: 10,
+    paddingBottom: 10,
+  },
   statusContent: {
     gap: 10,
   },
@@ -737,10 +759,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   statusInlineRow: {
-    minHeight: 34,
+    minHeight: 32,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 7,
   },
   statusPillRow: {
     minHeight: 24,

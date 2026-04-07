@@ -656,6 +656,50 @@ describe('NoteDetailSheet', () => {
     );
   });
 
+  it('saves a photo caption when editing a photo note', async () => {
+    mockGetNoteById.mockResolvedValue({
+      id: 'photo-1',
+      type: 'photo',
+      content: 'file:///photos/photo-1.jpg',
+      caption: null,
+      photoLocalUri: 'file:///photos/photo-1.jpg',
+      photoRemoteBase64: null,
+      locationName: 'Coffee shop',
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: false,
+      createdAt: '2026-03-10T00:00:00.000Z',
+      updatedAt: null,
+    });
+
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="photo-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+
+    await act(async () => {
+      fireEvent.changeText(getByTestId('note-detail-photo-caption-input'), 'Golden hour on the way home');
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-edit'));
+    });
+
+    expect(mockUpdateNote).toHaveBeenCalledWith(
+      'photo-1',
+      expect.objectContaining({
+        caption: 'Golden hour on the way home',
+      })
+    );
+  });
+
   it('shows and saves doodles on photo notes', async () => {
     mockGetNoteById.mockResolvedValue({
       id: 'photo-1',

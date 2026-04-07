@@ -1,4 +1,5 @@
 import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { type TFunction } from 'i18next';
 import React from 'react';
@@ -241,125 +242,180 @@ export default function NoteDetailSheetContent({
     const selectedStickerIsStamp = selectedStickerPlacement?.renderMode === 'stamp';
     const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
     const selectedStickerMotionLocked = selectedStickerPlacement?.motionLocked === true;
+    const displayedPhotoCaption = note.type === 'photo'
+        ? (isEditing ? editContent : note.caption ?? '')
+        : '';
 
     const cardContent = note.type === 'photo' ? (
         <View style={styles.photoContainer}>
-            <View style={styles.photo}>
-                <PhotoMediaView
-                    imageUrl={getNotePhotoUri(note)}
-                    isLivePhoto={note.isLivePhoto}
-                    pairedVideoUri={getNotePairedVideoUri(note)}
-                    showLiveBadge={false}
-                    style={styles.photo}
-                    imageStyle={styles.photo}
-                    enablePlayback={!isEditing}
-                />
-            </View>
-            {isEditing && ENABLE_PHOTO_STICKERS ? (
-                <Pressable
-                    testID="note-detail-card-paste-surface"
-                    style={styles.cardPasteSurface}
-                    onLongPress={onShowCardPastePrompt}
-                    delayLongPress={320}
-                />
-            ) : null}
-            {displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled) ? (
-                <View
-                    pointerEvents={isEditing && stickerModeEnabled ? 'box-none' : 'none'}
-                    style={[
-                        styles.doodleOverlay,
-                        styles.photoDoodleOverlay,
-                        isEditing ? styles.doodleOverlayEditing : null,
-                        isEditing && stickerModeEnabled ? styles.doodleOverlayActive : null,
-                    ]}
-                >
-                    {isEditing ? (
-                        <NoteStickerCanvas
-                            placements={displayedStickerPlacements}
-                            editable={stickerModeEnabled}
-                            onChangePlacements={setEditStickerPlacements}
-                            selectedPlacementId={selectedStickerId}
-                            onChangeSelectedPlacementId={setSelectedStickerId}
-                            onPressCanvas={onPressStickerCanvas}
-                        />
-                    ) : (
-                        <DynamicStickerCanvas
-                            placements={displayedStickerPlacements}
-                            motionVariant={textStickerMotionVariant}
-                        />
-                    )}
-                </View>
-            ) : null}
-            {displayedDoodleStrokes.length > 0 || isEditing ? (
-                <View
-                    pointerEvents={isEditing && doodleModeEnabled ? 'auto' : 'none'}
-                    style={[
-                        styles.doodleOverlay,
-                        styles.photoDoodleOverlay,
-                        isEditing ? styles.doodleOverlayEditing : null,
-                        isEditing && doodleModeEnabled ? styles.doodleOverlayActive : null,
-                    ]}
-                >
-                    <NoteDoodleCanvas
-                        strokes={displayedDoodleStrokes}
-                        editable={isEditing && doodleModeEnabled}
-                        activeColor="#FFFFFF"
-                        onChangeStrokes={setEditDoodleStrokes}
+            <View style={styles.photoCard}>
+                <View style={styles.photo}>
+                    <PhotoMediaView
+                        imageUrl={getNotePhotoUri(note)}
+                        isLivePhoto={note.isLivePhoto}
+                        pairedVideoUri={getNotePairedVideoUri(note)}
+                        showLiveBadge={false}
+                        style={styles.photo}
+                        imageStyle={styles.photo}
+                        enablePlayback={!isEditing}
                     />
                 </View>
-            ) : null}
-            <NoteDetailEditToolbar
-                colors={colors}
-                displayedStickerPlacementsCount={displayedStickerPlacements.length}
-                doodleModeEnabled={doodleModeEnabled}
-                editDoodleStrokesCount={editDoodleStrokes.length}
-                importingSticker={importingSticker}
-                isEditing={isEditing}
-                onClearDoodle={onClearDoodle}
-                onShowStickerSourceOptions={onShowStickerSourceOptions}
-                onStickerAction={onStickerAction}
-                onToggleDoodleMode={onToggleDoodleMode}
-                onToggleStickerMode={onToggleStickerMode}
-                onToggleStickerMotionLock={onToggleStickerMotionLock}
-                onUndoDoodle={onUndoDoodle}
-                selectedStickerId={selectedStickerId}
-                selectedStickerIsStamp={selectedStickerIsStamp}
-                selectedStickerMotionLocked={selectedStickerMotionLocked}
-                selectedStickerOutlineEnabled={selectedStickerOutlineEnabled}
-                stickerModeEnabled={stickerModeEnabled}
-                stickersEnabled={ENABLE_PHOTO_STICKERS}
-                t={t}
-            />
-            {!isEditing ? (
-                <NoteDetailStatusBadges
-                    captureGlassColorScheme={colors.captureGlassColorScheme}
+                {isEditing && ENABLE_PHOTO_STICKERS ? (
+                    <Pressable
+                        testID="note-detail-card-paste-surface"
+                        style={styles.cardPasteSurface}
+                        onLongPress={onShowCardPastePrompt}
+                        delayLongPress={320}
+                    />
+                ) : null}
+                {displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled) ? (
+                    <View
+                        pointerEvents={isEditing && stickerModeEnabled ? 'box-none' : 'none'}
+                        style={[
+                            styles.doodleOverlay,
+                            styles.photoDoodleOverlay,
+                            isEditing ? styles.doodleOverlayEditing : null,
+                            isEditing && stickerModeEnabled ? styles.doodleOverlayActive : null,
+                        ]}
+                    >
+                        {isEditing ? (
+                            <NoteStickerCanvas
+                                placements={displayedStickerPlacements}
+                                editable={stickerModeEnabled}
+                                onChangePlacements={setEditStickerPlacements}
+                                selectedPlacementId={selectedStickerId}
+                                onChangeSelectedPlacementId={setSelectedStickerId}
+                                onPressCanvas={onPressStickerCanvas}
+                            />
+                        ) : (
+                            <DynamicStickerCanvas
+                                placements={displayedStickerPlacements}
+                                motionVariant={textStickerMotionVariant}
+                            />
+                        )}
+                    </View>
+                ) : null}
+                {displayedDoodleStrokes.length > 0 || isEditing ? (
+                    <View
+                        pointerEvents={isEditing && doodleModeEnabled ? 'auto' : 'none'}
+                        style={[
+                            styles.doodleOverlay,
+                            styles.photoDoodleOverlay,
+                            isEditing ? styles.doodleOverlayEditing : null,
+                            isEditing && doodleModeEnabled ? styles.doodleOverlayActive : null,
+                        ]}
+                    >
+                        <NoteDoodleCanvas
+                            strokes={displayedDoodleStrokes}
+                            editable={isEditing && doodleModeEnabled}
+                            activeColor="#FFFFFF"
+                            onChangeStrokes={setEditDoodleStrokes}
+                        />
+                    </View>
+                ) : null}
+                <NoteDetailEditToolbar
                     colors={colors}
-                    favoriteFilledIconStyle={favoriteFilledIconStyle}
-                    favoriteFilledTintStyle={favoriteFilledTintStyle}
-                    favoriteOutlineIconStyle={favoriteOutlineIconStyle}
-                    inactiveColor={colors.secondaryText}
-                    isLivePhoto={Boolean(note.isLivePhoto)}
-                    onToggleFavorite={onToggleFavorite}
+                    displayedStickerPlacementsCount={displayedStickerPlacements.length}
+                    doodleModeEnabled={doodleModeEnabled}
+                    editDoodleStrokesCount={editDoodleStrokes.length}
+                    importingSticker={importingSticker}
+                    isEditing={isEditing}
+                    onClearDoodle={onClearDoodle}
+                    onShowStickerSourceOptions={onShowStickerSourceOptions}
+                    onStickerAction={onStickerAction}
+                    onToggleDoodleMode={onToggleDoodleMode}
+                    onToggleStickerMode={onToggleStickerMode}
+                    onToggleStickerMotionLock={onToggleStickerMotionLock}
+                    onUndoDoodle={onUndoDoodle}
+                    selectedStickerId={selectedStickerId}
+                    selectedStickerIsStamp={selectedStickerIsStamp}
+                    selectedStickerMotionLocked={selectedStickerMotionLocked}
+                    selectedStickerOutlineEnabled={selectedStickerOutlineEnabled}
+                    stickerModeEnabled={stickerModeEnabled}
+                    stickersEnabled={ENABLE_PHOTO_STICKERS}
+                    t={t}
                 />
-            ) : null}
-            <StickerPastePopover
-                visible={pastePrompt.visible}
-                anchor={{ x: pastePrompt.x, y: pastePrompt.y }}
-                containerWidth={CARD_SIZE}
-                containerHeight={CARD_SIZE}
-                label={t('capture.pasteStickerAction', 'Paste sticker')}
-                description={t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.')}
-                backgroundColor="rgba(255, 255, 255, 0.96)"
-                borderColor="rgba(255,255,255,0.24)"
-                secondaryTextColor="rgba(28,28,30,0.6)"
-                buttonBackgroundColor="#1C1C1E"
-                buttonTextColor="#FFFFFF"
-                onPress={onConfirmPasteFromPrompt}
-                onDismiss={dismissPastePrompt}
-                popoverTestID="note-detail-card-paste-popover"
-                actionTestID="note-detail-card-paste-action"
-                dismissTestID="note-detail-card-paste-dismiss"
-            />
+                {!isEditing ? (
+                    <NoteDetailStatusBadges
+                        captureGlassColorScheme={colors.captureGlassColorScheme}
+                        colors={colors}
+                        favoriteFilledIconStyle={favoriteFilledIconStyle}
+                        favoriteFilledTintStyle={favoriteFilledTintStyle}
+                        favoriteOutlineIconStyle={favoriteOutlineIconStyle}
+                        inactiveColor={colors.secondaryText}
+                        isLivePhoto={Boolean(note.isLivePhoto)}
+                        onToggleFavorite={onToggleFavorite}
+                    />
+                ) : null}
+                <StickerPastePopover
+                    visible={pastePrompt.visible}
+                    anchor={{ x: pastePrompt.x, y: pastePrompt.y }}
+                    containerWidth={CARD_SIZE}
+                    containerHeight={CARD_SIZE}
+                    label={t('capture.pasteStickerAction', 'Paste sticker')}
+                    description={t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.')}
+                    backgroundColor="rgba(255, 255, 255, 0.96)"
+                    borderColor="rgba(255,255,255,0.24)"
+                    secondaryTextColor="rgba(28,28,30,0.6)"
+                    buttonBackgroundColor="#1C1C1E"
+                    buttonTextColor="#FFFFFF"
+                    onPress={onConfirmPasteFromPrompt}
+                    onDismiss={dismissPastePrompt}
+                    popoverTestID="note-detail-card-paste-popover"
+                    actionTestID="note-detail-card-paste-action"
+                    dismissTestID="note-detail-card-paste-dismiss"
+                />
+                {isEditing || displayedPhotoCaption.trim().length > 0 ? (
+                    <View style={styles.photoCaptionOverlay}>
+                        <View
+                            style={[
+                                styles.photoCaptionOverlayField,
+                                {
+                                    backgroundColor: isDark ? 'rgba(20,20,20,0.5)' : 'rgba(255,255,255,0.72)',
+                                    borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.42)',
+                                },
+                            ]}
+                        >
+                            {isEditing ? (
+                                <>
+                                    <Ionicons name="create-outline" size={16} color={colors.secondaryText} />
+                                    <SheetTextInput
+                                        ref={contentInputRef}
+                                        testID="note-detail-photo-caption-input"
+                                        style={[styles.photoCaptionOverlayInput, { color: colors.text }]}
+                                        value={editContent}
+                                        onChangeText={setEditContent}
+                                        editable={!doodleModeEnabled && !stickerModeEnabled}
+                                        placeholder={t('noteDetail.editPhotoCaption', 'Add a short note...')}
+                                        placeholderTextColor={colors.secondaryText}
+                                        maxLength={60}
+                                        selectionColor={colors.primary}
+                                    />
+                                    {editContent.trim().length > 0 ? (
+                                        <Pressable
+                                            testID="note-detail-photo-caption-clear"
+                                            accessibilityRole="button"
+                                            accessibilityLabel={t('capture.clearPhotoCaption', 'Clear caption')}
+                                            hitSlop={8}
+                                            onPress={() => {
+                                                setEditContent('');
+                                                contentInputRef?.current?.focus?.();
+                                            }}
+                                            style={styles.photoCaptionClearButton}
+                                        >
+                                            <Ionicons name="close-circle" size={18} color={colors.secondaryText} />
+                                        </Pressable>
+                                    ) : null}
+                                </>
+                            ) : (
+                                <Text style={[styles.photoCaptionOverlayText, { color: colors.text }]} numberOfLines={2}>
+                                    {displayedPhotoCaption.trim()}
+                                </Text>
+                            )}
+                        </View>
+                    </View>
+                ) : null}
+            </View>
         </View>
     ) : (
         <View style={styles.textContainer}>
@@ -627,14 +683,58 @@ const styles = StyleSheet.create({
     photoContainer: {
         width: CARD_SIZE,
         height: CARD_SIZE,
+        marginBottom: 16,
+    },
+    photoCard: {
+        width: CARD_SIZE,
+        height: CARD_SIZE,
         borderRadius: Layout.cardRadius,
         borderCurve: 'continuous',
         overflow: 'hidden',
-        marginBottom: 16,
     },
     photo: {
         width: '100%',
         height: '100%',
+    },
+    photoCaptionOverlay: {
+        position: 'absolute',
+        left: 12,
+        right: 12,
+        bottom: 14,
+        alignItems: 'center',
+        zIndex: 6,
+    },
+    photoCaptionOverlayField: {
+        width: '84%',
+        minHeight: 38,
+        borderRadius: 19,
+        borderWidth: StyleSheet.hairlineWidth,
+        paddingHorizontal: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    photoCaptionOverlayInput: {
+        flex: 1,
+        height: 20,
+        fontSize: 13.5,
+        lineHeight: 18,
+        fontFamily: Typography.body.fontFamily,
+        paddingVertical: 0,
+        includeFontPadding: false,
+        textAlignVertical: 'center',
+    },
+    photoCaptionClearButton: {
+        marginLeft: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    photoCaptionOverlayText: {
+        flex: 1,
+        fontSize: 13.5,
+        lineHeight: 18,
+        fontFamily: Typography.body.fontFamily,
+        fontWeight: '600',
     },
     textContainer: {
         width: CARD_SIZE,

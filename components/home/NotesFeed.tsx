@@ -166,6 +166,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   prevProps.item.id === nextProps.item.id &&
   prevProps.item.type === nextProps.item.type &&
   prevProps.item.content === nextProps.item.content &&
+  prevProps.item.caption === nextProps.item.caption &&
   prevProps.item.photoLocalUri === nextProps.item.photoLocalUri &&
   prevProps.item.isLivePhoto === nextProps.item.isLivePhoto &&
   prevProps.item.pairedVideoLocalUri === nextProps.item.pairedVideoLocalUri &&

@@ -50,7 +50,7 @@ export const PhotoFilterCarousel = memo(function PhotoFilterCarousel({
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.photoFilterRow}
-      style={embedded ? styles.photoFilterEmbeddedScroll : undefined}
+      style={[styles.photoFilterScroll, embedded ? styles.photoFilterEmbeddedScroll : undefined]}
     >
       {PHOTO_FILTER_PRESETS.map((preset) => {
         const isSelected = preset.id === selectedFilterId;
@@ -103,11 +103,14 @@ export const PhotoFilterCarousel = memo(function PhotoFilterCarousel({
 const styles = StyleSheet.create({
   photoFilterTray: {
     maxWidth: '100%',
-    paddingHorizontal: 5,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 999,
     overflow: 'hidden',
+  },
+  photoFilterScroll: {
+    flexGrow: 0,
   },
   photoFilterRow: {
     flexDirection: 'row',

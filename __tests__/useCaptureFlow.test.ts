@@ -8,6 +8,7 @@ const mockTakePhoto = jest.fn();
 const mockStartRecording = jest.fn();
 const mockStopRecording = jest.fn(async () => undefined);
 const mockCancelRecording = jest.fn(async () => undefined);
+const mockUseCameraDevice = jest.fn();
 let mockPermissionStatus: 'granted' | 'not-determined' | 'denied' | 'restricted' = 'granted';
 let mockHasPermission = true;
 let mockPlatformOS: 'ios' | 'android' = 'ios';
@@ -38,12 +39,7 @@ jest.mock('react-native-vision-camera', () => {
 
   return {
     Camera: MockCamera,
-    useCameraDevice: () => ({
-      id: 'back-camera',
-      position: 'back',
-      neutralZoom: 1,
-      maxZoom: 4,
-    }),
+    useCameraDevice: (...args: any[]) => mockUseCameraDevice(...args),
     useCameraPermission: () => ({ hasPermission: mockHasPermission, requestPermission: mockRequestPermission }),
   };
 });
@@ -59,6 +55,12 @@ jest.mock('expo-haptics', () => ({
 describe('useCaptureFlow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseCameraDevice.mockReturnValue({
+      id: 'back-camera',
+      position: 'back',
+      neutralZoom: 1,
+      maxZoom: 4,
+    });
     mockTakePhoto.mockResolvedValue({ path: '/tmp/captured-photo.jpg' });
     mockStartRecording.mockImplementation(({ onRecordingFinished }: any) => {
       setTimeout(() => {
@@ -69,6 +71,14 @@ describe('useCaptureFlow', () => {
     mockHasPermission = true;
     mockPlatformOS = 'ios';
     AppState.currentState = 'active';
+  });
+
+  it('prefers the wide-angle back camera for capture mode', () => {
+    renderHook(() => useCaptureFlow());
+
+    expect(mockUseCameraDevice).toHaveBeenCalledWith('back', {
+      physicalDevices: ['wide-angle-camera'],
+    });
   });
 
   it('captures a photo without triggering the custom flash overlay animation', async () => {

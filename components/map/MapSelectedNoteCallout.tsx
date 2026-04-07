@@ -25,7 +25,7 @@ interface MapSelectedNoteCalloutProps {
 function getPreviewText(note: Note) {
   const primarySource = note.type === 'text'
     ? note.content
-    : note.promptAnswer || note.promptTextSnapshot || note.locationName || '';
+    : note.caption || note.promptAnswer || note.promptTextSnapshot || note.locationName || '';
   const normalized = formatNoteTextWithEmoji(primarySource, note.moodEmoji).trim();
 
   if (!normalized) {

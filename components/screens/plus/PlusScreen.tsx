@@ -55,15 +55,10 @@ export default function PlusScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const {
-    annualPackage,
     isPurchaseAvailable,
     isPurchaseInFlight,
-    lifetimePackage,
-    monthlyPackage,
-    plusPriceLabel,
     presentCustomerCenter,
     presentPaywall,
-    purchasePackage,
     restorePurchases,
     tier,
   } = useSubscription();
@@ -72,34 +67,6 @@ export default function PlusScreen() {
     ? [colors.background, colors.card, '#1A1A1A']
     : [colors.background, colors.surface, '#ECE2D7'];
   const appIconSource = isDark ? APP_ICON_DARK_SOURCE : APP_ICON_LIGHT_SOURCE;
-
-  const handlePurchase = async (
-    pkg: typeof monthlyPackage,
-    successMessage: string
-  ) => {
-    if (!pkg || isPurchaseInFlight) {
-      return;
-    }
-
-    const result = await purchasePackage(pkg);
-    if (result.status === 'success') {
-      showAppAlert(t('plus.upgradeSuccessTitle', 'Plus unlocked'), successMessage);
-      return;
-    }
-
-    if (result.status === 'cancelled') {
-      return;
-    }
-
-    showAppAlert(
-      t('plus.upgradeUnavailableTitle', 'Plus unavailable'),
-      result.message ??
-        t(
-          'plus.upgradeUnavailableMessage',
-          'We could not complete the purchase right now. Please try again in a moment.'
-        )
-    );
-  };
 
   const handlePresentPaywall = async () => {
     const result = await presentPaywall();
@@ -145,14 +112,16 @@ export default function PlusScreen() {
       />
 
       <ScrollView
-        style={[
-          styles.content,
+        style={styles.content}
+        contentContainerStyle={[
+          styles.contentContainer,
           {
             paddingTop: headerHeight + 12,
             paddingBottom: insets.bottom + 24,
           },
         ]}
-        contentContainerStyle={styles.contentContainer}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.heroSection}>
           <View style={styles.iconContainer}>
@@ -211,9 +180,7 @@ export default function PlusScreen() {
                 ? t('settings.plusActive', 'Plus Active')
                 : !isPurchaseAvailable
                 ? t('settings.plusUnavailable', 'Coming Soon')
-                : plusPriceLabel
-                ? t('plus.upgradeCtaWithPrice', 'Upgrade to Plus · {{price}}', { price: plusPriceLabel })
-                : t('plus.cta', 'Upgrade to Noto Plus')
+                : t('plus.cta', 'Get Noto Plus')
             }
             onPress={() => {
               if (tier === 'plus' || !isPurchaseAvailable || isPurchaseInFlight) return;
@@ -223,57 +190,6 @@ export default function PlusScreen() {
             variant="neutral"
             disabled={tier === 'plus' || !isPurchaseAvailable || !isOnline}
           />
-
-          {monthlyPackage ? (
-            <PrimaryButton
-              label={`${t('plus.monthly', 'Monthly')} · ${monthlyPackage.product.priceString ?? monthlyPackage.identifier}`}
-              onPress={() =>
-                void handlePurchase(
-                  monthlyPackage,
-                  t(
-                    'plus.upgradeSuccessMessage',
-                    'You can now save more photo notes and import images from your library.'
-                  )
-                )
-              }
-              variant="secondary"
-              disabled={isPurchaseInFlight || !isOnline}
-            />
-          ) : null}
-
-          {annualPackage ? (
-            <PrimaryButton
-              label={`${t('plus.yearly', 'Yearly')} · ${annualPackage.product.priceString ?? annualPackage.identifier}`}
-              onPress={() =>
-                void handlePurchase(
-                  annualPackage,
-                  t(
-                    'plus.upgradeSuccessMessage',
-                    'You can now save more photo notes and import images from your library.'
-                  )
-                )
-              }
-              variant="secondary"
-              disabled={isPurchaseInFlight || !isOnline}
-            />
-          ) : null}
-
-          {lifetimePackage ? (
-            <PrimaryButton
-              label={`${t('plus.lifetime', 'Lifetime')} · ${lifetimePackage.product.priceString ?? lifetimePackage.identifier}`}
-              onPress={() =>
-                void handlePurchase(
-                  lifetimePackage,
-                  t(
-                    'plus.upgradeSuccessMessage',
-                    'You can now save more photo notes and import images from your library.'
-                  )
-                )
-              }
-              variant="secondary"
-              disabled={isPurchaseInFlight || !isOnline}
-            />
-          ) : null}
 
           <PrimaryButton
             label={t('plus.restore', 'Restore purchases')}
@@ -306,9 +222,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: Layout.screenPadding + 12,
   },
   contentContainer: {
+    flexGrow: 1,
+    paddingHorizontal: Layout.screenPadding + 12,
     gap: 24,
   },
   heroSection: {

@@ -99,6 +99,18 @@ export default function MapPreviewSheet({
     [clearCloseFallback]
   );
 
+  const finalizeCloseSequence = useCallback(
+    (sequence: number) => {
+      if (closeSequenceRef.current !== sequence) {
+        return;
+      }
+
+      clearCloseFallback();
+      onFullyClosed();
+    },
+    [clearCloseFallback, onFullyClosed]
+  );
+
   useEffect(() => {
     return () => {
       clearCloseFallback();
@@ -146,8 +158,7 @@ export default function MapPreviewSheet({
           },
           (finished) => {
             if (finished && closeSequenceRef.current === sequence) {
-              clearCloseFallback();
-              scheduleOnRN(onFullyClosed);
+              scheduleOnRN(finalizeCloseSequence, sequence);
             }
           }
         );
@@ -156,6 +167,7 @@ export default function MapPreviewSheet({
   }, [
     clearCloseFallback,
     dismissing,
+    finalizeCloseSequence,
     invalidateCloseSequence,
     isVisible,
     onFullyClosed,
@@ -211,13 +223,12 @@ export default function MapPreviewSheet({
         },
         (finished) => {
           if (finished && closeSequenceRef.current === sequence) {
-            clearCloseFallback();
-            scheduleOnRN(onFullyClosed);
+            scheduleOnRN(finalizeCloseSequence, sequence);
           }
         }
       );
     },
-    [clearCloseFallback, dismissing, onDismiss, onFullyClosed, reduceMotionEnabled, scheduleCloseFallback, translateY]
+    [dismissing, finalizeCloseSequence, onDismiss, onFullyClosed, reduceMotionEnabled, scheduleCloseFallback, translateY]
   );
 
   const handlePressDismiss = useCallback(() => {

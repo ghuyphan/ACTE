@@ -23,12 +23,13 @@ const mockGetAllAsync = jest.fn<Promise<unknown[]>, [string, ...unknown[]]>(asyn
     ];
   }
 
-  if (sql.includes('SELECT id, type, content, photo_local_uri, location_name, prompt_text_snapshot, prompt_answer, search_text')) {
+  if (sql.includes('SELECT id, type, content, caption, photo_local_uri, location_name, prompt_text_snapshot, prompt_answer, search_text')) {
     return [
       {
         id: 'photo-1',
         type: 'photo',
         content: 'legacy-photo.jpg',
+        caption: null,
         photo_local_uri: null,
         location_name: 'District 3',
         search_text: '',
@@ -99,6 +100,7 @@ describe('database migrations', () => {
 
     expect(mockExecAsync.mock.calls[0]?.[0]).not.toContain('idx_notes_search_text ON notes(search_text)');
     expect(mockExecAsync).toHaveBeenCalledWith(expect.stringContaining('photo_local_uri TEXT'));
+    expect(mockExecAsync).toHaveBeenCalledWith('ALTER TABLE notes ADD COLUMN caption TEXT');
     expect(mockExecAsync).toHaveBeenCalledWith('ALTER TABLE notes ADD COLUMN search_text TEXT NOT NULL DEFAULT \'\'');
     expect(mockExecAsync).toHaveBeenCalledWith('CREATE INDEX IF NOT EXISTS idx_notes_search_text ON notes(search_text)');
     expect(mockExecAsync).toHaveBeenCalledWith(
@@ -184,6 +186,7 @@ describe('database migrations', () => {
       null,
       null,
       null,
+      null,
       0,
       null,
       null,
@@ -214,6 +217,7 @@ describe('database migrations', () => {
     expect(mockRunAsync).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE notes'),
       'Updated legacy note',
+      null,
       null,
       null,
       null,

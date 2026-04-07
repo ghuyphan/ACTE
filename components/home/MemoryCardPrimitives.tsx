@@ -73,6 +73,7 @@ export function NoteMemoryCard({
           {note.type === 'photo' ? (
             <ImageMemoryCard
               imageUrl={getNotePhotoUri(note)}
+              caption={note.caption}
               isLivePhoto={note.isLivePhoto}
               pairedVideoUri={getNotePairedVideoUri(note)}
               showLiveBadge={false}

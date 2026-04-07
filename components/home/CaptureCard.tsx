@@ -89,6 +89,7 @@ const SHUTTER_SIDE_ACTION_GAP = 24;
 const SHUTTER_SIDE_ACTION_OFFSET =
   SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP + SIDE_ACTION_SIZE;
 const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
+const PHOTO_CAPTION_MAX_LENGTH = 60;
 const LIVE_PHOTO_RING_SIZE = SHUTTER_OUTER_SIZE;
 const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
 const DOCKED_HEADER_CONTENT_OVERLAP = 8;
@@ -538,10 +539,16 @@ interface PhotoCaptureSurfaceProps {
   handleSelectSticker: CaptureCardStickerFlowState['handleSelectSticker'];
   handleShowCardPastePrompt: CaptureCardStickerFlowState['handleShowCardPastePrompt'];
   hasLivePhotoMotion: boolean;
+  interactionsDisabled: boolean;
+  noteInputRef: RefObject<TextInput | null>;
+  noteText: CaptureCardProps['noteText'];
   onChangePhotoFilter: CaptureCardProps['onChangePhotoFilter'];
+  onChangeNoteText: CaptureCardProps['onChangeNoteText'];
   pastePrompt: CaptureCardStickerFlowState['pastePrompt'];
   photoDoodleStrokes: CaptureCardDecorationState['photoDoodleStrokes'];
+  onPhotoCaptionBlur: () => void;
   onCanvasGestureActiveChange: (active: boolean) => void;
+  onPhotoCaptionFocus: () => void;
   selectedPhotoFilterId: CaptureCardProps['selectedPhotoFilterId'];
   selectedStickerId: CaptureCardDecorationState['selectedStickerId'];
   setPhotoDoodleStrokes: CaptureCardDecorationState['setPhotoDoodleStrokes'];
@@ -566,10 +573,16 @@ function PhotoCaptureSurface({
   handleSelectSticker,
   handleShowCardPastePrompt,
   hasLivePhotoMotion,
+  interactionsDisabled,
+  noteInputRef,
+  noteText,
   onChangePhotoFilter,
+  onChangeNoteText,
   pastePrompt,
   photoDoodleStrokes,
+  onPhotoCaptionBlur,
   onCanvasGestureActiveChange,
+  onPhotoCaptionFocus,
   selectedPhotoFilterId,
   selectedStickerId,
   setPhotoDoodleStrokes,
@@ -672,7 +685,7 @@ function PhotoCaptureSurface({
         dismissTestID="capture-card-paste-dismiss"
       />
       {!hasLivePhotoMotion ? (
-        <View pointerEvents="box-none" style={styles.cardBottomOverlay}>
+        <View pointerEvents="box-none" style={styles.cardTopOverlay}>
           <PhotoFilterCarousel
             sourceUri={capturedPhoto}
             selectedFilterId={selectedPhotoFilterId}
@@ -682,6 +695,59 @@ function PhotoCaptureSurface({
           />
         </View>
       ) : null}
+      <View pointerEvents="box-none" style={styles.cardBottomOverlay}>
+        <View
+          style={[
+            styles.photoCaptionOverlayField,
+            {
+              backgroundColor: colors.captureGlassFill,
+              borderColor: photoPreviewControlBorder,
+            },
+          ]}
+        >
+          <Ionicons
+            name="create-outline"
+            size={16}
+            color={colors.captureGlassIcon}
+            style={styles.photoCaptionIcon}
+          />
+          <TextInput
+            ref={noteInputRef}
+            testID="capture-photo-caption-input"
+            style={[styles.photoCaptionOverlayInput, { color: colors.captureGlassText }]}
+            value={noteText}
+            onChangeText={onChangeNoteText}
+            onFocus={onPhotoCaptionFocus}
+            onBlur={onPhotoCaptionBlur}
+            editable={!interactionsDisabled && !doodleModeEnabled && !stickerModeEnabled}
+            placeholder={t('capture.photoCaptionPlaceholder', 'Add a short note...')}
+            placeholderTextColor={colors.captureGlassPlaceholder}
+            maxLength={PHOTO_CAPTION_MAX_LENGTH}
+            returnKeyType="done"
+            blurOnSubmit
+            selectionColor={colors.primary}
+          />
+          {noteText.trim().length > 0 ? (
+            <Pressable
+              testID="capture-photo-caption-clear"
+              accessibilityRole="button"
+              accessibilityLabel={t('capture.clearPhotoCaption', 'Clear caption')}
+              hitSlop={8}
+              onPress={() => {
+                onChangeNoteText('');
+                noteInputRef.current?.focus();
+              }}
+              style={styles.photoCaptionClearButton}
+            >
+              <Ionicons
+                name="close-circle"
+                size={18}
+                color={colors.captureGlassPlaceholder}
+              />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
     </View>
   );
 }
@@ -1461,16 +1527,6 @@ function PhotoCaptureBottomBar({
               size={15}
               color={hasLivePhotoMotion ? textCardActiveIconColor : colors.captureGlassText}
             />
-            <Text
-              style={[
-                styles.livePhotoPillText,
-                { color: hasLivePhotoMotion ? textCardActiveIconColor : colors.captureGlassText },
-              ]}
-            >
-              {hasLivePhotoMotion
-                ? t('capture.removeLivePhotoShort', 'Remove Live')
-                : t('capture.addLivePhotoShort', 'Add Live')}
-            </Text>
           </CaptureAnimatedPressable>
         }
       />
@@ -1748,6 +1804,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const autoEmojiPopOpacity = useSharedValue(0);
   const autoEmojiPopTranslateY = useSharedValue(12);
   const autoEmojiPopScale = useSharedValue(0.86);
+  const [isPhotoCaptionFocused, setIsPhotoCaptionFocused] = useState(false);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
@@ -1787,9 +1844,16 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     reduceMotionEnabled,
     restaurantInputRef,
   });
+  const isCaptureTextEntryFocused = isTextEntryFocused || isPhotoCaptionFocused;
+  const handlePhotoCaptionFocus = useCallback(() => {
+    setIsPhotoCaptionFocused(true);
+  }, []);
+  const handlePhotoCaptionBlur = useCallback(() => {
+    setIsPhotoCaptionFocused(false);
+  }, []);
   useEffect(() => {
-    onTextEntryFocusChange?.(isTextEntryFocused);
-  }, [isTextEntryFocused, onTextEntryFocusChange]);
+    onTextEntryFocusChange?.(isCaptureTextEntryFocused);
+  }, [isCaptureTextEntryFocused, onTextEntryFocusChange]);
   useEffect(() => {
     if (captureMode !== 'text' || !onChangeNoteColor) {
       return;
@@ -1805,9 +1869,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     },
     [onTextEntryFocusChange]
   );
+  useEffect(() => {
+    if (captureMode === 'camera' && capturedPhoto) {
+      return;
+    }
+
+    setIsPhotoCaptionFocused(false);
+  }, [captureMode, capturedPhoto]);
   const dismissCaptureInputs = useCallback(() => {
     noteInputRef.current?.blur();
     restaurantInputRef.current?.blur();
+    setIsPhotoCaptionFocused(false);
     dismissCaptureInputsState();
   }, [dismissCaptureInputsState]);
   const {
@@ -1963,9 +2035,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     !isModeSwitchAnimating &&
     (captureMode === 'camera' || (captureMode === 'text' && isTextEntryFocused));
   const shouldUseSimpleKeyboardAvoidance =
-    Platform.OS === 'ios' && isTextEntryFocused;
+    Platform.OS === 'ios' && isCaptureTextEntryFocused;
   const androidTextEntryBottomInset =
-    Platform.OS === 'android' && isTextEntryFocused ? 96 : 0;
+    Platform.OS === 'android' && isCaptureTextEntryFocused ? 96 : 0;
   const captureKeyboardVerticalOffset = topInset + 76;
   const [canvasGestureActive, setCanvasGestureActive] = useState(false);
 
@@ -2354,8 +2426,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 handleSelectSticker={handleSelectSticker}
                 handleShowCardPastePrompt={handleShowCardPastePrompt}
                 hasLivePhotoMotion={hasLivePhotoMotion}
+                interactionsDisabled={interactionsDisabled}
+                noteInputRef={noteInputRef}
+                noteText={noteText}
                 onChangePhotoFilter={onChangePhotoFilter}
+                onChangeNoteText={onChangeNoteText}
                 onCanvasGestureActiveChange={setCanvasGestureActive}
+                onPhotoCaptionBlur={handlePhotoCaptionBlur}
+                onPhotoCaptionFocus={handlePhotoCaptionFocus}
                 pastePrompt={pastePrompt}
                 photoDoodleStrokes={photoDoodleStrokes}
                 selectedPhotoFilterId={selectedPhotoFilterId}
@@ -2657,6 +2735,7 @@ const styles = StyleSheet.create({
     left: 18,
     right: 18,
     gap: 8,
+    alignItems: 'center',
     zIndex: 11,
   },
   cardBottomOverlay: {
@@ -2746,10 +2825,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  livePhotoPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
   captureActionTextPill: {
     width: 'auto',
     minWidth: 58,
@@ -2760,11 +2835,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   livePhotoTogglePill: {
-    width: 'auto',
-    minWidth: 102,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    gap: 6,
+    width: TOP_CONTROL_HEIGHT,
+    minWidth: TOP_CONTROL_HEIGHT,
+    paddingHorizontal: 0,
     justifyContent: 'center',
   },
   doodleColorPalette: {
@@ -3015,14 +3088,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: HORIZONTAL_PADDING + 4,
     paddingTop: 14,
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 78,
+    justifyContent: 'flex-start',
+    minHeight: 162,
     gap: 10,
   },
   belowCardMetaRow: {
     width: '100%',
     alignItems: 'center',
     minHeight: 52,
+    justifyContent: 'center',
+  },
+  photoCaptionIcon: {
+    marginTop: 0,
+  },
+  photoCaptionOverlayField: {
+    width: '84%',
+    minHeight: 38,
+    borderRadius: 19,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  photoCaptionOverlayInput: {
+    flex: 1,
+    height: 20,
+    fontSize: 13.5,
+    lineHeight: 18,
+    fontWeight: '600',
+    fontFamily: 'Noto Sans',
+    paddingVertical: 0,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
+  photoCaptionClearButton: {
+    marginLeft: 2,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   textBottomToolsWrap: {
@@ -3178,7 +3280,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   belowCardCapturedPhotoActions: {
-    minHeight: 68,
+    minHeight: 92,
+    paddingTop: 12,
+    paddingBottom: 14,
   },
   liveCameraShutterRow: {
     minHeight: 92,

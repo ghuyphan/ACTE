@@ -384,6 +384,8 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
+      expect(getByTestId('map-preview-list')).toBeTruthy();
+      expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
       expect(getByText('2 notes · all results')).toBeTruthy();
     });
 

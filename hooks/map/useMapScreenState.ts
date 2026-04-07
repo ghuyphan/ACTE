@@ -148,6 +148,10 @@ export function useMapScreenState({
     () => (enableHeavyCalculations ? getNearbyNoteItems(nearbyCandidates, nearbyAnchor, 30) : []),
     [enableHeavyCalculations, nearbyAnchor, nearbyCandidates]
   );
+  const allFilteredNearbyItems = useMemo(
+    () => (enableHeavyCalculations ? getNearbyNoteItems(filteredNotes, nearbyAnchor, 30) : []),
+    [enableHeavyCalculations, filteredNotes, nearbyAnchor]
+  );
 
   useEffect(() => {
     if (!selectedGroup) {
@@ -312,6 +316,7 @@ export function useMapScreenState({
     clusterNodes,
     pointGroupMap,
     nearbyItems,
+    allFilteredNearbyItems,
     filteredNotes,
     filteredCount,
     visibleAreaCount: notesInVisibleRegion.length,

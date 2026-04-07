@@ -52,6 +52,12 @@ export function mergeNotePatch(note: Note, updates: NoteUpdates, updatedAt = new
     ...note,
     ...updates,
     content: note.type === 'photo' ? nextPhotoUri : updates.content ?? note.content,
+    caption:
+      note.type === 'photo'
+        ? updates.caption !== undefined
+          ? updates.caption
+          : note.caption ?? null
+        : null,
     photoLocalUri: note.type === 'photo' ? nextPhotoUri || null : null,
     photoSyncedLocalUri:
       note.type === 'photo'

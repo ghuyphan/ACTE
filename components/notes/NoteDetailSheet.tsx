@@ -551,7 +551,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 setNote(nextNote);
                 favoriteFillProgress.value = nextNote?.isFavorite ? 1 : 0;
                 if (nextNote) {
-                    setEditContent(nextNote.content);
+                    setEditContent(nextNote.type === 'photo' ? nextNote.caption ?? '' : nextNote.content);
                     setEditLocation(nextNote.locationName || '');
                     setEditRadius(nextNote.radius);
                     setEditNoteColor(
@@ -1287,7 +1287,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     const handleSaveEdit = async () => {
         if (!note || isDeleting) return;
-        const updates: Partial<Pick<Note, 'content' | 'locationName' | 'moodEmoji' | 'noteColor' | 'radius'>> = {};
+        const updates: Partial<Pick<Note, 'content' | 'caption' | 'locationName' | 'moodEmoji' | 'noteColor' | 'radius'>> = {};
         const currentNoteColor =
             note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null;
         if (note.type === 'text') {
@@ -1321,10 +1321,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         if (note.type === 'text' && editContent.trim() !== note.content) {
             updates.content = editContent.trim();
         }
+        if (note.type === 'photo' && editContent.trim() !== (note.caption ?? '')) {
+            updates.caption = editContent.trim() || null;
+        }
         if (editLocation.trim() !== (note.locationName || '')) {
             updates.locationName = editLocation.trim() || null;
         }
         const nextContent = updates.content ?? note.content;
+        const nextCaption = updates.caption !== undefined ? updates.caption : note.caption ?? null;
         const nextLocationName = updates.locationName !== undefined ? updates.locationName : note.locationName;
         if (
             note.type === 'text' &&
@@ -1368,6 +1372,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 ...note,
                 ...storeUpdates,
                 content: nextContent,
+                caption: nextCaption,
                 locationName: nextLocationName ?? null,
                 noteColor: updates.noteColor !== undefined ? updates.noteColor : currentNoteColor,
                 hasDoodle: doodleChanged ? nextHasDoodle : note.hasDoodle,
@@ -1434,7 +1439,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             setNote(nextNote);
             setEditDoodleStrokes(parseNoteDoodleStrokes(nextDoodleStrokesJson));
             setEditStickerPlacements(parseNoteStickerPlacements(nextStickerPlacementsJson));
-            setEditContent(nextNote.content);
+            setEditContent(nextNote.type === 'photo' ? nextNote.caption ?? '' : nextNote.content);
             setEditLocation(nextNote.locationName || '');
             setEditRadius(nextNote.radius);
             setEditNoteColor(
@@ -1473,10 +1478,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         const locationStr = note.locationName || t('noteDetail.unknownLocation');
         const photoUri = getNotePhotoUri(note);
+        const photoCaption = note.caption?.trim() ?? '';
         const message =
             note.type === 'text'
                 ? `📍 ${locationStr}\n\n${formatNoteTextWithEmoji(note.content, note.moodEmoji)}\n\n— Noto 💛`
-                : `${t('noteDetail.sharePhotoMsg', { location: locationStr })}\n\n— Noto 💛`;
+                : `${t('noteDetail.sharePhotoMsg', { location: locationStr })}${photoCaption ? `\n\n${photoCaption}` : ''}\n\n— Noto 💛`;
 
         try {
             if (note.type === 'photo' && photoUri) {

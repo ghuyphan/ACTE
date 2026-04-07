@@ -107,6 +107,7 @@ export default function SharedPostCardVisual({
       return (
         <ImageMemoryCard
           imageUrl={photoUri}
+          caption={post.text}
           isLivePhoto={post.isLivePhoto}
           pairedVideoUri={pairedVideoUri}
           showLiveBadge={false}

@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { STICKER_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { Layout, Shadows } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
@@ -13,6 +13,7 @@ import type { SharedValue } from 'react-native-reanimated';
 
 interface ImageMemoryCardProps {
   imageUrl: string;
+  caption?: string | null;
   isLivePhoto?: boolean;
   pairedVideoUri?: string | null;
   showLiveBadge?: boolean;
@@ -25,6 +26,7 @@ interface ImageMemoryCardProps {
 
 function ImageMemoryCard({
   imageUrl,
+  caption = null,
   isLivePhoto = false,
   pairedVideoUri = null,
   showLiveBadge = true,
@@ -43,6 +45,7 @@ function ImageMemoryCard({
     () => parseNoteStickerPlacements(stickerPlacementsJson),
     [stickerPlacementsJson]
   );
+  const normalizedCaption = caption?.trim() ?? '';
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card }]}>
@@ -73,6 +76,18 @@ function ImageMemoryCard({
           <NoteDoodleCanvas strokes={doodleStrokes} />
         </View>
       ) : null}
+      {normalizedCaption.length > 0 ? (
+        <View
+          pointerEvents="none"
+          style={styles.captionOverlay}
+        >
+          <View style={styles.captionField}>
+            <Text style={styles.captionText} numberOfLines={2}>
+              {normalizedCaption}
+            </Text>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -101,5 +116,29 @@ const styles = StyleSheet.create({
     position: 'absolute',
     ...STICKER_ARTBOARD_FRAME,
     opacity: 0.82,
+  },
+  captionOverlay: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 14,
+    alignItems: 'center',
+  },
+  captionField: {
+    width: '84%',
+    minHeight: 38,
+    borderRadius: 19,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.34)',
+    backgroundColor: 'rgba(255,252,246,0.74)',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  captionText: {
+    color: '#2B2621',
+    fontSize: 13.5,
+    lineHeight: 18,
+    fontWeight: '600',
   },
 });

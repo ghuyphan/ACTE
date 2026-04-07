@@ -155,6 +155,7 @@ export default function MapScreenIOS() {
     selectNoteById,
     clusterNodes,
     nearbyItems,
+    allFilteredNearbyItems,
     filteredCount,
     visibleAreaCount,
     showingAllFilteredResults,
@@ -1018,6 +1019,21 @@ export default function MapScreenIOS() {
             }
 
             setNotesPreviewDismissed(false);
+            setNotesPreviewCollapsed(false);
+            setNearbyPreviewItems((current) =>
+              areNearbyItemsEquivalent(current, allFilteredNearbyItems) ? current : allFilteredNearbyItems
+            );
+            setActiveNearbyNoteId((current) => {
+              if (allFilteredNearbyItems.length === 0) {
+                return null;
+              }
+
+              if (current && allFilteredNearbyItems.some((item) => item.note.id === current)) {
+                return current;
+              }
+
+              return allFilteredNearbyItems[0].note.id;
+            });
             shouldAdoptNearbyPreviewItemsRef.current = true;
             showAllFilteredResults();
           }}

@@ -1035,7 +1035,10 @@ export async function createSharedPost(
       author_photo_url_snapshot: user.photoURL ?? null,
       audience_user_ids: dedupedAudience,
       type: note.type,
-      text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
+      text:
+        note.type === 'text'
+          ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji)
+          : note.caption?.trim() ?? '',
       photo_path: photoPath ?? null,
       is_live_photo: Boolean(note.isLivePhoto && pairedVideoPath),
       paired_video_path: pairedVideoPath ?? null,
@@ -1181,7 +1184,10 @@ export async function updateSharedPost(
   const { error } = await supabase
     .from('shared_posts')
     .update({
-      text: note.type === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
+      text:
+        note.type === 'text'
+          ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji)
+          : note.caption?.trim() ?? '',
       photo_path: nextPhotoPath ?? null,
       is_live_photo: Boolean(note.isLivePhoto && nextPairedVideoPath),
       paired_video_path: nextPairedVideoPath ?? null,

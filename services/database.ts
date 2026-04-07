@@ -25,6 +25,7 @@ export interface Note {
     id: string;
     type: NoteType;
     content: string;          // text content or local photo URI
+    caption?: string | null;
     photoLocalUri?: string | null;
     photoSyncedLocalUri?: string | null;
     photoRemoteBase64?: string | null;
@@ -54,6 +55,7 @@ export interface CreateNoteInput {
     id?: string;
     type: NoteType;
     content: string;
+    caption?: string | null;
     photoLocalUri?: string | null;
     photoSyncedLocalUri?: string | null;
     photoRemoteBase64?: string | null;
@@ -80,6 +82,7 @@ export type NoteUpdates = Partial<
     Pick<
         Note,
         | 'content'
+        | 'caption'
         | 'photoLocalUri'
         | 'photoSyncedLocalUri'
         | 'photoRemoteBase64'
@@ -107,6 +110,7 @@ interface NoteRow {
     id: string;
     type: NoteType;
     content: string;
+    caption: string | null;
     photo_local_uri: string | null;
     photo_synced_local_uri: string | null;
     photo_remote_base64: string | null;
@@ -138,7 +142,7 @@ let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let transactionQueue: Promise<void> = Promise.resolve();
 let androidDatabaseQueue: Promise<void> = Promise.resolve();
-const APP_SCHEMA_VERSION = 13;
+const APP_SCHEMA_VERSION = 14;
 export const LOCAL_NOTES_SCOPE = '__local__';
 let activeNotesScope = LOCAL_NOTES_SCOPE;
 const SQLITE_LOCK_RETRY_DELAYS_MS = [30, 80, 160];
@@ -419,6 +423,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         owner_uid TEXT NOT NULL DEFAULT '__local__',
         type TEXT NOT NULL CHECK(type IN ('text', 'photo')),
         content TEXT NOT NULL,
+        caption TEXT,
         photo_local_uri TEXT,
         photo_synced_local_uri TEXT,
         photo_remote_base64 TEXT,
@@ -572,6 +577,10 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_local_uri TEXT`);
                     shouldBackfillNoteMetadata = true;
                 }
+                if (!columns.includes('caption')) {
+                    await database.execAsync(`ALTER TABLE notes ADD COLUMN caption TEXT`);
+                    shouldBackfillNoteMetadata = true;
+                }
                 if (!columns.includes('photo_synced_local_uri')) {
                     await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_synced_local_uri TEXT`);
                 }
@@ -678,13 +687,14 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                         id: string;
                         type: NoteType;
                         content: string;
+                        caption: string | null;
                         photo_local_uri: string | null;
                         location_name: string | null;
                         prompt_text_snapshot: string | null;
                         prompt_answer: string | null;
                         search_text: string | null;
                     }>(
-                        `SELECT id, type, content, photo_local_uri, location_name, prompt_text_snapshot, prompt_answer, search_text
+                        `SELECT id, type, content, caption, photo_local_uri, location_name, prompt_text_snapshot, prompt_answer, search_text
                          FROM notes`
                     );
 
@@ -696,6 +706,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                         const searchText = buildNoteSearchText({
                             type: row.type,
                             content: row.type === 'photo' ? '' : row.content,
+                            caption: row.type === 'photo' ? row.caption ?? null : null,
                             locationName: row.location_name,
                             promptTextSnapshot: row.prompt_text_snapshot,
                             promptAnswer: row.prompt_answer,
@@ -960,9 +971,19 @@ function getResolvedPhotoLocalUri(row: Pick<NoteRow, 'type' | 'content' | 'photo
     return resolveStoredPhotoUri(row.photo_local_uri ?? row.content);
 }
 
+function normalizePhotoCaption(value: string | null | undefined) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
 function buildSearchText(input: {
     type: NoteType;
     content: string;
+    caption?: string | null;
     locationName: string | null;
     promptTextSnapshot?: string | null;
     promptAnswer?: string | null;
@@ -970,6 +991,7 @@ function buildSearchText(input: {
     return buildNoteSearchText({
         type: input.type,
         content: input.type === 'text' ? input.content : '',
+        caption: input.type === 'photo' ? input.caption ?? null : null,
         locationName: input.locationName,
         promptTextSnapshot: input.promptTextSnapshot,
         promptAnswer: input.promptAnswer,
@@ -1017,6 +1039,7 @@ function rowToNote(row: NoteRow): Note {
         id: row.id,
         type: row.type as NoteType,
         content: row.type === 'photo' ? photoLocalUri ?? '' : row.content,
+        caption: row.type === 'photo' ? row.caption ?? null : null,
         photoLocalUri,
         photoSyncedLocalUri: resolveStoredPhotoUri(row.photo_synced_local_uri),
         photoRemoteBase64: row.photo_remote_base64,
@@ -1175,11 +1198,13 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
             ? resolveStoredPairedVideoUri(input.pairedVideoSyncedLocalUri)
             : null;
     const normalizedContent = input.type === 'photo' ? photoLocalUri ?? '' : input.content;
+    const normalizedCaption = input.type === 'photo' ? normalizePhotoCaption(input.caption) : null;
     const normalizedNoteColor =
         input.type === 'text' ? normalizeSavedTextNoteColor(input.noteColor) : null;
     const searchText = buildSearchText({
         type: input.type,
         content: normalizedContent,
+        caption: normalizedCaption,
         locationName: input.locationName ?? null,
         promptTextSnapshot: input.promptTextSnapshot ?? null,
         promptAnswer: input.promptAnswer ?? null,
@@ -1196,6 +1221,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
                 owner_uid,
                 type,
                 content,
+                caption,
                 photo_local_uri,
                 photo_synced_local_uri,
                 photo_remote_base64,
@@ -1216,11 +1242,12 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
                 is_favorite,
                 created_at
             )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
             id,
             scope,
             input.type,
             normalizedContent,
+            normalizedCaption,
             photoLocalUri,
             photoSyncedLocalUri,
             input.photoRemoteBase64 ?? null,
@@ -1248,6 +1275,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         id,
         type: input.type,
         content: normalizedContent,
+        caption: normalizedCaption,
         photoLocalUri,
         photoSyncedLocalUri,
         photoRemoteBase64: input.photoRemoteBase64 ?? null,
@@ -1374,6 +1402,12 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         nextType === 'photo'
             ? nextPhotoLocalUri ?? ''
             : updates.content ?? existing.content;
+    const nextCaption =
+        nextType === 'photo'
+            ? updates.caption !== undefined
+                ? normalizePhotoCaption(updates.caption)
+                : existing.caption ?? null
+            : null;
     const nextLocationName =
         updates.locationName !== undefined ? updates.locationName : existing.locationName;
     const nextPromptId =
@@ -1407,6 +1441,7 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
     const searchText = buildSearchText({
         type: nextType,
         content: nextContent,
+        caption: nextCaption,
         locationName: nextLocationName,
         promptTextSnapshot: nextPromptTextSnapshot,
         promptAnswer: nextPromptAnswer,
@@ -1422,6 +1457,7 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
         await txn.runAsync(
             `UPDATE notes
              SET content = ?,
+                 caption = ?,
                  photo_local_uri = ?,
                  photo_synced_local_uri = ?,
                  photo_remote_base64 = ?,
@@ -1440,6 +1476,7 @@ export async function updateNote(id: string, updates: NoteUpdates): Promise<void
                  updated_at = ?
              WHERE id = ? AND owner_uid = ?`,
             nextContent,
+            nextCaption,
             nextPhotoLocalUri,
             nextPhotoSyncedLocalUri,
             nextPhotoRemoteBase64,
@@ -1720,9 +1757,11 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
             ? resolveStoredPairedVideoUri(input.pairedVideoSyncedLocalUri)
             : null;
     const normalizedContent = input.type === 'photo' ? photoLocalUri ?? '' : input.content;
+    const normalizedCaption = input.type === 'photo' ? normalizePhotoCaption(input.caption) : null;
     const searchText = buildSearchText({
         type: input.type,
         content: normalizedContent,
+        caption: normalizedCaption,
         locationName: input.locationName,
         promptTextSnapshot: input.promptTextSnapshot ?? null,
         promptAnswer: input.promptAnswer ?? null,
@@ -1740,6 +1779,7 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
                 owner_uid,
                 type,
                 content,
+                caption,
                 photo_local_uri,
                 photo_synced_local_uri,
                 photo_remote_base64,
@@ -1761,11 +1801,12 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
                 created_at,
                 updated_at
             )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
                 owner_uid = excluded.owner_uid,
                 type = excluded.type,
                 content = excluded.content,
+                caption = excluded.caption,
                 photo_local_uri = excluded.photo_local_uri,
                 photo_synced_local_uri = excluded.photo_synced_local_uri,
                 photo_remote_base64 = excluded.photo_remote_base64,
@@ -1790,6 +1831,7 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
             scope,
             input.type,
             normalizedContent,
+            normalizedCaption,
             photoLocalUri,
             photoSyncedLocalUri,
             input.photoRemoteBase64 ?? null,
@@ -1819,6 +1861,7 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
         id: input.id,
         type: input.type,
         content: normalizedContent,
+        caption: normalizedCaption,
         photoLocalUri,
         photoSyncedLocalUri,
         photoRemoteBase64: input.photoRemoteBase64 ?? null,

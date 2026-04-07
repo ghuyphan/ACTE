@@ -1351,6 +1351,7 @@ export default function HomeScreen() {
           id: pendingNoteId,
           type: captureMode === 'camera' ? 'photo' : 'text',
           content,
+          caption: captureMode === 'camera' ? noteText.trim() || null : null,
           photoLocalUri: captureMode === 'camera' ? content : null,
           isLivePhoto: captureMode === 'camera' && Boolean(pairedVideoDestinationPath),
           pairedVideoLocalUri:

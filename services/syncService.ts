@@ -901,7 +901,7 @@ async function serializeNoteForSupabase(
       id: note.id,
       user_id: userId,
       type: note.type,
-      content: note.type === 'text' ? note.content : '',
+      content: note.type === 'text' ? note.content : note.caption ?? '',
       photo_path: photoPath,
       is_live_photo: Boolean(note.isLivePhoto && pairedVideoPath),
       paired_video_path: pairedVideoPath,
@@ -1012,6 +1012,7 @@ async function deserializeRemoteNote(
     id: record.id,
     type: record.type,
     content: record.type === 'photo' ? photoLocalUri ?? '' : record.content ?? '',
+    caption: record.type === 'photo' ? record.content ?? null : null,
     photoLocalUri,
     photoSyncedLocalUri: photoLocalUri,
     photoRemoteBase64: null,
@@ -1447,6 +1448,7 @@ async function upsertRemoteNote(
     await upsertNoteForScope({
       ...note,
       content: note.type === 'photo' ? normalizeMediaUri(note.photoLocalUri ?? note.content) ?? '' : note.content,
+      caption: note.type === 'photo' ? note.caption ?? null : null,
       photoSyncedLocalUri:
         note.type === 'photo' ? normalizeMediaUri(note.photoLocalUri ?? note.content) : null,
       pairedVideoSyncedLocalUri:
