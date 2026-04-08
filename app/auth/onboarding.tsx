@@ -121,7 +121,9 @@ export default function OnboardingScreen() {
         if (!options?.keepLoadingState) {
             setIsCompleting(true);
         }
+        let didComplete = false;
         await completeOnboardingAndEnterApp((route) => {
+            didComplete = true;
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     router.replace(route);
@@ -130,7 +132,9 @@ export default function OnboardingScreen() {
         }).catch((error) => {
             console.warn('Failed to persist onboarding state:', error);
         }).finally(() => {
-            setIsCompleting(false);
+            if (!options?.keepLoadingState || !didComplete) {
+                setIsCompleting(false);
+            }
         });
     };
 

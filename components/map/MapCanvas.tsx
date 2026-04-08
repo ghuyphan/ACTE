@@ -705,6 +705,8 @@ function MapCanvas({
           selectedGroup!.notes.length === 1 &&
           Boolean(selectedNote) &&
           node.groupId === selectedGroup!.id;
+        const markerKey = showSelectedCallout ? `${key}-selected-${selectedNote!.id}` : key;
+        const markerZIndex = showSelectedCallout ? 30 : isSelected ? 20 : node.isCluster ? 5 : 10;
 
         return (
           preferLiteMarkers && !node.isCluster ? (
@@ -724,12 +726,17 @@ function MapCanvas({
             />
           ) : (
             <Marker
-              key={key}
+              key={markerKey}
               testID={testID}
               coordinate={coordinate}
               anchor={showSelectedCallout ? selectedCalloutAnchor : { x: 0.5, y: 0.5 }}
+              zIndex={markerZIndex}
               tracksViewChanges={
-                isSelected || pulseActive || reduceMotionEnabled || (isAndroid && androidShouldTrackMarkerViews)
+                showSelectedCallout ||
+                isSelected ||
+                pulseActive ||
+                reduceMotionEnabled ||
+                (isAndroid && androidShouldTrackMarkerViews)
               }
               onPress={(event) => {
                 event.stopPropagation?.();

@@ -86,6 +86,7 @@ function MapSelectedNoteCallout({
             {
               borderColor: colors.primary,
               backgroundColor: colors.card,
+              shadowColor: colors.border,
             },
           ]}
         >
@@ -109,7 +110,8 @@ function MapSelectedNoteCallout({
           styles.card,
           {
             backgroundColor: colors.card,
-            shadowColor: 'rgba(43,38,33,0.14)',
+            borderColor: colors.border,
+            shadowColor: colors.border,
           },
         ]}
       >
@@ -169,6 +171,7 @@ const styles = StyleSheet.create({
     width: 168,
     minHeight: 68,
     borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
     paddingVertical: 10,
     justifyContent: 'center',

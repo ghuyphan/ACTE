@@ -807,6 +807,19 @@ private func colorFromHex(_ value: String) -> Color {
     }
 }
 
+private func normalizeWidgetImageOrientation(_ image: UIImage) -> UIImage {
+    guard image.imageOrientation != .up else {
+        return image
+    }
+
+    let format = UIGraphicsImageRendererFormat.default()
+    format.scale = image.scale
+    let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
+    return renderer.image { _ in
+        image.draw(in: CGRect(origin: .zero, size: image.size))
+    }
+}
+
 private func loadWidgetImageFromPath(_ path: String) -> UIImage? {
     let normalizedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedPath.isEmpty else {
@@ -814,10 +827,17 @@ private func loadWidgetImageFromPath(_ path: String) -> UIImage? {
     }
 
     if normalizedPath.hasPrefix("file://"), let url = URL(string: normalizedPath) {
-        return UIImage(contentsOfFile: url.path)
+        if let image = UIImage(contentsOfFile: url.path) {
+            return normalizeWidgetImageOrientation(image)
+        }
+        return nil
     }
 
-    return UIImage(contentsOfFile: normalizedPath)
+    if let image = UIImage(contentsOfFile: normalizedPath) {
+        return normalizeWidgetImageOrientation(image)
+    }
+
+    return nil
 }
 
 private struct LocketWidgetEntry: TimelineEntry {
@@ -1366,8 +1386,7 @@ private struct LocketWidgetEntryView: View {
 
     private var smallLayout: some View {
         framedMemoryCard(
-            widgetPadding: 6,
-            shellPadding: 4,
+            widgetPadding: 4,
             contentPadding: 12,
             showPhotoCaption: false,
             isExpanded: false
@@ -1376,8 +1395,7 @@ private struct LocketWidgetEntryView: View {
 
     private var mediumLayout: some View {
         framedMemoryCard(
-            widgetPadding: 8,
-            shellPadding: 5,
+            widgetPadding: 5,
             contentPadding: 18,
             showPhotoCaption: true,
             isExpanded: true
@@ -1386,8 +1404,7 @@ private struct LocketWidgetEntryView: View {
 
     private var largeLayout: some View {
         framedMemoryCard(
-            widgetPadding: 10,
-            shellPadding: 6,
+            widgetPadding: 6,
             contentPadding: 22,
             showPhotoCaption: true,
             isExpanded: true
@@ -1533,19 +1550,15 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var outerSurfaceColor: some View {
-        Color(red: 0.97, green: 0.95, blue: 0.92)
-    }
-
-    private var cardShellColor: Color {
-        Color(red: 0.99, green: 0.98, blue: 0.96)
-    }
-
-    private var cardShellStrokeColor: Color {
-        Color(red: 0.92, green: 0.88, blue: 0.84)
+        Color(red: 0.99, green: 0.97, blue: 0.93)
     }
 
     private var paperSurfaceColor: Color {
         Color(red: 0.99, green: 0.97, blue: 0.93)
+    }
+
+    private var cardBorderColor: Color {
+        Color(red: 0.86, green: 0.79, blue: 0.65)
     }
 
     private var textTintOverlayColor: Color {
@@ -1584,16 +1597,18 @@ private struct LocketWidgetEntryView: View {
         !compactPhotoCaptionText.isEmpty
     }
 
+    private var shouldShowTopLocationChip: Bool {
+        !payload.isIdleState && !shouldShowAuthorChip && !compactLocationName.isEmpty
+    }
+
     private var shouldShowBottomMetaChip: Bool {
-        !payload.isIdleState && (shouldShowAuthorChip || !compactLocationName.isEmpty)
+        !payload.isIdleState && shouldShowAuthorChip
     }
 
     @ViewBuilder
     private var bottomMetaChip: some View {
         if shouldShowAuthorChip {
             authorChip
-        } else if !compactLocationName.isEmpty {
-            floatingLocationChip
         }
     }
 
@@ -1671,6 +1686,7 @@ private struct LocketWidgetEntryView: View {
                 .resizable()
                 .scaledToFill()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .scaleEffect(1.01)
                 .clipped()
                 .overlay(
                     LinearGradient(
@@ -1691,45 +1707,41 @@ private struct LocketWidgetEntryView: View {
 
     private func framedMemoryCard(
         widgetPadding: CGFloat,
-        shellPadding: CGFloat,
         contentPadding: CGFloat,
         showPhotoCaption: Bool,
         isExpanded: Bool
     ) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: isExpanded ? 30 : 26, style: .continuous)
-                .fill(cardShellColor)
-                .overlay(
-                    RoundedRectangle(cornerRadius: isExpanded ? 30 : 26, style: .continuous)
-                        .stroke(cardShellStrokeColor.opacity(0.78), lineWidth: 0.9)
+        let cornerRadius = isExpanded ? 26 : 22
+        let borderWidth = isExpanded ? 1.5 : 1.25
+        let cardShape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        ZStack(alignment: .bottomLeading) {
+            cardInnerBackground
+
+            if shouldShowStickerOverlay {
+                LocketWidgetStickerOverlay(
+                    placements: stickerPlacements,
+                    overlayOpacity: noteOverlayOpacity,
+                    artboardInset: isExpanded ? 16 : 10,
+                    minimumBaseSize: isExpanded ? 64 : 48,
+                    baseSizeRatio: isExpanded ? 0.26 : 0.22
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
 
-            ZStack(alignment: .bottomLeading) {
-                cardInnerBackground
+            if shouldShowDoodleOverlay {
+                LocketWidgetDoodleOverlay(
+                    strokes: doodleStrokes,
+                    isLarge: isExpanded,
+                    overlayOpacity: noteOverlayOpacity,
+                    contentInset: isExpanded ? 16 : 8
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
+            }
 
-                if shouldShowStickerOverlay {
-                    LocketWidgetStickerOverlay(
-                        placements: stickerPlacements,
-                        overlayOpacity: noteOverlayOpacity,
-                        artboardInset: isExpanded ? 16 : 10,
-                        minimumBaseSize: isExpanded ? 64 : 48,
-                        baseSizeRatio: isExpanded ? 0.26 : 0.22
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-
-                if shouldShowDoodleOverlay {
-                    LocketWidgetDoodleOverlay(
-                        strokes: doodleStrokes,
-                        isLarge: isExpanded,
-                        overlayOpacity: noteOverlayOpacity,
-                        contentInset: isExpanded ? 16 : 8
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .allowsHitTesting(false)
-                }
-
-                VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                ZStack(alignment: .top) {
                     HStack(alignment: .top) {
                         Spacer(minLength: 0)
 
@@ -1740,49 +1752,51 @@ private struct LocketWidgetEntryView: View {
                         }
                     }
 
-                    Spacer(minLength: 0)
-
-                    if !hasPhotoBackground {
-                        framedTextContent
-                    }
-
-                    Spacer(minLength: hasPhotoBackground ? 0 : 10)
-
-                    HStack(alignment: .bottom) {
-                        if shouldShowBottomMetaChip {
-                            bottomMetaChip
-                        }
-
-                        Spacer(minLength: 0)
+                    if shouldShowTopLocationChip {
+                        floatingLocationChip
                     }
                 }
-                .padding(contentPadding)
 
-                if showPhotoCaption && shouldShowPhotoCaptionChip {
-                    VStack {
-                        Spacer(minLength: 0)
-                        HStack {
-                            Spacer(minLength: 0)
-                            photoCaptionChip
-                            Spacer(minLength: 0)
-                        }
+                Spacer(minLength: 0)
+
+                if !hasPhotoBackground {
+                    framedTextContent
+                }
+
+                Spacer(minLength: hasPhotoBackground ? 0 : 10)
+
+                HStack(alignment: .bottom) {
+                    if shouldShowBottomMetaChip {
+                        bottomMetaChip
                     }
-                    .padding(.horizontal, contentPadding)
-                    .padding(.bottom, contentPadding + (shouldShowBottomMetaChip ? 38 : 0))
+
+                    Spacer(minLength: 0)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: isExpanded ? 26 : 22, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: isExpanded ? 26 : 22, style: .continuous)
-                    .stroke(
-                        hasPhotoBackground
-                            ? Color.white.opacity(0.18)
-                            : cardShellStrokeColor.opacity(0.34),
-                        lineWidth: 0.8
-                    )
-            )
-            .padding(shellPadding)
+            .padding(contentPadding)
+
+            if showPhotoCaption && shouldShowPhotoCaptionChip {
+                let photoCaptionBottomPadding = shouldShowBottomMetaChip
+                    ? contentPadding + 30
+                    : max(8, contentPadding - 8)
+
+                VStack {
+                    Spacer(minLength: 0)
+                    HStack {
+                        Spacer(minLength: 0)
+                        photoCaptionChip
+                        Spacer(minLength: 0)
+                    }
+                }
+                .padding(.horizontal, contentPadding)
+                .padding(.bottom, photoCaptionBottomPadding)
+            }
         }
+        .clipShape(cardShape)
+        .overlay(
+            cardShape
+                .strokeBorder(cardBorderColor, lineWidth: borderWidth)
+        )
         .padding(widgetPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -1794,17 +1808,29 @@ private struct LocketWidgetEntryView: View {
         }
 
         if normalizedPath.hasPrefix("file://"), let url = URL(string: normalizedPath) {
-            return UIImage(contentsOfFile: url.path)
+            if let image = UIImage(contentsOfFile: url.path) {
+                return normalizeWidgetImageOrientation(image)
+            }
+            return nil
         }
 
-        return UIImage(contentsOfFile: normalizedPath)
+        if let image = UIImage(contentsOfFile: normalizedPath) {
+            return normalizeWidgetImageOrientation(image)
+        }
+
+        return nil
     }
 
     private func loadImage(fromBase64 base64: String) -> UIImage? {
         guard let data = Data(base64Encoded: base64, options: .ignoreUnknownCharacters) else {
             return nil
         }
-        return UIImage(data: data)
+
+        if let image = UIImage(data: data) {
+            return normalizeWidgetImageOrientation(image)
+        }
+
+        return nil
     }
 }
 

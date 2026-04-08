@@ -25,9 +25,11 @@ import android.util.Base64
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
+import androidx.exifinterface.media.ExifInterface
 import com.acte.app.R
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -89,12 +91,8 @@ private fun getWidgetOuterPaddingDp(isMedium: Boolean): Float {
   return if (isMedium) 8f else 6f
 }
 
-private fun getWidgetCardShellPaddingDp(isMedium: Boolean): Float {
-  return if (isMedium) 5f else 4f
-}
-
 private fun getWidgetInnerCornerRadiusDp(isMedium: Boolean): Float {
-  return if (isMedium) 26f else 22f
+  return 26f
 }
 
 private fun applyAlphaToColor(color: Int, alphaFraction: Float): Int {
@@ -745,7 +743,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
         if (!normalizedPath.isNullOrBlank()) {
           val bitmap = BitmapFactory.decodeFile(normalizedPath)
           if (bitmap != null) {
-            return createRoundedBitmap(bitmap, targetWidthPx, targetHeightPx, cornerRadiusPx)
+            val normalizedBitmap = normalizeBitmapOrientation(bitmap, readExifOrientationFromPath(normalizedPath))
+            return createRoundedBitmap(normalizedBitmap, targetWidthPx, targetHeightPx, cornerRadiusPx)
           }
         }
       }
@@ -753,13 +752,62 @@ class NotoWidgetProvider : AppWidgetProvider() {
       snapshot.backgroundImageBase64?.let { base64 ->
         return runCatching {
           val bytes = Base64.decode(base64, Base64.DEFAULT)
+          val orientation = readExifOrientationFromBytes(bytes)
           BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { bitmap ->
-            createRoundedBitmap(bitmap, targetWidthPx, targetHeightPx, cornerRadiusPx)
+            val normalizedBitmap = normalizeBitmapOrientation(bitmap, orientation)
+            createRoundedBitmap(normalizedBitmap, targetWidthPx, targetHeightPx, cornerRadiusPx)
           }
         }.getOrNull()
       }
 
       return null
+    }
+
+    private fun readExifOrientationFromPath(path: String): Int {
+      return runCatching {
+        ExifInterface(path).getAttributeInt(
+          ExifInterface.TAG_ORIENTATION,
+          ExifInterface.ORIENTATION_NORMAL
+        )
+      }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+    }
+
+    private fun readExifOrientationFromBytes(bytes: ByteArray): Int {
+      return runCatching {
+        ByteArrayInputStream(bytes).use { inputStream ->
+          ExifInterface(inputStream).getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL
+          )
+        }
+      }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+    }
+
+    private fun normalizeBitmapOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
+      val matrix = android.graphics.Matrix()
+
+      when (orientation) {
+        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+        ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+        ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+        ExifInterface.ORIENTATION_TRANSPOSE -> {
+          matrix.postRotate(90f)
+          matrix.postScale(-1f, 1f)
+        }
+        ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+        ExifInterface.ORIENTATION_TRANSVERSE -> {
+          matrix.postRotate(270f)
+          matrix.postScale(-1f, 1f)
+        }
+        ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+        else -> return bitmap
+      }
+
+      return runCatching {
+        Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+      }.getOrElse {
+        bitmap
+      }
     }
 
     private fun createRoundedBitmap(
@@ -771,9 +819,13 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val output = Bitmap.createBitmap(targetWidthPx, targetHeightPx, Bitmap.Config.ARGB_8888)
       val canvas = Canvas(output)
       val shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+      // Slightly overfill the rounded mask to avoid light seams at antialiased corners.
+      val bleedPx = max(1f, cornerRadiusPx * 0.035f)
+      val expandedWidth = targetWidthPx + (bleedPx * 2f)
+      val expandedHeight = targetHeightPx + (bleedPx * 2f)
       val scale = max(
-        targetWidthPx / bitmap.width.toFloat(),
-        targetHeightPx / bitmap.height.toFloat()
+        expandedWidth / bitmap.width.toFloat(),
+        expandedHeight / bitmap.height.toFloat()
       )
       val scaledWidth = bitmap.width * scale
       val scaledHeight = bitmap.height * scale
@@ -788,8 +840,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
         isFilterBitmap = true
         this.shader = shader
       }
-      val rect = RectF(0f, 0f, targetWidthPx.toFloat(), targetHeightPx.toFloat())
-      canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, paint)
+      val rect = RectF(-bleedPx, -bleedPx, targetWidthPx.toFloat() + bleedPx, targetHeightPx.toFloat() + bleedPx)
+      canvas.drawRoundRect(rect, cornerRadiusPx + bleedPx, cornerRadiusPx + bleedPx, paint)
       return output
     }
 
@@ -1123,7 +1175,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val minHeightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, if (isMedium) 140 else 160)
       val requestedWidthDp = exactSizeDp?.width ?: max(minWidthDp.toFloat(), if (isMedium) 250f else 160f)
       val requestedHeightDp = exactSizeDp?.height ?: max(minHeightDp.toFloat(), if (isMedium) 140f else 160f)
-      val totalInsetDp = (getWidgetOuterPaddingDp(isMedium) + getWidgetCardShellPaddingDp(isMedium)) * 2f
+      val totalInsetDp = getWidgetOuterPaddingDp(isMedium) * 2f
       val requestedWidthPx = context.dpToPx(max(1f, requestedWidthDp - totalInsetDp))
       val requestedHeightPx = context.dpToPx(max(1f, requestedHeightDp - totalInsetDp))
 

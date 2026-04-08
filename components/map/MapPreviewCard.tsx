@@ -612,10 +612,52 @@ export default function MapPreviewCard({
                                   end={{ x: 1, y: 1 }}
                                   style={styles.textThumb}
                                 >
-                                  <View style={styles.textThumbPaper}>
-                                    <View style={[styles.textThumbLine, styles.textThumbLineLong]} />
-                                    <View style={[styles.textThumbLine, styles.textThumbLineMedium]} />
-                                    <View style={[styles.textThumbLine, styles.textThumbLineShort]} />
+                                  <View
+                                    style={[
+                                      styles.textThumbPaper,
+                                      {
+                                        backgroundColor: isDark
+                                          ? 'rgba(28,28,30,0.76)'
+                                          : 'rgba(255,255,255,0.78)',
+                                        borderColor: isDark
+                                          ? 'rgba(255,255,255,0.12)'
+                                          : 'rgba(255,255,255,0.44)',
+                                      },
+                                    ]}
+                                  >
+                                    <View
+                                      style={[
+                                        styles.textThumbLine,
+                                        styles.textThumbLineLong,
+                                        {
+                                          backgroundColor: isDark
+                                            ? 'rgba(255,247,232,0.22)'
+                                            : 'rgba(92,74,58,0.22)',
+                                        },
+                                      ]}
+                                    />
+                                    <View
+                                      style={[
+                                        styles.textThumbLine,
+                                        styles.textThumbLineMedium,
+                                        {
+                                          backgroundColor: isDark
+                                            ? 'rgba(255,247,232,0.22)'
+                                            : 'rgba(92,74,58,0.22)',
+                                        },
+                                      ]}
+                                    />
+                                    <View
+                                      style={[
+                                        styles.textThumbLine,
+                                        styles.textThumbLineShort,
+                                        {
+                                          backgroundColor: isDark
+                                            ? 'rgba(255,247,232,0.22)'
+                                            : 'rgba(92,74,58,0.22)',
+                                        },
+                                      ]}
+                                    />
                                   </View>
                                 </LinearGradient>
                               )}
@@ -881,9 +923,7 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 11,
     borderCurve: 'continuous',
-    backgroundColor: 'rgba(255,252,246,0.82)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.38)',
     paddingHorizontal: 8,
     paddingVertical: 9,
     justifyContent: 'space-between',
@@ -891,7 +931,6 @@ const styles = StyleSheet.create({
   textThumbLine: {
     height: 3,
     borderRadius: 999,
-    backgroundColor: 'rgba(92,74,58,0.34)',
   },
   textThumbLineLong: {
     width: '100%',

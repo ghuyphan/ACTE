@@ -6,8 +6,8 @@ import type { ThemeColors } from '../../../hooks/useTheme';
 import { CaptureAnimatedPressable } from './CaptureAnimatedPressable';
 import { FilteredPhotoCanvas } from './FilteredPhotoCanvas';
 
-const PHOTO_FILTER_BUTTON_SIZE = 38;
-const PHOTO_FILTER_PREVIEW_SIZE = 34;
+const PHOTO_FILTER_BUTTON_SIZE = 34;
+const PHOTO_FILTER_PREVIEW_SIZE = 30;
 
 export type PhotoFilterCarouselProps = {
   embedded?: boolean;
@@ -29,8 +29,8 @@ const PhotoFilterSwatch = memo(function PhotoFilterSwatch({
     <FilteredPhotoCanvas
       sourceUri={sourceUri}
       filterId={filterId}
-      width={34}
-      height={34}
+      width={PHOTO_FILTER_PREVIEW_SIZE}
+      height={PHOTO_FILTER_PREVIEW_SIZE}
       style={styles.photoFilterPreviewCanvas}
     />
   );
@@ -103,8 +103,8 @@ export const PhotoFilterCarousel = memo(function PhotoFilterCarousel({
 const styles = StyleSheet.create({
   photoFilterTray: {
     maxWidth: '100%',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 999,
     overflow: 'hidden',
@@ -115,10 +115,10 @@ const styles = StyleSheet.create({
   photoFilterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   photoFilterEmbeddedScroll: {
-    maxWidth: 182,
+    maxWidth: 166,
   },
   photoFilterButton: {
     width: PHOTO_FILTER_BUTTON_SIZE,

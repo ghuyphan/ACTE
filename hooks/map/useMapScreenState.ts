@@ -47,6 +47,7 @@ export function useMapScreenState({
   const lastMarkerTapAtRef = useRef(0);
   const ignoreNextMapPressUntilRef = useRef(0);
   const visibleRegionRef = useRef<Region | null>(null);
+  const selectedNoteIntentIdRef = useRef<string | null>(null);
 
   const initialRegion = useMemo(() => getInitialMapRegion(location, notes), [location, notes]);
 
@@ -106,22 +107,49 @@ export function useMapScreenState({
 
   useEffect(() => {
     if (!selectedGroupId) {
+      selectedNoteIntentIdRef.current = null;
+      return;
+    }
+
+    const intendedNoteId = selectedNoteIntentIdRef.current;
+    if (!selectedGroup || !intendedNoteId) {
+      return;
+    }
+
+    const nextIndex = selectedGroup.notes.findIndex((note) => note.id === intendedNoteId);
+    if (nextIndex === -1) {
+      selectedNoteIntentIdRef.current = null;
+      setSelectedGroupId(null);
+      setSelectedNoteIndex(0);
+      return;
+    }
+
+    if (nextIndex !== selectedNoteIndex) {
+      setSelectedNoteIndex(nextIndex);
+    }
+  }, [selectedGroup, selectedGroupId, selectedNoteIndex]);
+
+  useEffect(() => {
+    if (!selectedGroupId) {
       return;
     }
 
     if (!pointGroupMap.has(selectedGroupId)) {
+      selectedNoteIntentIdRef.current = null;
       setSelectedGroupId(null);
       setSelectedNoteIndex(0);
     }
   }, [pointGroupMap, selectedGroupId]);
 
   const setFilterType = useCallback((nextType: MapFilterType) => {
+    selectedNoteIntentIdRef.current = null;
     setFilterState((current) => ({ ...current, type: nextType }));
     setSelectedGroupId(null);
     setSelectedNoteIndex(0);
   }, []);
 
   const toggleFavoritesOnly = useCallback(() => {
+    selectedNoteIntentIdRef.current = null;
     setFilterState((current) => ({ ...current, favoritesOnly: !current.favoritesOnly }));
     setSelectedGroupId(null);
     setSelectedNoteIndex(0);
@@ -150,16 +178,19 @@ export function useMapScreenState({
 
   const handleLeafMarkerPress = useCallback((groupId: string) => {
     const now = Date.now();
+    const group = pointGroupMap.get(groupId) ?? null;
     lastMarkerTapAtRef.current = now;
     ignoreNextMapPressUntilRef.current = now + 320;
+    selectedNoteIntentIdRef.current = group?.notes[0]?.id ?? null;
     setSelectedGroupId(groupId);
     setSelectedNoteIndex(0);
-  }, []);
+  }, [pointGroupMap]);
 
   const handleClusterMarkerPress = useCallback(() => {
     const now = Date.now();
     lastMarkerTapAtRef.current = now;
     ignoreNextMapPressUntilRef.current = now + 320;
+    selectedNoteIntentIdRef.current = null;
     setSelectedGroupId(null);
     setSelectedNoteIndex(0);
   }, []);
@@ -175,11 +206,13 @@ export function useMapScreenState({
     if (now - lastMarkerTapAtRef.current < 250) {
       return;
     }
+    selectedNoteIntentIdRef.current = null;
     setSelectedGroupId(null);
     setSelectedNoteIndex(0);
   }, []);
 
   const clearSelection = useCallback(() => {
+    selectedNoteIntentIdRef.current = null;
     setSelectedGroupId(null);
     setSelectedNoteIndex(0);
   }, []);
@@ -188,14 +221,22 @@ export function useMapScreenState({
     if (!selectedGroup) {
       return;
     }
-    setSelectedNoteIndex((current) => (current - 1 + selectedGroup.notes.length) % selectedGroup.notes.length);
+    setSelectedNoteIndex((current) => {
+      const nextIndex = (current - 1 + selectedGroup.notes.length) % selectedGroup.notes.length;
+      selectedNoteIntentIdRef.current = selectedGroup.notes[nextIndex]?.id ?? null;
+      return nextIndex;
+    });
   }, [selectedGroup]);
 
   const openNextInGroup = useCallback(() => {
     if (!selectedGroup) {
       return;
     }
-    setSelectedNoteIndex((current) => (current + 1) % selectedGroup.notes.length);
+    setSelectedNoteIndex((current) => {
+      const nextIndex = (current + 1) % selectedGroup.notes.length;
+      selectedNoteIntentIdRef.current = selectedGroup.notes[nextIndex]?.id ?? null;
+      return nextIndex;
+    });
   }, [selectedGroup]);
 
   const selectNoteById = useCallback(
@@ -207,6 +248,7 @@ export function useMapScreenState({
 
       const index = group.notes.findIndex((note) => note.id === noteId);
       lastMarkerTapAtRef.current = Date.now();
+      selectedNoteIntentIdRef.current = noteId;
       setSelectedGroupId(group.id);
       setSelectedNoteIndex(index === -1 ? 0 : index);
     },

@@ -762,7 +762,7 @@ function createPersonalWidgetCandidate(note: Note): WidgetCandidate {
         candidateKey: `personal:${note.id}`,
         source: 'personal',
         noteType: note.type,
-        text: note.content,
+        text: note.type === 'photo' ? (note.caption ?? '') : note.content,
         photoPath: null,
         photoLocalUri: getNotePhotoUri(note),
         isLivePhoto: Boolean(note.type === 'photo' && note.isLivePhoto),
@@ -1522,7 +1522,7 @@ async function buildWidgetPropsFromSelection(
         text:
             selectedNote.noteType === 'text'
                 ? formatNoteTextWithEmoji(selectedNote.text.trim(), selectedNote.moodEmoji)
-                : '',
+                : selectedNote.text.trim(),
         locationName: selection.selectedLocationName ?? selectedNote.locationName ?? i18n.t('capture.unknownPlace'),
         date: dateStr,
         noteCount,

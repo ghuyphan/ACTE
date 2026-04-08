@@ -295,11 +295,18 @@ export default function LoginScreen() {
 
   const handleAuthSuccess = async () => {
     resetMessages();
-    await completeOnboardingAndEnterApp((route) => {
-      router.replace(route as Href);
-    }).catch((error) => {
+    try {
+      await completeOnboardingAndEnterApp((route) => {
+        router.replace(route as Href);
+      });
+      return true;
+    } catch (error) {
       console.warn('Failed to persist onboarding state after auth:', error);
-    });
+      setAuthMessage(
+        t('auth.continueFailed', 'We could not finish setup right now. Please try again.')
+      );
+      return false;
+    }
   };
 
   const handleGoogleSignIn = async () => {
@@ -313,12 +320,16 @@ export default function LoginScreen() {
     resetMessages();
     setActiveAction('google');
     const result = await signInWithGoogle();
-    setActiveAction(null);
 
     if (result.status === 'success') {
-      await handleAuthSuccess();
+      const completed = await handleAuthSuccess();
+      if (!completed) {
+        setActiveAction(null);
+      }
       return;
     }
+
+    setActiveAction(null);
 
     if (result.status === 'cancelled') {
       return;
@@ -349,12 +360,16 @@ export default function LoginScreen() {
     resetMessages();
     setActiveAction('signIn');
     const result = await signInWithEmail(trimmedEmail, password);
-    setActiveAction(null);
 
     if (result.status === 'success') {
-      await handleAuthSuccess();
+      const completed = await handleAuthSuccess();
+      if (!completed) {
+        setActiveAction(null);
+      }
       return;
     }
+
+    setActiveAction(null);
 
     setAuthMessage(
       result.message ?? t('auth.signInFailed', 'Unable to sign in right now. Please try again later.')
@@ -416,12 +431,16 @@ export default function LoginScreen() {
       displayName: trimmedName || undefined,
     };
     const result = await registerWithEmail(input);
-    setActiveAction(null);
 
     if (result.status === 'success') {
-      await handleAuthSuccess();
+      const completed = await handleAuthSuccess();
+      if (!completed) {
+        setActiveAction(null);
+      }
       return;
     }
+
+    setActiveAction(null);
 
     setAuthMessage(
       result.message ?? t('auth.signUpFailed', 'Unable to create your account right now. Please try again later.')

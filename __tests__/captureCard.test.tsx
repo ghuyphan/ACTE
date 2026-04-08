@@ -697,6 +697,23 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
+  it('shows the camera zoom badge when the active preview is zoomed', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByText } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      isCameraPreviewActive: true,
+      cameraDevice: {
+        id: 'zoomed-camera',
+        position: 'back',
+        neutralZoom: 2,
+        maxZoom: 4,
+        supportsFocus: true,
+      } as any,
+    });
+
+    expect(getByText('2.0x')).toBeTruthy();
+  });
+
   it('uses a shutter long press for live photo capture without firing the normal photo tap', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const onTakePicture = jest.fn();

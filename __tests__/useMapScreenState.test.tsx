@@ -98,6 +98,47 @@ describe('useMapScreenState', () => {
     });
   });
 
+  it('clears selection instead of jumping to another note when the selected note is deleted', async () => {
+    const initialNotes = [
+      makeNote({ id: 'same-1', latitude: 10.76, longitude: 106.66, createdAt: '2026-03-12T00:00:00.000Z' }),
+      makeNote({ id: 'same-2', latitude: 10.76, longitude: 106.66, createdAt: '2026-03-11T00:00:00.000Z' }),
+    ];
+
+    const { result, rerender } = renderHook<
+      ReturnType<typeof useMapScreenState>,
+      { notes: Note[] }
+    >(
+      ({ notes }) =>
+        useMapScreenState({
+          notes,
+          location: null,
+        }),
+      {
+        initialProps: {
+          notes: initialNotes,
+        },
+      }
+    );
+
+    act(() => {
+      result.current.selectNoteById('same-2');
+    });
+
+    expect(result.current.selectedNote?.id).toBe('same-2');
+
+    rerender({
+      notes: [
+        makeNote({ id: 'same-1', latitude: 10.76, longitude: 106.66, createdAt: '2026-03-12T00:00:00.000Z' }),
+      ],
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedNote).toBeNull();
+      expect(result.current.selectedGroup).toBeNull();
+      expect(result.current.selectedGroupId).toBeNull();
+    });
+  });
+
   it('uses the map center instead of device location when the viewport changes', async () => {
     const notes = [
       makeNote({ id: 'near-location', latitude: 10.7601, longitude: 106.6601 }),

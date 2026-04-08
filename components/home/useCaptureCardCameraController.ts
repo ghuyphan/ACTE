@@ -53,6 +53,7 @@ interface UseCaptureCardCameraControllerOptions {
   t: TFunction;
   cardSize: number;
   livePhotoRingStrokeWidth: number;
+  onCameraGestureActiveChange?: (active: boolean) => void;
   onToggleFacing: () => void;
   onTakePicture: () => void;
   onShutterPressOut: () => void;
@@ -77,6 +78,7 @@ export function useCaptureCardCameraController({
   t,
   cardSize,
   livePhotoRingStrokeWidth,
+  onCameraGestureActiveChange,
   onToggleFacing,
   onTakePicture,
   onShutterPressOut,
@@ -99,6 +101,7 @@ export function useCaptureCardCameraController({
   const cameraZoomRef = useRef(0);
   const cameraPanZoomStartRef = useRef(0);
   const cameraPinchZoomStartRef = useRef(0);
+  const cameraGestureLockCountRef = useRef(0);
   const cameraZoomBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraFocusRingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraHintVisibility = useSharedValue(Boolean(cameraInstructionText) && !capturedPhoto ? 1 : 0);
@@ -167,6 +170,26 @@ export function useCaptureCardCameraController({
       cameraFocusRingTimeoutRef.current = null;
     }
   }, []);
+
+  const beginCameraGestureLock = useCallback(() => {
+    cameraGestureLockCountRef.current += 1;
+    if (cameraGestureLockCountRef.current === 1) {
+      onCameraGestureActiveChange?.(true);
+    }
+  }, [onCameraGestureActiveChange]);
+
+  const endCameraGestureLock = useCallback(() => {
+    if (cameraGestureLockCountRef.current <= 0) {
+      cameraGestureLockCountRef.current = 0;
+      onCameraGestureActiveChange?.(false);
+      return;
+    }
+
+    cameraGestureLockCountRef.current -= 1;
+    if (cameraGestureLockCountRef.current === 0) {
+      onCameraGestureActiveChange?.(false);
+    }
+  }, [onCameraGestureActiveChange]);
 
   const scheduleHideCameraZoomBadge = useCallback(() => {
     clearCameraZoomBadgeTimeout();
@@ -365,11 +388,22 @@ export function useCaptureCardCameraController({
 
   useEffect(
     () => () => {
+      cameraGestureLockCountRef.current = 0;
+      onCameraGestureActiveChange?.(false);
       clearCameraZoomBadgeTimeout();
       clearCameraFocusRingTimeout();
     },
-    [clearCameraFocusRingTimeout, clearCameraZoomBadgeTimeout]
+    [clearCameraFocusRingTimeout, clearCameraZoomBadgeTimeout, onCameraGestureActiveChange]
   );
+
+  useEffect(() => {
+    if (canShowLiveCameraPreview) {
+      return;
+    }
+
+    cameraGestureLockCountRef.current = 0;
+    onCameraGestureActiveChange?.(false);
+  }, [canShowLiveCameraPreview, onCameraGestureActiveChange]);
 
   useEffect(() => {
     if (!canShowLiveCameraPreview || isCameraReady || cameraUnavailable) {
@@ -577,12 +611,18 @@ export function useCaptureCardCameraController({
         .enabled(cameraFocusGesturesEnabled)
         .runOnJS(true)
         .maxDuration(250)
+        .onBegin(() => {
+          beginCameraGestureLock();
+        })
         .onEnd((event, success) => {
           if (success === false) {
             return;
           }
 
           void handleCameraFocusTap(event.x, event.y);
+        })
+        .onFinalize(() => {
+          endCameraGestureLock();
         });
 
       return Gesture.Simultaneous(
@@ -595,6 +635,7 @@ export function useCaptureCardCameraController({
           .failOffsetX([-48, 48])
           .shouldCancelWhenOutside(false)
           .onBegin(() => {
+            beginCameraGestureLock();
             cameraPanZoomStartRef.current = cameraZoomRef.current;
           })
           .onUpdate((event) => {
@@ -605,12 +646,16 @@ export function useCaptureCardCameraController({
           })
           .onEnd(() => {
             scheduleHideCameraZoomBadge();
+          })
+          .onFinalize(() => {
+            endCameraGestureLock();
           }),
         Gesture.Pinch()
           .enabled(cameraZoomGesturesEnabled)
           .runOnJS(true)
           .shouldCancelWhenOutside(false)
           .onBegin(() => {
+            beginCameraGestureLock();
             cameraPinchZoomStartRef.current = cameraZoomRef.current;
           })
           .onUpdate((event) => {
@@ -621,12 +666,17 @@ export function useCaptureCardCameraController({
           .onEnd(() => {
             scheduleHideCameraZoomBadge();
           })
+          .onFinalize(() => {
+            endCameraGestureLock();
+          })
       );
     },
     [
+      beginCameraGestureLock,
       cameraFocusGesturesEnabled,
       cameraZoomGesturesEnabled,
       cardSize,
+      endCameraGestureLock,
       handleCameraFocusTap,
       scheduleHideCameraZoomBadge,
       updateCameraZoom,

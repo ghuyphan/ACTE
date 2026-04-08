@@ -2,7 +2,7 @@ import { AppState, Platform } from 'react-native';
 import { Camera, type CameraPermissionStatus, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Easing, runOnJS, useSharedValue, withTiming } from 'react-native-reanimated';
+import { Easing, runOnJS, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
 import type { PhotoFilterId } from '../services/photoFilters';
 import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../services/livePhotoProcessing';
@@ -154,6 +154,20 @@ export function useCaptureFlow() {
   const clearLivePhotoTapSuppression = useCallback(() => {
     suppressNextPhotoTapRef.current = false;
   }, []);
+
+  const triggerShutterOverlay = useCallback(() => {
+    flashAnim.value = 0;
+    flashAnim.value = withSequence(
+      withTiming(0.72, {
+        duration: 44,
+        easing: Easing.out(Easing.quad),
+      }),
+      withTiming(0, {
+        duration: 150,
+        easing: Easing.out(Easing.cubic),
+      })
+    );
+  }, [flashAnim]);
 
   const resetLivePhotoCaptureRefs = useCallback(() => {
     clearLivePhotoStopTimeout();
@@ -387,6 +401,7 @@ export function useCaptureFlow() {
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    triggerShutterOverlay();
 
     const photo = await cameraRef.current.takePhoto({
       enableShutterSound: false,
@@ -399,7 +414,7 @@ export function useCaptureFlow() {
       setCapturedPairedVideo(null);
       setCapturedPhoto(normalizeCapturedFileUri(photo.path));
     }
-  }, [cameraRef, clearLivePhotoSaveGuard, shutterScale]);
+  }, [cameraRef, clearLivePhotoSaveGuard, shutterScale, triggerShutterOverlay]);
 
   const startLivePhotoCapture = useCallback(async () => {
     if (!cameraRef.current || isLivePhotoCaptureInProgress) {
@@ -454,6 +469,7 @@ export function useCaptureFlow() {
       });
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      triggerShutterOverlay();
       livePhotoPhotoPromiseRef.current = cameraRef.current
         .takePhoto({
           enableShutterSound: false,
@@ -496,6 +512,7 @@ export function useCaptureFlow() {
     finishLivePhotoCapture,
     isLivePhotoCaptureInProgress,
     resetLivePhotoCaptureRefs,
+    triggerShutterOverlay,
   ]);
 
   const requestPermission = useCallback(async () => {

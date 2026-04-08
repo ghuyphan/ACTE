@@ -214,7 +214,7 @@ async function waitForPreviewCloseAnimation() {
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
-    notes: mockNotes,
+    notes: mockNotes.map((note) => ({ ...note })),
   }),
 }));
 
@@ -983,6 +983,46 @@ describe('MapScreen', () => {
     expect(getByTestId('note-marker-text-1')).toBeTruthy();
   });
 
+  it('clears the selected map callout when the selected note disappears', async () => {
+    const { getByTestId, queryByTestId, rerender } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    });
+
+    replaceMockNotes([
+      {
+        id: 'replacement-note',
+        type: 'text',
+        content: 'Replacement note',
+        locationName: 'District 1',
+        latitude: 10.76,
+        longitude: 106.66,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-12T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ]);
+    rerender(<MapScreen />);
+
+    await waitFor(() => {
+      expect(queryByTestId('note-marker-text-1')).toBeNull();
+      expect(queryByTestId('note-marker-replacement-note')).toBeNull();
+    });
+  });
+
   it('keeps the pinned preview visible after opening the note and a follow-up map update', async () => {
     const { getByTestId } = render(<MapScreen />);
 
@@ -1118,7 +1158,7 @@ describe('MapScreen', () => {
     });
   });
 
-  it('separates same-place notes into individual pins at high zoom', async () => {
+  it('separates same-place notes into individual pins as cluster expansion zoom is reached', async () => {
     replaceMockNotes([
       {
         id: 'same-1',
@@ -1164,8 +1204,8 @@ describe('MapScreen', () => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
         latitude: 10.8,
         longitude: 106.7,
-        latitudeDelta: 0.001,
-        longitudeDelta: 0.001,
+        latitudeDelta: 0.002,
+        longitudeDelta: 0.002,
       });
     });
 

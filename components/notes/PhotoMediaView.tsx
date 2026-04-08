@@ -97,7 +97,8 @@ function StaticPhotoView({
         source={{ uri: imageUrl }}
         style={imageStyle}
         contentFit="cover"
-        transition={200}
+        transition={0}
+        cachePolicy="memory-disk"
       />
       {isLivePhoto && showLiveBadge ? <LivePhotoBadge badgeStyle={badgeStyle} /> : null}
     </View>
@@ -282,7 +283,8 @@ function VideoLivePhotoPreview({
           shouldShowVideo ? styles.previewHidden : styles.previewVisible,
         ]}
         contentFit="cover"
-        transition={200}
+        transition={0}
+        cachePolicy="memory-disk"
       />
       <Pressable
         accessibilityLabel={t('common.previewLivePhotoMotion', 'Preview live photo motion')}

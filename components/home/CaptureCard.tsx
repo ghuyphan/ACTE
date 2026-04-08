@@ -80,6 +80,7 @@ const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
 const TOP_CONTROL_INSET = 24;
 const TOP_CONTROL_HEIGHT = 38;
 const TOP_CONTROL_RADIUS = 19;
+const CARD_CHROME_SAFE_TOP = 30;
 const DECORATE_OPTION_ACTIVE_SCALE = 1;
 const DECORATE_OPTION_CONTENT_SCALE = 1;
 const SHUTTER_OUTER_SIZE = 74;
@@ -760,6 +761,7 @@ interface LiveCameraSurfaceProps {
   cameraKey: CaptureCardCameraControllerState['cameraKey'];
   cameraPermissionRequiresSettings: boolean;
   cameraPreviewZoom: CaptureCardCameraControllerState['cameraPreviewZoom'];
+  cameraZoomLabel: CaptureCardCameraControllerState['cameraZoomLabel'];
   cameraRef: CaptureCardProps['cameraRef'];
   cameraTransitionMaskAnimatedStyle: CaptureCardAnimatedStyle;
   cameraUnavailableDetail: CaptureCardCameraControllerState['cameraUnavailableDetail'];
@@ -779,6 +781,7 @@ interface LiveCameraSurfaceProps {
   needsCameraPermission: boolean;
   shouldRenderCameraPreview: CaptureCardCameraControllerState['shouldRenderCameraPreview'];
   showCameraUnavailableState: CaptureCardCameraControllerState['showCameraUnavailableState'];
+  showCameraZoomBadge: CaptureCardCameraControllerState['showCameraZoomBadge'];
   t: TFunction;
 }
 
@@ -789,6 +792,7 @@ function LiveCameraSurface({
   cameraKey,
   cameraPermissionRequiresSettings,
   cameraPreviewZoom,
+  cameraZoomLabel,
   cameraRef,
   cameraTransitionMaskAnimatedStyle,
   cameraUnavailableDetail,
@@ -808,8 +812,11 @@ function LiveCameraSurface({
   needsCameraPermission,
   shouldRenderCameraPreview,
   showCameraUnavailableState,
+  showCameraZoomBadge,
   t,
 }: LiveCameraSurfaceProps) {
+  const shouldShowZoomBadge = showCameraZoomBadge || cameraPreviewZoom > 1.01;
+
   return (
     <View
       style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}
@@ -817,7 +824,7 @@ function LiveCameraSurface({
     >
       {shouldRenderCameraPreview ? (
         <GestureDetector gesture={cameraZoomGesture}>
-          <View style={styles.cameraGestureLayer}>
+          <View style={styles.cameraGestureLayer} collapsable={false}>
             <Camera
               key={cameraKey}
               style={styles.cameraPreview}
@@ -838,6 +845,13 @@ function LiveCameraSurface({
                 handleCameraStartupFailure(error.message);
               }}
             />
+            {shouldShowZoomBadge ? (
+              <View pointerEvents="none" style={styles.cameraZoomBadge}>
+                <Text style={[styles.cameraZoomBadgeText, { color: colors.captureCameraOverlayText }]}>
+                  {cameraZoomLabel}
+                </Text>
+              </View>
+            ) : null}
             {cameraFocusPoint ? (
               <Reanimated.View
                 pointerEvents="none"
@@ -2011,11 +2025,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     onPressLockedNoteColor,
     onHaptic: triggerCaptureCardHaptic,
   });
+  const [canvasGestureActive, setCanvasGestureActive] = useState(false);
+  const [cameraGestureActive, setCameraGestureActive] = useState(false);
   const {
     cameraFocusPoint,
     cameraFocusRingAnimatedStyle,
     cameraKey,
     cameraPreviewZoom,
+    cameraZoomLabel,
     cameraTransitionMaskAnimatedStyle,
     cameraUnavailableDetail,
     cameraZoomGesture,
@@ -2034,6 +2051,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     shouldRenderCameraPreview,
     shouldShowCameraCard,
     showCameraUnavailableState,
+    showCameraZoomBadge,
     shutterCaptureHaloAnimatedStyle,
     shutterInnerAnimatedStyle,
     shutterOuterAnimatedStyle,
@@ -2058,6 +2076,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     t,
     cardSize: CARD_SIZE,
     livePhotoRingStrokeWidth: LIVE_PHOTO_RING_STROKE_WIDTH,
+    onCameraGestureActiveChange: setCameraGestureActive,
     onToggleFacing,
     onTakePicture,
     onShutterPressOut,
@@ -2081,7 +2100,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const androidTextEntryBottomInset =
     Platform.OS === 'android' && isCaptureTextEntryFocused ? 96 : 0;
   const captureKeyboardVerticalOffset = topInset + 76;
-  const [canvasGestureActive, setCanvasGestureActive] = useState(false);
 
   useEffect(() => {
     if (saveState === 'success') {
@@ -2171,6 +2189,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     closeDecorateControls();
     closeStickerOverlays();
     setCanvasGestureActive(false);
+    setCameraGestureActive(false);
   }, [captureMode, capturedPhoto, closeDecorateControls, closeStickerOverlays]);
 
   useEffect(() => {
@@ -2195,10 +2214,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
   useEffect(() => {
     onInteractionLockChange?.(
-      canvasGestureActive || isLivePhotoCaptureInProgress
+      canvasGestureActive || cameraGestureActive || isLivePhotoCaptureInProgress
     );
   }, [
     canvasGestureActive,
+    cameraGestureActive,
     isLivePhotoCaptureInProgress,
     onInteractionLockChange,
   ]);
@@ -2494,6 +2514,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 cameraKey={cameraKey}
                 cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
                 cameraPreviewZoom={cameraPreviewZoom}
+                cameraZoomLabel={cameraZoomLabel}
                 cameraRef={cameraRef}
                 cameraTransitionMaskAnimatedStyle={cameraTransitionMaskAnimatedStyle}
                 cameraUnavailableDetail={cameraUnavailableDetail}
@@ -2513,6 +2534,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 needsCameraPermission={needsCameraPermission}
                 shouldRenderCameraPreview={shouldRenderCameraPreview}
                 showCameraUnavailableState={showCameraUnavailableState}
+                showCameraZoomBadge={showCameraZoomBadge}
                 t={t}
               />
             ) : null}
@@ -2775,9 +2797,9 @@ const styles = StyleSheet.create({
   },
   cardTopOverlay: {
     position: 'absolute',
-    top: TOP_CONTROL_INSET,
-    left: 18,
-    right: 18,
+    top: CARD_CHROME_SAFE_TOP,
+    left: 14,
+    right: 14,
     gap: 8,
     alignItems: 'center',
     zIndex: 11,
@@ -3064,7 +3086,7 @@ const styles = StyleSheet.create({
   },
   cameraZoomBadge: {
     position: 'absolute',
-    top: TOP_CONTROL_INSET,
+    top: CARD_CHROME_SAFE_TOP,
     right: 16,
     minWidth: 58,
     minHeight: TOP_CONTROL_HEIGHT,
