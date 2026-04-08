@@ -246,7 +246,9 @@ function getReusableSharedPostCleanupArtifacts(artifacts: {
   return {
     photoPath: artifacts.photoPath ?? null,
     pairedVideoPath: artifacts.pairedVideoPath ?? null,
-    stickerPaths: artifacts.stickerPaths ?? [],
+    // Shared-post sticker blobs are reusable assets; shared-post cleanup should
+    // drop the container refs without deleting the shared underlying asset.
+    stickerPaths: [],
   };
 }
 
@@ -1238,11 +1240,11 @@ export async function deleteOwnedSharedPostsForNotes(
     rows.map((row) =>
       cleanupRemoteArtifacts(
         SHARED_POST_MEDIA_BUCKET,
-        {
+        getReusableSharedPostCleanupArtifacts({
           photoPath: row.photo_path ?? null,
           pairedVideoPath: row.paired_video_path ?? null,
           stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
-        },
+        }),
         { strict: true }
       )
     )
@@ -1310,14 +1312,14 @@ export async function deleteSharedPost(
   const expectedDeletedPostIds = existing ? [postId] : [];
   await cleanupRemoteArtifacts(
     SHARED_POST_MEDIA_BUCKET,
-    {
+    getReusableSharedPostCleanupArtifacts({
       photoPath: (existing as { photo_path?: string | null } | null)?.photo_path ?? null,
       pairedVideoPath:
         (existing as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
       stickerPaths: getRemoteStickerAssetPaths(
         (existing as { sticker_placements_json?: string | null } | null)?.sticker_placements_json ?? null
       ),
-    },
+    }),
     { strict: true }
   );
 

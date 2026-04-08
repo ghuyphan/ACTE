@@ -1,7 +1,67 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
+import { FeedFocusProvider } from '../hooks/useFeedFocus';
 
 const mockSearchBarProps: { onChangeText?: (event: { nativeEvent: { text: string } }) => void } = {};
+type MockNote = {
+  id: string;
+  type: 'photo' | 'text';
+  content: string;
+  photoLocalUri?: string | null;
+  caption?: string | null;
+  moodEmoji?: string | null;
+  locationName: string | null;
+  latitude: number;
+  longitude: number;
+  radius: number;
+  isFavorite: boolean;
+  createdAt: string;
+  updatedAt: null;
+};
+
+const mockNotes: MockNote[] = [
+  {
+    id: 'photo-1',
+    type: 'photo',
+    content: 'file:///private/photo-1.jpg',
+    photoLocalUri: 'file:///private/photo-1.jpg',
+    locationName: 'District 3',
+    latitude: 10.8,
+    longitude: 106.7,
+    radius: 150,
+    isFavorite: false,
+    createdAt: '2026-03-11T00:00:00.000Z',
+    updatedAt: null,
+  },
+  {
+    id: 'text-1',
+    type: 'text',
+    content: 'Best iced coffee',
+    locationName: 'District 1',
+    latitude: 10.7,
+    longitude: 106.6,
+    radius: 150,
+    isFavorite: false,
+    createdAt: '2026-03-10T00:00:00.000Z',
+    updatedAt: null,
+  },
+];
+
+const mockSearchNotes = jest.fn(async (query: string) => {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return mockNotes;
+  }
+
+  return mockNotes.filter((note) => {
+    const searchableValues =
+      note.type === 'photo'
+        ? [note.caption ?? '', note.locationName ?? '']
+        : [note.content, note.locationName ?? '', note.moodEmoji ?? ''];
+
+    return searchableValues.some((value) => value.toLowerCase().includes(normalizedQuery));
+  });
+});
 
 jest.mock('expo-router', () => {
   const React = require('react');
@@ -92,33 +152,8 @@ jest.mock('../hooks/useNoteDetailSheet', () => ({
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
-    notes: [
-      {
-        id: 'photo-1',
-        type: 'photo',
-        content: 'file:///private/photo-1.jpg',
-        photoLocalUri: 'file:///private/photo-1.jpg',
-        locationName: 'District 3',
-        latitude: 10.8,
-        longitude: 106.7,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-11T00:00:00.000Z',
-        updatedAt: null,
-      },
-      {
-        id: 'text-1',
-        type: 'text',
-        content: 'Best iced coffee',
-        locationName: 'District 1',
-        latitude: 10.7,
-        longitude: 106.6,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-10T00:00:00.000Z',
-        updatedAt: null,
-      },
-    ],
+    notes: mockNotes,
+    searchNotes: mockSearchNotes,
   }),
 }));
 
@@ -130,7 +165,11 @@ import SearchScreen from '../app/(tabs)/search/index';
 
 describe('SearchScreen', () => {
   it('does not match photo file uris when searching', async () => {
-    const { getByTestId, queryByText, getByText } = render(<SearchScreen />);
+    const { getByTestId, queryByText, getByText } = render(
+      <FeedFocusProvider>
+        <SearchScreen />
+      </FeedFocusProvider>
+    );
 
     expect(getByTestId('search-bar')).toBeTruthy();
 

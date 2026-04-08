@@ -80,6 +80,11 @@ export interface SyncRepository {
   enqueue: (change: SyncChange) => Promise<void>;
   listPending: (limit?: number) => Promise<SyncQueueItem[]>;
   listRecent: (limit?: number) => Promise<SyncQueueItem[]>;
+  peekStats: () => Promise<{
+    pendingCount: number;
+    failedCount: number;
+    blockedCount: number;
+  }>;
   getStats: () => Promise<{
     pendingCount: number;
     failedCount: number;
@@ -242,6 +247,29 @@ function rowToQueueItem(row: QueueRow): SyncQueueItem {
     terminal: row.terminal === 1,
     blockedReason: row.blocked_reason,
     createdAt: row.created_at,
+  };
+}
+
+async function readQueueStats(scope: string) {
+  const db = await getDB();
+  const row = await db.getFirstAsync<{
+    pending_count: number | null;
+    failed_count: number | null;
+    blocked_count: number | null;
+  }>(
+    `SELECT
+       SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+       SUM(CASE WHEN status = 'failed' AND terminal = 0 THEN 1 ELSE 0 END) AS failed_count,
+       SUM(CASE WHEN terminal = 1 THEN 1 ELSE 0 END) AS blocked_count
+     FROM sync_queue
+     WHERE owner_uid = ?`,
+    scope
+  );
+
+  return {
+    pendingCount: row?.pending_count ?? 0,
+    failedCount: row?.failed_count ?? 0,
+    blockedCount: row?.blocked_count ?? 0,
   };
 }
 
@@ -1769,25 +1797,12 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
        WHERE owner_uid = ? AND status = 'processing'`,
       scope
     );
-    const row = await db.getFirstAsync<{
-      pending_count: number | null;
-      failed_count: number | null;
-      blocked_count: number | null;
-    }>(
-      `SELECT
-         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
-         SUM(CASE WHEN status = 'failed' AND terminal = 0 THEN 1 ELSE 0 END) AS failed_count,
-         SUM(CASE WHEN terminal = 1 THEN 1 ELSE 0 END) AS blocked_count
-       FROM sync_queue
-       WHERE owner_uid = ?`,
-      scope
-    );
+    return readQueueStats(scope);
+  },
 
-    return {
-      pendingCount: row?.pending_count ?? 0,
-      failedCount: row?.failed_count ?? 0,
-      blockedCount: row?.blocked_count ?? 0,
-    };
+  async peekStats() {
+    const scope = resolveScope();
+    return readQueueStats(scope);
   },
 
   async listRecent(limit = 5) {

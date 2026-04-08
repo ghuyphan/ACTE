@@ -10,6 +10,7 @@ export type FilteredPhotoCanvasProps = {
   width: number;
   height: number;
   style?: StyleProp<ViewStyle>;
+  onImageReady?: () => void;
 };
 
 export const FilteredPhotoCanvas = memo(function FilteredPhotoCanvas({
@@ -18,6 +19,7 @@ export const FilteredPhotoCanvas = memo(function FilteredPhotoCanvas({
   width,
   height,
   style,
+  onImageReady,
 }: FilteredPhotoCanvasProps) {
   const image = useSkiaImage(sourceUri);
   const filterPreset = useMemo(() => getPhotoFilterPreset(filterId), [filterId]);
@@ -30,6 +32,8 @@ export const FilteredPhotoCanvas = memo(function FilteredPhotoCanvas({
         contentFit="cover"
         transition={0}
         cachePolicy="memory-disk"
+        onLoad={onImageReady}
+        onError={onImageReady}
       />
       {image ? (
         <Canvas style={StyleSheet.absoluteFill}>

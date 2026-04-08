@@ -9,6 +9,7 @@ const WIDGET_ENTITLEMENTS_PATH = `${TARGET_NAME}/${TARGET_NAME}.entitlements`;
 
 function enableWidgetEntitlementsModification(project) {
   const configurations = project.pbxXCBuildConfigurationSection();
+  let updated = 0;
 
   for (const [key, configuration] of Object.entries(configurations)) {
     if (key.endsWith('_comment')) {
@@ -26,11 +27,15 @@ function enableWidgetEntitlementsModification(project) {
     }
 
     buildSettings.CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = 'YES';
+    updated += 1;
   }
+
+  return updated;
 }
 
 function setWidgetDisplayName(project, widgetDisplayName) {
   const configurations = project.pbxXCBuildConfigurationSection();
+  let updated = 0;
 
   for (const [key, configuration] of Object.entries(configurations)) {
     if (key.endsWith('_comment')) {
@@ -48,24 +53,32 @@ function setWidgetDisplayName(project, widgetDisplayName) {
     }
 
     buildSettings.INFOPLIST_KEY_CFBundleDisplayName = widgetDisplayName;
+    updated += 1;
   }
+
+  return updated;
 }
 
 function patchProjectBuildSettings(iosRoot, widgetDisplayName) {
   const projectDirectoryName = fs.readdirSync(iosRoot).find((entry) => entry.endsWith('.xcodeproj'));
   if (!projectDirectoryName) {
-    return;
+    throw new Error('[withCustomWidgetSwift] No .xcodeproj directory found in ios output');
   }
 
   const projectFilePath = path.join(iosRoot, projectDirectoryName, 'project.pbxproj');
   if (!fs.existsSync(projectFilePath)) {
-    return;
+    throw new Error(`[withCustomWidgetSwift] Xcode project file not found: ${projectFilePath}`);
   }
 
   const project = xcode.project(projectFilePath);
   project.parseSync();
-  enableWidgetEntitlementsModification(project);
-  setWidgetDisplayName(project, widgetDisplayName);
+  const entitlementsUpdated = enableWidgetEntitlementsModification(project);
+  const displayNameUpdated = setWidgetDisplayName(project, widgetDisplayName);
+  if (entitlementsUpdated === 0 || displayNameUpdated === 0) {
+    throw new Error(
+      `[withCustomWidgetSwift] Could not find ${TARGET_NAME} build settings in ${projectFilePath}`
+    );
+  }
   fs.writeFileSync(projectFilePath, project.writeSync());
 }
 
@@ -80,8 +93,7 @@ const withCustomWidgetSwift = (config) =>
       const widgetDisplayName = config.name || 'Noto';
 
       if (!fs.existsSync(sourcePath)) {
-        console.warn(`[withCustomWidgetSwift] Source file not found: ${sourcePath}`);
-        return config;
+        throw new Error(`[withCustomWidgetSwift] Source file not found: ${sourcePath}`);
       }
 
       fs.mkdirSync(path.dirname(targetPath), { recursive: true });

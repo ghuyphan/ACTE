@@ -23,6 +23,7 @@ type PhotoMediaViewProps = {
   showLiveBadge?: boolean;
   enablePlayback?: boolean;
   badgeStyle?: StyleProp<ViewStyle>;
+  onImageReady?: () => void;
 };
 
 type ExpoVideoPlayer = {
@@ -87,9 +88,10 @@ function StaticPhotoView({
   imageStyle,
   showLiveBadge = true,
   badgeStyle,
+  onImageReady,
 }: Pick<
   PhotoMediaViewProps,
-  'imageUrl' | 'isLivePhoto' | 'style' | 'imageStyle' | 'showLiveBadge' | 'badgeStyle'
+  'imageUrl' | 'isLivePhoto' | 'style' | 'imageStyle' | 'showLiveBadge' | 'badgeStyle' | 'onImageReady'
 >) {
   return (
     <View style={style}>
@@ -99,6 +101,8 @@ function StaticPhotoView({
         contentFit="cover"
         transition={0}
         cachePolicy="memory-disk"
+        onLoad={onImageReady}
+        onError={onImageReady}
       />
       {isLivePhoto && showLiveBadge ? <LivePhotoBadge badgeStyle={badgeStyle} /> : null}
     </View>
@@ -113,8 +117,9 @@ function NativeLivePhotoPreview({
   showLiveBadge = true,
   enablePlayback = true,
   badgeStyle,
+  onImageReady,
 }: Required<Pick<PhotoMediaViewProps, 'imageUrl' | 'showLiveBadge' | 'enablePlayback'>> &
-  Pick<PhotoMediaViewProps, 'style' | 'imageStyle' | 'badgeStyle'> & {
+  Pick<PhotoMediaViewProps, 'style' | 'imageStyle' | 'badgeStyle' | 'onImageReady'> & {
     pairedVideoUri: string;
   }) {
   const { t } = useTranslation();
@@ -128,6 +133,7 @@ function NativeLivePhotoPreview({
         imageStyle={imageStyle}
         showLiveBadge={showLiveBadge}
         badgeStyle={badgeStyle}
+        onImageReady={onImageReady}
       />
     );
   }
@@ -141,6 +147,7 @@ function NativeLivePhotoPreview({
       showLiveBadge={showLiveBadge}
       enablePlayback={enablePlayback}
       badgeStyle={badgeStyle}
+      onImageReady={onImageReady}
       t={t}
       expoVideo={expoVideo}
     />
@@ -155,10 +162,11 @@ function VideoLivePhotoPreview({
   showLiveBadge,
   enablePlayback,
   badgeStyle,
+  onImageReady,
   t,
   expoVideo,
 }: Required<Pick<PhotoMediaViewProps, 'imageUrl' | 'showLiveBadge' | 'enablePlayback'>> &
-  Pick<PhotoMediaViewProps, 'style' | 'imageStyle' | 'badgeStyle'> & {
+  Pick<PhotoMediaViewProps, 'style' | 'imageStyle' | 'badgeStyle' | 'onImageReady'> & {
     pairedVideoUri: string;
     t: ReturnType<typeof useTranslation>['t'];
     expoVideo: ExpoVideoModule;
@@ -285,6 +293,8 @@ function VideoLivePhotoPreview({
         contentFit="cover"
         transition={0}
         cachePolicy="memory-disk"
+        onLoad={onImageReady}
+        onError={onImageReady}
       />
       <Pressable
         accessibilityLabel={t('common.previewLivePhotoMotion', 'Preview live photo motion')}
@@ -309,6 +319,7 @@ export default function PhotoMediaView({
   showLiveBadge = true,
   enablePlayback = true,
   badgeStyle,
+  onImageReady,
 }: PhotoMediaViewProps) {
   if (!isLivePhoto || !pairedVideoUri) {
     return (
@@ -319,6 +330,7 @@ export default function PhotoMediaView({
         imageStyle={imageStyle}
         showLiveBadge={showLiveBadge}
         badgeStyle={badgeStyle}
+        onImageReady={onImageReady}
       />
     );
   }
@@ -332,6 +344,7 @@ export default function PhotoMediaView({
       showLiveBadge={showLiveBadge}
       enablePlayback={enablePlayback}
       badgeStyle={badgeStyle}
+      onImageReady={onImageReady}
     />
   );
 }

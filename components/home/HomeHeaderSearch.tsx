@@ -108,7 +108,6 @@ export default function HomeHeaderSearch({
   const androidHeaderStandaloneBorderColor = colors.border ?? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(113,86,26,0.18)');
   const androidHeaderControlForegroundColor = isDark ? '#FFF7E8' : '#6D530F';
   const androidHeaderSearchBackgroundColor = isDark ? 'rgba(255,247,232,0.22)' : 'rgba(255,255,255,0.88)';
-  const androidHeaderDividerColor = isDark ? 'rgba(255,247,232,0.16)' : 'rgba(113,86,26,0.12)';
   const notesButtonRef = useRef<View>(null);
 
   useEffect(() => {

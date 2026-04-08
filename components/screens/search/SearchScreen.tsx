@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Stack, useRouter } from 'expo-router';
+import { Href, Stack, useRouter } from 'expo-router';
 import { useCallback, useDeferredValue, useEffect, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -18,20 +18,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout, Shadows } from '../../../constants/theme';
 import { useAndroidBottomTabOverlayInset } from '../../../hooks/useAndroidBottomTabOverlayInset';
 import { useAndroidTabSearchQuery } from '../../../hooks/useAndroidTabSearchState';
-import { CardGradients, useTheme } from '../../../hooks/useTheme';
+import { useFeedFocus } from '../../../hooks/useFeedFocus';
+import { useTheme } from '../../../hooks/useTheme';
 import { useNotesStore } from '../../../hooks/useNotes';
 import { Note } from '../../../services/database';
+import { getTextNoteCardGradient } from '../../../services/noteAppearance';
 import { getNotePhotoUri } from '../../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../../services/noteTextPresentation';
 import { formatDate } from '../../../utils/dateUtils';
-
-function hashToIndex(str: string, max: number): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i += 1) {
-    hash = (hash * 31 + str.charCodeAt(i)) % max;
-  }
-  return Math.abs(hash) % max;
-}
 
 function getPreviewText(note: Note, photoLabel: string, emptyLabel: string) {
   if (note.type === 'photo') {
@@ -52,6 +46,7 @@ export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
   const androidTabSearchQuery = useAndroidTabSearchQuery();
+  const { requestFeedFocus } = useFeedFocus();
   const { notes, loading, searchNotes } = useNotesStore();
   const router = useRouter();
   const [query, setQuery] = useState('');
@@ -94,16 +89,17 @@ export default function SearchScreen() {
     return () => {
       cancelled = true;
     };
-  }, [deferredQuery, hasDeferredQuery, notes, searchNotes]);
+  }, [deferredQuery, hasDeferredQuery, searchNotes]);
 
   const shouldShowEmptyState = filteredNotes.length === 0;
 
   const openNote = useCallback(
     (noteId: string) => {
       Keyboard.dismiss();
-      router.push(`/note/${noteId}` as any);
+      requestFeedFocus({ kind: 'note', id: noteId });
+      router.replace('/' as Href);
     },
-    [router]
+    [requestFeedFocus, router]
   );
 
   const dismissKeyboard = useCallback(() => {
@@ -123,7 +119,12 @@ export default function SearchScreen() {
         t('map.photoNote', 'Photo Note'),
         t('map.noContent', 'No note content')
       );
-      const previewGradient = CardGradients[hashToIndex(item.id, CardGradients.length)];
+      const previewGradient = getTextNoteCardGradient({
+        text: item.content,
+        noteId: item.id,
+        emoji: item.moodEmoji,
+        noteColor: item.noteColor,
+      });
       const createdAt = formatDate(item.createdAt, 'short');
 
       return (

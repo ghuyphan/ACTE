@@ -74,6 +74,7 @@
 
 ## Quality Gates
 
-- [ ] `npm run lint`
+- [ ] `npm run lint:ci`
 - [ ] `npm run typecheck`
 - [ ] `npm test -- --runInBand`
+- [ ] `npm run verify`

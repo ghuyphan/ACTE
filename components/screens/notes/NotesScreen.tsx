@@ -164,6 +164,9 @@ const GridTile = memo(function GridTile({
         ? sharedPhotoUri ?? ''
         : '';
   const isPhotoTile = (item.kind === 'note' ? item.note.type : item.post.type) === 'photo';
+  const noteId = item.kind === 'note' ? item.note.id : item.post.id;
+  const noteEmoji = item.kind === 'note' ? item.note.moodEmoji : null;
+  const noteColor = item.kind === 'note' ? item.note.noteColor : item.post.noteColor;
   const doodleStrokesJson =
     item.kind === 'note'
       ? item.note.doodleStrokesJson
@@ -188,20 +191,19 @@ const GridTile = memo(function GridTile({
     () =>
       getTextNoteCardGradient({
         text,
-        noteId: item.kind === 'note' ? item.note.id : item.post.id,
-        emoji: item.kind === 'note' ? item.note.moodEmoji : null,
-        noteColor: item.kind === 'note' ? item.note.noteColor : item.post.noteColor,
+        noteId,
+        emoji: noteEmoji,
+        noteColor,
       }),
-    [item, text]
+    [noteColor, noteEmoji, noteId, text]
   );
   const stickerMotionVariant = useMemo<StickerMotionVariant>(() => {
     if (isPhotoTile) {
       return 'physics';
     }
 
-    const noteColor = item.kind === 'note' ? item.note.noteColor : item.post.noteColor;
     return getNoteColorStickerMotion(noteColor) ?? getGradientStickerMotionVariant(textGradient);
-  }, [isPhotoTile, item, textGradient]);
+  }, [isPhotoTile, noteColor, textGradient]);
   const tileText = text || (isPhotoTile ? photoFallbackLabel : '');
   const showPhotoPlaceholder = item.kind === 'shared-post' && item.post.type === 'photo' && !imageUri;
   const sharedTransitionTag = item.kind === 'note' ? `feed-note-card-${item.note.id}` : undefined;
@@ -371,7 +373,7 @@ export default function NotesIndexScreen() {
   );
 
   const handleViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: Array<{ item: NoteGridItem }> }) => {
+    ({ viewableItems }: { viewableItems: { item: NoteGridItem }[] }) => {
       const nextVisibleSharedPhotoIds = viewableItems
         .map(({ item }) => item)
         .filter(

@@ -20,10 +20,6 @@ import {
 import {
   useClipboardStickerFlow,
 } from '../../hooks/ui/useClipboardStickerFlow';
-import type {
-  StickerAction,
-  StickerSourceAction,
-} from '../../hooks/ui/stickerFlowTypes';
 import { useSelectedStickerActionsFlow } from '../../hooks/ui/useSelectedStickerActionsFlow';
 import { useStickerSourceSheetFlow } from '../../hooks/ui/useStickerSourceSheetFlow';
 import { useStampCutterFlow } from '../../hooks/ui/useStampCutterFlow';

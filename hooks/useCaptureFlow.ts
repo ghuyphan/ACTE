@@ -2,7 +2,7 @@ import { AppState, Platform } from 'react-native';
 import { Camera, type CameraPermissionStatus, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Easing, runOnJS, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import { Easing, runOnJS, useSharedValue, withTiming } from 'react-native-reanimated';
 import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
 import type { PhotoFilterId } from '../services/photoFilters';
 import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../services/livePhotoProcessing';
@@ -44,6 +44,7 @@ export function useCaptureFlow() {
   const [noteText, setNoteText] = useState('');
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [capturedPairedVideo, setCapturedPairedVideo] = useState<string | null>(null);
+  const [isStillPhotoCaptureInProgress, setIsStillPhotoCaptureInProgress] = useState(false);
   const [isLivePhotoCaptureInProgress, setIsLivePhotoCaptureInProgress] = useState(false);
   const [isLivePhotoCaptureSettling, setIsLivePhotoCaptureSettling] = useState(false);
   const [isLivePhotoSaveGuardActive, setIsLivePhotoSaveGuardActive] = useState(false);
@@ -154,20 +155,6 @@ export function useCaptureFlow() {
   const clearLivePhotoTapSuppression = useCallback(() => {
     suppressNextPhotoTapRef.current = false;
   }, []);
-
-  const triggerShutterOverlay = useCallback(() => {
-    flashAnim.value = 0;
-    flashAnim.value = withSequence(
-      withTiming(0.72, {
-        duration: 44,
-        easing: Easing.out(Easing.quad),
-      }),
-      withTiming(0, {
-        duration: 150,
-        easing: Easing.out(Easing.cubic),
-      })
-    );
-  }, [flashAnim]);
 
   const resetLivePhotoCaptureRefs = useCallback(() => {
     clearLivePhotoStopTimeout();
@@ -289,6 +276,7 @@ export function useCaptureFlow() {
       void cancelLivePhotoCapture();
       setCapturedPhoto(null);
       setCapturedPairedVideo(null);
+      setIsStillPhotoCaptureInProgress(false);
       setIsLivePhotoCaptureInProgress(false);
       setIsLivePhotoCaptureSettling(false);
       setIsLivePhotoSaveGuardActive(false);
@@ -401,20 +389,24 @@ export function useCaptureFlow() {
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    triggerShutterOverlay();
+    setIsStillPhotoCaptureInProgress(true);
 
-    const photo = await cameraRef.current.takePhoto({
-      enableShutterSound: false,
-    });
-    shutterScale.value = 1;
-    if (photo?.path) {
-      clearLivePhotoSaveGuard();
-      setIsLivePhotoCaptureInProgress(false);
-      setIsLivePhotoCaptureSettling(false);
-      setCapturedPairedVideo(null);
-      setCapturedPhoto(normalizeCapturedFileUri(photo.path));
+    try {
+      const photo = await cameraRef.current.takePhoto({
+        enableShutterSound: false,
+      });
+      shutterScale.value = 1;
+      if (photo?.path) {
+        clearLivePhotoSaveGuard();
+        setIsLivePhotoCaptureInProgress(false);
+        setIsLivePhotoCaptureSettling(false);
+        setCapturedPairedVideo(null);
+        setCapturedPhoto(normalizeCapturedFileUri(photo.path));
+      }
+    } finally {
+      setIsStillPhotoCaptureInProgress(false);
     }
-  }, [cameraRef, clearLivePhotoSaveGuard, shutterScale, triggerShutterOverlay]);
+  }, [cameraRef, clearLivePhotoSaveGuard, shutterScale]);
 
   const startLivePhotoCapture = useCallback(async () => {
     if (!cameraRef.current || isLivePhotoCaptureInProgress) {
@@ -469,7 +461,7 @@ export function useCaptureFlow() {
       });
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      triggerShutterOverlay();
+      setIsStillPhotoCaptureInProgress(true);
       livePhotoPhotoPromiseRef.current = cameraRef.current
         .takePhoto({
           enableShutterSound: false,
@@ -488,6 +480,9 @@ export function useCaptureFlow() {
           }
 
           return null;
+        })
+        .finally(() => {
+          setIsStillPhotoCaptureInProgress(false);
         });
 
       livePhotoStopTimeoutRef.current = setTimeout(() => {
@@ -496,6 +491,7 @@ export function useCaptureFlow() {
     } catch (error) {
       livePhotoRecordingActiveRef.current = false;
       setIsLivePhotoCaptureInProgress(false);
+      setIsStillPhotoCaptureInProgress(false);
       try {
         await cameraRef.current.cancelRecording();
       } catch {
@@ -512,7 +508,6 @@ export function useCaptureFlow() {
     finishLivePhotoCapture,
     isLivePhotoCaptureInProgress,
     resetLivePhotoCaptureRefs,
-    triggerShutterOverlay,
   ]);
 
   const requestPermission = useCallback(async () => {
@@ -528,6 +523,7 @@ export function useCaptureFlow() {
     void cancelLivePhotoCapture();
     setCapturedPhoto(null);
     setCapturedPairedVideo(null);
+    setIsStillPhotoCaptureInProgress(false);
     setIsLivePhotoCaptureInProgress(false);
     setIsLivePhotoCaptureSettling(false);
     setIsLivePhotoSaveGuardActive(false);
@@ -554,6 +550,7 @@ export function useCaptureFlow() {
     capturedPhoto,
     setCapturedPhoto,
     capturedPairedVideo,
+    isStillPhotoCaptureInProgress,
     setCapturedPairedVideo,
     isLivePhotoCaptureInProgress,
     isLivePhotoCaptureSettling,

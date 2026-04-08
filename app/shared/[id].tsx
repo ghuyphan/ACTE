@@ -13,6 +13,7 @@ export default function SharedPostDetailRoute() {
 
   return (
     <SharedPostDetailSheet
+      key={id}
       postId={id}
       visible={visible}
       onClose={() => {

@@ -23,8 +23,15 @@ const CAMERA_START_TIMEOUT_MS = 2400;
 const CAMERA_ZOOM_PAN_RANGE = 0.9;
 const CAMERA_ZOOM_PINCH_RANGE = 0.45;
 const CAMERA_ZOOM_LABEL_VISIBLE_MS = 1100;
-const CAMERA_TRANSITION_FADE_IN_MS = 140;
-const CAMERA_TRANSITION_FADE_OUT_MS = 240;
+const CAMERA_TRANSITION_FADE_IN_MS = 110;
+const CAMERA_TRANSITION_READY_SOFTEN_MS = 120;
+const CAMERA_TRANSITION_READY_SOFTEN_OPACITY = 0.32;
+const CAMERA_TRANSITION_FADE_OUT_MS = 140;
+const CAMERA_SWITCH_MASK_OPACITY = 0.78;
+const CAMERA_SWITCH_FADE_IN_MS = 80;
+const CAMERA_SWITCH_READY_SOFTEN_MS = 90;
+const CAMERA_SWITCH_READY_SOFTEN_OPACITY = 0.18;
+const CAMERA_SWITCH_FADE_OUT_MS = 100;
 const CAMERA_FOCUS_RING_VISIBLE_MS = 640;
 const CAMERA_FOCUS_RING_FADE_IN_MS = 170;
 const CAMERA_FOCUS_RING_SETTLE_MS = 110;
@@ -102,6 +109,7 @@ export function useCaptureCardCameraController({
   const cameraPanZoomStartRef = useRef(0);
   const cameraPinchZoomStartRef = useRef(0);
   const cameraGestureLockCountRef = useRef(0);
+  const cameraSwitchInFlightRef = useRef(false);
   const cameraZoomBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraFocusRingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraHintVisibility = useSharedValue(Boolean(cameraInstructionText) && !capturedPhoto ? 1 : 0);
@@ -292,6 +300,7 @@ export function useCaptureCardCameraController({
       cameraAutoRecoveryCountRef.current = 0;
     }
 
+    cameraSwitchInFlightRef.current = false;
     cameraTransitionMaskOpacity.value = withTiming(1, {
       duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_IN_MS,
       easing: Easing.out(Easing.cubic),
@@ -319,6 +328,7 @@ export function useCaptureCardCameraController({
         )
       );
       setIsCameraReady(false);
+      cameraSwitchInFlightRef.current = false;
       cameraTransitionMaskOpacity.value = withTiming(0, { duration: 0 });
     },
     [cameraTransitionMaskOpacity, restartCameraPreview, t]
@@ -328,18 +338,43 @@ export function useCaptureCardCameraController({
     cameraAutoRecoveryCountRef.current = 0;
     setCameraUnavailable(false);
     setCameraIssueDetail(null);
-  }, []);
+    if (!canShowLiveCameraPreview) {
+      return;
+    }
+
+    const isSwitchingCamera = cameraSwitchInFlightRef.current;
+    cameraTransitionMaskOpacity.value = withTiming(
+      isSwitchingCamera ? CAMERA_SWITCH_READY_SOFTEN_OPACITY : CAMERA_TRANSITION_READY_SOFTEN_OPACITY,
+      {
+        duration: reduceMotionEnabled
+          ? 0
+          : isSwitchingCamera
+            ? CAMERA_SWITCH_READY_SOFTEN_MS
+            : CAMERA_TRANSITION_READY_SOFTEN_MS,
+        easing: Easing.out(Easing.cubic),
+      }
+    );
+  }, [
+    cameraTransitionMaskOpacity,
+    canShowLiveCameraPreview,
+    reduceMotionEnabled,
+  ]);
 
   const handleCameraPreviewStarted = useCallback(() => {
+    const isSwitchingCamera = cameraSwitchInFlightRef.current;
+    cameraSwitchInFlightRef.current = false;
     cameraAutoRecoveryCountRef.current = 0;
     setCameraUnavailable(false);
     setCameraIssueDetail(null);
     setIsCameraReady(true);
     cameraTransitionMaskOpacity.value = withTiming(0, {
-      duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_OUT_MS,
+      duration: reduceMotionEnabled ? 0 : isSwitchingCamera ? CAMERA_SWITCH_FADE_OUT_MS : CAMERA_TRANSITION_FADE_OUT_MS,
       easing: Easing.out(Easing.cubic),
     });
-  }, [cameraTransitionMaskOpacity, reduceMotionEnabled]);
+  }, [
+    cameraTransitionMaskOpacity,
+    reduceMotionEnabled,
+  ]);
 
   useEffect(() => {
     const previousCanShowLiveCameraPreview = previousCanShowLiveCameraPreviewRef.current;
@@ -355,12 +390,18 @@ export function useCaptureCardCameraController({
       setIsCameraReady(true);
       setCameraUnavailable(false);
       setCameraIssueDetail(null);
+      cameraSwitchInFlightRef.current = false;
       cameraTransitionMaskOpacity.value = withTiming(0, { duration: 0 });
       return;
     }
 
-    cameraTransitionMaskOpacity.value = withTiming(1, {
-      duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_IN_MS,
+    const isSwitchingCamera = cameraSwitchInFlightRef.current;
+    cameraTransitionMaskOpacity.value = withTiming(isSwitchingCamera ? CAMERA_SWITCH_MASK_OPACITY : 1, {
+      duration: reduceMotionEnabled
+        ? 0
+        : isSwitchingCamera
+          ? CAMERA_SWITCH_FADE_IN_MS
+          : CAMERA_TRANSITION_FADE_IN_MS,
       easing: Easing.out(Easing.cubic),
     });
     setIsCameraReady(false);
@@ -553,8 +594,9 @@ export function useCaptureCardCameraController({
     cameraZoomGesturesEnabled && Boolean(cameraDevice?.supportsFocus);
 
   const handleSwitchCameraPress = useCallback(() => {
-    cameraTransitionMaskOpacity.value = withTiming(1, {
-      duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_IN_MS,
+    cameraSwitchInFlightRef.current = true;
+    cameraTransitionMaskOpacity.value = withTiming(CAMERA_SWITCH_MASK_OPACITY, {
+      duration: reduceMotionEnabled ? 0 : CAMERA_SWITCH_FADE_IN_MS,
       easing: Easing.out(Easing.cubic),
     });
     setIsCameraReady(false);

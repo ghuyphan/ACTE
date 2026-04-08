@@ -66,7 +66,9 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const refreshQueueStats = useCallback(async (): Promise<QueueStatsSnapshot | null> => {
     try {
       const repository = getSyncRepository();
-      const stats = await repository.getStats();
+      const stats = repository.peekStats
+        ? await repository.peekStats()
+        : await repository.getStats();
       const recentItems = await repository.listRecent(5);
       setPendingCount(stats.pendingCount);
       setFailedCount(stats.failedCount);
@@ -86,12 +88,18 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
   // Load persistence
   useEffect(() => {
-    getPersistentItem(SYNC_ENABLED_KEY).then((value) => {
-      if (value !== null) {
-        setSyncEnabledState(value === 'true');
-      }
-      setIsSyncPrefReady(true);
-    });
+    void getPersistentItem(SYNC_ENABLED_KEY)
+      .then((value) => {
+        if (value !== null) {
+          setSyncEnabledState(value === 'true');
+        }
+      })
+      .catch((error) => {
+        console.warn('[syncStatus] Failed to load sync preference:', error);
+      })
+      .finally(() => {
+        setIsSyncPrefReady(true);
+      });
   }, []);
 
   const setSyncEnabled = useCallback(async (enabled: boolean) => {
@@ -149,7 +157,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
         if ((result.importedCount ?? 0) > 0) {
           suppressNextNotesEffectRef.current = true;
-          await refreshNotes(false, { updateWidget: true });
+          await refreshNotes(false, { updateWidget: true, syncGeofences: true });
         }
 
         return;

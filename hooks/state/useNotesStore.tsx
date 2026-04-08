@@ -36,7 +36,10 @@ import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 interface NotesStoreValue {
   notes: Note[];
   loading: boolean;
-  refreshNotes: (showLoading?: boolean, options?: { updateWidget?: boolean }) => Promise<void>;
+  refreshNotes: (
+    showLoading?: boolean,
+    options?: { updateWidget?: boolean; syncGeofences?: boolean }
+  ) => Promise<void>;
   createNote: (input: CreateNoteInput) => Promise<Note>;
   updateNote: (id: string, updates: NoteUpdates) => Promise<void>;
   toggleFavorite: (id: string) => Promise<boolean>;

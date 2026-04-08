@@ -9,8 +9,10 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
+    "lint:ci": "expo lint --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "jest",
+    "verify": "npm run lint:ci && npm run typecheck && npm test -- --runInBand",
     "update:preview": "npx eas-cli update --channel preview",
     "update:production": "npx eas-cli update --channel production"
   },

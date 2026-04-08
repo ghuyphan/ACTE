@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import { PAYWALL_RESULT } from 'react-native-purchases-ui';
-import { useSharedValue, withTiming } from 'react-native-reanimated';
+import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../sheets/AppSheetAlert';
 import CaptureCard, { type CaptureCardHandle } from '../home/CaptureCard';
@@ -243,6 +243,7 @@ export default function HomeScreen() {
     handleShutterPressOut,
     takePicture,
     startLivePhotoCapture,
+    isStillPhotoCaptureInProgress,
     isLivePhotoCaptureInProgress,
     isLivePhotoCaptureSettling,
     isLivePhotoSaveGuardActive,
@@ -1194,8 +1195,16 @@ export default function HomeScreen() {
       if (!currentLocation) {
         showDoneSheet(
           'error',
-          t('capture.error', 'Error'),
-          t('capture.noLocation', 'Could not get your location'),
+          t('capture.locationUnavailableTitle', 'Location unavailable'),
+          requiresSettings
+            ? t(
+                'capture.noLocationSettings',
+                'Noto needs location access to save a memory here. Open Settings to turn location access back on.'
+              )
+            : t(
+                'capture.noLocation',
+                'Noto could not get your current location yet. Please try again in a moment.'
+              ),
           requiresSettings
         );
         return;
@@ -1684,6 +1693,7 @@ export default function HomeScreen() {
           saving={saving}
           saveState={saveButtonState}
           shutterScale={shutterScale}
+          isStillPhotoCaptureInProgress={isStillPhotoCaptureInProgress}
           isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
           isLivePhotoCaptureSettling={isLivePhotoCaptureSettling}
           isLivePhotoSaveGuardActive={isLivePhotoSaveGuardActive}
@@ -1732,6 +1742,7 @@ export default function HomeScreen() {
       importingPhoto,
       insets.top,
       isCameraPreviewActive,
+      isStillPhotoCaptureInProgress,
       isLivePhotoCaptureInProgress,
       isLivePhotoCaptureSettling,
       isLivePhotoSaveGuardActive,

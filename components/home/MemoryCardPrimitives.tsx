@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
-import { Dimensions, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, StyleSheet, Text, useWindowDimensions, View, ViewStyle } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { Layout, Radii, Typography } from '../../constants/theme';
 import { useRelativeTimeNow } from '../../hooks/useRelativeTimeNow';
@@ -19,9 +19,6 @@ import TextMemoryCard from '../notes/TextMemoryCard';
 import InfoPill from '../ui/InfoPill';
 import LivePhotoIcon from '../ui/LivePhotoIcon';
 import SharedPostCardVisual from './SharedPostCardVisual';
-
-const { width } = Dimensions.get('window');
-const DEFAULT_CARD_SIZE = width - (Layout.screenPadding - 8) * 2;
 
 type MemoryColors = {
   primary: string;
@@ -57,18 +54,20 @@ export function NoteMemoryCard({
   colors,
   t,
   onPress,
-  cardSize = DEFAULT_CARD_SIZE,
+  cardSize,
   containerStyle,
   isActive = false,
 }: NoteMemoryCardProps) {
+  const { width } = useWindowDimensions();
   const now = useRelativeTimeNow();
+  const resolvedCardSize = cardSize ?? width - (Layout.screenPadding - 8) * 2;
   const dateStr = formatNoteTimestamp(note.createdAt, 'card', now);
   const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
   const locationLabel = note.locationName ?? t('home.unknownLocation', 'Unknown location');
 
   const content = (
-    <View style={[styles.cardRoot, containerStyle, { width: cardSize }]}>
-      <View style={[styles.noteCardWrapper, { width: cardSize, height: cardSize }]}>
+    <View style={[styles.cardRoot, containerStyle, { width: resolvedCardSize }]}>
+      <View style={[styles.noteCardWrapper, { width: resolvedCardSize, height: resolvedCardSize }]}>
         <View style={styles.cardFill}>
           {note.type === 'photo' ? (
             <ImageMemoryCard
@@ -112,7 +111,7 @@ export function NoteMemoryCard({
         ) : null}
       </View>
 
-      <View style={[styles.metaContainer, { width: cardSize }]}>
+      <View style={[styles.metaContainer, { width: resolvedCardSize }]}>
         {onPress ? (
           <Pressable
             accessibilityRole="button"
@@ -187,19 +186,21 @@ export function SharedPostMemoryCard({
   colors,
   t,
   onPress,
-  cardSize = DEFAULT_CARD_SIZE,
+  cardSize,
   containerStyle,
   isActive = false,
 }: SharedPostMemoryCardProps) {
+  const { width } = useWindowDimensions();
+  const resolvedCardSize = cardSize ?? width - (Layout.screenPadding - 8) * 2;
   const authorLabel = post.authorDisplayName ?? t('shared.someone', 'Someone');
   const dateStr = formatDate(post.createdAt, 'short');
   const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
   const placeLabel = post.placeName ?? t('shared.sharedNow', 'Shared now');
 
   const content = (
-    <View style={[styles.cardRoot, containerStyle, { width: cardSize }]}>
-      <View style={[styles.sharedCardWrap, { width: cardSize }]}>
-        <View style={[styles.noteCardWrapper, { width: cardSize, height: cardSize }]}>
+    <View style={[styles.cardRoot, containerStyle, { width: resolvedCardSize }]}>
+      <View style={[styles.sharedCardWrap, { width: resolvedCardSize }]}>
+        <View style={[styles.noteCardWrapper, { width: resolvedCardSize, height: resolvedCardSize }]}>
           <View style={styles.cardFill}>
             <SharedPostCardVisual
               post={post}
@@ -210,7 +211,7 @@ export function SharedPostMemoryCard({
           </View>
         </View>
 
-        <View style={[styles.metaContainer, { width: cardSize }]}>
+        <View style={[styles.metaContainer, { width: resolvedCardSize }]}>
           {onPress ? (
             <Pressable
               accessibilityRole="button"

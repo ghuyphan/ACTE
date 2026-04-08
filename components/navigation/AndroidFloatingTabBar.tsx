@@ -48,7 +48,7 @@ const INDICATOR_SPRING = {
   stiffness: 220,
 } as const;
 const SEARCH_NAVIGATION_DELAY_MS = 170;
-const KEYBOARD_AVOIDANCE_GAP = 22;
+const KEYBOARD_AVOIDANCE_GAP = 10;
 const COMPACT_SCREEN_WIDTH = 390;
 const VERY_NARROW_SCREEN_WIDTH = 360;
 
@@ -319,7 +319,7 @@ export default function AndroidFloatingTabBar({
     const searchIconLeft = isVeryNarrow ? 14 : isCompact ? 15 : 16;
     const searchTextOffset = isVeryNarrow ? 30 : 34;
     const tabMinWidth = tabLabelVisible ? (isCompact ? 70 : 82) : 50;
-    const keyboardAvoidanceGap = isVeryNarrow ? 18 : KEYBOARD_AVOIDANCE_GAP;
+    const keyboardAvoidanceGap = isVeryNarrow ? 8 : KEYBOARD_AVOIDANCE_GAP;
 
     return {
       barContentInset,

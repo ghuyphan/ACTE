@@ -66,34 +66,56 @@ const BUILD_GRADLE_RELEASE_SNIPPET = `        release {
 
 function patchBuildGradle(contents) {
   let nextContents = contents;
+  const replaceOrThrow = (searchValue, replacement, label) => {
+    if (typeof searchValue === 'string') {
+      if (!nextContents.includes(searchValue)) {
+        throw new Error(
+          `[withAndroidReleaseHardening] Could not find ${label} anchor in android/app/build.gradle`
+        );
+      }
+      nextContents = nextContents.replace(searchValue, replacement);
+      return;
+    }
+
+    if (!searchValue.test(nextContents)) {
+      throw new Error(
+        `[withAndroidReleaseHardening] Could not find ${label} pattern in android/app/build.gradle`
+      );
+    }
+    nextContents = nextContents.replace(searchValue, replacement);
+  };
 
   if (!nextContents.includes("def readEnv = { name ->")) {
-    nextContents = nextContents.replace(
+    replaceOrThrow(
       "def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()\n",
-      `def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()\n${BUILD_GRADLE_ENV_SNIPPET}`
+      `def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()\n${BUILD_GRADLE_ENV_SNIPPET}`,
+      'projectRoot declaration'
     );
   }
 
   if (!nextContents.includes('GOOGLE_MAPS_API_KEY: googleMapsApiKey')) {
-    nextContents = nextContents.replace(
+    replaceOrThrow(
       /        versionName "1\.0\.0"\n\n        buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\\"\\\$\{findProperty\('reactNativeReleaseLevel'\) \?: 'stable'\}\\""/,
-      BUILD_GRADLE_DEFAULT_CONFIG_SNIPPET
+      BUILD_GRADLE_DEFAULT_CONFIG_SNIPPET,
+      'defaultConfig block'
     );
   }
 
   if (
     !nextContents.includes('if (releaseStoreFile && uploadStorePassword && uploadKeyAlias && uploadKeyPassword)')
   ) {
-    nextContents = nextContents.replace(
+    replaceOrThrow(
       /    signingConfigs \{\n        debug \{\n            storeFile file\('debug\.keystore'\)\n            storePassword 'android'\n            keyAlias 'androiddebugkey'\n            keyPassword 'android'\n        \}\n    \}/,
-      BUILD_GRADLE_SIGNING_CONFIG_SNIPPET
+      BUILD_GRADLE_SIGNING_CONFIG_SNIPPET,
+      'signingConfigs block'
     );
   }
 
   if (!nextContents.includes('Release signing credentials are missing.')) {
-    nextContents = nextContents.replace(
+    replaceOrThrow(
       /        release \{\n            \/\/ Caution! In production, you need to generate your own keystore file\.\n            \/\/ see https:\/\/reactnative\.dev\/docs\/signed-apk-android\.\n            signingConfig signingConfigs\.debug/,
-      BUILD_GRADLE_RELEASE_SNIPPET
+      BUILD_GRADLE_RELEASE_SNIPPET,
+      'release signing block'
     );
   }
 
@@ -101,10 +123,21 @@ function patchBuildGradle(contents) {
 }
 
 function patchManifest(contents) {
-  return contents.replace(
+  const nextContents = contents.replace(
     /<meta-data android:name="com\.google\.android\.geo\.API_KEY" android:value="[^"]*"\/>/,
     '<meta-data android:name="com.google.android.geo.API_KEY" android:value="${GOOGLE_MAPS_API_KEY}"/>'
   );
+
+  if (
+    nextContents === contents &&
+    !contents.includes('android:name="com.google.android.geo.API_KEY" android:value="${GOOGLE_MAPS_API_KEY}"')
+  ) {
+    throw new Error(
+      '[withAndroidReleaseHardening] Could not find Google Maps meta-data tag in android/app/src/main/AndroidManifest.xml'
+    );
+  }
+
+  return nextContents;
 }
 
 function withAndroidReleaseHardening(config) {

@@ -155,7 +155,18 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const isInitializedRef = useRef(false);
   const customerInfoListenerRef = useRef<((customerInfo: CustomerInfo) => void) | null>(null);
   const currentRevenueCatUserIdRef = useRef<string | null>(null);
+  const snapshotLoadRequestIdRef = useRef(0);
+  const receivedLiveRemotePhotoNoteCountRef = useRef(false);
+  const cachedSnapshotRef = useRef<SubscriptionSnapshot | null>(null);
+  const userId = user?.id ?? null;
   const snapshotStorageKey = `${SUBSCRIPTION_SNAPSHOT_KEY_PREFIX}${user?.uid ?? 'anonymous'}`;
+  const availablePackages = useMemo(
+    () => currentOffering?.availablePackages ?? [],
+    [currentOffering]
+  );
+  const cachedRemotePhotoNoteCount = cachedSnapshot?.remotePhotoNoteCount ?? null;
+  const cachedPlusPriceLabel = cachedSnapshot?.plusPriceLabel ?? null;
+  const cachedPlusPackageTitle = cachedSnapshot?.plusPackageTitle ?? null;
 
   const loadRevenueCatState = useCallback(async () => {
     if (!isConfiguredRef.current || !isOnline) {
@@ -177,21 +188,37 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   }, [isOnline]);
 
   useEffect(() => {
+    const requestId = ++snapshotLoadRequestIdRef.current;
+    receivedLiveRemotePhotoNoteCountRef.current = false;
+    cachedSnapshotRef.current = null;
     setCachedSnapshot(null);
     setRemotePhotoNoteCount(null);
     setIsRemotePhotoNoteCountReady(false);
 
-    getPersistentItem(snapshotStorageKey)
+    void getPersistentItem(snapshotStorageKey)
       .then((rawValue) => {
+        if (snapshotLoadRequestIdRef.current !== requestId) {
+          return;
+        }
+
         if (!rawValue) {
+          cachedSnapshotRef.current = null;
           setCachedSnapshot(null);
           return;
         }
 
         const parsed = JSON.parse(rawValue) as SubscriptionSnapshot;
+        if (snapshotLoadRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        cachedSnapshotRef.current = parsed;
         setCachedSnapshot(parsed);
-        setRemotePhotoNoteCount(parsed.remotePhotoNoteCount ?? null);
-        setIsRemotePhotoNoteCountReady(parsed.remotePhotoNoteCount !== null);
+
+        if (!receivedLiveRemotePhotoNoteCountRef.current) {
+          setRemotePhotoNoteCount(parsed.remotePhotoNoteCount ?? null);
+          setIsRemotePhotoNoteCountReady(parsed.remotePhotoNoteCount !== null);
+        }
       })
       .catch((error) => {
         console.warn('[subscription] Failed to load cached subscription snapshot:', error);
@@ -199,6 +226,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   }, [snapshotStorageKey]);
 
   useEffect(() => {
+    if (!authReady) {
+      return;
+    }
+
     if (!isConfigured) {
       setIsReady(true);
       return;
@@ -229,7 +260,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         setIsReady(true);
       });
 
-  }, [isConfigured, isOnline, loadRevenueCatState, revenueCatApiKey]);
+  }, [authReady, isConfigured, isOnline, loadRevenueCatState, revenueCatApiKey]);
 
   useEffect(() => {
     if (!isConfigured || !isInitializedRef.current || customerInfoListenerRef.current) {
@@ -283,50 +314,42 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     }
 
     const supabase = getSupabase();
-    const cachedRemotePhotoNoteCount = cachedSnapshot?.remotePhotoNoteCount ?? null;
-    if (!user || !supabase) {
-      if (remotePhotoNoteCount !== cachedRemotePhotoNoteCount) {
+    const cachedRemotePhotoNoteCount = cachedSnapshotRef.current?.remotePhotoNoteCount ?? null;
+    const hasCachedRemotePhotoNoteCount = cachedRemotePhotoNoteCount !== null;
+
+    if (!userId || !supabase) {
+      if (!receivedLiveRemotePhotoNoteCountRef.current) {
         setRemotePhotoNoteCount(cachedRemotePhotoNoteCount);
-      }
-      if (!isRemotePhotoNoteCountReady) {
         setIsRemotePhotoNoteCountReady(true);
       }
       return;
     }
 
-    if (remotePhotoNoteCount !== cachedRemotePhotoNoteCount) {
-      setRemotePhotoNoteCount(cachedRemotePhotoNoteCount);
-    }
-
     if (!isOnline) {
-      const nextReady = cachedRemotePhotoNoteCount !== null;
-      if (isRemotePhotoNoteCountReady !== nextReady) {
-        setIsRemotePhotoNoteCountReady(nextReady);
+      if (!receivedLiveRemotePhotoNoteCountRef.current) {
+        setRemotePhotoNoteCount(cachedRemotePhotoNoteCount);
+        setIsRemotePhotoNoteCountReady(hasCachedRemotePhotoNoteCount);
       }
       return;
     }
 
-    const nextReady = cachedRemotePhotoNoteCount !== null;
-    if (isRemotePhotoNoteCountReady !== nextReady) {
-      setIsRemotePhotoNoteCountReady(nextReady);
-    }
-
     let active = true;
     const channel = supabase
-      .channel(`user-usage:${user.id}`)
+      .channel(`user-usage:${userId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'user_usage',
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${userId}`,
         },
         (payload) => {
           const nextCount =
             typeof payload.new === 'object' && payload.new && 'photo_note_count' in payload.new
               ? (payload.new as { photo_note_count?: unknown }).photo_note_count
               : null;
+          receivedLiveRemotePhotoNoteCountRef.current = true;
           setIsRemotePhotoNoteCountReady(true);
           setRemotePhotoNoteCount(
             typeof nextCount === 'number' && Number.isFinite(nextCount) ? nextCount : null
@@ -340,10 +363,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         const { data, error } = await supabase
           .from('user_usage')
           .select('photo_note_count')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .maybeSingle();
 
-        if (!active) {
+        if (!active || receivedLiveRemotePhotoNoteCountRef.current) {
           return;
         }
 
@@ -352,14 +375,16 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         }
 
         const nextCount = data?.photo_note_count;
+        receivedLiveRemotePhotoNoteCountRef.current = true;
         setIsRemotePhotoNoteCountReady(true);
         setRemotePhotoNoteCount(
           typeof nextCount === 'number' && Number.isFinite(nextCount) ? nextCount : null
         );
       } catch (error: unknown) {
         console.warn('[subscription] Failed to load remote usage:', error);
-        if (active) {
-          setIsRemotePhotoNoteCountReady(cachedRemotePhotoNoteCount !== null);
+        if (active && !receivedLiveRemotePhotoNoteCountRef.current) {
+          setIsRemotePhotoNoteCountReady(hasCachedRemotePhotoNoteCount);
+          setRemotePhotoNoteCount(cachedRemotePhotoNoteCount);
         }
       }
     })();
@@ -368,14 +393,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       active = false;
       void supabase.removeChannel(channel);
     };
-  }, [
-    authReady,
-    cachedSnapshot,
-    isOnline,
-    isRemotePhotoNoteCountReady,
-    remotePhotoNoteCount,
-    user?.id,
-  ]);
+  }, [authReady, isOnline, userId]);
 
   useEffect(() => {
     if (!isConfigured || !authReady) {
@@ -412,7 +430,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
   const tier = customerInfo ? getTierFromCustomerInfo(customerInfo) : cachedSnapshot?.tier ?? 'free';
   const selectedPackage = selectPreferredPackage(currentOffering);
-  const availablePackages = currentOffering?.availablePackages ?? [];
   const monthlyPackage =
     availablePackages.find((item) => item.packageType === PACKAGE_TYPE.MONTHLY) ?? null;
   const annualPackage =
@@ -424,15 +441,22 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     const nextSnapshot: SubscriptionSnapshot = {
       tier,
       remotePhotoNoteCount,
-      plusPriceLabel: selectedPackage?.product.priceString ?? cachedSnapshot?.plusPriceLabel ?? null,
-      plusPackageTitle: getPlusOfferingLabel(selectedPackage) ?? cachedSnapshot?.plusPackageTitle ?? null,
+      plusPriceLabel: selectedPackage?.product.priceString ?? cachedPlusPriceLabel,
+      plusPackageTitle: getPlusOfferingLabel(selectedPackage) ?? cachedPlusPackageTitle,
       cachedAt: new Date().toISOString(),
     };
 
     void setPersistentItem(snapshotStorageKey, JSON.stringify(nextSnapshot)).catch((error) => {
       console.warn('[subscription] Failed to persist subscription snapshot:', error);
     });
-  }, [remotePhotoNoteCount, selectedPackage, snapshotStorageKey, tier]);
+  }, [
+    cachedPlusPackageTitle,
+    cachedPlusPriceLabel,
+    remotePhotoNoteCount,
+    selectedPackage,
+    snapshotStorageKey,
+    tier,
+  ]);
 
   const purchasePackage = useCallback(
     async (pkg: PurchasesPackage | null): Promise<SubscriptionActionResult> => {
@@ -473,7 +497,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       hasProEntitlement: tier === 'plus',
       canImportFromLibrary: tier === 'plus',
       photoNoteLimit: getPhotoNoteLimitForTier(tier),
-      remotePhotoNoteCount: remotePhotoNoteCount ?? cachedSnapshot?.remotePhotoNoteCount ?? null,
+      remotePhotoNoteCount: remotePhotoNoteCount ?? cachedRemotePhotoNoteCount,
       isRemotePhotoNoteCountReady,
       customerInfo,
       currentOffering,
@@ -481,8 +505,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       monthlyPackage,
       annualPackage,
       lifetimePackage,
-      plusPriceLabel: selectedPackage?.product.priceString ?? cachedSnapshot?.plusPriceLabel ?? null,
-      plusPackageTitle: getPlusOfferingLabel(selectedPackage) ?? cachedSnapshot?.plusPackageTitle ?? null,
+      plusPriceLabel: selectedPackage?.product.priceString ?? cachedPlusPriceLabel,
+      plusPackageTitle: getPlusOfferingLabel(selectedPackage) ?? cachedPlusPackageTitle,
       purchasePackage,
       purchasePlus: async () => {
         if (!selectedPackage) {
@@ -578,7 +602,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     [
       annualPackage,
       availablePackages,
-      cachedSnapshot,
       currentOffering,
       customerInfo,
       isConfigured,
@@ -593,6 +616,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       isRemotePhotoNoteCountReady,
       selectedPackage,
       tier,
+      cachedRemotePhotoNoteCount,
+      cachedPlusPackageTitle,
+      cachedPlusPriceLabel,
     ]
   );
 

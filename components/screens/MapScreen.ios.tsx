@@ -134,7 +134,6 @@ export default function MapScreenIOS() {
     handleLeafMarkerPress,
     handleClusterMarkerPress,
     handleMapPress,
-    clearSelection,
     selectNoteById,
     clusterNodes,
     nearbyItems,
@@ -490,7 +489,6 @@ export default function MapScreenIOS() {
       handleLeafMarkerPress,
       notesPreviewVisibility,
       revealNotesPreview,
-      reduceMotionEnabled,
       triggerMarkerPulse,
       resetToNearbyPreview,
     ]
@@ -514,7 +512,6 @@ export default function MapScreenIOS() {
       emitLightHaptic,
       notesPreviewVisibility,
       revealNotesPreview,
-      reduceMotionEnabled,
       selectNoteById,
       triggerMarkerPulse,
       resetToNearbyPreview,
@@ -662,6 +659,7 @@ export default function MapScreenIOS() {
       initialRegion,
       openFriendsPreview,
       reduceMotionEnabled,
+      setActiveFriendPostId,
       showFriendsPreview,
       visibleRegion,
     ]
