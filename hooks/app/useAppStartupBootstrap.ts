@@ -14,6 +14,7 @@ export function useAppStartupBootstrap() {
   const [startupTarget, setStartupTarget] = useState<StartupEntryRoute | null>(() =>
     getCachedStartupRoute('entry')
   );
+  const [startupError, setStartupError] = useState<string | null>(null);
 
   useEffect(() => {
     if (startupTarget) {
@@ -46,6 +47,7 @@ export function useAppStartupBootstrap() {
           return;
         }
 
+        setStartupError(null);
         startupIdleHandle = scheduleOnIdle(() => {
           startupTimeout = setTimeout(() => {
             syncGeofenceRegions().catch((err) => console.warn('Geofence sync failed:', err));
@@ -55,6 +57,9 @@ export function useAppStartupBootstrap() {
       })
       .catch((err) => {
         console.error('Database init failed:', err);
+        if (!cancelled) {
+          setStartupError('database-init-failed');
+        }
       });
 
     return () => {
@@ -68,5 +73,6 @@ export function useAppStartupBootstrap() {
 
   return {
     startupTarget,
+    startupError,
   };
 }

@@ -1,7 +1,8 @@
 const mockStorage = new Map<string, string>();
 const mockScheduleNotificationAsync = jest.fn();
-const mockGetNoteById = jest.fn();
-const mockGetAllNotes = jest.fn();
+const mockGetNoteByIdForScope = jest.fn();
+const mockGetAllNotesForScope = jest.fn();
+const mockGetPersistedActiveNotesScope = jest.fn();
 const mockUpdateWidgetData = jest.fn();
 
 (globalThis as any).__mockGeofenceTaskHandler = null;
@@ -36,8 +37,10 @@ jest.mock('expo-task-manager', () => ({
 }));
 
 jest.mock('../services/database', () => ({
-  getNoteById: (...args: unknown[]) => mockGetNoteById(...args),
-  getAllNotes: (...args: unknown[]) => mockGetAllNotes(...args),
+  LOCAL_NOTES_SCOPE: '__local__',
+  getNoteByIdForScope: (...args: unknown[]) => mockGetNoteByIdForScope(...args),
+  getAllNotesForScope: (...args: unknown[]) => mockGetAllNotesForScope(...args),
+  getPersistedActiveNotesScope: (...args: unknown[]) => mockGetPersistedActiveNotesScope(...args),
 }));
 
 jest.mock('../services/widgetService', () => ({
@@ -92,13 +95,14 @@ function buildNote(overrides: Partial<any> = {}) {
 }
 
 function setMockNotes(notes: Array<any>) {
-  mockGetAllNotes.mockResolvedValue(notes);
-  mockGetNoteById.mockImplementation(async (id: string) => notes.find((note) => note.id === id) ?? null);
+  mockGetAllNotesForScope.mockResolvedValue(notes);
+  mockGetNoteByIdForScope.mockImplementation(async (id: string) => notes.find((note) => note.id === id) ?? null);
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockStorage.clear();
+  mockGetPersistedActiveNotesScope.mockResolvedValue('user-1');
   mockUpdateWidgetData.mockResolvedValue(undefined);
   setMockNotes([buildNote()]);
 });
@@ -249,8 +253,8 @@ describe('backgroundGeofence', () => {
   });
 
   it('omits note routing data when the geofence region identifier is missing', async () => {
-    mockGetAllNotes.mockResolvedValue([]);
-    mockGetNoteById.mockResolvedValue(null);
+    mockGetAllNotesForScope.mockResolvedValue([]);
+    mockGetNoteByIdForScope.mockResolvedValue(null);
 
     await runEnterEventWithoutIdentifier();
 

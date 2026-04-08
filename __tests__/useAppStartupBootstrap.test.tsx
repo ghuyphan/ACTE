@@ -105,4 +105,17 @@ describe('useAppStartupBootstrap', () => {
       expect(mockRunMediaCacheEviction).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('surfaces a startup error when database initialization fails', async () => {
+    mockGetDB.mockRejectedValueOnce(new Error('db failed'));
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result } = renderHook(() => useAppStartupBootstrap(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.startupError).toBe('database-init-failed');
+    });
+
+    consoleErrorSpy.mockRestore();
+  });
 });

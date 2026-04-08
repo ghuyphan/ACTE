@@ -30,13 +30,20 @@ export default function NoteDetailActionSection({
     saveIconAnimatedStyle,
 }: NoteDetailActionSectionProps) {
     const actionButtonBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)';
+    const actionButtonBorder = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(43,38,33,0.12)';
 
     return (
         <Animated.View style={styles.actionRow}>
             <AnimatedActionButton
                 onPress={onPrimaryPress}
                 testID="note-detail-edit"
-                style={[styles.actionBtn, { backgroundColor: actionButtonBackground }]}
+                style={[
+                    styles.actionBtn,
+                    {
+                        backgroundColor: actionButtonBackground,
+                        borderColor: actionButtonBorder,
+                    },
+                ]}
                 delay={100}
                 disabled={isDeleting}
             >
@@ -61,7 +68,13 @@ export default function NoteDetailActionSection({
             <AnimatedActionButton
                 onPress={onShare}
                 testID="note-detail-share"
-                style={[styles.actionBtn, { backgroundColor: actionButtonBackground }]}
+                style={[
+                    styles.actionBtn,
+                    {
+                        backgroundColor: actionButtonBackground,
+                        borderColor: actionButtonBorder,
+                    },
+                ]}
                 delay={140}
                 disabled={isDeleting}
             >
@@ -71,7 +84,13 @@ export default function NoteDetailActionSection({
             <AnimatedActionButton
                 onPress={onDelete}
                 testID="note-detail-delete"
-                style={[styles.actionBtn, { backgroundColor: actionButtonBackground }]}
+                style={[
+                    styles.actionBtn,
+                    {
+                        backgroundColor: actionButtonBackground,
+                        borderColor: actionButtonBorder,
+                    },
+                ]}
                 delay={180}
                 disabled={isDeleting}
             >
@@ -92,6 +111,7 @@ const styles = StyleSheet.create({
         width: 52,
         height: 52,
         borderRadius: 26,
+        borderWidth: StyleSheet.hairlineWidth,
         justifyContent: 'center',
         alignItems: 'center',
     },

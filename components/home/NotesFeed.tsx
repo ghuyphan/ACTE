@@ -26,6 +26,9 @@ import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
 const MAX_STAGGERED_ENTRANCE_INDEX = 2;
 const ENTRANCE_DELAY_MS = 24;
 const DOCKED_HEADER_CONTENT_OVERLAP = 22;
+const SCROLL_SNAP_EPSILON = 2;
+const REFRESH_PULL_THRESHOLD = -6;
+const DRAG_END_VELOCITY_THRESHOLD = 0.05;
 function getEntranceDelay(index: number) {
   return Math.min(index, MAX_STAGGERED_ENTRANCE_INDEX) * ENTRANCE_DELAY_MS;
 }
@@ -377,23 +380,27 @@ export default function NotesFeed({
     }
   }, [refreshing, updateRefreshGestureActive]);
 
-  const settleCaptureVisibility = useCallback((offsetY: number) => {
-    reportCaptureVisibility(offsetY);
-  }, [reportCaptureVisibility]);
+  const getNearestSnapOffset = useCallback(
+    (offsetY: number) => {
+      const maxSnapOffset = snapPageCount * snapHeight;
+      return Math.min(
+        maxSnapOffset,
+        Math.max(0, Math.round(offsetY / snapHeight) * snapHeight)
+      );
+    },
+    [snapHeight, snapPageCount]
+  );
 
   const getSettledItemFromOffset = useCallback(
     (offsetY: number) => {
       const settledOffset =
         Platform.OS === 'android'
-          ? Math.min(
-              snapPageCount * snapHeight,
-              Math.max(0, Math.round(offsetY / snapHeight) * snapHeight)
-            )
-          : offsetY;
+          ? getNearestSnapOffset(offsetY)
+          : Math.max(0, offsetY);
       const rawIndex = Math.round(settledOffset / snapHeight) - 1;
       return rawIndex >= 0 ? listData[rawIndex] ?? null : null;
     },
-    [listData, snapHeight, snapPageCount]
+    [getNearestSnapOffset, listData, snapHeight]
   );
 
   const reportActiveCard = useCallback(
@@ -402,33 +409,6 @@ export default function NotesFeed({
       setActiveCardKey(nextItem ? `${nextItem.kind}:${nextItem.id}` : null);
     },
     [getSettledItemFromOffset]
-  );
-
-  const settleAndroidSnap = useCallback(
-    (offsetY: number) => {
-      if (Platform.OS !== 'android') {
-        return;
-      }
-
-      if (isAdjustingSnapRef.current) {
-        isAdjustingSnapRef.current = false;
-        return;
-      }
-
-      const maxSnapOffset = snapPageCount * snapHeight;
-      const nearestSnapOffset = Math.min(
-        maxSnapOffset,
-        Math.max(0, Math.round(offsetY / snapHeight) * snapHeight)
-      );
-
-      if (Math.abs(nearestSnapOffset - offsetY) < 2) {
-        return;
-      }
-
-      isAdjustingSnapRef.current = true;
-      flatListRef.current?.scrollToOffset({ offset: nearestSnapOffset, animated: true });
-    },
-    [flatListRef, snapHeight, snapPageCount]
   );
 
   const reportSettledArchiveItem = useCallback(
@@ -447,18 +427,77 @@ export default function NotesFeed({
     [getSettledItemFromOffset, onSettledArchiveItemChange]
   );
 
+  const applySettledOffset = useCallback(
+    (offsetY: number) => {
+      const normalizedOffset = Math.max(0, offsetY);
+      lastOffsetYRef.current = normalizedOffset;
+      reportCaptureVisibility(normalizedOffset);
+      reportActiveCard(normalizedOffset);
+      reportSettledArchiveItem(normalizedOffset);
+
+      if (!refreshing) {
+        updateRefreshGestureActive(false);
+      }
+    },
+    [
+      refreshing,
+      reportActiveCard,
+      reportCaptureVisibility,
+      reportSettledArchiveItem,
+      updateRefreshGestureActive,
+    ]
+  );
+
+  const maybeCorrectSnapOffset = useCallback(
+    (
+      offsetY: number,
+      { animated, trackAdjustment = false }: { animated: boolean; trackAdjustment?: boolean }
+    ) => {
+      if (Platform.OS !== 'android') {
+        return false;
+      }
+
+      const nearestSnapOffset = getNearestSnapOffset(offsetY);
+      if (Math.abs(nearestSnapOffset - offsetY) < SCROLL_SNAP_EPSILON) {
+        return false;
+      }
+
+      if (trackAdjustment) {
+        isAdjustingSnapRef.current = true;
+      }
+
+      flatListRef.current?.scrollToOffset({ offset: nearestSnapOffset, animated });
+      applySettledOffset(nearestSnapOffset);
+      return true;
+    },
+    [applySettledOffset, flatListRef, getNearestSnapOffset]
+  );
+
   const pinCapturePageToTop = useCallback(() => {
     if (Platform.OS !== 'android') {
       return;
     }
 
     isAdjustingSnapRef.current = false;
-    lastOffsetYRef.current = 0;
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-    settleCaptureVisibility(0);
-    reportActiveCard(0);
-    reportSettledArchiveItem(0);
-  }, [flatListRef, reportActiveCard, reportSettledArchiveItem, settleCaptureVisibility]);
+    applySettledOffset(0);
+  }, [applySettledOffset, flatListRef]);
+
+  const settleAndroidSnap = useCallback(
+    (offsetY: number) => {
+      if (Platform.OS !== 'android') {
+        return;
+      }
+
+      if (isAdjustingSnapRef.current) {
+        isAdjustingSnapRef.current = false;
+        return;
+      }
+
+      maybeCorrectSnapOffset(offsetY, { animated: true, trackAdjustment: true });
+    },
+    [maybeCorrectSnapOffset]
+  );
 
   useLayoutEffect(() => {
     if (Platform.OS !== 'android') {
@@ -488,31 +527,12 @@ export default function NotesFeed({
       return;
     }
 
-    const currentOffset = lastOffsetYRef.current;
-    const maxSnapOffset = snapPageCount * snapHeight;
-    const nearestSnapOffset = Math.min(
-      maxSnapOffset,
-      Math.max(0, Math.round(currentOffset / snapHeight) * snapHeight)
-    );
-
-    if (Math.abs(nearestSnapOffset - currentOffset) < 2) {
-      return;
-    }
-
-    lastOffsetYRef.current = nearestSnapOffset;
-    flatListRef.current?.scrollToOffset({ offset: nearestSnapOffset, animated: false });
-    settleCaptureVisibility(nearestSnapOffset);
-    reportActiveCard(nearestSnapOffset);
-    reportSettledArchiveItem(nearestSnapOffset);
+    maybeCorrectSnapOffset(lastOffsetYRef.current, { animated: false });
   }, [
     flatListRef,
     itemKeys,
-    reportActiveCard,
     capturePageLocked,
-    reportSettledArchiveItem,
-    settleCaptureVisibility,
-    snapHeight,
-    snapPageCount,
+    maybeCorrectSnapOffset,
   ]);
 
   useEffect(() => {
@@ -524,30 +544,10 @@ export default function NotesFeed({
       return;
     }
 
-    const currentOffset = lastOffsetYRef.current;
-    const maxSnapOffset = snapPageCount * snapHeight;
-    const nearestSnapOffset = Math.min(
-      maxSnapOffset,
-      Math.max(0, Math.round(currentOffset / snapHeight) * snapHeight)
-    );
-
-    if (Math.abs(nearestSnapOffset - currentOffset) < 2) {
-      return;
-    }
-
-    lastOffsetYRef.current = nearestSnapOffset;
-    flatListRef.current?.scrollToOffset({ offset: nearestSnapOffset, animated: false });
-    settleCaptureVisibility(nearestSnapOffset);
-    reportActiveCard(nearestSnapOffset);
-    reportSettledArchiveItem(nearestSnapOffset);
+    maybeCorrectSnapOffset(lastOffsetYRef.current, { animated: false });
   }, [
-    flatListRef,
     capturePageLocked,
-    reportActiveCard,
-    reportSettledArchiveItem,
-    settleCaptureVisibility,
-    snapHeight,
-    snapPageCount,
+    maybeCorrectSnapOffset,
   ]);
 
   useEffect(() => {
@@ -640,6 +640,9 @@ export default function NotesFeed({
       disableIntervalMomentum={Platform.OS === 'android' && !snapSuspended}
       snapToAlignment="start"
       decelerationRate={snapSuspended ? 'normal' : 'fast'}
+      // This feed already manages its own anchor + snap corrections. Letting
+      // FlashList auto-maintain visible content position can cause double-adjusts.
+      maintainVisibleContentPosition={{ disabled: true }}
       showsVerticalScrollIndicator={false}
       ListHeaderComponent={captureHeader}
       ListEmptyComponent={
@@ -660,7 +663,7 @@ export default function NotesFeed({
       onScroll={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
         lastOffsetYRef.current = offsetY;
-        updateRefreshGestureActive(offsetY < -6 || refreshing);
+        updateRefreshGestureActive(offsetY < REFRESH_PULL_THRESHOLD || refreshing);
         reportCaptureVisibility(offsetY);
         onScrollOffsetChange?.(offsetY);
       }}
@@ -676,23 +679,14 @@ export default function NotesFeed({
 
         const offsetY = event.nativeEvent.contentOffset.y;
         if (offsetY <= 0) {
-          lastOffsetYRef.current = offsetY;
-          settleCaptureVisibility(0);
-          reportActiveCard(0);
-          reportSettledArchiveItem(0);
-
-          if (!refreshing) {
-            updateRefreshGestureActive(false);
-          }
+          applySettledOffset(0);
           return;
         }
 
         const velocityY = event.nativeEvent.velocity?.y ?? 0;
-        if (Math.abs(velocityY) < 0.05) {
-          lastOffsetYRef.current = offsetY;
-          settleCaptureVisibility(offsetY);
-          reportActiveCard(offsetY);
-          reportSettledArchiveItem(offsetY);
+        if (Math.abs(velocityY) < DRAG_END_VELOCITY_THRESHOLD) {
+          applySettledOffset(offsetY);
+          settleAndroidSnap(offsetY);
         }
       }}
       onMomentumScrollBegin={() => {
@@ -706,22 +700,12 @@ export default function NotesFeed({
 
         const offsetY = event.nativeEvent.contentOffset.y;
         if (offsetY <= 0) {
-          lastOffsetYRef.current = offsetY;
-          settleCaptureVisibility(0);
-          reportActiveCard(0);
-          reportSettledArchiveItem(0);
-
-          if (!refreshing) {
-            updateRefreshGestureActive(false);
-          }
+          applySettledOffset(0);
           return;
         }
 
-        lastOffsetYRef.current = offsetY;
-        settleCaptureVisibility(offsetY);
+        applySettledOffset(offsetY);
         settleAndroidSnap(offsetY);
-        reportActiveCard(offsetY);
-        reportSettledArchiveItem(offsetY);
       }}
       contentContainerStyle={{ paddingBottom: height - snapHeight + bottomOverlayInset }}
       refreshControl={

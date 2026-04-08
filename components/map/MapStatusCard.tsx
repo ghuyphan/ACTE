@@ -15,6 +15,7 @@ import {
   getOverlayBorderColor,
   getOverlayFallbackColor,
   getOverlayMutedFillColor,
+  getOverlayScrimColor,
   mapOverlayTokens,
 } from './overlayTokens';
 
@@ -54,7 +55,7 @@ export default function MapStatusCard({
   const isIOS = Platform.OS === 'ios';
   const shouldUseGlass = isIOS;
   const fallbackFill = getOverlayFallbackColor(isDark);
-  const statusGlassScrimColor = isDark ? 'rgba(12,12,18,0.10)' : 'rgba(255,255,255,0.04)';
+  const statusScrimColor = getOverlayScrimColor(isDark);
   const iconColor = isIOS ? secondaryTextColor : primaryColor;
   const isPill = variant === 'pill';
   const pillEnterProgress = useSharedValue(reduceMotionEnabled ? 1 : 0);
@@ -114,7 +115,7 @@ export default function MapStatusCard({
               isIOS ? styles.pillIOS : styles.pillAndroid,
               {
                 opacity: pressed ? 0.74 : 1,
-                borderColor: isIOS ? getOverlayBorderColor(isDark) : 'transparent',
+                borderColor: getOverlayBorderColor(isDark),
                 backgroundColor: shouldUseGlass ? 'transparent' : getOverlayMutedFillColor(isDark),
               },
             ]}
@@ -140,7 +141,7 @@ export default function MapStatusCard({
                 StyleSheet.absoluteFill,
                 styles.pillScrim,
                 {
-                  backgroundColor: shouldUseGlass ? statusGlassScrimColor : getOverlayMutedFillColor(isDark),
+                  backgroundColor: shouldUseGlass ? statusScrimColor : getOverlayScrimColor(isDark),
                 },
               ]}
             />
@@ -176,7 +177,7 @@ export default function MapStatusCard({
           styles.card,
           isIOS ? styles.cardIOS : styles.cardAndroid,
           {
-            borderColor: isIOS ? getOverlayBorderColor(isDark) : 'transparent',
+            borderColor: getOverlayBorderColor(isDark),
             backgroundColor: shouldUseGlass ? 'transparent' : fallbackFill,
           },
         ]}
@@ -196,7 +197,7 @@ export default function MapStatusCard({
             styles.scrim,
             isIOS ? styles.scrimIOS : styles.scrimAndroid,
             {
-              backgroundColor: shouldUseGlass ? statusGlassScrimColor : fallbackFill,
+              backgroundColor: shouldUseGlass ? statusScrimColor : getOverlayScrimColor(isDark),
             },
           ]}
         />
@@ -270,6 +271,7 @@ const styles = StyleSheet.create({
   pillAndroid: {
     minHeight: 42,
     borderRadius: 21,
+    borderWidth: 1,
     paddingHorizontal: 14,
     paddingVertical: 9,
     ...mapOverlayTokens.overlayShadow,
@@ -312,7 +314,7 @@ const styles = StyleSheet.create({
   cardAndroid: {
     maxWidth: 368,
     borderRadius: mapOverlayTokens.overlayRadius,
-    borderWidth: 0,
+    borderWidth: 1,
     ...mapOverlayTokens.overlayShadow,
   },
   content: {

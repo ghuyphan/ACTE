@@ -114,7 +114,7 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
         tabBarBg: 'rgba(0,0,0,0.92)',
         captureCardText: '#1C1C1E',
         captureCardPlaceholder: 'rgba(28,28,30,0.5)',
-        captureCardBorder: 'rgba(255,255,255,0.08)',
+        captureCardBorder: 'rgba(255,247,232,0.16)',
         captureGlassFill: 'rgba(28,28,30,0.28)',
         captureGlassBorder: 'rgba(255,255,255,0.16)',
         captureGlassText: '#FFF7E8',

@@ -21,6 +21,7 @@ import MapPreviewSheet from './MapPreviewSheet';
 import {
   getOverlayBorderColor,
   getOverlayFallbackColor,
+  getOverlayScrimColor,
   mapOverlayTokens,
 } from './overlayTokens';
 
@@ -188,13 +189,14 @@ export default function MapFriendsPreviewCard({
           pointerEvents="none"
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
+          fallbackColor="transparent"
           style={StyleSheet.absoluteFill}
         />
         <View
           pointerEvents="none"
           style={[
             StyleSheet.absoluteFill,
-            { backgroundColor: Platform.OS === 'android' ? colors.androidTabShellScrim : isDark ? 'rgba(24,24,28,0.24)' : 'rgba(255,255,255,0.44)' },
+            { backgroundColor: Platform.OS === 'android' ? getOverlayScrimColor(isDark) : isDark ? 'rgba(24,24,28,0.24)' : 'rgba(255,255,255,0.44)' },
           ]}
         />
         {isOlderIOS ? (
@@ -313,7 +315,7 @@ export default function MapFriendsPreviewCard({
 
 const styles = StyleSheet.create({
   inner: {
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: Platform.OS === 'android' ? 1 : StyleSheet.hairlineWidth,
     borderRadius: mapOverlayTokens.overlayRadius,
     overflow: 'hidden',
     ...mapOverlayTokens.overlayShadow,

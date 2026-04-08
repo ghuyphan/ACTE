@@ -206,6 +206,8 @@ export default function NoteDetailSheetContent({
     stickerModeEnabled,
     t,
 }: NoteDetailSheetContentProps) {
+    const now = useRelativeTimeNow();
+
     if (loading) {
         return (
             <View style={styles.sheetSurface}>
@@ -229,7 +231,6 @@ export default function NoteDetailSheetContent({
         );
     }
 
-    const now = useRelativeTimeNow();
     const dateStr = formatNoteTimestamp(note.createdAt, 'detail', now);
     const gradient = getTextNoteCardGradient({
         text: isEditing ? editContent : note.content,

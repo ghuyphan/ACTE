@@ -2,7 +2,12 @@ import { LocationGeofencingEventType, LocationRegion } from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import i18n from '../constants/i18n';
-import { getAllNotes, getNoteById } from '../services/database';
+import {
+    getAllNotesForScope,
+    getNoteByIdForScope,
+    getPersistedActiveNotesScope,
+    LOCAL_NOTES_SCOPE,
+} from '../services/database';
 import { buildNearbyReminderCopy, buildReminderNotificationContent } from '../services/notificationService';
 import { buildReminderTextExcerpt, findReminderPlaceGroupByNoteId } from '../services/reminderSelection';
 import { updateWidgetData } from '../services/widgetService';
@@ -46,6 +51,10 @@ function getWidgetRefreshLocation(
     }
 
     return { latitude, longitude };
+}
+
+async function resolveBackgroundNotesScope() {
+    return (await getPersistedActiveNotesScope()) ?? LOCAL_NOTES_SCOPE;
 }
 
 // Configure how notifications appear when the app is in the foreground
@@ -93,9 +102,10 @@ if (
                 let cooldownNoteId = regionId;
 
                 try {
+                    const noteScope = await resolveBackgroundNotesScope();
                     const [triggeredNote, allNotes] = await Promise.all([
-                        regionId ? getNoteById(regionId) : Promise.resolve(null),
-                        regionId ? getAllNotes() : Promise.resolve([]),
+                        regionId ? getNoteByIdForScope(regionId, noteScope) : Promise.resolve(null),
+                        regionId ? getAllNotesForScope(noteScope) : Promise.resolve([]),
                     ]);
                     const reminderGroup = regionId
                         ? findReminderPlaceGroupByNoteId(allNotes, regionId)

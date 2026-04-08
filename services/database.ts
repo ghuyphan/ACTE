@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
 import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
+import { getPersistentItem, getPersistentItemSync, setPersistentItem } from '../utils/appStorage';
 import type { SyncChange } from './syncService';
 import { buildNoteSearchText, tokenizeSearchQuery } from './noteSearch';
 import { normalizeSavedTextNoteColor } from './noteAppearance';
@@ -150,6 +151,7 @@ let transactionQueue: Promise<void> = Promise.resolve();
 let androidDatabaseQueue: Promise<void> = Promise.resolve();
 const APP_SCHEMA_VERSION = 14;
 export const LOCAL_NOTES_SCOPE = '__local__';
+const ACTIVE_NOTES_SCOPE_STORAGE_KEY = 'notes.activeScope';
 let activeNotesScope = LOCAL_NOTES_SCOPE;
 const SQLITE_LOCK_RETRY_DELAYS_MS = [30, 80, 160];
 const NOTES_FTS_TABLE = 'notes_fts';
@@ -262,6 +264,18 @@ export function getActiveNotesScope() {
 
 export function setActiveNotesScope(scope: string | null | undefined) {
     activeNotesScope = scope?.trim() || LOCAL_NOTES_SCOPE;
+    void setPersistentItem(ACTIVE_NOTES_SCOPE_STORAGE_KEY, activeNotesScope).catch((error) => {
+        console.warn('[database] Failed to persist active notes scope:', error);
+    });
+}
+
+export function getPersistedActiveNotesScopeSync() {
+    return getPersistentItemSync(ACTIVE_NOTES_SCOPE_STORAGE_KEY)?.trim() || null;
+}
+
+export async function getPersistedActiveNotesScope() {
+    const storedScope = await getPersistentItem(ACTIVE_NOTES_SCOPE_STORAGE_KEY);
+    return storedScope?.trim() || null;
 }
 
 function hasStoredDecorationPayload(payload: string | null | undefined) {
@@ -601,344 +615,339 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         ON monthly_recap_cache(owner_uid, updated_at DESC);
     `);
 
-            // Migration: add missing columns for existing databases before touching dependent indexes/queries.
-            try {
-                const userVersionRow = await database.getFirstAsync<{ user_version: number }>(
-                    'PRAGMA user_version'
-                );
-                const currentUserVersion = userVersionRow?.user_version ?? 0;
-                const tableInfo = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(notes)`);
-                const columns = tableInfo.map((col) => col.name);
-                let shouldBackfillNoteMetadata = currentUserVersion < APP_SCHEMA_VERSION;
+            const userVersionRow = await database.getFirstAsync<{ user_version: number }>(
+                'PRAGMA user_version'
+            );
+            const currentUserVersion = userVersionRow?.user_version ?? 0;
+            const tableInfo = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(notes)`);
+            const columns = tableInfo.map((col) => col.name);
+            let shouldBackfillNoteMetadata = currentUserVersion < APP_SCHEMA_VERSION;
 
-                if (!columns.includes('is_favorite')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0`);
-                }
-                if (!columns.includes('owner_uid')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN owner_uid TEXT NOT NULL DEFAULT '${LOCAL_NOTES_SCOPE}'`);
-                }
-                if (!columns.includes('photo_local_uri')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_local_uri TEXT`);
-                    shouldBackfillNoteMetadata = true;
-                }
-                if (!columns.includes('caption')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN caption TEXT`);
-                    shouldBackfillNoteMetadata = true;
-                }
-                if (!columns.includes('photo_synced_local_uri')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_synced_local_uri TEXT`);
-                }
-                if (!columns.includes('photo_remote_base64')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_remote_base64 TEXT`);
-                }
-                if (!columns.includes('is_live_photo')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN is_live_photo INTEGER NOT NULL DEFAULT 0`);
-                }
-                if (!columns.includes('paired_video_local_uri')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN paired_video_local_uri TEXT`);
-                }
-                if (!columns.includes('paired_video_synced_local_uri')) {
-                    await database.execAsync(
-                        `ALTER TABLE notes ADD COLUMN paired_video_synced_local_uri TEXT`
-                    );
-                }
-                if (!columns.includes('paired_video_remote_path')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN paired_video_remote_path TEXT`);
-                }
-                if (!columns.includes('search_text')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN search_text TEXT NOT NULL DEFAULT ''`);
-                    shouldBackfillNoteMetadata = true;
-                }
-                if (!columns.includes('prompt_id')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN prompt_id TEXT`);
-                }
-                if (!columns.includes('prompt_text_snapshot')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN prompt_text_snapshot TEXT`);
-                    shouldBackfillNoteMetadata = true;
-                }
-                if (!columns.includes('prompt_answer')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN prompt_answer TEXT`);
-                    shouldBackfillNoteMetadata = true;
-                }
-                if (!columns.includes('mood_emoji')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN mood_emoji TEXT`);
-                }
-                if (!columns.includes('note_color')) {
-                    await database.execAsync(`ALTER TABLE notes ADD COLUMN note_color TEXT`);
-                }
-
-                await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_search_text ON notes(search_text)`);
-                await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_owner_created ON notes(owner_uid, created_at DESC)`);
+            if (!columns.includes('is_favorite')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0`);
+            }
+            if (!columns.includes('owner_uid')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN owner_uid TEXT NOT NULL DEFAULT '${LOCAL_NOTES_SCOPE}'`);
+            }
+            if (!columns.includes('photo_local_uri')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_local_uri TEXT`);
+                shouldBackfillNoteMetadata = true;
+            }
+            if (!columns.includes('caption')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN caption TEXT`);
+                shouldBackfillNoteMetadata = true;
+            }
+            if (!columns.includes('photo_synced_local_uri')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_synced_local_uri TEXT`);
+            }
+            if (!columns.includes('photo_remote_base64')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN photo_remote_base64 TEXT`);
+            }
+            if (!columns.includes('is_live_photo')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN is_live_photo INTEGER NOT NULL DEFAULT 0`);
+            }
+            if (!columns.includes('paired_video_local_uri')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN paired_video_local_uri TEXT`);
+            }
+            if (!columns.includes('paired_video_synced_local_uri')) {
                 await database.execAsync(
-                    `CREATE VIRTUAL TABLE IF NOT EXISTS ${NOTES_FTS_TABLE}
-                     USING fts5(note_id UNINDEXED, owner_uid, search_text)`
+                    `ALTER TABLE notes ADD COLUMN paired_video_synced_local_uri TEXT`
                 );
+            }
+            if (!columns.includes('paired_video_remote_path')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN paired_video_remote_path TEXT`);
+            }
+            if (!columns.includes('search_text')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN search_text TEXT NOT NULL DEFAULT ''`);
+                shouldBackfillNoteMetadata = true;
+            }
+            if (!columns.includes('prompt_id')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN prompt_id TEXT`);
+            }
+            if (!columns.includes('prompt_text_snapshot')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN prompt_text_snapshot TEXT`);
+                shouldBackfillNoteMetadata = true;
+            }
+            if (!columns.includes('prompt_answer')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN prompt_answer TEXT`);
+                shouldBackfillNoteMetadata = true;
+            }
+            if (!columns.includes('mood_emoji')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN mood_emoji TEXT`);
+            }
+            if (!columns.includes('note_color')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN note_color TEXT`);
+            }
+
+            await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_search_text ON notes(search_text)`);
+            await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_owner_created ON notes(owner_uid, created_at DESC)`);
+            await database.execAsync(
+                `CREATE VIRTUAL TABLE IF NOT EXISTS ${NOTES_FTS_TABLE}
+                 USING fts5(note_id UNINDEXED, owner_uid, search_text)`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS note_doodles (
+                    note_id TEXT PRIMARY KEY NOT NULL,
+                    strokes_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
+                )`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS sticker_assets (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    owner_uid TEXT NOT NULL DEFAULT '${LOCAL_NOTES_SCOPE}',
+                    local_uri TEXT NOT NULL,
+                    remote_path TEXT,
+                    upload_fingerprint TEXT,
+                    content_hash TEXT,
+                    mime_type TEXT NOT NULL,
+                    width REAL NOT NULL,
+                    height REAL NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT,
+                    source TEXT NOT NULL DEFAULT 'import'
+                )`
+            );
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_sticker_assets_owner_created ON sticker_assets(owner_uid, created_at DESC)`
+            );
+            const stickerAssetInfo = await database.getAllAsync<{ name: string }>(
+                `PRAGMA table_info(sticker_assets)`
+            );
+            const stickerAssetColumns = stickerAssetInfo.map((col) => col.name);
+            if (!stickerAssetColumns.includes('upload_fingerprint')) {
                 await database.execAsync(
-                    `CREATE TABLE IF NOT EXISTS note_doodles (
-                        note_id TEXT PRIMARY KEY NOT NULL,
-                        strokes_json TEXT NOT NULL,
-                        updated_at TEXT NOT NULL,
-                        FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
-                    )`
+                    `ALTER TABLE sticker_assets ADD COLUMN upload_fingerprint TEXT`
                 );
+            }
+            if (!stickerAssetColumns.includes('content_hash')) {
                 await database.execAsync(
-                    `CREATE TABLE IF NOT EXISTS sticker_assets (
-                        id TEXT PRIMARY KEY NOT NULL,
-                        owner_uid TEXT NOT NULL DEFAULT '${LOCAL_NOTES_SCOPE}',
-                        local_uri TEXT NOT NULL,
-                        remote_path TEXT,
-                        upload_fingerprint TEXT,
-                        content_hash TEXT,
-                        mime_type TEXT NOT NULL,
-                        width REAL NOT NULL,
-                        height REAL NOT NULL,
-                        created_at TEXT NOT NULL,
-                        updated_at TEXT,
-                        source TEXT NOT NULL DEFAULT 'import'
-                    )`
+                    `ALTER TABLE sticker_assets ADD COLUMN content_hash TEXT`
                 );
-                await database.execAsync(
-                    `CREATE INDEX IF NOT EXISTS idx_sticker_assets_owner_created ON sticker_assets(owner_uid, created_at DESC)`
-                );
-                const stickerAssetInfo = await database.getAllAsync<{ name: string }>(
-                    `PRAGMA table_info(sticker_assets)`
-                );
-                const stickerAssetColumns = stickerAssetInfo.map((col) => col.name);
-                if (!stickerAssetColumns.includes('upload_fingerprint')) {
-                    await database.execAsync(
-                        `ALTER TABLE sticker_assets ADD COLUMN upload_fingerprint TEXT`
-                    );
-                }
-                if (!stickerAssetColumns.includes('content_hash')) {
-                    await database.execAsync(
-                        `ALTER TABLE sticker_assets ADD COLUMN content_hash TEXT`
-                    );
-                }
-                await database.execAsync(
-                    `CREATE INDEX IF NOT EXISTS idx_sticker_assets_owner_content_hash ON sticker_assets(owner_uid, content_hash)`
-                );
-                await database.execAsync(
-                    `CREATE TABLE IF NOT EXISTS note_stickers (
-                        note_id TEXT PRIMARY KEY NOT NULL,
-                        placements_json TEXT NOT NULL,
-                        updated_at TEXT NOT NULL,
-                        FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
-                    )`
+            }
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_sticker_assets_owner_content_hash ON sticker_assets(owner_uid, content_hash)`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS note_stickers (
+                    note_id TEXT PRIMARY KEY NOT NULL,
+                    placements_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
+                )`
+            );
+
+            if (shouldBackfillNoteMetadata) {
+                const rows = await database.getAllAsync<{
+                    id: string;
+                    type: NoteType;
+                    content: string;
+                    caption: string | null;
+                    photo_local_uri: string | null;
+                    location_name: string | null;
+                    prompt_text_snapshot: string | null;
+                    prompt_answer: string | null;
+                    search_text: string | null;
+                }>(
+                    `SELECT id, type, content, caption, photo_local_uri, location_name, prompt_text_snapshot, prompt_answer, search_text
+                     FROM notes`
                 );
 
-                if (shouldBackfillNoteMetadata) {
-                    const rows = await database.getAllAsync<{
-                        id: string;
-                        type: NoteType;
-                        content: string;
-                        caption: string | null;
-                        photo_local_uri: string | null;
-                        location_name: string | null;
-                        prompt_text_snapshot: string | null;
-                        prompt_answer: string | null;
-                        search_text: string | null;
-                    }>(
-                        `SELECT id, type, content, caption, photo_local_uri, location_name, prompt_text_snapshot, prompt_answer, search_text
-                         FROM notes`
-                    );
+                for (const row of rows) {
+                    const photoLocalUri =
+                        row.type === 'photo'
+                            ? resolveStoredPhotoUri(row.photo_local_uri ?? row.content)
+                            : null;
+                    const searchText = buildNoteSearchText({
+                        type: row.type,
+                        content: row.type === 'photo' ? '' : row.content,
+                        caption: row.type === 'photo' ? row.caption ?? null : null,
+                        locationName: row.location_name,
+                        promptTextSnapshot: row.prompt_text_snapshot,
+                        promptAnswer: row.prompt_answer,
+                    });
 
-                    for (const row of rows) {
-                        const photoLocalUri =
-                            row.type === 'photo'
-                                ? resolveStoredPhotoUri(row.photo_local_uri ?? row.content)
-                                : null;
-                        const searchText = buildNoteSearchText({
-                            type: row.type,
-                            content: row.type === 'photo' ? '' : row.content,
-                            caption: row.type === 'photo' ? row.caption ?? null : null,
-                            locationName: row.location_name,
-                            promptTextSnapshot: row.prompt_text_snapshot,
-                            promptAnswer: row.prompt_answer,
-                        });
-
-                        if (
-                            row.photo_local_uri !== photoLocalUri ||
-                            (row.search_text ?? '') !== searchText
-                        ) {
-                            await database.runAsync(
-                                `UPDATE notes
-                                 SET photo_local_uri = ?, search_text = ?
-                                 WHERE id = ?`,
-                                photoLocalUri,
-                                searchText,
-                                row.id
-                            );
-                        }
-                    }
-                }
-
-                if (currentUserVersion < APP_SCHEMA_VERSION) {
-                    const searchRows = await database.getAllAsync<{
-                        id: string;
-                        owner_uid: string | null;
-                        search_text: string | null;
-                    }>(`SELECT id, owner_uid, search_text FROM notes`);
-
-                    await database.runAsync(`DELETE FROM ${NOTES_FTS_TABLE}`);
-                    for (const row of searchRows) {
+                    if (
+                        row.photo_local_uri !== photoLocalUri ||
+                        (row.search_text ?? '') !== searchText
+                    ) {
                         await database.runAsync(
-                            `INSERT INTO ${NOTES_FTS_TABLE} (note_id, owner_uid, search_text)
-                             VALUES (?, ?, ?)`,
-                            row.id,
-                            row.owner_uid ?? LOCAL_NOTES_SCOPE,
-                            row.search_text ?? ''
+                            `UPDATE notes
+                             SET photo_local_uri = ?, search_text = ?
+                             WHERE id = ?`,
+                            photoLocalUri,
+                            searchText,
+                            row.id
                         );
                     }
                 }
+            }
 
-                const syncQueueInfo = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(sync_queue)`);
-                const syncQueueColumns = syncQueueInfo.map((col) => col.name);
+            if (currentUserVersion < APP_SCHEMA_VERSION) {
+                const searchRows = await database.getAllAsync<{
+                    id: string;
+                    owner_uid: string | null;
+                    search_text: string | null;
+                }>(`SELECT id, owner_uid, search_text FROM notes`);
 
-                if (!syncQueueColumns.includes('next_retry_at')) {
-                    await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN next_retry_at TEXT`);
+                await database.runAsync(`DELETE FROM ${NOTES_FTS_TABLE}`);
+                for (const row of searchRows) {
+                    await database.runAsync(
+                        `INSERT INTO ${NOTES_FTS_TABLE} (note_id, owner_uid, search_text)
+                         VALUES (?, ?, ?)`,
+                        row.id,
+                        row.owner_uid ?? LOCAL_NOTES_SCOPE,
+                        row.search_text ?? ''
+                    );
                 }
-                if (!syncQueueColumns.includes('owner_uid')) {
-                    await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN owner_uid TEXT NOT NULL DEFAULT '${LOCAL_NOTES_SCOPE}'`);
-                }
-                if (!syncQueueColumns.includes('terminal')) {
-                    await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN terminal INTEGER NOT NULL DEFAULT 0`);
-                }
-                if (!syncQueueColumns.includes('blocked_reason')) {
-                    await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN blocked_reason TEXT`);
-                }
+            }
 
-                await database.execAsync(
-                    `CREATE INDEX IF NOT EXISTS idx_sync_queue_retry_window ON sync_queue(status, terminal, next_retry_at, created_at ASC)`
-                );
-                await database.execAsync(
-                    `CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_status_created ON sync_queue(owner_uid, status, created_at ASC)`
-                );
+            const syncQueueInfo = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(sync_queue)`);
+            const syncQueueColumns = syncQueueInfo.map((col) => col.name);
 
-                if (currentUserVersion < APP_SCHEMA_VERSION) {
-                    await database.execAsync(`
-                        DROP TABLE IF EXISTS rooms_cache;
-                        DROP TABLE IF EXISTS room_memberships_cache;
-                        DROP TABLE IF EXISTS room_posts_cache;
-                        DROP TABLE IF EXISTS room_read_state;
-                        DROP TABLE IF EXISTS room_invites_cache;
-                        DROP TABLE IF EXISTS rooms_cache_meta;
-                        DROP TABLE IF EXISTS shared_friends_cache;
-                        DROP TABLE IF EXISTS shared_posts_cache;
-                        DROP TABLE IF EXISTS shared_invites_cache;
-                        DROP TABLE IF EXISTS shared_feed_cache_meta;
-                    `);
-                }
+            if (!syncQueueColumns.includes('next_retry_at')) {
+                await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN next_retry_at TEXT`);
+            }
+            if (!syncQueueColumns.includes('owner_uid')) {
+                await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN owner_uid TEXT NOT NULL DEFAULT '${LOCAL_NOTES_SCOPE}'`);
+            }
+            if (!syncQueueColumns.includes('terminal')) {
+                await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN terminal INTEGER NOT NULL DEFAULT 0`);
+            }
+            if (!syncQueueColumns.includes('blocked_reason')) {
+                await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN blocked_reason TEXT`);
+            }
 
-                await database.execAsync(
-                    `CREATE TABLE IF NOT EXISTS shared_friends_cache (
-                        user_uid TEXT NOT NULL,
-                        friend_uid TEXT NOT NULL,
-                        display_name_snapshot TEXT,
-                        photo_url_snapshot TEXT,
-                        friended_at TEXT NOT NULL,
-                        last_shared_at TEXT,
-                        created_by_invite_id TEXT,
-                        PRIMARY KEY (user_uid, friend_uid)
-                    )`
-                );
-                await database.execAsync(
-                    `CREATE INDEX IF NOT EXISTS idx_shared_friends_cache_user ON shared_friends_cache(user_uid, friended_at ASC)`
-                );
-                await database.execAsync(
-                    `CREATE TABLE IF NOT EXISTS shared_posts_cache (
-                        user_uid TEXT NOT NULL,
-                        id TEXT NOT NULL,
-                        author_uid TEXT NOT NULL,
-                        author_display_name TEXT,
-                        author_photo_url_snapshot TEXT,
-                        audience_user_ids TEXT NOT NULL,
-                        type TEXT NOT NULL CHECK(type IN ('text', 'photo')),
-                        text TEXT NOT NULL DEFAULT '',
-                        photo_path TEXT,
-                        photo_local_uri TEXT,
-                        is_live_photo INTEGER NOT NULL DEFAULT 0,
-                        paired_video_path TEXT,
-                        paired_video_local_uri TEXT,
-                        doodle_strokes_json TEXT,
-                        sticker_placements_json TEXT,
-                        note_color TEXT,
-                        place_name TEXT,
-                        source_note_id TEXT,
-                        latitude REAL,
-                        longitude REAL,
-                        created_at TEXT NOT NULL,
-                        updated_at TEXT,
-                        PRIMARY KEY (user_uid, id)
-                    )`
-                );
-                const sharedPostsCacheInfo = await database.getAllAsync<{ name: string }>(
-                    `PRAGMA table_info(shared_posts_cache)`
-                );
-                const sharedPostsCacheColumns = sharedPostsCacheInfo.map((col) => col.name);
-                if (!sharedPostsCacheColumns.includes('is_live_photo')) {
-                    await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN is_live_photo INTEGER NOT NULL DEFAULT 0`);
-                }
-                if (!sharedPostsCacheColumns.includes('paired_video_path')) {
-                    await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN paired_video_path TEXT`);
-                }
-                if (!sharedPostsCacheColumns.includes('paired_video_local_uri')) {
-                    await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN paired_video_local_uri TEXT`);
-                }
-                if (!sharedPostsCacheColumns.includes('note_color')) {
-                    await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN note_color TEXT`);
-                }
-                if (!sharedPostsCacheColumns.includes('latitude')) {
-                    await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN latitude REAL`);
-                }
-                if (!sharedPostsCacheColumns.includes('longitude')) {
-                    await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN longitude REAL`);
-                }
-                await database.execAsync(
-                    `CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_created ON shared_posts_cache(user_uid, created_at DESC)`
-                );
-                await database.execAsync(
-                    `CREATE TABLE IF NOT EXISTS shared_invites_cache (
-                        user_uid TEXT PRIMARY KEY NOT NULL,
-                        id TEXT NOT NULL,
-                        inviter_uid TEXT NOT NULL,
-                        inviter_display_name_snapshot TEXT,
-                        inviter_photo_url_snapshot TEXT,
-                        token TEXT NOT NULL,
-                        created_at TEXT NOT NULL,
-                        revoked_at TEXT,
-                        accepted_by_uid TEXT,
-                        accepted_at TEXT,
-                        expires_at TEXT,
-                        url TEXT NOT NULL
-                    )`
-                );
-                await database.execAsync(
-                    `CREATE TABLE IF NOT EXISTS shared_feed_cache_meta (
-                        user_uid TEXT PRIMARY KEY NOT NULL,
-                        last_updated_at TEXT
-                    )`
-                );
-                await database.execAsync(
-                    `CREATE TABLE IF NOT EXISTS monthly_recap_cache (
-                        owner_uid TEXT NOT NULL,
-                        month_key TEXT NOT NULL,
-                        time_zone TEXT NOT NULL,
-                        digest TEXT NOT NULL,
-                        payload_json TEXT NOT NULL,
-                        updated_at TEXT NOT NULL,
-                        PRIMARY KEY (owner_uid, month_key, time_zone)
-                    )`
-                );
-                await database.execAsync(
-                    `CREATE INDEX IF NOT EXISTS idx_monthly_recap_cache_owner_updated
-                     ON monthly_recap_cache(owner_uid, updated_at DESC)`
-                );
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_sync_queue_retry_window ON sync_queue(status, terminal, next_retry_at, created_at ASC)`
+            );
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_status_created ON sync_queue(owner_uid, status, created_at ASC)`
+            );
 
-                if (currentUserVersion < APP_SCHEMA_VERSION) {
-                    await database.execAsync(`PRAGMA user_version = ${APP_SCHEMA_VERSION}`);
-                }
-            } catch (e) {
-                console.warn('Migration check failed:', e);
+            if (currentUserVersion < APP_SCHEMA_VERSION) {
+                await database.execAsync(`
+                    DROP TABLE IF EXISTS rooms_cache;
+                    DROP TABLE IF EXISTS room_memberships_cache;
+                    DROP TABLE IF EXISTS room_posts_cache;
+                    DROP TABLE IF EXISTS room_read_state;
+                    DROP TABLE IF EXISTS room_invites_cache;
+                    DROP TABLE IF EXISTS rooms_cache_meta;
+                    DROP TABLE IF EXISTS shared_friends_cache;
+                    DROP TABLE IF EXISTS shared_posts_cache;
+                    DROP TABLE IF EXISTS shared_invites_cache;
+                    DROP TABLE IF EXISTS shared_feed_cache_meta;
+                `);
+            }
+
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS shared_friends_cache (
+                    user_uid TEXT NOT NULL,
+                    friend_uid TEXT NOT NULL,
+                    display_name_snapshot TEXT,
+                    photo_url_snapshot TEXT,
+                    friended_at TEXT NOT NULL,
+                    last_shared_at TEXT,
+                    created_by_invite_id TEXT,
+                    PRIMARY KEY (user_uid, friend_uid)
+                )`
+            );
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_shared_friends_cache_user ON shared_friends_cache(user_uid, friended_at ASC)`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS shared_posts_cache (
+                    user_uid TEXT NOT NULL,
+                    id TEXT NOT NULL,
+                    author_uid TEXT NOT NULL,
+                    author_display_name TEXT,
+                    author_photo_url_snapshot TEXT,
+                    audience_user_ids TEXT NOT NULL,
+                    type TEXT NOT NULL CHECK(type IN ('text', 'photo')),
+                    text TEXT NOT NULL DEFAULT '',
+                    photo_path TEXT,
+                    photo_local_uri TEXT,
+                    is_live_photo INTEGER NOT NULL DEFAULT 0,
+                    paired_video_path TEXT,
+                    paired_video_local_uri TEXT,
+                    doodle_strokes_json TEXT,
+                    sticker_placements_json TEXT,
+                    note_color TEXT,
+                    place_name TEXT,
+                    source_note_id TEXT,
+                    latitude REAL,
+                    longitude REAL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT,
+                    PRIMARY KEY (user_uid, id)
+                )`
+            );
+            const sharedPostsCacheInfo = await database.getAllAsync<{ name: string }>(
+                `PRAGMA table_info(shared_posts_cache)`
+            );
+            const sharedPostsCacheColumns = sharedPostsCacheInfo.map((col) => col.name);
+            if (!sharedPostsCacheColumns.includes('is_live_photo')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN is_live_photo INTEGER NOT NULL DEFAULT 0`);
+            }
+            if (!sharedPostsCacheColumns.includes('paired_video_path')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN paired_video_path TEXT`);
+            }
+            if (!sharedPostsCacheColumns.includes('paired_video_local_uri')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN paired_video_local_uri TEXT`);
+            }
+            if (!sharedPostsCacheColumns.includes('note_color')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN note_color TEXT`);
+            }
+            if (!sharedPostsCacheColumns.includes('latitude')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN latitude REAL`);
+            }
+            if (!sharedPostsCacheColumns.includes('longitude')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN longitude REAL`);
+            }
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_created ON shared_posts_cache(user_uid, created_at DESC)`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS shared_invites_cache (
+                    user_uid TEXT PRIMARY KEY NOT NULL,
+                    id TEXT NOT NULL,
+                    inviter_uid TEXT NOT NULL,
+                    inviter_display_name_snapshot TEXT,
+                    inviter_photo_url_snapshot TEXT,
+                    token TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    revoked_at TEXT,
+                    accepted_by_uid TEXT,
+                    accepted_at TEXT,
+                    expires_at TEXT,
+                    url TEXT NOT NULL
+                )`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS shared_feed_cache_meta (
+                    user_uid TEXT PRIMARY KEY NOT NULL,
+                    last_updated_at TEXT
+                )`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS monthly_recap_cache (
+                    owner_uid TEXT NOT NULL,
+                    month_key TEXT NOT NULL,
+                    time_zone TEXT NOT NULL,
+                    digest TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (owner_uid, month_key, time_zone)
+                )`
+            );
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_monthly_recap_cache_owner_updated
+                 ON monthly_recap_cache(owner_uid, updated_at DESC)`
+            );
+
+            if (currentUserVersion < APP_SCHEMA_VERSION) {
+                await database.execAsync(`PRAGMA user_version = ${APP_SCHEMA_VERSION}`);
             }
 
             db = createSerializedDatabase(database);

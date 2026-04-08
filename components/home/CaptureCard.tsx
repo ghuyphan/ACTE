@@ -247,7 +247,7 @@ function CaptureShareTargetButton({
       iconColor={colors.captureGlassText}
       glassColorScheme={colors.captureGlassColorScheme}
       fallbackColor={colors.card}
-      borderColor={colors.captureGlassBorder}
+      borderColor={colors.captureCardBorder}
       style={style}
     />
   );
@@ -1287,7 +1287,7 @@ function TextCaptureBottomBar({
         t={t}
         theme={{
           activeBackgroundColor: colors.captureButtonBg,
-          activeBorderColor: 'rgba(255,255,255,0.18)',
+          activeBorderColor: 'transparent',
           activeIconColor: textCardActiveIconColor,
           detailBackgroundColor: 'transparent',
           detailBorderColor: 'transparent',
@@ -1296,10 +1296,10 @@ function TextCaptureBottomBar({
           inactiveBorderColor: 'transparent',
           inactiveIconColor: colors.captureGlassText,
           paletteButtonBackgroundColor: colors.captureGlassFill,
-          paletteButtonBorderColor: colors.captureGlassBorder,
+          paletteButtonBorderColor: 'transparent',
           paletteSelectedBorderColor: colors.captureButtonBg,
           paletteSwatchBorderColor: 'rgba(43,38,33,0.16)',
-          railBorderColor: colors.captureGlassBorder,
+          railBorderColor: colors.captureCardBorder,
         }}
         defaultActions={
           showInlinePasteButton ? (
@@ -1310,7 +1310,14 @@ function TextCaptureBottomBar({
                   accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
                   disabled
                   disabledOpacity={1}
-                  style={[styles.textBottomToolsButton, styles.textBottomToolsAction]}
+                  style={[
+                    styles.textBottomToolsButton,
+                    styles.textBottomToolsAction,
+                    {
+                      borderColor: 'transparent',
+                      backgroundColor: colors.captureGlassFill,
+                    },
+                  ]}
                 >
                   <ActivityIndicator
                     testID="capture-inline-paste-sticker-loading"
@@ -1329,7 +1336,13 @@ function TextCaptureBottomBar({
                   backgroundColor={colors.captureGlassFill}
                   foregroundColor={colors.captureGlassText}
                   onPress={handleNativeInlinePasteStickerPress}
-                  style={styles.nativeInlinePasteStickerButton}
+                  style={[
+                    styles.nativeInlinePasteStickerButton,
+                    {
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: 'transparent',
+                    },
+                  ]}
                 />
               ) : (
                 <CaptureAnimatedPressable
@@ -1338,7 +1351,14 @@ function TextCaptureBottomBar({
                   onPress={handleInlinePasteStickerPress}
                   disabled={inlinePasteLoading}
                   disabledOpacity={1}
-                  style={[styles.textBottomToolsButton, styles.textBottomToolsAction]}
+                  style={[
+                    styles.textBottomToolsButton,
+                    styles.textBottomToolsAction,
+                    {
+                      borderColor: 'transparent',
+                      backgroundColor: colors.captureGlassFill,
+                    },
+                  ]}
                 >
                   <Ionicons name="clipboard-outline" size={16} color={colors.captureGlassText} />
                 </CaptureAnimatedPressable>
@@ -1380,7 +1400,7 @@ function LiveCameraActionBar({
     <View style={styles.captureActionBarWrap}>
       <CaptureControlRail
         animationKey={importingPhoto ? 'camera-live-importing' : libraryImportLocked ? 'camera-live-locked' : 'camera-live'}
-        borderColor={colors.captureGlassBorder}
+        borderColor={colors.captureCardBorder}
         colors={colors}
       >
         {showLivePhotoGuide ? (
@@ -1505,7 +1525,7 @@ function PhotoCaptureBottomBar({
         t={t}
         theme={{
           activeBackgroundColor: colors.captureButtonBg,
-          activeBorderColor: 'rgba(255,255,255,0.18)',
+          activeBorderColor: 'transparent',
           activeIconColor: textCardActiveIconColor,
           detailBackgroundColor: 'transparent',
           detailBorderColor: 'transparent',
@@ -1514,10 +1534,10 @@ function PhotoCaptureBottomBar({
           inactiveBorderColor: 'transparent',
           inactiveIconColor: colors.captureGlassText,
           paletteButtonBackgroundColor: colors.captureGlassFill,
-          paletteButtonBorderColor: colors.captureGlassBorder,
+          paletteButtonBorderColor: 'transparent',
           paletteSelectedBorderColor: colors.captureButtonBg,
           paletteSwatchBorderColor: 'rgba(43,38,33,0.16)',
-          railBorderColor: colors.captureGlassBorder,
+          railBorderColor: colors.captureCardBorder,
         }}
         afterToggles={
           <CaptureAnimatedPressable
@@ -1538,7 +1558,7 @@ function PhotoCaptureBottomBar({
               styles.livePhotoTogglePill,
               {
                 backgroundColor: hasLivePhotoMotion ? colors.captureButtonBg : colors.captureGlassFill,
-                borderColor: hasLivePhotoMotion ? colors.captureButtonBg : 'transparent',
+                borderColor: 'transparent',
               },
             ]}
           >
@@ -1688,7 +1708,7 @@ function CaptureActionRow({
               iconColor={colors.captureGlassText}
               glassColorScheme={colors.captureGlassColorScheme}
               fallbackColor={colors.card}
-              borderColor={colors.captureGlassBorder}
+              borderColor={colors.captureCardBorder}
               style={styles.belowCardTrailingAction}
             />
           ) : (
@@ -1739,7 +1759,7 @@ function CaptureActionRow({
           iconColor={colors.captureGlassText}
           glassColorScheme={colors.captureGlassColorScheme}
           fallbackColor={colors.card}
-          borderColor={colors.captureGlassBorder}
+          borderColor={colors.captureCardBorder}
           style={styles.belowCardTrailingAction}
         />
       ) : (

@@ -118,7 +118,7 @@ async function getLocalPairedVideoInfo(videoUri: string) {
 async function optimizePhotoForUpload(photoUri: string) {
   const originalInfo = await getLocalPhotoInfo(photoUri);
   if (!originalInfo) {
-    return null;
+    throw new Error('Photo file is unavailable locally. Please retry after reopening the note.');
   }
 
   if (
@@ -174,7 +174,7 @@ async function optimizePhotoForUpload(photoUri: string) {
 async function optimizePairedVideoForUpload(videoUri: string) {
   const originalInfo = await getLocalPairedVideoInfo(videoUri);
   if (!originalInfo) {
-    return null;
+    throw new Error('Live photo motion is unavailable locally. Please retry after reopening the note.');
   }
 
   const bestSize =

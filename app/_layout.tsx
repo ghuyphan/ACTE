@@ -4,7 +4,7 @@ import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { i18nReady } from '../constants/i18n';
@@ -24,7 +24,7 @@ SplashScreen.preventAutoHideAsync();
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
   const { t } = useTranslation();
-  const { startupTarget } = useAppStartupBootstrap();
+  const { startupError, startupTarget } = useAppStartupBootstrap();
   useAppWidgetRefresh();
   useAppNotificationRouting();
   useSocialPushRegistration();
@@ -41,7 +41,7 @@ function AppContent() {
   }, [colors.background]);
 
   useEffect(() => {
-    if (!themeReady || !startupTarget) {
+    if (!themeReady || (!startupTarget && !startupError)) {
       return;
     }
 
@@ -55,7 +55,7 @@ function AppContent() {
     return () => {
       cancelled = true;
     };
-  }, [startupTarget, themeReady]);
+  }, [startupError, startupTarget, themeReady]);
 
   const navTheme = useMemo(() => {
     const baseTheme = isDark ? DarkTheme : DefaultTheme;
@@ -76,6 +76,19 @@ function AppContent() {
     <NavThemeProvider value={navTheme}>
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
+        {startupError ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700', textAlign: 'center' }}>
+              {t('common.error', 'Something went wrong')}
+            </Text>
+            <Text style={{ color: colors.secondaryText, fontSize: 15, marginTop: 12, textAlign: 'center' }}>
+              {t(
+                'startup.databaseInitFailed',
+                'Noto could not open its local database. Please restart the app and try again.'
+              )}
+            </Text>
+          </View>
+        ) : (
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
           <Stack.Screen
@@ -161,6 +174,7 @@ function AppContent() {
             }}
           />
         </Stack>
+        )}
       </View>
     </NavThemeProvider>
   );

@@ -23,6 +23,7 @@ const mockSubscriptionConfig = {
 const mockRemoteUsage = {
   photoNoteCount: null as number | null,
 };
+const originalConsoleError = console.error;
 const mockRemoveChannel = jest.fn<Promise<string>, [unknown]>(async () => 'ok');
 type MockSupabaseChannel = {
   on: jest.MockedFunction<
@@ -160,6 +161,13 @@ function setPlatformOS(nextOS: 'ios' | 'android' | 'web') {
 describe('useSubscription', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    console.error = ((...args: unknown[]) => {
+      const [message] = args;
+      if (typeof message === 'string' && message.includes('not wrapped in act')) {
+        return;
+      }
+      originalConsoleError(...args);
+    }) as typeof console.error;
     setPlatformOS('android');
     mockAuthState.isReady = true;
     mockAuthState.user = null;
@@ -203,6 +211,10 @@ describe('useSubscription', () => {
     mockPurchases.logOut.mockResolvedValue({
       entitlements: { active: {} },
     } as any);
+  });
+
+  afterEach(() => {
+    console.error = originalConsoleError;
   });
 
   it('supports Android purchases when RevenueCat is configured', async () => {
@@ -292,6 +304,9 @@ describe('useSubscription', () => {
       expect(hook.result.current.isPurchaseAvailable).toBe(true);
       expect(hook.result.current.plusPriceLabel).toBe('$4.99');
     });
+
+    expect(mockPurchases.addCustomerInfoUpdateListener).toHaveBeenCalledTimes(1);
+    expect(mockPurchases.removeCustomerInfoUpdateListener).not.toHaveBeenCalled();
   });
 
   it('keeps the last known entitlement while the device is offline', async () => {

@@ -120,6 +120,20 @@ describe('database migrations', () => {
     );
   });
 
+  it('fails database initialization when a migration step throws', async () => {
+    let getDB!: () => Promise<unknown>;
+
+    mockExecAsync.mockImplementationOnce(async () => {
+      throw new Error('migration failed');
+    });
+
+    jest.isolateModules(() => {
+      ({ getDB } = require('../services/database'));
+    });
+
+    await expect(getDB()).rejects.toThrow('migration failed');
+  });
+
   it('normalizes saved text note colors on create and update', async () => {
     let getDB!: () => Promise<unknown>;
     let createNote!: (input: Record<string, unknown>) => Promise<unknown>;

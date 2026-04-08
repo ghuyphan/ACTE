@@ -30,7 +30,12 @@ import { getNotePhotoUri } from '../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
 import { isOlderIOS } from '../../utils/platform';
 import MapPreviewSheet from './MapPreviewSheet';
-import { getOverlayBorderColor, getOverlayFallbackColor, mapOverlayTokens } from './overlayTokens';
+import {
+  getOverlayBorderColor,
+  getOverlayFallbackColor,
+  getOverlayScrimColor,
+  mapOverlayTokens,
+} from './overlayTokens';
 
 const PREVIEW_HORIZONTAL_INSET = 14;
 const STATUS_HEIGHT = 76;
@@ -238,7 +243,7 @@ export default function MapPreviewCard({
             note: item.note,
             distanceMeters: item.distanceMeters,
           })),
-    [isGroupMode, nearbyItems, renderSelectedGroup]
+    [distanceAnchor, isGroupMode, nearbyItems, renderSelectedGroup]
   );
 
   const activeNearbyIndex = useMemo(
@@ -422,6 +427,7 @@ export default function MapPreviewCard({
             pointerEvents="none"
             glassEffectStyle="regular"
             colorScheme={isDark ? 'dark' : 'light'}
+            fallbackColor="transparent"
             style={StyleSheet.absoluteFill}
           />
           {Platform.OS === 'android' ? (
@@ -430,7 +436,7 @@ export default function MapPreviewCard({
               style={[
                 StyleSheet.absoluteFill,
                 {
-                  backgroundColor: colors.androidTabShellScrim,
+                  backgroundColor: getOverlayScrimColor(isDark),
                 },
               ]}
             />
@@ -715,7 +721,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     alignSelf: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: Platform.OS === 'android' ? 1 : StyleSheet.hairlineWidth,
     overflow: 'hidden',
     ...mapOverlayTokens.overlayShadow,
   },

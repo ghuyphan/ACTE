@@ -1,4 +1,5 @@
 const { existsSync } = require('node:fs');
+const { version: appVersion } = require('./package.json');
 
 const googleMapsAndroidApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY;
 const easProjectIdFromEnv = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ?? '';
@@ -61,8 +62,6 @@ const notoSansFontDefinitions = [
     weight: 900,
   },
 ];
-const appVersion = '1.0.0';
-
 function assertProductionConfig() {
   if (!isProductionBuild) {
     return;
@@ -103,7 +102,9 @@ const config = {
   name: 'Noto',
   slug: 'noto',
   version: appVersion,
-  runtimeVersion: appVersion,
+  runtimeVersion: {
+    policy: 'appVersion',
+  },
   orientation: 'portrait',
   icon: './assets/images/icon/icon-default.png',
   scheme: 'noto',

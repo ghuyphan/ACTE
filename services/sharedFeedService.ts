@@ -246,6 +246,7 @@ function getReusableSharedPostCleanupArtifacts(artifacts: {
   return {
     photoPath: artifacts.photoPath ?? null,
     pairedVideoPath: artifacts.pairedVideoPath ?? null,
+    stickerPaths: artifacts.stickerPaths ?? [],
   };
 }
 
@@ -1071,9 +1072,13 @@ export async function updateSharedPost(
   let nextStickerPlacementsJson: string | null = null;
 
   try {
+    const currentPhotoUri = normalizeRemoteArtifactPath(note.photoLocalUri ?? note.content);
+    const currentPairedVideoUri = normalizeRemoteArtifactPath(note.pairedVideoLocalUri ?? null);
     nextPhotoPath =
       note.type === 'photo'
-        ? await uploadPhotoToStorage(
+        ? current.photo_path && !currentPhotoUri
+          ? current.photo_path
+          : await uploadPhotoToStorage(
             SHARED_POST_MEDIA_BUCKET,
             `${user.id}/${postId}`,
             note.photoLocalUri ?? note.content,
@@ -1082,7 +1087,9 @@ export async function updateSharedPost(
         : null;
     nextPairedVideoPath =
       note.type === 'photo' && note.isLivePhoto
-        ? await uploadPairedVideoToStorage(
+        ? current.paired_video_path && !currentPairedVideoUri
+          ? current.paired_video_path
+          : await uploadPairedVideoToStorage(
             SHARED_POST_MEDIA_BUCKET,
             getRemotePairedVideoPath(`${user.id}/${postId}`, note.pairedVideoLocalUri ?? null),
             note.pairedVideoLocalUri ?? null,
@@ -1219,6 +1226,7 @@ export async function deleteOwnedSharedPostsForNotes(
     id: string;
     photo_path?: string | null;
     paired_video_path?: string | null;
+    sticker_placements_json?: string | null;
   }>;
   if (rows.length === 0) {
     return [];
@@ -1233,6 +1241,7 @@ export async function deleteOwnedSharedPostsForNotes(
         {
           photoPath: row.photo_path ?? null,
           pairedVideoPath: row.paired_video_path ?? null,
+          stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
         },
         { strict: true }
       )
@@ -1305,6 +1314,9 @@ export async function deleteSharedPost(
       photoPath: (existing as { photo_path?: string | null } | null)?.photo_path ?? null,
       pairedVideoPath:
         (existing as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
+      stickerPaths: getRemoteStickerAssetPaths(
+        (existing as { sticker_placements_json?: string | null } | null)?.sticker_placements_json ?? null
+      ),
     },
     { strict: true }
   );

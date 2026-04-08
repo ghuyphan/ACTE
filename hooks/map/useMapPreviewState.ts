@@ -94,7 +94,7 @@ export function useMapPreviewState({
     setActiveFriendPostId((current) => current ?? fallbackPostId ?? null);
   }, []);
 
-  const useFocusedNearbyPreview = useCallback(
+  const focusNearbyPreview = useCallback(
     (items: NearbyNoteItem[], noteId?: string | null) => {
       setShowFriendsPreview(false);
       setNotesPreviewState({
@@ -110,7 +110,7 @@ export function useMapPreviewState({
     []
   );
 
-  const useNearbyPreview = useCallback(() => {
+  const resetToNearbyPreview = useCallback(() => {
     setNotesPreviewState((current) =>
       current.itemsOverride === null && !current.persistsWhenAreaEmpty
         ? current
@@ -135,7 +135,7 @@ export function useMapPreviewState({
     setActiveFriendPostId,
     showFriendsPreview,
     toggleFriendsPreview,
-    useFocusedNearbyPreview,
-    useNearbyPreview,
+    focusNearbyPreview,
+    resetToNearbyPreview,
   };
 }

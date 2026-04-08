@@ -7,6 +7,7 @@ import { useCallback, useDeferredValue, useEffect, useState, useTransition } fro
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -16,7 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout, Shadows } from '../../../constants/theme';
 import { useAndroidBottomTabOverlayInset } from '../../../hooks/useAndroidBottomTabOverlayInset';
-import { useAndroidTabSearchState } from '../../../hooks/useAndroidTabSearchState';
+import { useAndroidTabSearchQuery } from '../../../hooks/useAndroidTabSearchState';
 import { CardGradients, useTheme } from '../../../hooks/useTheme';
 import { useNotesStore } from '../../../hooks/useNotes';
 import { Note } from '../../../services/database';
@@ -50,13 +51,13 @@ export default function SearchScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
-  const androidTabSearch = useAndroidTabSearchState();
+  const androidTabSearchQuery = useAndroidTabSearchQuery();
   const { notes, loading, searchNotes } = useNotesStore();
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
   const [, startSearchTransition] = useTransition();
-  const activeQuery = Platform.OS === 'android' ? androidTabSearch.query : query;
+  const activeQuery = Platform.OS === 'android' ? androidTabSearchQuery : query;
   const deferredQuery = useDeferredValue(activeQuery);
   const hasQuery = activeQuery.trim().length > 0;
   const hasDeferredQuery = deferredQuery.trim().length > 0;
@@ -66,8 +67,8 @@ export default function SearchScreen() {
       return;
     }
 
-    setQuery(androidTabSearch.query);
-  }, [androidTabSearch.query]);
+    setQuery(androidTabSearchQuery);
+  }, [androidTabSearchQuery]);
 
   useEffect(() => {
     if (!hasDeferredQuery) {
@@ -99,10 +100,15 @@ export default function SearchScreen() {
 
   const openNote = useCallback(
     (noteId: string) => {
+      Keyboard.dismiss();
       router.push(`/note/${noteId}` as any);
     },
     [router]
   );
+
+  const dismissKeyboard = useCallback(() => {
+    Keyboard.dismiss();
+  }, []);
 
   const handleSearchChange = useCallback((nextQuery: string) => {
     startSearchTransition(() => {
@@ -223,7 +229,8 @@ export default function SearchScreen() {
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : shouldShowEmptyState ? (
-        <View
+        <Pressable
+          onPress={dismissKeyboard}
           style={[
             styles.centerWrap,
             styles.emptyScreen,
@@ -233,7 +240,7 @@ export default function SearchScreen() {
             },
           ]}
         >
-          <View style={styles.emptyState}>
+          <View pointerEvents="none" style={styles.emptyState}>
             <View style={styles.emptyIconWrap}>
               <Ionicons
                 name="search-outline"
@@ -252,7 +259,7 @@ export default function SearchScreen() {
                 : t('home.count', '{{count}} notes saved', { count: notes.length })}
             </Text>
           </View>
-        </View>
+        </Pressable>
       ) : (
         <FlashList
           data={filteredNotes}
@@ -264,6 +271,7 @@ export default function SearchScreen() {
           contentInsetAdjustmentBehavior="never"
           automaticallyAdjustContentInsets={false}
           automaticallyAdjustsScrollIndicatorInsets={false}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           contentContainerStyle={[
             styles.listContent,
             {
@@ -271,6 +279,8 @@ export default function SearchScreen() {
               paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
             },
           ]}
+          onScrollBeginDrag={dismissKeyboard}
+          onTouchStart={dismissKeyboard}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         />

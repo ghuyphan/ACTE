@@ -60,6 +60,7 @@ const mockUndeletableRemoteNoteIds = new Set<string>();
 const mockUndeletableRemoteSharedPostIds = new Set<string>();
 const mockDeleteResponseOmittedRemoteNoteIds = new Set<string>();
 const mockDeleteResponseOmittedRemoteSharedPostIds = new Set<string>();
+let consoleWarnSpy: jest.SpyInstance;
 
 const mockUploadPhotoToStorage = jest.fn<Promise<string | null>, [string, string, string | null | undefined]>(
   async (_bucket: string, path: string) => path
@@ -866,6 +867,12 @@ const syncUser = {
 
 beforeEach(async () => {
   jest.clearAllMocks();
+  consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+    const [message] = args;
+    if (typeof message === 'string' && message.includes('[syncService] Supabase sync failed:')) {
+      return;
+    }
+  });
   await AsyncStorage.clear();
   queueRows = [];
   queueId = 1;
@@ -884,6 +891,10 @@ beforeEach(async () => {
   mockRemoteStickerAssetRefs.clear();
   mockUserUsage.clear();
   mockPublicProfiles.clear();
+});
+
+afterEach(() => {
+  consoleWarnSpy.mockRestore();
 });
 
 describe('syncService', () => {
@@ -1096,6 +1107,79 @@ describe('syncService', () => {
     expect(result.status).toBe('success');
     expect(mockUploadPhotoToStorage).not.toHaveBeenCalled();
     expect(mockUploadVideoToStorage).not.toHaveBeenCalled();
+  });
+
+  it('preserves remote media and retries when a new local photo is unavailable', async () => {
+    localNotesStore = [
+      {
+        ...createPhotoNote('note-missing-local'),
+        photoLocalUri: 'file:///photos/note-missing-local-updated.jpg',
+        content: 'file:///photos/note-missing-local-updated.jpg',
+        photoSyncedLocalUri: 'file:///photos/note-missing-local.jpg',
+      },
+    ];
+    mockRemoteNotes.set('note-missing-local', {
+      id: 'note-missing-local',
+      user_id: 'user-1',
+      type: 'photo',
+      content: '',
+      photo_path: 'user-1/note-missing-local',
+      is_live_photo: false,
+      paired_video_path: null,
+      has_doodle: false,
+      doodle_strokes_json: null,
+      has_stickers: false,
+      sticker_placements_json: null,
+      location_name: 'Saigon',
+      prompt_id: null,
+      prompt_text_snapshot: null,
+      prompt_answer: null,
+      mood_emoji: null,
+      note_color: null,
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      is_favorite: false,
+      created_at: '2026-03-10T00:00:00.000Z',
+      updated_at: '2026-03-10T00:00:00.000Z',
+      synced_at: '2026-03-10T00:00:00.000Z',
+    });
+    mockUploadPhotoToStorage.mockRejectedValueOnce(
+      new Error('Photo file is unavailable locally and cannot be synced right now.')
+    );
+
+    await getSyncService().recordChange({
+      type: 'update',
+      entity: 'note',
+      entityId: 'note-missing-local',
+      timestamp: '2026-03-10T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'incremental' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'error',
+        failedCount: 1,
+        message: expect.stringContaining('unavailable locally'),
+      })
+    );
+    expect(mockRemoteNotes.get('note-missing-local')).toEqual(
+      expect.objectContaining({
+        photo_path: 'user-1/note-missing-local',
+      })
+    );
+    expect(mockDeletePhotoFromStorage).not.toHaveBeenCalledWith(
+      'note-media',
+      'user-1/note-missing-local'
+    );
+    expect(queueRows).toHaveLength(1);
+    expect(queueRows[0]).toEqual(
+      expect.objectContaining({
+        entity_id: 'note-missing-local',
+        status: 'failed',
+      })
+    );
   });
 
   it('imports newer remote notes during incremental sync', async () => {
@@ -1602,12 +1686,12 @@ describe('syncService', () => {
       })
     );
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('note-media', 'user-1/note-2');
-    expect(mockDeletePhotoFromStorage).not.toHaveBeenCalledWith(
+    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith(
       'note-media',
       'user-1/note-2-sticker.png'
     );
     expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith('shared-post-media', 'user-1/shared-2');
-    expect(mockDeletePhotoFromStorage).not.toHaveBeenCalledWith(
+    expect(mockDeletePhotoFromStorage).toHaveBeenCalledWith(
       'shared-post-media',
       'user-1/shared-2-sticker.png'
     );

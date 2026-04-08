@@ -7,7 +7,7 @@ import {
   createNote as dbCreate,
   deleteAllNotes as dbDeleteAll,
   deleteNote as dbDelete,
-  getAllNotes,
+  getAllNotesForScope,
   getNoteById as dbGetById,
   Note,
   NoteUpdates,
@@ -55,6 +55,7 @@ function useNotesStoreValue(): NotesStoreValue {
   const notesRef = useRef<Note[]>([]);
   const activeScopeRef = useRef<string>(user?.uid ?? LOCAL_NOTES_SCOPE);
   const widgetSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshRequestIdRef = useRef(0);
 
   useEffect(() => {
     notesRef.current = notes;
@@ -109,32 +110,51 @@ function useNotesStoreValue(): NotesStoreValue {
     }
   }, []);
 
-  const refreshNotes = useCallback(async (showLoading = true, options?: { updateWidget?: boolean }) => {
+  const refreshNotes = useCallback(async (
+    showLoading = true,
+    options?: { updateWidget?: boolean; scope?: string; syncGeofences?: boolean }
+  ) => {
+    const scope = options?.scope ?? activeScopeRef.current;
+    const requestId = ++refreshRequestIdRef.current;
     try {
       if (showLoading) {
         setLoading(true);
       }
-      const allNotes = await getAllNotes();
+      const allNotes = await getAllNotesForScope(scope);
+      if (refreshRequestIdRef.current !== requestId || activeScopeRef.current !== scope) {
+        return;
+      }
       notesRef.current = allNotes;
       setNotes(allNotes);
       if (options?.updateWidget) {
         scheduleWidgetUpdate(allNotes);
       }
+      if (options?.syncGeofences) {
+        syncGeofencesForNotes('note refresh', allNotes);
+      }
     } catch (error) {
       console.error('Failed to load notes:', error);
     } finally {
-      if (showLoading) {
+      if (showLoading && refreshRequestIdRef.current === requestId) {
         setLoading(false);
       }
     }
-  }, [scheduleWidgetUpdate]);
+  }, [scheduleWidgetUpdate, syncGeofencesForNotes]);
 
   useEffect(() => {
+    if (!authReady) {
+      return;
+    }
+
     let cancelled = false;
     let cleanupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
     let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
     (async () => {
-      await refreshNotes(true);
+      await refreshNotes(true, {
+        scope: activeScopeRef.current,
+        syncGeofences: true,
+        updateWidget: true,
+      });
       cleanupIdleHandle = scheduleOnIdle(() => {
         cleanupTimeout = setTimeout(() => {
           if (cancelled) {
@@ -155,7 +175,7 @@ function useNotesStoreValue(): NotesStoreValue {
         clearTimeout(cleanupTimeout);
       }
     };
-  }, [refreshNotes]);
+  }, [authReady, refreshNotes]);
 
   useEffect(() => {
     if (!authReady) {
@@ -171,10 +191,12 @@ function useNotesStoreValue(): NotesStoreValue {
     notesRef.current = [];
     setNotes([]);
     setLoading(true);
-    void refreshNotes(true, { updateWidget: true }).finally(() => {
-      syncGeofencesForNotes('scope change');
+    void refreshNotes(true, {
+      scope: nextScope,
+      syncGeofences: true,
+      updateWidget: true,
     });
-  }, [authReady, refreshNotes, syncGeofencesForNotes, user?.uid]);
+  }, [authReady, refreshNotes, user?.uid]);
 
   useEffect(() => () => {
     if (widgetSyncTimeoutRef.current) {
@@ -300,7 +322,7 @@ function useNotesStoreValue(): NotesStoreValue {
   );
 
   const deleteAllNotes = useCallback(async () => {
-    const allNotes = await getAllNotes();
+    const allNotes = await getAllNotesForScope(activeScopeRef.current);
 
     await dbDeleteAll({
       syncChange: {

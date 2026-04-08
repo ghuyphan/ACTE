@@ -27,6 +27,14 @@ function getSnapshot() {
   return snapshot;
 }
 
+function useAndroidTabSearchSelector<T>(selector: (value: AndroidTabSearchSnapshot) => T) {
+  return useSyncExternalStore(
+    subscribe,
+    () => selector(snapshot),
+    () => selector(snapshot)
+  );
+}
+
 export function setAndroidTabSearchQuery(query: string) {
   if (snapshot.query === query) {
     return;
@@ -57,4 +65,12 @@ export function clearAndroidTabSearch() {
 
 export function useAndroidTabSearchState() {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+export function useAndroidTabSearchQuery() {
+  return useAndroidTabSearchSelector((value) => value.query);
+}
+
+export function useAndroidTabSearchFocusRequestId() {
+  return useAndroidTabSearchSelector((value) => value.focusRequestId);
 }

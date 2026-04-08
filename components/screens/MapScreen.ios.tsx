@@ -23,6 +23,7 @@ import {
   getOverlayBorderColor,
   getOverlayFallbackColor,
   getOverlayMutedFillColor,
+  getOverlayScrimColor,
   mapOverlayTokens,
 } from '../map/overlayTokens';
 import { useAuth } from '../../hooks/useAuth';
@@ -36,6 +37,7 @@ import { useNotesStore } from '../../hooks/useNotes';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
+import { useAndroidBottomTabOverlayInset } from '../../hooks/useAndroidBottomTabOverlayInset';
 import type { SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
@@ -83,6 +85,7 @@ export default function MapScreenIOS() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
   const reduceMotionEnabled = useReducedMotion();
   const { user } = useAuth();
   const { notes, loading } = useNotesStore();
@@ -143,7 +146,10 @@ export default function MapScreenIOS() {
     enableHeavyCalculations: androidMapUiReady,
   });
 
-  const previewBottomOffset = insets.bottom + 12;
+  const previewBottomOffset =
+    Platform.OS === 'android'
+      ? bottomTabOverlayInset + 12
+      : insets.bottom + 12;
   const previewMode = selectedGroup ? 'group' : 'nearby';
   const friendPosts = useMemo(
     () =>
@@ -178,8 +184,8 @@ export default function MapScreenIOS() {
     setActiveFriendPostId,
     showFriendsPreview,
     toggleFriendsPreview,
-    useFocusedNearbyPreview,
-    useNearbyPreview,
+    focusNearbyPreview,
+    resetToNearbyPreview,
   } = useMapPreviewState({
     nearbyItems,
     friendPosts,
@@ -289,9 +295,9 @@ export default function MapScreenIOS() {
 
   useEffect(() => {
     if (overlayState !== 'content' && !notesPreviewPersistsWhenAreaEmpty) {
-      useNearbyPreview();
+      resetToNearbyPreview();
     }
-  }, [notesPreviewPersistsWhenAreaEmpty, overlayState, useNearbyPreview]);
+  }, [notesPreviewPersistsWhenAreaEmpty, overlayState, resetToNearbyPreview]);
 
   useEffect(() => {
     return () => {
@@ -374,9 +380,9 @@ export default function MapScreenIOS() {
 
   const handleMapCanvasPress = useCallback(() => {
     nearbyPreviewFocusGuardUntilRef.current = 0;
-    useNearbyPreview();
+    resetToNearbyPreview();
     handleMapPress();
-  }, [handleMapPress, useNearbyPreview]);
+  }, [handleMapPress, resetToNearbyPreview]);
 
   const handleChangeFilterType = useCallback(
     (nextType: Parameters<typeof setFilterType>[0]) => {
@@ -427,7 +433,7 @@ export default function MapScreenIOS() {
   const handleClusterPress = useCallback(
     (node: MapClusterNode) => {
       nearbyPreviewFocusGuardUntilRef.current = 0;
-      useNearbyPreview();
+      resetToNearbyPreview();
       revealNotesPreview();
       handleClusterMarkerPress();
       emitLightHaptic();
@@ -460,7 +466,7 @@ export default function MapScreenIOS() {
       revealNotesPreview,
       reduceMotionEnabled,
       triggerMarkerPulse,
-      useNearbyPreview,
+      resetToNearbyPreview,
       visibleRegion,
     ]
   );
@@ -468,7 +474,7 @@ export default function MapScreenIOS() {
   const handleLeafPress = useCallback(
     (groupId: string) => {
       nearbyPreviewFocusGuardUntilRef.current = 0;
-      useNearbyPreview();
+      resetToNearbyPreview();
       closeFriendsPreview();
       triggerMarkerPulse(groupId);
       handleLeafMarkerPress(groupId);
@@ -486,14 +492,14 @@ export default function MapScreenIOS() {
       revealNotesPreview,
       reduceMotionEnabled,
       triggerMarkerPulse,
-      useNearbyPreview,
+      resetToNearbyPreview,
     ]
   );
 
   const handleSeparatedNotePress = useCallback(
     (noteId: string) => {
       nearbyPreviewFocusGuardUntilRef.current = 0;
-      useNearbyPreview();
+      resetToNearbyPreview();
       closeFriendsPreview();
       triggerMarkerPulse(noteId);
       selectNoteById(noteId);
@@ -511,13 +517,13 @@ export default function MapScreenIOS() {
       reduceMotionEnabled,
       selectNoteById,
       triggerMarkerPulse,
-      useNearbyPreview,
+      resetToNearbyPreview,
     ]
   );
 
   const handleFocusNearbyNote = useCallback(
     (noteId: string) => {
-      useFocusedNearbyPreview(nearbyPreviewItems, noteId);
+      focusNearbyPreview(nearbyPreviewItems, noteId);
       const nearbyItem = nearbyItemById.get(noteId);
       if (!nearbyItem) {
         return;
@@ -545,7 +551,7 @@ export default function MapScreenIOS() {
       nearbyItemById,
       nearbyPreviewItems,
       reduceMotionEnabled,
-      useFocusedNearbyPreview,
+      focusNearbyPreview,
       visibleRegion,
     ]
   );
@@ -589,14 +595,14 @@ export default function MapScreenIOS() {
 
   const handleOpenFriendsLayer = useCallback(() => {
     nearbyPreviewFocusGuardUntilRef.current = 0;
-    useNearbyPreview();
+    resetToNearbyPreview();
     if (!hasFriendLayer) {
       return;
     }
 
     emitLightHaptic();
     toggleFriendsPreview(friendPosts[0]?.id ?? null);
-  }, [emitLightHaptic, friendPosts, hasFriendLayer, toggleFriendsPreview, useNearbyPreview]);
+  }, [emitLightHaptic, friendPosts, hasFriendLayer, resetToNearbyPreview, toggleFriendsPreview]);
 
   const handleDismissNotesPreview = useCallback(() => {
     nearbyPreviewFocusGuardUntilRef.current = 0;
@@ -817,6 +823,7 @@ export default function MapScreenIOS() {
                     style={StyleSheet.absoluteFill}
                     glassEffectStyle="regular"
                     colorScheme={isDark ? 'dark' : 'light'}
+                    fallbackColor="transparent"
                   />
                   {isOlderIOS ? (
                     <View
@@ -882,9 +889,9 @@ export default function MapScreenIOS() {
               styles.fab,
               Platform.OS === 'android'
                 ? {
-                    borderWidth: StyleSheet.hairlineWidth,
-                    borderColor: colors.androidTabShellBorder,
-                    backgroundColor: colors.androidTabShellBackground,
+                    borderWidth: 1,
+                    borderColor: getOverlayBorderColor(isDark),
+                    backgroundColor: getOverlayFallbackColor(isDark),
                     shadowColor: colors.androidTabShellShadow,
                   }
                 : null,
@@ -896,6 +903,7 @@ export default function MapScreenIOS() {
               style={StyleSheet.absoluteFill}
               glassEffectStyle="regular"
               colorScheme={isDark ? 'dark' : 'light'}
+              fallbackColor="transparent"
             />
             {Platform.OS === 'android' ? (
               <View
@@ -904,7 +912,7 @@ export default function MapScreenIOS() {
                   StyleSheet.absoluteFill,
                   {
                     borderRadius: mapOverlayTokens.floatingButtonSize / 2,
-                    backgroundColor: colors.androidTabShellScrim,
+                    backgroundColor: getOverlayScrimColor(isDark),
                   },
                 ]}
               />

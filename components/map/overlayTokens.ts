@@ -3,17 +3,22 @@ import { Shadows } from '../../constants/theme';
 
 const ANDROID_OVERLAY_BORDER = {
   light: 'rgba(113,86,26,0.18)',
-  dark: 'rgba(255,255,255,0.12)',
+  dark: 'rgba(255,255,255,0.08)',
 } as const;
 
 const ANDROID_OVERLAY_FILL = {
   light: 'rgba(255,251,246,0.88)',
-  dark: 'rgba(24,20,18,0.68)',
+  dark: 'rgba(24,20,18,0.76)',
 } as const;
 
 const ANDROID_OVERLAY_MUTED_FILL = {
   light: 'rgba(255,255,255,0.62)',
-  dark: 'rgba(255,247,232,0.1)',
+  dark: 'rgba(255,255,255,0.1)',
+} as const;
+
+const ANDROID_OVERLAY_SCRIM = {
+  light: 'rgba(255,255,255,0.44)',
+  dark: 'rgba(255,255,255,0.05)',
 } as const;
 
 export const mapOverlayTokens = {
@@ -69,4 +74,12 @@ export function getOverlayMutedFillColor(isDark: boolean) {
   }
 
   return isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,24,39,0.05)';
+}
+
+export function getOverlayScrimColor(isDark: boolean) {
+  if (Platform.OS === 'android') {
+    return isDark ? ANDROID_OVERLAY_SCRIM.dark : ANDROID_OVERLAY_SCRIM.light;
+  }
+
+  return isDark ? 'rgba(12,12,18,0.10)' : 'rgba(255,255,255,0.04)';
 }

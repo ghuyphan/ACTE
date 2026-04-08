@@ -633,7 +633,6 @@ export default function HomeHeaderSearch({
                 <Ionicons name="grid-outline" size={18} color={androidHeaderControlForegroundColor} />
               </Pressable>
             </View>
-            <View style={[styles.androidGroupedActionDivider, { backgroundColor: androidHeaderDividerColor }]} />
           </>
         ) : null}
 
@@ -675,13 +674,11 @@ export default function HomeHeaderSearch({
                   />
               </Pressable>
             </View>
-            <View style={[styles.androidGroupedActionDivider, { backgroundColor: androidHeaderDividerColor }]} />
           </>
         ) : null}
 
         {showSearchButton ? (
           <>
-            <View style={[styles.androidGroupedActionDivider, { backgroundColor: androidHeaderDividerColor }]} />
             {renderAndroidGroupedSearchButton()}
           </>
         ) : null}
@@ -936,11 +933,6 @@ const styles = StyleSheet.create({
   },
   androidGroupedActionPressed: {
     opacity: 0.8,
-  },
-  androidGroupedActionDivider: {
-    width: StyleSheet.hairlineWidth,
-    alignSelf: 'stretch',
-    marginVertical: 8,
   },
   androidSearchButton: {
     width: 42,

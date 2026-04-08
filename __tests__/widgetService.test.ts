@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const mockUpdateTimeline = jest.fn();
 const mockGetAllNotes = jest.fn();
+const mockGetAllNotesForScope = jest.fn();
+const mockGetPersistedActiveNotesScope = jest.fn();
 const mockGetForegroundPermissionsAsync = jest.fn();
 const mockGetLastKnownPositionAsync = jest.fn();
 const mockGetCurrentPositionAsync = jest.fn();
@@ -124,6 +126,9 @@ jest.mock('../widgets/LocketWidget', () => ({
 
 jest.mock('../services/database', () => ({
   getAllNotes: (...args: unknown[]) => mockGetAllNotes(...args),
+  getAllNotesForScope: (...args: unknown[]) => mockGetAllNotesForScope(...args),
+  getPersistedActiveNotesScope: (...args: unknown[]) => mockGetPersistedActiveNotesScope(...args),
+  LOCAL_NOTES_SCOPE: '__local__',
 }));
 
 jest.mock('../services/sharedFeedCache', () => ({
@@ -282,6 +287,8 @@ beforeEach(async () => {
       createdAt: '2026-03-09T10:00:00.000Z',
     }),
   ]);
+  mockGetAllNotesForScope.mockImplementation(async () => mockGetAllNotes());
+  mockGetPersistedActiveNotesScope.mockResolvedValue('user-1');
 });
 
 afterEach(() => {
@@ -352,6 +359,13 @@ describe('widgetService', () => {
         primaryActionUrl: 'noto:///widget/note/near-note',
       })
     );
+  });
+
+  it('loads widget notes from the persisted active scope when no notes are provided', async () => {
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
+
+    expect(mockGetPersistedActiveNotesScope).toHaveBeenCalledTimes(1);
+    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-1');
   });
 
   it('can anchor the current slot to the place that triggered a geofence refresh', () => {

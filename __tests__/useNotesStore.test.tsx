@@ -10,6 +10,7 @@ const mockUpdateWidgetData = jest.fn();
 const mockCleanupOrphanMediaFiles = jest.fn();
 const mockGetInfoAsync = jest.fn();
 const mockDeleteAsync = jest.fn();
+const mockGetAllNotesForScope = jest.fn();
 const mockUseAuth = jest.fn(() => ({
   user: null,
   isReady: true,
@@ -39,6 +40,7 @@ jest.mock('../services/mediaIntegrity', () => ({
 
 jest.mock('../services/database', () => ({
   getAllNotes: jest.fn(async () => [...mockNotesDb]),
+  getAllNotesForScope: (...args: unknown[]) => mockGetAllNotesForScope(...args),
   getNoteById: jest.fn(async (id: string) => mockNotesDb.find((note) => note.id === id) ?? null),
   createNote: jest.fn(async (input: any) => {
     const nextNote: Note = {
@@ -122,6 +124,7 @@ beforeEach(() => {
   mockClearGeofenceRegions.mockResolvedValue(undefined);
   mockSkipImmediateReminderForNewNote.mockResolvedValue(undefined);
   mockUpdateWidgetData.mockResolvedValue(undefined);
+  mockGetAllNotesForScope.mockImplementation(async () => [...mockNotesDb]);
 });
 
 describe('useNotesStore', () => {
@@ -166,6 +169,7 @@ describe('useNotesStore', () => {
 
     const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
+    mockSyncGeofenceRegions.mockClear();
 
     await act(async () => {
       await result.current.createNote({
@@ -185,6 +189,30 @@ describe('useNotesStore', () => {
     await act(async () => {
       deferred.resolve();
     });
+  });
+
+  it('waits for auth readiness before loading scoped notes for a signed-in user', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { uid: 'user-42' } as any,
+      isReady: false,
+    });
+
+    const { result, rerender } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+
+    expect(mockGetAllNotesForScope).not.toHaveBeenCalled();
+
+    mockUseAuth.mockReturnValue({
+      user: { uid: 'user-42' } as any,
+      isReady: true,
+    });
+
+    rerender({});
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-42');
   });
 
   it('updates and favorites a note', async () => {

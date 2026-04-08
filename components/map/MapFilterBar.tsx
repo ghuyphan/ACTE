@@ -19,6 +19,7 @@ import {
   getOverlayBorderColor,
   getOverlayFallbackColor,
   getOverlayMutedFillColor,
+  getOverlayScrimColor,
   mapOverlayTokens,
 } from './overlayTokens';
 import type { MapFilterState, MapFilterType } from '../../hooks/map/mapDomain';
@@ -194,8 +195,8 @@ export default function MapFilterBar({
           styles.container,
           isAndroid ? styles.containerAndroidShadow : null,
           {
-            borderColor: isAndroid ? colors.androidTabShellBorder : getOverlayBorderColor(isDark),
-            backgroundColor: isAndroid ? colors.androidTabShellBackground : getOverlayFallbackColor(isDark),
+            borderColor: getOverlayBorderColor(isDark),
+            backgroundColor: getOverlayFallbackColor(isDark),
             shadowColor: isAndroid ? colors.androidTabShellShadow : undefined,
           },
         ]}
@@ -204,6 +205,7 @@ export default function MapFilterBar({
           pointerEvents="none"
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
+          fallbackColor="transparent"
           style={StyleSheet.absoluteFill}
         />
         {Platform.OS === 'android' ? (
@@ -213,7 +215,7 @@ export default function MapFilterBar({
               StyleSheet.absoluteFill,
               styles.androidScrim,
               {
-                backgroundColor: colors.androidTabShellScrim,
+                backgroundColor: getOverlayScrimColor(isDark),
               },
             ]}
           />
@@ -276,7 +278,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   container: {
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: Platform.OS === 'android' ? 1 : StyleSheet.hairlineWidth,
     borderRadius: mapOverlayTokens.overlayRadius,
     minHeight: mapOverlayTokens.overlayMinHeight,
     overflow: 'hidden',

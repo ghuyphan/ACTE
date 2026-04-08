@@ -6,7 +6,12 @@ import i18n from '../constants/i18n';
 import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 import { getSupabaseUser } from '../utils/supabase';
 import { formatDate } from '../utils/dateUtils';
-import { getAllNotes, Note } from './database';
+import {
+    getAllNotesForScope,
+    getPersistedActiveNotesScope,
+    LOCAL_NOTES_SCOPE,
+    Note,
+} from './database';
 import { getTextNoteCardGradient } from './noteAppearance';
 import { parseNoteStickerPlacements } from './noteStickers';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
@@ -1729,7 +1734,8 @@ async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<v
     }
 
     try {
-        const notes = options.notes ?? await getAllNotes();
+        const noteScope = (await getPersistedActiveNotesScope()) ?? LOCAL_NOTES_SCOPE;
+        const notes = options.notes ?? await getAllNotesForScope(noteScope);
         const sharedFeedSnapshot = await getSharedWidgetFeedSnapshot(options.includeSharedRefresh === true);
         const currentLocation =
             options.currentLocation !== undefined

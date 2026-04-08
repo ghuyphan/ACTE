@@ -191,6 +191,19 @@ describe('syncSocialPushRegistration', () => {
     expect(mockRemovePersistentItem).toHaveBeenCalled();
   });
 
+  it('keeps the persisted token when unregister fails during sign-out', async () => {
+    mockGetPersistentItem.mockResolvedValue(
+      JSON.stringify({
+        token: 'ExponentPushToken[old]',
+        userId: 'user-1',
+      })
+    );
+    rpc.mockResolvedValueOnce({ error: new Error('network failed') });
+
+    await expect(syncSocialPushRegistration(null)).rejects.toThrow('network failed');
+    expect(mockRemovePersistentItem).not.toHaveBeenCalled();
+  });
+
   it('ignores malformed persisted registration payloads', async () => {
     mockGetPermissionsAsync.mockResolvedValue({
       status: 'granted',

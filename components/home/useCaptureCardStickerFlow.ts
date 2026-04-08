@@ -567,6 +567,7 @@ export function useCaptureCardStickerFlow({
       selectedStickerPlacement,
       showInlinePasteButton,
       showStickerActionsSheet,
+      showStampCutterEditor,
       showStickerSourceSheet,
       stampCutterDraft,
       stickerSourceActions,

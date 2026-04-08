@@ -86,6 +86,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const suppressActiveInviteRef = useRef(false);
   const createInvitePromiseRef = useRef<Promise<FriendInvite> | null>(null);
   const previousUserUidRef = useRef<string | null>(null);
+  const sharedFeedSessionRef = useRef(0);
 
   const enabled = isAuthAvailable;
 
@@ -165,16 +166,20 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       updatedAt: string,
       source: 'live' | 'cache' = 'live'
     ) => {
-      commitSnapshot(snapshot, source, updatedAt);
+      applySnapshot(snapshot, source, updatedAt);
       void persistSnapshot(userUid, snapshot);
     },
-    [commitSnapshot, persistSnapshot]
+    [applySnapshot, persistSnapshot]
   );
 
-  const hydrateFromCache = useCallback(async (userUid: string) => {
+  const hydrateFromCache = useCallback(async (userUid: string, sessionId: number) => {
     const snapshot = await getCachedSharedFeedSnapshot(userUid);
+    if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== userUid) {
+      return false;
+    }
     applySnapshot(snapshot, 'cache', snapshot.lastUpdatedAt);
     setReady(true);
+    return true;
   }, [applySnapshot]);
 
   const refreshAll = useCallback(async () => {
@@ -202,14 +207,21 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     }
 
     setLoading(true);
+    const userUid = user.uid;
+    const sessionId = sharedFeedSessionRef.current;
     try {
       const snapshot = await fetchSharedFeed(user);
-      applySnapshot(snapshot, 'live', new Date().toISOString());
+      if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== userUid) {
+        return;
+      }
+      commitSnapshotAndPersist(userUid, snapshot, new Date().toISOString());
     } finally {
-      setLoading(false);
-      setReady(true);
+      if (sharedFeedSessionRef.current === sessionId && previousUserUidRef.current === userUid) {
+        setLoading(false);
+        setReady(true);
+      }
     }
-  }, [applySnapshot, enabled, isOnline, user]);
+  }, [commitSnapshotAndPersist, enabled, isOnline, user]);
 
   const resolveOwnedPostIdsForNote = useCallback(
     async (activeUser: typeof user, noteId: string) => {
@@ -238,6 +250,9 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   );
 
   useEffect(() => {
+    sharedFeedSessionRef.current += 1;
+    const sessionId = sharedFeedSessionRef.current;
+
     if (!isReady) {
       return;
     }
@@ -275,10 +290,10 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     );
     setLoading(true);
     setReady(false);
-    void hydrateFromCache(user.uid)
+    void hydrateFromCache(user.uid, sessionId)
       .catch(() => undefined)
       .finally(() => {
-        if (!isOnline) {
+        if (sharedFeedSessionRef.current === sessionId && !isOnline) {
           setLoading(false);
           setReady(true);
         }
@@ -290,11 +305,17 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
     const unsubscribe = subscribeToSharedFeed(user, {
       onSnapshot: (snapshot) => {
-        applySnapshot(snapshot, 'live', new Date().toISOString());
+        if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== user.uid) {
+          return;
+        }
+        commitSnapshotAndPersist(user.uid, snapshot, new Date().toISOString());
         setLoading(false);
         setReady(true);
       },
       onError: (error) => {
+        if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== user.uid) {
+          return;
+        }
         console.warn('Shared feed subscription failed:', getSharedFeedErrorMessage(error));
         setLoading(false);
         setReady(true);
@@ -302,7 +323,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     });
 
     return unsubscribe;
-  }, [applySnapshot, enabled, hydrateFromCache, isOnline, isReady, user]);
+  }, [commitSnapshotAndPersist, enabled, hydrateFromCache, isOnline, isReady, user]);
 
   useEffect(() => {
     if (!enabled || !user || !isReady) {

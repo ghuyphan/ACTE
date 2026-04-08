@@ -146,17 +146,18 @@ async function unregisterPushToken(token: string) {
   }
 }
 
+async function clearPersistedRegistrationAfterSuccessfulUnregister(token: string) {
+  await unregisterPushToken(token);
+  await removePersistentItem(PUSH_REGISTRATION_STORAGE_KEY);
+}
+
 export async function unregisterCurrentSocialPushToken() {
   const persisted = await readPersistedRegistration();
   if (!persisted) {
     return;
   }
 
-  try {
-    await unregisterPushToken(persisted.token);
-  } finally {
-    await removePersistentItem(PUSH_REGISTRATION_STORAGE_KEY).catch(() => undefined);
-  }
+  await clearPersistedRegistrationAfterSuccessfulUnregister(persisted.token);
 }
 
 export async function syncSocialPushRegistration(
@@ -176,9 +177,9 @@ export async function syncSocialPushRegistration(
 
   if (!user) {
     if (persisted?.token) {
-      await unregisterPushToken(persisted.token).catch(() => undefined);
+      await clearPersistedRegistrationAfterSuccessfulUnregister(persisted.token);
+      return 'skipped';
     }
-    await removePersistentItem(PUSH_REGISTRATION_STORAGE_KEY).catch(() => undefined);
     return 'skipped';
   }
 
@@ -192,8 +193,7 @@ export async function syncSocialPushRegistration(
 
   if (permissions.status !== 'granted') {
     if (persisted?.token) {
-      await unregisterPushToken(persisted.token).catch(() => undefined);
-      await removePersistentItem(PUSH_REGISTRATION_STORAGE_KEY).catch(() => undefined);
+      await clearPersistedRegistrationAfterSuccessfulUnregister(persisted.token);
     }
     return permissions.canAskAgain === false ? 'blocked' : 'denied';
   }
@@ -212,7 +212,7 @@ export async function syncSocialPushRegistration(
   }
 
   if (persisted?.token && (persisted.token !== expoPushToken || persisted.userId !== user.uid)) {
-    await unregisterPushToken(persisted.token).catch(() => undefined);
+    await clearPersistedRegistrationAfterSuccessfulUnregister(persisted.token);
   }
 
   const { error } = await supabase.rpc('register_push_token', {

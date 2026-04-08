@@ -147,10 +147,13 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [currentOffering, setCurrentOffering] = useState<PurchasesOffering | null>(null);
   const [isPurchaseInFlight, setIsPurchaseInFlight] = useState(false);
   const [remotePhotoNoteCount, setRemotePhotoNoteCount] = useState<number | null>(null);
-  const [isRemotePhotoNoteCountReady, setIsRemotePhotoNoteCountReady] = useState(false);
+  const [isRemotePhotoNoteCountReady, setIsRemotePhotoNoteCountReady] = useState(
+    () => authReady && !user
+  );
   const [cachedSnapshot, setCachedSnapshot] = useState<SubscriptionSnapshot | null>(null);
   const isConfiguredRef = useRef(false);
   const isInitializedRef = useRef(false);
+  const customerInfoListenerRef = useRef<((customerInfo: CustomerInfo) => void) | null>(null);
   const currentRevenueCatUserIdRef = useRef<string | null>(null);
   const snapshotStorageKey = `${SUBSCRIPTION_SNAPSHOT_KEY_PREFIX}${user?.uid ?? 'anonymous'}`;
 
@@ -213,17 +216,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
     void Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.ERROR);
 
-    const listener = (customerInfo: CustomerInfo) => {
-      setCustomerInfo(customerInfo);
-    };
-
-    Purchases.addCustomerInfoUpdateListener(listener);
-
     if (!isOnline) {
       setIsReady(true);
-      return () => {
-        Purchases.removeCustomerInfoUpdateListener(listener);
-      };
+      return;
     }
 
     void loadRevenueCatState()
@@ -234,10 +229,26 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         setIsReady(true);
       });
 
-    return () => {
-      Purchases.removeCustomerInfoUpdateListener(listener);
-    };
   }, [isConfigured, isOnline, loadRevenueCatState, revenueCatApiKey]);
+
+  useEffect(() => {
+    if (!isConfigured || !isInitializedRef.current || customerInfoListenerRef.current) {
+      return;
+    }
+
+    const listener = (nextCustomerInfo: CustomerInfo) => {
+      setCustomerInfo(nextCustomerInfo);
+    };
+    customerInfoListenerRef.current = listener;
+    Purchases.addCustomerInfoUpdateListener(listener);
+
+    return () => {
+      if (customerInfoListenerRef.current) {
+        Purchases.removeCustomerInfoUpdateListener(customerInfoListenerRef.current);
+        customerInfoListenerRef.current = null;
+      }
+    };
+  }, [isConfigured]);
 
   useEffect(() => {
     if (!isConfigured || !authReady || !isOnline || !isInitializedRef.current) {
@@ -274,19 +285,31 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     const supabase = getSupabase();
     const cachedRemotePhotoNoteCount = cachedSnapshot?.remotePhotoNoteCount ?? null;
     if (!user || !supabase) {
-      setRemotePhotoNoteCount(cachedRemotePhotoNoteCount);
-      setIsRemotePhotoNoteCountReady(true);
+      if (remotePhotoNoteCount !== cachedRemotePhotoNoteCount) {
+        setRemotePhotoNoteCount(cachedRemotePhotoNoteCount);
+      }
+      if (!isRemotePhotoNoteCountReady) {
+        setIsRemotePhotoNoteCountReady(true);
+      }
       return;
     }
 
-    setRemotePhotoNoteCount(cachedRemotePhotoNoteCount);
+    if (remotePhotoNoteCount !== cachedRemotePhotoNoteCount) {
+      setRemotePhotoNoteCount(cachedRemotePhotoNoteCount);
+    }
 
     if (!isOnline) {
-      setIsRemotePhotoNoteCountReady(cachedRemotePhotoNoteCount !== null);
+      const nextReady = cachedRemotePhotoNoteCount !== null;
+      if (isRemotePhotoNoteCountReady !== nextReady) {
+        setIsRemotePhotoNoteCountReady(nextReady);
+      }
       return;
     }
 
-    setIsRemotePhotoNoteCountReady(cachedRemotePhotoNoteCount !== null);
+    const nextReady = cachedRemotePhotoNoteCount !== null;
+    if (isRemotePhotoNoteCountReady !== nextReady) {
+      setIsRemotePhotoNoteCountReady(nextReady);
+    }
 
     let active = true;
     const channel = supabase
@@ -345,7 +368,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       active = false;
       void supabase.removeChannel(channel);
     };
-  }, [authReady, isOnline, user?.id]);
+  }, [
+    authReady,
+    cachedSnapshot,
+    isOnline,
+    isRemotePhotoNoteCountReady,
+    remotePhotoNoteCount,
+    user?.id,
+  ]);
 
   useEffect(() => {
     if (!isConfigured || !authReady) {

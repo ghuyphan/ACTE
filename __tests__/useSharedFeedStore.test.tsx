@@ -101,6 +101,16 @@ const wrapper = ({ children }: { children: ReactNode }) => (
   <SharedFeedProvider>{children}</SharedFeedProvider>
 );
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function createSharedPost(overrides: Record<string, unknown> = {}) {
   return {
     id: 'shared-note-1',
@@ -262,6 +272,81 @@ describe('useSharedFeedStore', () => {
           token: 'token-1',
         })
       );
+    });
+  });
+
+  it('persists live shared-feed snapshots from subscription updates', async () => {
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+    });
+
+    await act(async () => {
+      latestSharedFeedSubscriptionHandlers?.onSnapshot({
+        friends: [
+          {
+            userId: 'friend-1',
+            displayNameSnapshot: 'Lan',
+            photoURLSnapshot: null,
+            friendedAt: '2026-03-21T00:00:00.000Z',
+            lastSharedAt: null,
+            createdByInviteId: 'invite-1',
+          },
+        ],
+        sharedPosts: [createSharedPost()],
+        activeInvite: null,
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockCacheSharedFeedSnapshot).toHaveBeenCalledWith(
+        'me',
+        expect.objectContaining({
+          sharedPosts: [expect.objectContaining({ id: 'shared-note-1' })],
+        })
+      );
+    });
+  });
+
+  it('does not apply a stale cached snapshot after switching accounts', async () => {
+    const deferredCache = createDeferred<typeof mockCachedSnapshot>();
+    mockGetCachedSharedFeedSnapshot.mockImplementationOnce(() => deferredCache.promise);
+
+    const { result, rerender } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    mockAuthState.user = {
+      id: 'other-user',
+      uid: 'other-user',
+      displayName: 'Other',
+      email: 'other@example.com',
+      photoURL: null,
+      providerData: [],
+    } as any;
+    mockCachedSnapshot = {
+      friends: [],
+      sharedPosts: [createSharedPost({ id: 'fresh-post', authorUid: 'other-user' })],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-24T00:00:00.000Z',
+    };
+
+    rerender({});
+
+    await act(async () => {
+      deferredCache.resolve({
+        friends: [],
+        sharedPosts: [createSharedPost({ id: 'stale-post', authorUid: 'me' })],
+        activeInvite: null,
+        lastUpdatedAt: '2026-03-23T00:00:00.000Z',
+      });
+      await deferredCache.promise;
+    });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+      expect(result.current.sharedPosts).toEqual([
+        expect.objectContaining({ id: 'fresh-post', authorUid: 'other-user' }),
+      ]);
     });
   });
 

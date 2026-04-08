@@ -43,6 +43,7 @@ import {
   buildNewRemoteArtifacts,
   buildRemovedRemoteArtifacts,
   getRemotePairedVideoPath,
+  getRemoteStickerAssetPaths,
   normalizeRemoteArtifactPath,
   normalizeRemoteEntityIds,
 } from './remoteArtifactUtils';
@@ -428,6 +429,7 @@ function getReusableNoteMediaCleanupArtifacts(artifacts: {
   return {
     photoPath: artifacts.photoPath ?? null,
     pairedVideoPath: artifacts.pairedVideoPath ?? null,
+    stickerPaths: artifacts.stickerPaths ?? [],
   };
 }
 
@@ -804,7 +806,8 @@ async function serializeNoteForSupabase(
   try {
     photoPath =
       note.type === 'photo'
-        ? existingRemoteArtifacts?.photoPath && currentPhotoUri === normalizeMediaUri(note.photoSyncedLocalUri)
+        ? existingRemoteArtifacts?.photoPath &&
+          (!currentPhotoUri || currentPhotoUri === normalizeMediaUri(note.photoSyncedLocalUri))
           ? existingRemoteArtifacts.photoPath
           : await uploadPhotoToStorage(
               NOTE_MEDIA_BUCKET,
@@ -816,7 +819,8 @@ async function serializeNoteForSupabase(
     pairedVideoPath =
       note.type === 'photo' && note.isLivePhoto
         ? existingRemoteArtifacts?.pairedVideoPath &&
-          currentPairedVideoUri === normalizeMediaUri(note.pairedVideoSyncedLocalUri)
+          (!currentPairedVideoUri ||
+            currentPairedVideoUri === normalizeMediaUri(note.pairedVideoSyncedLocalUri))
           ? existingRemoteArtifacts.pairedVideoPath
           : await uploadPairedVideoToStorage(
               NOTE_MEDIA_BUCKET,
@@ -1176,12 +1180,14 @@ async function deleteAllRemoteNotesForUser(userId: string) {
     ((sharedPosts ?? []) as {
       photo_path?: string | null;
       paired_video_path?: string | null;
+      sticker_placements_json?: string | null;
     }[]).map((row) =>
       cleanupRemoteArtifacts(
         SHARED_POST_MEDIA_BUCKET,
         {
           photoPath: row.photo_path ?? null,
           pairedVideoPath: row.paired_video_path ?? null,
+          stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
         },
         { strict: true }
       )
@@ -1246,12 +1252,14 @@ async function deleteAllRemoteNotesForUser(userId: string) {
     ((data ?? []) as {
       photo_path?: string | null;
       paired_video_path?: string | null;
+      sticker_placements_json?: string | null;
     }[]).map((row) =>
       cleanupRemoteArtifacts(
         NOTE_MEDIA_BUCKET,
         {
           photoPath: row.photo_path ?? null,
           pairedVideoPath: row.paired_video_path ?? null,
+          stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
         },
         { strict: true }
       )

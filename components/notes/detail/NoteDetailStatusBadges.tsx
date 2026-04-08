@@ -30,8 +30,8 @@ export default function NoteDetailStatusBadges({
 }: NoteDetailStatusBadgesProps) {
     const borderColor =
         captureGlassColorScheme === 'dark'
-            ? 'rgba(255,255,255,0.12)'
-            : 'rgba(43,38,33,0.08)';
+            ? 'rgba(255,255,255,0.14)'
+            : 'rgba(43,38,33,0.12)';
 
     return (
         <View pointerEvents="box-none" style={styles.cardStatusBadgeRow}>

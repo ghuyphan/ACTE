@@ -24,7 +24,15 @@ export default function InfoPill({
   const { colors, isDark } = useTheme();
 
   return (
-    <View style={[styles.container, style]}>
+    <View
+      style={[
+        styles.container,
+        {
+          borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(43,38,33,0.12)',
+        },
+        style,
+      ]}
+    >
       {isOlderIOS ? (
         <View
           style={[
@@ -57,6 +65,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: Layout.pillRadius,
+    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
   text: {

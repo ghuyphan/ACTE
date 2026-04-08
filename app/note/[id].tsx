@@ -20,7 +20,12 @@ export default function NoteDetailRoute() {
                 setVisible(false);
             }}
             onClosed={() => {
-                router.back();
+                if (router.canGoBack()) {
+                    router.back();
+                    return;
+                }
+
+                router.replace('/notes');
             }}
         />
     );

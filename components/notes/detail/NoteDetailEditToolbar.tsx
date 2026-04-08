@@ -63,8 +63,8 @@ export default function NoteDetailEditToolbar({
     const detailBadgeFill = colors.card;
     const detailBadgeBorder =
         colors.captureGlassColorScheme === 'dark'
-            ? 'rgba(255,255,255,0.12)'
-            : 'rgba(43,38,33,0.08)';
+            ? 'rgba(255,255,255,0.14)'
+            : 'rgba(43,38,33,0.12)';
     const detailBadgeIconColor = colors.text;
     const detailBadgeActiveIconColor = colors.primary;
 
