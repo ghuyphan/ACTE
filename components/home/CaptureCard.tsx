@@ -22,7 +22,7 @@ import { Camera, type CameraDevice } from 'react-native-vision-camera';
 import Reanimated, {
   Easing,
   LinearTransition,
-  interpolateColor,
+  runOnJS,
   type SharedValue,
   useAnimatedStyle,
   useSharedValue,
@@ -194,6 +194,7 @@ interface CaptureCardProps {
   saving: boolean;
   saveState?: 'idle' | 'saving' | 'success';
   shutterScale: SharedValue<number>;
+  isStillPhotoCaptureInProgress?: boolean;
   isLivePhotoCaptureInProgress?: boolean;
   isLivePhotoCaptureSettling?: boolean;
   isLivePhotoSaveGuardActive?: boolean;
@@ -219,6 +220,7 @@ type CaptureCardTextInputState = ReturnType<typeof useCaptureCardTextInputState>
 type CaptureCardDecorationState = ReturnType<typeof useCaptureCardDecorations>;
 type CaptureCardStickerFlowState = ReturnType<typeof useCaptureCardStickerFlow>;
 type CaptureCardCameraControllerState = ReturnType<typeof useCaptureCardCameraController>;
+type CameraUiStage = 'text' | 'live' | 'capturing' | 'review';
 
 interface CaptureShareTargetButtonProps {
   colors: CaptureCardColors;
@@ -259,7 +261,6 @@ interface CaptureSaveButtonProps {
   animatedSaveIconStyle: CaptureCardAnimatedStyle;
   animatedSaveInnerStyle: CaptureCardAnimatedStyle;
   colors: CaptureCardColors;
-  isCameraSaveMode: boolean;
   isSaveBusy: boolean;
   isSaveDisabled: boolean;
   isSaveSuccessful: boolean;
@@ -274,7 +275,6 @@ function CaptureSaveButton({
   animatedSaveIconStyle,
   animatedSaveInnerStyle,
   colors,
-  isCameraSaveMode,
   isSaveBusy,
   isSaveDisabled,
   isSaveSuccessful,
@@ -283,6 +283,8 @@ function CaptureSaveButton({
   onPressOut,
   savePressAnimatedStyle,
 }: CaptureSaveButtonProps) {
+  const saveButtonIconColor = '#FFFFFF';
+
   return (
     <CaptureAnimatedPressable
       testID="capture-save-button"
@@ -319,13 +321,13 @@ function CaptureSaveButton({
             ]}
           />
           {isSaveBusy ? (
-            <ActivityIndicator size="small" color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'} />
+            <ActivityIndicator size="small" color={saveButtonIconColor} />
           ) : (
             <Reanimated.View style={animatedSaveIconStyle}>
               <Ionicons
                 name={isSaveSuccessful ? 'checkmark-done' : 'checkmark'}
                 size={26}
-                color={isCameraSaveMode ? colors.captureCardText : '#FFFFFF'}
+                color={saveButtonIconColor}
               />
             </Reanimated.View>
           )}
@@ -533,7 +535,7 @@ interface PhotoCaptureSurfaceProps {
   doodleColor: CaptureCardDecorationState['doodleColor'];
   doodleModeEnabled: CaptureCardDecorationState['doodleModeEnabled'];
   doodleStrokes: CaptureCardDecorationState['doodleStrokes'];
-  flashAnimatedStyle: CaptureCardAnimatedStyle;
+  captureCoverAnimatedStyle: CaptureCardAnimatedStyle;
   handleChangeStickerPlacements: CaptureCardDecorationState['changeStickerPlacements'];
   handleConfirmPasteFromPrompt: CaptureCardStickerFlowState['handleConfirmPasteFromPrompt'];
   handlePressStickerCanvas: () => void;
@@ -556,8 +558,10 @@ interface PhotoCaptureSurfaceProps {
   setPhotoDoodleStrokes: CaptureCardDecorationState['setPhotoDoodleStrokes'];
   stickerModeEnabled: CaptureCardDecorationState['stickerModeEnabled'];
   stickerPlacements: CaptureCardDecorationState['stickerPlacements'];
+  showCaptureCover: boolean;
   t: TFunction;
   dismissPastePrompt: CaptureCardStickerFlowState['dismissPastePrompt'];
+  onPhotoSurfaceReady: () => void;
 }
 
 function PhotoCaptureSurface({
@@ -567,7 +571,7 @@ function PhotoCaptureSurface({
   doodleColor,
   doodleModeEnabled,
   doodleStrokes,
-  flashAnimatedStyle,
+  captureCoverAnimatedStyle,
   handleChangeStickerPlacements,
   handleConfirmPasteFromPrompt,
   handlePressStickerCanvas,
@@ -590,8 +594,10 @@ function PhotoCaptureSurface({
   setPhotoDoodleStrokes,
   stickerModeEnabled,
   stickerPlacements,
+  showCaptureCover,
   t,
   dismissPastePrompt,
+  onPhotoSurfaceReady,
 }: PhotoCaptureSurfaceProps) {
   const photoPreviewControlBorder = hasLivePhotoMotion
     ? (colors.captureGlassColorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.42)')
@@ -610,6 +616,7 @@ function PhotoCaptureSurface({
           style={styles.cameraPreview}
           imageStyle={styles.cameraPreview}
           enablePlayback
+          onImageReady={onPhotoSurfaceReady}
         />
       ) : (
         <FilteredPhotoCanvas
@@ -618,8 +625,19 @@ function PhotoCaptureSurface({
           width={CARD_SIZE}
           height={CARD_SIZE}
           style={styles.cameraPreview}
+          onImageReady={onPhotoSurfaceReady}
         />
       )}
+      {showCaptureCover ? (
+        <Reanimated.View
+          pointerEvents="none"
+          style={[
+            styles.captureTransitionCover,
+            { backgroundColor: colors.captureFlashOverlay },
+            captureCoverAnimatedStyle,
+          ]}
+        />
+      ) : null}
       {ENABLE_PHOTO_STICKERS && !hasLivePhotoMotion ? (
         <Pressable
           testID="capture-card-paste-surface"
@@ -660,14 +678,6 @@ function PhotoCaptureSurface({
           />
         </View>
       ) : null}
-      <Reanimated.View
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFill,
-          { backgroundColor: colors.captureFlashOverlay, zIndex: 50 },
-          flashAnimatedStyle,
-        ]}
-      />
       <StickerPastePopover
         visible={pastePrompt.visible}
         anchor={{ x: pastePrompt.x, y: pastePrompt.y }}
@@ -769,7 +779,7 @@ interface LiveCameraSurfaceProps {
   canShowLiveCameraPreview: CaptureCardCameraControllerState['canShowLiveCameraPreview'];
   colors: CaptureCardColors;
   facing: CaptureCardProps['facing'];
-  flashAnimatedStyle: CaptureCardAnimatedStyle;
+  captureCoverAnimatedStyle: CaptureCardAnimatedStyle;
   handleCameraInitialized: CaptureCardCameraControllerState['handleCameraInitialized'];
   handleCameraPreviewStarted: CaptureCardCameraControllerState['handleCameraPreviewStarted'];
   handleCameraRetryPress: () => void;
@@ -780,6 +790,7 @@ interface LiveCameraSurfaceProps {
   livePhotoRingProgress: CaptureCardCameraControllerState['livePhotoRingProgress'];
   needsCameraPermission: boolean;
   shouldRenderCameraPreview: CaptureCardCameraControllerState['shouldRenderCameraPreview'];
+  showCaptureCover: boolean;
   showCameraUnavailableState: CaptureCardCameraControllerState['showCameraUnavailableState'];
   showCameraZoomBadge: CaptureCardCameraControllerState['showCameraZoomBadge'];
   t: TFunction;
@@ -800,7 +811,7 @@ function LiveCameraSurface({
   canShowLiveCameraPreview,
   colors,
   facing,
-  flashAnimatedStyle,
+  captureCoverAnimatedStyle,
   handleCameraInitialized,
   handleCameraPreviewStarted,
   handleCameraRetryPress,
@@ -811,6 +822,7 @@ function LiveCameraSurface({
   livePhotoRingProgress,
   needsCameraPermission,
   shouldRenderCameraPreview,
+  showCaptureCover,
   showCameraUnavailableState,
   showCameraZoomBadge,
   t,
@@ -892,6 +904,16 @@ function LiveCameraSurface({
           </Canvas>
         </View>
       ) : null}
+      {showCaptureCover ? (
+        <Reanimated.View
+          pointerEvents="none"
+          style={[
+            styles.captureTransitionCover,
+            { backgroundColor: colors.captureFlashOverlay },
+            captureCoverAnimatedStyle,
+          ]}
+        />
+      ) : null}
       {showCameraUnavailableState ? (
         <View style={styles.cameraUnavailableState}>
           <Ionicons name="camera-outline" size={42} color={colors.captureCameraOverlayText} />
@@ -930,14 +952,6 @@ function LiveCameraSurface({
           />
         </View>
       ) : null}
-      <Reanimated.View
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFill,
-          { backgroundColor: colors.captureFlashOverlay, zIndex: 50 },
-          flashAnimatedStyle,
-        ]}
-      />
     </View>
   );
 }
@@ -1598,7 +1612,6 @@ interface CaptureActionRowProps {
   handleShutterPress: CaptureCardCameraControllerState['handleShutterPress'];
   handleShutterRelease: CaptureCardCameraControllerState['handleShutterRelease'];
   handleSwitchCameraPress: CaptureCardCameraControllerState['handleSwitchCameraPress'];
-  isCameraSaveMode: boolean;
   isLivePhotoCaptureInProgress: boolean;
   isSaveBusy: boolean;
   isSaveDisabled: boolean;
@@ -1618,8 +1631,7 @@ interface CaptureActionRowProps {
   shutterInnerAnimatedStyle: CaptureCardAnimatedStyle;
   shutterOuterAnimatedStyle: CaptureCardAnimatedStyle;
   t: TFunction;
-  capturedPhoto: CaptureCardProps['capturedPhoto'];
-  captureMode: CaptureCardProps['captureMode'];
+  cameraUiStage: CameraUiStage;
 }
 
 function CaptureActionRow({
@@ -1633,7 +1645,6 @@ function CaptureActionRow({
   handleShutterPress,
   handleShutterRelease,
   handleSwitchCameraPress,
-  isCameraSaveMode,
   isLivePhotoCaptureInProgress,
   isSaveBusy,
   isSaveDisabled,
@@ -1653,10 +1664,9 @@ function CaptureActionRow({
   shutterInnerAnimatedStyle,
   shutterOuterAnimatedStyle,
   t,
-  capturedPhoto,
-  captureMode,
+  cameraUiStage,
 }: CaptureActionRowProps) {
-  if (captureMode === 'camera' && !capturedPhoto) {
+  if (cameraUiStage === 'live' || cameraUiStage === 'capturing') {
     return (
       <View style={styles.cameraControlsWrap}>
         <View style={[styles.belowCardShutterRow, styles.liveCameraShutterRow]}>
@@ -1737,7 +1747,7 @@ function CaptureActionRow({
     <View
       style={[
         styles.belowCardShutterRow,
-        capturedPhoto ? styles.belowCardCapturedPhotoActions : null,
+        cameraUiStage === 'review' ? styles.belowCardCapturedPhotoActions : null,
       ]}
     >
       <CaptureShareTargetButton
@@ -1753,7 +1763,6 @@ function CaptureActionRow({
         animatedSaveIconStyle={animatedSaveIconStyle}
         animatedSaveInnerStyle={animatedSaveInnerStyle}
         colors={colors}
-        isCameraSaveMode={isCameraSaveMode}
         isSaveBusy={isSaveBusy}
         isSaveDisabled={isSaveDisabled}
         isSaveSuccessful={isSaveSuccessful}
@@ -1762,7 +1771,7 @@ function CaptureActionRow({
         onPressOut={handleSavePressOut}
         savePressAnimatedStyle={savePressAnimatedStyle}
       />
-      {capturedPhoto ? (
+      {cameraUiStage === 'review' ? (
         <CaptureGlassActionButton
           testID="capture-retake-button"
           accessibilityLabel={t('capture.retake', 'Retake')}
@@ -1827,6 +1836,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   saving,
   saveState = 'idle',
   shutterScale,
+  isStillPhotoCaptureInProgress = false,
   isLivePhotoCaptureInProgress = false,
   isLivePhotoCaptureSettling = false,
   isLivePhotoSaveGuardActive = false,
@@ -1844,7 +1854,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   footerContent,
 }, ref) {
   const reduceMotionEnabled = useReducedMotion();
-  const isCameraSaveMode = captureMode === 'camera';
   const isSharedTarget = shareTarget === 'shared';
   const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
   const textCardActiveIconColor = isDarkCaptureTheme ? colors.captureCardText : '#FFFFFF';
@@ -1857,7 +1866,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const autoEmojiPopOpacity = useSharedValue(0);
   const autoEmojiPopTranslateY = useSharedValue(12);
   const autoEmojiPopScale = useSharedValue(0.86);
+  const captureCoverOpacity = useSharedValue(0);
   const [isPhotoCaptionFocused, setIsPhotoCaptionFocused] = useState(false);
+  const [pendingPhotoReveal, setPendingPhotoReveal] = useState(false);
+  const [shouldRenderCaptureCover, setShouldRenderCaptureCover] = useState(false);
+  const previousCapturedPhotoRef = useRef(capturedPhoto);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
@@ -1929,6 +1942,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
     setIsPhotoCaptionFocused(false);
   }, [captureMode, capturedPhoto]);
+  useEffect(() => {
+    const previousCapturedPhoto = previousCapturedPhotoRef.current;
+
+    if (!capturedPhoto) {
+      setPendingPhotoReveal(false);
+    } else if (!previousCapturedPhoto) {
+      setPendingPhotoReveal(true);
+    }
+
+    previousCapturedPhotoRef.current = capturedPhoto;
+  }, [capturedPhoto]);
   const dismissCaptureInputs = useCallback(() => {
     noteInputRef.current?.blur();
     restaurantInputRef.current?.blur();
@@ -2090,7 +2114,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     dismissPastePrompt();
     handlePressStickerCanvasInternal();
   }, [dismissPastePrompt, handlePressStickerCanvasInternal]);
-  const saveIdleBackground = isCameraSaveMode ? colors.primary : colors.captureButtonBg;
   const disableAndroidCaptureTransforms =
     Platform.OS === 'android' &&
     !isModeSwitchAnimating &&
@@ -2287,15 +2310,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   );
 
   const animatedSaveInnerStyle = useAnimatedStyle(() => ({
-    backgroundColor: isCameraSaveMode
-      ? colors.primary
-      : interpolateColor(
-          saveSuccessProgress.value,
-          [0, 1],
-          [saveIdleBackground, colors.primary]
-        ),
+    backgroundColor: colors.primary,
     transform: [{ scale: saveStateScale.value }],
-  }), [colors.primary, isCameraSaveMode, saveIdleBackground, saveStateScale, saveSuccessProgress]);
+  }), [colors.primary, saveStateScale]);
   const animatedSaveHaloStyle = useAnimatedStyle(() => ({
     opacity: saveSuccessProgress.value * (reduceMotionEnabled ? 0.16 : 0.28),
     transform: [{ scale: 1 + saveSuccessProgress.value * (reduceMotionEnabled ? 0.03 : 0.08) }],
@@ -2322,9 +2339,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       { scale: captureScale.value },
     ],
   }), [captureScale, captureTranslateY]);
-  const flashAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: flashAnim.value,
-  }), [flashAnim]);
+  const captureCoverAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: captureCoverOpacity.value,
+  }), [captureCoverOpacity]);
   const savePressAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: savePressScale.value }],
   }), [savePressScale]);
@@ -2336,6 +2353,63 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     triggerCaptureCardHaptic();
     onRequestCameraPermission();
   }, [onRequestCameraPermission]);
+  const handlePhotoSurfaceReady = useCallback(() => {
+    setPendingPhotoReveal(false);
+  }, []);
+  const shouldShowCaptureCover =
+    captureMode === 'camera' &&
+    (isStillPhotoCaptureInProgress || pendingPhotoReveal);
+  const cameraUiStage: CameraUiStage =
+    captureMode !== 'camera'
+      ? 'text'
+      : shouldShowCaptureCover
+        ? 'capturing'
+        : capturedPhoto
+          ? 'review'
+          : 'live';
+  const isCameraUiCapturing = cameraUiStage === 'capturing';
+  const shouldRenderPhotoCaptureSurface =
+    captureMode === 'camera' &&
+    Boolean(capturedPhoto) &&
+    (cameraUiStage === 'capturing' || cameraUiStage === 'review');
+  const shouldRenderLiveCameraSurface =
+    captureMode === 'camera' &&
+    shouldShowCameraCard &&
+    (cameraUiStage === 'live' || cameraUiStage === 'capturing');
+  const controlsUiStage: CameraUiStage =
+    captureMode === 'camera' && shouldRenderCaptureCover
+      ? 'capturing'
+      : cameraUiStage;
+
+  useEffect(() => {
+    if (shouldShowCaptureCover) {
+      setShouldRenderCaptureCover(true);
+      captureCoverOpacity.value = withTiming(1, {
+        duration: reduceMotionEnabled ? 90 : 140,
+        easing: Easing.out(Easing.quad),
+      });
+      return;
+    }
+
+    if (!shouldRenderCaptureCover) {
+      captureCoverOpacity.value = 0;
+      return;
+    }
+
+    captureCoverOpacity.value = withTiming(0, {
+      duration: reduceMotionEnabled ? 180 : 680,
+      easing: Easing.out(Easing.cubic),
+    }, (finished) => {
+      if (finished) {
+        runOnJS(setShouldRenderCaptureCover)(false);
+      }
+    });
+  }, [
+    captureCoverOpacity,
+    reduceMotionEnabled,
+    shouldRenderCaptureCover,
+    shouldShowCaptureCover,
+  ]);
 
   const noteColorSheetBody = onChangeNoteColor ? (
     <AppSheetScaffold
@@ -2427,9 +2501,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               styles.captureArea,
               disableAndroidCaptureTransforms ? null : captureAreaAnimatedStyle,
             ]}
-            pointerEvents={isSearching || interactionsDisabled ? 'none' : 'auto'}
+            pointerEvents={isSearching || interactionsDisabled || isCameraUiCapturing ? 'none' : 'auto'}
           >
-            {captureMode === 'text' ? (
+            {cameraUiStage === 'text' ? (
               <TextCaptureSurface
                 activeTextPlaceholder={activeTextPlaceholder}
                 animatedAutoEmojiPopStyle={animatedAutoEmojiPopStyle}
@@ -2472,72 +2546,84 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 textInputDynamicStyle={textInputDynamicStyle}
                 useNativeInlinePasteButton={useNativeInlinePasteButton}
               />
-            ) : capturedPhoto ? (
-              <PhotoCaptureSurface
-                capturedPairedVideo={capturedPairedVideo}
-                capturedPhoto={capturedPhoto}
-                colors={colors}
-                doodleColor={doodleColor}
-                doodleModeEnabled={doodleModeEnabled}
-                doodleStrokes={doodleStrokes}
-                flashAnimatedStyle={flashAnimatedStyle}
-                handleChangeStickerPlacements={handleChangeStickerPlacements}
-                handleConfirmPasteFromPrompt={handleConfirmPasteFromPrompt}
-                handlePressStickerCanvas={handlePressStickerCanvas}
-                handleSelectedStickerAction={handleSelectedStickerAction}
-                handleSelectSticker={handleSelectSticker}
-                handleShowCardPastePrompt={handleShowCardPastePrompt}
-                hasLivePhotoMotion={hasLivePhotoMotion}
-                interactionsDisabled={interactionsDisabled}
-                noteInputRef={noteInputRef}
-                noteText={noteText}
-                onChangePhotoFilter={onChangePhotoFilter}
-                onChangeNoteText={onChangeNoteText}
-                onCanvasGestureActiveChange={setCanvasGestureActive}
-                onPhotoCaptionBlur={handlePhotoCaptionBlur}
-                onPhotoCaptionFocus={handlePhotoCaptionFocus}
-                pastePrompt={pastePrompt}
-                photoDoodleStrokes={photoDoodleStrokes}
-                selectedPhotoFilterId={selectedPhotoFilterId}
-                selectedStickerId={selectedStickerId}
-                setPhotoDoodleStrokes={setPhotoDoodleStrokes}
-                stickerModeEnabled={stickerModeEnabled}
-                stickerPlacements={stickerPlacements}
-                t={t}
-                dismissPastePrompt={dismissPastePrompt}
-              />
-            ) : shouldShowCameraCard ? (
-              <LiveCameraSurface
-                cameraDevice={cameraDevice}
-                cameraFocusPoint={cameraFocusPoint}
-                cameraFocusRingAnimatedStyle={cameraFocusRingAnimatedStyle}
-                cameraKey={cameraKey}
-                cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
-                cameraPreviewZoom={cameraPreviewZoom}
-                cameraZoomLabel={cameraZoomLabel}
-                cameraRef={cameraRef}
-                cameraTransitionMaskAnimatedStyle={cameraTransitionMaskAnimatedStyle}
-                cameraUnavailableDetail={cameraUnavailableDetail}
-                cameraZoomGesture={cameraZoomGesture}
-                canShowLiveCameraPreview={canShowLiveCameraPreview}
-                colors={colors}
-                facing={facing}
-                flashAnimatedStyle={flashAnimatedStyle}
-                handleCameraInitialized={handleCameraInitialized}
-                handleCameraPreviewStarted={handleCameraPreviewStarted}
-                handleCameraRetryPress={handleCameraRetryPress}
-                handleCameraStartupFailure={handleCameraStartupFailure}
-                handleRequestCameraPermissionPress={handleRequestCameraPermissionPress}
-                isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
-                livePhotoProgressPath={livePhotoProgressPath}
-                livePhotoRingProgress={livePhotoRingProgress}
-                needsCameraPermission={needsCameraPermission}
-                shouldRenderCameraPreview={shouldRenderCameraPreview}
-                showCameraUnavailableState={showCameraUnavailableState}
-                showCameraZoomBadge={showCameraZoomBadge}
-                t={t}
-              />
-            ) : null}
+            ) : (
+              <View style={styles.cameraSurfaceStack}>
+                {shouldRenderLiveCameraSurface ? (
+                  <View style={styles.cameraSurfaceLayer}>
+                    <LiveCameraSurface
+                      cameraDevice={cameraDevice}
+                      cameraFocusPoint={cameraFocusPoint}
+                      cameraFocusRingAnimatedStyle={cameraFocusRingAnimatedStyle}
+                      cameraKey={cameraKey}
+                      cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
+                      cameraPreviewZoom={cameraPreviewZoom}
+                      cameraZoomLabel={cameraZoomLabel}
+                      cameraRef={cameraRef}
+                      cameraTransitionMaskAnimatedStyle={cameraTransitionMaskAnimatedStyle}
+                      cameraUnavailableDetail={cameraUnavailableDetail}
+                      cameraZoomGesture={cameraZoomGesture}
+                      canShowLiveCameraPreview={canShowLiveCameraPreview}
+                      colors={colors}
+                      facing={facing}
+                      captureCoverAnimatedStyle={captureCoverAnimatedStyle}
+                      handleCameraInitialized={handleCameraInitialized}
+                      handleCameraPreviewStarted={handleCameraPreviewStarted}
+                      handleCameraRetryPress={handleCameraRetryPress}
+                      handleCameraStartupFailure={handleCameraStartupFailure}
+                      handleRequestCameraPermissionPress={handleRequestCameraPermissionPress}
+                      isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
+                      livePhotoProgressPath={livePhotoProgressPath}
+                      livePhotoRingProgress={livePhotoRingProgress}
+                      needsCameraPermission={needsCameraPermission}
+                      shouldRenderCameraPreview={shouldRenderCameraPreview}
+                      showCaptureCover={shouldRenderCaptureCover && !shouldRenderPhotoCaptureSurface}
+                      showCameraUnavailableState={showCameraUnavailableState}
+                      showCameraZoomBadge={showCameraZoomBadge}
+                      t={t}
+                    />
+                  </View>
+                ) : null}
+                {shouldRenderPhotoCaptureSurface && capturedPhoto ? (
+                  <View style={[styles.cameraSurfaceLayer, styles.cameraSurfaceTopLayer]}>
+                    <PhotoCaptureSurface
+                      capturedPairedVideo={capturedPairedVideo}
+                      capturedPhoto={capturedPhoto}
+                      colors={colors}
+                      doodleColor={doodleColor}
+                      doodleModeEnabled={doodleModeEnabled}
+                      doodleStrokes={doodleStrokes}
+                      captureCoverAnimatedStyle={captureCoverAnimatedStyle}
+                      handleChangeStickerPlacements={handleChangeStickerPlacements}
+                      handleConfirmPasteFromPrompt={handleConfirmPasteFromPrompt}
+                      handlePressStickerCanvas={handlePressStickerCanvas}
+                      handleSelectedStickerAction={handleSelectedStickerAction}
+                      handleSelectSticker={handleSelectSticker}
+                      handleShowCardPastePrompt={handleShowCardPastePrompt}
+                      hasLivePhotoMotion={hasLivePhotoMotion}
+                      interactionsDisabled={interactionsDisabled}
+                      noteInputRef={noteInputRef}
+                      noteText={noteText}
+                      onChangePhotoFilter={onChangePhotoFilter}
+                      onChangeNoteText={onChangeNoteText}
+                      onCanvasGestureActiveChange={setCanvasGestureActive}
+                      onPhotoCaptionBlur={handlePhotoCaptionBlur}
+                      onPhotoCaptionFocus={handlePhotoCaptionFocus}
+                      pastePrompt={pastePrompt}
+                      photoDoodleStrokes={photoDoodleStrokes}
+                      selectedPhotoFilterId={selectedPhotoFilterId}
+                      selectedStickerId={selectedStickerId}
+                      setPhotoDoodleStrokes={setPhotoDoodleStrokes}
+                      stickerModeEnabled={stickerModeEnabled}
+                      stickerPlacements={stickerPlacements}
+                      showCaptureCover={shouldRenderCaptureCover}
+                      t={t}
+                      dismissPastePrompt={dismissPastePrompt}
+                      onPhotoSurfaceReady={handlePhotoSurfaceReady}
+                    />
+                  </View>
+                ) : null}
+              </View>
+            )}
           </Reanimated.View>
 
           <Reanimated.View
@@ -2545,9 +2631,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               styles.belowCardSection,
               disableAndroidCaptureTransforms ? null : belowCardAnimatedStyle,
             ]}
-            pointerEvents={interactionsDisabled ? 'none' : 'auto'}
+            pointerEvents={interactionsDisabled || isCameraUiCapturing ? 'none' : 'auto'}
           >
-            {captureMode === 'text' ? (
+            {controlsUiStage === 'text' ? (
               <TextCaptureBottomBar
                 colors={colors}
                 doodleColor={doodleColor}
@@ -2572,7 +2658,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 textCardActiveIconColor={textCardActiveIconColor}
                 useNativeInlinePasteButton={useNativeInlinePasteButton}
               />
-            ) : capturedPhoto ? (
+            ) : controlsUiStage === 'review' ? (
               <PhotoCaptureBottomBar
                 colors={colors}
                 doodleColor={doodleColor}
@@ -2617,7 +2703,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               handleShutterPress={handleShutterPress}
               handleShutterRelease={handleShutterRelease}
               handleSwitchCameraPress={handleSwitchCameraPress}
-              isCameraSaveMode={isCameraSaveMode}
               isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
               isSaveBusy={isSaveBusy}
               isSaveDisabled={isSaveDisabled}
@@ -2637,8 +2722,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               shutterInnerAnimatedStyle={shutterInnerAnimatedStyle}
               shutterOuterAnimatedStyle={shutterOuterAnimatedStyle}
               t={t}
-              capturedPhoto={capturedPhoto}
-              captureMode={captureMode}
+              cameraUiStage={controlsUiStage}
             />
           {footerContent ? <View style={styles.footerSlot}>{footerContent}</View> : null}
           </Reanimated.View>
@@ -3075,6 +3159,24 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     backgroundColor: '#000000',
     zIndex: 1,
+  },
+  cameraSurfaceStack: {
+    width: CARD_SIZE,
+    height: CARD_SIZE,
+    position: 'relative',
+  },
+  cameraSurfaceLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraSurfaceTopLayer: {
+    zIndex: 1,
+  },
+  captureTransitionCover: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: '#000000',
+    zIndex: 50,
   },
   cameraLiveProgressOverlay: {
     ...StyleSheet.absoluteFill,

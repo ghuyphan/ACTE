@@ -9,15 +9,26 @@
     <FrameLayout
         android:id="@+id/widget_card_shell"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_margin="6dp"
-        android:background="@drawable/noto_widget_card_shell">
+        android:layout_height="match_parent">
+
+        <ImageView
+            android:id="@+id/widget_shell_background"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="fitXY" />
 
         <RelativeLayout
             android:id="@+id/widget_card_inner"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@drawable/noto_widget_card_inner_paper">
+            android:layout_height="match_parent">
+
+            <ImageView
+                android:id="@+id/widget_inner_background"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
 
             <ImageView
                 android:id="@+id/widget_text_background_overlay"
@@ -33,15 +44,15 @@
                 android:layout_height="match_parent"
                 android:adjustViewBounds="false"
                 android:contentDescription="@null"
-                android:scaleType="centerCrop"
+                android:scaleType="fitXY"
                 android:visibility="gone" />
 
             <ImageView
                 android:id="@+id/widget_photo_overlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="@drawable/noto_widget_photo_scrim"
                 android:contentDescription="@null"
+                android:scaleType="fitXY"
                 android:visibility="gone" />
 
             <ImageView
@@ -66,10 +77,32 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentTop="true"
                 android:layout_alignParentEnd="true"
-                android:layout_marginTop="16dp"
-                android:layout_marginEnd="16dp"
+                android:layout_marginTop="14dp"
+                android:layout_marginEnd="14dp"
                 android:gravity="end"
                 android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_location"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:background="@drawable/noto_widget_overlay_chip_dark"
+                    android:ellipsize="end"
+                    android:fontFamily="@font/xml_noto_sans"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:maxLines="2"
+                    android:maxWidth="190dp"
+                    android:minWidth="104dp"
+                    android:paddingLeft="12dp"
+                    android:paddingTop="7dp"
+                    android:paddingRight="12dp"
+                    android:paddingBottom="7dp"
+                    android:textAlignment="center"
+                    android:textColor="#FFF8F0"
+                    android:textSize="10sp"
+                    android:visibility="gone" />
 
                 <LinearLayout
                     android:id="@+id/widget_live_photo_badge"
@@ -135,9 +168,9 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentBottom="true"
                 android:layout_centerHorizontal="true"
-                android:layout_marginLeft="24dp"
-                android:layout_marginRight="24dp"
-                android:layout_marginBottom="24dp"
+                android:layout_marginLeft="16dp"
+                android:layout_marginRight="16dp"
+                android:layout_marginBottom="16dp"
                 android:background="@drawable/noto_widget_overlay_chip_dark"
                 android:ellipsize="end"
                 android:fontFamily="@font/noto_sans_600semi_bold"
@@ -159,8 +192,8 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentStart="true"
                 android:layout_alignParentBottom="true"
-                android:layout_marginStart="16dp"
-                android:layout_marginBottom="16dp"
+                android:layout_marginStart="14dp"
+                android:layout_marginBottom="14dp"
                 android:background="@drawable/noto_widget_badge_light"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
@@ -209,29 +242,6 @@
                     android:visibility="gone" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/widget_location"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentTop="true"
-                android:layout_centerHorizontal="true"
-                android:layout_marginTop="16dp"
-                android:layout_marginLeft="64dp"
-                android:layout_marginRight="64dp"
-                android:background="@drawable/noto_widget_badge_light"
-                android:ellipsize="end"
-                android:fontFamily="@font/xml_noto_sans"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:maxWidth="148dp"
-                android:paddingLeft="11dp"
-                android:paddingTop="6dp"
-                android:paddingRight="11dp"
-                android:paddingBottom="6dp"
-                android:textColor="#6E5E4F"
-                android:textSize="11sp"
-                android:visibility="gone" />
         </RelativeLayout>
     </FrameLayout>
 </RelativeLayout>

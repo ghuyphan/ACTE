@@ -72,6 +72,18 @@ private data class WidgetRenderSize(
   val heightPx: Int
 )
 
+private data class WidgetRenderGeometry(
+  val rootWidthPx: Int,
+  val rootHeightPx: Int,
+  val shellWidthPx: Int,
+  val shellHeightPx: Int,
+  val contentWidthPx: Int,
+  val contentHeightPx: Int,
+  val shellCornerRadiusPx: Float,
+  val innerCornerRadiusPx: Float,
+  val shellStrokeWidthPx: Float
+)
+
 private data class WidgetOverlayRenderSpec(
   val doodleInsetDp: Float,
   val stickerInsetDp: Float,
@@ -87,12 +99,16 @@ private data class WidgetStampMetrics(
   val perforationRadius: Float
 )
 
-private fun getWidgetOuterPaddingDp(isMedium: Boolean): Float {
-  return if (isMedium) 8f else 6f
+private fun getWidgetCardShellMarginDp(isMedium: Boolean): Float {
+  return 0f
+}
+
+private fun getWidgetCardInsetDp(isMedium: Boolean): Float {
+  return 0f
 }
 
 private fun getWidgetInnerCornerRadiusDp(isMedium: Boolean): Float {
-  return 26f
+  return if (isMedium) 21f else 18f
 }
 
 private fun applyAlphaToColor(color: Int, alphaFraction: Float): Int {
@@ -324,6 +340,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       } else {
         ""
       }
+      val geometry = resolveWidgetRenderGeometryPx(context, options, isMedium)
       val bodyText = if (showIdle) {
         snapshot.idleText.ifBlank { context.getString(R.string.noto_widget_idle_fallback) }
       } else if (hasVisualOnlyContent || shouldHidePhotoBodyText) {
@@ -331,7 +348,6 @@ class NotoWidgetProvider : AppWidgetProvider() {
       } else {
         snapshot.text.ifBlank { snapshot.memoryReminderText.ifBlank { context.getString(R.string.noto_widget_memory_fallback) } }
       }
-      val compactLocationName = getCompactLocationName(snapshot.locationName)
       val noteCountLabel = snapshot.savedCountText.ifBlank {
         context.resources.getQuantityString(
           R.plurals.noto_widget_count_fallback,
@@ -342,8 +358,9 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val showCountBadge = showIdle && snapshot.noteCount > 0
       val showCaption = isMedium && photoCaptionText.isNotBlank()
 
-      bindTextBackgroundState(context, views, snapshot, options, isMedium, usesTextSurface, showIdle)
-      bindPhotoState(context, views, snapshot, showIdle, options, isMedium)
+      bindCardSurfaceState(views, geometry, usesTextSurface)
+      bindTextBackgroundState(context, views, snapshot, geometry, usesTextSurface, showIdle)
+      bindPhotoState(context, views, snapshot, showIdle, geometry)
       bindStickerState(context, views, snapshot, options, isMedium, showIdle)
       bindDoodleState(context, views, snapshot, options, isMedium, usesTextSurface, showIdle)
       val showAuthorChip = bindAuthorState(context, views, snapshot, showIdle, usesTextSurface)
@@ -366,10 +383,11 @@ class NotoWidgetProvider : AppWidgetProvider() {
         views.setTextColor(R.id.widget_caption, Color.parseColor("#FFF8F0"))
       }
 
-      val showLocationChip = !showIdle && !showAuthorChip && compactLocationName.isNotBlank()
+      val locationBadgeText = getLocationBadgeText(snapshot.locationName, isMedium)
+      val showLocationChip = isMedium && !showIdle && !showAuthorChip && locationBadgeText.isNotBlank()
       views.setViewVisibility(R.id.widget_location, if (showLocationChip) View.VISIBLE else View.GONE)
       if (showLocationChip) {
-        views.setTextViewText(R.id.widget_location, compactLocationName)
+        views.setTextViewText(R.id.widget_location, locationBadgeText)
         views.setInt(
           R.id.widget_location,
           "setBackgroundResource",
@@ -400,12 +418,33 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
     }
 
+    private fun bindCardSurfaceState(
+      views: RemoteViews,
+      geometry: WidgetRenderGeometry,
+      usesTextSurface: Boolean
+    ) {
+      views.setViewVisibility(R.id.widget_shell_background, View.GONE)
+
+      if (!usesTextSurface) {
+        views.setViewVisibility(R.id.widget_inner_background, View.GONE)
+        return
+      }
+
+      val innerBitmap = createRoundedRectBitmap(
+        widthPx = geometry.contentWidthPx,
+        heightPx = geometry.contentHeightPx,
+        cornerRadiusPx = geometry.innerCornerRadiusPx,
+        fillColor = Color.parseColor("#F6EFE1")
+      )
+      views.setViewVisibility(R.id.widget_inner_background, View.VISIBLE)
+      views.setImageViewBitmap(R.id.widget_inner_background, innerBitmap)
+    }
+
     private fun bindTextBackgroundState(
       context: Context,
       views: RemoteViews,
       snapshot: NotoWidgetSnapshot,
-      options: Bundle,
-      isMedium: Boolean,
+      geometry: WidgetRenderGeometry,
       usesTextSurface: Boolean,
       showIdle: Boolean
     ) {
@@ -417,9 +456,9 @@ class NotoWidgetProvider : AppWidgetProvider() {
 
       val tintColor = applyAlphaToColor(Color.parseColor(startColorValue), 0.14f)
       val overlayBitmap = createRoundedGradientBitmap(
-        widthPx = resolveContentWidthPx(context, options, isMedium),
-        heightPx = resolveContentHeightPx(context, options, isMedium),
-        cornerRadiusPx = context.dpToPx(getWidgetInnerCornerRadiusDp(isMedium)).toFloat(),
+        widthPx = geometry.contentWidthPx,
+        heightPx = geometry.contentHeightPx,
+        cornerRadiusPx = geometry.innerCornerRadiusPx,
         startColor = tintColor,
         endColor = tintColor
       )
@@ -433,15 +472,14 @@ class NotoWidgetProvider : AppWidgetProvider() {
       views: RemoteViews,
       snapshot: NotoWidgetSnapshot,
       showIdle: Boolean,
-      options: Bundle,
-      isMedium: Boolean
+      geometry: WidgetRenderGeometry
     ) {
       val photoBitmap = if (!showIdle) {
         decodePhoto(
           snapshot = snapshot,
-          targetWidthPx = resolveContentWidthPx(context, options, isMedium),
-          targetHeightPx = resolveContentHeightPx(context, options, isMedium),
-          cornerRadiusPx = context.dpToPx(getWidgetInnerCornerRadiusDp(isMedium)).toFloat()
+          targetWidthPx = geometry.contentWidthPx,
+          targetHeightPx = geometry.contentHeightPx,
+          cornerRadiusPx = geometry.innerCornerRadiusPx
         )
       } else {
         null
@@ -452,6 +490,16 @@ class NotoWidgetProvider : AppWidgetProvider() {
       views.setViewVisibility(R.id.widget_photo_overlay, if (hasPhoto) View.VISIBLE else View.GONE)
       if (hasPhoto) {
         views.setImageViewBitmap(R.id.widget_photo, photoBitmap)
+        views.setImageViewBitmap(
+          R.id.widget_photo_overlay,
+          createVerticalGradientBitmap(
+            widthPx = geometry.contentWidthPx,
+            heightPx = geometry.contentHeightPx,
+            cornerRadiusPx = geometry.innerCornerRadiusPx,
+            startColor = Color.parseColor("#12000000"),
+            endColor = Color.parseColor("#76000000")
+          )
+        )
       }
     }
 
@@ -584,7 +632,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       return true
     }
 
-    private fun getCompactLocationName(locationName: String): String {
+    private fun getLocationBadgeText(locationName: String, isMedium: Boolean): String {
       val segments = locationName
         .split(',')
         .map { it.trim() }
@@ -594,25 +642,31 @@ class NotoWidgetProvider : AppWidgetProvider() {
         return ""
       }
 
-      val baseLabel = if (segments.first().length <= 6 && segments.size > 1) {
-        "${segments[0]} ${segments[1]}".trim()
-      } else {
-        segments.first()
+      val cleanedSegments = segments
+        .map { segment ->
+          segment
+            .replace(Regex("^\\d+[\\p{L}\\p{N}/-]*\\s+"), "")
+            .trim()
+        }
+        .filter { it.isNotBlank() }
+
+      if (cleanedSegments.isEmpty()) {
+        return ""
       }
 
-      val shortenedStreetLabel = baseLabel
-        .replace(Regex("^\\d+[\\p{L}\\p{N}/-]*\\s+"), "")
-        .trim()
-      val compactLabel = if (shortenedStreetLabel.length >= 6) {
-        shortenedStreetLabel
+      val primary = cleanedSegments.first()
+      val secondary = cleanedSegments.getOrNull(1).orEmpty()
+      val combined = if (secondary.isNotBlank()) {
+        "$primary\n$secondary"
       } else {
-        baseLabel
+        primary
       }
+      val maxLength = if (isMedium) 44 else 24
 
-      return if (compactLabel.length <= 20) {
-        compactLabel
+      return if (combined.length <= maxLength) {
+        combined
       } else {
-        "${compactLabel.take(19).trimEnd()}…"
+        "${combined.take(maxLength - 1).trimEnd()}…"
       }
     }
 
@@ -868,6 +922,68 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
       val rect = RectF(0f, 0f, widthPx.toFloat(), heightPx.toFloat())
       canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, paint)
+      return output
+    }
+
+    private fun createVerticalGradientBitmap(
+      widthPx: Int,
+      heightPx: Int,
+      cornerRadiusPx: Float,
+      startColor: Int,
+      endColor: Int
+    ): Bitmap {
+      val output = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(output)
+      val shader = LinearGradient(
+        0f,
+        0f,
+        0f,
+        heightPx.toFloat(),
+        startColor,
+        endColor,
+        Shader.TileMode.CLAMP
+      )
+      val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.shader = shader
+      }
+      val rect = RectF(0f, 0f, widthPx.toFloat(), heightPx.toFloat())
+      canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, paint)
+      return output
+    }
+
+    private fun createRoundedRectBitmap(
+      widthPx: Int,
+      heightPx: Int,
+      cornerRadiusPx: Float,
+      fillColor: Int,
+      strokeColor: Int? = null,
+      strokeWidthPx: Float = 0f
+    ): Bitmap {
+      val output = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(output)
+      val rect = RectF(0f, 0f, widthPx.toFloat(), heightPx.toFloat())
+      val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = fillColor
+      }
+      canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, fillPaint)
+
+      if (strokeColor != null && strokeWidthPx > 0f) {
+        val inset = strokeWidthPx / 2f
+        val strokeRect = RectF(inset, inset, widthPx.toFloat() - inset, heightPx.toFloat() - inset)
+        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+          style = Paint.Style.STROKE
+          color = strokeColor
+          this.strokeWidth = strokeWidthPx
+        }
+        canvas.drawRoundRect(
+          strokeRect,
+          max(0f, cornerRadiusPx - inset),
+          max(0f, cornerRadiusPx - inset),
+          strokePaint
+        )
+      }
+
       return output
     }
 
@@ -1162,35 +1278,59 @@ class NotoWidgetProvider : AppWidgetProvider() {
     }
 
     private fun resolveContentWidthPx(context: Context, options: Bundle, isMedium: Boolean): Int {
-      return resolveContentRenderSizePx(context, options, isMedium).widthPx
+      return resolveWidgetRenderGeometryPx(context, options, isMedium).contentWidthPx
     }
 
     private fun resolveContentHeightPx(context: Context, options: Bundle, isMedium: Boolean): Int {
-      return resolveContentRenderSizePx(context, options, isMedium).heightPx
+      return resolveWidgetRenderGeometryPx(context, options, isMedium).contentHeightPx
     }
 
-    private fun resolveContentRenderSizePx(context: Context, options: Bundle, isMedium: Boolean): WidgetRenderSize {
+    private fun resolveWidgetRenderGeometryPx(context: Context, options: Bundle, isMedium: Boolean): WidgetRenderGeometry {
       val exactSizeDp = resolveExactWidgetSizeDp(options, isMedium)
       val minWidthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, if (isMedium) 250 else 160)
       val minHeightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, if (isMedium) 140 else 160)
       val requestedWidthDp = exactSizeDp?.width ?: max(minWidthDp.toFloat(), if (isMedium) 250f else 160f)
       val requestedHeightDp = exactSizeDp?.height ?: max(minHeightDp.toFloat(), if (isMedium) 140f else 160f)
-      val totalInsetDp = getWidgetOuterPaddingDp(isMedium) * 2f
-      val requestedWidthPx = context.dpToPx(max(1f, requestedWidthDp - totalInsetDp))
-      val requestedHeightPx = context.dpToPx(max(1f, requestedHeightDp - totalInsetDp))
+      val shellMarginPx = context.dpToPx(getWidgetCardShellMarginDp(isMedium)).toFloat()
+      val cardInsetPx = context.dpToPx(getWidgetCardInsetDp(isMedium)).toFloat()
+      val requestedRootWidthPx = context.dpToPx(max(1f, requestedWidthDp))
+      val requestedRootHeightPx = context.dpToPx(max(1f, requestedHeightDp))
+      val requestedShellWidthPx = max(1f, requestedRootWidthPx - (shellMarginPx * 2f))
+      val requestedShellHeightPx = max(1f, requestedRootHeightPx - (shellMarginPx * 2f))
+      val requestedContentWidthPx = max(1f, requestedShellWidthPx - (cardInsetPx * 2f))
+      val requestedContentHeightPx = max(1f, requestedShellHeightPx - (cardInsetPx * 2f))
 
       val maxEdgePx = if (isMedium) MEDIUM_WIDGET_MAX_RENDER_EDGE_PX else SMALL_WIDGET_MAX_RENDER_EDGE_PX
       val maxPixels = if (isMedium) MEDIUM_WIDGET_MAX_RENDER_PIXELS else SMALL_WIDGET_MAX_RENDER_PIXELS
-      val currentMaxEdge = max(requestedWidthPx, requestedHeightPx).coerceAtLeast(1)
-      val currentPixels = (requestedWidthPx.toLong() * requestedHeightPx.toLong()).coerceAtLeast(1L)
+      val currentMaxEdge = max(requestedRootWidthPx, requestedRootHeightPx).coerceAtLeast(1)
+      val currentPixels = (requestedRootWidthPx.toLong() * requestedRootHeightPx.toLong()).coerceAtLeast(1L)
       val edgeScale = maxEdgePx / currentMaxEdge.toFloat()
       val areaScale = sqrt(maxPixels.toDouble() / currentPixels.toDouble()).toFloat()
       val scale = min(1f, min(edgeScale, areaScale))
 
-      val widthPx = max(1, (requestedWidthPx * scale).toInt())
-      val heightPx = max(1, (requestedHeightPx * scale).toInt())
+      val rootWidthPx = max(1, (requestedRootWidthPx * scale).toInt())
+      val rootHeightPx = max(1, (requestedRootHeightPx * scale).toInt())
+      val shellWidthPx = max(1, (requestedShellWidthPx * scale).toInt())
+      val shellHeightPx = max(1, (requestedShellHeightPx * scale).toInt())
+      val contentWidthPx = max(1, (requestedContentWidthPx * scale).toInt())
+      val contentHeightPx = max(1, (requestedContentHeightPx * scale).toInt())
+      val shellShortestEdge = min(shellWidthPx, shellHeightPx).toFloat().coerceAtLeast(1f)
+      val shellCornerRadiusPx = shellShortestEdge * (if (isMedium) 0.132f else 0.148f)
+      val contentInsetPx = ((shellWidthPx - contentWidthPx).toFloat() / 2f).coerceAtLeast(0f)
+      val innerCornerRadiusPx = max(0f, shellCornerRadiusPx - (contentInsetPx * 0.92f))
+      val shellStrokeWidthPx = max(1f, shellShortestEdge * 0.0065f)
 
-      return WidgetRenderSize(widthPx = widthPx, heightPx = heightPx)
+      return WidgetRenderGeometry(
+        rootWidthPx = rootWidthPx,
+        rootHeightPx = rootHeightPx,
+        shellWidthPx = shellWidthPx,
+        shellHeightPx = shellHeightPx,
+        contentWidthPx = contentWidthPx,
+        contentHeightPx = contentHeightPx,
+        shellCornerRadiusPx = shellCornerRadiusPx,
+        innerCornerRadiusPx = innerCornerRadiusPx,
+        shellStrokeWidthPx = shellStrokeWidthPx
+      )
     }
 
     private fun resolveExactWidgetSizeDp(options: Bundle, isMedium: Boolean): SizeF? {

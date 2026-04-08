@@ -9,15 +9,26 @@
     <FrameLayout
         android:id="@+id/widget_card_shell"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_margin="4dp"
-        android:background="@drawable/noto_widget_card_shell">
+        android:layout_height="match_parent">
+
+        <ImageView
+            android:id="@+id/widget_shell_background"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="fitXY" />
 
         <RelativeLayout
             android:id="@+id/widget_card_inner"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@drawable/noto_widget_card_inner_paper">
+            android:layout_height="match_parent">
+
+            <ImageView
+                android:id="@+id/widget_inner_background"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
 
             <ImageView
                 android:id="@+id/widget_text_background_overlay"
@@ -33,15 +44,15 @@
                 android:layout_height="match_parent"
                 android:adjustViewBounds="false"
                 android:contentDescription="@null"
-                android:scaleType="centerCrop"
+                android:scaleType="fitXY"
                 android:visibility="gone" />
 
             <ImageView
                 android:id="@+id/widget_photo_overlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="@drawable/noto_widget_photo_scrim"
                 android:contentDescription="@null"
+                android:scaleType="fitXY"
                 android:visibility="gone" />
 
             <ImageView
@@ -135,9 +146,9 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentBottom="true"
                 android:layout_centerHorizontal="true"
-                android:layout_marginLeft="18dp"
-                android:layout_marginRight="18dp"
-                android:layout_marginBottom="18dp"
+                android:layout_marginLeft="16dp"
+                android:layout_marginRight="16dp"
+                android:layout_marginBottom="16dp"
                 android:background="@drawable/noto_widget_overlay_chip_dark"
                 android:ellipsize="end"
                 android:fontFamily="@font/noto_sans_600semi_bold"
@@ -209,29 +220,6 @@
                     android:visibility="gone" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/widget_location"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentTop="true"
-                android:layout_centerHorizontal="true"
-                android:layout_marginTop="12dp"
-                android:layout_marginLeft="48dp"
-                android:layout_marginRight="48dp"
-                android:background="@drawable/noto_widget_badge_light"
-                android:ellipsize="end"
-                android:fontFamily="@font/xml_noto_sans"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:maxWidth="96dp"
-                android:paddingLeft="10dp"
-                android:paddingTop="5dp"
-                android:paddingRight="10dp"
-                android:paddingBottom="5dp"
-                android:textColor="#6E5E4F"
-                android:textSize="10sp"
-                android:visibility="gone" />
         </RelativeLayout>
     </FrameLayout>
 </RelativeLayout>
