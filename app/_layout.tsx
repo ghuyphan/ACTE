@@ -24,7 +24,7 @@ SplashScreen.preventAutoHideAsync();
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
   const { t } = useTranslation();
-  const { initialUrlResolved, startupTarget } = useAppStartupBootstrap();
+  const { startupTarget } = useAppStartupBootstrap();
   useAppWidgetRefresh();
   useAppNotificationRouting();
   useSocialPushRegistration();
@@ -41,7 +41,7 @@ function AppContent() {
   }, [colors.background]);
 
   useEffect(() => {
-    if (!themeReady || !startupTarget || !initialUrlResolved) {
+    if (!themeReady || !startupTarget) {
       return;
     }
 
@@ -55,7 +55,7 @@ function AppContent() {
     return () => {
       cancelled = true;
     };
-  }, [initialUrlResolved, startupTarget, themeReady]);
+  }, [startupTarget, themeReady]);
 
   const navTheme = useMemo(() => {
     const baseTheme = isDark ? DarkTheme : DefaultTheme;

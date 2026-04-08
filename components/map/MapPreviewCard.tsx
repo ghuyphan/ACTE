@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -423,6 +424,17 @@ export default function MapPreviewCard({
             colorScheme={isDark ? 'dark' : 'light'}
             style={StyleSheet.absoluteFill}
           />
+          {Platform.OS === 'android' ? (
+            <View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  backgroundColor: colors.androidTabShellScrim,
+                },
+              ]}
+            />
+          ) : null}
           {isOlderIOS ? (
             <View
               style={[

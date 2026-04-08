@@ -264,6 +264,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
 interface NotesFeedProps {
   flatListRef: RefObject<any>;
   captureHeader: ReactElement;
+  emptyState?: ReactElement | null;
   captureMode: 'text' | 'camera';
   screenActive?: boolean;
   items?: HomeFeedItem[];
@@ -291,11 +292,13 @@ interface NotesFeedProps {
   revealToken?: number;
   onSettledArchiveItemChange?: (item: { id: string; kind: 'note' | 'shared-post' } | null) => void;
   onScrollOffsetChange?: (offsetY: number) => void;
+  bottomOverlayInset?: number;
 }
 
 export default function NotesFeed({
   flatListRef,
   captureHeader,
+  emptyState = null,
   captureMode,
   screenActive = true,
   items,
@@ -316,6 +319,7 @@ export default function NotesFeed({
   revealToken = 0,
   onSettledArchiveItemChange,
   onScrollOffsetChange,
+  bottomOverlayInset = 0,
 }: NotesFeedProps) {
   const { height } = useWindowDimensions();
   const captureVisibilityRef = useRef(true);
@@ -329,6 +333,8 @@ export default function NotesFeed({
     () => items ?? buildHomeFeedItems(notes, sharedPosts),
     [items, notes, sharedPosts]
   );
+  const hasEmptyStatePage = listData.length === 0 && Boolean(emptyState);
+  const snapPageCount = hasEmptyStatePage ? 1 : listData.length;
   const itemKeys = useMemo(
     () => listData.map(getHomeFeedItemKey),
     [listData]
@@ -380,14 +386,14 @@ export default function NotesFeed({
       const settledOffset =
         Platform.OS === 'android'
           ? Math.min(
-              listData.length * snapHeight,
+              snapPageCount * snapHeight,
               Math.max(0, Math.round(offsetY / snapHeight) * snapHeight)
             )
           : offsetY;
       const rawIndex = Math.round(settledOffset / snapHeight) - 1;
       return rawIndex >= 0 ? listData[rawIndex] ?? null : null;
     },
-    [listData, snapHeight]
+    [listData, snapHeight, snapPageCount]
   );
 
   const reportActiveCard = useCallback(
@@ -409,7 +415,7 @@ export default function NotesFeed({
         return;
       }
 
-      const maxSnapOffset = listData.length * snapHeight;
+      const maxSnapOffset = snapPageCount * snapHeight;
       const nearestSnapOffset = Math.min(
         maxSnapOffset,
         Math.max(0, Math.round(offsetY / snapHeight) * snapHeight)
@@ -422,7 +428,7 @@ export default function NotesFeed({
       isAdjustingSnapRef.current = true;
       flatListRef.current?.scrollToOffset({ offset: nearestSnapOffset, animated: true });
     },
-    [flatListRef, listData.length, snapHeight]
+    [flatListRef, snapHeight, snapPageCount]
   );
 
   const reportSettledArchiveItem = useCallback(
@@ -483,7 +489,7 @@ export default function NotesFeed({
     }
 
     const currentOffset = lastOffsetYRef.current;
-    const maxSnapOffset = itemKeys.length * snapHeight;
+    const maxSnapOffset = snapPageCount * snapHeight;
     const nearestSnapOffset = Math.min(
       maxSnapOffset,
       Math.max(0, Math.round(currentOffset / snapHeight) * snapHeight)
@@ -506,6 +512,7 @@ export default function NotesFeed({
     reportSettledArchiveItem,
     settleCaptureVisibility,
     snapHeight,
+    snapPageCount,
   ]);
 
   useEffect(() => {
@@ -518,7 +525,7 @@ export default function NotesFeed({
     }
 
     const currentOffset = lastOffsetYRef.current;
-    const maxSnapOffset = listData.length * snapHeight;
+    const maxSnapOffset = snapPageCount * snapHeight;
     const nearestSnapOffset = Math.min(
       maxSnapOffset,
       Math.max(0, Math.round(currentOffset / snapHeight) * snapHeight)
@@ -535,12 +542,12 @@ export default function NotesFeed({
     reportSettledArchiveItem(nearestSnapOffset);
   }, [
     flatListRef,
-    listData.length,
     capturePageLocked,
     reportActiveCard,
     reportSettledArchiveItem,
     settleCaptureVisibility,
     snapHeight,
+    snapPageCount,
   ]);
 
   useEffect(() => {
@@ -635,6 +642,21 @@ export default function NotesFeed({
       decelerationRate={snapSuspended ? 'normal' : 'fast'}
       showsVerticalScrollIndicator={false}
       ListHeaderComponent={captureHeader}
+      ListEmptyComponent={
+        emptyState ? (
+          <View
+            style={[
+              styles.snapItem,
+              {
+                height: snapHeight,
+                paddingTop: topInset + Layout.headerHeight - DOCKED_HEADER_CONTENT_OVERLAP,
+              },
+            ]}
+          >
+            <View style={styles.cardStage}>{emptyState}</View>
+          </View>
+        ) : null
+      }
       onScroll={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
         lastOffsetYRef.current = offsetY;
@@ -701,7 +723,7 @@ export default function NotesFeed({
         reportActiveCard(offsetY);
         reportSettledArchiveItem(offsetY);
       }}
-      contentContainerStyle={{ paddingBottom: height - snapHeight }}
+      contentContainerStyle={{ paddingBottom: height - snapHeight + bottomOverlayInset }}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

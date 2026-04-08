@@ -265,6 +265,52 @@ describe('useCaptureFlow', () => {
     expect(result.current.capturedPhoto).toBe('file:///tmp/captured-photo.jpg');
   });
 
+  it('cancels an in-flight live photo recording when the capture flow is reset', async () => {
+    const { result } = renderHook(() => useCaptureFlow());
+
+    act(() => {
+      result.current.cameraRef.current = {
+        takePhoto: mockTakePhoto,
+        startRecording: mockStartRecording,
+        stopRecording: mockStopRecording,
+        cancelRecording: mockCancelRecording,
+      } as any;
+    });
+
+    await act(async () => {
+      await result.current.startLivePhotoCapture();
+    });
+
+    act(() => {
+      result.current.resetCapture();
+    });
+
+    expect(mockCancelRecording).toHaveBeenCalledTimes(1);
+    expect(result.current.isLivePhotoCaptureInProgress).toBe(false);
+    expect(result.current.capturedPhoto).toBeNull();
+  });
+
+  it('cancels an in-flight live photo recording on unmount', async () => {
+    const hook = renderHook(() => useCaptureFlow());
+
+    act(() => {
+      hook.result.current.cameraRef.current = {
+        takePhoto: mockTakePhoto,
+        startRecording: mockStartRecording,
+        stopRecording: mockStopRecording,
+        cancelRecording: mockCancelRecording,
+      } as any;
+    });
+
+    await act(async () => {
+      await hook.result.current.startLivePhotoCapture();
+    });
+
+    hook.unmount();
+
+    expect(mockCancelRecording).toHaveBeenCalledTimes(1);
+  });
+
   it('treats denied camera permission as re-requestable on Android', () => {
     mockPlatformOS = 'android';
     mockPermissionStatus = 'denied';

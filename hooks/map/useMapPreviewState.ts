@@ -1,20 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { NearbyNoteItem } from './mapDomain';
 import type { SharedPost } from '../../services/sharedFeedService';
 
-function areNearbyItemsEquivalent(left: NearbyNoteItem[], right: NearbyNoteItem[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
+type NotesPreviewVisibility = 'visible' | 'collapsed';
 
-  return left.every((item, index) => {
-    const other = right[index];
-    return (
-      other != null &&
-      other.note.id === item.note.id &&
-      other.distanceMeters === item.distanceMeters
-    );
-  });
+interface NotesPreviewState {
+  visibility: NotesPreviewVisibility;
+  itemsOverride: NearbyNoteItem[] | null;
+  persistsWhenAreaEmpty: boolean;
 }
 
 interface UseMapPreviewStateParams {
@@ -26,41 +19,33 @@ export function useMapPreviewState({
   nearbyItems,
   friendPosts,
 }: UseMapPreviewStateParams) {
+  const [notesPreviewState, setNotesPreviewState] = useState<NotesPreviewState>({
+    visibility: 'visible',
+    itemsOverride: null,
+    persistsWhenAreaEmpty: false,
+  });
   const [activeNearbyNoteId, setActiveNearbyNoteId] = useState<string | null>(null);
-  const [nearbyPreviewItems, setNearbyPreviewItems] = useState<NearbyNoteItem[]>([]);
-  const [notesPreviewDismissed, setNotesPreviewDismissed] = useState(false);
-  const [notesPreviewCollapsed, setNotesPreviewCollapsed] = useState(false);
   const [showFriendsPreview, setShowFriendsPreview] = useState(false);
   const [activeFriendPostId, setActiveFriendPostId] = useState<string | null>(null);
-  const shouldAdoptNearbyPreviewItemsRef = useRef(true);
+
+  const nearbyPreviewItems = useMemo(
+    () => notesPreviewState.itemsOverride ?? nearbyItems,
+    [nearbyItems, notesPreviewState.itemsOverride]
+  );
 
   useEffect(() => {
-    const shouldAdopt =
-      shouldAdoptNearbyPreviewItemsRef.current ||
-      nearbyPreviewItems.length === 0 ||
-      (activeNearbyNoteId != null &&
-        !nearbyPreviewItems.some((item) => item.note.id === activeNearbyNoteId));
-
-    if (!shouldAdopt) {
-      return;
-    }
-
-    setNearbyPreviewItems((current) =>
-      areNearbyItemsEquivalent(current, nearbyItems) ? current : nearbyItems
-    );
     setActiveNearbyNoteId((current) => {
-      if (nearbyItems.length === 0) {
+      if (nearbyPreviewItems.length === 0) {
         return null;
       }
 
-      if (current && nearbyItems.some((item) => item.note.id === current)) {
+      if (current && nearbyPreviewItems.some((item) => item.note.id === current)) {
         return current;
       }
 
-      return nearbyItems[0].note.id;
+      return nearbyPreviewItems[0].note.id;
     });
-    shouldAdoptNearbyPreviewItemsRef.current = false;
-  }, [activeNearbyNoteId, nearbyItems, nearbyPreviewItems]);
+  }, [nearbyPreviewItems]);
 
   useEffect(() => {
     if (!friendPosts.length) {
@@ -80,28 +65,20 @@ export function useMapPreviewState({
     setActiveFriendPostId(friendPosts[0].id);
   }, [activeFriendPostId, friendPosts, showFriendsPreview]);
 
-  const requestNearbyPreviewAdoption = useCallback(() => {
-    shouldAdoptNearbyPreviewItemsRef.current = true;
-  }, []);
-
-  const revealNotesPreview = useCallback((options?: { adoptNearbyItems?: boolean }) => {
-    if (options?.adoptNearbyItems) {
-      shouldAdoptNearbyPreviewItemsRef.current = true;
-    }
-
+  const revealNotesPreview = useCallback((options?: { resetToNearby?: boolean }) => {
     setShowFriendsPreview(false);
-    setNotesPreviewDismissed(false);
-    setNotesPreviewCollapsed(false);
-  }, []);
-
-  const dismissNotesPreview = useCallback(() => {
-    setShowFriendsPreview(false);
-    setNotesPreviewDismissed(true);
-    setNotesPreviewCollapsed(false);
+    setNotesPreviewState((current) => ({
+      visibility: 'visible',
+      itemsOverride: options?.resetToNearby ? null : current.itemsOverride,
+      persistsWhenAreaEmpty: options?.resetToNearby ? false : current.persistsWhenAreaEmpty,
+    }));
   }, []);
 
   const collapseNotesPreview = useCallback(() => {
-    setNotesPreviewCollapsed(true);
+    setNotesPreviewState((current) => ({
+      ...current,
+      visibility: 'collapsed',
+    }));
   }, []);
 
   const closeFriendsPreview = useCallback(() => {
@@ -117,19 +94,32 @@ export function useMapPreviewState({
     setActiveFriendPostId((current) => current ?? fallbackPostId ?? null);
   }, []);
 
-  const presentNearbyPreviewItems = useCallback((items: NearbyNoteItem[]) => {
-    setNearbyPreviewItems(items);
-    setActiveNearbyNoteId((current) => {
-      if (items.length === 0) {
-        return null;
-      }
+  const useFocusedNearbyPreview = useCallback(
+    (items: NearbyNoteItem[], noteId?: string | null) => {
+      setShowFriendsPreview(false);
+      setNotesPreviewState({
+        visibility: 'visible',
+        itemsOverride: items,
+        persistsWhenAreaEmpty: true,
+      });
 
-      if (current && items.some((item) => item.note.id === current)) {
-        return current;
+      if (noteId !== undefined) {
+        setActiveNearbyNoteId(noteId);
       }
+    },
+    []
+  );
 
-      return items[0].note.id;
-    });
+  const useNearbyPreview = useCallback(() => {
+    setNotesPreviewState((current) =>
+      current.itemsOverride === null && !current.persistsWhenAreaEmpty
+        ? current
+        : {
+            ...current,
+            itemsOverride: null,
+            persistsWhenAreaEmpty: false,
+          }
+    );
   }, []);
 
   return {
@@ -137,17 +127,15 @@ export function useMapPreviewState({
     activeNearbyNoteId,
     closeFriendsPreview,
     collapseNotesPreview,
-    dismissNotesPreview,
     nearbyPreviewItems,
-    notesPreviewCollapsed,
-    notesPreviewDismissed,
+    notesPreviewPersistsWhenAreaEmpty: notesPreviewState.persistsWhenAreaEmpty,
+    notesPreviewVisibility: notesPreviewState.visibility,
     openFriendsPreview,
-    presentNearbyPreviewItems,
-    requestNearbyPreviewAdoption,
     revealNotesPreview,
     setActiveFriendPostId,
-    setActiveNearbyNoteId,
     showFriendsPreview,
     toggleFriendsPreview,
+    useFocusedNearbyPreview,
+    useNearbyPreview,
   };
 }

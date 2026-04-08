@@ -498,15 +498,65 @@ export async function getCachedSharedFeedSnapshot(userUid: string): Promise<{
   activeInvite: FriendInvite | null;
   lastUpdatedAt: string | null;
 }> {
-  const friends = await getCachedSharedFriends(userUid);
-  const sharedPosts = await getCachedSharedPosts(userUid);
-  const activeInvite = await getCachedActiveInvite(userUid);
-  const lastUpdatedAt = await getSharedFeedCacheLastUpdatedAt(userUid);
+  const { friendRows, sharedPostRows, inviteRow, metaRow } = await withDatabaseTransaction(
+    async (tx) => {
+      const nextFriendRows = await tx.getAllAsync<FriendRow>(
+        `SELECT *
+         FROM shared_friends_cache
+         WHERE user_uid = ?
+         ORDER BY friended_at ASC`,
+        userUid
+      );
+      const nextSharedPostRows = await tx.getAllAsync<SharedPostRow>(
+        `SELECT *
+         FROM shared_posts_cache
+         WHERE user_uid = ?
+         ORDER BY created_at DESC`,
+        userUid
+      );
+      const nextInviteRow = await tx.getFirstAsync<InviteRow>(
+        `SELECT *
+         FROM shared_invites_cache
+         WHERE user_uid = ?`,
+        userUid
+      );
+      const nextMetaRow = await tx.getFirstAsync<MetaRow>(
+        `SELECT last_updated_at
+         FROM shared_feed_cache_meta
+         WHERE user_uid = ?`,
+        userUid
+      );
+
+      return {
+        friendRows: nextFriendRows,
+        sharedPostRows: nextSharedPostRows,
+        inviteRow: nextInviteRow ?? null,
+        metaRow: nextMetaRow ?? null,
+      };
+    }
+  );
+
+  let activeInvite: FriendInvite | null = null;
+  if (inviteRow) {
+    const storedToken = await getStoredInviteToken(userUid);
+    if (storedToken && storedToken.inviteId === inviteRow.id) {
+      activeInvite = {
+        ...rowToInvite(inviteRow),
+        token: storedToken.token,
+        url: Linking.createURL('/friends/join', {
+          queryParams: {
+            inviteId: inviteRow.id,
+            invite: storedToken.token,
+          },
+        }),
+      };
+    }
+  }
 
   return {
-    friends,
-    sharedPosts,
+    friends: friendRows.map(rowToFriend),
+    sharedPosts: sharedPostRows.map(rowToSharedPost),
     activeInvite,
-    lastUpdatedAt,
+    lastUpdatedAt: metaRow?.last_updated_at ?? null,
   };
 }

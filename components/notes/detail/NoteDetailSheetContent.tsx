@@ -38,6 +38,7 @@ import { parseNoteStickerPlacements } from '../../../services/noteStickers';
 import DynamicStickerCanvas from '../DynamicStickerCanvas';
 import NoteDoodleCanvas from '../NoteDoodleCanvas';
 import NoteStickerCanvas from '../NoteStickerCanvas';
+import PhotoCaptionChip from '../PhotoCaptionChip';
 import PhotoMediaView from '../PhotoMediaView';
 import PremiumNoteFinishOverlay from '../../ui/PremiumNoteFinishOverlay';
 import StickerPastePopover from '../../ui/StickerPastePopover';
@@ -374,55 +375,55 @@ export default function NoteDetailSheetContent({
                 />
                 {isEditing || displayedPhotoCaption.trim().length > 0 ? (
                     <View style={styles.photoCaptionOverlay}>
-                        <View
-                            style={[
-                                styles.photoCaptionOverlayField,
-                                isEditing
-                                    ? styles.photoCaptionOverlayFieldEditing
-                                    : styles.photoCaptionOverlayFieldDisplay,
-                                {
-                                    backgroundColor: isDark ? 'rgba(20,20,20,0.5)' : 'rgba(255,255,255,0.72)',
-                                    borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.42)',
-                                },
-                            ]}
-                        >
-                            {isEditing ? (
-                                <>
-                                    <Ionicons name="create-outline" size={16} color={colors.secondaryText} />
-                                    <SheetTextInput
-                                        ref={contentInputRef}
-                                        testID="note-detail-photo-caption-input"
-                                        style={[styles.photoCaptionOverlayInput, { color: colors.text }]}
-                                        value={editContent}
-                                        onChangeText={setEditContent}
-                                        editable={!doodleModeEnabled && !stickerModeEnabled}
-                                        placeholder={t('noteDetail.editPhotoCaption', 'Add a short note...')}
-                                        placeholderTextColor={colors.secondaryText}
-                                        maxLength={60}
-                                        selectionColor={colors.primary}
-                                    />
-                                    {editContent.trim().length > 0 ? (
-                                        <Pressable
-                                            testID="note-detail-photo-caption-clear"
-                                            accessibilityRole="button"
-                                            accessibilityLabel={t('capture.clearPhotoCaption', 'Clear caption')}
-                                            hitSlop={8}
-                                            onPress={() => {
-                                                setEditContent('');
-                                                contentInputRef?.current?.focus?.();
-                                            }}
-                                            style={styles.photoCaptionClearButton}
-                                        >
-                                            <Ionicons name="close-circle" size={18} color={colors.secondaryText} />
-                                        </Pressable>
-                                    ) : null}
-                                </>
-                            ) : (
-                                <Text style={[styles.photoCaptionOverlayText, { color: colors.text }]} numberOfLines={2}>
-                                    {displayedPhotoCaption.trim()}
-                                </Text>
-                            )}
-                        </View>
+                        {isEditing ? (
+                            <View
+                                style={[
+                                    styles.photoCaptionOverlayField,
+                                    styles.photoCaptionOverlayFieldEditing,
+                                    {
+                                        backgroundColor: isDark ? 'rgba(20,20,20,0.5)' : 'rgba(255,255,255,0.72)',
+                                        borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.42)',
+                                    },
+                                ]}
+                            >
+                                <Ionicons name="create-outline" size={16} color={colors.secondaryText} />
+                                <SheetTextInput
+                                    ref={contentInputRef}
+                                    testID="note-detail-photo-caption-input"
+                                    style={[styles.photoCaptionOverlayInput, { color: colors.text }]}
+                                    value={editContent}
+                                    onChangeText={setEditContent}
+                                    editable={!doodleModeEnabled && !stickerModeEnabled}
+                                    placeholder={t('noteDetail.editPhotoCaption', 'Add a short note...')}
+                                    placeholderTextColor={colors.secondaryText}
+                                    maxLength={60}
+                                    selectionColor={colors.primary}
+                                />
+                                {editContent.trim().length > 0 ? (
+                                    <Pressable
+                                        testID="note-detail-photo-caption-clear"
+                                        accessibilityRole="button"
+                                        accessibilityLabel={t('capture.clearPhotoCaption', 'Clear caption')}
+                                        hitSlop={8}
+                                        onPress={() => {
+                                            setEditContent('');
+                                            contentInputRef?.current?.focus?.();
+                                        }}
+                                        style={styles.photoCaptionClearButton}
+                                    >
+                                        <Ionicons name="close-circle" size={18} color={colors.secondaryText} />
+                                    </Pressable>
+                                ) : null}
+                            </View>
+                        ) : (
+                            <PhotoCaptionChip
+                                caption={displayedPhotoCaption}
+                                color={colors.text}
+                                isDark={isDark}
+                                numberOfLines={2}
+                                overlayStyle={styles.photoCaptionChipOverlay}
+                            />
+                        )}
                     </View>
                 ) : null}
             </View>
@@ -730,6 +731,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         zIndex: 6,
     },
+    photoCaptionChipOverlay: {
+        position: 'relative',
+        left: undefined,
+        right: undefined,
+        bottom: undefined,
+    },
     photoCaptionOverlayField: {
         minHeight: 38,
         borderRadius: 19,
@@ -741,11 +748,6 @@ const styles = StyleSheet.create({
     },
     photoCaptionOverlayFieldEditing: {
         width: '84%',
-    },
-    photoCaptionOverlayFieldDisplay: {
-        width: undefined,
-        maxWidth: '72%',
-        paddingHorizontal: 16,
     },
     photoCaptionOverlayInput: {
         flex: 1,
@@ -762,13 +764,6 @@ const styles = StyleSheet.create({
         marginLeft: 2,
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    photoCaptionOverlayText: {
-        flexShrink: 1,
-        fontSize: 13.5,
-        lineHeight: 18,
-        fontFamily: Typography.body.fontFamily,
-        fontWeight: '600',
     },
     textContainer: {
         width: CARD_SIZE,

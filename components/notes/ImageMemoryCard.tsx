@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { STICKER_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { Layout, Shadows } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
@@ -7,6 +7,7 @@ import { parseNoteDoodleStrokes } from '../../services/noteDoodles';
 import { parseNoteStickerPlacements } from '../../services/noteStickers';
 import DynamicStickerCanvas from './DynamicStickerCanvas';
 import NoteDoodleCanvas from './NoteDoodleCanvas';
+import PhotoCaptionChip from './PhotoCaptionChip';
 import PhotoMediaView from './PhotoMediaView';
 import type { DebugTiltState } from './StickerPhysicsDebugControls';
 import type { SharedValue } from 'react-native-reanimated';
@@ -76,26 +77,11 @@ function ImageMemoryCard({
           <NoteDoodleCanvas strokes={doodleStrokes} />
         </View>
       ) : null}
-      {normalizedCaption.length > 0 ? (
-        <View
-          pointerEvents="none"
-          style={styles.captionOverlay}
-        >
-          <View
-            style={[
-              styles.captionField,
-              {
-                backgroundColor: isDark ? 'rgba(20,20,20,0.5)' : 'rgba(255,255,255,0.72)',
-                borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.42)',
-              },
-            ]}
-          >
-            <Text style={[styles.captionText, { color: colors.text }]} numberOfLines={1}>
-              {normalizedCaption}
-            </Text>
-          </View>
-        </View>
-      ) : null}
+      <PhotoCaptionChip
+        caption={normalizedCaption}
+        color={colors.text}
+        isDark={isDark}
+      />
     </View>
   );
 }
@@ -124,27 +110,5 @@ const styles = StyleSheet.create({
     position: 'absolute',
     ...STICKER_ARTBOARD_FRAME,
     opacity: 0.82,
-  },
-  captionOverlay: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 14,
-    alignItems: 'center',
-  },
-  captionField: {
-    maxWidth: '72%',
-    minHeight: 38,
-    borderRadius: 19,
-    borderWidth: StyleSheet.hairlineWidth,
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  captionText: {
-    flexShrink: 1,
-    fontSize: 13.5,
-    lineHeight: 18,
-    fontWeight: '600',
   },
 });

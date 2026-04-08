@@ -241,14 +241,14 @@ export function buildReminderNotificationContent(
   }: {
     title: string;
     body: string;
-    noteId: string;
+    noteId?: string | null;
   },
   platformOS = Platform.OS
 ): Notifications.NotificationContentInput {
   const content: ReminderNotificationContent = {
     title,
     body,
-    data: { noteId },
+    data: noteId ? { noteId } : {},
   };
 
   if (platformOS === 'android') {

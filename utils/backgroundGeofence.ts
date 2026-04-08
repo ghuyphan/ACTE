@@ -58,140 +58,145 @@ Notifications.setNotificationHandler({
     }),
 });
 
-TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
-    if (error) {
-        console.error('Geofence task error:', error.message);
-        return;
-    }
-
-    if (data) {
-        const { eventType, region } = data as {
-            eventType: LocationGeofencingEventType;
-            region: LocationRegion;
-        };
-
-        if (eventType === LocationGeofencingEventType.Enter) {
-            console.info('You entered region:', region.identifier);
-
-            let title = i18n.t('notification.title');
-            let body = i18n.t('notification.body');
-            const regionId = region.identifier ?? '';
-
-            if (regionId) {
-                const skipNextEnterKey = getSkipNextEnterKey(regionId);
-                const shouldSkip = await getPersistentItem(skipNextEnterKey);
-                if (shouldSkip === '1') {
-                    await removePersistentItem(skipNextEnterKey);
-                    return;
-                }
-            }
-
-            let cooldownNoteId = regionId;
-
-            try {
-                const [triggeredNote, allNotes] = await Promise.all([
-                    regionId ? getNoteById(regionId) : Promise.resolve(null),
-                    regionId ? getAllNotes() : Promise.resolve([]),
-                ]);
-                const reminderGroup = regionId
-                    ? findReminderPlaceGroupByNoteId(allNotes, regionId)
-                    : null;
-                const note = reminderGroup?.bestNote ?? triggeredNote;
-
-                if (note) {
-                    cooldownNoteId = note.id;
-                    const widgetRefreshLocation = getWidgetRefreshLocation(note, region);
-                    void updateWidgetData({
-                        notes: allNotes,
-                        includeLocationLookup: false,
-                        currentLocation: widgetRefreshLocation,
-                        preferredNoteId: note.id,
-                    }).catch((widgetError) => {
-                        console.warn('Widget geofence refresh failed:', widgetError);
-                    });
-
-                    const isNoteCoolingDown = await isOnCooldown(
-                        'note',
-                        cooldownNoteId,
-                        NOTE_NOTIFICATION_COOLDOWN_MS
-                    );
-                    if (isNoteCoolingDown) {
-                        return;
-                    }
-
-                    const locationName = note.locationName?.trim() || '';
-                    const locationCooldownId = getLocationCooldownId(
-                        locationName || i18n.t('widget.unknownPlace'),
-                        note.latitude,
-                        note.longitude
-                    );
-                    const isLocationCoolingDown = await isOnCooldown(
-                        'location',
-                        locationCooldownId,
-                        LOCATION_NOTIFICATION_COOLDOWN_MS
-                    );
-
-                    if (isLocationCoolingDown) {
-                        await setCooldown('note', cooldownNoteId);
-                        return;
-                    }
-
-                    if (note.type === 'text') {
-                        const reminderCopy = await buildNearbyReminderCopy({
-                            noteType: 'text',
-                            locationName,
-                            noteBody: buildReminderTextExcerpt(note.content),
-                        });
-                        title = reminderCopy.title;
-                        body = reminderCopy.body;
-                    } else {
-                        const reminderCopy = await buildNearbyReminderCopy({
-                            noteType: 'photo',
-                            locationName,
-                        });
-                        title = reminderCopy.title;
-                        body = reminderCopy.body;
-                    }
-
-                    await Notifications.scheduleNotificationAsync({
-                        content: buildReminderNotificationContent({
-                            title,
-                            body,
-                            noteId: cooldownNoteId,
-                        }),
-                        trigger: null,
-                    });
-
-                    await Promise.all([
-                        setCooldown('note', cooldownNoteId),
-                        setCooldown('location', locationCooldownId),
-                    ]);
-                    return;
-                }
-            } catch (err) {
-                console.error('Failed to fetch note for notification:', err);
-            }
-
-            const isFallbackCoolingDown = cooldownNoteId
-                ? await isOnCooldown('note', cooldownNoteId, NOTE_NOTIFICATION_COOLDOWN_MS)
-                : false;
-            if (isFallbackCoolingDown) {
-                return;
-            }
-
-            await Notifications.scheduleNotificationAsync({
-                content: buildReminderNotificationContent({
-                    title,
-                    body,
-                    noteId: cooldownNoteId,
-                }),
-                trigger: null,
-            });
-            if (cooldownNoteId) {
-                await setCooldown('note', cooldownNoteId);
-            }
-        } else if (eventType === LocationGeofencingEventType.Exit) {
-            console.info('You left region:', region.identifier);
+if (
+    typeof TaskManager.isTaskDefined !== 'function' ||
+    !TaskManager.isTaskDefined(GEOFENCE_TASK_NAME)
+) {
+    TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
+        if (error) {
+            console.error('Geofence task error:', error.message);
+            return;
         }
-    }
-});
+
+        if (data) {
+            const { eventType, region } = data as {
+                eventType: LocationGeofencingEventType;
+                region: LocationRegion;
+            };
+
+            if (eventType === LocationGeofencingEventType.Enter) {
+                console.info('You entered region:', region.identifier);
+
+                let title = i18n.t('notification.title');
+                let body = i18n.t('notification.body');
+                const regionId = region.identifier ?? '';
+
+                if (regionId) {
+                    const skipNextEnterKey = getSkipNextEnterKey(regionId);
+                    const shouldSkip = await getPersistentItem(skipNextEnterKey);
+                    if (shouldSkip === '1') {
+                        await removePersistentItem(skipNextEnterKey);
+                        return;
+                    }
+                }
+
+                let cooldownNoteId = regionId;
+
+                try {
+                    const [triggeredNote, allNotes] = await Promise.all([
+                        regionId ? getNoteById(regionId) : Promise.resolve(null),
+                        regionId ? getAllNotes() : Promise.resolve([]),
+                    ]);
+                    const reminderGroup = regionId
+                        ? findReminderPlaceGroupByNoteId(allNotes, regionId)
+                        : null;
+                    const note = reminderGroup?.bestNote ?? triggeredNote;
+
+                    if (note) {
+                        cooldownNoteId = note.id;
+                        const widgetRefreshLocation = getWidgetRefreshLocation(note, region);
+                        void updateWidgetData({
+                            notes: allNotes,
+                            includeLocationLookup: false,
+                            currentLocation: widgetRefreshLocation,
+                            preferredNoteId: note.id,
+                        }).catch((widgetError) => {
+                            console.warn('Widget geofence refresh failed:', widgetError);
+                        });
+
+                        const isNoteCoolingDown = await isOnCooldown(
+                            'note',
+                            cooldownNoteId,
+                            NOTE_NOTIFICATION_COOLDOWN_MS
+                        );
+                        if (isNoteCoolingDown) {
+                            return;
+                        }
+
+                        const locationName = note.locationName?.trim() || '';
+                        const locationCooldownId = getLocationCooldownId(
+                            locationName || i18n.t('widget.unknownPlace'),
+                            note.latitude,
+                            note.longitude
+                        );
+                        const isLocationCoolingDown = await isOnCooldown(
+                            'location',
+                            locationCooldownId,
+                            LOCATION_NOTIFICATION_COOLDOWN_MS
+                        );
+
+                        if (isLocationCoolingDown) {
+                            await setCooldown('note', cooldownNoteId);
+                            return;
+                        }
+
+                        if (note.type === 'text') {
+                            const reminderCopy = await buildNearbyReminderCopy({
+                                noteType: 'text',
+                                locationName,
+                                noteBody: buildReminderTextExcerpt(note.content),
+                            });
+                            title = reminderCopy.title;
+                            body = reminderCopy.body;
+                        } else {
+                            const reminderCopy = await buildNearbyReminderCopy({
+                                noteType: 'photo',
+                                locationName,
+                            });
+                            title = reminderCopy.title;
+                            body = reminderCopy.body;
+                        }
+
+                        await Notifications.scheduleNotificationAsync({
+                            content: buildReminderNotificationContent({
+                                title,
+                                body,
+                                noteId: cooldownNoteId,
+                            }),
+                            trigger: null,
+                        });
+
+                        await Promise.all([
+                            setCooldown('note', cooldownNoteId),
+                            setCooldown('location', locationCooldownId),
+                        ]);
+                        return;
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch note for notification:', err);
+                }
+
+                const isFallbackCoolingDown = cooldownNoteId
+                    ? await isOnCooldown('note', cooldownNoteId, NOTE_NOTIFICATION_COOLDOWN_MS)
+                    : false;
+                if (isFallbackCoolingDown) {
+                    return;
+                }
+
+                await Notifications.scheduleNotificationAsync({
+                    content: buildReminderNotificationContent({
+                        title,
+                        body,
+                        noteId: cooldownNoteId || null,
+                    }),
+                    trigger: null,
+                });
+                if (cooldownNoteId) {
+                    await setCooldown('note', cooldownNoteId);
+                }
+            } else if (eventType === LocationGeofencingEventType.Exit) {
+                console.info('You left region:', region.identifier);
+            }
+        }
+    });
+}

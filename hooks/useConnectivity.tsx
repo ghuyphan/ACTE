@@ -95,15 +95,11 @@ export function ConnectivityProvider({ children }: { children: ReactNode }) {
         refreshConnectivity();
       }
     });
-    const intervalId = setInterval(() => {
-      refreshConnectivity();
-    }, 15_000);
 
     return () => {
       mounted = false;
       unsubscribe();
       appStateSubscription.remove();
-      clearInterval(intervalId);
     };
   }, [applyState, refreshConnectivity]);
 

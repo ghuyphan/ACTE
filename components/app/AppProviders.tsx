@@ -19,35 +19,53 @@ type AppProvidersProps = {
   children: ReactNode;
 };
 
-export default function AppProviders({ children }: AppProvidersProps) {
+function CoreProviders({ children }: AppProvidersProps) {
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
         <ConnectivityProvider>
           <AuthProvider>
-            <SubscriptionProvider>
-              <ActiveNoteProvider>
-                <ActiveFeedTargetProvider>
-                  <FeedFocusProvider>
-                    <NotesProvider>
-                      <SyncStatusProvider>
-                        <SharedFeedProvider>
-                          <NoteDetailSheetProvider>
-                            <BottomSheetModalProvider>
-                              <AppAlertProvider />
-                              {children}
-                            </BottomSheetModalProvider>
-                          </NoteDetailSheetProvider>
-                        </SharedFeedProvider>
-                      </SyncStatusProvider>
-                    </NotesProvider>
-                  </FeedFocusProvider>
-                </ActiveFeedTargetProvider>
-              </ActiveNoteProvider>
-            </SubscriptionProvider>
+            <SubscriptionProvider>{children}</SubscriptionProvider>
           </AuthProvider>
         </ConnectivityProvider>
       </ThemeProvider>
     </I18nextProvider>
+  );
+}
+
+function FeatureProviders({ children }: AppProvidersProps) {
+  return (
+    <ActiveNoteProvider>
+      <ActiveFeedTargetProvider>
+        <FeedFocusProvider>
+          <NotesProvider>
+            <SyncStatusProvider>
+              <SharedFeedProvider>
+                <NoteDetailSheetProvider>{children}</NoteDetailSheetProvider>
+              </SharedFeedProvider>
+            </SyncStatusProvider>
+          </NotesProvider>
+        </FeedFocusProvider>
+      </ActiveFeedTargetProvider>
+    </ActiveNoteProvider>
+  );
+}
+
+function UiProviders({ children }: AppProvidersProps) {
+  return (
+    <BottomSheetModalProvider>
+      <AppAlertProvider />
+      {children}
+    </BottomSheetModalProvider>
+  );
+}
+
+export default function AppProviders({ children }: AppProvidersProps) {
+  return (
+    <CoreProviders>
+      <FeatureProviders>
+        <UiProviders>{children}</UiProviders>
+      </FeatureProviders>
+    </CoreProviders>
   );
 }

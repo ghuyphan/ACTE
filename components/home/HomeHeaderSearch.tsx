@@ -102,10 +102,13 @@ export default function HomeHeaderSearch({
   const useDockedHeader = Platform.OS === 'android' || (Platform.OS === 'ios' && !isIOS26OrNewer);
   const useNativeLiquidGlassControls = Platform.OS === 'ios' && isIOS26OrNewer;
   const useIconOnlyHeaderControls = Platform.OS === 'ios';
-  const androidHeaderControlBackgroundColor = isDark ? 'rgba(255,247,232,0.20)' : 'rgba(255,255,255,0.72)';
-  const androidHeaderControlBorderColor = isDark ? 'rgba(255,247,232,0.22)' : 'rgba(113,86,26,0.10)';
+  const androidHeaderControlBackgroundColor = isDark ? 'rgba(24,20,18,0.68)' : 'rgba(255,251,246,0.88)';
+  const androidHeaderControlBorderColor = colors.border ?? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(113,86,26,0.18)');
+  const androidHeaderStandaloneBackgroundColor = isDark ? 'rgba(24,20,18,0.68)' : 'rgba(255,251,246,0.88)';
+  const androidHeaderStandaloneBorderColor = colors.border ?? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(113,86,26,0.18)');
   const androidHeaderControlForegroundColor = isDark ? '#FFF7E8' : '#6D530F';
   const androidHeaderSearchBackgroundColor = isDark ? 'rgba(255,247,232,0.22)' : 'rgba(255,255,255,0.88)';
+  const androidHeaderDividerColor = isDark ? 'rgba(255,247,232,0.16)' : 'rgba(113,86,26,0.12)';
   const notesButtonRef = useRef<View>(null);
 
   useEffect(() => {
@@ -255,20 +258,22 @@ export default function HomeHeaderSearch({
       return null;
     }
 
+    const searchLabel = t('home.searchPlaceholder', 'Search notes...');
+
     if (Platform.OS === 'android') {
       return (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={t('home.searchPlaceholder', 'Search notes...')}
+          accessibilityLabel={searchLabel}
           hitSlop={HEADER_BUTTON_HIT_SLOP}
           onPress={onOpenSearch}
           pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
           style={({ pressed }) => [
             styles.androidSearchButton,
-            styles.androidHeaderActionButton,
+            styles.androidHeaderStandaloneButton,
             {
-              backgroundColor: androidHeaderSearchBackgroundColor,
-              borderColor: androidHeaderControlBorderColor,
+              backgroundColor: androidHeaderStandaloneBackgroundColor,
+              borderColor: androidHeaderStandaloneBorderColor,
             },
             pressed ? styles.androidGroupedActionPressed : null,
           ]}
@@ -279,14 +284,33 @@ export default function HomeHeaderSearch({
     }
 
     return (
+      <Host
+        matchContents
+        colorScheme={isDark ? 'dark' : 'light'}
+        style={styles.swiftHeaderControlHost}
+      >
+        <Button onPress={onOpenSearch} modifiers={getHeaderControlModifiers(searchLabel)}>
+          {renderHeaderControlLabel('magnifyingglass', searchLabel)}
+        </Button>
+      </Host>
+    );
+  };
+
+  const renderAndroidGroupedSearchButton = () => {
+    if (!showSearchButton || Platform.OS !== 'android') {
+      return null;
+    }
+
+    return (
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('home.searchPlaceholder', 'Search notes...')}
         hitSlop={HEADER_BUTTON_HIT_SLOP}
         onPress={onOpenSearch}
         pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
+        style={({ pressed }) => [styles.androidGroupedAction, pressed ? styles.androidGroupedActionPressed : null]}
       >
-        <Ionicons name="search" size={20} color={colors.primary} />
+        <Ionicons name="search" size={18} color={androidHeaderControlForegroundColor} />
       </Pressable>
     );
   };
@@ -320,11 +344,11 @@ export default function HomeHeaderSearch({
         onPress={onToggleCaptureMode}
         pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
         style={[
-          styles.modeToggleBtn,
-          styles.androidHeaderActionButton,
+          styles.androidSearchButton,
+          styles.androidHeaderStandaloneButton,
           {
-            backgroundColor: androidHeaderControlBackgroundColor,
-            borderColor: androidHeaderControlBorderColor,
+            backgroundColor: androidHeaderStandaloneBackgroundColor,
+            borderColor: androidHeaderStandaloneBorderColor,
           },
         ]}
       >
@@ -518,12 +542,6 @@ export default function HomeHeaderSearch({
   };
 
   const renderDetachedNativeControls = () => {
-    const modeLabel =
-      captureMode === 'text'
-        ? t('capture.switchCamera', 'Camera')
-        : t('capture.switchText', 'Text');
-    const modeSystemName = captureMode === 'text' ? 'camera' : 'square.and.pencil';
-
     return (
       <Host matchContents colorScheme={isDark ? 'dark' : 'light'} style={styles.detachedSwiftControlsHost}>
         <HStack spacing={10} alignment="center">
@@ -576,8 +594,11 @@ export default function HomeHeaderSearch({
             </View>
           ) : null}
           {renderDetachedGlassIconButton({
-            label: modeLabel,
-            systemImage: modeSystemName,
+            label:
+              captureMode === 'text'
+                ? t('capture.switchCamera', 'Camera')
+                : t('capture.switchText', 'Text'),
+            systemImage: captureMode === 'text' ? 'camera' : 'square.and.pencil',
             onPress: onToggleCaptureMode,
           })}
         </HStack>
@@ -612,7 +633,7 @@ export default function HomeHeaderSearch({
                 <Ionicons name="grid-outline" size={18} color={androidHeaderControlForegroundColor} />
               </Pressable>
             </View>
-            <View style={[styles.androidGroupedActionDivider, { backgroundColor: androidHeaderControlBorderColor }]} />
+            <View style={[styles.androidGroupedActionDivider, { backgroundColor: androidHeaderDividerColor }]} />
           </>
         ) : null}
 
@@ -654,30 +675,16 @@ export default function HomeHeaderSearch({
                   />
               </Pressable>
             </View>
-            <View style={[styles.androidGroupedActionDivider, { backgroundColor: androidHeaderControlBorderColor }]} />
+            <View style={[styles.androidGroupedActionDivider, { backgroundColor: androidHeaderDividerColor }]} />
           </>
         ) : null}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={
-            captureMode === 'text'
-              ? t('capture.switchCamera', 'Camera')
-              : t('capture.switchText', 'Text')
-          }
-          hitSlop={HEADER_BUTTON_HIT_SLOP}
-          onPress={onToggleCaptureMode}
-          pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
-          style={({ pressed }) => [styles.androidGroupedAction, pressed ? styles.androidGroupedActionPressed : null]}
-        >
-          <Animated.View style={modeIconAnimatedStyle}>
-            <Ionicons
-              name={captureMode === 'text' ? 'camera-outline' : 'create-outline'}
-              size={18}
-              color={androidHeaderControlForegroundColor}
-            />
-          </Animated.View>
-        </Pressable>
+        {showSearchButton ? (
+          <>
+            <View style={[styles.androidGroupedActionDivider, { backgroundColor: androidHeaderDividerColor }]} />
+            {renderAndroidGroupedSearchButton()}
+          </>
+        ) : null}
       </View>
     </GlassView>
   );
@@ -746,14 +753,14 @@ export default function HomeHeaderSearch({
         {isAndroid ? (
           <View style={styles.androidHeaderControls}>
             {renderAndroidGroupedControls()}
-            {renderSearchButton()}
+            {renderModeToggle()}
           </View>
         ) : (
           <View style={styles.headerActions}>
-            {renderSearchButton()}
             {renderNotesButton()}
             {renderSharedButton()}
             {renderModeToggle()}
+            {renderSearchButton()}
           </View>
         )}
       </Animated.View>
@@ -955,6 +962,9 @@ const styles = StyleSheet.create({
   androidHeaderActionButton: {
     borderWidth: StyleSheet.hairlineWidth,
   },
+  androidHeaderStandaloneButton: {
+    borderWidth: 1,
+  },
   swiftHeaderControlHost: {
     minHeight: 38,
     justifyContent: 'center',
@@ -970,7 +980,7 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     flex: 1,
-    minHeight: 42,
+    height: 42,
     paddingHorizontal: 14,
     borderRadius: 21,
     borderWidth: StyleSheet.hairlineWidth,
@@ -980,11 +990,14 @@ const styles = StyleSheet.create({
   },
   searchInputWrap: {
     flex: 1,
+    height: '100%',
     justifyContent: 'center',
   },
   searchInput: {
+    height: '100%',
     fontSize: 16,
     fontWeight: '500',
+    paddingVertical: 0,
     width: '100%',
     fontFamily: 'Noto Sans',
   },

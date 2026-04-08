@@ -222,6 +222,16 @@ function getLastTimelineEntries() {
   return (call?.[0] ?? []) as Array<{ date: Date; props: { props: Record<string, unknown> } }>;
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(async () => {
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
   jest.clearAllMocks();
@@ -704,6 +714,56 @@ describe('widgetService', () => {
     });
 
     expect(mockRefreshSharedFeed).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a newer queued refresh replace stale in-flight widget options', async () => {
+    const refreshDeferred = createDeferred<{
+      friends: [];
+      sharedPosts: [];
+      activeInvite: null;
+    }>();
+    mockRefreshSharedFeed.mockImplementationOnce(() => refreshDeferred.promise);
+    mockCurrentUser = { id: 'me-queued', uid: 'me-queued' };
+
+    const staleNote = buildNote({
+      id: 'stale-note',
+      content: 'Stale note',
+      locationName: 'Stale Place',
+    });
+    const freshNote = buildNote({
+      id: 'fresh-note',
+      content: 'Fresh note',
+      locationName: 'Fresh Place',
+    });
+
+    const firstUpdate = updateWidgetData({
+      notes: [staleNote],
+      includeSharedRefresh: true,
+      referenceDate: new Date('2026-03-10T12:00:00.000Z'),
+    });
+
+    mockGetAllNotes.mockResolvedValueOnce([freshNote]);
+
+    const secondUpdate = updateWidgetData({
+      referenceDate: new Date('2026-03-10T18:00:00.000Z'),
+    });
+
+    refreshDeferred.resolve({
+      friends: [],
+      sharedPosts: [],
+      activeInvite: null,
+    });
+
+    await Promise.all([firstUpdate, secondUpdate]);
+
+    const entries = getLastTimelineEntries();
+
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        text: 'Fresh note',
+        locationName: 'Fresh Place',
+      })
+    );
   });
 
   it('falls back to a friend post when personal photos are unreadable and no other personal memory is eligible', async () => {

@@ -56,6 +56,12 @@ export const Shadows = {
     shadowRadius: 10,
     elevation: 5,
   },
+  androidChrome: {
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.16,
+    shadowRadius: 24,
+    elevation: 10,
+  },
 } as const;
 
 export const Sheet = {

@@ -1,11 +1,13 @@
 import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { getCachedStartupRoute, loadStartupRoute } from '../services/startupRouting';
+import {
+  getCachedStartupRoute,
+  loadStartupRoute,
+  type StartupIndexRoute,
+} from '../services/startupRouting';
 
 export default function Index() {
-  const [target, setTarget] = useState<'/(tabs)' | '/auth/onboarding' | null>(() =>
-    getCachedStartupRoute('index') as '/(tabs)' | '/auth/onboarding' | null
-  );
+  const [target, setTarget] = useState<StartupIndexRoute | null>(() => getCachedStartupRoute('index'));
 
   useEffect(() => {
     if (target) {
@@ -16,7 +18,7 @@ export default function Index() {
 
     void loadStartupRoute('index').then((nextTarget) => {
       if (!cancelled) {
-        setTarget(nextTarget as '/(tabs)' | '/auth/onboarding');
+        setTarget(nextTarget);
       }
     });
 

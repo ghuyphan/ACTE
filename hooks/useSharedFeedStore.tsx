@@ -23,7 +23,6 @@ import {
   cacheSharedFeedSnapshot,
   clearSharedFeedCache,
   getCachedSharedFeedSnapshot,
-  replaceCachedActiveInvite,
 } from '../services/sharedFeedCache';
 import { getNotePairedVideoUri } from '../services/livePhotoStorage';
 import { normalizeSavedTextNoteColor } from '../services/noteAppearance';
@@ -87,18 +86,6 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const suppressActiveInviteRef = useRef(false);
   const createInvitePromiseRef = useRef<Promise<FriendInvite> | null>(null);
   const previousUserUidRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    friendsRef.current = friends;
-  }, [friends]);
-
-  useEffect(() => {
-    sharedPostsRef.current = sharedPosts;
-  }, [sharedPosts]);
-
-  useEffect(() => {
-    activeInviteRef.current = activeInvite;
-  }, [activeInvite]);
 
   const enabled = isAuthAvailable;
 
@@ -167,6 +154,23 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     []
   );
 
+  const commitSnapshotAndPersist = useCallback(
+    (
+      userUid: string,
+      snapshot: {
+        friends: FriendConnection[];
+        sharedPosts: SharedPost[];
+        activeInvite: FriendInvite | null;
+      },
+      updatedAt: string,
+      source: 'live' | 'cache' = 'live'
+    ) => {
+      commitSnapshot(snapshot, source, updatedAt);
+      void persistSnapshot(userUid, snapshot);
+    },
+    [commitSnapshot, persistSnapshot]
+  );
+
   const hydrateFromCache = useCallback(async (userUid: string) => {
     const snapshot = await getCachedSharedFeedSnapshot(userUid);
     applySnapshot(snapshot, 'cache', snapshot.lastUpdatedAt);
@@ -206,6 +210,32 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       setReady(true);
     }
   }, [applySnapshot, enabled, isOnline, user]);
+
+  const resolveOwnedPostIdsForNote = useCallback(
+    async (activeUser: typeof user, noteId: string) => {
+      if (!activeUser) {
+        return [];
+      }
+
+      let matchingPostIds = sharedPostsRef.current
+        .filter((post) => post.authorUid === activeUser.uid && post.sourceNoteId === noteId)
+        .map((post) => post.id);
+
+      if (matchingPostIds.length === 0 && !ready) {
+        await refreshAll();
+        matchingPostIds = sharedPostsRef.current
+          .filter((post) => post.authorUid === activeUser.uid && post.sourceNoteId === noteId)
+          .map((post) => post.id);
+      }
+
+      if (matchingPostIds.length === 0) {
+        matchingPostIds = await findOwnedSharedPostIdsForNote(activeUser, noteId);
+      }
+
+      return matchingPostIds;
+    },
+    [ready, refreshAll]
+  );
 
   useEffect(() => {
     if (!isReady) {
@@ -336,11 +366,15 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         const invitePromise = createInvite(activeUser)
           .then((invite) => {
             suppressActiveInviteRef.current = false;
-            activeInviteRef.current = invite;
-            setActiveInvite(invite);
-            setDataSource('live');
-            setLastUpdatedAt(new Date().toISOString());
-            void replaceCachedActiveInvite(activeUser.uid, invite).catch(() => undefined);
+            commitSnapshotAndPersist(
+              activeUser.uid,
+              {
+                friends: friendsRef.current,
+                sharedPosts: sharedPostsRef.current,
+                activeInvite: invite,
+              },
+              new Date().toISOString()
+            );
             return invite;
           })
           .finally(() => {
@@ -355,34 +389,30 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         const activeUser = requireUser();
         await revokeInvite(activeUser, inviteId);
         suppressActiveInviteRef.current = true;
-        setDataSource('live');
-        setLastUpdatedAt(new Date().toISOString());
-        setActiveInvite((current) => {
-          const nextInvite = current?.id === inviteId ? null : current;
-          activeInviteRef.current = nextInvite;
-          void replaceCachedActiveInvite(activeUser.uid, nextInvite).catch(() => undefined);
-          return nextInvite;
-        });
+        commitSnapshotAndPersist(
+          activeUser.uid,
+          {
+            friends: friendsRef.current,
+            sharedPosts: sharedPostsRef.current,
+            activeInvite: activeInviteRef.current?.id === inviteId ? null : activeInviteRef.current,
+          },
+          new Date().toISOString()
+        );
       },
       acceptFriendInvite: async (inviteValue: string) => {
         requireOnline();
         const activeUser = requireUser();
         const connection = await acceptInvite(activeUser, inviteValue);
         const nextFriends = upsertFriendConnection(friendsRef.current, connection);
-        commitSnapshot(
+        commitSnapshotAndPersist(
+          activeUser.uid,
           {
             friends: nextFriends,
             sharedPosts: sharedPostsRef.current,
             activeInvite: activeInviteRef.current,
           },
-          'live',
           new Date().toISOString()
         );
-        void persistSnapshot(activeUser.uid, {
-          friends: nextFriends,
-          sharedPosts: sharedPostsRef.current,
-          activeInvite: activeInviteRef.current,
-        });
         void refreshAll().catch(() => undefined);
       },
       removeFriend: async (friendUid: string) => {
@@ -418,20 +448,15 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             },
           ];
         });
-        commitSnapshot(
+        commitSnapshotAndPersist(
+          activeUser.uid,
           {
             friends: nextFriends,
             sharedPosts: nextSharedPosts,
             activeInvite: activeInviteRef.current,
           },
-          'live',
           new Date().toISOString()
         );
-        void persistSnapshot(activeUser.uid, {
-          friends: nextFriends,
-          sharedPosts: nextSharedPosts,
-          activeInvite: activeInviteRef.current,
-        });
         void refreshAll().catch(() => undefined);
       },
       createSharedPost: async (note: Note, audienceUserIds?: string[]) => {
@@ -447,39 +472,21 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         );
         const post = await createPost(activeUser, note, nextAudience);
         const nextSharedPosts = [post, ...sharedPostsRef.current.filter((item) => item.id !== post.id)];
-        commitSnapshot(
+        commitSnapshotAndPersist(
+          activeUser.uid,
           {
             friends: friendsRef.current,
             sharedPosts: nextSharedPosts,
             activeInvite: activeInviteRef.current,
           },
-          'live',
           new Date().toISOString()
         );
-        void persistSnapshot(activeUser.uid, {
-          friends: friendsRef.current,
-          sharedPosts: nextSharedPosts,
-          activeInvite: activeInviteRef.current,
-        });
         return post;
       },
       updateSharedNote: async (note: Note) => {
         requireOnline();
         const activeUser = requireUser();
-        let matchingPostIds = sharedPostsRef.current
-          .filter((post) => post.authorUid === activeUser.uid && post.sourceNoteId === note.id)
-          .map((post) => post.id);
-
-        if (matchingPostIds.length === 0 && !ready) {
-          await refreshAll();
-          matchingPostIds = sharedPostsRef.current
-            .filter((post) => post.authorUid === activeUser.uid && post.sourceNoteId === note.id)
-            .map((post) => post.id);
-        }
-
-        if (matchingPostIds.length === 0) {
-          matchingPostIds = await findOwnedSharedPostIdsForNote(activeUser, note.id);
-        }
+        const matchingPostIds = await resolveOwnedPostIdsForNote(activeUser, note.id);
 
         await Promise.all(matchingPostIds.map((postId) => updatePost(activeUser, postId, note)));
         const matchingPostIdSet = new Set(matchingPostIds);
@@ -513,38 +520,20 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             updatedAt,
           };
         });
-        commitSnapshot(
+        commitSnapshotAndPersist(
+          activeUser.uid,
           {
             friends: friendsRef.current,
             sharedPosts: nextSharedPosts,
             activeInvite: activeInviteRef.current,
           },
-          'live',
           updatedAt
         );
-        void persistSnapshot(activeUser.uid, {
-          friends: friendsRef.current,
-          sharedPosts: nextSharedPosts,
-          activeInvite: activeInviteRef.current,
-        });
       },
       deleteSharedNote: async (noteId: string) => {
         requireOnline();
         const activeUser = requireUser();
-        let matchingPostIds = sharedPostsRef.current
-          .filter((post) => post.authorUid === activeUser.uid && post.sourceNoteId === noteId)
-          .map((post) => post.id);
-
-        if (matchingPostIds.length === 0 && !ready) {
-          await refreshAll();
-          matchingPostIds = sharedPostsRef.current
-            .filter((post) => post.authorUid === activeUser.uid && post.sourceNoteId === noteId)
-            .map((post) => post.id);
-        }
-
-        if (matchingPostIds.length === 0) {
-          matchingPostIds = await findOwnedSharedPostIdsForNote(activeUser, noteId);
-        }
+        const matchingPostIds = await resolveOwnedPostIdsForNote(activeUser, noteId);
 
         await Promise.all(matchingPostIds.map((postId) => deletePost(activeUser, postId)));
         const matchingPostIdSet = new Set(matchingPostIds);
@@ -553,20 +542,15 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             !matchingPostIdSet.has(post.id) &&
             !(post.authorUid === activeUser.uid && post.sourceNoteId === noteId)
         );
-        commitSnapshot(
+        commitSnapshotAndPersist(
+          activeUser.uid,
           {
             friends: friendsRef.current,
             sharedPosts: nextSharedPosts,
             activeInvite: activeInviteRef.current,
           },
-          'live',
           new Date().toISOString()
         );
-        void persistSnapshot(activeUser.uid, {
-          friends: friendsRef.current,
-          sharedPosts: nextSharedPosts,
-          activeInvite: activeInviteRef.current,
-        });
       },
       deleteSharedNotes: async (noteIds: string[]) => {
         requireOnline();
@@ -579,20 +563,15 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             !deletedPostIdSet.has(post.id) &&
             !(post.authorUid === activeUser.uid && post.sourceNoteId && nextNoteIdSet.has(post.sourceNoteId))
         );
-        commitSnapshot(
+        commitSnapshotAndPersist(
+          activeUser.uid,
           {
             friends: friendsRef.current,
             sharedPosts: nextSharedPosts,
             activeInvite: activeInviteRef.current,
           },
-          'live',
           new Date().toISOString()
         );
-        void persistSnapshot(activeUser.uid, {
-          friends: friendsRef.current,
-          sharedPosts: nextSharedPosts,
-          activeInvite: activeInviteRef.current,
-        });
       },
       deleteSharedPostById: async (postId: string) => {
         requireOnline();
@@ -601,25 +580,21 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         const nextSharedPosts = sharedPostsRef.current.filter(
           (post) => post.id !== postId && !(post.authorUid === activeUser.uid && post.id === postId)
         );
-        commitSnapshot(
+        commitSnapshotAndPersist(
+          activeUser.uid,
           {
             friends: friendsRef.current,
             sharedPosts: nextSharedPosts,
             activeInvite: activeInviteRef.current,
           },
-          'live',
           new Date().toISOString()
         );
-        void persistSnapshot(activeUser.uid, {
-          friends: friendsRef.current,
-          sharedPosts: nextSharedPosts,
-          activeInvite: activeInviteRef.current,
-        });
       },
     }),
     [
       activeInvite,
       commitSnapshot,
+      commitSnapshotAndPersist,
       dataSource,
       enabled,
       friends,
@@ -631,6 +606,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       refreshAll,
       requireOnline,
       requireUser,
+      resolveOwnedPostIdsForNote,
       sharedPosts,
     ]
   );

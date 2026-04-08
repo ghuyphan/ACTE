@@ -282,10 +282,14 @@ describe('useSharedFeedStore', () => {
         id: 'invite-1',
       })
     );
-    expect(mockReplaceCachedActiveInvite).toHaveBeenCalledWith(
+    expect(mockCacheSharedFeedSnapshot).toHaveBeenCalledWith(
       'me',
       expect.objectContaining({
-        id: 'invite-1',
+        friends: expect.any(Array),
+        sharedPosts: expect.any(Array),
+        activeInvite: expect.objectContaining({
+          id: 'invite-1',
+        }),
       })
     );
 
@@ -293,7 +297,15 @@ describe('useSharedFeedStore', () => {
       await result.current.revokeFriendInvite('invite-1');
     });
 
-    expect(mockReplaceCachedActiveInvite).toHaveBeenLastCalledWith('me', null);
+    expect(mockCacheSharedFeedSnapshot).toHaveBeenLastCalledWith(
+      'me',
+      expect.objectContaining({
+        friends: expect.any(Array),
+        sharedPosts: expect.any(Array),
+        activeInvite: null,
+      })
+    );
+    expect(mockReplaceCachedActiveInvite).not.toHaveBeenCalled();
   });
 
   it('keeps a revoked invite hidden even if a stale snapshot still includes it', async () => {

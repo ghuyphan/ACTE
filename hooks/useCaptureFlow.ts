@@ -174,19 +174,34 @@ export function useCaptureFlow() {
     clearLivePhotoTapSuppression,
   ]);
 
+  const cancelLivePhotoCapture = useCallback(async () => {
+    const camera = cameraRef.current;
+    const wasRecording = livePhotoRecordingActiveRef.current;
+    livePhotoRecordingActiveRef.current = false;
+    livePhotoRecordingStartedAtRef.current = null;
+
+    if (camera && wasRecording) {
+      try {
+        await camera.cancelRecording();
+      } catch (error) {
+        const errorCode = getCaptureErrorCode(error);
+        if (
+          errorCode !== 'capture/no-recording-in-progress' &&
+          errorCode !== 'capture/recording-canceled'
+        ) {
+          console.warn('Failed to cancel live photo capture:', error);
+        }
+      }
+    }
+
+    resetLivePhotoCaptureRefs();
+  }, [cameraRef, resetLivePhotoCaptureRefs]);
+
   useEffect(
     () => () => {
-      clearLivePhotoStopTimeout();
-      clearLivePhotoSettleTimeout();
-      clearLivePhotoSaveGuardTimeout();
-      clearLivePhotoMinimumDurationTimeout();
+      void cancelLivePhotoCapture();
     },
-    [
-      clearLivePhotoMinimumDurationTimeout,
-      clearLivePhotoSaveGuardTimeout,
-      clearLivePhotoSettleTimeout,
-      clearLivePhotoStopTimeout,
-    ]
+    [cancelLivePhotoCapture]
   );
 
   useEffect(() => {
@@ -257,9 +272,7 @@ export function useCaptureFlow() {
         }
         return nextMode;
       });
-      livePhotoRecordingActiveRef.current = false;
-      suppressNextPhotoTapRef.current = false;
-      resetLivePhotoCaptureRefs();
+      void cancelLivePhotoCapture();
       setCapturedPhoto(null);
       setCapturedPairedVideo(null);
       setIsLivePhotoCaptureInProgress(false);
@@ -272,7 +285,7 @@ export function useCaptureFlow() {
       setPromptExpanded(false);
       setHasShuffledPrompt(false);
     });
-  }, [animateModeSwitch, isModeSwitchAnimating, resetLivePhotoCaptureRefs]);
+  }, [animateModeSwitch, cancelLivePhotoCapture, isModeSwitchAnimating]);
 
   const refreshCameraSession = useCallback(() => {
     setCameraSessionKey((current) => current + 1);
@@ -495,9 +508,7 @@ export function useCaptureFlow() {
   const resetCapture = useCallback(() => {
     setNoteText('');
     setRestaurantName('');
-    livePhotoRecordingActiveRef.current = false;
-    suppressNextPhotoTapRef.current = false;
-    resetLivePhotoCaptureRefs();
+    void cancelLivePhotoCapture();
     setCapturedPhoto(null);
     setCapturedPairedVideo(null);
     setIsLivePhotoCaptureInProgress(false);
@@ -511,7 +522,7 @@ export function useCaptureFlow() {
     setPromptExpanded(false);
     setHasShuffledPrompt(false);
     setRadius(DEFAULT_NOTE_RADIUS);
-  }, [clearLivePhotoTapSuppression, resetLivePhotoCaptureRefs]);
+  }, [cancelLivePhotoCapture]);
 
   const needsCameraPermission = captureMode === 'camera' && (!permission || !permission.granted);
 

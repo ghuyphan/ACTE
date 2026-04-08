@@ -38,8 +38,14 @@ import {
   uploadPhotoToStorage,
   uploadPairedVideoToStorage,
 } from './remoteMedia';
-import { getPairedVideoFileExtension } from './livePhotoStorage';
 import { upsertPublicUserProfile } from './publicProfileService';
+import {
+  buildNewRemoteArtifacts,
+  buildRemovedRemoteArtifacts,
+  getRemotePairedVideoPath,
+  normalizeRemoteArtifactPath,
+  normalizeRemoteEntityIds,
+} from './remoteArtifactUtils';
 
 export type SyncChangeType = 'create' | 'update' | 'delete' | 'deleteAll';
 export type SyncQueueStatus = 'pending' | 'processing' | 'failed';
@@ -93,10 +99,6 @@ export interface SyncRepository {
   ) => Promise<void>;
   markDone: (id: number) => Promise<void>;
   clearAll: () => Promise<void>;
-}
-
-function getRemotePairedVideoPath(basePath: string, localUri: string | null | undefined) {
-  return `${basePath}.motion${getPairedVideoFileExtension(localUri)}`;
 }
 
 function normalizeMediaUri(value: string | null | undefined) {
@@ -346,21 +348,6 @@ function getRetryDelayMs(attemptCount: number) {
   return RETRY_DELAYS_MS[index] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
 }
 
-function normalizeRemoteArtifactPath(path: string | null | undefined) {
-  const normalizedPath = typeof path === 'string' ? path.trim() : '';
-  return normalizedPath || null;
-}
-
-function normalizeRemoteEntityIds(ids: Iterable<string | null | undefined>) {
-  return Array.from(
-    new Set(
-      Array.from(ids)
-        .map((value) => (typeof value === 'string' ? value.trim() : ''))
-        .filter(Boolean)
-    )
-  );
-}
-
 async function mapWithConcurrency<T>(
   items: T[],
   concurrency: number,
@@ -387,57 +374,6 @@ async function mapWithConcurrency<T>(
       }
     })
   );
-}
-
-function getRemoteStickerAssetPaths(stickerPlacementsJson: string | null | undefined) {
-  return Array.from(
-    new Set(
-      parseNoteStickerPlacements(stickerPlacementsJson)
-        .map((placement) => normalizeRemoteArtifactPath(placement.asset.remotePath))
-        .filter((path): path is string => Boolean(path))
-    )
-  );
-}
-
-function buildNewRemoteArtifacts(
-  next: RemoteArtifactSnapshot,
-  previous: RemoteArtifactSnapshot | null | undefined
-) {
-  const previousStickerPaths = new Set(getRemoteStickerAssetPaths(previous?.stickerPlacementsJson));
-  return {
-    photoPath:
-      normalizeRemoteArtifactPath(next.photoPath) !== normalizeRemoteArtifactPath(previous?.photoPath)
-        ? normalizeRemoteArtifactPath(next.photoPath)
-        : null,
-    pairedVideoPath:
-      normalizeRemoteArtifactPath(next.pairedVideoPath) !== normalizeRemoteArtifactPath(previous?.pairedVideoPath)
-        ? normalizeRemoteArtifactPath(next.pairedVideoPath)
-        : null,
-    stickerPaths: getRemoteStickerAssetPaths(next.stickerPlacementsJson).filter(
-      (path) => !previousStickerPaths.has(path)
-    ),
-  };
-}
-
-function buildRemovedRemoteArtifacts(
-  previous: RemoteArtifactSnapshot | null | undefined,
-  next: RemoteArtifactSnapshot | null | undefined
-) {
-  const nextStickerPaths = new Set(getRemoteStickerAssetPaths(next?.stickerPlacementsJson));
-  return {
-    photoPath:
-      normalizeRemoteArtifactPath(previous?.photoPath) !== normalizeRemoteArtifactPath(next?.photoPath)
-        ? normalizeRemoteArtifactPath(previous?.photoPath)
-        : null,
-    pairedVideoPath:
-      normalizeRemoteArtifactPath(previous?.pairedVideoPath) !==
-      normalizeRemoteArtifactPath(next?.pairedVideoPath)
-        ? normalizeRemoteArtifactPath(previous?.pairedVideoPath)
-        : null,
-    stickerPaths: getRemoteStickerAssetPaths(previous?.stickerPlacementsJson).filter(
-      (path) => !nextStickerPaths.has(path)
-    ),
-  };
 }
 
 async function cleanupRemoteArtifacts(

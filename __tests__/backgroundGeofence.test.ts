@@ -29,6 +29,7 @@ jest.mock('expo-notifications', () => ({
 }));
 
 jest.mock('expo-task-manager', () => ({
+  isTaskDefined: jest.fn(() => false),
   defineTask: (name: string, handler: (payload: unknown) => Promise<void>) => {
     (globalThis as any).__mockGeofenceTaskHandler = handler;
   },
@@ -116,6 +117,22 @@ async function runEnterEvent(noteId = 'note-1') {
       region: {
         identifier: noteId,
       },
+    },
+  });
+}
+
+async function runEnterEventWithoutIdentifier() {
+  const handler = (globalThis as any).__mockGeofenceTaskHandler as
+    | ((payload: any) => Promise<void>)
+    | null;
+  if (!handler) {
+    throw new Error('Geofence task was not registered');
+  }
+
+  await handler({
+    data: {
+      eventType: 'enter',
+      region: {},
     },
   });
 }
@@ -226,6 +243,22 @@ describe('backgroundGeofence', () => {
         title: 'Này, District 1 quen không?',
         body: 'Có một kỷ niệm từ nơi này đang chờ bạn.',
         data: { noteId: 'photo-note' },
+      },
+      trigger: null,
+    });
+  });
+
+  it('omits note routing data when the geofence region identifier is missing', async () => {
+    mockGetAllNotes.mockResolvedValue([]);
+    mockGetNoteById.mockResolvedValue(null);
+
+    await runEnterEventWithoutIdentifier();
+
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
+      content: {
+        title: 'Nearby reminder',
+        body: 'A note is ready when you open Noto.',
+        data: {},
       },
       trigger: null,
     });

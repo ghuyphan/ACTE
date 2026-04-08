@@ -190,4 +190,28 @@ describe('syncSocialPushRegistration', () => {
     });
     expect(mockRemovePersistentItem).toHaveBeenCalled();
   });
+
+  it('ignores malformed persisted registration payloads', async () => {
+    mockGetPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+      canAskAgain: true,
+    });
+    mockGetPersistentItem.mockResolvedValue('{not-json');
+
+    await syncSocialPushRegistration({
+      id: 'user-1',
+      uid: 'user-1',
+      email: 'hello@example.com',
+      displayName: 'Noto User',
+      photoURL: null,
+      providerData: [],
+    });
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('register_push_token', {
+      expo_push_token_input: 'ExponentPushToken[token]',
+      platform_input: 'ios',
+      app_version_input: '1.0.0',
+    });
+  });
 });

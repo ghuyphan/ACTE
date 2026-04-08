@@ -363,8 +363,8 @@ describe('MapScreen', () => {
     });
   });
 
-  it('shows an in-area empty state and can temporarily reveal all matching results', async () => {
-    const { getByTestId, getByText, queryByText } = render(<MapScreen />);
+  it('keeps the nearby tray visible instead of swapping into a show-all state when panning to an empty area', async () => {
+    const { getByTestId, queryByTestId, getByText } = render(<MapScreen />);
 
     act(() => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
@@ -377,29 +377,10 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
-      expect(getByTestId('map-show-all-results')).toBeTruthy();
-    });
-
-    fireEvent.press(getByTestId('map-show-all-results'));
-
-    await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(getByTestId('map-preview-list')).toBeTruthy();
-      expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
-      expect(getByText('2 notes · all results')).toBeTruthy();
-    });
-
-    act(() => {
-      getByTestId('map-canvas').props.onRegionChangeComplete({
-        latitude: 10.8,
-        longitude: 106.7,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      });
-    });
-
-    await waitFor(() => {
-      expect(queryByText('2 notes · all results')).toBeNull();
+      expect(queryByTestId('map-show-all-results')).toBeNull();
+      expect(getByText('2 notes')).toBeTruthy();
     });
   });
 
@@ -712,7 +693,47 @@ describe('MapScreen', () => {
     });
   });
 
-  it('dismisses the selected preview when tapping outside the map content', async () => {
+  it('keeps a focused nearby preview visible when the map drifts into an empty area', async () => {
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
+    const nearbyList = await waitFor(() => getByTestId('map-preview-list'));
+    const snapInterval = nearbyList.props.snapToInterval;
+
+    act(() => {
+      nearbyList.props.onScrollBeginDrag({
+        nativeEvent: {},
+      });
+      nearbyList.props.onMomentumScrollEnd({
+        nativeEvent: {
+          contentOffset: {
+            x: snapInterval,
+            y: 0,
+          },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(String(getByTestId('map-preview-index').props.children)).toBe('2/2');
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 11.4,
+        longitude: 107.4,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-item-photo-1')).toBeTruthy();
+      expect(String(getByTestId('map-preview-index').props.children)).toBe('2/2');
+      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('Center on map');
+      expect(queryByTestId('map-show-all-results')).toBeNull();
+    });
+  });
+
+  it('keeps the note tray visible when tapping empty map content', async () => {
     const nowSpy = jest.spyOn(Date, 'now');
     let now = 1000;
     nowSpy.mockImplementation(() => now);
@@ -741,10 +762,9 @@ describe('MapScreen', () => {
 
     expect(getByTestId('map-preview-shell')).toBeTruthy();
 
-    await waitForPreviewCloseAnimation();
-
     await waitFor(() => {
-      expect(queryByTestId('map-preview-shell')).toBeNull();
+      expect(queryByTestId('note-marker-text-1')).toBeNull();
+      expect(getByTestId('map-preview-list')).toBeTruthy();
     });
 
     nowSpy.mockRestore();
@@ -780,7 +800,7 @@ describe('MapScreen', () => {
     });
   });
 
-  it('lets you reveal all matching notes when filters leave the current area empty', async () => {
+  it('keeps filtered preview items available without switching into a show-all state', async () => {
     const { getByTestId } = render(<MapScreen />);
 
     act(() => {
@@ -800,7 +820,6 @@ describe('MapScreen', () => {
     expect(mockOpenNoteDetail).not.toHaveBeenCalled();
 
     fireEvent.press(getByTestId('map-filter-text'));
-    fireEvent.press(getByTestId('map-show-all-results'));
     fireEvent.press(getByTestId('map-preview-item-text-1'));
 
     await waitFor(() => {
@@ -907,7 +926,7 @@ describe('MapScreen', () => {
     let now = 1000;
     nowSpy.mockImplementation(() => now);
 
-    const { getByTestId, getByText } = render(<MapScreen />);
+    const { getByTestId, getAllByText } = render(<MapScreen />);
 
     act(() => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
@@ -922,14 +941,14 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByTestId('note-marker-text-1')).toBeTruthy();
-      expect(getByText(/^\d+(?:\.\d)?(?:m|km)$/)).toBeTruthy();
+      expect(getAllByText(/^\d+(?:\.\d)?(?:m|km)$/).length).toBeGreaterThan(0);
     });
 
     now = 1100;
     fireEvent.press(getByTestId('mock-map-press'));
 
     expect(getByTestId('note-marker-text-1')).toBeTruthy();
-    expect(getByText(/^\d+(?:\.\d)?(?:m|km)$/)).toBeTruthy();
+    expect(getAllByText(/^\d+(?:\.\d)?(?:m|km)$/).length).toBeGreaterThan(0);
 
     nowSpy.mockRestore();
   });
@@ -1006,7 +1025,7 @@ describe('MapScreen', () => {
     let now = 1000;
     nowSpy.mockImplementation(() => now);
 
-    const { getByTestId, getByText } = render(<MapScreen />);
+    const { getByTestId, getAllByText } = render(<MapScreen />);
 
     act(() => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
@@ -1021,14 +1040,14 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByTestId('note-marker-text-1')).toBeTruthy();
-      expect(getByText(/^\d+(?:\.\d)?(?:m|km)$/)).toBeTruthy();
+      expect(getAllByText(/^\d+(?:\.\d)?(?:m|km)$/).length).toBeGreaterThan(0);
     });
 
     now = 1400;
     fireEvent.press(getByTestId('mock-map-press'));
 
     expect(getByTestId('leaf-marker-10.76000:106.66000')).toBeTruthy();
-    expect(getByText(/^\d+(?:\.\d)?(?:m|km)$/)).toBeTruthy();
+    expect(getAllByText(/^\d+(?:\.\d)?(?:m|km)$/).length).toBeGreaterThan(0);
 
     nowSpy.mockRestore();
   });

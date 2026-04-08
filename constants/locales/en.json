@@ -2,6 +2,7 @@
     "tabs": {
         "home": "Journal",
         "capture": "Add",
+        "search": "Search",
         "map": "Spots",
         "settings": "App"
     },

@@ -43,6 +43,7 @@ jest.mock('expo-notifications', () => ({
 
 jest.mock('expo-task-manager', () => ({
   defineTask: jest.fn(),
+  isTaskDefined: jest.fn(() => false),
 }));
 
 jest.mock('../services/database', () => ({
@@ -107,6 +108,18 @@ describe('geofenceService', () => {
     const result = await syncGeofenceRegions();
     expect(result).toBe(false);
     expect(mockStartGeofencingAsync).not.toHaveBeenCalled();
+  });
+
+  it('clears active geofencing when reminder permissions are revoked', async () => {
+    mockStorage.set('geofence.signature', 'existing-signature');
+    mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false });
+    mockHasStartedGeofencingAsync.mockResolvedValue(true);
+
+    const result = await syncGeofenceRegions();
+
+    expect(result).toBe(false);
+    expect(mockStopGeofencingAsync).toHaveBeenCalledWith('BACKGROUND_GEOFENCE_TASK');
+    expect(mockStorage.has('geofence.signature')).toBe(false);
   });
 
   it('starts geofencing and stores signature when enabled', async () => {

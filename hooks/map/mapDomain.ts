@@ -86,7 +86,6 @@ export interface MapViewportState {
   nearbyAnchor: CoordinatePoint;
   notesInVisibleRegion: Note[];
   nearbyItems: NearbyNoteItem[];
-  allFilteredNearbyItems: NearbyNoteItem[];
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -390,7 +389,6 @@ interface BuildMapViewportStateParams {
   initialRegion: Region;
   visibleRegion: Region | null;
   nearbyBrowseRegion: Region | null;
-  allowOffscreenResults: boolean;
   location: Location.LocationObject | null;
   enableHeavyCalculations?: boolean;
 }
@@ -401,19 +399,18 @@ export function buildMapViewportState({
   initialRegion,
   visibleRegion,
   nearbyBrowseRegion,
-  allowOffscreenResults,
   location,
   enableHeavyCalculations = true,
 }: BuildMapViewportStateParams): MapViewportState {
   const clusteringRegion = visibleRegion ?? initialRegion ?? DEFAULT_REGION;
   const nearbyReferenceRegion = nearbyBrowseRegion ?? visibleRegion;
-  const nearbyAnchor = location
-    ? {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      }
-    : nearbyReferenceRegion
-      ? getRegionCenter(nearbyReferenceRegion)
+  const nearbyAnchor = nearbyReferenceRegion
+    ? getRegionCenter(nearbyReferenceRegion)
+    : location
+      ? {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        }
       : getRegionCenter(initialRegion);
 
   if (!enableHeavyCalculations) {
@@ -422,7 +419,6 @@ export function buildMapViewportState({
       nearbyAnchor,
       notesInVisibleRegion: [],
       nearbyItems: [],
-      allFilteredNearbyItems: [],
     };
   }
 
@@ -430,26 +426,11 @@ export function buildMapViewportState({
     ? getNotesInRegion(filteredNotes, visibleRegion)
     : filteredNotes;
 
-  const nearbyNotesInBrowseRegion = !nearbyReferenceRegion
-    ? filteredNotes
-    : visibleRegion && areRegionsEquivalent(visibleRegion, nearbyReferenceRegion)
-      ? notesInVisibleRegion
-      : getNotesInRegion(filteredNotes, nearbyReferenceRegion);
-
-  const nearbyCandidates = !nearbyReferenceRegion
-    ? filteredNotes
-    : nearbyNotesInBrowseRegion.length > 0
-      ? nearbyNotesInBrowseRegion
-      : allowOffscreenResults
-        ? filteredNotes
-        : [];
-
   return {
     clusterNodes: getMapClusterNodes(geometry.clusterIndex, clusteringRegion, geometry.pointGroupMap),
     nearbyAnchor,
     notesInVisibleRegion,
-    nearbyItems: getNearbyNoteItems(nearbyCandidates, nearbyAnchor, 30),
-    allFilteredNearbyItems: getNearbyNoteItems(filteredNotes, nearbyAnchor, 30),
+    nearbyItems: getNearbyNoteItems(filteredNotes, nearbyAnchor, 30),
   };
 }
 

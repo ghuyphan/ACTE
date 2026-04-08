@@ -1,4 +1,3 @@
-import * as Linking from 'expo-linking';
 import { useEffect, useState } from 'react';
 import { getDB } from '../../services/database';
 import { syncGeofenceRegions } from '../../services/geofenceService';
@@ -7,39 +6,14 @@ import { configureNotificationChannels } from '../../services/notificationServic
 import {
   getCachedStartupRoute,
   loadStartupRoute,
-  type StartupRoute,
+  type StartupEntryRoute,
 } from '../../services/startupRouting';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
 export function useAppStartupBootstrap() {
-  const [initialUrlResolved, setInitialUrlResolved] = useState(false);
-  const [startupTarget, setStartupTarget] = useState<StartupRoute | null>(() =>
+  const [startupTarget, setStartupTarget] = useState<StartupEntryRoute | null>(() =>
     getCachedStartupRoute('entry')
   );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void Linking.getInitialURL()
-      .then((initialUrl) => {
-        if (cancelled) {
-          return;
-        }
-
-        setInitialUrlResolved(true);
-      })
-      .catch(() => {
-        if (cancelled) {
-          return;
-        }
-
-        setInitialUrlResolved(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (startupTarget) {
@@ -93,7 +67,6 @@ export function useAppStartupBootstrap() {
   }, []);
 
   return {
-    initialUrlResolved,
     startupTarget,
   };
 }

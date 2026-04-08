@@ -355,7 +355,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     const nextUserId = user?.uid ?? null;
 
     if (!isOnline) {
-      setCustomerInfo(null);
       return;
     }
 

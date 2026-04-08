@@ -22,6 +22,13 @@ interface SyncStatusContextValue {
   requestSync: () => void;
 }
 
+interface QueueStatsSnapshot {
+  pendingCount: number;
+  failedCount: number;
+  blockedCount: number;
+  recentQueueItems: SyncQueueItem[];
+}
+
 const AUTO_SYNC_DEBOUNCE_MS = 1200;
 const SYNC_ENABLED_KEY = 'settings.syncEnabled';
 
@@ -56,7 +63,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const refreshQueueStats = useCallback(async () => {
+  const refreshQueueStats = useCallback(async (): Promise<QueueStatsSnapshot | null> => {
     try {
       const repository = getSyncRepository();
       const stats = await repository.getStats();
@@ -65,8 +72,15 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       setFailedCount(stats.failedCount);
       setBlockedCount(stats.blockedCount);
       setRecentQueueItems(recentItems);
+      return {
+        pendingCount: stats.pendingCount,
+        failedCount: stats.failedCount,
+        blockedCount: stats.blockedCount,
+        recentQueueItems: recentItems,
+      };
     } catch (error) {
       console.warn('[syncStatus] Failed to load queue stats:', error);
+      return null;
     }
   }, []);
 
@@ -92,12 +106,13 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     }
 
     if (!isOnline) {
+      const queueStats = await refreshQueueStats();
+      const hasPendingChanges = (queueStats?.pendingCount ?? pendingCount) > 0;
       setLastMessage(
-        pendingCount > 0
+        hasPendingChanges
           ? i18n.t('settings.syncPendingOffline', 'Your notes are saved locally and will sync when you are back online.')
           : i18n.t('settings.offlineReadOnly', 'You are offline right now. Cloud sync will resume when you reconnect.')
       );
-      await refreshQueueStats();
       return;
     }
 
@@ -120,13 +135,14 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       setLastMessage(null);
 
       const result = await syncNotes(currentUser, notes, { mode });
-      await refreshQueueStats();
+      const queueStats = await refreshQueueStats();
+      const hasPendingChanges = (queueStats?.pendingCount ?? pendingCount) > 0;
 
       if (result.status === 'success') {
         setStatus('success');
         setLastSyncedAt(new Date().toISOString());
         setLastMessage(
-          pendingCount > 0
+          hasPendingChanges
             ? i18n.t('settings.syncPendingOffline', 'Your notes are saved locally and will sync when you are back online.')
             : result.message ?? null
         );
@@ -159,7 +175,11 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
   const queueSync = useCallback(
     (immediate = false, mode: SyncMode = 'incremental') => {
-      if (!isReady || !isAuthAvailable || !user || loading || !syncEnabledState || !isSyncPrefReady || !isOnline) {
+      if (!isReady || !isAuthAvailable || !user || loading || !syncEnabledState || !isSyncPrefReady) {
+        return;
+      }
+
+      if (!isOnline && !immediate) {
         return;
       }
 

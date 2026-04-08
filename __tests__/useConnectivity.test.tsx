@@ -52,7 +52,7 @@ describe('useConnectivity', () => {
     appStateListener = null;
   });
 
-  it('refreshes on mount, app foreground, and the polling interval', async () => {
+  it('refreshes on mount and app foreground', async () => {
     const { result } = renderHook(() => useConnectivity(), { wrapper });
 
     await waitFor(() => {
@@ -67,14 +67,6 @@ describe('useConnectivity', () => {
 
     await waitFor(() => {
       expect(mockRefresh).toHaveBeenCalledTimes(2);
-    });
-
-    await act(async () => {
-      jest.advanceTimersByTime(15_000);
-    });
-
-    await waitFor(() => {
-      expect(mockRefresh).toHaveBeenCalledTimes(3);
     });
   });
 });

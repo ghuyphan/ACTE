@@ -35,12 +35,16 @@ export function scheduleOnIdle(
     };
   }
 
+  const fallbackDelayMs =
+    typeof options?.timeout === 'number' && Number.isFinite(options.timeout)
+      ? Math.max(0, options.timeout)
+      : 0;
   const timeoutId = setTimeout(() => {
     callback({
-      didTimeout: false,
+      didTimeout: fallbackDelayMs > 0,
       timeRemaining: () => 0,
     });
-  }, 0);
+  }, fallbackDelayMs);
 
   return {
     cancel: () => {

@@ -294,6 +294,29 @@ describe('useSubscription', () => {
     });
   });
 
+  it('keeps the last known entitlement while the device is offline', async () => {
+    mockPurchases.getCustomerInfo.mockResolvedValue({
+      entitlements: { active: { noto_pro: {} } },
+    } as any);
+
+    const hook = renderHook(() => useSubscription(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.tier).toBe('plus');
+      expect(hook.result.current.hasProEntitlement).toBe(true);
+    });
+
+    await act(async () => {
+      mockConnectivityState.status = 'offline';
+      mockConnectivityState.isOnline = false;
+      mockConnectivityState.isInternetReachable = false;
+      hook.rerender({});
+    });
+
+    expect(hook.result.current.tier).toBe('plus');
+    expect(hook.result.current.hasProEntitlement).toBe(true);
+  });
+
   it('reports restore as inactive when no plus entitlement is found', async () => {
     mockPurchases.restorePurchases.mockResolvedValue({
       entitlements: { active: {} },

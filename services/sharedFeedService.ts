@@ -19,7 +19,6 @@ import {
   uploadPhotoToStorage,
   uploadPairedVideoToStorage,
 } from './remoteMedia';
-import { getPairedVideoFileExtension } from './livePhotoStorage';
 import {
   clearRemoteStickerAssetRefs,
   parseNoteStickerPlacements,
@@ -38,6 +37,14 @@ import {
   setStoredInviteToken,
 } from './inviteTokenStorage';
 import { sendSocialNotificationEvent } from './socialPushService';
+import {
+  buildNewRemoteArtifacts,
+  buildRemovedRemoteArtifacts,
+  getRemotePairedVideoPath,
+  getRemoteStickerAssetPaths,
+  normalizeRemoteArtifactPath,
+  normalizeRemoteEntityIds,
+} from './remoteArtifactUtils';
 
 export interface FriendConnection {
   userId: string;
@@ -60,10 +67,6 @@ export interface FriendInvite {
   acceptedAt: string | null;
   expiresAt: string | null;
   url: string;
-}
-
-function getRemotePairedVideoPath(basePath: string, localUri: string | null | undefined) {
-  return `${basePath}.motion${getPairedVideoFileExtension(localUri)}`;
 }
 
 export interface SharedPost {
@@ -191,72 +194,6 @@ function getDisplayName(user: AppUser) {
   return getUserDisplayName(user);
 }
 
-function normalizeRemoteArtifactPath(path: string | null | undefined) {
-  const normalizedPath = typeof path === 'string' ? path.trim() : '';
-  return normalizedPath || null;
-}
-
-function normalizeRemoteEntityIds(ids: Iterable<string | null | undefined>) {
-  return Array.from(
-    new Set(
-      Array.from(ids)
-        .map((value) => (typeof value === 'string' ? value.trim() : ''))
-        .filter(Boolean)
-    )
-  );
-}
-
-function getRemoteStickerAssetPaths(stickerPlacementsJson: string | null | undefined) {
-  return Array.from(
-    new Set(
-      parseNoteStickerPlacements(stickerPlacementsJson)
-        .map((placement) => normalizeRemoteArtifactPath(placement.asset.remotePath))
-        .filter((path): path is string => Boolean(path))
-    )
-  );
-}
-
-function buildNewRemoteArtifacts(
-  next: RemoteArtifactSnapshot,
-  previous: RemoteArtifactSnapshot | null | undefined
-) {
-  const previousStickerPaths = new Set(getRemoteStickerAssetPaths(previous?.stickerPlacementsJson));
-  return {
-    photoPath:
-      normalizeRemoteArtifactPath(next.photoPath) !== normalizeRemoteArtifactPath(previous?.photoPath)
-        ? normalizeRemoteArtifactPath(next.photoPath)
-        : null,
-    pairedVideoPath:
-      normalizeRemoteArtifactPath(next.pairedVideoPath) !== normalizeRemoteArtifactPath(previous?.pairedVideoPath)
-        ? normalizeRemoteArtifactPath(next.pairedVideoPath)
-        : null,
-    stickerPaths: getRemoteStickerAssetPaths(next.stickerPlacementsJson).filter(
-      (path) => !previousStickerPaths.has(path)
-    ),
-  };
-}
-
-function buildRemovedRemoteArtifacts(
-  previous: RemoteArtifactSnapshot | null | undefined,
-  next: RemoteArtifactSnapshot | null | undefined
-) {
-  const nextStickerPaths = new Set(getRemoteStickerAssetPaths(next?.stickerPlacementsJson));
-  return {
-    photoPath:
-      normalizeRemoteArtifactPath(previous?.photoPath) !== normalizeRemoteArtifactPath(next?.photoPath)
-        ? normalizeRemoteArtifactPath(previous?.photoPath)
-        : null,
-    pairedVideoPath:
-      normalizeRemoteArtifactPath(previous?.pairedVideoPath) !==
-      normalizeRemoteArtifactPath(next?.pairedVideoPath)
-        ? normalizeRemoteArtifactPath(previous?.pairedVideoPath)
-        : null,
-    stickerPaths: getRemoteStickerAssetPaths(previous?.stickerPlacementsJson).filter(
-      (path) => !nextStickerPaths.has(path)
-    ),
-  };
-}
-
 async function cleanupRemoteArtifacts(
   bucket: string,
   artifacts: {
@@ -310,6 +247,21 @@ function getReusableSharedPostCleanupArtifacts(artifacts: {
     photoPath: artifacts.photoPath ?? null,
     pairedVideoPath: artifacts.pairedVideoPath ?? null,
   };
+}
+
+async function clearLocalActiveInviteState(userUid: string) {
+  await Promise.all([
+    clearStoredInviteToken(userUid).catch(() => undefined),
+    replaceCachedActiveInvite(userUid, null).catch(() => undefined),
+  ]);
+}
+
+async function persistLocalActiveInvite(userUid: string, invite: FriendInvite) {
+  await setStoredInviteToken(userUid, {
+    inviteId: invite.id,
+    token: invite.token,
+  });
+  await replaceCachedActiveInvite(userUid, invite).catch(() => undefined);
 }
 
 function collectDeletedIds<Row extends Record<string, unknown>>(
@@ -657,10 +609,7 @@ export async function getActiveFriendInvite(user: AppUser): Promise<FriendInvite
 
   const invite = ((data ?? []) as FriendInviteRow[]).find((item) => isInviteActive(item));
   if (!invite) {
-    await Promise.all([
-      clearStoredInviteToken(user.id).catch(() => undefined),
-      replaceCachedActiveInvite(user.id, null).catch(() => undefined),
-    ]);
+    await clearLocalActiveInviteState(user.id);
     return null;
   }
 
@@ -884,13 +833,8 @@ export async function createFriendInvite(user: AppUser): Promise<FriendInvite> {
     throw error;
   }
 
-  await setStoredInviteToken(user.id, {
-    inviteId,
-    token: inviteToken,
-  });
-
   const localInvite = mapInvite(nextInvite, inviteToken);
-  await replaceCachedActiveInvite(user.id, localInvite).catch(() => undefined);
+  await persistLocalActiveInvite(user.id, localInvite);
   return localInvite;
 }
 
@@ -908,10 +852,7 @@ export async function revokeFriendInvite(user: AppUser, inviteId: string): Promi
     throw error;
   }
 
-  await Promise.all([
-    clearStoredInviteToken(user.id).catch(() => undefined),
-    replaceCachedActiveInvite(user.id, null).catch(() => undefined),
-  ]);
+  await clearLocalActiveInviteState(user.id);
 }
 
 export async function acceptFriendInvite(

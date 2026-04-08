@@ -22,6 +22,7 @@ import {
   mapOverlayTokens,
 } from './overlayTokens';
 import type { MapFilterState, MapFilterType } from '../../hooks/map/mapDomain';
+import { Shadows } from '../../constants/theme';
 
 interface MapFilterBarProps {
   filterState: MapFilterState;
@@ -49,8 +50,13 @@ function FilterChip({ label, active, onPress, icon, testID, reduceMotionEnabled 
   const { colors, isDark } = useTheme();
   const activeProgress = useSharedValue(active ? 1 : 0);
   const pressScale = useSharedValue(1);
-  const inactiveChipBackground = getOverlayMutedFillColor(isDark);
-  const inactiveChipBorderColor = getOverlayBorderColor(isDark);
+  const isAndroid = Platform.OS === 'android';
+  const inactiveChipBackground = isAndroid
+    ? colors.androidTabShellMutedBackground
+    : getOverlayMutedFillColor(isDark);
+  const inactiveChipBorderColor = isAndroid
+    ? colors.androidTabShellMutedBorder
+    : getOverlayBorderColor(isDark);
 
   useEffect(() => {
     activeProgress.value = reduceMotionEnabled
@@ -68,13 +74,13 @@ function FilterChip({ label, active, onPress, icon, testID, reduceMotionEnabled 
       [0, 1],
       [
         inactiveChipBackground,
-        `${colors.primary}1A`,
+        isAndroid ? colors.androidTabShellSelectedBackground : `${colors.primary}1A`,
       ]
     ),
     borderColor: interpolateColor(
       activeProgress.value,
       [0, 1],
-      [inactiveChipBorderColor, `${colors.primary}55`]
+      [inactiveChipBorderColor, isAndroid ? colors.androidTabShellSelectedBorder : `${colors.primary}55`]
     ),
   }));
 
@@ -131,6 +137,7 @@ export default function MapFilterBar({
 }: MapFilterBarProps) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const isAndroid = Platform.OS === 'android';
 
   const chips = useMemo(
     () => [
@@ -185,9 +192,11 @@ export default function MapFilterBar({
         testID="map-top-header"
         style={[
           styles.container,
+          isAndroid ? styles.containerAndroidShadow : null,
           {
-            borderColor: getOverlayBorderColor(isDark),
-            backgroundColor: getOverlayFallbackColor(isDark),
+            borderColor: isAndroid ? colors.androidTabShellBorder : getOverlayBorderColor(isDark),
+            backgroundColor: isAndroid ? colors.androidTabShellBackground : getOverlayFallbackColor(isDark),
+            shadowColor: isAndroid ? colors.androidTabShellShadow : undefined,
           },
         ]}
       >
@@ -204,7 +213,7 @@ export default function MapFilterBar({
               StyleSheet.absoluteFill,
               styles.androidScrim,
               {
-                backgroundColor: isDark ? 'rgba(24,24,28,0.24)' : 'rgba(255,255,255,0.44)',
+                backgroundColor: colors.androidTabShellScrim,
               },
             ]}
           />
@@ -272,6 +281,9 @@ const styles = StyleSheet.create({
     minHeight: mapOverlayTokens.overlayMinHeight,
     overflow: 'hidden',
     ...mapOverlayTokens.overlayShadow,
+  },
+  containerAndroidShadow: {
+    ...Shadows.androidChrome,
   },
   androidScrim: {
     borderRadius: mapOverlayTokens.overlayRadius,

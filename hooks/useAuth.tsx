@@ -1,6 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import {
   GOOGLE_IOS_CLIENT_ID,
@@ -251,6 +251,7 @@ async function syncUserProfile(session: Session | null) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [isReady, setIsReady] = useState(() => !isSupportedPlatform());
+  const authSyncRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (!isSupportedPlatform() || !isGoogleSigninConfigured) {
@@ -271,49 +272,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let active = true;
+    const syncAuthSession = async (
+      session: Session | null,
+      errorContext: 'load Supabase session' | 'sync auth state',
+      requestId: number
+    ) => {
+      try {
+        if (!session) {
+          await unregisterCurrentSocialPushToken().catch(() => undefined);
+        }
 
-    void supabase.auth
-      .getSession()
-      .then(async ({ data, error }) => {
+        const nextUser = await syncUserProfile(session);
+        if (!active || authSyncRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setUser(nextUser);
+        setIsReady(true);
+      } catch (error) {
+        console.warn(`[auth] Failed to ${errorContext}:`, error);
+        if (!active || authSyncRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        const fallbackUser = mapSupabaseUser(session?.user);
+        setActiveNotesScope(fallbackUser?.uid ?? LOCAL_NOTES_SCOPE);
+        setUser(fallbackUser);
+        setIsReady(true);
+      }
+    };
+
+    void (async () => {
+      const requestId = ++authSyncRequestIdRef.current;
+
+      try {
+        const { data, error } = await supabase.auth.getSession();
         if (error) {
           throw error;
         }
 
-        const nextUser = await syncUserProfile(data.session ?? null);
-        if (active) {
-          setUser(nextUser);
-          setIsReady(true);
-        }
-      })
-      .catch((error) => {
+        await syncAuthSession(data.session ?? null, 'load Supabase session', requestId);
+      } catch (error) {
         console.warn('[auth] Failed to load Supabase session:', error);
-        if (active) {
+        if (active && authSyncRequestIdRef.current === requestId) {
           setUser(null);
+          setActiveNotesScope(LOCAL_NOTES_SCOPE);
           setIsReady(true);
         }
-      });
+      }
+    })();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      void syncUserProfile(session)
-        .then((nextUser) => {
-          if (!active) {
-            return;
-          }
-
-          setUser(nextUser);
-          setIsReady(true);
-        })
-        .catch((error) => {
-          console.warn('[auth] Failed to sync auth state:', error);
-          if (active) {
-            const fallbackUser = mapSupabaseUser(session?.user);
-            setActiveNotesScope(fallbackUser?.uid ?? LOCAL_NOTES_SCOPE);
-            setUser(fallbackUser);
-            setIsReady(true);
-          }
-        });
+      const requestId = ++authSyncRequestIdRef.current;
+      void syncAuthSession(session, 'sync auth state', requestId);
     });
 
     return () => {

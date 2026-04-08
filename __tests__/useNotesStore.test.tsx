@@ -240,6 +240,32 @@ describe('useNotesStore', () => {
     expect(mockSyncGeofenceRegions).toHaveBeenCalled();
   });
 
+  it('falls back to in-memory caption matching when photo captions are missing from db search results', async () => {
+    mockNotesDb = [
+      {
+        id: 'photo-42',
+        type: 'photo',
+        content: 'file:///photo-caption.jpg',
+        caption: 'Golden sunset on the river',
+        locationName: 'District 2',
+        latitude: 10,
+        longitude: 106,
+        radius: 150,
+        isFavorite: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: null,
+      },
+    ];
+
+    const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const searchResult = await result.current.searchNotes('sunset');
+
+    expect(searchResult).toHaveLength(1);
+    expect(searchResult[0]?.id).toBe('photo-42');
+  });
+
   it('deletes a photo note and clears all notes', async () => {
     mockNotesDb = [
       {

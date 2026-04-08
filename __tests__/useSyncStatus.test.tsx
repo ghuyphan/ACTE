@@ -2,10 +2,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { AppState, AppStateStatus } from 'react-native';
 import { ReactNode } from 'react';
+import i18n from '../constants/i18n';
 import { SyncStatusProvider, useSyncStatus } from '../hooks/useSyncStatus';
 
 const mockSyncNotes = jest.fn<Promise<unknown>, [unknown, unknown, unknown?]>();
 const mockRefreshNotes = jest.fn<Promise<void>, [boolean?]>(async () => undefined);
+const mockQueueStats = {
+  pendingCount: 0,
+  failedCount: 0,
+  blockedCount: 0,
+};
 
 let appStateListener: ((state: AppStateStatus) => void) | null = null;
 
@@ -38,18 +44,19 @@ const mockNotesState = {
   loading: false,
   refreshNotes: (showLoading?: boolean) => mockRefreshNotes(showLoading),
 };
+const mockConnectivityState = {
+  status: 'online' as 'online' | 'offline' | 'unknown',
+  isOnline: true,
+  isInternetReachable: true as boolean | null,
+  lastChangedAt: null as string | null,
+};
 
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => mockAuthState,
 }));
 
 jest.mock('../hooks/useConnectivity', () => ({
-  useConnectivity: () => ({
-    status: 'online',
-    isOnline: true,
-    isInternetReachable: true,
-    lastChangedAt: null,
-  }),
+  useConnectivity: () => mockConnectivityState,
 }));
 
 jest.mock('../hooks/useNotes', () => ({
@@ -61,9 +68,9 @@ jest.mock('../services/syncService', () => ({
     mockSyncNotes(user, notes, options),
   getSyncRepository: () => ({
     getStats: async () => ({
-      pendingCount: 0,
-      failedCount: 0,
-      blockedCount: 0,
+      pendingCount: mockQueueStats.pendingCount,
+      failedCount: mockQueueStats.failedCount,
+      blockedCount: mockQueueStats.blockedCount,
     }),
     listRecent: async () => [],
   }),
@@ -100,6 +107,13 @@ beforeEach(() => {
   mockAuthState.isAuthAvailable = true;
   mockNotesState.notes = [];
   mockNotesState.loading = false;
+  mockConnectivityState.status = 'online';
+  mockConnectivityState.isOnline = true;
+  mockConnectivityState.isInternetReachable = true;
+  mockConnectivityState.lastChangedAt = null;
+  mockQueueStats.pendingCount = 0;
+  mockQueueStats.failedCount = 0;
+  mockQueueStats.blockedCount = 0;
   mockSyncNotes.mockResolvedValue({
     status: 'success',
     syncedCount: 0,
@@ -272,5 +286,67 @@ describe('useSyncStatus', () => {
     await waitFor(() => {
       expect(mockSyncNotes).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('uses refreshed queue stats when composing the post-sync status message', async () => {
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+    mockQueueStats.pendingCount = 2;
+    mockSyncNotes.mockResolvedValue({
+      status: 'success',
+      message: 'Everything synced.',
+      syncedCount: 1,
+      importedCount: 0,
+      uploadedCount: 1,
+      failedCount: 0,
+    });
+
+    const { result } = renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
+
+    await waitFor(() => {
+      expect(mockSyncNotes).toHaveBeenCalled();
+      expect(result.current.lastMessage).toBe(
+        i18n.t(
+          'settings.syncPendingOffline',
+          'Your notes are saved locally and will sync when you are back online.'
+        )
+      );
+    });
+  });
+
+  it('surfaces the offline pending message for a manual sync request', async () => {
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+    mockConnectivityState.status = 'offline';
+    mockConnectivityState.isOnline = false;
+    mockConnectivityState.isInternetReachable = false;
+    mockQueueStats.pendingCount = 1;
+
+    const { result } = renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
+
+    await act(async () => {
+      result.current.requestSync();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.lastMessage).toBe(
+        i18n.t(
+          'settings.syncPendingOffline',
+          'Your notes are saved locally and will sync when you are back online.'
+        )
+      );
+    });
+    expect(mockSyncNotes).not.toHaveBeenCalled();
   });
 });

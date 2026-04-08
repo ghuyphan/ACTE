@@ -21,6 +21,7 @@ import {
   replaceNoteInCollection,
   updateNoteInCollection,
 } from '../../services/noteMutationHelpers';
+import { filterNotesByQuery } from '../../services/noteSearch';
 import {
   clearGeofenceRegions,
   skipImmediateReminderForNewNote,
@@ -81,6 +82,13 @@ function useNotesStoreValue(): NotesStoreValue {
     },
     [scheduleWidgetUpdate]
   );
+
+  const syncGeofencesForNotes = useCallback((reason: string, nextNotes?: Note[]) => {
+    const options = nextNotes ? { notes: nextNotes } : undefined;
+    void syncGeofenceRegions(options).catch((error) => {
+      console.warn(`Failed to sync geofence regions after ${reason}:`, error);
+    });
+  }, []);
 
   const deletePhotoFileIfPresent = useCallback(async (note: Note | null | undefined) => {
     const photoUri = getNotePhotoUri(note);
@@ -164,11 +172,9 @@ function useNotesStoreValue(): NotesStoreValue {
     setNotes([]);
     setLoading(true);
     void refreshNotes(true, { updateWidget: true }).finally(() => {
-      void syncGeofenceRegions().catch((error) => {
-        console.warn('Failed to sync geofence regions after scope change:', error);
-      });
+      syncGeofencesForNotes('scope change');
     });
-  }, [authReady, refreshNotes, user?.uid]);
+  }, [authReady, refreshNotes, syncGeofencesForNotes, user?.uid]);
 
   useEffect(() => () => {
     if (widgetSyncTimeoutRef.current) {
@@ -193,13 +199,11 @@ function useNotesStoreValue(): NotesStoreValue {
       void skipImmediateReminderForNewNote(note.id).catch((error) => {
         console.warn('Failed to suppress immediate reminder for new note:', error);
       });
-      void syncGeofenceRegions({ notes: nextNotes }).catch((error) => {
-        console.warn('Failed to sync geofence regions after note creation:', error);
-      });
+      syncGeofencesForNotes('note creation', nextNotes);
 
       return note;
     },
-    [commitNotes]
+    [commitNotes, syncGeofencesForNotes]
   );
 
   const updateNote = useCallback(
@@ -215,12 +219,9 @@ function useNotesStoreValue(): NotesStoreValue {
       });
       const nextNotes = updateNoteInCollection(notesRef.current, id, updates);
       commitNotes(nextNotes);
-
-      void syncGeofenceRegions({ notes: nextNotes }).catch((error) => {
-        console.warn('Failed to sync geofence regions after note update:', error);
-      });
+      syncGeofencesForNotes('note update', nextNotes);
     },
-    [commitNotes]
+    [commitNotes, syncGeofencesForNotes]
   );
 
   const toggleFavorite = useCallback(
@@ -242,16 +243,39 @@ function useNotesStoreValue(): NotesStoreValue {
         isFavorite: newValue,
       }));
       commitNotes(nextNotes);
-      void syncGeofenceRegions({ notes: nextNotes }).catch((error) => {
-        console.warn('Failed to sync geofence regions after favorite change:', error);
-      });
+      syncGeofencesForNotes('favorite change', nextNotes);
       return newValue;
     },
-    [commitNotes]
+    [commitNotes, syncGeofencesForNotes]
   );
 
   const searchNotes = useCallback(async (query: string) => {
-    return dbSearchNotes(query);
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      return notesRef.current;
+    }
+
+    const dbResults = await dbSearchNotes(trimmedQuery);
+    const fallbackMatches = filterNotesByQuery(notesRef.current, trimmedQuery);
+
+    if (fallbackMatches.length === 0) {
+      return dbResults;
+    }
+
+    if (dbResults.length === 0) {
+      return fallbackMatches;
+    }
+
+    const mergedResults = [...dbResults];
+    const seenIds = new Set(dbResults.map((note) => note.id));
+    for (const note of fallbackMatches) {
+      if (!seenIds.has(note.id)) {
+        seenIds.add(note.id);
+        mergedResults.push(note);
+      }
+    }
+
+    return mergedResults;
   }, []);
 
   const deleteNote = useCallback(
@@ -270,12 +294,9 @@ function useNotesStoreValue(): NotesStoreValue {
       commitNotes(nextNotes);
 
       await deletePhotoFileIfPresent(note);
-
-      void syncGeofenceRegions({ notes: nextNotes }).catch((error) => {
-        console.warn('Failed to sync geofence regions after note deletion:', error);
-      });
+      syncGeofencesForNotes('note deletion', nextNotes);
     },
-    [commitNotes, deletePhotoFileIfPresent]
+    [commitNotes, deletePhotoFileIfPresent, syncGeofencesForNotes]
   );
 
   const deleteAllNotes = useCallback(async () => {

@@ -7,13 +7,8 @@ const mockConfigureNotificationChannels = jest.fn();
 const mockSyncGeofenceRegions = jest.fn();
 const mockRunMediaCacheEviction = jest.fn();
 const mockScheduleOnIdle = jest.fn();
-const mockGetInitialURL = jest.fn();
 const mockGetCachedStartupRoute = jest.fn();
 const mockLoadStartupRoute = jest.fn();
-
-jest.mock('expo-linking', () => ({
-  getInitialURL: () => mockGetInitialURL(),
-}));
 
 jest.mock('../services/database', () => ({
   getDB: () => mockGetDB(),
@@ -58,7 +53,6 @@ beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
 
-  mockGetInitialURL.mockResolvedValue(null);
   mockGetCachedStartupRoute.mockReturnValue(null);
   mockLoadStartupRoute.mockResolvedValue('/(tabs)');
   mockScheduleOnIdle.mockImplementation((callback: () => void) => {
@@ -86,12 +80,13 @@ describe('useAppStartupBootstrap', () => {
     expect(mockConfigureNotificationChannels).toHaveBeenCalledTimes(1);
     expect(mockSyncGeofenceRegions).not.toHaveBeenCalled();
     expect(mockRunMediaCacheEviction).not.toHaveBeenCalled();
-    expect(result.current.initialUrlResolved).toBe(false);
 
-    deferredDb.resolve({});
+    await act(async () => {
+      deferredDb.resolve({});
+      await deferredDb.promise;
+    });
 
     await waitFor(() => {
-      expect(result.current.initialUrlResolved).toBe(true);
       expect(result.current.startupTarget).toBe('/(tabs)');
     });
 

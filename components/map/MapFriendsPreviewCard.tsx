@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -193,7 +194,7 @@ export default function MapFriendsPreviewCard({
           pointerEvents="none"
           style={[
             StyleSheet.absoluteFill,
-            { backgroundColor: isDark ? 'rgba(24,24,28,0.24)' : 'rgba(255,255,255,0.44)' },
+            { backgroundColor: Platform.OS === 'android' ? colors.androidTabShellScrim : isDark ? 'rgba(24,24,28,0.24)' : 'rgba(255,255,255,0.44)' },
           ]}
         />
         {isOlderIOS ? (

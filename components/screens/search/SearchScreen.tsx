@@ -3,7 +3,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
-import { useCallback, useDeferredValue, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout, Shadows } from '../../../constants/theme';
+import { useAndroidBottomTabOverlayInset } from '../../../hooks/useAndroidBottomTabOverlayInset';
+import { useAndroidTabSearchState } from '../../../hooks/useAndroidTabSearchState';
 import { CardGradients, useTheme } from '../../../hooks/useTheme';
 import { useNotesStore } from '../../../hooks/useNotes';
 import { Note } from '../../../services/database';
@@ -32,7 +34,8 @@ function hashToIndex(str: string, max: number): number {
 
 function getPreviewText(note: Note, photoLabel: string, emptyLabel: string) {
   if (note.type === 'photo') {
-    return photoLabel;
+    const caption = note.caption?.trim();
+    return caption?.length ? caption : photoLabel;
   }
 
   const normalized = note.content.trim();
@@ -46,14 +49,25 @@ export default function SearchScreen() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
+  const androidTabSearch = useAndroidTabSearchState();
   const { notes, loading, searchNotes } = useNotesStore();
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
   const [, startSearchTransition] = useTransition();
-  const deferredQuery = useDeferredValue(query);
-  const hasQuery = query.trim().length > 0;
+  const activeQuery = Platform.OS === 'android' ? androidTabSearch.query : query;
+  const deferredQuery = useDeferredValue(activeQuery);
+  const hasQuery = activeQuery.trim().length > 0;
   const hasDeferredQuery = deferredQuery.trim().length > 0;
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    setQuery(androidTabSearch.query);
+  }, [androidTabSearch.query]);
 
   useEffect(() => {
     if (!hasDeferredQuery) {
@@ -190,16 +204,19 @@ export default function SearchScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen
         options={{
+          headerShown: Platform.OS !== 'android',
           title: '',
           headerShadowVisible: false,
           headerTransparent: true,
         }}
       />
-      <Stack.SearchBar
-        hideWhenScrolling={false}
-        placeholder={t('home.searchPlaceholder', 'Search notes...')}
-        onChangeText={(event) => handleSearchChange(event.nativeEvent.text)}
-      />
+      {Platform.OS === 'ios' ? (
+        <Stack.SearchBar
+          hideWhenScrolling={false}
+          placeholder={t('home.searchPlaceholder', 'Search notes...')}
+          onChangeText={(event) => handleSearchChange(event.nativeEvent.text)}
+        />
+      ) : null}
 
       {loading ? (
         <View style={styles.centerWrap}>
@@ -211,8 +228,8 @@ export default function SearchScreen() {
             styles.centerWrap,
             styles.emptyScreen,
             {
-              paddingTop: insets.top + 10,
-              paddingBottom: insets.bottom + 20,
+              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : insets.top + 10,
+              paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
             },
           ]}
         >
@@ -249,7 +266,10 @@ export default function SearchScreen() {
           automaticallyAdjustsScrollIndicatorInsets={false}
           contentContainerStyle={[
             styles.listContent,
-            { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 },
+            {
+              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : insets.top + 10,
+              paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
+            },
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}

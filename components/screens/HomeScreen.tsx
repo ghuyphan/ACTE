@@ -1,23 +1,21 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useIsFocused, useScrollToTop } from '@react-navigation/native';
 import * as FileSystem from '../../utils/fileSystem';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Href, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AppState,
   Keyboard,
   Platform,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { PAYWALL_RESULT } from 'react-native-purchases-ui';
-import { cancelAnimation, runOnJS, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../sheets/AppSheetAlert';
 import CaptureCard, { type CaptureCardHandle } from '../home/CaptureCard';
@@ -39,6 +37,7 @@ import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
+import { useAndroidBottomTabOverlayInset } from '../../hooks/useAndroidBottomTabOverlayInset';
 import {
   canCreatePhotoNote,
   countPhotoNotes,
@@ -59,9 +58,8 @@ import {
   isPreviewablePremiumNoteColor,
   PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
 } from '../../services/premiumNoteFinish';
-import { generateNoteId, type Note } from '../../services/database';
+import { generateNoteId } from '../../services/database';
 import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
-import { isIOS26OrNewer } from '../../utils/platform';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
 import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
@@ -78,7 +76,8 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const reduceMotionEnabled = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { notes, loading, refreshNotes, createNote, searchNotes: searchLocalNotes } = useNotesStore();
+  const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
+  const { notes, loading, refreshNotes, createNote } = useNotesStore();
   const { user, isAuthAvailable } = useAuth();
   const {
     enabled: sharedEnabled,
@@ -121,12 +120,8 @@ export default function HomeScreen() {
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
   const isScreenFocused = useIsFocused();
-  const useNativeTabSearch = isIOS26OrNewer;
-  const useInlineHeaderSearch = !useNativeTabSearch;
 
   const [refreshing, setRefreshing] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveButtonState, setSaveButtonState] = useState<SaveButtonState>('idle');
   const [suppressedHomeNoteIds, setSuppressedHomeNoteIds] = useState<string[]>([]);
@@ -151,9 +146,6 @@ export default function HomeScreen() {
   const [pendingSavedNoteScrollTargetId, setPendingSavedNoteScrollTargetId] = useState<string | null>(null);
   const [hasSeenLivePhotoCameraHint, setHasSeenLivePhotoCameraHint] = useState<boolean | null>(null);
   const [showLivePhotoCameraHint, setShowLivePhotoCameraHint] = useState(false);
-  const [searchedNotes, setSearchedNotes] = useState<Note[]>([]);
-  const [, startSearchTransition] = useTransition();
-  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const searchAnim = useSharedValue(0);
   const flatListRef = useRef<any>(null);
@@ -269,31 +261,6 @@ export default function HomeScreen() {
   const snapHeight =
     shouldLockCapturePage && lockedCaptureSnapHeight != null ? lockedCaptureSnapHeight : liveSnapHeight;
 
-  useEffect(() => {
-    if (!deferredSearchQuery.trim()) {
-      setSearchedNotes(notes);
-      return;
-    }
-
-    let cancelled = false;
-
-    void searchLocalNotes(deferredSearchQuery)
-      .then((results) => {
-        if (!cancelled) {
-          setSearchedNotes(results);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.warn('Home search query failed:', error);
-          setSearchedNotes([]);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [deferredSearchQuery, notes, searchLocalNotes]);
   const friendPosts = useMemo(
     () => sharedPosts.filter((post) => post.authorUid !== user?.uid),
     [sharedPosts, user?.uid]
@@ -392,8 +359,8 @@ export default function HomeScreen() {
     [suppressedHomeNoteIds]
   );
   const isFriendsFilterActive = useMemo(
-    () => isFriendsFilterEnabled && !(useInlineHeaderSearch && isSearching),
-    [isFriendsFilterEnabled, isSearching, useInlineHeaderSearch]
+    () => isFriendsFilterEnabled,
+    [isFriendsFilterEnabled]
   );
 
   const displayedNotes = useMemo(() => {
@@ -401,23 +368,19 @@ export default function HomeScreen() {
       return [];
     }
 
-    const baseNotes = useInlineHeaderSearch && isSearching ? searchedNotes : notes;
-
     if (suppressedHomeNoteIdSet.size === 0) {
-      return baseNotes;
+      return notes;
     }
 
-    return baseNotes.filter((note) => !suppressedHomeNoteIdSet.has(note.id));
-  }, [isFriendsFilterActive, isSearching, notes, searchedNotes, suppressedHomeNoteIdSet, useInlineHeaderSearch]);
-  const hasSearchableNotes = notes.length > 0;
+    return notes.filter((note) => !suppressedHomeNoteIdSet.has(note.id));
+  }, [isFriendsFilterActive, notes, suppressedHomeNoteIdSet]);
   const cameraPermissionRequiresSettings =
     captureMode === 'camera' &&
     permission?.granted === false &&
     permission.canAskAgain === false;
   const visibleSharedPosts = useMemo(
-    () =>
-      useInlineHeaderSearch && isSearching ? [] : friendPosts,
-    [friendPosts, isSearching, useInlineHeaderSearch]
+    () => friendPosts,
+    [friendPosts]
   );
   const visibleFeedItems = useMemo(
     () => {
@@ -438,7 +401,6 @@ export default function HomeScreen() {
     },
     [archiveFeedItems, displayedNotes, friendPosts, notes, visibleSharedPosts]
   );
-
   useEffect(() => {
     if (friendPosts.length === 0 && isFriendsFilterEnabled) {
       setIsFriendsFilterEnabled(false);
@@ -699,16 +661,6 @@ export default function HomeScreen() {
         return undefined;
       }
 
-      if (useInlineHeaderSearch) {
-        Keyboard.dismiss();
-        cancelAnimation(searchAnim);
-        searchAnim.value = 0;
-        if (isSearching || searchQuery.length > 0) {
-          setIsSearching(false);
-          setSearchQuery('');
-        }
-      }
-
       const targetIndex = findHomeFeedItemIndex(archiveFeedItems, target);
       if (targetIndex < 0) {
         return undefined;
@@ -735,14 +687,10 @@ export default function HomeScreen() {
       archiveFeedItems,
       clearFeedFocus,
       consumeFeedFocus,
-      isSearching,
       loading,
       peekFeedFocus,
-      searchAnim,
-      searchQuery.length,
       sharedLoading,
       snapHeight,
-      useInlineHeaderSearch,
     ])
   );
 
@@ -1620,35 +1568,6 @@ export default function HomeScreen() {
     }
   }, [canImportFromLibrary, setCapturedPairedVideo, setSelectedPhotoFilterId, showDoneSheet, showPlusSheet, t]);
 
-  const handleOpenSearch = useCallback(() => {
-    if (!useInlineHeaderSearch || !hasSearchableNotes) {
-      return;
-    }
-
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIsSearching(true);
-    searchAnim.value = withTiming(1, { duration: 250 });
-    flatListRef.current?.scrollToOffset({ offset: snapHeight, animated: true });
-  }, [hasSearchableNotes, searchAnim, snapHeight, useInlineHeaderSearch]);
-
-  const handleCloseSearch = useCallback(() => {
-    if (!useInlineHeaderSearch) {
-      return;
-    }
-
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Keyboard.dismiss();
-    searchAnim.value = withTiming(0, { duration: 250 }, (finished) => {
-      if (!finished) {
-        return;
-      }
-
-      runOnJS(setIsSearching)(false);
-      runOnJS(setSearchQuery)('');
-    });
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-  }, [searchAnim, useInlineHeaderSearch]);
-
   const handleToggleCaptureMode = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     captureCardRef.current?.closeDecorateControls();
@@ -1684,12 +1603,6 @@ export default function HomeScreen() {
     [router]
   );
 
-  const handleSearchChange = useCallback((nextQuery: string) => {
-    startSearchTransition(() => {
-      setSearchQuery(nextQuery);
-    });
-  }, [startSearchTransition]);
-
   const handleCaptureTextEntryFocusChange = useCallback((focused: boolean) => {
     setIsCaptureTextEntryFocused(focused);
 
@@ -1713,7 +1626,7 @@ export default function HomeScreen() {
           ref={captureCardRef}
           snapHeight={snapHeight}
           topInset={insets.top}
-          isSearching={isSearching}
+          isSearching={false}
           captureMode={captureMode}
           cameraSessionKey={cameraSessionKey}
           captureScale={captureScale}
@@ -1824,7 +1737,6 @@ export default function HomeScreen() {
       isLivePhotoSaveGuardActive,
       isModeSwitchAnimating,
       isPurchaseInFlight,
-      isSearching,
       lockedPremiumNoteColorIds,
       needsCameraPermission,
       noteColor,
@@ -1861,6 +1773,7 @@ export default function HomeScreen() {
         <NotesFeed
           flatListRef={flatListRef}
           captureHeader={captureHeader}
+          emptyState={null}
           captureMode={captureMode}
           screenActive={isScreenFocused}
           items={visibleFeedItems}
@@ -1885,45 +1798,19 @@ export default function HomeScreen() {
             !isCaptureTextEntryFocused
           }
           capturePageLocked={shouldLockCapturePage}
+          bottomOverlayInset={bottomTabOverlayInset}
         />
-
-        {useInlineHeaderSearch && isSearching && searchedNotes.length === 0 && searchQuery.trim() ? (
-          <View
-            style={[
-              styles.center,
-              {
-                gap: 8,
-                backgroundColor: colors.background,
-                position: 'absolute',
-                top: snapHeight,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                zIndex: 10,
-              },
-            ]}
-          pointerEvents="none"
-        >
-          <Ionicons name="search-outline" size={48} color={colors.secondaryText} style={{ opacity: 0.5 }} />
-          <Text style={[styles.emptyTitle, { color: colors.text, marginTop: 12 }]}>
-            {t('home.noResults', 'No notes found')}
-          </Text>
-          <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-            {t('home.noResultsMsg', 'Try a different keyword')}
-          </Text>
-        </View>
-        ) : null}
       </View>
 
       <HomeHeaderSearch
         topInset={insets.top}
-        isSearching={isSearching}
+        isSearching={false}
         searchAnim={searchAnim}
-        searchQuery={searchQuery}
-        onSearchChange={handleSearchChange}
-        onOpenSearch={handleOpenSearch}
-        onCloseSearch={handleCloseSearch}
-        showSearchButton={useInlineHeaderSearch && hasSearchableNotes}
+        searchQuery=""
+        onSearchChange={() => {}}
+        onOpenSearch={() => {}}
+        onCloseSearch={() => {}}
+        showSearchButton={false}
         showSharedButton
         showNotesButton
         onOpenShared={handleOpenSharedManage}
@@ -1977,23 +1864,5 @@ const styles = StyleSheet.create({
   },
   captureItemWrapper: {
     width: '100%',
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 0,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 0,
-    fontFamily: 'Noto Sans',
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    fontFamily: 'Noto Sans',
   },
 });

@@ -80,7 +80,6 @@ describe('useMapScreenState', () => {
 
     await waitFor(() => {
       expect(result.current.nearbyItems[0]?.note.id).toBe('near');
-      expect(result.current.nearbyItems.some((item) => item.note.id === 'far')).toBe(false);
     });
 
     const farRegion: Region = {
@@ -96,7 +95,44 @@ describe('useMapScreenState', () => {
 
     await waitFor(() => {
       expect(result.current.nearbyItems[0]?.note.id).toBe('far');
-      expect(result.current.nearbyItems.some((item) => item.note.id === 'near')).toBe(false);
+    });
+  });
+
+  it('uses the map center instead of device location when the viewport changes', async () => {
+    const notes = [
+      makeNote({ id: 'near-location', latitude: 10.7601, longitude: 106.6601 }),
+      makeNote({ id: 'near-map-center', latitude: 11.0, longitude: 107.0 }),
+    ];
+
+    const { result } = renderHook(() =>
+      useMapScreenState({
+        notes,
+        location: {
+          coords: {
+            latitude: 10.7605,
+            longitude: 106.6605,
+            accuracy: 1,
+            altitude: null,
+            altitudeAccuracy: null,
+            heading: null,
+            speed: null,
+          },
+          timestamp: Date.now(),
+        } as any,
+      })
+    );
+
+    act(() => {
+      result.current.setVisibleRegion({
+        latitude: 11.0,
+        longitude: 107.0,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.nearbyItems[0]?.note.id).toBe('near-map-center');
     });
   });
 

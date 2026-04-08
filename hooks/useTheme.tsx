@@ -35,6 +35,17 @@ export interface ThemeColors {
     captureCameraOverlayBorder: string;
     captureCameraOverlayText: string;
     captureFlashOverlay: string;
+    androidTabShellBackground: string;
+    androidTabShellBorder: string;
+    androidTabShellShadow: string;
+    androidTabShellScrim: string;
+    androidTabShellMutedBackground: string;
+    androidTabShellMutedBorder: string;
+    androidTabShellSelectedBackground: string;
+    androidTabShellSelectedBorder: string;
+    androidTabShellSelectedGradient: [string, string];
+    androidTabShellActive: string;
+    androidTabShellInactive: string;
 }
 
 interface ThemeContextType {
@@ -74,6 +85,17 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
         captureCameraOverlayBorder: 'rgba(255,255,255,0.16)',
         captureCameraOverlayText: '#FFFDFC',
         captureFlashOverlay: 'rgba(255,250,242,0.96)',
+        androidTabShellBackground: 'rgba(255,251,246,0.88)',
+        androidTabShellBorder: 'rgba(113,86,26,0.18)',
+        androidTabShellShadow: 'rgba(107,79,14,0.1)',
+        androidTabShellScrim: 'rgba(255,255,255,0.44)',
+        androidTabShellMutedBackground: 'rgba(255,255,255,0.62)',
+        androidTabShellMutedBorder: 'rgba(113,86,26,0.1)',
+        androidTabShellSelectedBackground: 'rgba(255,255,255,0.88)',
+        androidTabShellSelectedBorder: 'rgba(113,86,26,0.1)',
+        androidTabShellSelectedGradient: ['rgba(255,255,255,0.94)', 'rgba(255,248,239,0.84)'],
+        androidTabShellActive: '#6D530F',
+        androidTabShellInactive: '#85786A',
     },
     dark: {
         background: '#000000',       // Pure OLED black
@@ -103,6 +125,17 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
         captureCameraOverlayBorder: 'rgba(255,255,255,0.14)',
         captureCameraOverlayText: '#FFF7E8',
         captureFlashOverlay: 'rgba(255,248,232,0.92)',
+        androidTabShellBackground: 'rgba(24,20,18,0.68)',
+        androidTabShellBorder: 'rgba(255,255,255,0.12)',
+        androidTabShellShadow: 'rgba(0,0,0,0.24)',
+        androidTabShellScrim: 'rgba(24,24,28,0.24)',
+        androidTabShellMutedBackground: 'rgba(255,247,232,0.1)',
+        androidTabShellMutedBorder: 'rgba(255,255,255,0.12)',
+        androidTabShellSelectedBackground: 'rgba(255,247,232,0.22)',
+        androidTabShellSelectedBorder: 'rgba(255,255,255,0.16)',
+        androidTabShellSelectedGradient: ['rgba(255,247,232,0.24)', 'rgba(255,247,232,0.12)'],
+        androidTabShellActive: '#FFF7E8',
+        androidTabShellInactive: 'rgba(255,247,232,0.68)',
     },
 };
 

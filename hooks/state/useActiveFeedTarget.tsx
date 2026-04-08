@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useMemo, useRef } from 'react';
 
 export type ActiveFeedTarget =
   | { id: string; kind: 'note' }
@@ -13,19 +13,19 @@ interface ActiveFeedTargetContextValue {
 const ActiveFeedTargetContext = createContext<ActiveFeedTargetContextValue | undefined>(undefined);
 
 export function ActiveFeedTargetProvider({ children }: { children: ReactNode }) {
-  const [activeFeedTarget, setActiveFeedTargetState] = useState<ActiveFeedTarget | null>(null);
+  const activeFeedTargetRef = useRef<ActiveFeedTarget | null>(null);
 
   const setActiveFeedTarget = useCallback((target: ActiveFeedTarget | null) => {
-    setActiveFeedTargetState(target);
+    activeFeedTargetRef.current = target;
   }, []);
 
   const clearActiveFeedTarget = useCallback(() => {
-    setActiveFeedTargetState(null);
+    activeFeedTargetRef.current = null;
   }, []);
 
   const peekActiveFeedTarget = useCallback(() => {
-    return activeFeedTarget;
-  }, [activeFeedTarget]);
+    return activeFeedTargetRef.current;
+  }, []);
 
   const value = useMemo<ActiveFeedTargetContextValue>(
     () => ({

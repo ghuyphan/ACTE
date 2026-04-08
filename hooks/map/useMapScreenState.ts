@@ -44,7 +44,6 @@ export function useMapScreenState({
   const [selectedNoteIndex, setSelectedNoteIndex] = useState(0);
   const [visibleRegion, setVisibleRegion] = useState<Region | null>(null);
   const [nearbyBrowseRegion, setNearbyBrowseRegion] = useState<Region | null>(null);
-  const [allowOffscreenResults, setAllowOffscreenResults] = useState(false);
   const lastMarkerTapAtRef = useRef(0);
   const ignoreNextMapPressUntilRef = useRef(0);
   const visibleRegionRef = useRef<Region | null>(null);
@@ -77,12 +76,10 @@ export function useMapScreenState({
         initialRegion,
         visibleRegion,
         nearbyBrowseRegion,
-        allowOffscreenResults,
         location,
         enableHeavyCalculations,
       }),
     [
-      allowOffscreenResults,
       enableHeavyCalculations,
       filteredNotes,
       initialRegion,
@@ -94,8 +91,6 @@ export function useMapScreenState({
   );
   const clusterNodes = viewportState.clusterNodes;
   const nearbyItems = viewportState.nearbyItems;
-  const allFilteredNearbyItems = viewportState.allFilteredNearbyItems;
-  const nearbyAnchor = viewportState.nearbyAnchor;
   const notesInVisibleRegion = viewportState.notesInVisibleRegion;
 
   useEffect(() => {
@@ -122,21 +117,18 @@ export function useMapScreenState({
 
   const setFilterType = useCallback((nextType: MapFilterType) => {
     setFilterState((current) => ({ ...current, type: nextType }));
-    setAllowOffscreenResults(false);
     setSelectedGroupId(null);
     setSelectedNoteIndex(0);
   }, []);
 
   const toggleFavoritesOnly = useCallback(() => {
     setFilterState((current) => ({ ...current, favoritesOnly: !current.favoritesOnly }));
-    setAllowOffscreenResults(false);
     setSelectedGroupId(null);
     setSelectedNoteIndex(0);
   }, []);
 
   const clearFilters = useCallback(() => {
     setFilterState({ type: 'all', favoritesOnly: false });
-    setAllowOffscreenResults(false);
   }, []);
 
   const updateVisibleRegion = useCallback((region: Region) => {
@@ -146,7 +138,6 @@ export function useMapScreenState({
 
     setVisibleRegion(region);
     setNearbyBrowseRegion(region);
-    setAllowOffscreenResults(false);
   }, []);
 
   const setProgrammaticVisibleRegion = useCallback((region: Region) => {
@@ -155,13 +146,6 @@ export function useMapScreenState({
     }
 
     setVisibleRegion(region);
-    setAllowOffscreenResults(false);
-  }, []);
-
-  const showAllFilteredResults = useCallback(() => {
-    setAllowOffscreenResults(true);
-    setSelectedGroupId(null);
-    setSelectedNoteIndex(0);
   }, []);
 
   const handleLeafMarkerPress = useCallback((groupId: string) => {
@@ -245,7 +229,6 @@ export function useMapScreenState({
     visibleRegion,
     setVisibleRegion: updateVisibleRegion,
     setProgrammaticVisibleRegion,
-    showAllFilteredResults,
     selectedGroupId,
     selectedGroup,
     selectedNote,
@@ -261,15 +244,8 @@ export function useMapScreenState({
     clusterNodes,
     pointGroupMap,
     nearbyItems,
-    allFilteredNearbyItems,
     filteredNotes,
     filteredCount,
-    visibleAreaCount: notesInVisibleRegion.length,
-    showingAllFilteredResults:
-      Boolean(visibleRegion) &&
-      notesInVisibleRegion.length === 0 &&
-      filteredNotes.length > 0 &&
-      allowOffscreenResults,
     hasActiveFilters: filterState.type !== 'all' || filterState.favoritesOnly,
     currentZoom: visibleRegion ? regionToZoom(visibleRegion) : regionToZoom(initialRegion),
   };

@@ -44,17 +44,21 @@ const mockUnregisterCurrentSocialPushToken = jest.fn<Promise<void>, []>(async ()
 const mockPurgeLocalAccountScope = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
 const mockMigrateLocalNotesScopeToUser = jest.fn<Promise<void>, [string]>(async () => undefined);
 const mockSetActiveNotesScope = jest.fn<void, [string | null | undefined]>();
+let authStateChangeCallback: ((event: string, session: Session | null) => void) | null = null;
 const mockGetSession = jest.fn(async () => ({
   data: { session: mockAuthState.initialSession },
   error: null,
 }));
-const mockOnAuthStateChange = jest.fn((_callback: (event: string, session: Session | null) => void) => ({
-  data: {
-    subscription: {
-      unsubscribe: jest.fn(),
+const mockOnAuthStateChange = jest.fn((callback: (event: string, session: Session | null) => void) => {
+  authStateChangeCallback = callback;
+  return {
+    data: {
+      subscription: {
+        unsubscribe: jest.fn(),
+      },
     },
-  },
-}));
+  };
+});
 const mockSignInWithIdToken = jest.fn(async (_input?: unknown) => {
   return {
     data: { session: buildSession() },
@@ -230,6 +234,7 @@ function setPlatformOS(nextOS: 'ios' | 'android' | 'web') {
 describe('useAuth', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    authStateChangeCallback = null;
     setPlatformOS('ios');
     mockAuthState.hasSupabaseConfig = true;
     mockAuthState.googleConfigured = true;
@@ -411,6 +416,39 @@ describe('useAuth', () => {
     expect(mockSupabaseSignOut).toHaveBeenCalled();
     expect(mockPurgeLocalAccountScope).toHaveBeenCalledWith('user-1');
     expect(hook.result.current.user).toBeNull();
+  });
+
+  it('ignores a stale initial session result after a newer signed-out auth event', async () => {
+    let resolveGetSession!: (value: { data: { session: Session | null }; error: null }) => void;
+    mockGetSession.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveGetSession = resolve;
+        })
+    );
+    mockAuthState.initialSession = buildSession();
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await act(async () => {
+      authStateChangeCallback?.('SIGNED_OUT', null);
+    });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user).toBeNull();
+    });
+
+    await act(async () => {
+      resolveGetSession({
+        data: { session: buildSession() },
+        error: null,
+      });
+      await Promise.resolve();
+    });
+
+    expect(hook.result.current.user).toBeNull();
+    expect(mockUnregisterCurrentSocialPushToken).toHaveBeenCalled();
   });
 
   it('requires a recent sign-in message from delete account when the backend rejects it', async () => {

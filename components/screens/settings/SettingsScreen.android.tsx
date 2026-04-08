@@ -7,6 +7,7 @@ import AppSheetAlert from '../../sheets/AppSheetAlert';
 import SettingsLanguageSheetAndroid from '../../settings/SettingsLanguageSheet.android';
 import SettingsSyncSheetAndroid from '../../settings/SettingsSyncSheet.android';
 import SettingsThemeSheetAndroid from '../../settings/SettingsThemeSheet.android';
+import { useAndroidBottomTabOverlayInset } from '../../../hooks/useAndroidBottomTabOverlayInset';
 import type { ThemeColors } from '../../../hooks/useTheme';
 import { Layout } from '../../../constants/theme';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
@@ -138,6 +139,7 @@ export default function SettingsScreenAndroid() {
   const languageCode = i18n.resolvedLanguage?.startsWith('vi') ? 'vi' : 'en';
   const languageLabel = languageCode === 'vi' ? 'Tiếng Việt' : 'English';
   const contentTopInset = 16;
+  const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
   const accountSubtitle = !isAuthAvailable
     ? t(
         'settings.accountUnavailableMsg',
@@ -200,7 +202,7 @@ export default function SettingsScreenAndroid() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: contentTopInset, paddingBottom: insets.bottom + 32 },
+          { paddingTop: contentTopInset, paddingBottom: insets.bottom + 32 + bottomTabOverlayInset },
         ]}
       >
         <View style={styles.section}>

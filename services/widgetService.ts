@@ -1762,10 +1762,9 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
     }
 
     if (widgetUpdateInFlight) {
-        pendingWidgetUpdateOptions = {
-            ...(pendingWidgetUpdateOptions ?? {}),
-            ...options,
-        };
+        // Keep only the latest pending request so older explicit payloads like `notes`
+        // do not leak into a newer refresh that intended to reload fresh state.
+        pendingWidgetUpdateOptions = options;
         await widgetUpdateInFlight;
         return;
     }
