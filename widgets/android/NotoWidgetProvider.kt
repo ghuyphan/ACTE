@@ -108,7 +108,7 @@ private fun getWidgetCardInsetDp(isMedium: Boolean): Float {
 }
 
 private fun getWidgetInnerCornerRadiusDp(isMedium: Boolean): Float {
-  return if (isMedium) 21f else 18f
+  return if (isMedium) 24f else 20f
 }
 
 private fun applyAlphaToColor(color: Int, alphaFraction: Float): Int {
@@ -370,7 +370,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       views.setViewVisibility(R.id.widget_body, if (bodyText.isBlank()) View.GONE else View.VISIBLE)
       views.setTextColor(
         R.id.widget_body,
-        if (usesTextSurface) Color.parseColor("#2A1A11") else Color.parseColor("#FFF8F0")
+        if (usesTextSurface) Color.parseColor("#2B2621") else Color.parseColor("#FFF7E8")
       )
       views.setViewVisibility(R.id.widget_caption, if (showCaption) View.VISIBLE else View.GONE)
       if (showCaption) {
@@ -380,7 +380,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
           "setBackgroundResource",
           R.drawable.noto_widget_overlay_chip_dark
         )
-        views.setTextColor(R.id.widget_caption, Color.parseColor("#FFF8F0"))
+        views.setTextColor(R.id.widget_caption, Color.parseColor("#FFF7E8"))
       }
 
       val locationBadgeText = getLocationBadgeText(snapshot.locationName, isMedium)
@@ -395,7 +395,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         )
         views.setTextColor(
           R.id.widget_location,
-          if (usesTextSurface) Color.parseColor("#6E5E4F") else Color.parseColor("#FFF8F0")
+          if (usesTextSurface) Color.parseColor("#7A6A58") else Color.parseColor("#FFF7E8")
         )
       }
 
@@ -409,7 +409,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         )
         views.setTextColor(
           R.id.widget_badge,
-          if (usesTextSurface) Color.parseColor("#6E5E4F") else Color.parseColor("#FFF8F0")
+          if (usesTextSurface) Color.parseColor("#7A6A58") else Color.parseColor("#FFF7E8")
         )
         views.setOnClickPendingIntent(
           R.id.widget_badge,
@@ -434,7 +434,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         widthPx = geometry.contentWidthPx,
         heightPx = geometry.contentHeightPx,
         cornerRadiusPx = geometry.innerCornerRadiusPx,
-        fillColor = Color.parseColor("#F6EFE1")
+        fillColor = Color.parseColor("#FAF6EE")
       )
       views.setViewVisibility(R.id.widget_inner_background, View.VISIBLE)
       views.setImageViewBitmap(R.id.widget_inner_background, innerBitmap)
@@ -496,8 +496,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
             widthPx = geometry.contentWidthPx,
             heightPx = geometry.contentHeightPx,
             cornerRadiusPx = geometry.innerCornerRadiusPx,
-            startColor = Color.parseColor("#12000000"),
-            endColor = Color.parseColor("#76000000")
+            startColor = Color.parseColor("#00000000"),
+            endColor = Color.parseColor("#A0000000")
           )
         )
       }
@@ -604,7 +604,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         if (onDarkSurface) R.drawable.noto_widget_overlay_chip_dark else R.drawable.noto_widget_badge_light
       )
 
-      val foregroundColor = if (onDarkSurface) Color.parseColor("#FFF8F0") else Color.parseColor("#2A1A11")
+      val foregroundColor = if (onDarkSurface) Color.parseColor("#FFF7E8") else Color.parseColor("#2B2621")
       val avatarBitmap = decodeAuthorAvatar(snapshot, context.dpToPx(18f))
 
       if (avatarBitmap != null) {
@@ -1315,10 +1315,10 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val contentWidthPx = max(1, (requestedContentWidthPx * scale).toInt())
       val contentHeightPx = max(1, (requestedContentHeightPx * scale).toInt())
       val shellShortestEdge = min(shellWidthPx, shellHeightPx).toFloat().coerceAtLeast(1f)
-      val shellCornerRadiusPx = shellShortestEdge * (if (isMedium) 0.132f else 0.148f)
+      val shellCornerRadiusPx = shellShortestEdge * (if (isMedium) 0.152f else 0.168f)
       val contentInsetPx = ((shellWidthPx - contentWidthPx).toFloat() / 2f).coerceAtLeast(0f)
       val innerCornerRadiusPx = max(0f, shellCornerRadiusPx - (contentInsetPx * 0.92f))
-      val shellStrokeWidthPx = max(1f, shellShortestEdge * 0.0065f)
+      val shellStrokeWidthPx = max(1f, shellShortestEdge * 0.0072f)
 
       return WidgetRenderGeometry(
         rootWidthPx = rootWidthPx,

@@ -1386,27 +1386,24 @@ private struct LocketWidgetEntryView: View {
 
     private var smallLayout: some View {
         framedMemoryCard(
-            widgetPadding: 4,
+            widgetPadding: 0,
             contentPadding: 12,
-            showPhotoCaption: false,
             isExpanded: false
         )
     }
 
     private var mediumLayout: some View {
         framedMemoryCard(
-            widgetPadding: 5,
+            widgetPadding: 0,
             contentPadding: 18,
-            showPhotoCaption: true,
             isExpanded: true
         )
     }
 
     private var largeLayout: some View {
         framedMemoryCard(
-            widgetPadding: 6,
+            widgetPadding: 0,
             contentPadding: 22,
-            showPhotoCaption: true,
             isExpanded: true
         )
     }
@@ -1438,66 +1435,81 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var primaryTextColor: Color {
-        hasPhotoBackground
-            ? Color.white
-            : Color(red: 0.23, green: 0.17, blue: 0.13)
+        if hasPhotoBackground || payload.isIdleState {
+            return Color(red: 1.0, green: 0.969, blue: 0.910) // #FFF7E8 — app dark text token
+        }
+        return Color(red: 0.169, green: 0.149, blue: 0.129)   // #2B2621 — app light text token
     }
 
     private var eyebrowTextColor: Color {
         hasPhotoBackground
-            ? Color.white.opacity(0.84)
-            : Color(red: 0.46, green: 0.37, blue: 0.30)
+            ? Color(red: 1.0, green: 0.969, blue: 0.910).opacity(0.84) // #FFF7E8 84%
+            : Color(red: 0.478, green: 0.416, blue: 0.345)             // #7A6A58 — app secondary
     }
 
     private var floatingLocationChipBackgroundColor: Color {
         hasPhotoBackground
-            ? Color.black.opacity(0.38)
-            : Color.white.opacity(0.90)
+            ? Color.black.opacity(0.50)
+            : Color(red: 0.929, green: 0.910, blue: 0.867).opacity(0.94) // warm ivory pill
     }
 
     private var badgeBackgroundColor: Color {
-        hasPhotoBackground
-            ? Color.black.opacity(0.38)
-            : Color.white.opacity(0.90)
+        if payload.isIdleState {
+            return Color(red: 0.27, green: 0.20, blue: 0.15).opacity(0.58)
+        }
+        return hasPhotoBackground
+            ? Color.black.opacity(0.50)
+            : Color(red: 0.929, green: 0.910, blue: 0.867).opacity(0.94)
     }
 
     private var badgeForegroundColor: Color {
-        hasPhotoBackground
-            ? Color.white
-            : Color(red: 0.39, green: 0.32, blue: 0.26)
+        if payload.isIdleState {
+            return Color(red: 1.0, green: 0.969, blue: 0.910)
+        }
+        return hasPhotoBackground
+            ? Color(red: 1.0, green: 0.969, blue: 0.910)
+            : Color(red: 0.478, green: 0.416, blue: 0.345)
     }
 
     private var countBadge: some View {
         Text(countLabel)
-            .font(.system(size: isLarge ? 11 : 10, weight: .semibold))
+            .font(.custom("Noto Sans SemiBold", size: isLarge ? 11 : 10))
             .foregroundStyle(badgeForegroundColor)
             .padding(.horizontal, isLarge ? 12 : 11)
             .padding(.vertical, isLarge ? 7 : 6)
             .background(badgeBackgroundColor)
             .clipShape(Capsule())
+            .shadow(color: Color.black.opacity(hasPhotoBackground ? 0.16 : 0.08), radius: 10, x: 0, y: 4)
     }
 
     private var floatingLocationChip: some View {
-        Text(payload.locationName)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(eyebrowTextColor)
-            .lineLimit(1)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(floatingLocationChipBackgroundColor)
-            .clipShape(Capsule())
+        HStack(spacing: 5) {
+            Image(systemName: "mappin.and.ellipse")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(eyebrowTextColor)
+
+            Text(compactLocationName)
+                .font(.custom("Noto Sans Medium", size: 10))
+                .foregroundStyle(eyebrowTextColor)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 6)
+        .background(floatingLocationChipBackgroundColor)
+        .clipShape(Capsule())
+        .shadow(color: Color.black.opacity(hasPhotoBackground ? 0.18 : 0.08), radius: 10, x: 0, y: 4)
     }
 
     private var authorChipBackgroundColor: Color {
         hasPhotoBackground
-            ? Color.black.opacity(0.40)
-            : Color.white.opacity(0.92)
+            ? Color.black.opacity(0.50)
+            : Color(red: 0.929, green: 0.910, blue: 0.867).opacity(0.94)
     }
 
     private var authorChipForegroundColor: Color {
         hasPhotoBackground
-            ? Color.white
-            : Color(red: 0.23, green: 0.17, blue: 0.13)
+            ? Color(red: 1.0, green: 0.969, blue: 0.910)    // #FFF7E8
+            : Color(red: 0.169, green: 0.149, blue: 0.129)  // #2B2621
     }
 
     private var authorChip: some View {
@@ -1510,7 +1522,7 @@ private struct LocketWidgetEntryView: View {
                     .clipShape(Circle())
             } else if !payload.authorInitials.isEmpty {
                 Text(payload.authorInitials)
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .font(.custom("Noto Sans Bold", size: 9))
                     .foregroundStyle(authorChipForegroundColor)
                     .frame(width: 18, height: 18)
                     .background(authorChipForegroundColor.opacity(hasPhotoBackground ? 0.16 : 0.10))
@@ -1519,7 +1531,7 @@ private struct LocketWidgetEntryView: View {
 
             if !compactAuthorName.isEmpty {
                 Text(compactAuthorName)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.custom("Noto Sans Medium", size: 10))
                     .foregroundStyle(authorChipForegroundColor)
                     .lineLimit(1)
             }
@@ -1528,6 +1540,7 @@ private struct LocketWidgetEntryView: View {
         .padding(.vertical, 5)
         .background(authorChipBackgroundColor)
         .clipShape(Capsule())
+        .shadow(color: Color.black.opacity(hasPhotoBackground ? 0.18 : 0.08), radius: 10, x: 0, y: 4)
     }
 
     private var livePhotoBadge: some View {
@@ -1538,7 +1551,7 @@ private struct LocketWidgetEntryView: View {
 
             if isLarge || isMedium {
                 Text(payload.livePhotoBadgeText.isEmpty ? widgetLocalized("widget.livePhotoBadge", fallback: "Live") : payload.livePhotoBadgeText)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.custom("Noto Sans SemiBold", size: 10))
                     .foregroundStyle(authorChipForegroundColor)
                     .lineLimit(1)
             }
@@ -1547,18 +1560,16 @@ private struct LocketWidgetEntryView: View {
         .padding(.vertical, 6)
         .background(authorChipBackgroundColor)
         .clipShape(Capsule())
+        .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: 4)
     }
 
+    @ViewBuilder
     private var outerSurfaceColor: some View {
-        Color(red: 0.99, green: 0.97, blue: 0.93)
+        Color.clear
     }
 
     private var paperSurfaceColor: Color {
-        Color(red: 0.99, green: 0.97, blue: 0.93)
-    }
-
-    private var cardBorderColor: Color {
-        Color(red: 0.86, green: 0.79, blue: 0.65)
+        Color(red: 0.985, green: 0.972, blue: 0.944)
     }
 
     private var textTintOverlayColor: Color {
@@ -1593,10 +1604,6 @@ private struct LocketWidgetEntryView: View {
         return "\(photoCaptionText[..<endIndex])…"
     }
 
-    private var shouldShowPhotoCaptionChip: Bool {
-        !compactPhotoCaptionText.isEmpty
-    }
-
     private var shouldShowTopLocationChip: Bool {
         !payload.isIdleState && !shouldShowAuthorChip && !compactLocationName.isEmpty
     }
@@ -1612,33 +1619,45 @@ private struct LocketWidgetEntryView: View {
         }
     }
 
-    private var photoCaptionChip: some View {
-        Text(compactPhotoCaptionText)
-            .font(.system(size: isLarge ? 12 : 11, weight: .semibold))
-            .foregroundStyle(Color.white)
-            .lineLimit(isLarge ? 2 : 1)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, isLarge ? 14 : 12)
-            .padding(.vertical, 7)
-            .background(Color.black.opacity(0.40))
-            .clipShape(Capsule())
+    private var photoTitleFont: Font {
+        if isLarge {
+            return .custom("Noto Sans ExtraBold", size: 28)
+        }
+        if isMedium {
+            return .custom("Noto Sans ExtraBold", size: 22)
+        }
+        return .custom("Noto Sans ExtraBold", size: compactPhotoCaptionText.count > 28 ? 18 : 20)
+    }
+
+    @ViewBuilder
+    private var photoTitleContent: some View {
+        if !compactPhotoCaptionText.isEmpty {
+            Text(compactPhotoCaptionText)
+                .font(photoTitleFont)
+                .foregroundStyle(Color(red: 1.0, green: 0.969, blue: 0.910))
+                .multilineTextAlignment(.leading)
+                .lineLimit(isLarge ? 3 : 2)
+                .lineSpacing(isLarge ? 2 : 1)
+                .tracking(-0.45)
+                .shadow(color: Color.black.opacity(0.30), radius: 10, x: 0, y: 2)
+        }
     }
 
     @ViewBuilder
     private var framedTextContent: some View {
         if !contentDisplayText.isEmpty {
             Text(contentDisplayText)
-                .font(noteCardBodyFont)
+                .font(payload.isIdleState ? noteCardIdleFont : noteCardBodyFont)
                 .foregroundStyle(primaryTextColor)
                 .multilineTextAlignment(isLarge ? .leading : .center)
                 .lineLimit(isLarge ? 5 : 4)
                 .lineSpacing(noteCardLineSpacing)
                 .tracking(noteCardTracking)
                 .shadow(
-                    color: hasPhotoBackground ? Color.black.opacity(0.16) : .clear,
-                    radius: hasPhotoBackground ? 4 : 0,
+                    color: (hasPhotoBackground || payload.isIdleState) ? Color.black.opacity(0.20) : .clear,
+                    radius: (hasPhotoBackground || payload.isIdleState) ? 6 : 0,
                     x: 0,
-                    y: hasPhotoBackground ? 1 : 0
+                    y: (hasPhotoBackground || payload.isIdleState) ? 1 : 0
                 )
                 .frame(maxWidth: .infinity, alignment: isLarge ? .leading : .center)
         }
@@ -1664,7 +1683,7 @@ private struct LocketWidgetEntryView: View {
             baseSize = count > 110 ? 16 : 18
         }
 
-        return .system(size: baseSize, weight: .bold, design: .default)
+        return .custom("Noto Sans ExtraBold", size: baseSize)
     }
 
     private var noteCardLineSpacing: CGFloat {
@@ -1679,6 +1698,11 @@ private struct LocketWidgetEntryView: View {
         -0.35
     }
 
+    private var noteCardIdleFont: Font {
+        let baseSize: CGFloat = isLarge ? 20 : (isMedium ? 17 : 15)
+        return .custom("Noto Sans Medium", size: baseSize).italic()
+    }
+
     @ViewBuilder
     private var cardInnerBackground: some View {
         if let image = resolvedImage, hasPhotoBackground {
@@ -1691,28 +1715,53 @@ private struct LocketWidgetEntryView: View {
                 .overlay(
                     LinearGradient(
                         colors: [
-                            Color.black.opacity(0.06),
-                            Color.black.opacity(0.16),
-                            Color.black.opacity(0.48),
+                            Color.black.opacity(0.00),
+                            Color.black.opacity(0.12),
+                            Color.black.opacity(0.62),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
+        } else if payload.isIdleState {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.110, green: 0.100, blue: 0.118),
+                    Color(red: 0.071, green: 0.063, blue: 0.078),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .overlay(
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.878, green: 0.694, blue: 0.357).opacity(0.18),
+                        Color.clear
+                    ],
+                    center: .init(x: 0.5, y: 0.42),
+                    startRadius: 0,
+                    endRadius: 96
+                )
+            )
         } else {
-            paperSurfaceColor
-                .overlay(textTintOverlayColor)
+            LinearGradient(
+                colors: [
+                    Color(red: 1.0, green: 0.992, blue: 0.974),
+                    paperSurfaceColor
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .overlay(textTintOverlayColor)
         }
     }
 
     private func framedMemoryCard(
         widgetPadding: CGFloat,
         contentPadding: CGFloat,
-        showPhotoCaption: Bool,
         isExpanded: Bool
     ) -> some View {
-        let cornerRadius = isExpanded ? 26 : 22
-        let borderWidth = isExpanded ? 1.5 : 1.25
+        let cornerRadius: CGFloat = isExpanded ? 30 : 26
         let cardShape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
         ZStack(alignment: .bottomLeading) {
@@ -1766,37 +1815,22 @@ private struct LocketWidgetEntryView: View {
                 Spacer(minLength: hasPhotoBackground ? 0 : 10)
 
                 HStack(alignment: .bottom) {
-                    if shouldShowBottomMetaChip {
-                        bottomMetaChip
+                    VStack(alignment: .leading, spacing: hasPhotoBackground && shouldShowBottomMetaChip && !compactPhotoCaptionText.isEmpty ? 10 : 0) {
+                        if hasPhotoBackground {
+                            photoTitleContent
+                        }
+
+                        if shouldShowBottomMetaChip {
+                            bottomMetaChip
+                        }
                     }
 
                     Spacer(minLength: 0)
                 }
             }
             .padding(contentPadding)
-
-            if showPhotoCaption && shouldShowPhotoCaptionChip {
-                let photoCaptionBottomPadding = shouldShowBottomMetaChip
-                    ? contentPadding + 30
-                    : max(8, contentPadding - 8)
-
-                VStack {
-                    Spacer(minLength: 0)
-                    HStack {
-                        Spacer(minLength: 0)
-                        photoCaptionChip
-                        Spacer(minLength: 0)
-                    }
-                }
-                .padding(.horizontal, contentPadding)
-                .padding(.bottom, photoCaptionBottomPadding)
-            }
         }
         .clipShape(cardShape)
-        .overlay(
-            cardShape
-                .strokeBorder(cardBorderColor, lineWidth: borderWidth)
-        )
         .padding(widgetPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
