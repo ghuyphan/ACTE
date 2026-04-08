@@ -85,6 +85,23 @@ private data class WidgetStampMetrics(
   val perforationRadius: Float
 )
 
+private fun getWidgetOuterPaddingDp(isMedium: Boolean): Float {
+  return if (isMedium) 8f else 6f
+}
+
+private fun getWidgetCardShellPaddingDp(isMedium: Boolean): Float {
+  return if (isMedium) 5f else 4f
+}
+
+private fun getWidgetInnerCornerRadiusDp(isMedium: Boolean): Float {
+  return if (isMedium) 26f else 22f
+}
+
+private fun applyAlphaToColor(color: Int, alphaFraction: Float): Int {
+  val alpha = (alphaFraction.coerceIn(0f, 1f) * 255f).toInt().coerceIn(0, 255)
+  return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
+}
+
 private fun clampWidgetScalar(value: Float, minValue: Float, maxValue: Float): Float {
   return min(maxValue, max(minValue, value))
 }
@@ -325,12 +342,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         )
       }
       val showCountBadge = showIdle && snapshot.noteCount > 0
-
-      views.setInt(
-        R.id.widget_root,
-        "setBackgroundResource",
-        if (usesTextSurface) R.drawable.noto_widget_text_background else R.drawable.noto_widget_photo_background
-      )
+      val showCaption = isMedium && photoCaptionText.isNotBlank()
 
       bindTextBackgroundState(context, views, snapshot, options, isMedium, usesTextSurface, showIdle)
       bindPhotoState(context, views, snapshot, showIdle, options, isMedium)
@@ -345,38 +357,20 @@ class NotoWidgetProvider : AppWidgetProvider() {
         R.id.widget_body,
         if (usesTextSurface) Color.parseColor("#2A1A11") else Color.parseColor("#FFF8F0")
       )
-      views.setViewVisibility(R.id.widget_caption, if (photoCaptionText.isBlank()) View.GONE else View.VISIBLE)
-      if (photoCaptionText.isNotBlank()) {
+      views.setViewVisibility(R.id.widget_caption, if (showCaption) View.VISIBLE else View.GONE)
+      if (showCaption) {
         views.setTextViewText(R.id.widget_caption, photoCaptionText)
         views.setInt(
           R.id.widget_caption,
           "setBackgroundResource",
-          if (usesTextSurface) R.drawable.noto_widget_badge_light else R.drawable.noto_widget_overlay_chip_dark
+          R.drawable.noto_widget_overlay_chip_dark
         )
-        views.setTextColor(
-          R.id.widget_caption,
-          if (usesTextSurface) Color.parseColor("#2A1A11") else Color.parseColor("#FFF8F0")
-        )
+        views.setTextColor(R.id.widget_caption, Color.parseColor("#FFF8F0"))
       }
 
-      val locationVisible = !showIdle && compactLocationName.isNotBlank()
-      val showLocationOverlay = locationVisible && (hasVisualOnlyContent || shouldHidePhotoBodyText)
-      val showInlineLocationOverlay = showLocationOverlay && showLivePhotoBadge && !showAuthorChip
-      val showStackedLocationOverlay = showLocationOverlay && showLivePhotoBadge && showAuthorChip
-      views.setViewVisibility(R.id.widget_location, if (locationVisible && !showLocationOverlay) View.VISIBLE else View.GONE)
-      views.setViewVisibility(
-        R.id.widget_location_overlay,
-        if (showLocationOverlay && !showInlineLocationOverlay && !showStackedLocationOverlay) View.VISIBLE else View.GONE
-      )
-      views.setViewVisibility(
-        R.id.widget_location_overlay_inline,
-        if (showInlineLocationOverlay) View.VISIBLE else View.GONE
-      )
-      views.setViewVisibility(
-        R.id.widget_location_overlay_below,
-        if (showStackedLocationOverlay) View.VISIBLE else View.GONE
-      )
-      if (locationVisible && !showLocationOverlay) {
+      val showLocationChip = !showIdle && !showAuthorChip && compactLocationName.isNotBlank()
+      views.setViewVisibility(R.id.widget_location, if (showLocationChip) View.VISIBLE else View.GONE)
+      if (showLocationChip) {
         views.setTextViewText(R.id.widget_location, compactLocationName)
         views.setInt(
           R.id.widget_location,
@@ -385,24 +379,6 @@ class NotoWidgetProvider : AppWidgetProvider() {
         )
         views.setTextColor(
           R.id.widget_location,
-          if (usesTextSurface) Color.parseColor("#6E5E4F") else Color.parseColor("#FFF8F0")
-        )
-      }
-      if (showLocationOverlay) {
-        val locationOverlayViewId =
-          when {
-            showInlineLocationOverlay -> R.id.widget_location_overlay_inline
-            showStackedLocationOverlay -> R.id.widget_location_overlay_below
-            else -> R.id.widget_location_overlay
-          }
-        views.setTextViewText(locationOverlayViewId, compactLocationName)
-        views.setInt(
-          locationOverlayViewId,
-          "setBackgroundResource",
-          if (usesTextSurface) R.drawable.noto_widget_badge_light else R.drawable.noto_widget_overlay_chip_dark
-        )
-        views.setTextColor(
-          locationOverlayViewId,
           if (usesTextSurface) Color.parseColor("#6E5E4F") else Color.parseColor("#FFF8F0")
         )
       }
@@ -436,24 +412,22 @@ class NotoWidgetProvider : AppWidgetProvider() {
       showIdle: Boolean
     ) {
       val startColorValue = snapshot.backgroundGradientStartColor?.takeIf { it.isNotBlank() }
-      val endColorValue = snapshot.backgroundGradientEndColor?.takeIf { it.isNotBlank() }
-      val shouldShowCustomGradient = usesTextSurface && !showIdle && startColorValue != null && endColorValue != null
-
-      if (!shouldShowCustomGradient) {
+      if (!usesTextSurface || showIdle || startColorValue == null) {
         views.setViewVisibility(R.id.widget_text_background_overlay, View.GONE)
         return
       }
 
-      val gradientBitmap = createRoundedGradientBitmap(
+      val tintColor = applyAlphaToColor(Color.parseColor(startColorValue), 0.14f)
+      val overlayBitmap = createRoundedGradientBitmap(
         widthPx = resolveContentWidthPx(context, options, isMedium),
         heightPx = resolveContentHeightPx(context, options, isMedium),
-        cornerRadiusPx = 0f,
-        startColor = Color.parseColor(startColorValue),
-        endColor = Color.parseColor(endColorValue)
+        cornerRadiusPx = context.dpToPx(getWidgetInnerCornerRadiusDp(isMedium)).toFloat(),
+        startColor = tintColor,
+        endColor = tintColor
       )
 
       views.setViewVisibility(R.id.widget_text_background_overlay, View.VISIBLE)
-      views.setImageViewBitmap(R.id.widget_text_background_overlay, gradientBitmap)
+      views.setImageViewBitmap(R.id.widget_text_background_overlay, overlayBitmap)
     }
 
     private fun bindPhotoState(
@@ -469,7 +443,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
           snapshot = snapshot,
           targetWidthPx = resolveContentWidthPx(context, options, isMedium),
           targetHeightPx = resolveContentHeightPx(context, options, isMedium),
-          cornerRadiusPx = 0f
+          cornerRadiusPx = context.dpToPx(getWidgetInnerCornerRadiusDp(isMedium)).toFloat()
         )
       } else {
         null
@@ -1147,12 +1121,11 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val exactSizeDp = resolveExactWidgetSizeDp(options, isMedium)
       val minWidthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, if (isMedium) 250 else 160)
       val minHeightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, if (isMedium) 140 else 160)
-      val requestedWidthPx = context.dpToPx(
-        exactSizeDp?.width ?: max(minWidthDp.toFloat(), if (isMedium) 250f else 160f)
-      )
-      val requestedHeightPx = context.dpToPx(
-        exactSizeDp?.height ?: max(minHeightDp.toFloat(), if (isMedium) 140f else 160f)
-      )
+      val requestedWidthDp = exactSizeDp?.width ?: max(minWidthDp.toFloat(), if (isMedium) 250f else 160f)
+      val requestedHeightDp = exactSizeDp?.height ?: max(minHeightDp.toFloat(), if (isMedium) 140f else 160f)
+      val totalInsetDp = (getWidgetOuterPaddingDp(isMedium) + getWidgetCardShellPaddingDp(isMedium)) * 2f
+      val requestedWidthPx = context.dpToPx(max(1f, requestedWidthDp - totalInsetDp))
+      val requestedHeightPx = context.dpToPx(max(1f, requestedHeightDp - totalInsetDp))
 
       val maxEdgePx = if (isMedium) MEDIUM_WIDGET_MAX_RENDER_EDGE_PX else SMALL_WIDGET_MAX_RENDER_EDGE_PX
       val maxPixels = if (isMedium) MEDIUM_WIDGET_MAX_RENDER_PIXELS else SMALL_WIDGET_MAX_RENDER_PIXELS

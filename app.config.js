@@ -102,9 +102,8 @@ const config = {
   name: 'Noto',
   slug: 'noto',
   version: appVersion,
-  runtimeVersion: {
-    policy: 'appVersion',
-  },
+  // Bare workflow requires a manual runtime version string for EAS Update.
+  runtimeVersion: appVersion,
   orientation: 'portrait',
   icon: './assets/images/icon/icon-default.png',
   scheme: 'noto',

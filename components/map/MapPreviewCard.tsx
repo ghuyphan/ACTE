@@ -413,300 +413,307 @@ export default function MapPreviewCard({
       >
         <Animated.View
           style={[
-            styles.surface,
+            styles.surfaceShadow,
             isPassiveStatusPill ? styles.surfacePill : null,
             animatedShellStyle,
-            {
-              borderColor: getOverlayBorderColor(isDark),
-              backgroundColor: getOverlayFallbackColor(isDark),
-            },
           ]}
           pointerEvents="auto"
         >
-          <GlassView
-            pointerEvents="none"
-            glassEffectStyle="regular"
-            colorScheme={isDark ? 'dark' : 'light'}
-            fallbackColor="transparent"
-            style={StyleSheet.absoluteFill}
-          />
-          {Platform.OS === 'android' ? (
-            <View
+          <Animated.View
+            style={[
+              styles.surface,
+              animatedShellStyle,
+              {
+                borderColor: getOverlayBorderColor(isDark),
+                backgroundColor: getOverlayFallbackColor(isDark),
+              },
+            ]}
+          >
+            <GlassView
               pointerEvents="none"
-              style={[
-                StyleSheet.absoluteFill,
-                {
-                  backgroundColor: getOverlayScrimColor(isDark),
-                },
-              ]}
+              glassEffectStyle="regular"
+              colorScheme={isDark ? 'dark' : 'light'}
+              fallbackColor="transparent"
+              style={StyleSheet.absoluteFill}
             />
-          ) : null}
-          {isOlderIOS ? (
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                {
-                  backgroundColor: getOverlayFallbackColor(isDark),
-                },
-              ]}
-            />
-          ) : null}
+            {Platform.OS === 'android' ? (
+              <View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    backgroundColor: getOverlayScrimColor(isDark),
+                  },
+                ]}
+              />
+            ) : null}
+            {isOlderIOS ? (
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    backgroundColor: getOverlayFallbackColor(isDark),
+                  },
+                ]}
+              />
+            ) : null}
 
-          {shouldShowStatusLayer ? (
-            <Animated.View
-              style={[
-                styles.compactLayer,
-                isPassiveStatusPill ? styles.compactLayerPill : null,
-                isActionOnlyStatus ? styles.compactLayerActionOnly : null,
-                animatedCompactContentStyle,
-              ]}
-              pointerEvents={mode === 'status' && statusAction ? 'auto' : 'none'}
-            >
-              {isPassiveStatusPill && statusTitle ? (
-                <View style={styles.statusPillRow}>
-                  <View style={[styles.statusPillDot, { backgroundColor: colors.primary }]} />
-                  <Text style={[styles.statusPillLabel, { color: colors.text }]} numberOfLines={1}>
-                    {statusTitle}
-                  </Text>
-                </View>
-              ) : hasStatusCopy ? (
-                <View style={styles.statusContent}>
-                  <View style={styles.statusHeaderRow}>
-                    <View style={[styles.statusActionIconWrap, { backgroundColor: `${colors.primary}18` }]}>
-                      <Ionicons name={statusIcon} size={15} color={colors.primary} />
-                    </View>
-                    <View style={styles.statusCopyWrap}>
-                      {statusTitle ? (
-                        <Text style={[styles.statusTitle, { color: colors.text }]} numberOfLines={2}>
-                          {statusTitle}
-                        </Text>
-                      ) : null}
-                      {statusSubtitle ? (
-                        <Text
-                          style={[styles.statusSubtitle, { color: colors.secondaryText }]}
-                          numberOfLines={2}
-                        >
-                          {statusSubtitle}
-                        </Text>
-                      ) : null}
-                    </View>
+            {shouldShowStatusLayer ? (
+              <Animated.View
+                style={[
+                  styles.compactLayer,
+                  isPassiveStatusPill ? styles.compactLayerPill : null,
+                  isActionOnlyStatus ? styles.compactLayerActionOnly : null,
+                  animatedCompactContentStyle,
+                ]}
+                pointerEvents={mode === 'status' && statusAction ? 'auto' : 'none'}
+              >
+                {isPassiveStatusPill && statusTitle ? (
+                  <View style={styles.statusPillRow}>
+                    <View style={[styles.statusPillDot, { backgroundColor: colors.primary }]} />
+                    <Text style={[styles.statusPillLabel, { color: colors.text }]} numberOfLines={1}>
+                      {statusTitle}
+                    </Text>
                   </View>
-                  {statusAction ? (
-                    <Pressable
-                      testID={statusAction.testID}
-                      accessibilityRole="button"
-                      onPress={() => {
-                        onInteraction?.();
-                        onStatusAction?.();
-                      }}
-                      style={({ pressed }) => [
-                        styles.statusLinkButton,
-                        {
-                          opacity: pressed ? 0.72 : 1,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.statusActionText, { color: colors.primary }]} numberOfLines={1}>
-                        {statusAction.label}
-                      </Text>
-                      <Ionicons name="arrow-forward" size={13} color={colors.primary} />
-                    </Pressable>
-                  ) : null}
-                </View>
-              ) : statusAction ? (
-                <Pressable
-                  testID={statusAction.testID}
-                  accessibilityRole="button"
-                  onPress={() => {
-                    onInteraction?.();
-                    onStatusAction?.();
-                  }}
-                  style={({ pressed }) => [
-                    styles.statusInlineRow,
-                    {
-                      opacity: pressed ? 0.72 : 1,
-                    },
-                  ]}
-                >
-                  <View style={styles.statusActionIconWrap}>
-                    <Ionicons name={statusIcon} size={15} color={colors.primary} />
-                  </View>
-                  <Text style={[styles.statusActionText, { color: colors.primary }]} numberOfLines={1}>
-                    {statusAction.label}
-                  </Text>
-                  <Ionicons name="chevron-up" size={14} color={colors.primary} />
-                </Pressable>
-              ) : null}
-            </Animated.View>
-          ) : null}
-
-          {renderData ? (
-            <Animated.View
-              style={[styles.previewLayer, animatedPreviewContentStyle]}
-              pointerEvents={mode === 'preview' ? 'auto' : 'none'}
-            >
-              <View style={[styles.previewViewport, { width: fullSurfaceWidth }]}>
-                <View style={styles.cardContent}>
-                  <FlashList
-                    ref={previewListRef}
-                    testID="map-preview-list"
-                    horizontal
-                    data={renderData.previewItems}
-                    keyExtractor={(item) => item.note.id}
-                    drawDistance={nearbyPageWidth * 2}
-                    renderItem={({ item }) => {
-                      const cardPreview = getPreviewText(
-                        item.note,
-                        t('map.photoNote', 'Photo Note'),
-                        t('map.noContent', 'No note content')
-                      );
-                      const photoUri = item.note.type === 'photo' ? getNotePhotoUri(item.note) : '';
-                      const textTileGradient = getTextNoteCardGradient({
-                        text: item.note.content,
-                        noteId: item.note.id,
-                        emoji: item.note.moodEmoji,
-                        noteColor: item.note.noteColor,
-                      });
-                      const metaLabel =
-                        showPlaceMeta || item.distanceMeters == null
-                          ? t('map.noteAtPlace', 'Saved here')
-                          : formatDistanceLabel(item.distanceMeters);
-                      const isActive = item.note.id === renderData.activePreviewItem.note.id;
-
-                      return (
-                        <Pressable
-                          testID={`map-preview-item-${item.note.id}`}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: isActive }}
-                          style={[styles.previewPage, { width: nearbyPageWidth }]}
-                          onPress={() => handlePreviewItemPress(item.note.id)}
-                        >
-                          <View style={styles.previewPageInner}>
-                            {photoUri ? (
-                              <View>
-                                <Image
-                                  testID={`map-preview-image-${item.note.id}`}
-                                  source={{ uri: photoUri }}
-                                  style={[
-                                    styles.photoThumb,
-                                    {
-                                      backgroundColor: isDark
-                                        ? 'rgba(255,255,255,0.06)'
-                                        : 'rgba(0,0,0,0.04)',
-                                    },
-                                  ]}
-                                  contentFit="cover"
-                                  transition={0}
-                                />
-                              </View>
-                            ) : (
-                              <LinearGradient
-                                colors={textTileGradient}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                                style={styles.textThumb}
-                              >
-                                <View style={styles.textThumbPaper}>
-                                  <View style={[styles.textThumbLine, styles.textThumbLineLong]} />
-                                  <View style={[styles.textThumbLine, styles.textThumbLineMedium]} />
-                                  <View style={[styles.textThumbLine, styles.textThumbLineShort]} />
-                                </View>
-                              </LinearGradient>
-                            )}
-                            <View style={styles.copyWrap}>
-                              <Text
-                                style={[styles.title, { color: isActive ? colors.primary : colors.text }]}
-                                numberOfLines={1}
-                              >
-                                {item.note.locationName || t('map.unknownLocation', 'Unknown')}
-                              </Text>
-                              <Text
-                                style={[styles.content, { color: colors.secondaryText }]}
-                                numberOfLines={2}
-                              >
-                                {cardPreview}
-                              </Text>
-                              <View style={styles.metaRow}>
-                                <Ionicons
-                                  name={showPlaceMeta || item.distanceMeters == null ? 'pin' : 'navigate'}
-                                  size={12}
-                                  color={colors.secondaryText}
-                                />
-                                <Text style={[styles.metaText, { color: colors.secondaryText }]}>
-                                  {metaLabel}
-                                </Text>
-                              </View>
-                            </View>
-                          </View>
-                        </Pressable>
-                      );
-                    }}
-                    style={styles.previewList}
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.previewListContent}
-                    snapToInterval={nearbyPageWidth > 0 ? nearbyPageWidth : undefined}
-                    decelerationRate="fast"
-                    snapToAlignment="start"
-                    disableIntervalMomentum
-                    bounces={false}
-                    scrollEnabled={renderData.previewItems.length > 1}
-                    onScrollBeginDrag={() => {
-                      previewDraggingRef.current = true;
-                    }}
-                    onScrollEndDrag={(event) => {
-                      const velocityX = event.nativeEvent.velocity?.x ?? 0;
-                      if (Math.abs(velocityX) > 0.05) {
-                        return;
-                      }
-
-                      handlePreviewMomentumEnd(event);
-                    }}
-                    onMomentumScrollEnd={handlePreviewMomentumEnd}
-                  />
-
-                  <View style={styles.footer}>
-                    <Pressable
-                      testID="map-preview-primary-action"
-                      accessibilityRole="button"
-                      accessibilityLabel={previewActionLabel}
-                      onPress={() => {
-                        onInteraction?.();
-                        onPrimaryAction();
-                      }}
-                      style={({ pressed }) => [styles.actionButton, { opacity: pressed ? 0.72 : 1 }]}
-                      hitSlop={8}
-                    >
-                      <Ionicons
-                        name={previewActionIcon}
-                        size={14}
-                        color={activeNoteReadyToOpen ? colors.primary : colors.secondaryText}
-                      />
-                      <Text
-                        testID="map-preview-action"
-                        style={[
-                          styles.actionText,
-                          { color: activeNoteReadyToOpen ? colors.primary : colors.secondaryText },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {previewActionLabel}
-                      </Text>
-                    </Pressable>
-                    {showPreviewCount ? (
-                      <View style={styles.indexLabelWrap}>
-                        <Text
-                          style={[styles.indexText, { color: colors.secondaryText }]}
-                          testID="map-preview-index"
-                        >
-                          {previewCountLabel}
-                        </Text>
+                ) : hasStatusCopy ? (
+                  <View style={styles.statusContent}>
+                    <View style={styles.statusHeaderRow}>
+                      <View style={[styles.statusActionIconWrap, { backgroundColor: `${colors.primary}18` }]}>
+                        <Ionicons name={statusIcon} size={15} color={colors.primary} />
                       </View>
+                      <View style={styles.statusCopyWrap}>
+                        {statusTitle ? (
+                          <Text style={[styles.statusTitle, { color: colors.text }]} numberOfLines={2}>
+                            {statusTitle}
+                          </Text>
+                        ) : null}
+                        {statusSubtitle ? (
+                          <Text
+                            style={[styles.statusSubtitle, { color: colors.secondaryText }]}
+                            numberOfLines={2}
+                          >
+                            {statusSubtitle}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    {statusAction ? (
+                      <Pressable
+                        testID={statusAction.testID}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          onInteraction?.();
+                          onStatusAction?.();
+                        }}
+                        style={({ pressed }) => [
+                          styles.statusLinkButton,
+                          {
+                            opacity: pressed ? 0.72 : 1,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.statusActionText, { color: colors.primary }]} numberOfLines={1}>
+                          {statusAction.label}
+                        </Text>
+                        <Ionicons name="arrow-forward" size={13} color={colors.primary} />
+                      </Pressable>
                     ) : null}
                   </View>
+                ) : statusAction ? (
+                  <Pressable
+                    testID={statusAction.testID}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      onInteraction?.();
+                      onStatusAction?.();
+                    }}
+                    style={({ pressed }) => [
+                      styles.statusInlineRow,
+                      {
+                        opacity: pressed ? 0.72 : 1,
+                      },
+                    ]}
+                  >
+                    <View style={styles.statusActionIconWrap}>
+                      <Ionicons name={statusIcon} size={15} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.statusActionText, { color: colors.primary }]} numberOfLines={1}>
+                      {statusAction.label}
+                    </Text>
+                    <Ionicons name="chevron-up" size={14} color={colors.primary} />
+                  </Pressable>
+                ) : null}
+              </Animated.View>
+            ) : null}
+
+            {renderData ? (
+              <Animated.View
+                style={[styles.previewLayer, animatedPreviewContentStyle]}
+                pointerEvents={mode === 'preview' ? 'auto' : 'none'}
+              >
+                <View style={[styles.previewViewport, { width: fullSurfaceWidth }]}>
+                  <View style={styles.cardContent}>
+                    <FlashList
+                      ref={previewListRef}
+                      testID="map-preview-list"
+                      horizontal
+                      data={renderData.previewItems}
+                      keyExtractor={(item) => item.note.id}
+                      drawDistance={nearbyPageWidth * 2}
+                      renderItem={({ item }) => {
+                        const cardPreview = getPreviewText(
+                          item.note,
+                          t('map.photoNote', 'Photo Note'),
+                          t('map.noContent', 'No note content')
+                        );
+                        const photoUri = item.note.type === 'photo' ? getNotePhotoUri(item.note) : '';
+                        const textTileGradient = getTextNoteCardGradient({
+                          text: item.note.content,
+                          noteId: item.note.id,
+                          emoji: item.note.moodEmoji,
+                          noteColor: item.note.noteColor,
+                        });
+                        const metaLabel =
+                          showPlaceMeta || item.distanceMeters == null
+                            ? t('map.noteAtPlace', 'Saved here')
+                            : formatDistanceLabel(item.distanceMeters);
+                        const isActive = item.note.id === renderData.activePreviewItem.note.id;
+
+                        return (
+                          <Pressable
+                            testID={`map-preview-item-${item.note.id}`}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: isActive }}
+                            style={[styles.previewPage, { width: nearbyPageWidth }]}
+                            onPress={() => handlePreviewItemPress(item.note.id)}
+                          >
+                            <View style={styles.previewPageInner}>
+                              {photoUri ? (
+                                <View>
+                                  <Image
+                                    testID={`map-preview-image-${item.note.id}`}
+                                    source={{ uri: photoUri }}
+                                    style={[
+                                      styles.photoThumb,
+                                      {
+                                        backgroundColor: isDark
+                                          ? 'rgba(255,255,255,0.06)'
+                                          : 'rgba(0,0,0,0.04)',
+                                      },
+                                    ]}
+                                    contentFit="cover"
+                                    transition={0}
+                                  />
+                                </View>
+                              ) : (
+                                <LinearGradient
+                                  colors={textTileGradient}
+                                  start={{ x: 0, y: 0 }}
+                                  end={{ x: 1, y: 1 }}
+                                  style={styles.textThumb}
+                                >
+                                  <View style={styles.textThumbPaper}>
+                                    <View style={[styles.textThumbLine, styles.textThumbLineLong]} />
+                                    <View style={[styles.textThumbLine, styles.textThumbLineMedium]} />
+                                    <View style={[styles.textThumbLine, styles.textThumbLineShort]} />
+                                  </View>
+                                </LinearGradient>
+                              )}
+                              <View style={styles.copyWrap}>
+                                <Text
+                                  style={[styles.title, { color: isActive ? colors.primary : colors.text }]}
+                                  numberOfLines={1}
+                                >
+                                  {item.note.locationName || t('map.unknownLocation', 'Unknown')}
+                                </Text>
+                                <Text
+                                  style={[styles.content, { color: colors.secondaryText }]}
+                                  numberOfLines={2}
+                                >
+                                  {cardPreview}
+                                </Text>
+                                <View style={styles.metaRow}>
+                                  <Ionicons
+                                    name={showPlaceMeta || item.distanceMeters == null ? 'pin' : 'navigate'}
+                                    size={12}
+                                    color={colors.secondaryText}
+                                  />
+                                  <Text style={[styles.metaText, { color: colors.secondaryText }]}>
+                                    {metaLabel}
+                                  </Text>
+                                </View>
+                              </View>
+                            </View>
+                          </Pressable>
+                        );
+                      }}
+                      style={styles.previewList}
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.previewListContent}
+                      snapToInterval={nearbyPageWidth > 0 ? nearbyPageWidth : undefined}
+                      decelerationRate="fast"
+                      snapToAlignment="start"
+                      disableIntervalMomentum
+                      bounces={false}
+                      scrollEnabled={renderData.previewItems.length > 1}
+                      onScrollBeginDrag={() => {
+                        previewDraggingRef.current = true;
+                      }}
+                      onScrollEndDrag={(event) => {
+                        const velocityX = event.nativeEvent.velocity?.x ?? 0;
+                        if (Math.abs(velocityX) > 0.05) {
+                          return;
+                        }
+
+                        handlePreviewMomentumEnd(event);
+                      }}
+                      onMomentumScrollEnd={handlePreviewMomentumEnd}
+                    />
+
+                    <View style={styles.footer}>
+                      <Pressable
+                        testID="map-preview-primary-action"
+                        accessibilityRole="button"
+                        accessibilityLabel={previewActionLabel}
+                        onPress={() => {
+                          onInteraction?.();
+                          onPrimaryAction();
+                        }}
+                        style={({ pressed }) => [styles.actionButton, { opacity: pressed ? 0.72 : 1 }]}
+                        hitSlop={8}
+                      >
+                        <Ionicons
+                          name={previewActionIcon}
+                          size={14}
+                          color={activeNoteReadyToOpen ? colors.primary : colors.secondaryText}
+                        />
+                        <Text
+                          testID="map-preview-action"
+                          style={[
+                            styles.actionText,
+                            { color: activeNoteReadyToOpen ? colors.primary : colors.secondaryText },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {previewActionLabel}
+                        </Text>
+                      </Pressable>
+                      {showPreviewCount ? (
+                        <View style={styles.indexLabelWrap}>
+                          <Text
+                            style={[styles.indexText, { color: colors.secondaryText }]}
+                            testID="map-preview-index"
+                          >
+                            {previewCountLabel}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
                 </View>
-              </View>
-            </Animated.View>
-          ) : null}
+              </Animated.View>
+            ) : null}
+          </Animated.View>
         </Animated.View>
       </View>
     </MapPreviewSheet>
@@ -717,13 +724,15 @@ const styles = StyleSheet.create({
   surfaceHost: {
     alignSelf: 'center',
   },
-  surface: {
+  surfaceShadow: {
     position: 'absolute',
     bottom: 0,
     alignSelf: 'center',
+    ...mapOverlayTokens.overlayShadow,
+  },
+  surface: {
     borderWidth: Platform.OS === 'android' ? 1 : StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    ...mapOverlayTokens.overlayShadow,
   },
   surfacePill: {
     shadowOffset: { width: 0, height: 6 },

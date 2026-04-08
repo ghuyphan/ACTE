@@ -26,9 +26,10 @@ import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
 const MAX_STAGGERED_ENTRANCE_INDEX = 2;
 const ENTRANCE_DELAY_MS = 24;
 const DOCKED_HEADER_CONTENT_OVERLAP = 22;
+const CAPTURE_PAGE_STICKY_THRESHOLD = 0.62;
+const CAPTURE_PAGE_STICKY_VELOCITY_THRESHOLD = 0.9;
 const SCROLL_SNAP_EPSILON = 2;
 const REFRESH_PULL_THRESHOLD = -6;
-const DRAG_END_VELOCITY_THRESHOLD = 0.05;
 function getEntranceDelay(index: number) {
   return Math.min(index, MAX_STAGGERED_ENTRANCE_INDEX) * ENTRANCE_DELAY_MS;
 }
@@ -327,7 +328,6 @@ export default function NotesFeed({
   const { height } = useWindowDimensions();
   const captureVisibilityRef = useRef(true);
   const refreshGestureActiveRef = useRef(false);
-  const isAdjustingSnapRef = useRef(false);
   const lastOffsetYRef = useRef(0);
   const previousItemKeysRef = useRef<string[] | null>(null);
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null);
@@ -343,7 +343,12 @@ export default function NotesFeed({
     [listData]
   );
   const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
-  const snapSuspended = refreshGestureActive || refreshing;
+  const snapSuspended = refreshGestureActive;
+  const snapOffsets = useMemo(
+    () => Array.from({ length: snapPageCount + 1 }, (_, index) => index * snapHeight),
+    [snapHeight, snapPageCount]
+  );
+  const nativeSnapEnabled = !snapSuspended;
 
   const updateRefreshGestureActive = useCallback((nextActive: boolean) => {
     if (refreshGestureActiveRef.current === nextActive) {
@@ -375,7 +380,7 @@ export default function NotesFeed({
   }, [onCaptureVisibilityChange]);
 
   useEffect(() => {
-    if (!refreshing && lastOffsetYRef.current >= 0) {
+    if (lastOffsetYRef.current >= 0) {
       updateRefreshGestureActive(false);
     }
   }, [refreshing, updateRefreshGestureActive]);
@@ -451,7 +456,7 @@ export default function NotesFeed({
   const maybeCorrectSnapOffset = useCallback(
     (
       offsetY: number,
-      { animated, trackAdjustment = false }: { animated: boolean; trackAdjustment?: boolean }
+      { animated }: { animated: boolean }
     ) => {
       if (Platform.OS !== 'android') {
         return false;
@@ -460,10 +465,6 @@ export default function NotesFeed({
       const nearestSnapOffset = getNearestSnapOffset(offsetY);
       if (Math.abs(nearestSnapOffset - offsetY) < SCROLL_SNAP_EPSILON) {
         return false;
-      }
-
-      if (trackAdjustment) {
-        isAdjustingSnapRef.current = true;
       }
 
       flatListRef.current?.scrollToOffset({ offset: nearestSnapOffset, animated });
@@ -478,25 +479,47 @@ export default function NotesFeed({
       return;
     }
 
-    isAdjustingSnapRef.current = false;
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
     applySettledOffset(0);
   }, [applySettledOffset, flatListRef]);
 
-  const settleAndroidSnap = useCallback(
-    (offsetY: number) => {
-      if (Platform.OS !== 'android') {
-        return;
+  const maybeStickToCapturePage = useCallback(
+    (offsetY: number, velocityY: number) => {
+      if (offsetY <= 0 || offsetY >= snapHeight) {
+        return false;
       }
 
-      if (isAdjustingSnapRef.current) {
-        isAdjustingSnapRef.current = false;
-        return;
+      if (offsetY >= snapHeight * CAPTURE_PAGE_STICKY_THRESHOLD) {
+        return false;
       }
 
-      maybeCorrectSnapOffset(offsetY, { animated: true, trackAdjustment: true });
+      if (Math.abs(velocityY) >= CAPTURE_PAGE_STICKY_VELOCITY_THRESHOLD) {
+        return false;
+      }
+
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      applySettledOffset(0);
+      return true;
     },
-    [maybeCorrectSnapOffset]
+    [applySettledOffset, flatListRef, snapHeight]
+  );
+
+  const maybeClampToLastSnapOffset = useCallback(
+    (offsetY: number, animated: boolean) => {
+      if (Platform.OS !== 'android' || snapOffsets.length === 0) {
+        return false;
+      }
+
+      const lastSnapOffset = snapOffsets[snapOffsets.length - 1] ?? 0;
+      if (offsetY <= lastSnapOffset + SCROLL_SNAP_EPSILON) {
+        return false;
+      }
+
+      flatListRef.current?.scrollToOffset({ offset: lastSnapOffset, animated });
+      applySettledOffset(lastSnapOffset);
+      return true;
+    },
+    [applySettledOffset, flatListRef, snapOffsets]
   );
 
   useLayoutEffect(() => {
@@ -636,8 +659,9 @@ export default function NotesFeed({
       getItemType={(item) => item.kind}
       drawDistance={snapHeight * 2}
       removeClippedSubviews={Platform.OS === 'android' && captureMode !== 'camera'}
-      snapToInterval={snapSuspended ? undefined : snapHeight}
-      disableIntervalMomentum={Platform.OS === 'android' && !snapSuspended}
+      snapToOffsets={nativeSnapEnabled ? snapOffsets : undefined}
+      snapToEnd={false}
+      disableIntervalMomentum={nativeSnapEnabled && Platform.OS === 'android'}
       snapToAlignment="start"
       decelerationRate={snapSuspended ? 'normal' : 'fast'}
       // This feed already manages its own anchor + snap corrections. Letting
@@ -663,7 +687,7 @@ export default function NotesFeed({
       onScroll={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
         lastOffsetYRef.current = offsetY;
-        updateRefreshGestureActive(offsetY < REFRESH_PULL_THRESHOLD || refreshing);
+        updateRefreshGestureActive(offsetY < REFRESH_PULL_THRESHOLD);
         reportCaptureVisibility(offsetY);
         onScrollOffsetChange?.(offsetY);
       }}
@@ -683,10 +707,15 @@ export default function NotesFeed({
           return;
         }
 
+        if (maybeClampToLastSnapOffset(offsetY, true)) {
+          return;
+        }
+
         const velocityY = event.nativeEvent.velocity?.y ?? 0;
-        if (Math.abs(velocityY) < DRAG_END_VELOCITY_THRESHOLD) {
+        if (maybeStickToCapturePage(offsetY, velocityY)) {
+          return;
+        } else if (!nativeSnapEnabled) {
           applySettledOffset(offsetY);
-          settleAndroidSnap(offsetY);
         }
       }}
       onMomentumScrollBegin={() => {
@@ -704,8 +733,11 @@ export default function NotesFeed({
           return;
         }
 
+        if (maybeClampToLastSnapOffset(offsetY, true)) {
+          return;
+        }
+
         applySettledOffset(offsetY);
-        settleAndroidSnap(offsetY);
       }}
       contentContainerStyle={{ paddingBottom: height - snapHeight + bottomOverlayInset }}
       refreshControl={

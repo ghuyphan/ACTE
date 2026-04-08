@@ -1045,31 +1045,10 @@ private struct LocketWidgetEntryView: View {
         payload.noteType == "photo" ? 0.92 : 0.5
     }
 
-    private var shouldPinLocationChip: Bool {
-        hasLocationEyebrow && contentDisplayText.isEmpty
-    }
-
     private var hasVisualOnlyTextContent: Bool {
         payload.noteType == "text" &&
         payload.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         (shouldShowStickerOverlay || shouldShowDoodleOverlay)
-    }
-
-    private var textSurfaceColors: [Color] {
-        if
-            let start = payload.backgroundGradientStartColor,
-            let end = payload.backgroundGradientEndColor,
-            !start.isEmpty,
-            !end.isEmpty
-        {
-            return [colorFromHex(start), colorFromHex(end)]
-        }
-
-        return [Color(red: 0.96, green: 0.94, blue: 0.91), Color(red: 0.93, green: 0.90, blue: 0.86)]
-    }
-
-    private var photoOverlayColors: [Color] {
-        [Color.black.opacity(0.14), Color.black.opacity(0.48)]
     }
 
     private var nearbyPlacesLabel: String {
@@ -1281,26 +1260,7 @@ private struct LocketWidgetEntryView: View {
 
     @ViewBuilder
     private var backgroundLayer: some View {
-        if let image = resolvedImage, hasPhotoBackground {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-                .overlay(
-                    LinearGradient(
-                        colors: photoOverlayColors,
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-        } else {
-            LinearGradient(
-                colors: textSurfaceColors,
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
+        outerSurfaceColor
     }
 
     @ViewBuilder
@@ -1405,232 +1365,33 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var smallLayout: some View {
-        ZStack(alignment: .bottom) {
-            if shouldShowCountBadge {
-                countBadge
-                    .padding(.bottom, smallLayoutPadding + smallBadgeBottomPadding)
-            }
-
-            if shouldShowStickerOverlay {
-                LocketWidgetStickerOverlay(
-                    placements: stickerPlacements,
-                    overlayOpacity: noteOverlayOpacity,
-                    artboardInset: 0,
-                    minimumBaseSize: 48,
-                    baseSizeRatio: 0.24
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-
-            if shouldShowDoodleOverlay {
-                LocketWidgetDoodleOverlay(
-                    strokes: doodleStrokes,
-                    isLarge: false,
-                    overlayOpacity: noteOverlayOpacity,
-                    contentInset: 0
-                )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .allowsHitTesting(false)
-            }
-
-            VStack(spacing: 0) {
-                if shouldShowAuthorChip || shouldShowLivePhotoBadge || shouldPinLocationChip {
-                    VStack(spacing: 0) {
-                        if shouldShowAuthorChip || shouldShowLivePhotoBadge {
-                            HStack {
-                                if shouldShowAuthorChip {
-                                    authorChip
-                                }
-                                Spacer(minLength: 0)
-                                if shouldShowLivePhotoBadge {
-                                    livePhotoBadge
-                                }
-                            }
-                        }
-
-                        if shouldPinLocationChip {
-                            HStack {
-                                Spacer(minLength: 0)
-                                floatingLocationChip
-                                Spacer(minLength: 0)
-                            }
-                            .padding(.top, (shouldShowAuthorChip || shouldShowLivePhotoBadge) ? 6 : 0)
-                        }
-                    }
-                    .padding(.bottom, shouldPinLocationChip ? 10 : 6)
-                }
-
-                Spacer(minLength: 0)
-                smallTextContent
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, smallLayoutPadding)
-            .padding(.top, smallLayoutPadding)
-            .padding(.bottom, smallLayoutPadding + (shouldShowCountBadge ? smallBadgeReservedSpace : 0))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        framedMemoryCard(
+            widgetPadding: 6,
+            shellPadding: 4,
+            contentPadding: 12,
+            showPhotoCaption: false,
+            isExpanded: false
+        )
     }
 
     private var mediumLayout: some View {
-        ZStack {
-            if shouldShowStickerOverlay {
-                LocketWidgetStickerOverlay(
-                    placements: stickerPlacements,
-                    overlayOpacity: noteOverlayOpacity
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-
-            if shouldShowDoodleOverlay {
-                LocketWidgetDoodleOverlay(
-                    strokes: doodleStrokes,
-                    isLarge: true,
-                    overlayOpacity: noteOverlayOpacity,
-                    contentInset: locketWidgetDoodleArtboardInset
-                )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .allowsHitTesting(false)
-            }
-
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top, spacing: 8) {
-                    if shouldShowAuthorChip {
-                        authorChip
-                    }
-
-                    Spacer(minLength: 0)
-
-                    if shouldPinLocationChip || shouldShowLivePhotoBadge {
-                        trailingOverlayChips
-                    }
-                }
-                .padding(.bottom, (shouldShowAuthorChip || shouldPinLocationChip || shouldShowLivePhotoBadge) ? 10 : 0)
-
-                if hasLocationEyebrow && !shouldPinLocationChip {
-                    Text(payload.locationName)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(eyebrowTextColor)
-                        .lineLimit(1)
-                        .padding(.bottom, 10)
-                }
-
-                if !contentDisplayText.isEmpty {
-                    Text(contentDisplayText)
-                        .font(.system(size: mediumFontSize, weight: .regular, design: .serif))
-                        .foregroundStyle(primaryTextColor)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(hasPhotoBackground ? 3 : 4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                Spacer(minLength: 14)
-
-                if shouldShowCountBadge {
-                    HStack {
-                        countBadge
-                        Spacer(minLength: 0)
-                    }
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 18)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    private var smallTextContent: some View {
-        VStack(spacing: 0) {
-            if hasLocationEyebrow && !shouldPinLocationChip {
-                Text(payload.locationName)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(eyebrowTextColor)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.bottom, 8)
-            }
-
-            if !contentDisplayText.isEmpty {
-                Text(contentDisplayText)
-                    .font(.system(size: fontSize, weight: .regular, design: .serif))
-                    .foregroundStyle(primaryTextColor)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(smallTextLineLimit)
-                    .minimumScaleFactor(smallTextMinimumScaleFactor)
-                    .allowsTightening(usesCompactSmallTextLayout)
-                    .padding(.horizontal, smallTextHorizontalPadding)
-                    .padding(.top, hasLocationEyebrow ? 2 : 10)
-            }
-        }
+        framedMemoryCard(
+            widgetPadding: 8,
+            shellPadding: 5,
+            contentPadding: 18,
+            showPhotoCaption: true,
+            isExpanded: true
+        )
     }
 
     private var largeLayout: some View {
-        ZStack {
-            if shouldShowStickerOverlay {
-                LocketWidgetStickerOverlay(
-                    placements: stickerPlacements,
-                    overlayOpacity: noteOverlayOpacity
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-
-            if shouldShowDoodleOverlay {
-                LocketWidgetDoodleOverlay(
-                    strokes: doodleStrokes,
-                    isLarge: true,
-                    overlayOpacity: noteOverlayOpacity,
-                    contentInset: locketWidgetDoodleArtboardInset
-                )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .allowsHitTesting(false)
-            }
-
-            VStack(alignment: .leading, spacing: 0) {
-                if shouldShowAuthorChip || shouldPinLocationChip || shouldShowLivePhotoBadge {
-                    HStack(alignment: .top, spacing: 8) {
-                        if shouldShowAuthorChip {
-                            authorChip
-                        }
-
-                        Spacer(minLength: 0)
-
-                        if shouldPinLocationChip || shouldShowLivePhotoBadge {
-                            trailingOverlayChips
-                        }
-                    }
-                    .padding(.bottom, (shouldShowAuthorChip || shouldPinLocationChip || shouldShowLivePhotoBadge) ? 10 : 0)
-                }
-
-                if hasLocationEyebrow && !shouldPinLocationChip {
-                    Text(payload.locationName)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(eyebrowTextColor)
-                        .lineLimit(1)
-                        .padding(.bottom, 12)
-                }
-
-                if !contentDisplayText.isEmpty {
-                    Text(contentDisplayText)
-                        .font(.system(size: fontSize, weight: .regular, design: .serif))
-                        .foregroundStyle(primaryTextColor)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                Spacer(minLength: 18)
-
-                if shouldShowCountBadge {
-                    HStack {
-                        countBadge
-                        Spacer(minLength: 0)
-                    }
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 22)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        framedMemoryCard(
+            widgetPadding: 10,
+            shellPadding: 6,
+            contentPadding: 22,
+            showPhotoCaption: true,
+            isExpanded: true
+        )
     }
 
     private var fontSize: CGFloat {
@@ -1655,34 +1416,6 @@ private struct LocketWidgetEntryView: View {
         return 16.5
     }
 
-    private var usesCompactSmallTextLayout: Bool {
-        !isLarge && !hasPhotoBackground
-    }
-
-    private var smallTextLineLimit: Int {
-        usesCompactSmallTextLayout ? 4 : 3
-    }
-
-    private var smallTextMinimumScaleFactor: CGFloat {
-        usesCompactSmallTextLayout ? 0.82 : 1
-    }
-
-    private var smallTextHorizontalPadding: CGFloat {
-        usesCompactSmallTextLayout ? 14 : 18
-    }
-
-    private var smallBadgeBottomPadding: CGFloat {
-        usesCompactSmallTextLayout ? 4 : 6
-    }
-
-    private var smallBadgeReservedSpace: CGFloat {
-        28
-    }
-
-    private var smallLayoutPadding: CGFloat {
-        usesCompactSmallTextLayout ? 12 : 14
-    }
-
     private var shouldShowCountBadge: Bool {
         payload.isIdleState && payload.noteCount > 0
     }
@@ -1690,39 +1423,39 @@ private struct LocketWidgetEntryView: View {
     private var primaryTextColor: Color {
         hasPhotoBackground
             ? Color.white
-            : Color(red: 0.17, green: 0.10, blue: 0.07)
+            : Color(red: 0.23, green: 0.17, blue: 0.13)
     }
 
     private var eyebrowTextColor: Color {
         hasPhotoBackground
-            ? Color.white.opacity(0.82)
-            : Color(red: 0.44, green: 0.36, blue: 0.30)
+            ? Color.white.opacity(0.84)
+            : Color(red: 0.46, green: 0.37, blue: 0.30)
     }
 
     private var floatingLocationChipBackgroundColor: Color {
         hasPhotoBackground
-            ? Color.black.opacity(0.28)
-            : Color.white.opacity(0.72)
+            ? Color.black.opacity(0.38)
+            : Color.white.opacity(0.90)
     }
 
     private var badgeBackgroundColor: Color {
         hasPhotoBackground
-            ? Color.white.opacity(0.18)
-            : Color.white.opacity(0.84)
+            ? Color.black.opacity(0.38)
+            : Color.white.opacity(0.90)
     }
 
     private var badgeForegroundColor: Color {
         hasPhotoBackground
             ? Color.white
-            : Color(red: 0.43, green: 0.37, blue: 0.31)
+            : Color(red: 0.39, green: 0.32, blue: 0.26)
     }
 
     private var countBadge: some View {
         Text(countLabel)
-            .font(.system(size: isLarge ? 11 : 10, weight: .medium))
+            .font(.system(size: isLarge ? 11 : 10, weight: .semibold))
             .foregroundStyle(badgeForegroundColor)
-            .padding(.horizontal, isLarge ? 12 : 10)
-            .padding(.vertical, isLarge ? 6 : 5)
+            .padding(.horizontal, isLarge ? 12 : 11)
+            .padding(.vertical, isLarge ? 7 : 6)
             .background(badgeBackgroundColor)
             .clipShape(Capsule())
     }
@@ -1740,14 +1473,14 @@ private struct LocketWidgetEntryView: View {
 
     private var authorChipBackgroundColor: Color {
         hasPhotoBackground
-            ? Color.black.opacity(0.30)
-            : Color.white.opacity(0.84)
+            ? Color.black.opacity(0.40)
+            : Color.white.opacity(0.92)
     }
 
     private var authorChipForegroundColor: Color {
         hasPhotoBackground
             ? Color.white
-            : Color(red: 0.17, green: 0.10, blue: 0.07)
+            : Color(red: 0.23, green: 0.17, blue: 0.13)
     }
 
     private var authorChip: some View {
@@ -1780,29 +1513,278 @@ private struct LocketWidgetEntryView: View {
         .clipShape(Capsule())
     }
 
-    @ViewBuilder
-    private var trailingOverlayChips: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            if shouldShowLivePhotoBadge {
-                livePhotoBadge
-            }
-
-            if shouldPinLocationChip {
-                floatingLocationChip
-            }
-        }
-    }
-
     private var livePhotoBadge: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 4) {
             Image(systemName: "livephoto")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(authorChipForegroundColor)
+
+            if isLarge || isMedium {
+                Text(payload.livePhotoBadgeText.isEmpty ? widgetLocalized("widget.livePhotoBadge", fallback: "Live") : payload.livePhotoBadgeText)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(authorChipForegroundColor)
+                    .lineLimit(1)
+            }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
         .background(authorChipBackgroundColor)
         .clipShape(Capsule())
+    }
+
+    private var outerSurfaceColor: some View {
+        Color(red: 0.97, green: 0.95, blue: 0.92)
+    }
+
+    private var cardShellColor: Color {
+        Color(red: 0.99, green: 0.98, blue: 0.96)
+    }
+
+    private var cardShellStrokeColor: Color {
+        Color(red: 0.92, green: 0.88, blue: 0.84)
+    }
+
+    private var paperSurfaceColor: Color {
+        Color(red: 0.99, green: 0.97, blue: 0.93)
+    }
+
+    private var textTintOverlayColor: Color {
+        if let start = payload.backgroundGradientStartColor, !start.isEmpty {
+            return colorFromHex(start).opacity(0.13)
+        }
+
+        return Color.clear
+    }
+
+    private var photoCaptionText: String {
+        guard !payload.isIdleState, payload.noteType == "photo", hasPhotoBackground else {
+            return ""
+        }
+
+        return payload.text
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var compactPhotoCaptionText: String {
+        guard !photoCaptionText.isEmpty else {
+            return ""
+        }
+
+        let limit = isLarge ? 62 : 36
+        if photoCaptionText.count <= limit {
+            return photoCaptionText
+        }
+
+        let endIndex = photoCaptionText.index(photoCaptionText.startIndex, offsetBy: limit - 1)
+        return "\(photoCaptionText[..<endIndex])…"
+    }
+
+    private var shouldShowPhotoCaptionChip: Bool {
+        !compactPhotoCaptionText.isEmpty
+    }
+
+    private var shouldShowBottomMetaChip: Bool {
+        !payload.isIdleState && (shouldShowAuthorChip || !compactLocationName.isEmpty)
+    }
+
+    @ViewBuilder
+    private var bottomMetaChip: some View {
+        if shouldShowAuthorChip {
+            authorChip
+        } else if !compactLocationName.isEmpty {
+            floatingLocationChip
+        }
+    }
+
+    private var photoCaptionChip: some View {
+        Text(compactPhotoCaptionText)
+            .font(.system(size: isLarge ? 12 : 11, weight: .semibold))
+            .foregroundStyle(Color.white)
+            .lineLimit(isLarge ? 2 : 1)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, isLarge ? 14 : 12)
+            .padding(.vertical, 7)
+            .background(Color.black.opacity(0.40))
+            .clipShape(Capsule())
+    }
+
+    @ViewBuilder
+    private var framedTextContent: some View {
+        if !contentDisplayText.isEmpty {
+            Text(contentDisplayText)
+                .font(noteCardBodyFont)
+                .foregroundStyle(primaryTextColor)
+                .multilineTextAlignment(isLarge ? .leading : .center)
+                .lineLimit(isLarge ? 5 : 4)
+                .lineSpacing(noteCardLineSpacing)
+                .tracking(noteCardTracking)
+                .shadow(
+                    color: hasPhotoBackground ? Color.black.opacity(0.16) : .clear,
+                    radius: hasPhotoBackground ? 4 : 0,
+                    x: 0,
+                    y: hasPhotoBackground ? 1 : 0
+                )
+                .frame(maxWidth: .infinity, alignment: isLarge ? .leading : .center)
+        }
+    }
+
+    private var noteCardBodyFont: Font {
+        let baseSize: CGFloat
+
+        if isLarge {
+            let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
+            if count > 160 {
+                baseSize = 18
+            } else if count > 96 {
+                baseSize = 20
+            } else {
+                baseSize = 24
+            }
+        } else if isMedium {
+            let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
+            baseSize = count > 110 ? 18 : 20
+        } else {
+            let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
+            baseSize = count > 110 ? 16 : 18
+        }
+
+        return .system(size: baseSize, weight: .bold, design: .default)
+    }
+
+    private var noteCardLineSpacing: CGFloat {
+        if isLarge {
+            return 2
+        }
+
+        return 1
+    }
+
+    private var noteCardTracking: CGFloat {
+        -0.35
+    }
+
+    @ViewBuilder
+    private var cardInnerBackground: some View {
+        if let image = resolvedImage, hasPhotoBackground {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.06),
+                            Color.black.opacity(0.16),
+                            Color.black.opacity(0.48),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+        } else {
+            paperSurfaceColor
+                .overlay(textTintOverlayColor)
+        }
+    }
+
+    private func framedMemoryCard(
+        widgetPadding: CGFloat,
+        shellPadding: CGFloat,
+        contentPadding: CGFloat,
+        showPhotoCaption: Bool,
+        isExpanded: Bool
+    ) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: isExpanded ? 30 : 26, style: .continuous)
+                .fill(cardShellColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: isExpanded ? 30 : 26, style: .continuous)
+                        .stroke(cardShellStrokeColor.opacity(0.78), lineWidth: 0.9)
+                )
+
+            ZStack(alignment: .bottomLeading) {
+                cardInnerBackground
+
+                if shouldShowStickerOverlay {
+                    LocketWidgetStickerOverlay(
+                        placements: stickerPlacements,
+                        overlayOpacity: noteOverlayOpacity,
+                        artboardInset: isExpanded ? 16 : 10,
+                        minimumBaseSize: isExpanded ? 64 : 48,
+                        baseSizeRatio: isExpanded ? 0.26 : 0.22
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+
+                if shouldShowDoodleOverlay {
+                    LocketWidgetDoodleOverlay(
+                        strokes: doodleStrokes,
+                        isLarge: isExpanded,
+                        overlayOpacity: noteOverlayOpacity,
+                        contentInset: isExpanded ? 16 : 8
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+                }
+
+                VStack(spacing: 0) {
+                    HStack(alignment: .top) {
+                        Spacer(minLength: 0)
+
+                        if shouldShowLivePhotoBadge {
+                            livePhotoBadge
+                        } else if shouldShowCountBadge {
+                            countBadge
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+
+                    if !hasPhotoBackground {
+                        framedTextContent
+                    }
+
+                    Spacer(minLength: hasPhotoBackground ? 0 : 10)
+
+                    HStack(alignment: .bottom) {
+                        if shouldShowBottomMetaChip {
+                            bottomMetaChip
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+                }
+                .padding(contentPadding)
+
+                if showPhotoCaption && shouldShowPhotoCaptionChip {
+                    VStack {
+                        Spacer(minLength: 0)
+                        HStack {
+                            Spacer(minLength: 0)
+                            photoCaptionChip
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .padding(.horizontal, contentPadding)
+                    .padding(.bottom, contentPadding + (shouldShowBottomMetaChip ? 38 : 0))
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: isExpanded ? 26 : 22, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: isExpanded ? 26 : 22, style: .continuous)
+                    .stroke(
+                        hasPhotoBackground
+                            ? Color.white.opacity(0.18)
+                            : cardShellStrokeColor.opacity(0.34),
+                        lineWidth: 0.8
+                    )
+            )
+            .padding(shellPadding)
+        }
+        .padding(widgetPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func loadImage(fromPath path: String) -> UIImage? {
