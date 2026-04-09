@@ -11,10 +11,19 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Reanimated, {
+  Easing,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import {
   hydrateStickerPlacements,
   type NoteStickerPlacement,
 } from '../../services/noteStickers';
+import { measureWindowRect, type MeasurableView, type WindowRect } from '../../utils/measureWindowRect';
 import {
   getStickerPinchScale,
   getStickerOutlineOffsets,
@@ -23,6 +32,11 @@ import {
 } from './stickerCanvasMetrics';
 import StampStickerArtwork from './StampStickerArtwork';
 import { getStickerPlacementFrame } from './stickerPlacementLayout';
+
+export interface StickerEntryAnimation {
+  placementId: string;
+  sourceRect: WindowRect;
+}
 
 interface NoteStickerCanvasProps {
   placements: NoteStickerPlacement[];
@@ -40,6 +54,8 @@ interface NoteStickerCanvasProps {
   onToggleSelectedPlacementMotionLock?: (placementId: string) => void;
   onToggleSelectedPlacementOutline?: (placementId: string) => void;
   onGestureActiveChange?: (active: boolean) => void;
+  entryAnimation?: StickerEntryAnimation | null;
+  onEntryAnimationComplete?: (placementId: string) => void;
 }
 
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
@@ -116,10 +132,13 @@ function EditableSticker({
   showSelection,
   interactiveRef,
   stampShadowEnabled,
+  canvasWindowRect,
+  entryAnimation,
   onChangeSelectedPlacementId,
   onCommit,
   sizeMultiplier,
   minimumBaseSize,
+  onEntryAnimationComplete,
   onToggleSelectedPlacementMotionLock,
   onToggleSelectedPlacementOutline,
   onGestureActiveChange,
@@ -129,10 +148,13 @@ function EditableSticker({
   showSelection: boolean;
   interactiveRef: { current: boolean };
   stampShadowEnabled: boolean;
+  canvasWindowRect: WindowRect | null;
+  entryAnimation?: StickerEntryAnimation | null;
   onChangeSelectedPlacementId?: (placementId: string | null) => void;
   onCommit: (nextPlacement: NoteStickerPlacement) => void;
   sizeMultiplier: number;
   minimumBaseSize: number;
+  onEntryAnimationComplete?: (placementId: string) => void;
   onToggleSelectedPlacementMotionLock?: (placementId: string) => void;
   onToggleSelectedPlacementOutline?: (placementId: string) => void;
   onGestureActiveChange?: (active: boolean) => void;
@@ -143,6 +165,7 @@ function EditableSticker({
   const livePlacementRef = useRef(placement);
   const activeGestureCountRef = useRef(0);
   const [dragPlacement, setDragPlacement] = useState(placement);
+  const entryProgress = useSharedValue(1);
   const activePlacement = dragPlacement;
   const placementFrame = getStickerPlacementFrame(
     activePlacement,
@@ -159,6 +182,8 @@ function EditableSticker({
     outlineSize,
     stampMetrics,
   } = placementFrame;
+  const entryAnimationActive = Boolean(entryAnimation);
+  const selectionVisible = showSelection && !entryAnimationActive;
   const showOutline = activePlacement.renderMode !== 'stamp' && activePlacement.outlineEnabled !== false;
   const showOutlineToggle = activePlacement.renderMode !== 'stamp' && Boolean(onToggleSelectedPlacementOutline);
 
@@ -179,11 +204,11 @@ function EditableSticker({
     setDragPlacement(nextPlacement);
   }, []);
   const handleSelect = useCallback(() => {
-    if (!interactiveRef.current) {
+    if (!interactiveRef.current || entryAnimationActive) {
       return;
     }
     onChangeSelectedPlacementId?.(placement.id);
-  }, [interactiveRef, onChangeSelectedPlacementId, placement.id]);
+  }, [entryAnimationActive, interactiveRef, onChangeSelectedPlacementId, placement.id]);
 
   const beginGesture = useCallback(
     (type: 'pan' | 'pinch' | 'rotation') => {
@@ -220,13 +245,13 @@ function EditableSticker({
         .minDistance(1)
         .shouldCancelWhenOutside(false)
         .onBegin(() => {
-          if (!interactiveRef.current || layout.width <= 0 || layout.height <= 0) {
+          if (entryAnimationActive || !interactiveRef.current || layout.width <= 0 || layout.height <= 0) {
             return;
           }
           beginGesture('pan');
         })
         .onUpdate((event) => {
-          if (!interactiveRef.current || layout.width <= 0 || layout.height <= 0) {
+          if (entryAnimationActive || !interactiveRef.current || layout.width <= 0 || layout.height <= 0) {
             return;
           }
           updateLivePlacement({
@@ -235,12 +260,12 @@ function EditableSticker({
           });
         })
         .onFinalize(() => {
-          if (!interactiveRef.current) {
+          if (entryAnimationActive || !interactiveRef.current) {
             return;
           }
           finalizeGesture();
         }),
-    [beginGesture, finalizeGesture, interactiveRef, layout.height, layout.width, updateLivePlacement]
+    [beginGesture, entryAnimationActive, finalizeGesture, interactiveRef, layout.height, layout.width, updateLivePlacement]
   );
 
   const pinchGesture = useMemo(
@@ -249,13 +274,13 @@ function EditableSticker({
         .runOnJS(true)
         .shouldCancelWhenOutside(false)
         .onBegin(() => {
-          if (!interactiveRef.current) {
+          if (entryAnimationActive || !interactiveRef.current) {
             return;
           }
           beginGesture('pinch');
         })
         .onUpdate((event) => {
-          if (!interactiveRef.current) {
+          if (entryAnimationActive || !interactiveRef.current) {
             return;
           }
           updateLivePlacement({
@@ -263,12 +288,12 @@ function EditableSticker({
           });
         })
         .onFinalize(() => {
-          if (!interactiveRef.current) {
+          if (entryAnimationActive || !interactiveRef.current) {
             return;
           }
           finalizeGesture();
         }),
-    [beginGesture, finalizeGesture, interactiveRef, updateLivePlacement]
+    [beginGesture, entryAnimationActive, finalizeGesture, interactiveRef, updateLivePlacement]
   );
 
   const rotationGesture = useMemo(
@@ -277,13 +302,13 @@ function EditableSticker({
         .runOnJS(true)
         .shouldCancelWhenOutside(false)
         .onBegin(() => {
-          if (!interactiveRef.current) {
+          if (entryAnimationActive || !interactiveRef.current) {
             return;
           }
           beginGesture('rotation');
         })
         .onUpdate((event) => {
-          if (!interactiveRef.current) {
+          if (entryAnimationActive || !interactiveRef.current) {
             return;
           }
           updateLivePlacement({
@@ -291,12 +316,12 @@ function EditableSticker({
           });
         })
         .onFinalize(() => {
-          if (!interactiveRef.current) {
+          if (entryAnimationActive || !interactiveRef.current) {
             return;
           }
           finalizeGesture();
         }),
-    [beginGesture, finalizeGesture, interactiveRef, updateLivePlacement]
+    [beginGesture, entryAnimationActive, finalizeGesture, interactiveRef, updateLivePlacement]
   );
   const combinedGesture = useMemo(
     () => Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture),
@@ -327,14 +352,9 @@ function EditableSticker({
       top: activePlacement.y * layout.height - frameHeight / 2,
       zIndex: activePlacement.zIndex,
       opacity: activePlacement.opacity,
-      transform: [
-        { scale: normalizedScale },
-        { rotate: `${activePlacement.rotation}deg` },
-      ],
     }),
     [
       activePlacement.opacity,
-      activePlacement.rotation,
       activePlacement.x,
       activePlacement.y,
       activePlacement.zIndex,
@@ -342,9 +362,92 @@ function EditableSticker({
       frameWidth,
       layout.height,
       layout.width,
+    ]
+  );
+  const stickerTransformStyle = useMemo(
+    () => ({
+      transform: [
+        { scale: normalizedScale },
+        { rotate: `${activePlacement.rotation}deg` },
+      ],
+    }),
+    [
+      activePlacement.rotation,
       normalizedScale,
     ]
   );
+  const entryMotion = useMemo(() => {
+    if (!entryAnimation || !canvasWindowRect) {
+      return null;
+    }
+
+    const targetCenterX = canvasWindowRect.x + stickerWrapStyle.left + frameWidth / 2;
+    const targetCenterY = canvasWindowRect.y + stickerWrapStyle.top + frameHeight / 2;
+    const sourceCenterX = entryAnimation.sourceRect.x + entryAnimation.sourceRect.width / 2;
+    const sourceCenterY = entryAnimation.sourceRect.y + entryAnimation.sourceRect.height / 2;
+    const renderedTargetWidth = Math.max(frameWidth * normalizedScale, 1);
+    const renderedTargetHeight = Math.max(frameHeight * normalizedScale, 1);
+    const initialScale = Math.max(
+      0.18,
+      Math.min(
+        entryAnimation.sourceRect.width / renderedTargetWidth,
+        entryAnimation.sourceRect.height / renderedTargetHeight
+      )
+    );
+
+    return {
+      translateX: sourceCenterX - targetCenterX,
+      translateY: sourceCenterY - targetCenterY,
+      scale: Number.isFinite(initialScale) ? initialScale : 1,
+    };
+  }, [canvasWindowRect, entryAnimation, frameHeight, frameWidth, normalizedScale, stickerWrapStyle.left, stickerWrapStyle.top]);
+
+  useEffect(() => {
+    if (!entryAnimationActive) {
+      entryProgress.value = 1;
+      return;
+    }
+
+    if (!entryMotion) {
+      return;
+    }
+
+    entryProgress.value = 0;
+    entryProgress.value = withTiming(
+      1,
+      {
+        duration: 380,
+        easing: Easing.out(Easing.cubic),
+      },
+      (finished) => {
+        if (finished && onEntryAnimationComplete) {
+          runOnJS(onEntryAnimationComplete)(placement.id);
+        }
+      }
+    );
+  }, [entryAnimationActive, entryMotion, entryProgress, onEntryAnimationComplete, placement.id]);
+
+  const entryAnimatedStyle = useAnimatedStyle(() => {
+    if (!entryMotion) {
+      return {
+        transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 1 }],
+      };
+    }
+
+    return {
+      transform: [
+        {
+          translateX: interpolate(entryProgress.value, [0, 1], [entryMotion.translateX, 0]),
+        },
+        {
+          translateY: interpolate(entryProgress.value, [0, 1], [entryMotion.translateY, 0]),
+        },
+        {
+          scale: interpolate(entryProgress.value, [0, 1], [entryMotion.scale, 1]),
+        },
+      ],
+    };
+  }, [entryMotion, entryProgress]);
 
   const stickerArtwork = (
     <View style={styles.stickerArtwork}>
@@ -399,33 +502,37 @@ function EditableSticker({
   );
 
   const stickerNode = (
-    <View
-      pointerEvents="auto"
+    <Reanimated.View
+      pointerEvents={entryAnimationActive ? 'none' : 'auto'}
       testID={`note-sticker-wrap-${placement.id}`}
       style={[
         styles.stickerWrap,
         stickerWrapStyle,
+        entryAnimatedStyle,
       ]}
     >
-      {showSelection ? <View pointerEvents="none" style={styles.selectionRing} /> : null}
-      {showSelection ? (
-        <StickerSelectionControls
-          placementId={placement.id}
-          motionLocked={activePlacement.motionLocked === true}
-          outlineEnabled={activePlacement.outlineEnabled !== false}
-          showOutlineToggle={showOutlineToggle}
-          onToggleSelectedPlacementMotionLock={onToggleSelectedPlacementMotionLock}
-          onToggleSelectedPlacementOutline={onToggleSelectedPlacementOutline}
-        />
-      ) : null}
-      <Pressable
-        accessibilityRole="button"
-        onPress={handleSelect}
-        style={styles.stickerPressable}
-      >
-        {stickerArtwork}
-      </Pressable>
-    </View>
+      <View style={[styles.stickerTransformLayer, stickerTransformStyle]}>
+        {selectionVisible ? <View pointerEvents="none" style={styles.selectionRing} /> : null}
+        {selectionVisible ? (
+          <StickerSelectionControls
+            placementId={placement.id}
+            motionLocked={activePlacement.motionLocked === true}
+            outlineEnabled={activePlacement.outlineEnabled !== false}
+            showOutlineToggle={showOutlineToggle}
+            onToggleSelectedPlacementMotionLock={onToggleSelectedPlacementMotionLock}
+            onToggleSelectedPlacementOutline={onToggleSelectedPlacementOutline}
+          />
+        ) : null}
+        <Pressable
+          accessibilityRole="button"
+          disabled={entryAnimationActive}
+          onPress={handleSelect}
+          style={styles.stickerPressable}
+        >
+          {stickerArtwork}
+        </Pressable>
+      </View>
+    </Reanimated.View>
   );
 
   return (
@@ -453,10 +560,14 @@ function NoteStickerCanvas({
   onToggleSelectedPlacementMotionLock,
   onToggleSelectedPlacementOutline,
   onGestureActiveChange,
+  entryAnimation = null,
+  onEntryAnimationComplete,
 }: NoteStickerCanvasProps) {
   const [layout, setLayout] = useState<CanvasLayout>({ width: 1, height: 1 });
+  const [canvasWindowRect, setCanvasWindowRect] = useState<WindowRect | null>(null);
   const [hydratedPlacements, setHydratedPlacements] = useState(placements);
   const editableRef = useRef(editable);
+  const canvasRef = useRef<View | null>(null);
 
   useEffect(() => {
     editableRef.current = editable;
@@ -483,6 +594,53 @@ function NoteStickerCanvas({
 
   const renderedPlacements = editable ? placements : hydratedPlacements;
   const sortedPlacements = useMemo(() => sortStickerPlacements(renderedPlacements), [renderedPlacements]);
+  const activeEntryPlacementId = entryAnimation?.placementId ?? null;
+
+  const measureCanvasInWindow = useCallback(async () => {
+    if (!activeEntryPlacementId) {
+      return null;
+    }
+
+    const nextRect = await measureWindowRect(
+      canvasRef.current as MeasurableView | null,
+      layout
+    );
+    if (!nextRect) {
+      return null;
+    }
+
+    setCanvasWindowRect((current) => {
+      if (
+        current &&
+        current.x === nextRect.x &&
+        current.y === nextRect.y &&
+        current.width === nextRect.width &&
+        current.height === nextRect.height
+      ) {
+        return current;
+      }
+
+      return nextRect;
+    });
+    return nextRect;
+  }, [activeEntryPlacementId, layout]);
+
+  const scheduleCanvasWindowMeasurement = useCallback(() => {
+    if (!activeEntryPlacementId) {
+      return;
+    }
+
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        void measureCanvasInWindow();
+      });
+      return;
+    }
+
+    setTimeout(() => {
+      void measureCanvasInWindow();
+    }, 0);
+  }, [activeEntryPlacementId, measureCanvasInWindow]);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -501,6 +659,22 @@ function NoteStickerCanvas({
     });
   }, []);
 
+  useEffect(() => {
+    if (!activeEntryPlacementId) {
+      return;
+    }
+
+    setCanvasWindowRect(null);
+  }, [activeEntryPlacementId]);
+
+  useEffect(() => {
+    if (!activeEntryPlacementId) {
+      return;
+    }
+
+    scheduleCanvasWindowMeasurement();
+  }, [activeEntryPlacementId, layout.height, layout.width, scheduleCanvasWindowMeasurement]);
+
   const commitPlacement = useCallback((nextPlacement: NoteStickerPlacement) => {
     if (!onChangePlacements) {
       return;
@@ -515,7 +689,12 @@ function NoteStickerCanvas({
   }, [onChangePlacements, placements]);
 
   return (
-    <View pointerEvents={editable ? 'box-none' : 'none'} style={[styles.canvas, style]} onLayout={handleLayout}>
+    <View
+      ref={canvasRef}
+      pointerEvents={editable ? 'box-none' : 'none'}
+      style={[styles.canvas, style]}
+      onLayout={handleLayout}
+    >
       {editable && onPressCanvas ? (
         <Pressable
           testID="note-sticker-canvas-empty"
@@ -529,13 +708,20 @@ function NoteStickerCanvas({
           key={placement.id}
           placement={placement}
           layout={layout}
-          showSelection={editable && selectedPlacementId === placement.id}
+          showSelection={
+            editable &&
+            selectedPlacementId === placement.id &&
+            activeEntryPlacementId !== placement.id
+          }
           interactiveRef={editableRef}
           stampShadowEnabled={stampShadowEnabled}
+          canvasWindowRect={canvasWindowRect}
+          entryAnimation={activeEntryPlacementId === placement.id ? entryAnimation : null}
           onChangeSelectedPlacementId={onChangeSelectedPlacementId}
           onCommit={commitPlacement}
           sizeMultiplier={sizeMultiplier}
           minimumBaseSize={minimumBaseSize}
+          onEntryAnimationComplete={onEntryAnimationComplete}
           onToggleSelectedPlacementMotionLock={onToggleSelectedPlacementMotionLock}
           onToggleSelectedPlacementOutline={onToggleSelectedPlacementOutline}
           onGestureActiveChange={onGestureActiveChange}
@@ -558,6 +744,10 @@ const styles = StyleSheet.create({
   },
   stickerWrap: {
     position: 'absolute',
+  },
+  stickerTransformLayer: {
+    width: '100%',
+    height: '100%',
   },
   stickerPressable: {
     width: '100%',

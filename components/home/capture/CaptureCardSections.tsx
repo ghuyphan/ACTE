@@ -20,7 +20,7 @@ import {
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
 import type { PhotoFilterId } from '../../../services/photoFilters';
 import NoteDoodleCanvas, { type DoodleStroke } from '../../notes/NoteDoodleCanvas';
-import NoteStickerCanvas from '../../notes/NoteStickerCanvas';
+import NoteStickerCanvas, { type StickerEntryAnimation } from '../../notes/NoteStickerCanvas';
 import PhotoMediaView from '../../notes/PhotoMediaView';
 import PremiumNoteFinishOverlay from '../../ui/PremiumNoteFinishOverlay';
 import PrimaryButton from '../../ui/PrimaryButton';
@@ -66,9 +66,11 @@ interface TextCaptureSurfaceProps {
   recentAutoEmoji: { emoji: string; token: number } | null;
   selectedStickerId: string | null;
   setTextDoodleStrokes: (nextStrokes: DoodleStroke[]) => void;
+  stickerEntryAnimation: StickerEntryAnimation | null;
   stickerModeEnabled: boolean;
   stickerPlacements: NoteStickerPlacement[];
   textInputDynamicStyle: CaptureCardTextInputStyle;
+  onStickerEntryAnimationComplete: (placementId: string) => void;
 }
 
 export function TextCaptureSurface({
@@ -93,9 +95,11 @@ export function TextCaptureSurface({
   recentAutoEmoji,
   selectedStickerId,
   setTextDoodleStrokes,
+  stickerEntryAnimation,
   stickerModeEnabled,
   stickerPlacements,
   textInputDynamicStyle,
+  onStickerEntryAnimationComplete,
 }: TextCaptureSurfaceProps) {
   const captureGradient = getCaptureNoteGradient({ noteColor });
   const usesLightCaptureChrome = colors.captureGlassColorScheme === 'light';
@@ -135,6 +139,8 @@ export function TextCaptureSurface({
             selectedPlacementId={selectedStickerId}
             onChangeSelectedPlacementId={handleSelectSticker}
             onPressCanvas={handlePressStickerCanvas}
+            entryAnimation={stickerEntryAnimation}
+            onEntryAnimationComplete={onStickerEntryAnimationComplete}
             onToggleSelectedPlacementMotionLock={() =>
               handleSelectedStickerAction('motion-lock-toggle')
             }
@@ -241,9 +247,11 @@ interface PhotoCaptureSurfaceProps {
   selectedStickerId: string | null;
   setPhotoDoodleStrokes: (nextStrokes: DoodleStroke[]) => void;
   showCaptureCover: boolean;
+  stickerEntryAnimation: StickerEntryAnimation | null;
   stickerModeEnabled: boolean;
   stickerPlacements: NoteStickerPlacement[];
   t: TFunction;
+  onStickerEntryAnimationComplete: (placementId: string) => void;
 }
 
 export function PhotoCaptureSurface({
@@ -276,9 +284,11 @@ export function PhotoCaptureSurface({
   selectedStickerId,
   setPhotoDoodleStrokes,
   showCaptureCover,
+  stickerEntryAnimation,
   stickerModeEnabled,
   stickerPlacements,
   t,
+  onStickerEntryAnimationComplete,
 }: PhotoCaptureSurfaceProps) {
   const photoPreviewControlBorder = hasLivePhotoMotion
     ? colors.captureGlassColorScheme === 'dark'
@@ -342,6 +352,8 @@ export function PhotoCaptureSurface({
             selectedPlacementId={selectedStickerId}
             onChangeSelectedPlacementId={handleSelectSticker}
             onPressCanvas={handlePressStickerCanvas}
+            entryAnimation={stickerEntryAnimation}
+            onEntryAnimationComplete={onStickerEntryAnimationComplete}
             onToggleSelectedPlacementMotionLock={() =>
               handleSelectedStickerAction('motion-lock-toggle')
             }

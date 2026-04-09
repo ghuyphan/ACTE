@@ -5,8 +5,6 @@ import { Image as ExpoImage } from 'expo-image';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -26,11 +24,11 @@ import Reanimated, {
   withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { STICKER_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
 import { Radii, Typography } from '../../../constants/theme';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
+import { measureWindowRect, type MeasurableView, type WindowRect } from '../../../utils/measureWindowRect';
 import {
   getStampCutterBaseScale,
   getStampCutterWindowRect,
@@ -47,18 +45,13 @@ import {
   STAMP_PAPER_BORDER_COLOR,
   STAMP_PAPER_COLOR,
 } from '../../notes/stampFrameMetrics';
-import { getStickerPlacementWindowRect } from '../../notes/stickerPlacementLayout';
 import PrimaryButton from '../../ui/PrimaryButton';
-import { CARD_SIZE } from './captureCardStyles';
 import { triggerCaptureCardHaptic } from './captureMotion';
 
 const SCREEN_HORIZONTAL_PADDING = 18;
 const EDITOR_STAGE_MAX_WIDTH = 520;
-const STICKER_MINIMUM_BASE_SIZE = 68;
 const EXTRACTION_DURATION_MS = 220;
 const EXTRACTION_DURATION_REDUCED_MS = 120;
-const FLIGHT_DURATION_MS = 400;
-const FLIGHT_DURATION_REDUCED_MS = 240;
 const PROCESSING_HOLD_MS = 140;
 const PROCESSING_HOLD_REDUCED_MS = 60;
 const PROCESSING_FLOAT_DURATION_MS = 1200;
@@ -69,13 +62,6 @@ const RESET_TRANSFORM: StampCutterTransform = {
   rotation: 0,
 };
 
-interface WindowRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 interface StampCutterEditorProps {
   visible: boolean;
   draft: StampCutterDraft | null;
@@ -84,9 +70,11 @@ interface StampCutterEditorProps {
   subtitle: string;
   cancelLabel: string;
   confirmLabel: string;
-  captureAreaRect?: WindowRect | null;
   onClose: () => void;
-  onCompletePlacement: (placement: NoteStickerPlacement) => void;
+  onCompletePlacement: (payload: {
+    placement: NoteStickerPlacement;
+    sourceRect: WindowRect;
+  }) => void;
   onConfirm: (payload: {
     viewportSize: { width: number; height: number };
     selectionRect: { x: number; y: number; width: number; height: number };
@@ -98,47 +86,6 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function resolveStickerArtboardRect(captureAreaRect: WindowRect) {
-  const cardScale =
-    captureAreaRect.height > 0 ? Math.max(captureAreaRect.height / CARD_SIZE, 0.01) : 1;
-  const cardWidth = CARD_SIZE * cardScale;
-  const cardHeight = CARD_SIZE * cardScale;
-  const cardX = captureAreaRect.x + (captureAreaRect.width - cardWidth) / 2;
-  const cardY = captureAreaRect.y + (captureAreaRect.height - cardHeight) / 2;
-
-  return {
-    x: cardX + STICKER_ARTBOARD_FRAME.left * cardScale,
-    y: cardY + STICKER_ARTBOARD_FRAME.top * cardScale,
-    width:
-      cardWidth - (STICKER_ARTBOARD_FRAME.left + STICKER_ARTBOARD_FRAME.right) * cardScale,
-    height:
-      cardHeight - (STICKER_ARTBOARD_FRAME.top + STICKER_ARTBOARD_FRAME.bottom) * cardScale,
-  };
-}
-
-function resolvePlacementTargetRect(
-  placement: NoteStickerPlacement,
-  captureAreaRect: WindowRect | null | undefined
-): WindowRect | null {
-  if (!captureAreaRect) {
-    return null;
-  }
-
-  const targetRect = getStickerPlacementWindowRect(
-    placement,
-    resolveStickerArtboardRect(captureAreaRect),
-    1,
-    STICKER_MINIMUM_BASE_SIZE
-  );
-
-  return {
-    x: targetRect.x,
-    y: targetRect.y,
-    width: targetRect.width,
-    height: targetRect.height,
-  };
-}
-
 function StampCutterEditor({
   visible,
   draft,
@@ -147,7 +94,6 @@ function StampCutterEditor({
   subtitle,
   cancelLabel,
   confirmLabel,
-  captureAreaRect = null,
   onClose,
   onCompletePlacement,
   onConfirm,
@@ -158,8 +104,8 @@ function StampCutterEditor({
   const insets = safeAreaInsets ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [cutAnimating, setCutAnimating] = useState(false);
-  const [stageAreaRect, setStageAreaRect] = useState<WindowRect | null>(null);
-  const pendingPlacementRef = useRef<NoteStickerPlacement | null>(null);
+  const [stageAreaWindowRect, setStageAreaWindowRect] = useState<WindowRect | null>(null);
+  const stageAreaRef = useRef<View | null>(null);
   const zoomValue = useSharedValue(1);
   const offsetXValue = useSharedValue(0);
   const offsetYValue = useSharedValue(0);
@@ -206,7 +152,6 @@ function StampCutterEditor({
     processingIndicatorOpacity.value = 0;
     cancelAnimation(processingFloatProgress);
     processingFloatProgress.value = 0;
-    pendingPlacementRef.current = null;
     setCutAnimating(false);
   }, [
     activeGestureCountValue,
@@ -277,44 +222,90 @@ function StampCutterEditor({
   const extractionDuration = reduceMotionEnabled
     ? EXTRACTION_DURATION_REDUCED_MS
     : EXTRACTION_DURATION_MS;
-  const flightDuration = reduceMotionEnabled
-    ? FLIGHT_DURATION_REDUCED_MS
-    : FLIGHT_DURATION_MS;
   const processingHoldDuration = reduceMotionEnabled
     ? PROCESSING_HOLD_REDUCED_MS
     : PROCESSING_HOLD_MS;
 
   const stageLocalRect = useMemo(() => {
-    if (!stageAreaRect) {
+    if (!stageAreaWindowRect) {
       return null;
     }
 
     return {
-      x: stageAreaRect.x + (stageAreaRect.width - stageWidth) / 2,
-      y: stageAreaRect.y + (stageAreaRect.height - stageHeight) / 2,
+      x: stageAreaWindowRect.x + (stageAreaWindowRect.width - stageWidth) / 2,
+      y: stageAreaWindowRect.y + (stageAreaWindowRect.height - stageHeight) / 2,
       width: stageWidth,
       height: stageHeight,
     };
-  }, [stageAreaRect, stageHeight, stageWidth]);
+  }, [stageAreaWindowRect, stageHeight, stageWidth]);
 
-  const detachedBaseRect = useMemo(() => {
-    if (!stageLocalRect) {
+  const resolveDetachedBaseRect = useCallback(
+    (nextStageAreaWindowRect: WindowRect | null | undefined) => {
+      if (!nextStageAreaWindowRect) {
+        return {
+          x: (windowWidth - cropRect.width) / 2,
+          y: (windowHeight - cropRect.height) / 2,
+          width: cropRect.width,
+          height: cropRect.height,
+        };
+      }
+
+      const stageRect = {
+        x: nextStageAreaWindowRect.x + (nextStageAreaWindowRect.width - stageWidth) / 2,
+        y: nextStageAreaWindowRect.y + (nextStageAreaWindowRect.height - stageHeight) / 2,
+        width: stageWidth,
+        height: stageHeight,
+      };
+
       return {
-        x: (windowWidth - cropRect.width) / 2,
-        y: (windowHeight - cropRect.height) / 2,
+        x: stageRect.x + cropRect.x,
+        y: stageRect.y + cropRect.y,
         width: cropRect.width,
         height: cropRect.height,
       };
+    },
+    [cropRect.height, cropRect.width, cropRect.x, cropRect.y, stageHeight, stageWidth, windowHeight, windowWidth]
+  );
+
+  const detachedBaseRect = useMemo(() => {
+    return resolveDetachedBaseRect(stageAreaWindowRect);
+  }, [resolveDetachedBaseRect, stageAreaWindowRect]);
+  const previewUri = draft?.source.uri ?? null;
+
+  const measureStageAreaInWindow = useCallback(async () => {
+    const nextRect = await measureWindowRect(stageAreaRef.current as MeasurableView | null);
+    if (!nextRect) {
+      return null;
     }
 
-    return {
-      x: stageLocalRect.x + cropRect.x,
-      y: stageLocalRect.y + cropRect.y,
-      width: cropRect.width,
-      height: cropRect.height,
-    };
-  }, [cropRect.height, cropRect.width, cropRect.x, cropRect.y, stageLocalRect, windowHeight, windowWidth]);
-  const previewUri = draft?.source.uri ?? null;
+    setStageAreaWindowRect((current) => {
+      if (
+        current &&
+        current.x === nextRect.x &&
+        current.y === nextRect.y &&
+        current.width === nextRect.width &&
+        current.height === nextRect.height
+      ) {
+        return current;
+      }
+
+      return nextRect;
+    });
+    return nextRect;
+  }, []);
+
+  const scheduleStageAreaMeasurement = useCallback(() => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        void measureStageAreaInWindow();
+      });
+      return;
+    }
+
+    setTimeout(() => {
+      void measureStageAreaInWindow();
+    }, 0);
+  }, [measureStageAreaInWindow]);
 
   const animateToTransform = useCallback(
     (nextTransform: StampCutterTransform) => {
@@ -617,74 +608,6 @@ function StampCutterEditor({
     stopProcessingFloat,
   ]);
 
-  const playFlightAnimation = useCallback(
-    async (placement: NoteStickerPlacement) => {
-      const resolvedArtboardRect = captureAreaRect
-        ? resolveStickerArtboardRect(captureAreaRect)
-        : null;
-      const expectedRenderRect = resolvedArtboardRect
-        ? getStickerPlacementWindowRect(
-            placement,
-            resolvedArtboardRect,
-            1,
-            STICKER_MINIMUM_BASE_SIZE
-          )
-        : null;
-      const targetRect =
-        expectedRenderRect ?? resolvePlacementTargetRect(placement, captureAreaRect) ?? detachedBaseRect;
-      const originCenterX = detachedBaseRect.x + detachedBaseRect.width / 2;
-      const originCenterY = detachedBaseRect.y + detachedBaseRect.height / 2;
-      const targetCenterX = targetRect.x + targetRect.width / 2;
-      const targetCenterY = targetRect.y + targetRect.height / 2;
-      const targetScale = Math.max(0.3, targetRect.width / Math.max(detachedBaseRect.width, 1));
-
-      stopProcessingFloat();
-      processingIndicatorOpacity.value = withTiming(0, {
-        duration: reduceMotionEnabled ? 50 : 90,
-        easing: Easing.out(Easing.cubic),
-      });
-
-      const animationConfig = {
-        duration: flightDuration,
-        easing: Easing.out(Easing.cubic),
-      };
-
-      detachedTranslateX.value = withTiming(targetCenterX - originCenterX, animationConfig);
-      detachedTranslateY.value = withTiming(targetCenterY - originCenterY, animationConfig);
-      detachedScale.value = withTiming(targetScale, animationConfig);
-      detachedShadowOpacity.value = withTiming(reduceMotionEnabled ? 0.08 : 0.12, animationConfig);
-      backdropOpacity.value = withTiming(0, animationConfig);
-
-      await delay(flightDuration);
-    },
-    [
-      backdropOpacity,
-      captureAreaRect,
-      detachedBaseRect,
-      detachedScale,
-      detachedShadowOpacity,
-      detachedTranslateX,
-      detachedTranslateY,
-      flightDuration,
-      processingIndicatorOpacity,
-      reduceMotionEnabled,
-      stopProcessingFloat,
-    ]
-  );
-
-  const completeFlight = useCallback(() => {
-    const placement = pendingPlacementRef.current;
-    pendingPlacementRef.current = null;
-    setCutAnimating(false);
-
-    if (placement) {
-      onCompletePlacement(placement);
-      triggerCaptureCardHaptic(Haptics.ImpactFeedbackStyle.Heavy);
-    }
-
-    onClose();
-  }, [onClose, onCompletePlacement]);
-
   const runConfirm = useCallback(async () => {
     if (busy) {
       return;
@@ -701,7 +624,6 @@ function StampCutterEditor({
       }),
     };
 
-    pendingPlacementRef.current = null;
     setCutAnimating(true);
 
     try {
@@ -723,9 +645,22 @@ function StampCutterEditor({
         return;
       }
 
-      pendingPlacementRef.current = placement;
-      await playFlightAnimation(placement);
-      completeFlight();
+      const latestStageAreaWindowRect = await measureStageAreaInWindow();
+      const sourceRect = resolveDetachedBaseRect(latestStageAreaWindowRect ?? stageAreaWindowRect);
+
+      stopProcessingFloat();
+      processingIndicatorOpacity.value = withTiming(0, {
+        duration: reduceMotionEnabled ? 50 : 90,
+        easing: Easing.out(Easing.cubic),
+      });
+
+      onCompletePlacement({
+        placement,
+        sourceRect,
+      });
+      triggerCaptureCardHaptic(Haptics.ImpactFeedbackStyle.Heavy);
+      setCutAnimating(false);
+      onClose();
     } catch (error) {
       console.warn('[stickers] stamp cutter transition failed', error);
       await playRestoreAnimation();
@@ -733,19 +668,23 @@ function StampCutterEditor({
     }
   }, [
     busy,
-    completeFlight,
     cropRect,
+    measureStageAreaInWindow,
     offsetXValue,
     offsetYValue,
     onConfirm,
+    onCompletePlacement,
+    onClose,
     playExtractionAnimation,
-    playFlightAnimation,
     playRestoreAnimation,
     processingHoldDuration,
     processingIndicatorOpacity,
     reduceMotionEnabled,
+    resolveDetachedBaseRect,
     sourceSize,
+    stageAreaWindowRect,
     startProcessingFloat,
+    stopProcessingFloat,
     viewportSize,
     zoomValue,
   ]);
@@ -852,13 +791,13 @@ function StampCutterEditor({
     ],
   }));
 
-  const handleStageAreaLayout = useCallback(
-    (event: { nativeEvent: { layout: WindowRect } }) => {
-      const { x, y, width, height } = event.nativeEvent.layout;
-      setStageAreaRect({ x, y, width, height });
-    },
-    []
-  );
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    scheduleStageAreaMeasurement();
+  }, [scheduleStageAreaMeasurement, stageHeight, stageWidth, visible]);
 
   if (!visible || !draft || !previewUri) {
     return null;
@@ -928,7 +867,7 @@ function StampCutterEditor({
         </Pressable>
       </Reanimated.View>
 
-      <View style={styles.stageArea} onLayout={handleStageAreaLayout}>
+      <View ref={stageAreaRef} style={styles.stageArea} onLayout={scheduleStageAreaMeasurement}>
         <Reanimated.View
           style={[
             styles.stageShell,
@@ -1130,26 +1069,7 @@ function StampCutterEditor({
     </View>
   );
 
-  if (Platform.OS === 'web') {
-    return <GestureHandlerRootView style={styles.gestureRoot}>{content}</GestureHandlerRootView>;
-  }
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      presentationStyle="overFullScreen"
-      statusBarTranslucent
-      onRequestClose={() => {
-        if (!busy) {
-          onClose();
-        }
-      }}
-    >
-      <GestureHandlerRootView style={styles.gestureRoot}>{content}</GestureHandlerRootView>
-    </Modal>
-  );
+  return <GestureHandlerRootView style={styles.gestureRoot}>{content}</GestureHandlerRootView>;
 }
 
 export default memo(StampCutterEditor);
@@ -1160,7 +1080,8 @@ const styles = StyleSheet.create({
     zIndex: 40,
   },
   gestureRoot: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 40,
   },
   editorBackdrop: {
     ...StyleSheet.absoluteFillObject,
