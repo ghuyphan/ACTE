@@ -34,6 +34,10 @@ type PickedStickerImportSource = {
 export type { StickerPastePromptState } from '../../hooks/ui/useClipboardStickerFlow';
 export type { StickerAction, StickerSourceAction } from '../../hooks/ui/stickerFlowTypes';
 
+interface ImportStickerFromSourceOptions {
+  apply?: boolean;
+}
+
 interface UseCaptureCardStickerFlowOptions {
   captureMode: 'text' | 'camera';
   t: TFunction;
@@ -177,10 +181,10 @@ export function useCaptureCardStickerFlow({
     dismissOverlay();
   }, [dismissOverlay]);
 
-  const runImportingStickerTask = useCallback(async (task: () => Promise<void>) => {
+  const runImportingStickerTask = useCallback(async <T,>(task: () => Promise<T>): Promise<T> => {
     setImportingSticker(true);
     try {
-      await task();
+      return await task();
     } finally {
       setImportingSticker(false);
     }
@@ -241,7 +245,11 @@ export function useCaptureCardStickerFlow({
   } = clipboardFlow;
 
   const importStickerFromSource = useCallback(
-    async (source: StickerImportSource, intent: StickerImportIntent) => {
+    async (
+      source: StickerImportSource,
+      intent: StickerImportIntent,
+      options: ImportStickerFromSourceOptions = {}
+    ) => {
       let preparedSource = source;
       let cleanupUri: string | null = null;
 
@@ -275,7 +283,11 @@ export function useCaptureCardStickerFlow({
           stickerPlacements,
           intent === 'stamp' ? { renderMode: 'stamp' } : undefined
         );
-        applyImportedSticker(nextPlacement);
+        if (options.apply !== false) {
+          applyImportedSticker(nextPlacement);
+        }
+
+        return nextPlacement;
       } finally {
         await cleanupSubjectCutoutImportSource(cleanupUri);
       }
@@ -425,6 +437,13 @@ export function useCaptureCardStickerFlow({
     t,
   });
 
+  const handleCompleteStampCutterPlacement = useCallback(
+    (placement: NoteStickerPlacement) => {
+      applyImportedSticker(placement);
+    },
+    [applyImportedSticker]
+  );
+
   const {
     clearStickerSourceSheetFlow,
     handleCloseStickerSourceSheet,
@@ -521,6 +540,7 @@ export function useCaptureCardStickerFlow({
       showStickerSourceSheet,
       handleCloseStickerSourceSheet,
       handleCloseStampCutterEditor,
+      handleCompleteStampCutterPlacement,
       handleConfirmStampCutter,
       handleShowStickerSourceOptions,
       stickerSourceActions,
@@ -543,6 +563,7 @@ export function useCaptureCardStickerFlow({
       dismissPastePrompt,
       handleCloseStickerActionsSheet,
       handleCloseStampCutterEditor,
+      handleCompleteStampCutterPlacement,
       handleCloseStickerSourceSheet,
       handleConfirmStampCutter,
       handleConfirmPasteFromPrompt,

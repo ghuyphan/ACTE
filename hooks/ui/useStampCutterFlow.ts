@@ -11,7 +11,7 @@ import {
   type StampCutterDraft,
   type StampCutterTransform,
 } from '../../services/stampCutter';
-import type { StickerImportSource } from '../../services/noteStickers';
+import type { NoteStickerPlacement, StickerImportSource } from '../../services/noteStickers';
 import {
   cleanupStickerTempUri,
   cleanupStickerTempUris,
@@ -31,11 +31,14 @@ interface UseStampCutterFlowOptions {
   getErrorMessage: (error: unknown) => string;
   importStickerFromSource: (
     source: StickerImportSource,
-    intent: 'sticker' | 'stamp'
-  ) => Promise<void>;
+    intent: 'sticker' | 'stamp',
+    options?: {
+      apply?: boolean;
+    }
+  ) => Promise<NoteStickerPlacement>;
   importingSticker: boolean;
   pickStickerImportSource: () => Promise<PickedStickerImportSource | null>;
-  runImportingStickerTask: (task: () => Promise<void>) => Promise<void>;
+  runImportingStickerTask: <T>(task: () => Promise<T>) => Promise<T>;
   t: TFunction;
 }
 
@@ -122,16 +125,14 @@ export function useStampCutterFlow({
       viewportSize: { width: number; height: number };
       selectionRect: { x: number; y: number; width: number; height: number };
       transform: StampCutterTransform;
-    }) => {
+    }): Promise<NoteStickerPlacement | null> => {
       if (!stampCutterDraft) {
-        return;
+        return null;
       }
 
-      await runImportingStickerTask(async () => {
+      return runImportingStickerTask(async () => {
         let cleanupUri: string | null = null;
         let intermediateCleanupUri: string | null = null;
-        const draftCleanupUri = stampCutterDraft.cleanupUri;
-        let shouldCloseDraft = false;
 
         try {
           const exported = await exportStampCutoutImageSource(
@@ -142,20 +143,18 @@ export function useStampCutterFlow({
           );
           cleanupUri = exported.cleanupUri;
           intermediateCleanupUri = exported.intermediateCleanupUri ?? null;
-          await importStickerFromSource(exported.source, 'stamp');
-          shouldCloseDraft = true;
-          setStampCutterDraft(null);
+          return await importStickerFromSource(exported.source, 'stamp', {
+            apply: false,
+          });
         } catch (error) {
           console.warn('[stickers] stamp cutter export failed', error);
           showAppAlert(
             t('capture.error', 'Error'),
             getErrorMessage(error)
           );
+          return null;
         } finally {
           await cleanupStickerTempUris([cleanupUri, intermediateCleanupUri]);
-          if (shouldCloseDraft) {
-            scheduleStampCutterDraftCleanup(draftCleanupUri);
-          }
         }
       });
     },
@@ -163,7 +162,6 @@ export function useStampCutterFlow({
       getErrorMessage,
       importStickerFromSource,
       runImportingStickerTask,
-      scheduleStampCutterDraftCleanup,
       stampCutterDraft,
       t,
     ]

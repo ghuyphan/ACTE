@@ -102,6 +102,17 @@ const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
 ];
 const LIGHT_CAPTURE_ACTIVE_ICON_COLOR = '#FFFFFF';
 
+interface WindowRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type MeasurableView = View & {
+  measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void;
+};
+
 function getCaptureTextPlaceholderVariants(t: TFunction) {
   const translated = t('capture.textPlaceholderVariants', {
     returnObjects: true,
@@ -111,6 +122,39 @@ function getCaptureTextPlaceholderVariants(t: TFunction) {
   return Array.isArray(translated) && translated.every((item) => typeof item === 'string')
     ? translated
     : DEFAULT_CAPTURE_TEXT_PLACEHOLDERS;
+}
+
+function measureWindowRect(node: MeasurableView | null): Promise<WindowRect | null> {
+  return new Promise((resolve) => {
+    if (!node?.measureInWindow) {
+      resolve(null);
+      return;
+    }
+
+    let settled = false;
+    const finish = (rect: WindowRect | null) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve(rect);
+    };
+    const fallbackTimeout = setTimeout(() => {
+      finish(null);
+    }, 32);
+
+    node.measureInWindow((x, y, width, height) => {
+      clearTimeout(fallbackTimeout);
+
+      if (width <= 0 || height <= 0) {
+        finish(null);
+        return;
+      }
+
+      finish({ x, y, width, height });
+    });
+  });
 }
 
 export interface CaptureCardHandle {
@@ -286,10 +330,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [shouldRenderCaptureCover, setShouldRenderCaptureCover] = useState(false);
   const [canvasGestureActive, setCanvasGestureActive] = useState(false);
   const [cameraGestureActive, setCameraGestureActive] = useState(false);
+  const [captureAreaRect, setCaptureAreaRect] = useState<WindowRect | null>(null);
   const previousCapturedPhotoRef = useRef(capturedPhoto);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
   const noteInputRef = useRef<TextInput | null>(null);
+  const captureAreaRef = useRef<View | null>(null);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
   const textInputDynamicStyle = useMemo(
     () =>
@@ -418,6 +464,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     closeStickerOverlays,
     dismissPastePrompt,
     handleCloseStampCutterEditor,
+    handleCompleteStampCutterPlacement,
     handleCloseStickerSourceSheet,
     handleConfirmStampCutter,
     handleConfirmPasteFromPrompt,
@@ -455,6 +502,37 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     selectSticker: selectStickerPlacement,
     toggleStickerMode: toggleStickerModeInternal,
   });
+
+  const measureCaptureAreaInWindow = useCallback(async () => {
+    const nextRect = await measureWindowRect(captureAreaRef.current as MeasurableView | null);
+    if (!nextRect) {
+      return null;
+    }
+
+    setCaptureAreaRect(nextRect);
+    return nextRect;
+  }, []);
+
+  const scheduleCaptureAreaMeasurement = useCallback(() => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        void measureCaptureAreaInWindow();
+      });
+      return;
+    }
+
+    setTimeout(() => {
+      void measureCaptureAreaInWindow();
+    }, 0);
+  }, [measureCaptureAreaInWindow]);
+
+  useEffect(() => {
+    if (!showStampCutterEditor) {
+      return;
+    }
+
+    scheduleCaptureAreaMeasurement();
+  }, [scheduleCaptureAreaMeasurement, showStampCutterEditor]);
 
   const {
     handleCloseNoteColorSheet,
@@ -933,7 +1011,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           style={styles.captureKeyboardAvoiding}
         >
           <Reanimated.View
+            ref={captureAreaRef}
             testID="capture-card-area"
+            onLayout={scheduleCaptureAreaMeasurement}
             style={[
               styles.captureArea,
               disableAndroidCaptureTransforms ? null : captureAreaAnimatedStyle,
@@ -1218,7 +1298,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         )}
         cancelLabel={t('common.cancel', 'Cancel')}
         confirmLabel={t('capture.stampCutterConfirm', 'Cut stamp')}
+        captureAreaRect={captureAreaRect}
         onClose={handleCloseStampCutterEditor}
+        onCompletePlacement={handleCompleteStampCutterPlacement}
         onConfirm={handleConfirmStampCutter}
       />
     </>
