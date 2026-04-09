@@ -1057,71 +1057,88 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             ]}
             pointerEvents={interactionsDisabled || isCameraUiCapturing ? 'none' : 'auto'}
           >
-            {controlsUiStage === 'text' ? (
-              <Reanimated.View key="toolbar-text" entering={toolbarEntering} exiting={toolbarExiting}>
-                <TextCaptureBottomBar
-                  colors={colors}
-                  doodleColor={doodleColor}
-                  doodleColorOptions={doodleColorOptions}
-                  doodleModeEnabled={doodleModeEnabled}
-                  doodleStrokes={doodleStrokes}
-                  handleClearDoodle={handleClearDoodle}
-                  handleInlinePasteStickerPress={handleInlinePasteStickerPress}
-                  handleNativeInlinePasteStickerPress={handleNativeInlinePasteStickerPress}
-                  handleSelectDoodleColor={handleSelectDoodleColor}
-                  handleSelectedStickerAction={handleSelectedStickerAction}
-                  handleShowStickerSourceOptions={handleShowStickerSourceOptions}
-                  handleToggleDoodleMode={handleToggleDoodleMode}
-                  handleToggleStickerMode={handleToggleStickerMode}
-                  handleUndoDoodle={handleUndoDoodle}
-                  importingSticker={importingSticker}
-                  inlinePasteLoading={inlinePasteLoading}
-                  selectedStickerId={selectedStickerId}
-                  showInlinePasteButton={showInlinePasteButton}
-                  stickerModeEnabled={stickerModeEnabled}
-                  t={t}
-                  textCardActiveIconColor={textCardActiveIconColor}
-                  useNativeInlinePasteButton={useNativeInlinePasteButton}
-                />
-              </Reanimated.View>
-            ) : controlsUiStage === 'review' ? (
-              <Reanimated.View key="toolbar-review" entering={toolbarEntering} exiting={toolbarExiting}>
-                <PhotoCaptureBottomBar
-                  colors={colors}
-                  doodleColor={doodleColor}
-                  doodleColorOptions={doodleColorOptions}
-                  doodleModeEnabled={doodleModeEnabled}
-                  doodleStrokes={doodleStrokes}
-                  handleClearDoodle={handleClearDoodle}
-                  handleSelectDoodleColor={handleSelectDoodleColor}
-                  handleSelectedStickerAction={handleSelectedStickerAction}
-                  handleShowStickerSourceOptions={handleShowStickerSourceOptions}
-                  handleToggleDoodleMode={handleToggleDoodleMode}
-                  handleToggleStickerMode={handleToggleStickerMode}
-                  handleUndoDoodle={handleUndoDoodle}
-                  hasLivePhotoMotion={hasLivePhotoMotion}
-                  importingSticker={importingSticker}
-                  onImportMotionClip={onImportMotionClip}
-                  onRemoveMotionClip={onRemoveMotionClip}
-                  selectedStickerId={selectedStickerId}
-                  stickerModeEnabled={stickerModeEnabled}
-                  t={t}
-                  textCardActiveIconColor={textCardActiveIconColor}
-                />
-              </Reanimated.View>
-            ) : (
-              <Reanimated.View key="toolbar-live" entering={toolbarEntering} exiting={toolbarExiting}>
-                <LiveCameraActionBar
-                  cameraInstructionText={cameraInstructionText}
-                  colors={colors}
-                  importingPhoto={importingPhoto}
-                  libraryImportLocked={libraryImportLocked}
-                  needsCameraPermission={needsCameraPermission}
-                  onOpenPhotoLibrary={onOpenPhotoLibrary}
-                  t={t}
-                />
-              </Reanimated.View>
-            )}
+            <View style={styles.belowCardMetaRow} pointerEvents="box-none">
+              {controlsUiStage === 'text' ? (
+                <Reanimated.View
+                  key="toolbar-text"
+                  entering={toolbarEntering}
+                  exiting={toolbarExiting}
+                  style={styles.belowCardToolbarLayer}
+                >
+                  <TextCaptureBottomBar
+                    colors={colors}
+                    doodleColor={doodleColor}
+                    doodleColorOptions={doodleColorOptions}
+                    doodleModeEnabled={doodleModeEnabled}
+                    doodleStrokes={doodleStrokes}
+                    handleClearDoodle={handleClearDoodle}
+                    handleInlinePasteStickerPress={handleInlinePasteStickerPress}
+                    handleNativeInlinePasteStickerPress={handleNativeInlinePasteStickerPress}
+                    handleSelectDoodleColor={handleSelectDoodleColor}
+                    handleSelectedStickerAction={handleSelectedStickerAction}
+                    handleShowStickerSourceOptions={handleShowStickerSourceOptions}
+                    handleToggleDoodleMode={handleToggleDoodleMode}
+                    handleToggleStickerMode={handleToggleStickerMode}
+                    handleUndoDoodle={handleUndoDoodle}
+                    importingSticker={importingSticker}
+                    inlinePasteLoading={inlinePasteLoading}
+                    selectedStickerId={selectedStickerId}
+                    showInlinePasteButton={showInlinePasteButton}
+                    stickerModeEnabled={stickerModeEnabled}
+                    t={t}
+                    textCardActiveIconColor={textCardActiveIconColor}
+                    useNativeInlinePasteButton={useNativeInlinePasteButton}
+                  />
+                </Reanimated.View>
+              ) : controlsUiStage === 'review' ? (
+                <Reanimated.View
+                  key="toolbar-review"
+                  entering={toolbarEntering}
+                  exiting={toolbarExiting}
+                  style={styles.belowCardToolbarLayer}
+                >
+                  <PhotoCaptureBottomBar
+                    colors={colors}
+                    doodleColor={doodleColor}
+                    doodleColorOptions={doodleColorOptions}
+                    doodleModeEnabled={doodleModeEnabled}
+                    doodleStrokes={doodleStrokes}
+                    handleClearDoodle={handleClearDoodle}
+                    handleSelectDoodleColor={handleSelectDoodleColor}
+                    handleSelectedStickerAction={handleSelectedStickerAction}
+                    handleShowStickerSourceOptions={handleShowStickerSourceOptions}
+                    handleToggleDoodleMode={handleToggleDoodleMode}
+                    handleToggleStickerMode={handleToggleStickerMode}
+                    handleUndoDoodle={handleUndoDoodle}
+                    hasLivePhotoMotion={hasLivePhotoMotion}
+                    importingSticker={importingSticker}
+                    onImportMotionClip={onImportMotionClip}
+                    onRemoveMotionClip={onRemoveMotionClip}
+                    selectedStickerId={selectedStickerId}
+                    stickerModeEnabled={stickerModeEnabled}
+                    t={t}
+                    textCardActiveIconColor={textCardActiveIconColor}
+                  />
+                </Reanimated.View>
+              ) : (
+                <Reanimated.View
+                  key="toolbar-live"
+                  entering={toolbarEntering}
+                  exiting={toolbarExiting}
+                  style={styles.belowCardToolbarLayer}
+                >
+                  <LiveCameraActionBar
+                    cameraInstructionText={cameraInstructionText}
+                    colors={colors}
+                    importingPhoto={importingPhoto}
+                    libraryImportLocked={libraryImportLocked}
+                    needsCameraPermission={needsCameraPermission}
+                    onOpenPhotoLibrary={onOpenPhotoLibrary}
+                    t={t}
+                  />
+                </Reanimated.View>
+              )}
+            </View>
             <CaptureActionRow
               animatedSaveHaloStyle={animatedSaveHaloStyle}
               animatedSaveIconStyle={animatedSaveIconStyle}

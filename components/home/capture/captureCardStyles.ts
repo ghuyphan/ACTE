@@ -449,6 +449,13 @@ export const styles = StyleSheet.create({
     minHeight: 52,
     justifyContent: 'center',
   },
+  belowCardToolbarLayer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   photoCaptionIcon: {
     marginTop: 0,
   },
