@@ -5,7 +5,9 @@ jest.mock('@gorhom/bottom-sheet', () => {
   const React = require('react');
   const { ScrollView, TextInput } = require('react-native');
   return {
-    BottomSheetScrollView: ({ children }: { children: React.ReactNode }) => <ScrollView>{children}</ScrollView>,
+    BottomSheetScrollView: ({ children, ...props }: { children: React.ReactNode }) => (
+      <ScrollView {...props}>{children}</ScrollView>
+    ),
     BottomSheetTextInput: TextInput,
   };
 });
@@ -26,6 +28,7 @@ jest.mock('../components/notes/detail/PolaroidExportAnimation', () => 'PolaroidE
 jest.mock('../components/notes/detail/PolaroidExportView', () => 'PolaroidExportView');
 
 import NoteDetailSheetContent from '../components/notes/detail/NoteDetailSheetContent';
+import { Platform, ScrollView } from 'react-native';
 
 const baseProps = {
   cardAnimatedStyle: {},
@@ -158,5 +161,48 @@ describe('NoteDetailSheetContent', () => {
     );
 
     consoleErrorSpy.mockRestore();
+  });
+
+  it('only adds extra Android bottom padding while the keyboard is visible', () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+
+    try {
+      const hidden = render(
+        <NoteDetailSheetContent
+          {...baseProps}
+          loading={false}
+          note={note as any}
+          androidKeyboardVisible={false}
+        />
+      );
+
+      const hiddenScrollView = hidden.UNSAFE_getByType(ScrollView);
+      expect(hiddenScrollView.props.contentContainerStyle).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ paddingBottom: 60 }),
+          null,
+        ])
+      );
+
+      hidden.rerender(
+        <NoteDetailSheetContent
+          {...baseProps}
+          loading={false}
+          note={note as any}
+          androidKeyboardVisible
+        />
+      );
+
+      const visibleScrollView = hidden.UNSAFE_getByType(ScrollView);
+      expect(visibleScrollView.props.contentContainerStyle).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ paddingBottom: 60 }),
+          expect.objectContaining({ paddingBottom: 80 }),
+        ])
+      );
+    } finally {
+      Platform.OS = originalPlatform;
+    }
   });
 });

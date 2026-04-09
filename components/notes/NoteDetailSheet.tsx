@@ -259,6 +259,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [showPolaroidCapture, setShowPolaroidCapture] = useState(false);
     const [polaroidAnimationUri, setPolaroidAnimationUri] = useState<string | null>(null);
     const [polaroidAnimationSuccess, setPolaroidAnimationSuccess] = useState(false);
+    const [androidKeyboardVisible, setAndroidKeyboardVisible] = useState(false);
     const [locationKeyboardScrollToken, setLocationKeyboardScrollToken] = useState(0);
 
     const cardScaleValue = useSharedValue(0.92);
@@ -838,20 +839,38 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     }, [isEditing, scrollLocationFieldIntoView]);
 
     useEffect(() => {
-        if (Platform.OS !== 'android' || !isEditing || locationKeyboardScrollToken === 0) {
+        if (Platform.OS !== 'android' || !visible || !isEditing) {
             return;
         }
 
         const keyboardDidShowSubscription = Keyboard.addListener('keyboardDidShow', () => {
-            requestAnimationFrame(() => {
-                scrollLocationFieldIntoView();
-            });
+            setAndroidKeyboardVisible(true);
+            if (locationKeyboardScrollToken > 0) {
+                requestAnimationFrame(() => {
+                    scrollLocationFieldIntoView();
+                });
+            }
+        });
+        const keyboardDidHideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+            setAndroidKeyboardVisible(false);
         });
 
         return () => {
             keyboardDidShowSubscription.remove();
+            keyboardDidHideSubscription.remove();
         };
-    }, [isEditing, locationKeyboardScrollToken, scrollLocationFieldIntoView]);
+    }, [isEditing, locationKeyboardScrollToken, scrollLocationFieldIntoView, visible]);
+
+    useEffect(() => {
+        if (Platform.OS !== 'android' || !visible || isEditing) {
+            if (Platform.OS === 'android' && !visible) {
+                setAndroidKeyboardVisible(false);
+            }
+            return;
+        }
+
+        setAndroidKeyboardVisible(false);
+    }, [isEditing, visible]);
 
     const importStickerFromSource = useCallback(async (
         source: StickerImportSource,
@@ -1777,6 +1796,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             showPolaroidCapture={showPolaroidCapture}
             scrollContainerRef={scrollContainerRef}
             showPremiumColorAlert={showPremiumColorAlert}
+            androidKeyboardVisible={androidKeyboardVisible}
         />
     );
 
@@ -1788,7 +1808,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     onClose={handleSheetDismiss}
                     dismissible={!isEditing}
                     androidScrollable
-                    androidKeyboardBehavior="fillParent"
+                    androidKeyboardBehavior="interactive"
                 >
                     {renderBody()}
                 </AppSheet>

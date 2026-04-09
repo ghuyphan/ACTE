@@ -1,7 +1,18 @@
 import React from 'react';
-import { Alert, Keyboard, ScrollView } from 'react-native';
+import { Alert, Keyboard, Platform, ScrollView } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { interactiveDismissDisabled } from '@expo/ui/swift-ui/modifiers';
+
+jest.mock('@gorhom/bottom-sheet', () => {
+  const React = require('react');
+  const { ScrollView, TextInput } = require('react-native');
+  return {
+    BottomSheetScrollView: ({ children, ...props }: { children: React.ReactNode }) => (
+      <ScrollView {...props}>{children}</ScrollView>
+    ),
+    BottomSheetTextInput: TextInput,
+  };
+});
 
 const mockGetNoteById = jest.fn<Promise<unknown>, [string]>();
 const mockDeleteNote = jest.fn<Promise<void>, [string]>(async () => undefined);
@@ -33,6 +44,7 @@ const mockImpactAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined)
 const mockNotificationAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockSetActiveNote = jest.fn();
 const mockClearActiveNote = jest.fn();
+let latestAppBottomSheetProps: any = null;
 const mockNotesStore = {
   getNoteById: (noteId: string) => mockGetNoteById(noteId),
   deleteNote: (noteId: string) => mockDeleteNote(noteId),
@@ -311,8 +323,9 @@ jest.mock('../components/ui/TransientStatusChip', () => {
 jest.mock('../components/sheets/AppBottomSheet', () => {
   const React = require('react');
   const { View } = require('react-native');
-  return function MockAppBottomSheet({ children }: any) {
-    return <View>{children}</View>;
+  return function MockAppBottomSheet(props: any) {
+    latestAppBottomSheetProps = props;
+    return <View>{props.children}</View>;
   };
 });
 
@@ -368,6 +381,7 @@ import NoteDetailSheet from '../components/notes/NoteDetailSheet';
 
 beforeEach(() => {
   jest.clearAllMocks();
+  latestAppBottomSheetProps = null;
   mockHasClipboardStickerImage.mockResolvedValue(false);
   mockGetNoteById.mockResolvedValue({
     id: 'note-1',
@@ -549,6 +563,22 @@ describe('NoteDetailSheet', () => {
       expect(dismissSpy).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
     });
+  });
+
+  it('uses interactive keyboard behavior on Android note detail sheets', async () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+
+    try {
+      render(<NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />);
+
+      await waitFor(() => {
+        expect(mockGetNoteById).toHaveBeenCalledWith('note-1');
+        expect(latestAppBottomSheetProps?.androidKeyboardBehavior).toBe('interactive');
+      });
+    } finally {
+      Platform.OS = originalPlatform;
+    }
   });
 
   it('shows a paste popover on card long press in edit mode and pastes a sticker', async () => {

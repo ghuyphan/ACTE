@@ -196,7 +196,7 @@ function PolaroidExportViewInner(
           <Text numberOfLines={1} style={styles.dateLabel}>
             {dateLabel}
           </Text>
-          <Text style={styles.watermarkLabel}>noto</Text>
+          <Text style={styles.watermarkLabel}>ノート</Text>
         </View>
       </View>
     </View>
@@ -345,9 +345,8 @@ const styles = StyleSheet.create({
     bottom: 6,
     color: 'rgba(91, 67, 54, 0.4)',
     fontSize: 22,
-    letterSpacing: 1.8,
+    letterSpacing: 0.6,
     fontWeight: '700',
-    fontFamily: Typography.body.fontFamily,
-    textTransform: 'lowercase',
+    fontFamily: Fonts.sans,
   },
 });

@@ -34,6 +34,7 @@ import { getNotePhotoUri } from '../../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../../services/noteTextPresentation';
 import { formatNoteTimestamp } from '../../../utils/dateUtils';
 import { parseNoteStickerPlacements } from '../../../services/noteStickers';
+import { POLAROID_EXPORT_HEIGHT, POLAROID_EXPORT_WIDTH } from '../../../services/polaroidExport';
 import DynamicStickerCanvas from '../DynamicStickerCanvas';
 import NoteDoodleCanvas from '../NoteDoodleCanvas';
 import NoteStickerCanvas from '../NoteStickerCanvas';
@@ -60,6 +61,7 @@ const SheetTextInput = Platform.OS === 'android' ? BottomSheetTextInput : TextIn
 type InteractionFeedbackType = 'favorited' | 'unfavorited' | 'deleted';
 
 type NoteDetailSheetContentProps = {
+    androidKeyboardVisible?: boolean;
     cardAnimatedStyle: any;
     colors: any;
     contentInputRef: any;
@@ -153,6 +155,7 @@ function getFeedbackPresentation(t: TFunction, type: InteractionFeedbackType) {
 }
 
 export default function NoteDetailSheetContent({
+    androidKeyboardVisible = false,
     cardAnimatedStyle,
     colors,
     contentInputRef,
@@ -688,7 +691,10 @@ export default function NoteDetailSheetContent({
             {Platform.OS === 'android' ? (
                 <BottomSheetScrollView
                     ref={scrollContainerRef}
-                    contentContainerStyle={[styles.scrollContent, styles.scrollContentAndroid]}
+                    contentContainerStyle={[
+                        styles.scrollContent,
+                        androidKeyboardVisible ? styles.scrollContentAndroidKeyboardVisible : null,
+                    ]}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                 >
@@ -727,7 +733,7 @@ const styles = StyleSheet.create({
         paddingTop: 16,
         paddingBottom: 60,
     },
-    scrollContentAndroid: {
+    scrollContentAndroidKeyboardVisible: {
         paddingBottom: 80,
     },
     feedbackOverlay: {
@@ -747,8 +753,8 @@ const styles = StyleSheet.create({
         position: 'absolute',
         left: -9999,
         top: 0,
-        width: 1080,
-        height: 1350,
+        width: POLAROID_EXPORT_WIDTH,
+        height: POLAROID_EXPORT_HEIGHT,
         opacity: 1,
         zIndex: -1,
     },
