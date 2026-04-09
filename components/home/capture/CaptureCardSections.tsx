@@ -26,12 +26,6 @@ import PremiumNoteFinishOverlay from '../../ui/PremiumNoteFinishOverlay';
 import PrimaryButton from '../../ui/PrimaryButton';
 import StickerPastePopover from '../../ui/StickerPastePopover';
 import { FilteredPhotoCanvas, PhotoFilterCarousel } from './CaptureControls';
-import { CaptureActionRow } from './CaptureActionRow';
-import {
-  PhotoCaptureBottomBar,
-  TextCaptureBottomBar,
-} from './CaptureDecorateRail';
-import { LiveCameraActionBar } from './LiveCameraActionBar';
 import {
   CAMERA_FOCUS_RING_SIZE,
   CARD_SIZE,
@@ -40,7 +34,6 @@ import {
   styles,
 } from './captureCardStyles';
 import type {
-  CameraUiStage,
   CaptureCardAnimatedStyle,
   CaptureCardColors,
   CaptureCardTextInputStyle,

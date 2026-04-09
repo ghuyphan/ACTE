@@ -1,11 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import {
-  Canvas,
-  Group,
-  Image as SkiaImage,
-  Path,
-  useImage,
-} from '@shopify/react-native-skia';
 import { Image as ExpoImage } from 'expo-image';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -23,21 +16,13 @@ import {
   type NoteStickerPlacement,
 } from '../../services/noteStickers';
 import {
-  clampStickerScale,
   getStickerPinchScale,
-  getStickerDimensions,
   getStickerOutlineOffsets,
-  getStickerOutlineSize,
   sortStickerPlacements,
   type StickerCanvasLayout as CanvasLayout,
 } from './stickerCanvasMetrics';
-import {
-  createStampFramePath,
-  getStampFrameMetrics,
-  STAMP_DROP_SHADOW_COLOR,
-  STAMP_OUTLINE_COLOR,
-  STAMP_PAPER_BORDER_COLOR,
-} from './stampFrameMetrics';
+import StampStickerArtwork from './StampStickerArtwork';
+import { getStickerPlacementFrame } from './stickerPlacementLayout';
 
 interface NoteStickerCanvasProps {
   placements: NoteStickerPlacement[];
@@ -70,79 +55,60 @@ function normalizePlacements(placements: NoteStickerPlacement[]) {
   }));
 }
 
-function StampStickerArtwork({
+const StickerSelectionControls = memo(function StickerSelectionControls({
   placementId,
-  localUri,
-  stampShadowEnabled,
-  width,
-  height,
+  motionLocked,
+  outlineEnabled,
+  showOutlineToggle,
+  onToggleSelectedPlacementMotionLock,
+  onToggleSelectedPlacementOutline,
 }: {
   placementId: string;
-  localUri: string;
-  stampShadowEnabled: boolean;
-  width: number;
-  height: number;
+  motionLocked: boolean;
+  outlineEnabled: boolean;
+  showOutlineToggle: boolean;
+  onToggleSelectedPlacementMotionLock?: (placementId: string) => void;
+  onToggleSelectedPlacementOutline?: (placementId: string) => void;
 }) {
-  const stampMetrics = useMemo(
-    () => getStampFrameMetrics(width, height),
-    [height, width]
-  );
-  const stampPath = useMemo(
-    () => createStampFramePath(stampMetrics),
-    [stampMetrics]
-  );
-  const stampImage = useImage(localUri);
-  const stampOutlineWidth = Math.max(2.4, stampMetrics.perforationRadius * 0.66);
-  const stampBorderWidth = Math.max(1, stampMetrics.perforationRadius * 0.18);
-
   return (
-    <View
-      pointerEvents="none"
-      testID={`note-sticker-stamp-paper-${placementId}`}
-      style={[
-        styles.stampPaper,
-        stampShadowEnabled ? styles.stampPaperShadow : null,
-        {
-          width: stampMetrics.outerWidth,
-          height: stampMetrics.outerHeight,
-          shadowColor: stampShadowEnabled ? STAMP_DROP_SHADOW_COLOR : 'transparent',
-        },
-      ]}
-    >
-      <Canvas
-        testID={`note-sticker-stamp-${placementId}`}
-        style={styles.stampArtwork}
+    <View style={styles.selectionControls}>
+      <Pressable
+        testID={`note-sticker-lock-toggle-${placementId}`}
+        accessibilityRole="button"
+        accessibilityLabel={motionLocked ? 'Unlock sticker motion' : 'Lock sticker motion'}
+        onPress={() => onToggleSelectedPlacementMotionLock?.(placementId)}
+        style={[
+          styles.selectionControlButton,
+          motionLocked ? styles.selectionControlButtonActive : null,
+        ]}
       >
-        {stampImage ? (
-          <Group clip={stampPath}>
-            <SkiaImage
-              image={stampImage}
-              fit="cover"
-              x={0}
-              y={0}
-              width={stampMetrics.outerWidth}
-              height={stampMetrics.outerHeight}
-            />
-          </Group>
-        ) : null}
-        <Path
-          path={stampPath}
-          color={STAMP_OUTLINE_COLOR}
-          style="stroke"
-          strokeWidth={stampOutlineWidth}
+        <Ionicons
+          name={motionLocked ? 'lock-closed' : 'lock-open-outline'}
+          size={14}
+          color={motionLocked ? '#1C1C1E' : '#FFFFFF'}
         />
-        <Path
-          path={stampPath}
-          color={STAMP_PAPER_BORDER_COLOR}
-          style="stroke"
-          strokeWidth={stampBorderWidth}
-        />
-      </Canvas>
+      </Pressable>
+      {showOutlineToggle ? (
+        <Pressable
+          testID={`note-sticker-outline-toggle-${placementId}`}
+          accessibilityRole="button"
+          accessibilityLabel={outlineEnabled ? 'Turn off outline' : 'Turn on outline'}
+          onPress={() => onToggleSelectedPlacementOutline?.(placementId)}
+          style={[
+            styles.selectionControlButton,
+            outlineEnabled ? styles.selectionControlButtonActive : null,
+          ]}
+        >
+          <Ionicons
+            name={outlineEnabled ? 'ellipse' : 'ellipse-outline'}
+            size={14}
+            color={outlineEnabled ? '#1C1C1E' : '#FFFFFF'}
+          />
+        </Pressable>
+      ) : null}
     </View>
   );
-}
-
-const MemoStampStickerArtwork = memo(StampStickerArtwork);
+});
 
 function EditableSticker({
   placement,
@@ -178,26 +144,23 @@ function EditableSticker({
   const activeGestureCountRef = useRef(0);
   const [dragPlacement, setDragPlacement] = useState(placement);
   const activePlacement = dragPlacement;
-  const normalizedScale = clampStickerScale(activePlacement.scale);
-  const baseDimensions = getStickerDimensions(
-    { ...activePlacement, scale: 1 },
+  const placementFrame = getStickerPlacementFrame(
+    activePlacement,
     layout,
     sizeMultiplier,
     minimumBaseSize
   );
-  const stampMetrics =
-    activePlacement.renderMode === 'stamp'
-      ? getStampFrameMetrics(baseDimensions.width, baseDimensions.height)
-      : null;
-  const outlineSize = getStickerOutlineSize(baseDimensions.width, baseDimensions.height);
+  const {
+    baseWidth,
+    baseHeight,
+    frameWidth,
+    frameHeight,
+    normalizedScale,
+    outlineSize,
+    stampMetrics,
+  } = placementFrame;
   const showOutline = activePlacement.renderMode !== 'stamp' && activePlacement.outlineEnabled !== false;
   const showOutlineToggle = activePlacement.renderMode !== 'stamp' && Boolean(onToggleSelectedPlacementOutline);
-  const frameWidth = stampMetrics
-    ? stampMetrics.outerWidth
-    : baseDimensions.width + outlineSize * 2;
-  const frameHeight = stampMetrics
-    ? stampMetrics.outerHeight
-    : baseDimensions.height + outlineSize * 2;
 
   useEffect(() => {
     livePlacementRef.current = placement;
@@ -339,15 +302,49 @@ function EditableSticker({
     () => Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture),
     [panGesture, pinchGesture, rotationGesture]
   );
-  const outlineOffsets = getStickerOutlineOffsets(outlineSize, {
-    preferContinuous: PREFER_CONTINUOUS_OUTLINE,
-  });
-  const stickerFrameStyle = {
-    width: baseDimensions.width,
-    height: baseDimensions.height,
-    top: outlineSize,
-    left: outlineSize,
-  } as const;
+  const outlineOffsets = useMemo(
+    () =>
+      getStickerOutlineOffsets(outlineSize, {
+        preferContinuous: PREFER_CONTINUOUS_OUTLINE,
+      }),
+    [outlineSize]
+  );
+  const stickerFrameStyle = useMemo(
+    () =>
+      ({
+        width: baseWidth,
+        height: baseHeight,
+        top: outlineSize,
+        left: outlineSize,
+      }) as const,
+    [baseHeight, baseWidth, outlineSize]
+  );
+  const stickerWrapStyle = useMemo(
+    () => ({
+      width: frameWidth,
+      height: frameHeight,
+      left: activePlacement.x * layout.width - frameWidth / 2,
+      top: activePlacement.y * layout.height - frameHeight / 2,
+      zIndex: activePlacement.zIndex,
+      opacity: activePlacement.opacity,
+      transform: [
+        { scale: normalizedScale },
+        { rotate: `${activePlacement.rotation}deg` },
+      ],
+    }),
+    [
+      activePlacement.opacity,
+      activePlacement.rotation,
+      activePlacement.x,
+      activePlacement.y,
+      activePlacement.zIndex,
+      frameHeight,
+      frameWidth,
+      layout.height,
+      layout.width,
+      normalizedScale,
+    ]
+  );
 
   const stickerArtwork = (
     <View style={styles.stickerArtwork}>
@@ -380,12 +377,14 @@ function EditableSticker({
         </View>
       ) : null}
       {stampMetrics ? (
-        <MemoStampStickerArtwork
-          placementId={placement.id}
+        <StampStickerArtwork
           localUri={activePlacement.asset.localUri}
-          stampShadowEnabled={stampShadowEnabled}
-          width={baseDimensions.width}
-          height={baseDimensions.height}
+          metrics={stampMetrics}
+          shadowEnabled={stampShadowEnabled}
+          width={baseWidth}
+          height={baseHeight}
+          paperTestID={`note-sticker-stamp-paper-${placement.id}`}
+          artworkTestID={`note-sticker-stamp-${placement.id}`}
         />
       ) : (
         <ExpoImage
@@ -405,59 +404,19 @@ function EditableSticker({
       testID={`note-sticker-wrap-${placement.id}`}
       style={[
         styles.stickerWrap,
-        {
-          width: frameWidth,
-          height: frameHeight,
-          left: activePlacement.x * layout.width - frameWidth / 2,
-          top: activePlacement.y * layout.height - frameHeight / 2,
-          zIndex: activePlacement.zIndex,
-          opacity: activePlacement.opacity,
-          transform: [{ scale: normalizedScale }, { rotate: `${activePlacement.rotation}deg` }],
-        },
+        stickerWrapStyle,
       ]}
     >
       {showSelection ? <View pointerEvents="none" style={styles.selectionRing} /> : null}
       {showSelection ? (
-        <View style={styles.selectionControls}>
-          <Pressable
-            testID={`note-sticker-lock-toggle-${placement.id}`}
-            accessibilityRole="button"
-            accessibilityLabel={
-              activePlacement.motionLocked === true ? 'Unlock sticker motion' : 'Lock sticker motion'
-            }
-            onPress={() => onToggleSelectedPlacementMotionLock?.(placement.id)}
-            style={[
-              styles.selectionControlButton,
-              activePlacement.motionLocked === true ? styles.selectionControlButtonActive : null,
-            ]}
-          >
-            <Ionicons
-              name={activePlacement.motionLocked === true ? 'lock-closed' : 'lock-open-outline'}
-              size={14}
-              color={activePlacement.motionLocked === true ? '#1C1C1E' : '#FFFFFF'}
-            />
-          </Pressable>
-          {showOutlineToggle ? (
-            <Pressable
-              testID={`note-sticker-outline-toggle-${placement.id}`}
-              accessibilityRole="button"
-              accessibilityLabel={
-                activePlacement.outlineEnabled === false ? 'Turn on outline' : 'Turn off outline'
-              }
-              onPress={() => onToggleSelectedPlacementOutline?.(placement.id)}
-              style={[
-                styles.selectionControlButton,
-                activePlacement.outlineEnabled !== false ? styles.selectionControlButtonActive : null,
-              ]}
-            >
-              <Ionicons
-                name={activePlacement.outlineEnabled === false ? 'ellipse-outline' : 'ellipse'}
-                size={14}
-                color={activePlacement.outlineEnabled === false ? '#FFFFFF' : '#1C1C1E'}
-              />
-            </Pressable>
-          ) : null}
-        </View>
+        <StickerSelectionControls
+          placementId={placement.id}
+          motionLocked={activePlacement.motionLocked === true}
+          outlineEnabled={activePlacement.outlineEnabled !== false}
+          showOutlineToggle={showOutlineToggle}
+          onToggleSelectedPlacementMotionLock={onToggleSelectedPlacementMotionLock}
+          onToggleSelectedPlacementOutline={onToggleSelectedPlacementOutline}
+        />
       ) : null}
       <Pressable
         accessibilityRole="button"
@@ -646,21 +605,5 @@ const styles = StyleSheet.create({
   },
   stickerLayerImage: {
     position: 'absolute',
-  },
-  stampArtwork: {
-    width: '100%',
-    height: '100%',
-  },
-  stampPaper: {
-    overflow: 'visible',
-  },
-  stampPaperShadow: {
-    shadowOffset: {
-      width: 0,
-      height: 6,
-    },
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-    elevation: 6,
   },
 });

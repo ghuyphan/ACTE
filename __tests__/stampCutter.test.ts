@@ -81,7 +81,7 @@ describe('stampCutter', () => {
     expect(shiftedCrop.height).toBeCloseTo(centeredCrop.height, 5);
   });
 
-  it('lets the editor zoom out to the stamp window instead of the full viewport', () => {
+  it('lets the image zoom out until it exactly covers the cutter window', () => {
     const { getMinimumStampCutterZoom, normalizeStampCutterTransform } = loadModule();
 
     const sourceSize = { width: 1600, height: 1200 };
@@ -98,7 +98,7 @@ describe('stampCutter', () => {
     expect(minZoom).toBeLessThan(1);
     expect(normalized.zoom).toBeCloseTo(minZoom, 6);
     expect(normalized.imageWidth).toBeCloseTo(selectionRect.width, 6);
-    expect(normalized.imageHeight).toBeGreaterThan(selectionRect.height);
+    expect(normalized.imageHeight).toBeGreaterThanOrEqual(selectionRect.height);
   });
 
   it('exports a rounded JPEG crop for import', async () => {

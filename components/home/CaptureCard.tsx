@@ -464,7 +464,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     closeStickerOverlays,
     dismissPastePrompt,
     handleCloseStampCutterEditor,
-    handleCompleteStampCutterPlacement,
+    handleCompleteStampCutterPlacement: handleCompleteStampCutterPlacementInternal,
     handleCloseStickerSourceSheet,
     handleConfirmStampCutter,
     handleConfirmPasteFromPrompt,
@@ -530,9 +530,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     if (!showStampCutterEditor) {
       return;
     }
-
     scheduleCaptureAreaMeasurement();
   }, [scheduleCaptureAreaMeasurement, showStampCutterEditor]);
+
+  const handleCompleteStampCutterPlacement = useCallback(
+    (placement: NoteStickerPlacement) => {
+      handleCompleteStampCutterPlacementInternal(placement);
+    },
+    [handleCompleteStampCutterPlacementInternal]
+  );
 
   const {
     handleCloseNoteColorSheet,

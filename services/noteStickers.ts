@@ -1022,7 +1022,7 @@ export function setStickerPlacementRenderMode(
   placementId: string,
   renderMode: StickerRenderMode
 ) {
-  return normalizeStickerPlacements(
+  const nextPlacements = normalizeStickerPlacements(
     placements.map((placement) =>
       placement.id === placementId
         ? {
@@ -1032,6 +1032,7 @@ export function setStickerPlacementRenderMode(
         : placement
     )
   );
+  return nextPlacements;
 }
 
 export function bringStickerPlacementToFront(

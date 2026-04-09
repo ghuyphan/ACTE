@@ -79,7 +79,6 @@ const STAMP_CUTTER_OVERLAY_SOURCE_HEIGHT = 1536;
 const STAMP_CUTTER_MAX_SOURCE_DIMENSION = 2048;
 const STAMP_CUTTER_NORMALIZED_SOURCE_QUALITY = 0.94;
 
-export const STAMP_CUTTER_MIN_ZOOM = 0.18;
 export const STAMP_CUTTER_MAX_ZOOM = 16;
 export const STAMP_CUTTER_ROTATION_SNAP_DEGREES = 2.5;
 export const STAMP_CUTTER_OVERLAY_ASPECT_RATIO =
@@ -180,8 +179,11 @@ export function getMinimumStampCutterZoom(
   };
   const requiredZoomX = coverageRect.width / Math.max(1, baseImageWidth);
   const requiredZoomY = coverageRect.height / Math.max(1, baseImageHeight);
+  const coverageZoom = Math.max(requiredZoomX, requiredZoomY);
 
-  return clamp(Math.max(requiredZoomX, requiredZoomY), STAMP_CUTTER_MIN_ZOOM, 1);
+  // Allow zooming out until the source just covers the visible cutter window,
+  // but no farther. That keeps the preview and exported crop in the same space.
+  return clamp(coverageZoom, 0.01, STAMP_CUTTER_MAX_ZOOM);
 }
 
 export function normalizeStampCutterPreviewTransform(
@@ -201,23 +203,19 @@ export function normalizeStampCutterPreviewTransform(
     getMinimumStampCutterZoom(sourceSize, viewportSize, selectionRect),
     STAMP_CUTTER_MAX_ZOOM
   );
-  const rotation = normalizeStampCutterRotation(transform.rotation, true);
   const baseScale = getStampCutterBaseScale(sourceSize, viewportSize);
-  const scaledSize = {
-    width: safeWidth * baseScale * zoom,
-    height: safeHeight * baseScale * zoom,
-  };
-  const rotatedBounds = getStampCutterRotatedBounds(scaledSize, rotation);
+  const imageWidth = safeWidth * baseScale * zoom;
+  const imageHeight = safeHeight * baseScale * zoom;
   const minOffsetX =
-    selectionRect.x + selectionRect.width - (safeViewportWidth + rotatedBounds.width) / 2;
-  const maxOffsetX = selectionRect.x - (safeViewportWidth - rotatedBounds.width) / 2;
+    selectionRect.x + selectionRect.width - (safeViewportWidth + imageWidth) / 2;
+  const maxOffsetX = selectionRect.x - (safeViewportWidth - imageWidth) / 2;
   const minOffsetY =
-    selectionRect.y + selectionRect.height - (safeViewportHeight + rotatedBounds.height) / 2;
-  const maxOffsetY = selectionRect.y - (safeViewportHeight - rotatedBounds.height) / 2;
+    selectionRect.y + selectionRect.height - (safeViewportHeight + imageHeight) / 2;
+  const maxOffsetY = selectionRect.y - (safeViewportHeight - imageHeight) / 2;
 
   return {
     zoom,
-    rotation,
+    rotation: 0,
     offsetX: normalizeZero(
       clamp(Number.isFinite(transform.offsetX) ? transform.offsetX ?? 0 : 0, minOffsetX, maxOffsetX)
     ),
@@ -245,34 +243,30 @@ export function resolveStampCutterPreviewZoomTransform(
     startTransform
   );
   const baseScale = getStampCutterBaseScale(sourceSize, viewportSize);
-  const startScaledSize = {
-    width: Math.max(1, sourceSize.width) * baseScale * startNormalized.zoom,
-    height: Math.max(1, sourceSize.height) * baseScale * startNormalized.zoom,
-  };
-  const startBounds = getStampCutterRotatedBounds(startScaledSize, startNormalized.rotation);
-  const startLeft = (viewportSize.width - startBounds.width) / 2 + startNormalized.offsetX;
-  const startTop = (viewportSize.height - startBounds.height) / 2 + startNormalized.offsetY;
+  const safeWidth = Math.max(1, sourceSize.width);
+  const safeHeight = Math.max(1, sourceSize.height);
+  const startImageWidth = safeWidth * baseScale * startNormalized.zoom;
+  const startImageHeight = safeHeight * baseScale * startNormalized.zoom;
+  const startLeft = (viewportSize.width - startImageWidth) / 2 + startNormalized.offsetX;
+  const startTop = (viewportSize.height - startImageHeight) / 2 + startNormalized.offsetY;
   const relativeX =
-    startBounds.width > 0 ? clamp((anchorX - startLeft) / startBounds.width, 0, 1) : 0.5;
+    startImageWidth > 0 ? clamp((anchorX - startLeft) / startImageWidth, 0, 1) : 0.5;
   const relativeY =
-    startBounds.height > 0 ? clamp((anchorY - startTop) / startBounds.height, 0, 1) : 0.5;
+    startImageHeight > 0 ? clamp((anchorY - startTop) / startImageHeight, 0, 1) : 0.5;
   const provisional = normalizeStampCutterPreviewTransform(sourceSize, viewportSize, selectionRect, {
     zoom: nextZoom,
     offsetX: startTransform.offsetX,
     offsetY: startTransform.offsetY,
-    rotation: startTransform.rotation,
+    rotation: 0,
   });
-  const provisionalScaledSize = {
-    width: Math.max(1, sourceSize.width) * baseScale * provisional.zoom,
-    height: Math.max(1, sourceSize.height) * baseScale * provisional.zoom,
-  };
-  const provisionalBounds = getStampCutterRotatedBounds(provisionalScaledSize, provisional.rotation);
+  const provisionalImageWidth = safeWidth * baseScale * provisional.zoom;
+  const provisionalImageHeight = safeHeight * baseScale * provisional.zoom;
 
   return normalizeStampCutterPreviewTransform(sourceSize, viewportSize, selectionRect, {
     zoom: nextZoom,
-    offsetX: anchorX - viewportSize.width / 2 + (0.5 - relativeX) * provisionalBounds.width,
-    offsetY: anchorY - viewportSize.height / 2 + (0.5 - relativeY) * provisionalBounds.height,
-    rotation: startTransform.rotation,
+    offsetX: anchorX - viewportSize.width / 2 + (0.5 - relativeX) * provisionalImageWidth,
+    offsetY: anchorY - viewportSize.height / 2 + (0.5 - relativeY) * provisionalImageHeight,
+    rotation: 0,
   });
 }
 
