@@ -2,7 +2,10 @@ import { FlashList } from '@shopify/flash-list';
 import { TFunction } from 'i18next';
 import { ReactElement, RefObject, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Animated, {
+  Extrapolation,
   Easing,
+  interpolate,
+  type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -30,6 +33,9 @@ const CAPTURE_PAGE_STICKY_THRESHOLD = 0.62;
 const CAPTURE_PAGE_STICKY_VELOCITY_THRESHOLD = 0.9;
 const SCROLL_SNAP_EPSILON = 2;
 const REFRESH_PULL_THRESHOLD = -6;
+const INACTIVE_CARD_SCALE = 0.968;
+const INACTIVE_CARD_OPACITY = 0.78;
+const INACTIVE_CARD_TRANSLATE_Y = 24;
 function getEntranceDelay(index: number) {
   return Math.min(index, MAX_STAGGERED_ENTRANCE_INDEX) * ENTRANCE_DELAY_MS;
 }
@@ -43,6 +49,9 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   shouldReveal,
   revealToken,
   isActive,
+  pageOffset,
+  scrollOffsetY,
+  snapHeight,
 }: {
   item: Note;
   index: number;
@@ -58,6 +67,9 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   shouldReveal: boolean;
   revealToken: number;
   isActive: boolean;
+  pageOffset: number;
+  scrollOffsetY: SharedValue<number>;
+  snapHeight: number;
 }) {
   const reduceMotionEnabled = useReducedMotion();
   const scale = useSharedValue(0.9);
@@ -125,6 +137,29 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
     opacity: revealGlow.value,
     transform: [{ scale: revealScale.value }],
   }));
+  const pageAnimatedStyle = useAnimatedStyle(() => {
+    const distanceFromFocus = Math.min(
+      Math.abs(Math.max(0, scrollOffsetY.value) - pageOffset) / Math.max(snapHeight, 1),
+      1
+    );
+
+    return {
+      opacity: interpolate(distanceFromFocus, [0, 1], [1, INACTIVE_CARD_OPACITY], Extrapolation.CLAMP),
+      transform: [
+        {
+          translateY: interpolate(
+            distanceFromFocus,
+            [0, 1],
+            [0, INACTIVE_CARD_TRANSLATE_Y],
+            Extrapolation.CLAMP
+          ),
+        },
+        {
+          scale: interpolate(distanceFromFocus, [0, 1], [1, INACTIVE_CARD_SCALE], Extrapolation.CLAMP),
+        },
+      ],
+    };
+  }, [pageOffset, scrollOffsetY, snapHeight]);
   const noteCardAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
       { translateY: cardTranslateY.value + revealTranslateY.value },
@@ -136,31 +171,33 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   }));
 
   return (
-    <View style={styles.revealWrap}>
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.revealGlow,
-          {
-            backgroundColor: colors.primary,
-          },
-          revealGlowAnimatedStyle,
-        ]}
-      />
-      <Animated.View sharedTransitionTag={sharedTransitionTag}>
-        <Animated.View style={noteCardAnimatedStyle}>
-          <Animated.View style={noteMetaAnimatedStyle}>
-            <NoteMemoryCard
-              note={item}
-              onPress={() => onOpenNote(item.id)}
-              colors={colors}
-              t={t}
-              isActive={isActive}
-            />
+    <Animated.View style={pageAnimatedStyle}>
+      <View style={styles.revealWrap}>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.revealGlow,
+            {
+              backgroundColor: colors.primary,
+            },
+            revealGlowAnimatedStyle,
+          ]}
+        />
+        <Animated.View sharedTransitionTag={sharedTransitionTag}>
+          <Animated.View style={noteCardAnimatedStyle}>
+            <Animated.View style={noteMetaAnimatedStyle}>
+              <NoteMemoryCard
+                note={item}
+                onPress={() => onOpenNote(item.id)}
+                colors={colors}
+                t={t}
+                isActive={isActive}
+              />
+            </Animated.View>
           </Animated.View>
         </Animated.View>
-      </Animated.View>
-    </View>
+      </View>
+    </Animated.View>
   );
 }, (prevProps, nextProps) => (
   prevProps.index === nextProps.index &&
@@ -185,7 +222,10 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   prevProps.item.stickerPlacementsJson === nextProps.item.stickerPlacementsJson &&
   prevProps.shouldReveal === nextProps.shouldReveal &&
   prevProps.revealToken === nextProps.revealToken &&
-  prevProps.isActive === nextProps.isActive
+  prevProps.isActive === nextProps.isActive &&
+  prevProps.pageOffset === nextProps.pageOffset &&
+  prevProps.snapHeight === nextProps.snapHeight &&
+  prevProps.scrollOffsetY === nextProps.scrollOffsetY
 ));
 
 const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
@@ -195,6 +235,9 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   t,
   onOpenSharedPost,
   isActive,
+  pageOffset,
+  scrollOffsetY,
+  snapHeight,
 }: {
   item: SharedPost;
   index: number;
@@ -209,6 +252,9 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   };
   t: TFunction;
   isActive: boolean;
+  pageOffset: number;
+  scrollOffsetY: SharedValue<number>;
+  snapHeight: number;
 }) {
   const scale = useSharedValue(0.9);
   const translateY = useSharedValue(18);
@@ -229,16 +275,41 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   const animatedCardStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }, { scale: scale.value }],
   }));
+  const pageAnimatedStyle = useAnimatedStyle(() => {
+    const distanceFromFocus = Math.min(
+      Math.abs(Math.max(0, scrollOffsetY.value) - pageOffset) / Math.max(snapHeight, 1),
+      1
+    );
+
+    return {
+      opacity: interpolate(distanceFromFocus, [0, 1], [1, INACTIVE_CARD_OPACITY], Extrapolation.CLAMP),
+      transform: [
+        {
+          translateY: interpolate(
+            distanceFromFocus,
+            [0, 1],
+            [0, INACTIVE_CARD_TRANSLATE_Y],
+            Extrapolation.CLAMP
+          ),
+        },
+        {
+          scale: interpolate(distanceFromFocus, [0, 1], [1, INACTIVE_CARD_SCALE], Extrapolation.CLAMP),
+        },
+      ],
+    };
+  }, [pageOffset, scrollOffsetY, snapHeight]);
 
   return (
-    <Animated.View style={animatedCardStyle}>
-      <SharedPostMemoryCard
-        post={item}
-        onPress={onOpenSharedPost ? () => onOpenSharedPost(item.id) : undefined}
-        colors={colors}
-        t={t}
-        isActive={isActive}
-      />
+    <Animated.View style={pageAnimatedStyle}>
+      <Animated.View style={animatedCardStyle}>
+        <SharedPostMemoryCard
+          post={item}
+          onPress={onOpenSharedPost ? () => onOpenSharedPost(item.id) : undefined}
+          colors={colors}
+          t={t}
+          isActive={isActive}
+        />
+      </Animated.View>
     </Animated.View>
   );
 }, (prevProps, nextProps) => (
@@ -262,7 +333,10 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   prevProps.item.createdAt === nextProps.item.createdAt &&
   prevProps.item.authorDisplayName === nextProps.item.authorDisplayName &&
   prevProps.item.authorPhotoURLSnapshot === nextProps.item.authorPhotoURLSnapshot &&
-  prevProps.isActive === nextProps.isActive
+  prevProps.isActive === nextProps.isActive &&
+  prevProps.pageOffset === nextProps.pageOffset &&
+  prevProps.snapHeight === nextProps.snapHeight &&
+  prevProps.scrollOffsetY === nextProps.scrollOffsetY
 ));
 
 interface NotesFeedProps {
@@ -330,6 +404,7 @@ export default function NotesFeed({
   const refreshGestureActiveRef = useRef(false);
   const lastOffsetYRef = useRef(0);
   const previousItemKeysRef = useRef<string[] | null>(null);
+  const scrollOffsetY = useSharedValue(0);
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null);
   const [refreshGestureActive, setRefreshGestureActive] = useState(false);
   const listData = useMemo<HomeFeedItem[]>(
@@ -344,11 +419,35 @@ export default function NotesFeed({
   );
   const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
   const snapSuspended = refreshGestureActive;
+  const drawDistance = Math.max(snapHeight * 2, height * 1.15);
+  const listHeaderStyle = useMemo(
+    () => ({
+      height: snapHeight,
+    }),
+    [snapHeight]
+  );
+  const listContentContainerStyle = useMemo(
+    () => ({
+      paddingBottom: height - snapHeight + bottomOverlayInset,
+    }),
+    [bottomOverlayInset, height, snapHeight]
+  );
   const snapOffsets = useMemo(
     () => Array.from({ length: snapPageCount + 1 }, (_, index) => index * snapHeight),
     [snapHeight, snapPageCount]
   );
   const nativeSnapEnabled = !snapSuspended;
+  const getItemType = useCallback(
+    (item: HomeFeedItem) =>
+      item.kind === 'note' ? `note:${item.note.type}` : `shared-post:${item.post.type}`,
+    []
+  );
+  const overrideItemLayout = useCallback(
+    (layout: { span?: number; size?: number }) => {
+      layout.size = snapHeight;
+    },
+    [snapHeight]
+  );
 
   const updateRefreshGestureActive = useCallback((nextActive: boolean) => {
     if (refreshGestureActiveRef.current === nextActive) {
@@ -436,6 +535,7 @@ export default function NotesFeed({
     (offsetY: number) => {
       const normalizedOffset = Math.max(0, offsetY);
       lastOffsetYRef.current = normalizedOffset;
+      scrollOffsetY.value = normalizedOffset;
       reportCaptureVisibility(normalizedOffset);
       reportActiveCard(normalizedOffset);
       reportSettledArchiveItem(normalizedOffset);
@@ -449,6 +549,7 @@ export default function NotesFeed({
       reportActiveCard,
       reportCaptureVisibility,
       reportSettledArchiveItem,
+      scrollOffsetY,
       updateRefreshGestureActive,
     ]
   );
@@ -558,7 +659,7 @@ export default function NotesFeed({
     maybeCorrectSnapOffset,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (Platform.OS !== 'android') {
       return;
     }
@@ -604,6 +705,9 @@ export default function NotesFeed({
                 colors={colors}
                 t={t}
                 isActive={isActive}
+                pageOffset={(index + 1) * snapHeight}
+                scrollOffsetY={scrollOffsetY}
+                snapHeight={snapHeight}
               />
             </View>
           </View>
@@ -630,6 +734,9 @@ export default function NotesFeed({
               shouldReveal={item.note.id === revealedNoteId}
               revealToken={revealToken}
               isActive={isActive}
+              pageOffset={(index + 1) * snapHeight}
+              scrollOffsetY={scrollOffsetY}
+              snapHeight={snapHeight}
             />
           </View>
         </View>
@@ -656,8 +763,9 @@ export default function NotesFeed({
       keyExtractor={getHomeFeedItemKey}
       renderItem={renderItem}
       extraData={activeCardKey}
-      getItemType={(item) => item.kind}
-      drawDistance={snapHeight * 2}
+      getItemType={getItemType}
+      overrideItemLayout={overrideItemLayout as any}
+      drawDistance={drawDistance}
       removeClippedSubviews={Platform.OS === 'android' && captureMode !== 'camera'}
       snapToOffsets={nativeSnapEnabled ? snapOffsets : undefined}
       snapToEnd={false}
@@ -668,7 +776,12 @@ export default function NotesFeed({
       // FlashList auto-maintain visible content position can cause double-adjusts.
       maintainVisibleContentPosition={{ disabled: true }}
       showsVerticalScrollIndicator={false}
+      contentInsetAdjustmentBehavior="never"
+      automaticallyAdjustContentInsets={false}
+      automaticallyAdjustsScrollIndicatorInsets={false}
+      keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       ListHeaderComponent={captureHeader}
+      ListHeaderComponentStyle={listHeaderStyle}
       ListEmptyComponent={
         emptyState ? (
           <View
@@ -687,6 +800,7 @@ export default function NotesFeed({
       onScroll={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
         lastOffsetYRef.current = offsetY;
+        scrollOffsetY.value = offsetY;
         updateRefreshGestureActive(offsetY < REFRESH_PULL_THRESHOLD);
         reportCaptureVisibility(offsetY);
         onScrollOffsetChange?.(offsetY);
@@ -737,9 +851,13 @@ export default function NotesFeed({
           return;
         }
 
+        if (maybeCorrectSnapOffset(offsetY, { animated: false })) {
+          return;
+        }
+
         applySettledOffset(offsetY);
       }}
-      contentContainerStyle={{ paddingBottom: height - snapHeight + bottomOverlayInset }}
+      contentContainerStyle={listContentContainerStyle}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

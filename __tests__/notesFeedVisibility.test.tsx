@@ -604,6 +604,66 @@ describe('NotesFeed capture visibility', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
+  it('uses content-aware item types for recycler reuse', () => {
+    const { UNSAFE_getByType } = render(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="camera"
+        notes={[
+          {
+            id: 'note-photo',
+            type: 'photo',
+            caption: 'Photo',
+            locationName: 'Cafe',
+            latitude: 0,
+            longitude: 0,
+            radius: 150,
+            isFavorite: false,
+            createdAt: '2026-03-19T00:00:00.000Z',
+            updatedAt: null,
+          },
+        ] as any}
+        sharedPosts={[
+          {
+            id: 'shared-text',
+            authorUid: 'friend-1',
+            authorDisplayName: 'Friend',
+            authorPhotoURLSnapshot: null,
+            audienceUserIds: ['friend-1'],
+            type: 'text',
+            text: 'shared',
+            photoLocalUri: null,
+            photoRemoteBase64: null,
+            placeName: 'Park',
+            sourceNoteId: null,
+            createdAt: '2026-03-18T00:00:00.000Z',
+            updatedAt: null,
+          },
+        ] as any}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    const list = UNSAFE_getByType(FlatList);
+    const types = list.props.data.map((item: any, index: number) => list.props.getItemType(item, index));
+
+    expect(types).toEqual(['note:photo', 'shared-post:text']);
+  });
+
   it('keeps clipping disabled for this feed on ios', () => {
     const { UNSAFE_getByType } = render(
       <NotesFeed
@@ -662,6 +722,53 @@ describe('NotesFeed capture visibility', () => {
     const list = UNSAFE_getByType(FlatList);
 
     expect(list.props.maintainVisibleContentPosition).toEqual({ disabled: true });
+  });
+
+  it('pins the header and item layout to the snap height', () => {
+    const { UNSAFE_getByType } = render(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={<View testID="capture-header" />}
+        captureMode="text"
+        notes={[
+          {
+            id: 'note-1',
+            type: 'text',
+            content: 'hello',
+            locationName: 'Cafe',
+            latitude: 0,
+            longitude: 0,
+            radius: 150,
+            isFavorite: false,
+            createdAt: '2026-03-19T00:00:00.000Z',
+            updatedAt: null,
+          },
+        ] as any}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={jest.fn()}
+        onOpenSharedPost={jest.fn()}
+        colors={{
+          primary: '#FFC107',
+          text: '#1C1C1E',
+          secondaryText: '#8E8E93',
+          danger: '#FF3B30',
+          card: '#FFFFFF',
+        }}
+        t={((key: string, fallback?: string) => fallback ?? key) as any}
+      />
+    );
+
+    const list = UNSAFE_getByType(FlatList);
+    const layout: { size?: number } = {};
+
+    list.props.overrideItemLayout(layout, list.props.data[0], 0, 1);
+
+    expect(list.props.ListHeaderComponentStyle).toEqual({ height: 700 });
+    expect(layout.size).toBe(700);
   });
 
   it('suspends snapping while a top refresh pull is active', () => {
@@ -821,7 +928,7 @@ describe('NotesFeed capture visibility', () => {
     expect(list.props.decelerationRate).toBe('fast');
   });
 
-  it('uses native snap offsets on android without an extra momentum correction', () => {
+  it('re-snaps android momentum end to the nearest page when needed', () => {
     const originalPlatform = Platform.OS;
     Platform.OS = 'android';
     const scrollToOffset = jest.fn();
@@ -880,7 +987,7 @@ describe('NotesFeed capture visibility', () => {
         });
       });
 
-      expect(scrollToOffset).not.toHaveBeenCalled();
+      expect(scrollToOffset).toHaveBeenCalledWith({ offset: 700, animated: false });
     } finally {
       Platform.OS = originalPlatform;
     }
