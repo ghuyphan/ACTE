@@ -10,6 +10,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useTheme } from '../../../hooks/useTheme';
 import { SharedPost } from '../../../services/sharedFeedService';
+import { formatNoteTimestamp } from '../../../utils/dateUtils';
 
 const { width } = Dimensions.get('window');
 const DEFAULT_SHARED_CARD_SIZE = width - (Layout.screenPadding - 8) * 2;
@@ -21,12 +22,41 @@ export default function SharedIndexScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { enabled, loading, sharedPosts } = useSharedFeedStore();
+  const { dataSource, enabled, lastUpdatedAt, loading, sharedPosts } = useSharedFeedStore();
 
   const sortedPosts = useMemo(
     () => [...sharedPosts].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
     [sharedPosts]
   );
+  const cacheBanner =
+    dataSource === 'cache' ? (
+      <View
+        testID="shared-feed-cache-banner"
+        style={[
+          styles.cacheBanner,
+          {
+            backgroundColor: colors.primarySoft,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <Text style={[styles.cacheBannerTitle, { color: colors.text }]}>
+          {t('shared.cacheBannerTitle', 'Showing saved shared moments')}
+        </Text>
+        <Text style={[styles.cacheBannerBody, { color: colors.secondaryText }]}>
+          {lastUpdatedAt
+            ? t(
+                'shared.cacheBannerBodyWithTime',
+                'Last updated {{time}}. Live updates will resume when the connection returns.',
+                { time: formatNoteTimestamp(lastUpdatedAt, 'card') }
+              )
+            : t(
+                'shared.cacheBannerBody',
+                'Live updates are unavailable right now, so Noto is showing your saved shared feed.'
+              )}
+        </Text>
+      </View>
+    ) : null;
 
   const contentTopInset = insets.top + 72;
 
@@ -73,8 +103,11 @@ export default function SharedIndexScreen() {
           </Pressable>
         </View>
       ) : loading && sortedPosts.length === 0 ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
+        <View style={styles.flexFill}>
+          {cacheBanner ? <View style={styles.bannerShell}>{cacheBanner}</View> : null}
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
         </View>
       ) : (
         <FlashList
@@ -94,6 +127,7 @@ export default function SharedIndexScreen() {
             />
           )}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={cacheBanner ? <View style={styles.bannerListHeader}>{cacheBanner}</View> : null}
           contentContainerStyle={{
             paddingTop: contentTopInset,
             paddingBottom: insets.bottom + 32,
@@ -119,6 +153,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  flexFill: {
+    flex: 1,
+  },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -128,6 +165,30 @@ const styles = StyleSheet.create({
   },
   cardRow: {
     marginBottom: 28,
+  },
+  bannerShell: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: 12,
+  },
+  bannerListHeader: {
+    paddingBottom: 18,
+  },
+  cacheBanner: {
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  cacheBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  cacheBannerBody: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'Noto Sans',
   },
   emptyTitle: {
     fontSize: 20,

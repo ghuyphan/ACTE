@@ -150,6 +150,7 @@ let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let transactionQueue: Promise<void> = Promise.resolve();
 let androidDatabaseQueue: Promise<void> = Promise.resolve();
 const APP_SCHEMA_VERSION = 14;
+const DATABASE_NAME = 'acte_notes.db';
 export const LOCAL_NOTES_SCOPE = '__local__';
 const ACTIVE_NOTES_SCOPE_STORAGE_KEY = 'notes.activeScope';
 let activeNotesScope = LOCAL_NOTES_SCOPE;
@@ -457,6 +458,25 @@ export async function migrateLocalNotesScopeToUser(userUid: string): Promise<voi
     await migrateNotesScope(LOCAL_NOTES_SCOPE, userUid);
 }
 
+export async function resetLocalDatabase(): Promise<void> {
+    const openDatabase = db ?? (await dbInitPromise?.catch(() => null)) ?? null;
+
+    db = null;
+    dbInitPromise = null;
+    transactionQueue = Promise.resolve();
+    androidDatabaseQueue = Promise.resolve();
+
+    if (openDatabase) {
+        try {
+            await openDatabase.closeAsync();
+        } catch (error) {
+            console.warn('[database] Failed to close database before reset:', error);
+        }
+    }
+
+    await SQLite.deleteDatabaseAsync(DATABASE_NAME);
+}
+
 export async function getDB(): Promise<SQLite.SQLiteDatabase> {
     if (db) {
         return db;
@@ -465,7 +485,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
     if (!dbInitPromise) {
         dbInitPromise = (async () => {
             const database = await SQLite.openDatabaseAsync(
-                'acte_notes.db',
+                DATABASE_NAME,
                 Platform.OS === 'android'
                     ? {
                         useNewConnection: true,

@@ -3,7 +3,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Href, Stack, useRouter } from 'expo-router';
-import { useCallback, useDeferredValue, useEffect, useState, useTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -40,6 +40,10 @@ function getPreviewText(note: Note, photoLabel: string, emptyLabel: string) {
   return formatNoteTextWithEmoji(normalized, note.moodEmoji);
 }
 
+function sortNotesByCreatedAt(left: Note, right: Note) {
+  return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+}
+
 export default function SearchScreen() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -51,11 +55,18 @@ export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
+  const [searchFailed, setSearchFailed] = useState(false);
   const [, startSearchTransition] = useTransition();
   const activeQuery = Platform.OS === 'android' ? androidTabSearchQuery : query;
   const deferredQuery = useDeferredValue(activeQuery);
   const hasQuery = activeQuery.trim().length > 0;
   const hasDeferredQuery = deferredQuery.trim().length > 0;
+  const discoveryNotes = useMemo(() => {
+    const favoriteNotes = notes.filter((note) => note.isFavorite).sort(sortNotesByCreatedAt);
+    const recentNotes = notes.filter((note) => !note.isFavorite).sort(sortNotesByCreatedAt);
+
+    return [...favoriteNotes, ...recentNotes].slice(0, 12);
+  }, [notes]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') {
@@ -68,21 +79,25 @@ export default function SearchScreen() {
   useEffect(() => {
     if (!hasDeferredQuery) {
       setFilteredNotes([]);
+      setSearchFailed(false);
       return;
     }
 
     let cancelled = false;
+    setSearchFailed(false);
 
     void searchNotes(deferredQuery)
       .then((results) => {
         if (!cancelled) {
           setFilteredNotes(results);
+          setSearchFailed(false);
         }
       })
       .catch((error) => {
         if (!cancelled) {
           console.warn('Search query failed:', error);
           setFilteredNotes([]);
+          setSearchFailed(true);
         }
       });
 
@@ -91,7 +106,8 @@ export default function SearchScreen() {
     };
   }, [deferredQuery, hasDeferredQuery, searchNotes]);
 
-  const shouldShowEmptyState = filteredNotes.length === 0;
+  const visibleNotes = hasQuery ? filteredNotes : discoveryNotes;
+  const shouldShowEmptyState = !searchFailed && visibleNotes.length === 0;
 
   const openNote = useCallback(
     (noteId: string) => {
@@ -229,6 +245,35 @@ export default function SearchScreen() {
         <View style={styles.centerWrap}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
+      ) : searchFailed ? (
+        <Pressable
+          onPress={dismissKeyboard}
+          style={[
+            styles.centerWrap,
+            styles.emptyScreen,
+            {
+              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : insets.top + 10,
+              paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
+            },
+          ]}
+          testID="search-error-state"
+        >
+          <View pointerEvents="none" style={styles.emptyState}>
+            <View style={styles.emptyIconWrap}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={Platform.OS === 'ios' ? 54 : 30}
+                color={colors.secondaryText}
+              />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              {t('search.errorTitle', 'Search is unavailable')}
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
+              {t('search.errorBody', 'We could not search your notes right now. Please try again in a moment.')}
+            </Text>
+          </View>
+        </Pressable>
       ) : shouldShowEmptyState ? (
         <Pressable
           onPress={dismissKeyboard}
@@ -263,12 +308,27 @@ export default function SearchScreen() {
         </Pressable>
       ) : (
         <FlashList
-          data={filteredNotes}
+          data={visibleNotes}
           keyExtractor={(item) => item.id}
           getItemType={(item) => item.type}
           drawDistance={440}
           renderItem={renderNote}
           ItemSeparatorComponent={renderSeparator}
+          ListHeaderComponent={
+            !hasQuery ? (
+              <View style={styles.discoveryHeader} testID="search-discovery-header">
+                <Text style={[styles.discoveryTitle, { color: colors.text }]}>
+                  {t('search.discoveryTitle', 'Recent & favorite memories')}
+                </Text>
+                <Text style={[styles.discoverySubtitle, { color: colors.secondaryText }]}>
+                  {t(
+                    'search.discoveryBody',
+                    'Start with something you saved lately or marked as a favorite.'
+                  )}
+                </Text>
+              </View>
+            ) : null
+          }
           contentInsetAdjustmentBehavior="never"
           automaticallyAdjustContentInsets={false}
           automaticallyAdjustsScrollIndicatorInsets={false}
@@ -297,6 +357,20 @@ const styles = StyleSheet.create({
   listContent: {
     paddingTop: 16,
     paddingHorizontal: Layout.screenPadding,
+  },
+  discoveryHeader: {
+    gap: 4,
+    marginBottom: 18,
+  },
+  discoveryTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  discoverySubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'Noto Sans',
   },
   resultPress: {
     width: '100%',

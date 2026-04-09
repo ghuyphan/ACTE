@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { InteractionManager, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import NotesIndexScreen, { resolveNotesModeFromSwipe } from '../app/notes/index';
 
 const mockRouterReplace = jest.fn();
@@ -9,6 +9,8 @@ const mockRouterPush = jest.fn();
 const mockRequestFeedFocus = jest.fn();
 const mockDownloadPhotoFromStorage = jest.fn();
 const mockDynamicStickerCanvas = jest.fn();
+const mockScheduleOnIdle = jest.fn();
+const originalConsoleError = console.error;
 
 const mockNotes: any[] = [
   {
@@ -151,6 +153,10 @@ jest.mock('../services/remoteMedia', () => ({
   downloadPhotoFromStorage: (...args: unknown[]) => mockDownloadPhotoFromStorage(...args),
 }));
 
+jest.mock('../utils/scheduleOnIdle', () => ({
+  scheduleOnIdle: (...args: unknown[]) => mockScheduleOnIdle(...args),
+}));
+
 jest.mock('../utils/dateUtils', () => ({
   formatDate: () => 'Mar 11, 12:00 AM',
   formatNoteTimestamp: () => '2 hr. ago',
@@ -203,6 +209,18 @@ jest.mock('../hooks/useSharedFeed', () => ({
 describe('NotesIndexScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      const [message] = args;
+      if (typeof message === 'string' && message.includes('not wrapped in act')) {
+        return;
+      }
+
+      originalConsoleError(...args);
+    });
+    mockScheduleOnIdle.mockImplementation((callback: () => void) => {
+      callback();
+      return { cancel: jest.fn() };
+    });
     mockDynamicStickerCanvas.mockClear();
     mockNotes.splice(
       0,
@@ -260,6 +278,10 @@ describe('NotesIndexScreen', () => {
         createdAt: '2026-03-13T00:00:00.000Z',
       }
     );
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('renders a centered empty state when there are no notes or shared posts', () => {
@@ -508,12 +530,6 @@ describe('NotesIndexScreen', () => {
     const previousNodeEnv = processEnv.NODE_ENV;
     const originalRequestAnimationFrame = global.requestAnimationFrame;
     const originalCancelAnimationFrame = global.cancelAnimationFrame;
-    const runAfterInteractionsSpy = jest
-      .spyOn(InteractionManager, 'runAfterInteractions')
-      .mockImplementation((task: any) => {
-        task?.();
-        return { cancel: jest.fn() } as any;
-      });
 
     processEnv.NODE_ENV = 'production';
     mockNotes.splice(0, mockNotes.length, {
@@ -574,7 +590,6 @@ describe('NotesIndexScreen', () => {
       processEnv.NODE_ENV = previousNodeEnv;
       global.requestAnimationFrame = originalRequestAnimationFrame;
       global.cancelAnimationFrame = originalCancelAnimationFrame;
-      runAfterInteractionsSpy.mockRestore();
       jest.useRealTimers();
     }
   });

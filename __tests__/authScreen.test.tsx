@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import LoginScreen from '../app/auth/index';
 
 const mockReplace = jest.fn();
@@ -18,6 +18,9 @@ const mockSendPasswordReset = jest.fn<Promise<{ status: 'success' }>, [string]>(
 );
 const mockOpenPrivacyPolicy = jest.fn();
 const mockOpenSupport = jest.fn();
+const mockCompleteOnboardingAndEnterApp = jest.fn(async (complete: (route: string) => void) => {
+  complete('/');
+});
 
 const mockAuthState = {
   user: null,
@@ -190,6 +193,11 @@ jest.mock('../services/legalLinks', () => ({
   openSupport: () => mockOpenSupport(),
 }));
 
+jest.mock('../services/startupRouting', () => ({
+  completeOnboardingAndEnterApp: (complete: (route: string) => void) =>
+    mockCompleteOnboardingAndEnterApp(complete),
+}));
+
 describe('LoginScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -328,9 +336,15 @@ describe('LoginScreen', () => {
     expect(mockSignInWithGoogle).not.toHaveBeenCalled();
 
     fireEvent.press(getByTestId('auth-landing-policy-consent'));
-    fireEvent.press(getByTestId('auth-google-button'));
+    await act(async () => {
+      fireEvent.press(getByTestId('auth-google-button'));
+    });
 
-    expect(mockSignInWithGoogle).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockSignInWithGoogle).toHaveBeenCalled();
+      expect(mockCompleteOnboardingAndEnterApp).toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledWith('/');
+    });
   });
 
   it('steps back through the auth flow when navigation back is prevented', () => {

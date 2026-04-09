@@ -2,13 +2,14 @@ import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@rea
 import * as SystemUI from 'expo-system-ui';
 import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { i18nReady } from '../constants/i18n';
 import AppProviders from '../components/app/AppProviders';
+import PrimaryButton from '../components/ui/PrimaryButton';
 import { useTheme } from '../hooks/useTheme';
 import { useAppNotificationRouting } from '../hooks/app/useAppNotificationRouting';
 import { useAppStartupBootstrap } from '../hooks/app/useAppStartupBootstrap';
@@ -24,7 +25,13 @@ SplashScreen.preventAutoHideAsync();
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
   const { t } = useTranslation();
-  const { startupError, startupTarget } = useAppStartupBootstrap();
+  const {
+    isRecovering,
+    resetStartupData,
+    retryStartup,
+    startupError,
+    startupTarget,
+  } = useAppStartupBootstrap();
   useAppWidgetRefresh();
   useAppNotificationRouting();
   useSocialPushRegistration();
@@ -72,6 +79,44 @@ function AppContent() {
     };
   }, [colors.background, colors.border, colors.card, colors.primary, colors.text, isDark]);
 
+  const handleResetStartupData = useCallback(() => {
+    if (isRecovering) {
+      return;
+    }
+
+    Alert.alert(
+      t('startup.resetLocalDataTitle', 'Reset local data?'),
+      t(
+        'startup.resetLocalDataBody',
+        'This removes memories saved only on this device so Noto can rebuild its local database.'
+      ),
+      [
+        {
+          text: t('common.cancel', 'Cancel'),
+          style: 'cancel',
+        },
+        {
+          text: t('startup.resetLocalDataConfirm', 'Reset local data'),
+          style: 'destructive',
+          onPress: () => {
+            void resetStartupData();
+          },
+        },
+      ]
+    );
+  }, [isRecovering, resetStartupData, t]);
+
+  const startupErrorMessage =
+    startupError === 'database-reset-failed'
+      ? t(
+          'startup.databaseResetFailed',
+          'Noto could not reset its local database. Please restart the app and try again.'
+        )
+      : t(
+          'startup.databaseInitFailed',
+          'Noto could not open its local database. Please restart the app and try again.'
+        );
+
   return (
     <NavThemeProvider value={navTheme}>
       <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -82,11 +127,38 @@ function AppContent() {
               {t('common.error', 'Something went wrong')}
             </Text>
             <Text style={{ color: colors.secondaryText, fontSize: 15, marginTop: 12, textAlign: 'center' }}>
+              {startupErrorMessage}
+            </Text>
+            <Text style={{ color: colors.secondaryText, fontSize: 13, marginTop: 12, textAlign: 'center' }}>
               {t(
-                'startup.databaseInitFailed',
-                'Noto could not open its local database. Please restart the app and try again.'
+                'startup.resetLocalDataHint',
+                'Reset local data only if retrying does not help. Synced content can come back after sign-in.'
               )}
             </Text>
+            <View style={{ width: '100%', maxWidth: 320, gap: 12, marginTop: 24 }}>
+              <PrimaryButton
+                label={t('startup.retryAction', 'Try again')}
+                onPress={retryStartup}
+                loading={isRecovering}
+                disabled={isRecovering}
+                testID="startup-retry-button"
+              />
+              <PrimaryButton
+                label={t('startup.resetLocalDataAction', 'Reset local data')}
+                onPress={handleResetStartupData}
+                disabled={isRecovering}
+                variant="secondary"
+                testID="startup-reset-data-button"
+              />
+            </View>
+            {isRecovering ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 }}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={{ color: colors.secondaryText, fontSize: 13, textAlign: 'center' }}>
+                  {t('startup.recoveryInProgress', 'Trying to recover your local data...')}
+                </Text>
+              </View>
+            ) : null}
           </View>
         ) : (
         <Stack screenOptions={{ headerShown: false }}>

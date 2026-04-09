@@ -29,7 +29,7 @@ const mockNotes: MockNote[] = [
     latitude: 10.8,
     longitude: 106.7,
     radius: 150,
-    isFavorite: false,
+    isFavorite: true,
     createdAt: '2026-03-11T00:00:00.000Z',
     updatedAt: null,
   },
@@ -51,6 +51,10 @@ const mockSearchNotes = jest.fn(async (query: string) => {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) {
     return mockNotes;
+  }
+
+  if (normalizedQuery === 'explode') {
+    throw new Error('search exploded');
   }
 
   return mockNotes.filter((note) => {
@@ -164,6 +168,24 @@ jest.mock('../utils/dateUtils', () => ({
 import SearchScreen from '../app/(tabs)/search/index';
 
 describe('SearchScreen', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('shows recent and favorite notes before a query is entered', () => {
+    const { getByTestId, getByText } = render(
+      <FeedFocusProvider>
+        <SearchScreen />
+      </FeedFocusProvider>
+    );
+
+    expect(getByTestId('search-bar')).toBeTruthy();
+    expect(getByTestId('search-discovery-header')).toBeTruthy();
+    expect(getByText('Recent & favorite memories')).toBeTruthy();
+    expect(getByText('District 3')).toBeTruthy();
+    expect(getByText('District 1')).toBeTruthy();
+  });
+
   it('does not match photo file uris when searching', async () => {
     const { getByTestId, queryByText, getByText } = render(
       <FeedFocusProvider>
@@ -188,5 +210,27 @@ describe('SearchScreen', () => {
     await waitFor(() => {
       expect(queryByText('District 3')).toBeTruthy();
     });
+  });
+
+  it('shows a dedicated error state when search fails', async () => {
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const { getByTestId, getByText } = render(
+      <FeedFocusProvider>
+        <SearchScreen />
+      </FeedFocusProvider>
+    );
+
+    expect(getByTestId('search-bar')).toBeTruthy();
+
+    await act(async () => {
+      mockSearchBarProps.onChangeText?.({ nativeEvent: { text: 'explode' } });
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('search-error-state')).toBeTruthy();
+      expect(getByText('Search is unavailable')).toBeTruthy();
+    });
+
+    consoleWarnSpy.mockRestore();
   });
 });

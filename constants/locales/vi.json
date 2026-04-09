@@ -377,6 +377,9 @@
         "joinFailedTitle": "Không thể tham gia lời mời",
         "pushBlockedTitle": "Bật thông báo về hoạt động của bạn bè",
         "pushBlockedBody": "Thông báo của Noto đang tắt. Mở Cài đặt nếu bạn muốn nhận thông báo khi bạn bè chấp nhận lời mời hoặc chia sẻ kỷ niệm.",
+        "cacheBannerTitle": "Đang hiển thị bản đã lưu của kỷ niệm chia sẻ",
+        "cacheBannerBody": "Hiện chưa có cập nhật trực tiếp, nên Noto đang hiển thị bản feed chia sẻ đã lưu trên máy.",
+        "cacheBannerBodyWithTime": "Cập nhật lần cuối {{time}}. Khi có lại kết nối, feed sẽ tiếp tục cập nhật trực tiếp.",
         "signInRequiredError": "Đăng nhập để chia sẻ khoảnh khắc.",
         "offlineActionError": "Bạn đang ngoại tuyến. Khoảnh khắc đã lưu vẫn xem được, nhưng các thao tác chia sẻ cần có kết nối mạng."
     },
@@ -758,6 +761,23 @@
         "title": "Không tìm thấy",
         "message": "Màn hình này không tồn tại.",
         "go_home": "Về trang chính"
+    },
+    "search": {
+        "discoveryTitle": "Kỷ niệm gần đây và yêu thích",
+        "discoveryBody": "Bắt đầu với điều bạn vừa lưu gần đây hoặc đã đánh dấu yêu thích.",
+        "errorTitle": "Tìm kiếm tạm thời chưa khả dụng",
+        "errorBody": "Noto chưa thể tìm trong ghi chú lúc này. Hãy thử lại sau ít phút nhé."
+    },
+    "startup": {
+        "databaseInitFailed": "Noto chưa thể mở cơ sở dữ liệu cục bộ. Hãy khởi động lại ứng dụng rồi thử lại nhé.",
+        "databaseResetFailed": "Noto chưa thể đặt lại cơ sở dữ liệu cục bộ. Hãy khởi động lại ứng dụng rồi thử lại nhé.",
+        "retryAction": "Thử lại",
+        "resetLocalDataAction": "Đặt lại dữ liệu cục bộ",
+        "resetLocalDataTitle": "Đặt lại dữ liệu cục bộ?",
+        "resetLocalDataBody": "Thao tác này sẽ xóa các kỷ niệm chỉ lưu trên thiết bị này để Noto tạo lại cơ sở dữ liệu cục bộ.",
+        "resetLocalDataConfirm": "Đặt lại dữ liệu",
+        "resetLocalDataHint": "Chỉ nên đặt lại dữ liệu cục bộ nếu thử lại vẫn không được. Nội dung đã đồng bộ có thể tải lại sau khi đăng nhập.",
+        "recoveryInProgress": "Noto đang cố khôi phục dữ liệu cục bộ..."
     },
     "common": {
         "cancel": "Hủy",

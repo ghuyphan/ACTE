@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { getDB } from '../../services/database';
+import { useCallback, useEffect, useState } from 'react';
+import { getDB, resetLocalDatabase } from '../../services/database';
 import { syncGeofenceRegions } from '../../services/geofenceService';
 import { runMediaCacheEviction } from '../../services/mediaCacheManager';
 import { configureNotificationChannels } from '../../services/notificationService';
@@ -15,6 +15,26 @@ export function useAppStartupBootstrap() {
     getCachedStartupRoute('entry')
   );
   const [startupError, setStartupError] = useState<string | null>(null);
+  const [isRecovering, setIsRecovering] = useState(false);
+  const [databaseAttempt, setDatabaseAttempt] = useState(0);
+
+  const retryStartup = useCallback(() => {
+    setIsRecovering(true);
+    setDatabaseAttempt((current) => current + 1);
+  }, []);
+
+  const resetStartupData = useCallback(async () => {
+    setIsRecovering(true);
+
+    try {
+      await resetLocalDatabase();
+      setDatabaseAttempt((current) => current + 1);
+    } catch (error) {
+      console.error('Database reset failed:', error);
+      setStartupError('database-reset-failed');
+      setIsRecovering(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (startupTarget) {
@@ -39,6 +59,10 @@ export function useAppStartupBootstrap() {
     let startupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
     let startupTimeout: ReturnType<typeof setTimeout> | null = null;
 
+    if (databaseAttempt > 0) {
+      setIsRecovering(true);
+    }
+
     void configureNotificationChannels();
 
     getDB()
@@ -48,6 +72,7 @@ export function useAppStartupBootstrap() {
         }
 
         setStartupError(null);
+        setIsRecovering(false);
         startupIdleHandle = scheduleOnIdle(() => {
           startupTimeout = setTimeout(() => {
             syncGeofenceRegions().catch((err) => console.warn('Geofence sync failed:', err));
@@ -59,6 +84,7 @@ export function useAppStartupBootstrap() {
         console.error('Database init failed:', err);
         if (!cancelled) {
           setStartupError('database-init-failed');
+          setIsRecovering(false);
         }
       });
 
@@ -69,9 +95,12 @@ export function useAppStartupBootstrap() {
         clearTimeout(startupTimeout);
       }
     };
-  }, []);
+  }, [databaseAttempt]);
 
   return {
+    isRecovering,
+    resetStartupData,
+    retryStartup,
     startupTarget,
     startupError,
   };

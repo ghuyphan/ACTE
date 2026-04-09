@@ -17,7 +17,6 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import {
   ActivityIndicator,
-  InteractionManager,
   Platform,
   Pressable,
   StyleSheet,
@@ -52,6 +51,7 @@ import { getNotePhotoUri } from '../../../services/photoStorage';
 import { SHARED_POST_MEDIA_BUCKET } from '../../../services/remoteMedia';
 import { Note } from '../../../services/database';
 import { SharedPost } from '../../../services/sharedFeedService';
+import { scheduleOnIdle } from '../../../utils/scheduleOnIdle';
 import { useNotesGridSharedPhotoHydration } from './useNotesGridSharedPhotoHydration';
 
 type NoteGridItem =
@@ -422,23 +422,32 @@ export default function NotesIndexScreen() {
       return;
     }
 
-    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+    if (process.env.NODE_ENV === 'test') {
       setHasPreparedRecap(true);
-    });
+      return;
+    }
+
+    const idleHandle = scheduleOnIdle(() => {
+      setHasPreparedRecap(true);
+    }, { timeout: 220 });
 
     return () => {
-      interactionHandle.cancel();
+      idleHandle.cancel();
     };
   }, [hasPreparedRecap, hasRecapNotes, mode]);
 
   useEffect(() => {
     if (mode === 'all') {
-      setShowAllModeLayer(true);
+      if (!showAllModeLayer) {
+        setShowAllModeLayer(true);
+      }
       return;
     }
 
     if (process.env.NODE_ENV === 'test') {
-      setShowAllModeLayer(false);
+      if (showAllModeLayer) {
+        setShowAllModeLayer(false);
+      }
       return;
     }
 
@@ -449,7 +458,7 @@ export default function NotesIndexScreen() {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [mode]);
+  }, [mode, showAllModeLayer]);
 
   useEffect(() => {
     modeProgress.value = withTiming(mode === 'recap' ? 1 : 0, {
@@ -465,7 +474,7 @@ export default function NotesIndexScreen() {
     let cancelled = false;
     let animationFrameId: number | null = null;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    let interactionHandle: { cancel: () => void } | null = null;
+    let idleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
 
     setShowGridDecorations(false);
 
@@ -475,7 +484,7 @@ export default function NotesIndexScreen() {
       };
     }
 
-    interactionHandle = InteractionManager.runAfterInteractions(() => {
+    idleHandle = scheduleOnIdle(() => {
       animationFrameId = requestAnimationFrame(() => {
         timeoutId = setTimeout(() => {
           if (!cancelled) {
@@ -483,11 +492,11 @@ export default function NotesIndexScreen() {
           }
         }, GRID_DECORATION_REVEAL_DELAY_MS);
       });
-    });
+    }, { timeout: 220 });
 
     return () => {
       cancelled = true;
-      interactionHandle?.cancel();
+      idleHandle?.cancel();
       if (animationFrameId !== null) {
         cancelAnimationFrame(animationFrameId);
       }

@@ -377,6 +377,9 @@
         "joinFailedTitle": "Could not join",
         "pushBlockedTitle": "Turn on friend activity notifications",
         "pushBlockedBody": "Notifications are off for Noto. Open Settings if you want alerts when friends accept invites or share memories.",
+        "cacheBannerTitle": "Showing saved shared moments",
+        "cacheBannerBody": "Live updates are unavailable right now, so Noto is showing your saved shared feed.",
+        "cacheBannerBodyWithTime": "Last updated {{time}}. Live updates will resume when the connection returns.",
         "signInRequiredError": "Sign in to share moments.",
         "offlineActionError": "You are offline. Cached shared moments are still visible, but sharing actions need a connection."
     },
@@ -758,6 +761,23 @@
         "title": "Oops!",
         "message": "This screen doesn't exist.",
         "go_home": "Go to home screen!"
+    },
+    "search": {
+        "discoveryTitle": "Recent & favorite memories",
+        "discoveryBody": "Start with something you saved lately or marked as a favorite.",
+        "errorTitle": "Search is unavailable",
+        "errorBody": "We could not search your notes right now. Please try again in a moment."
+    },
+    "startup": {
+        "databaseInitFailed": "Noto could not open its local database. Please restart the app and try again.",
+        "databaseResetFailed": "Noto could not reset its local database. Please restart the app and try again.",
+        "retryAction": "Try again",
+        "resetLocalDataAction": "Reset local data",
+        "resetLocalDataTitle": "Reset local data?",
+        "resetLocalDataBody": "This removes memories saved only on this device so Noto can rebuild its local database.",
+        "resetLocalDataConfirm": "Reset local data",
+        "resetLocalDataHint": "Reset local data only if retrying does not help. Synced content can come back after sign-in.",
+        "recoveryInProgress": "Trying to recover your local data..."
     },
     "common": {
         "cancel": "Cancel",

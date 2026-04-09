@@ -15,6 +15,27 @@ jest.mock('expo-web-browser', () => ({
   },
 }));
 
+jest.mock('@expo/vector-icons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+
+  const MockIcon = ({ name, children, ...props }: any) =>
+    React.createElement(Text, props, children ?? name ?? 'icon');
+
+  return {
+    Ionicons: MockIcon,
+    MaterialIcons: MockIcon,
+  };
+});
+
+jest.mock('@expo/vector-icons/MaterialIcons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+
+  return ({ name, children, ...props }: any) =>
+    React.createElement(Text, props, children ?? name ?? 'icon');
+});
+
 jest.mock('expo-video', () => {
   const React = require('react');
   const { View } = require('react-native');
@@ -252,3 +273,5 @@ jest.mock('expo-image-picker', () => ({
   requestMediaLibraryPermissionsAsync: jest.fn(async () => ({ status: 'granted', canAskAgain: true })),
   launchImageLibraryAsync: jest.fn(async () => ({ canceled: true, assets: null })),
 }));
+
+require('./constants/i18n');

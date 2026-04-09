@@ -77,20 +77,20 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentTop="true"
                 android:layout_centerHorizontal="true"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="14dp"
                 android:background="@drawable/noto_widget_badge_light"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingLeft="10dp"
-                android:paddingTop="6dp"
-                android:paddingRight="11dp"
-                android:paddingBottom="6dp"
+                android:paddingLeft="13dp"
+                android:paddingTop="7dp"
+                android:paddingRight="14dp"
+                android:paddingBottom="7dp"
                 android:visibility="gone">
 
                 <ImageView
                     android:id="@+id/widget_location_icon"
-                    android:layout_width="10dp"
-                    android:layout_height="10dp"
+                    android:layout_width="11dp"
+                    android:layout_height="11dp"
                     android:contentDescription="@null"
                     android:src="@drawable/noto_widget_pin_icon" />
 
@@ -99,13 +99,13 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:fontFamily="@font/noto_sans_500medium"
+                    android:fontFamily="sans-serif-medium"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:maxWidth="116dp"
-                    android:paddingLeft="4dp"
+                    android:maxWidth="132dp"
+                    android:paddingLeft="5dp"
                     android:textColor="#7A6A58"
-                    android:textSize="10sp" />
+                    android:textSize="11sp" />
             </LinearLayout>
 
             <LinearLayout
@@ -166,7 +166,7 @@
                 android:layout_height="wrap_content"
                 android:layout_centerInParent="true"
                 android:ellipsize="end"
-                android:fontFamily="@font/noto_sans_500medium"
+                android:fontFamily="sans-serif"
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:lineSpacingExtra="3dp"
@@ -184,7 +184,7 @@
                 android:layout_height="wrap_content"
                 android:layout_centerInParent="true"
                 android:ellipsize="end"
-                android:fontFamily="@font/noto_sans_800extra_bold"
+                android:fontFamily="sans-serif-black"
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:letterSpacing="-0.03"
@@ -200,9 +200,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_alignParentBottom="true"
-                android:layout_marginStart="12dp"
-                android:layout_marginEnd="12dp"
-                android:layout_marginBottom="12dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_marginBottom="16dp"
                 android:orientation="vertical">
 
                 <TextView
@@ -210,13 +210,18 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:fontFamily="@font/noto_sans_800extra_bold"
+                    android:fontFamily="sans-serif-black"
                     android:includeFontPadding="false"
-                    android:lineSpacingExtra="2dp"
+                    android:letterSpacing="-0.03"
+                    android:lineSpacingExtra="1dp"
                     android:maxLines="2"
-                    android:maxWidth="132dp"
-                    android:textColor="#FFF7E8"
-                    android:textSize="20sp"
+                    android:maxWidth="162dp"
+                    android:shadowColor="#80000000"
+                    android:shadowDx="0"
+                    android:shadowDy="2"
+                    android:shadowRadius="8"
+                    android:textColor="#FFFFFF"
+                    android:textSize="26sp"
                     android:visibility="gone" />
 
                 <LinearLayout

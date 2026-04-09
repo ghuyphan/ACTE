@@ -18,6 +18,7 @@ const RESOURCE_MAPPINGS = [
   ['widgets/android/drawable/noto_widget_badge_light.xml', 'app/src/main/res/drawable/noto_widget_badge_light.xml'],
   ['widgets/android/drawable/noto_widget_overlay_chip_dark.xml', 'app/src/main/res/drawable/noto_widget_overlay_chip_dark.xml'],
   ['widgets/android/drawable/noto_widget_count_badge_dark.xml', 'app/src/main/res/drawable/noto_widget_count_badge_dark.xml'],
+  ['widgets/android/drawable/noto_widget_pin_icon.xml', 'app/src/main/res/drawable/noto_widget_pin_icon.xml'],
 ];
 
 function copyFileIfPresent(projectRoot, androidRoot, sourceRelativePath, targetRelativePath) {

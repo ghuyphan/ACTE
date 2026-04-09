@@ -1,12 +1,13 @@
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Reanimated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { ActivityIndicator, InteractionManager, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
 import { useNotesRecapViewModel } from '../../../hooks/useNotesRecapViewModel';
 import type { Note } from '../../../services/database';
+import { scheduleOnIdle } from '../../../utils/scheduleOnIdle';
 import RecapCalendarGrid from './RecapCalendarGrid';
 import RecapMonthPicker from './RecapMonthPicker';
 import RecapStickerPile from './RecapStickerPile';
@@ -42,7 +43,9 @@ const NotesRecapView = memo(function NotesRecapView({
     switchMonth,
     weekDayLabels,
   } = useNotesRecapViewModel({ notes });
-  const [hasCompletedFirstReveal, setHasCompletedFirstReveal] = useState(false);
+  const [hasCompletedFirstReveal, setHasCompletedFirstReveal] = useState(
+    process.env.NODE_ENV === 'test'
+  );
   const [isPileReady, setIsPileReady] = useState(process.env.NODE_ENV === 'test');
 
   useEffect(() => {
@@ -87,12 +90,12 @@ const NotesRecapView = memo(function NotesRecapView({
       return;
     }
 
-    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+    const idleHandle = scheduleOnIdle(() => {
       setIsPileReady(true);
-    });
+    }, { timeout: 180 });
 
     return () => {
-      interactionHandle.cancel();
+      idleHandle.cancel();
     };
   }, [activeRecap, isPileReady, isVisible]);
 

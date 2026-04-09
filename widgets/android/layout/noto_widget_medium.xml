@@ -77,20 +77,20 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentTop="true"
                 android:layout_centerHorizontal="true"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="16dp"
                 android:background="@drawable/noto_widget_badge_light"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingLeft="11dp"
-                android:paddingTop="6dp"
-                android:paddingRight="12dp"
-                android:paddingBottom="6dp"
+                android:paddingLeft="13dp"
+                android:paddingTop="7dp"
+                android:paddingRight="15dp"
+                android:paddingBottom="7dp"
                 android:visibility="gone">
 
                 <ImageView
                     android:id="@+id/widget_location_icon"
-                    android:layout_width="11dp"
-                    android:layout_height="11dp"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
                     android:contentDescription="@null"
                     android:src="@drawable/noto_widget_pin_icon" />
 
@@ -99,13 +99,13 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:fontFamily="@font/noto_sans_500medium"
+                    android:fontFamily="sans-serif-medium"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:maxWidth="172dp"
-                    android:paddingLeft="4dp"
+                    android:maxWidth="188dp"
+                    android:paddingLeft="5dp"
                     android:textColor="#7A6A58"
-                    android:textSize="10sp"
+                    android:textSize="11sp"
                     android:visibility="visible" />
             </LinearLayout>
 
@@ -115,10 +115,45 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentTop="true"
                 android:layout_alignParentEnd="true"
-                android:layout_marginTop="14dp"
-                android:layout_marginEnd="14dp"
+                android:layout_marginTop="16dp"
+                android:layout_marginEnd="16dp"
                 android:gravity="end"
                 android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/widget_photo_location_chip_end"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="7dp"
+                    android:background="@drawable/noto_widget_overlay_chip_dark"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingLeft="13dp"
+                    android:paddingTop="7dp"
+                    android:paddingRight="15dp"
+                    android:paddingBottom="7dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/widget_location_icon_end"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/noto_widget_pin_icon" />
+
+                    <TextView
+                        android:id="@+id/widget_location_end"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:fontFamily="sans-serif-medium"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:maxWidth="188dp"
+                        android:paddingLeft="5dp"
+                        android:textColor="#FFF7E8"
+                        android:textSize="11sp" />
+                </LinearLayout>
 
                 <LinearLayout
                     android:id="@+id/widget_live_photo_badge"
@@ -167,7 +202,7 @@
                 android:layout_height="wrap_content"
                 android:layout_centerInParent="true"
                 android:ellipsize="end"
-                android:fontFamily="@font/noto_sans_500medium"
+                android:fontFamily="sans-serif"
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:lineSpacingExtra="4dp"
@@ -185,7 +220,7 @@
                 android:layout_height="wrap_content"
                 android:layout_centerInParent="true"
                 android:ellipsize="end"
-                android:fontFamily="@font/noto_sans_800extra_bold"
+                android:fontFamily="sans-serif-black"
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:letterSpacing="-0.03"
@@ -201,9 +236,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_alignParentBottom="true"
-                android:layout_marginStart="14dp"
-                android:layout_marginEnd="14dp"
-                android:layout_marginBottom="14dp"
+                android:layout_marginStart="18dp"
+                android:layout_marginEnd="18dp"
+                android:layout_marginBottom="18dp"
                 android:orientation="vertical">
 
                 <TextView
@@ -211,13 +246,18 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:fontFamily="@font/noto_sans_800extra_bold"
+                    android:fontFamily="sans-serif-black"
                     android:includeFontPadding="false"
-                    android:lineSpacingExtra="2dp"
+                    android:letterSpacing="-0.03"
+                    android:lineSpacingExtra="1dp"
                     android:maxLines="2"
-                    android:maxWidth="196dp"
-                    android:textColor="#FFF7E8"
-                    android:textSize="22sp"
+                    android:maxWidth="286dp"
+                    android:shadowColor="#80000000"
+                    android:shadowDx="0"
+                    android:shadowDy="2"
+                    android:shadowRadius="10"
+                    android:textColor="#FFFFFF"
+                    android:textSize="30sp"
                     android:visibility="gone" />
 
                 <LinearLayout

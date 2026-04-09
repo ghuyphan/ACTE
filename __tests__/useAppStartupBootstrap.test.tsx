@@ -3,6 +3,7 @@ import { ReactNode } from 'react';
 import { useAppStartupBootstrap } from '../hooks/app/useAppStartupBootstrap';
 
 const mockGetDB = jest.fn();
+const mockResetLocalDatabase = jest.fn();
 const mockConfigureNotificationChannels = jest.fn();
 const mockSyncGeofenceRegions = jest.fn();
 const mockRunMediaCacheEviction = jest.fn();
@@ -12,6 +13,7 @@ const mockLoadStartupRoute = jest.fn();
 
 jest.mock('../services/database', () => ({
   getDB: () => mockGetDB(),
+  resetLocalDatabase: (...args: unknown[]) => mockResetLocalDatabase(...args),
 }));
 
 jest.mock('../services/geofenceService', () => ({
@@ -55,6 +57,7 @@ beforeEach(() => {
 
   mockGetCachedStartupRoute.mockReturnValue(null);
   mockLoadStartupRoute.mockResolvedValue('/(tabs)');
+  mockResetLocalDatabase.mockResolvedValue(undefined);
   mockScheduleOnIdle.mockImplementation((callback: () => void) => {
     callback();
     return { cancel: jest.fn() };
@@ -114,6 +117,55 @@ describe('useAppStartupBootstrap', () => {
 
     await waitFor(() => {
       expect(result.current.startupError).toBe('database-init-failed');
+    });
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('retries database initialization on demand', async () => {
+    mockGetDB.mockRejectedValueOnce(new Error('db failed'));
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result } = renderHook(() => useAppStartupBootstrap(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.startupError).toBe('database-init-failed');
+    });
+
+    mockGetDB.mockResolvedValueOnce({});
+
+    await act(async () => {
+      result.current.retryStartup();
+    });
+
+    await waitFor(() => {
+      expect(result.current.startupError).toBeNull();
+    });
+
+    expect(mockGetDB).toHaveBeenCalledTimes(2);
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('resets local data before retrying startup', async () => {
+    mockGetDB.mockRejectedValueOnce(new Error('db failed'));
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result } = renderHook(() => useAppStartupBootstrap(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.startupError).toBe('database-init-failed');
+    });
+
+    mockGetDB.mockResolvedValueOnce({});
+
+    await act(async () => {
+      await result.current.resetStartupData();
+    });
+
+    expect(mockResetLocalDatabase).toHaveBeenCalledTimes(1);
+
+    await waitFor(() => {
+      expect(result.current.startupError).toBeNull();
     });
 
     consoleErrorSpy.mockRestore();

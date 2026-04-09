@@ -14,6 +14,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
+import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.BitmapShader
@@ -335,19 +336,23 @@ class NotoWidgetProvider : AppWidgetProvider() {
         !showIdle &&
         snapshot.noteType == "photo" &&
         hasImage
-      val photoCaptionText = if (!showIdle && snapshot.noteType == "photo" && hasImage) {
+      val photoTitleText = if (!showIdle && snapshot.noteType == "photo" && hasImage) {
         snapshot.text.trim()
       } else {
         ""
       }
       val geometry = resolveWidgetRenderGeometryPx(context, options, isMedium)
-      val bodyText = if (showIdle) {
+      val idleBodyText = if (showIdle) {
         snapshot.idleText.ifBlank { context.getString(R.string.noto_widget_idle_fallback) }
-      } else if (hasVisualOnlyContent || shouldHidePhotoBodyText) {
+      } else {
+        ""
+      }
+      val bodyText = if (showIdle || hasVisualOnlyContent || shouldHidePhotoBodyText) {
         ""
       } else {
         snapshot.text.ifBlank { snapshot.memoryReminderText.ifBlank { context.getString(R.string.noto_widget_memory_fallback) } }
       }
+      val showPhotoTitle = photoTitleText.isNotBlank()
       val noteCountLabel = snapshot.savedCountText.ifBlank {
         context.resources.getQuantityString(
           R.plurals.noto_widget_count_fallback,
@@ -356,9 +361,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
         )
       }
       val showCountBadge = showIdle && snapshot.noteCount > 0
-      val showCaption = isMedium && photoCaptionText.isNotBlank()
 
-      bindCardSurfaceState(views, geometry, usesTextSurface)
+      bindCardSurfaceState(views, geometry, usesTextSurface, showIdle)
       bindTextBackgroundState(context, views, snapshot, geometry, usesTextSurface, showIdle)
       bindPhotoState(context, views, snapshot, showIdle, geometry)
       bindStickerState(context, views, snapshot, options, isMedium, showIdle)
@@ -366,36 +370,46 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val showAuthorChip = bindAuthorState(context, views, snapshot, showIdle, usesTextSurface)
       bindLivePhotoBadge(views, showLivePhotoBadge)
 
+      views.setTextViewText(R.id.widget_idle_body, idleBodyText)
+      views.setViewVisibility(R.id.widget_idle_body, if (idleBodyText.isBlank()) View.GONE else View.VISIBLE)
+      views.setTextColor(R.id.widget_idle_body, Color.parseColor("#FFF7E8"))
       views.setTextViewText(R.id.widget_body, bodyText)
       views.setViewVisibility(R.id.widget_body, if (bodyText.isBlank()) View.GONE else View.VISIBLE)
       views.setTextColor(
         R.id.widget_body,
         if (usesTextSurface) Color.parseColor("#2B2621") else Color.parseColor("#FFF7E8")
       )
-      views.setViewVisibility(R.id.widget_caption, if (showCaption) View.VISIBLE else View.GONE)
-      if (showCaption) {
-        views.setTextViewText(R.id.widget_caption, photoCaptionText)
-        views.setInt(
-          R.id.widget_caption,
-          "setBackgroundResource",
-          R.drawable.noto_widget_overlay_chip_dark
-        )
-        views.setTextColor(R.id.widget_caption, Color.parseColor("#FFF7E8"))
+      views.setViewVisibility(R.id.widget_photo_title, if (showPhotoTitle) View.VISIBLE else View.GONE)
+      if (showPhotoTitle) {
+        views.setTextViewText(R.id.widget_photo_title, photoTitleText)
+        views.setTextColor(R.id.widget_photo_title, Color.parseColor("#FFFFFF"))
       }
 
       val locationBadgeText = getLocationBadgeText(snapshot.locationName, isMedium)
-      val showLocationChip = isMedium && !showIdle && !showAuthorChip && locationBadgeText.isNotBlank()
-      views.setViewVisibility(R.id.widget_location, if (showLocationChip) View.VISIBLE else View.GONE)
-      if (showLocationChip) {
-        views.setTextViewText(R.id.widget_location, locationBadgeText)
-        views.setInt(
-          R.id.widget_location,
-          "setBackgroundResource",
-          if (usesTextSurface) R.drawable.noto_widget_badge_light else R.drawable.noto_widget_overlay_chip_dark
-        )
-        views.setTextColor(
-          R.id.widget_location,
-          if (usesTextSurface) Color.parseColor("#7A6A58") else Color.parseColor("#FFF7E8")
+      val showLocationChip = !showIdle && !showAuthorChip && locationBadgeText.isNotBlank()
+      val showTrailingPhotoLocationChip =
+        showLocationChip &&
+        isMedium &&
+        snapshot.noteType == "photo" &&
+        hasImage
+      bindLocationChip(
+        views = views,
+        chipId = R.id.widget_location_chip,
+        textId = R.id.widget_location,
+        iconId = R.id.widget_location_icon,
+        isVisible = showLocationChip && !showTrailingPhotoLocationChip,
+        usesTextSurface = usesTextSurface,
+        locationText = locationBadgeText
+      )
+      if (isMedium) {
+        bindLocationChip(
+          views = views,
+          chipId = R.id.widget_photo_location_chip_end,
+          textId = R.id.widget_location_end,
+          iconId = R.id.widget_location_icon_end,
+          isVisible = showTrailingPhotoLocationChip,
+          usesTextSurface = false,
+          locationText = locationBadgeText
         )
       }
 
@@ -405,11 +419,13 @@ class NotoWidgetProvider : AppWidgetProvider() {
         views.setInt(
           R.id.widget_badge,
           "setBackgroundResource",
-          if (usesTextSurface) R.drawable.noto_widget_badge_light else R.drawable.noto_widget_count_badge_dark
+          if (showIdle) R.drawable.noto_widget_count_badge_dark
+          else if (usesTextSurface) R.drawable.noto_widget_badge_light
+          else R.drawable.noto_widget_count_badge_dark
         )
         views.setTextColor(
           R.id.widget_badge,
-          if (usesTextSurface) Color.parseColor("#7A6A58") else Color.parseColor("#FFF7E8")
+          if (showIdle || !usesTextSurface) Color.parseColor("#FFF7E8") else Color.parseColor("#7A6A58")
         )
         views.setOnClickPendingIntent(
           R.id.widget_badge,
@@ -421,7 +437,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
     private fun bindCardSurfaceState(
       views: RemoteViews,
       geometry: WidgetRenderGeometry,
-      usesTextSurface: Boolean
+      usesTextSurface: Boolean,
+      showIdle: Boolean
     ) {
       views.setViewVisibility(R.id.widget_shell_background, View.GONE)
 
@@ -430,12 +447,21 @@ class NotoWidgetProvider : AppWidgetProvider() {
         return
       }
 
-      val innerBitmap = createRoundedRectBitmap(
-        widthPx = geometry.contentWidthPx,
-        heightPx = geometry.contentHeightPx,
-        cornerRadiusPx = geometry.innerCornerRadiusPx,
-        fillColor = Color.parseColor("#FAF6EE")
-      )
+      val innerBitmap = if (showIdle) {
+        createIdleBackgroundBitmap(
+          widthPx = geometry.contentWidthPx,
+          heightPx = geometry.contentHeightPx,
+          cornerRadiusPx = geometry.innerCornerRadiusPx
+        )
+      } else {
+        createRoundedGradientBitmap(
+          widthPx = geometry.contentWidthPx,
+          heightPx = geometry.contentHeightPx,
+          cornerRadiusPx = geometry.innerCornerRadiusPx,
+          startColor = Color.parseColor("#FFFDF8"),
+          endColor = Color.parseColor("#F5EEDF")
+        )
+      }
       views.setViewVisibility(R.id.widget_inner_background, View.VISIBLE)
       views.setImageViewBitmap(R.id.widget_inner_background, innerBitmap)
     }
@@ -492,15 +518,42 @@ class NotoWidgetProvider : AppWidgetProvider() {
         views.setImageViewBitmap(R.id.widget_photo, photoBitmap)
         views.setImageViewBitmap(
           R.id.widget_photo_overlay,
-          createVerticalGradientBitmap(
+          createPhotoScrimBitmap(
             widthPx = geometry.contentWidthPx,
             heightPx = geometry.contentHeightPx,
-            cornerRadiusPx = geometry.innerCornerRadiusPx,
-            startColor = Color.parseColor("#00000000"),
-            endColor = Color.parseColor("#A0000000")
+            cornerRadiusPx = geometry.innerCornerRadiusPx
           )
         )
       }
+    }
+
+    private fun bindLocationChip(
+      views: RemoteViews,
+      chipId: Int,
+      textId: Int,
+      iconId: Int,
+      isVisible: Boolean,
+      usesTextSurface: Boolean,
+      locationText: String
+    ) {
+      views.setViewVisibility(chipId, if (isVisible) View.VISIBLE else View.GONE)
+      if (!isVisible) {
+        return
+      }
+
+      val locationForegroundColor = if (usesTextSurface) {
+        Color.parseColor("#7A6A58")
+      } else {
+        Color.parseColor("#FFF7E8")
+      }
+      views.setTextViewText(textId, locationText)
+      views.setInt(
+        chipId,
+        "setBackgroundResource",
+        if (usesTextSurface) R.drawable.noto_widget_badge_light else R.drawable.noto_widget_overlay_chip_dark
+      )
+      views.setTextColor(textId, locationForegroundColor)
+      views.setInt(iconId, "setColorFilter", locationForegroundColor)
     }
 
     private fun bindStickerState(
@@ -655,18 +708,12 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
 
       val primary = cleanedSegments.first()
-      val secondary = cleanedSegments.getOrNull(1).orEmpty()
-      val combined = if (secondary.isNotBlank()) {
-        "$primary\n$secondary"
-      } else {
-        primary
-      }
-      val maxLength = if (isMedium) 44 else 24
+      val maxLength = if (isMedium) 28 else 18
 
-      return if (combined.length <= maxLength) {
-        combined
+      return if (primary.length <= maxLength) {
+        primary
       } else {
-        "${combined.take(maxLength - 1).trimEnd()}…"
+        "${primary.take(maxLength - 1).trimEnd()}…"
       }
     }
 
@@ -925,6 +972,44 @@ class NotoWidgetProvider : AppWidgetProvider() {
       return output
     }
 
+    private fun createIdleBackgroundBitmap(
+      widthPx: Int,
+      heightPx: Int,
+      cornerRadiusPx: Float
+    ): Bitmap {
+      val output = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(output)
+      val rect = RectF(0f, 0f, widthPx.toFloat(), heightPx.toFloat())
+      val basePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        shader = LinearGradient(
+          0f,
+          0f,
+          widthPx.toFloat(),
+          heightPx.toFloat(),
+          Color.parseColor("#1C1A1E"),
+          Color.parseColor("#121012"),
+          Shader.TileMode.CLAMP
+        )
+      }
+      val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        shader = RadialGradient(
+          widthPx * 0.5f,
+          heightPx * 0.42f,
+          min(widthPx, heightPx) * 0.48f,
+          intArrayOf(
+            Color.parseColor("#55E0B15B"),
+            Color.parseColor("#00E0B15B")
+          ),
+          floatArrayOf(0f, 1f),
+          Shader.TileMode.CLAMP
+        )
+      }
+
+      canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, basePaint)
+      canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, glowPaint)
+      return output
+    }
+
     private fun createVerticalGradientBitmap(
       widthPx: Int,
       heightPx: Int,
@@ -948,6 +1033,41 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
       val rect = RectF(0f, 0f, widthPx.toFloat(), heightPx.toFloat())
       canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, paint)
+      return output
+    }
+
+    private fun createPhotoScrimBitmap(
+      widthPx: Int,
+      heightPx: Int,
+      cornerRadiusPx: Float
+    ): Bitmap {
+      val output = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(output)
+      val bleedPx = max(1f, cornerRadiusPx * 0.045f)
+      val shader = LinearGradient(
+        0f,
+        0f,
+        0f,
+        heightPx.toFloat(),
+        intArrayOf(
+          Color.parseColor("#12000000"),
+          Color.parseColor("#18000000"),
+          Color.parseColor("#6E000000"),
+          Color.parseColor("#DE000000")
+        ),
+        floatArrayOf(0f, 0.38f, 0.72f, 1f),
+        Shader.TileMode.CLAMP
+      )
+      val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.shader = shader
+      }
+      val rect = RectF(
+        -bleedPx,
+        -bleedPx,
+        widthPx.toFloat() + bleedPx,
+        heightPx.toFloat() + bleedPx
+      )
+      canvas.drawRoundRect(rect, cornerRadiusPx + bleedPx, cornerRadiusPx + bleedPx, paint)
       return output
     }
 

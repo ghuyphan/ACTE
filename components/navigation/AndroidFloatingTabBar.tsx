@@ -23,7 +23,6 @@ import {
 } from '../../hooks/useAndroidTabSearchState';
 import {
   ANDROID_TAB_SHELL_BOTTOM_OFFSET,
-  ANDROID_TAB_SHELL_GAP,
   ANDROID_TAB_SHELL_HEIGHT,
   ANDROID_TAB_SHELL_HORIZONTAL_INSET,
   ANDROID_TAB_SHELL_INNER_PADDING,
@@ -35,7 +34,6 @@ import {
 const BAR_PADDING = ANDROID_TAB_SHELL_INNER_PADDING;
 const BAR_CONTENT_INSET = BAR_PADDING - 1;
 const TAB_GAP = ANDROID_TAB_SHELL_TAB_GAP;
-const SHELL_GAP = ANDROID_TAB_SHELL_GAP;
 const TAB_MIN_HEIGHT = ANDROID_TAB_SHELL_HEIGHT;
 const SEARCH_MORPH_ANIMATION = {
   duration: 320,
@@ -66,6 +64,7 @@ type ResponsiveMetrics = {
   compactPrimaryButtonSize: number;
   isCompact: boolean;
   keyboardAvoidanceGap: number;
+  searchBarGap: number;
   searchButtonSize: number;
   searchCollapsedTargetWidth: number;
   searchExpandedMinWidth: number;
@@ -73,7 +72,6 @@ type ResponsiveMetrics = {
   searchIconLeft: number;
   searchIconSize: number;
   searchTextOffset: number;
-  shellGap: number;
   shellHorizontalInset: number;
   tabGap: number;
   tabIconSize: number;
@@ -301,7 +299,7 @@ export default function AndroidFloatingTabBar({
     const isVeryNarrow = windowWidth < VERY_NARROW_SCREEN_WIDTH;
     const isCompact = windowWidth < COMPACT_SCREEN_WIDTH;
     const shellHorizontalInset = isVeryNarrow ? 12 : isCompact ? 14 : ANDROID_TAB_SHELL_HORIZONTAL_INSET;
-    const shellGap = isVeryNarrow ? 8 : isCompact ? 10 : SHELL_GAP;
+    const searchBarGap = isVeryNarrow ? 6 : isCompact ? 7 : 8;
     const wrapperTopPadding = isVeryNarrow ? 4 : ANDROID_TAB_SHELL_TOP_PADDING;
     const barContentInset = isVeryNarrow ? 2 : BAR_CONTENT_INSET;
     const tabGap = isVeryNarrow ? 0 : TAB_GAP;
@@ -326,6 +324,7 @@ export default function AndroidFloatingTabBar({
       compactPrimaryButtonSize,
       isCompact,
       keyboardAvoidanceGap,
+      searchBarGap,
       searchButtonSize,
       searchCollapsedTargetWidth,
       searchExpandedMinWidth,
@@ -333,7 +332,6 @@ export default function AndroidFloatingTabBar({
       searchIconLeft,
       searchIconSize,
       searchTextOffset,
-      shellGap,
       shellHorizontalInset,
       tabGap,
       tabIconSize,
@@ -348,7 +346,7 @@ export default function AndroidFloatingTabBar({
 
   const shellUsableWidth = Math.max(windowWidth - responsiveMetrics.shellHorizontalInset * 2, 0);
   const maximumPrimaryExpandedWidth = Math.max(
-    shellUsableWidth - responsiveMetrics.shellGap - responsiveMetrics.searchButtonSize,
+    shellUsableWidth - responsiveMetrics.searchBarGap - responsiveMetrics.searchButtonSize,
     responsiveMetrics.compactPrimaryButtonSize
   );
   const minimumPrimaryExpandedWidth = Math.min(
@@ -358,18 +356,18 @@ export default function AndroidFloatingTabBar({
     maximumPrimaryExpandedWidth
   );
   const primaryBarExpandedWidth = clamp(
-    shellUsableWidth - responsiveMetrics.shellGap - responsiveMetrics.searchCollapsedTargetWidth,
+    shellUsableWidth - responsiveMetrics.searchBarGap - responsiveMetrics.searchCollapsedTargetWidth,
     minimumPrimaryExpandedWidth,
     maximumPrimaryExpandedWidth
   );
   const primaryBarCollapsedWidth = responsiveMetrics.compactPrimaryButtonSize;
   const searchCollapsedWidth = clamp(
-    shellUsableWidth - responsiveMetrics.shellGap - primaryBarExpandedWidth,
+    shellUsableWidth - responsiveMetrics.searchBarGap - primaryBarExpandedWidth,
     responsiveMetrics.searchButtonSize,
     Math.max(responsiveMetrics.searchCollapsedTargetWidth, responsiveMetrics.searchButtonSize)
   );
   const searchExpandedWidth = Math.max(
-    shellUsableWidth - responsiveMetrics.shellGap - primaryBarCollapsedWidth,
+    shellUsableWidth - responsiveMetrics.searchBarGap - primaryBarCollapsedWidth,
     responsiveMetrics.searchExpandedMinWidth
   );
   const primaryRouteItems = useMemo<PrimaryRouteItem[]>(
@@ -618,7 +616,7 @@ export default function AndroidFloatingTabBar({
         },
       ]}
     >
-      <View style={[styles.shellRow, { gap: responsiveMetrics.shellGap }]}>
+      <View style={[styles.shellRow, { gap: responsiveMetrics.searchBarGap }]}>
         <Animated.View
           style={[
             styles.bar,
