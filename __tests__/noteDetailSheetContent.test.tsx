@@ -22,6 +22,8 @@ jest.mock('../components/notes/detail/NoteDetailActionSection', () => 'NoteDetai
 jest.mock('../components/notes/detail/NoteDetailEditToolbar', () => 'NoteDetailEditToolbar');
 jest.mock('../components/notes/detail/NoteDetailInfoSection', () => 'NoteDetailInfoSection');
 jest.mock('../components/notes/detail/NoteDetailStatusBadges', () => 'NoteDetailStatusBadges');
+jest.mock('../components/notes/detail/PolaroidExportAnimation', () => 'PolaroidExportAnimation');
+jest.mock('../components/notes/detail/PolaroidExportView', () => 'PolaroidExportView');
 
 import NoteDetailSheetContent from '../components/notes/detail/NoteDetailSheetContent';
 
@@ -67,14 +69,16 @@ const baseProps = {
   onClose: jest.fn(),
   onConfirmPasteFromPrompt: jest.fn(),
   onDelete: jest.fn(),
+  onDownloadPolaroid: jest.fn(),
   onInfoSectionLayout: jest.fn(),
   onLocationChangeText: jest.fn(),
   onLocationFieldLayout: jest.fn(),
   onLocationFocus: jest.fn(),
   onLocationSelectionChange: jest.fn(),
+  onPolaroidAnimationFinished: jest.fn(),
+  onPolaroidCaptureReady: jest.fn(),
   onPressStickerCanvas: jest.fn(),
   onSaveEdit: jest.fn(),
-  onShare: jest.fn(),
   onShowCardPastePrompt: jest.fn(),
   onShowStickerSourceOptions: jest.fn(),
   onStartEditing: jest.fn(),
@@ -85,6 +89,11 @@ const baseProps = {
   onToggleStickerMotionLock: jest.fn(),
   onUndoDoodle: jest.fn(),
   pastePrompt: { visible: false, x: 0, y: 0 },
+  polaroidAnimationSuccess: false,
+  polaroidAnimationUri: null,
+  polaroidCaptureRef: { current: null },
+  polaroidExporting: false,
+  polaroidFallbackLocationLabel: 'Unknown place',
   previewOnlyNoteColorIds: [],
   saveIconAnimatedStyle: {},
   scrollContainerRef: { current: null },
@@ -96,6 +105,7 @@ const baseProps = {
   setEditStickerPlacements: jest.fn(),
   setSelectedStickerId: jest.fn(),
   showPremiumColorAlert: jest.fn(),
+  showPolaroidCapture: false,
   stickerModeEnabled: false,
   t: ((_: string, fallback?: string) => fallback ?? '') as any,
 };

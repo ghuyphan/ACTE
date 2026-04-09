@@ -8,8 +8,8 @@ import {
     type GestureResponderEvent,
     Keyboard,
     type LayoutChangeEvent,
+    Linking,
     Platform,
-    Share,
 } from 'react-native';
 import { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import StickerSourceSheet, {
@@ -57,7 +57,6 @@ import {
     type StickerImportSource,
     updateStickerPlacementTransform,
 } from '../../services/noteStickers';
-import { getNotePhotoUri } from '../../services/photoStorage';
 import {
     cleanupSubjectCutoutImportSource,
     createStickerImportSourceFromSubjectCutout,
@@ -72,13 +71,20 @@ import {
     isPreviewablePremiumNoteColor,
     PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
 } from '../../services/premiumNoteFinish';
-import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
 import { emitInteractionFeedback, InteractionFeedbackType } from '../../utils/interactionFeedback';
 import {
     ClipboardStickerError,
     hasClipboardStickerImage,
     importStickerAssetFromClipboard,
 } from '../../utils/stickerClipboard';
+import {
+    captureViewAsImage,
+    cleanupCapturedImage,
+    PolaroidExportError,
+    requestSavePermission,
+    savePolaroidToLibrary,
+    type SavePermissionStatus,
+} from '../../services/polaroidExport';
 import AppSheet from '../sheets/AppSheet';
 import { type DoodleStroke } from './NoteDoodleCanvas';
 import NoteDetailSheetContent from './detail/NoteDetailSheetContent';
@@ -94,6 +100,10 @@ type StickerPastePromptState = {
 };
 
 type StickerImportIntent = 'sticker' | 'stamp';
+
+function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function getStickerImportErrorMessage(
     t: ReturnType<typeof useTranslation>['t'],
@@ -245,6 +255,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
     const [locationSelection, setLocationSelection] = useState<{ start: number; end: number } | undefined>(undefined);
+    const [polaroidExporting, setPolaroidExporting] = useState(false);
+    const [showPolaroidCapture, setShowPolaroidCapture] = useState(false);
+    const [polaroidAnimationUri, setPolaroidAnimationUri] = useState<string | null>(null);
+    const [polaroidAnimationSuccess, setPolaroidAnimationSuccess] = useState(false);
 
     const cardScaleValue = useSharedValue(0.92);
     const cardOpacityValue = useSharedValue(0);
@@ -269,6 +283,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const activeNoteKeyRef = useRef(`note-detail-${Math.random().toString(36).slice(2)}`);
     const lastFreeEditNoteColorRef = useRef('marigold-glow');
     const subjectCutoutPrewarmRequestedRef = useRef(false);
+    const polaroidCaptureRef = useRef<any>(null);
+    const polaroidTempUriRef = useRef<string | null>(null);
+    const polaroidReadyResolverRef = useRef<(() => void) | null>(null);
     const lockedPremiumNoteColorIds = useMemo(
         () => (tier === 'plus' ? [] : PREMIUM_NOTE_COLOR_IDS),
         [tier]
@@ -310,6 +327,87 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const infoSectionAnimatedStyle = useAnimatedStyle(() => ({
         transform: [{ translateY: infoTranslateY.value }],
     }));
+    const resetPolaroidCaptureState = useCallback(() => {
+        cleanupCapturedImage(polaroidTempUriRef.current);
+        polaroidTempUriRef.current = null;
+        polaroidReadyResolverRef.current = null;
+        setPolaroidAnimationUri(null);
+        setPolaroidAnimationSuccess(false);
+        setShowPolaroidCapture(false);
+        setPolaroidExporting(false);
+    }, []);
+
+    const waitForPolaroidRenderReady = useCallback(() => {
+        return new Promise<void>((resolve) => {
+            let settled = false;
+            const timeoutId = setTimeout(() => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                polaroidReadyResolverRef.current = null;
+                resolve();
+            }, 900);
+
+            polaroidReadyResolverRef.current = () => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                clearTimeout(timeoutId);
+                polaroidReadyResolverRef.current = null;
+                resolve();
+            };
+        });
+    }, []);
+
+    const handlePolaroidRenderReady = useCallback(() => {
+        polaroidReadyResolverRef.current?.();
+    }, []);
+
+    const handlePolaroidAnimationFinished = useCallback(() => {
+        resetPolaroidCaptureState();
+    }, [resetPolaroidCaptureState]);
+
+    const showPolaroidPermissionAlert = useCallback((status: SavePermissionStatus) => {
+        const buttons = status === 'blocked'
+            ? [
+                {
+                    text: t('common.cancel', 'Cancel'),
+                    style: 'cancel' as const,
+                },
+                {
+                    text: t('common.openSettings', 'Open Settings'),
+                    onPress: () => {
+                        void Linking.openSettings();
+                    },
+                },
+            ]
+            : undefined;
+
+        showAppAlert(
+            t('noteDetail.polaroidPermissionTitle', 'Photo library access needed'),
+            t(
+                status === 'blocked'
+                    ? 'noteDetail.polaroidPermissionSettingsMsg'
+                    : 'noteDetail.polaroidPermissionMsg',
+                status === 'blocked'
+                    ? 'Photo library access is blocked for Noto. Open Settings so polaroids can be saved to your camera roll.'
+                    : 'Allow photo library access so Noto can save polaroid cards to your camera roll.'
+            ),
+            buttons
+        );
+    }, [t]);
+
+    const showPolaroidRequiresUpdateAlert = useCallback(() => {
+        showAppAlert(
+            t('noteDetail.polaroidRequiresUpdateTitle', 'Update required'),
+            t(
+                'noteDetail.polaroidRequiresUpdateMsg',
+                'Saving polaroids needs the latest app build. Restart after rebuilding to use this feature.'
+            )
+        );
+    }, [t]);
 
     const showPremiumColorAlert = useCallback(() => {
         const buttons: {
@@ -537,6 +635,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setSelectedStickerId(null);
         setLocationSelection(undefined);
         setShowStickerSourceSheet(false);
+        resetPolaroidCaptureState();
         favoriteFillProgress.value = 0;
         cardScale.value = 0.97;
         cardOpacity.value = 0;
@@ -608,6 +707,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         infoTranslateY,
         noteId,
         reduceMotionEnabled,
+        resetPolaroidCaptureState,
         visible,
     ]);
 
@@ -1226,6 +1326,18 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
     }, []);
 
+    useEffect(() => {
+        if (!visible) {
+            resetPolaroidCaptureState();
+        }
+    }, [resetPolaroidCaptureState, visible]);
+
+    useEffect(() => {
+        return () => {
+            resetPolaroidCaptureState();
+        };
+    }, [resetPolaroidCaptureState]);
+
     const performDelete = useCallback(async (targetNoteId: string) => {
         try {
             await deleteNote(targetNoteId);
@@ -1524,29 +1636,87 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setIsEditing(false);
     };
 
-    const handleShare = async () => {
-        if (!note || isDeleting) return;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const handleDownloadPolaroid = useCallback(async () => {
+        if (!note || isDeleting || isEditing || polaroidExporting) {
+            return;
+        }
 
-        const locationStr = note.locationName || t('noteDetail.unknownLocation');
-        const photoUri = getNotePhotoUri(note);
-        const photoCaption = note.caption?.trim() ?? '';
-        const message =
-            note.type === 'text'
-                ? `📍 ${locationStr}\n\n${formatNoteTextWithEmoji(note.content, note.moodEmoji)}\n\n— Noto 💛`
-                : `${t('noteDetail.sharePhotoMsg', { location: locationStr })}${photoCaption ? `\n\n${photoCaption}` : ''}\n\n— Noto 💛`;
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setPolaroidExporting(true);
+        setPolaroidAnimationSuccess(false);
+        setPolaroidAnimationUri(null);
+
+        let permissionStatus: SavePermissionStatus;
 
         try {
-            if (note.type === 'photo' && photoUri) {
-                await Share.share({ message, url: photoUri });
+            permissionStatus = await requestSavePermission();
+        } catch (error) {
+            setPolaroidExporting(false);
+            if (error instanceof PolaroidExportError && error.code === 'requires-update') {
+                showPolaroidRequiresUpdateAlert();
                 return;
             }
 
-            await Share.share({ message });
-        } catch {
+            showAppAlert(
+                t('noteDetail.polaroidExportFailedTitle', 'Could not save polaroid'),
+                t(
+                    'noteDetail.polaroidExportFailed',
+                    'Could not create the polaroid right now. Please try again.'
+                )
+            );
             return;
         }
-    };
+
+        if (permissionStatus !== 'granted') {
+            setPolaroidExporting(false);
+            showPolaroidPermissionAlert(permissionStatus);
+            return;
+        }
+
+        setShowPolaroidCapture(true);
+        await waitForPolaroidRenderReady();
+        await delay(reduceMotionEnabled ? 60 : 140);
+
+        let capturedUri: string | null = null;
+
+        try {
+            capturedUri = await captureViewAsImage(polaroidCaptureRef);
+            polaroidTempUriRef.current = capturedUri;
+            setPolaroidAnimationUri(capturedUri);
+
+            await savePolaroidToLibrary(capturedUri);
+            setPolaroidAnimationSuccess(true);
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+            console.warn('Polaroid export failed:', error);
+            resetPolaroidCaptureState();
+            if (error instanceof PolaroidExportError && error.code === 'requires-update') {
+                showPolaroidRequiresUpdateAlert();
+                return;
+            }
+            showAppAlert(
+                t('noteDetail.polaroidExportFailedTitle', 'Could not save polaroid'),
+                t(
+                    'noteDetail.polaroidExportFailed',
+                    'Could not create the polaroid right now. Please try again.'
+                )
+            );
+            return;
+        } finally {
+            setPolaroidExporting(false);
+        }
+    }, [
+        isDeleting,
+        isEditing,
+        note,
+        polaroidExporting,
+        reduceMotionEnabled,
+        resetPolaroidCaptureState,
+        showPolaroidRequiresUpdateAlert,
+        showPolaroidPermissionAlert,
+        t,
+        waitForPolaroidRenderReady,
+    ]);
 
     const renderBody = () => (
         <NoteDetailSheetContent
@@ -1595,6 +1765,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             onLocationChangeText={handleLocationChangeText}
             onLocationFocus={handleLocationFocus}
             onLocationSelectionChange={handleLocationSelectionChange}
+            onPolaroidCaptureReady={handlePolaroidRenderReady}
             onShowCardPastePrompt={handleShowCardPastePrompt}
             onConfirmPasteFromPrompt={handleConfirmPasteFromPrompt}
             dismissPastePrompt={dismissPastePrompt}
@@ -1605,10 +1776,17 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             onStickerAction={handleStickerAction}
             onToggleFavorite={handleToggleFavorite}
             onSaveEdit={handleSaveEdit}
-            onShare={handleShare}
             onDelete={handleDelete}
+            onDownloadPolaroid={handleDownloadPolaroid}
             onInfoSectionLayout={handleInfoSectionLayout}
             onLocationFieldLayout={handleLocationFieldLayout}
+            onPolaroidAnimationFinished={handlePolaroidAnimationFinished}
+            polaroidAnimationSuccess={polaroidAnimationSuccess}
+            polaroidAnimationUri={polaroidAnimationUri}
+            polaroidCaptureRef={polaroidCaptureRef}
+            polaroidExporting={polaroidExporting}
+            polaroidFallbackLocationLabel={t('noteDetail.unknownLocation', 'Unknown place')}
+            showPolaroidCapture={showPolaroidCapture}
             scrollContainerRef={scrollContainerRef}
             showPremiumColorAlert={showPremiumColorAlert}
         />

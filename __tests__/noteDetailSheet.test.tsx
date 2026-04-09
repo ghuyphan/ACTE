@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, ScrollView, Share } from 'react-native';
+import { Alert, ScrollView } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockGetNoteById = jest.fn<Promise<unknown>, [string]>();
@@ -383,7 +383,6 @@ beforeEach(() => {
     updatedAt: null,
   });
   jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-  jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as any);
   mockImportStickerAsset.mockResolvedValue({
     id: 'detail-sticker-asset-1',
     ownerUid: '__local__',
@@ -617,42 +616,6 @@ describe('NoteDetailSheet', () => {
         { color: '#FFFFFF', points: [0.1, 0.1, 0.2, 0.2] },
         { color: '#FFFFFF', points: [0.3, 0.3, 0.4, 0.4] },
       ])
-    );
-  });
-
-  it('shares photo notes with the file url', async () => {
-    mockGetNoteById.mockResolvedValue({
-      id: 'photo-1',
-      type: 'photo',
-      content: 'file:///photos/photo-1.jpg',
-      photoLocalUri: 'file:///photos/photo-1.jpg',
-      photoRemoteBase64: null,
-      locationName: 'Coffee shop',
-      latitude: 10.77,
-      longitude: 106.69,
-      radius: 150,
-      isFavorite: false,
-      hasDoodle: false,
-      createdAt: '2026-03-10T00:00:00.000Z',
-      updatedAt: null,
-    });
-
-    const { getByTestId } = render(
-      <NoteDetailSheet noteId="photo-1" visible onClose={() => undefined} />
-    );
-
-    await waitFor(() => {
-      expect(getByTestId('note-detail-share')).toBeTruthy();
-    });
-
-    await act(async () => {
-      fireEvent.press(getByTestId('note-detail-share'));
-    });
-
-    expect(Share.share).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'file:///photos/photo-1.jpg',
-      })
     );
   });
 

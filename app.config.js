@@ -225,6 +225,15 @@ const config = {
       },
     ],
     [
+      'expo-media-library',
+      {
+        photosPermission: false,
+        savePhotosPermission:
+          'Allow Noto to save polaroid memories to your photo library.',
+        granularPermissions: ['photo'],
+      },
+    ],
+    [
       'expo-image-picker',
       {
         photosPermission:

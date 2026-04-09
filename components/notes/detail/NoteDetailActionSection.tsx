@@ -13,9 +13,11 @@ type NoteDetailActionSectionProps = {
     editIconAnimatedStyle: any;
     isDark: boolean;
     isDeleting: boolean;
+    isDownloadingPolaroid: boolean;
+    isEditing: boolean;
     onDelete: () => void;
+    onDownloadPolaroid: () => void;
     onPrimaryPress: () => void;
-    onShare: () => void;
     saveIconAnimatedStyle: any;
 };
 
@@ -24,9 +26,11 @@ export default function NoteDetailActionSection({
     editIconAnimatedStyle,
     isDark,
     isDeleting,
+    isDownloadingPolaroid,
+    isEditing,
     onDelete,
+    onDownloadPolaroid,
     onPrimaryPress,
-    onShare,
     saveIconAnimatedStyle,
 }: NoteDetailActionSectionProps) {
     const actionButtonBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)';
@@ -66,8 +70,8 @@ export default function NoteDetailActionSection({
             </AnimatedActionButton>
 
             <AnimatedActionButton
-                onPress={onShare}
-                testID="note-detail-share"
+                onPress={onDownloadPolaroid}
+                testID="note-detail-download-polaroid"
                 style={[
                     styles.actionBtn,
                     {
@@ -76,9 +80,9 @@ export default function NoteDetailActionSection({
                     },
                 ]}
                 delay={140}
-                disabled={isDeleting}
+                disabled={isDeleting || isDownloadingPolaroid || isEditing}
             >
-                <Ionicons name="share-outline" size={20} color={colors.secondaryText} />
+                <Ionicons name="download-outline" size={20} color={colors.secondaryText} />
             </AnimatedActionButton>
 
             <AnimatedActionButton

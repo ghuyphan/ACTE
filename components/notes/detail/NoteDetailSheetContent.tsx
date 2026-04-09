@@ -47,6 +47,8 @@ import { getNoteCardTextSizeStyle, noteCardTextStyles } from '../noteCardTextSty
 import NoteDetailActionSection from './NoteDetailActionSection';
 import NoteDetailEditToolbar from './NoteDetailEditToolbar';
 import NoteDetailInfoSection from './NoteDetailInfoSection';
+import PolaroidExportAnimation from './PolaroidExportAnimation';
+import PolaroidExportView from './PolaroidExportView';
 import { SkeletonCard } from './NoteDetailPrimitives';
 import NoteDetailStatusBadges from './NoteDetailStatusBadges';
 
@@ -89,14 +91,15 @@ type NoteDetailSheetContentProps = {
     onClose: () => void;
     onConfirmPasteFromPrompt: () => void;
     onDelete: () => void;
+    onDownloadPolaroid: () => void;
     onInfoSectionLayout?: (event: LayoutChangeEvent) => void;
     onLocationChangeText: (value: string) => void;
     onLocationFieldLayout?: (event: LayoutChangeEvent) => void;
     onLocationFocus: () => void;
     onLocationSelectionChange: (event: any) => void;
+    onPolaroidCaptureReady: () => void;
     onPressStickerCanvas: () => void;
     onSaveEdit: () => void;
-    onShare: () => void;
     onShowCardPastePrompt: (event: GestureResponderEvent) => void;
     onShowStickerSourceOptions: () => void;
     onStartEditing: () => void;
@@ -107,6 +110,13 @@ type NoteDetailSheetContentProps = {
     onToggleStickerMotionLock: () => void;
     onUndoDoodle: () => void;
     pastePrompt: { visible: boolean; x: number; y: number };
+    onPolaroidAnimationFinished: () => void;
+    polaroidAnimationSuccess: boolean;
+    polaroidAnimationUri: string | null;
+    polaroidCaptureRef: any;
+    polaroidExporting: boolean;
+    polaroidFallbackLocationLabel: string;
+    showPolaroidCapture: boolean;
     previewOnlyNoteColorIds: string[];
     saveIconAnimatedStyle: any;
     scrollContainerRef: any;
@@ -181,7 +191,6 @@ export default function NoteDetailSheetContent({
     onLocationSelectionChange,
     onPressStickerCanvas,
     onSaveEdit,
-    onShare,
     onShowCardPastePrompt,
     onShowStickerSourceOptions,
     onStartEditing,
@@ -205,6 +214,15 @@ export default function NoteDetailSheetContent({
     showPremiumColorAlert,
     stickerModeEnabled,
     t,
+    onDownloadPolaroid,
+    polaroidAnimationSuccess,
+    polaroidAnimationUri,
+    polaroidCaptureRef,
+    polaroidExporting,
+    polaroidFallbackLocationLabel,
+    onPolaroidAnimationFinished,
+    onPolaroidCaptureReady,
+    showPolaroidCapture,
 }: NoteDetailSheetContentProps) {
     const now = useRelativeTimeNow();
 
@@ -605,9 +623,11 @@ export default function NoteDetailSheetContent({
                 editIconAnimatedStyle={editIconAnimatedStyle}
                 isDark={isDark}
                 isDeleting={isDeleting}
+                isDownloadingPolaroid={polaroidExporting}
+                isEditing={isEditing}
                 onDelete={onDelete}
+                onDownloadPolaroid={onDownloadPolaroid}
                 onPrimaryPress={isEditing ? onSaveEdit : onStartEditing}
-                onShare={onShare}
                 saveIconAnimatedStyle={saveIconAnimatedStyle}
             />
 
@@ -653,6 +673,22 @@ export default function NoteDetailSheetContent({
                     />
                 </View>
             ) : null}
+            {showPolaroidCapture && note ? (
+                <View pointerEvents="none" style={styles.offscreenPolaroidCapture}>
+                    <PolaroidExportView
+                        ref={polaroidCaptureRef}
+                        note={note}
+                        fallbackLocationLabel={polaroidFallbackLocationLabel}
+                        onReady={onPolaroidCaptureReady}
+                    />
+                </View>
+            ) : null}
+            <PolaroidExportAnimation
+                uri={polaroidAnimationUri}
+                success={polaroidAnimationSuccess}
+                successLabel={t('noteDetail.polaroidSaved', 'Saved to your photos')}
+                onFinished={onPolaroidAnimationFinished}
+            />
             {Platform.OS === 'android' ? (
                 <BottomSheetScrollView
                     ref={scrollContainerRef}
@@ -707,6 +743,15 @@ const styles = StyleSheet.create({
         width: '100%',
         maxWidth: CARD_SIZE,
         alignSelf: 'center',
+    },
+    offscreenPolaroidCapture: {
+        position: 'absolute',
+        left: -9999,
+        top: 0,
+        width: 1080,
+        height: 1350,
+        opacity: 1,
+        zIndex: -1,
     },
     photoContainer: {
         width: CARD_SIZE,

@@ -15,6 +15,17 @@ jest.mock('expo-web-browser', () => ({
   },
 }));
 
+jest.mock('expo-media-library', () => ({
+  getPermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true, status: 'granted' })),
+  requestPermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true, status: 'granted' })),
+  saveToLibraryAsync: jest.fn(async () => undefined),
+}));
+
+jest.mock('react-native-view-shot', () => ({
+  captureRef: jest.fn(async () => 'file:///tmp/noto-polaroid.png'),
+  releaseCapture: jest.fn(),
+}));
+
 jest.mock('@expo/vector-icons', () => {
   const React = require('react');
   const { Text } = require('react-native');
