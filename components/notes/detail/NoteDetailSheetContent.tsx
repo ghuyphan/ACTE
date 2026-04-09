@@ -688,10 +688,7 @@ export default function NoteDetailSheetContent({
             {Platform.OS === 'android' ? (
                 <BottomSheetScrollView
                     ref={scrollContainerRef}
-                    contentContainerStyle={[
-                        styles.scrollContent,
-                        Platform.OS === 'android' ? styles.scrollContentAndroid : null,
-                    ]}
+                    contentContainerStyle={[styles.scrollContent, styles.scrollContentAndroid]}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                 >
