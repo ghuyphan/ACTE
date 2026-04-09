@@ -9,8 +9,10 @@ import {
   type SharedValue,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withRepeat,
   withSequence,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import type { Camera, CameraDevice } from 'react-native-vision-camera';
@@ -31,7 +33,6 @@ const CAMERA_SWITCH_MASK_OPACITY = 0.78;
 const CAMERA_SWITCH_FADE_IN_MS = 80;
 const CAMERA_SWITCH_READY_SOFTEN_MS = 90;
 const CAMERA_SWITCH_READY_SOFTEN_OPACITY = 0.18;
-const CAMERA_SWITCH_FADE_OUT_MS = 100;
 const CAMERA_FOCUS_RING_VISIBLE_MS = 640;
 const CAMERA_FOCUS_RING_FADE_IN_MS = 170;
 const CAMERA_FOCUS_RING_SETTLE_MS = 110;
@@ -111,7 +112,6 @@ export function useCaptureCardCameraController({
   const cameraGestureLockCountRef = useRef(0);
   const cameraSwitchInFlightRef = useRef(false);
   const cameraZoomBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cameraFocusRingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraHintVisibility = useSharedValue(Boolean(cameraInstructionText) && !capturedPhoto ? 1 : 0);
   const cameraTransitionMaskOpacity = useSharedValue(0);
   const cameraFocusRingOpacity = useSharedValue(0);
@@ -172,13 +172,6 @@ export function useCaptureCardCameraController({
     }
   }, []);
 
-  const clearCameraFocusRingTimeout = useCallback(() => {
-    if (cameraFocusRingTimeoutRef.current) {
-      clearTimeout(cameraFocusRingTimeoutRef.current);
-      cameraFocusRingTimeoutRef.current = null;
-    }
-  }, []);
-
   const beginCameraGestureLock = useCallback(() => {
     cameraGestureLockCountRef.current += 1;
     if (cameraGestureLockCountRef.current === 1) {
@@ -227,7 +220,8 @@ export function useCaptureCardCameraController({
 
   const showCameraFocusRing = useCallback(
     (x: number, y: number) => {
-      clearCameraFocusRingTimeout();
+      cancelAnimation(cameraFocusRingOpacity);
+      cancelAnimation(cameraFocusRingScale);
       setCameraFocusPoint({ x, y });
       cameraFocusRingScale.value = 0.82;
       cameraFocusRingOpacity.value = 0;
@@ -239,28 +233,32 @@ export function useCaptureCardCameraController({
         withTiming(0.98, {
           duration: reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_SETTLE_MS,
           easing: Easing.out(Easing.quad),
-        })
+        }),
+        withDelay(
+          reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_VISIBLE_MS,
+          withTiming(1.06, {
+            duration: reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_FADE_OUT_MS,
+            easing: Easing.out(Easing.cubic),
+          })
+        )
       );
-      cameraFocusRingOpacity.value = withTiming(1, {
-        duration: reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_FADE_IN_MS,
-        easing: Easing.out(Easing.cubic),
-      });
-      cameraFocusRingTimeoutRef.current = setTimeout(() => {
-        cameraFocusRingScale.value = withTiming(1.06, {
-          duration: reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_FADE_OUT_MS,
+      cameraFocusRingOpacity.value = withSequence(
+        withTiming(1, {
+          duration: reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_FADE_IN_MS,
           easing: Easing.out(Easing.cubic),
-        });
-        cameraFocusRingOpacity.value = withTiming(0, {
-          duration: reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_FADE_OUT_MS,
-          easing: Easing.out(Easing.cubic),
-        });
-        cameraFocusRingTimeoutRef.current = null;
-      }, CAMERA_FOCUS_RING_VISIBLE_MS);
+        }),
+        withDelay(
+          reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_VISIBLE_MS,
+          withTiming(0, {
+            duration: reduceMotionEnabled ? 0 : CAMERA_FOCUS_RING_FADE_OUT_MS,
+            easing: Easing.out(Easing.cubic),
+          })
+        )
+      );
     },
     [
       cameraFocusRingOpacity,
       cameraFocusRingScale,
-      clearCameraFocusRingTimeout,
       reduceMotionEnabled,
     ]
   );
@@ -367,10 +365,18 @@ export function useCaptureCardCameraController({
     setCameraUnavailable(false);
     setCameraIssueDetail(null);
     setIsCameraReady(true);
-    cameraTransitionMaskOpacity.value = withTiming(0, {
-      duration: reduceMotionEnabled ? 0 : isSwitchingCamera ? CAMERA_SWITCH_FADE_OUT_MS : CAMERA_TRANSITION_FADE_OUT_MS,
-      easing: Easing.out(Easing.cubic),
-    });
+    cameraTransitionMaskOpacity.value = isSwitchingCamera
+      ? reduceMotionEnabled
+        ? withTiming(0, { duration: 0 })
+        : withSpring(0, {
+            stiffness: 300,
+            damping: 28,
+            mass: 0.6,
+          })
+      : withTiming(0, {
+          duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_OUT_MS,
+          easing: Easing.out(Easing.cubic),
+        });
   }, [
     cameraTransitionMaskOpacity,
     reduceMotionEnabled,
@@ -432,9 +438,15 @@ export function useCaptureCardCameraController({
       cameraGestureLockCountRef.current = 0;
       onCameraGestureActiveChange?.(false);
       clearCameraZoomBadgeTimeout();
-      clearCameraFocusRingTimeout();
+      cancelAnimation(cameraFocusRingOpacity);
+      cancelAnimation(cameraFocusRingScale);
     },
-    [clearCameraFocusRingTimeout, clearCameraZoomBadgeTimeout, onCameraGestureActiveChange]
+    [
+      cameraFocusRingOpacity,
+      cameraFocusRingScale,
+      clearCameraZoomBadgeTimeout,
+      onCameraGestureActiveChange,
+    ]
   );
 
   useEffect(() => {

@@ -81,7 +81,7 @@ describe('useCaptureFlow', () => {
     });
   });
 
-  it('captures a photo without triggering the custom flash overlay animation', async () => {
+  it('captures a photo and normalizes the saved file uri', async () => {
     const { result } = renderHook(() => useCaptureFlow());
 
     act(() => {
@@ -91,7 +91,6 @@ describe('useCaptureFlow', () => {
         stopRecording: mockStopRecording,
         cancelRecording: mockCancelRecording,
       } as any;
-      result.current.flashAnim.value = 0;
     });
 
     await act(async () => {
@@ -101,7 +100,6 @@ describe('useCaptureFlow', () => {
     expect(Haptics.impactAsync).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Medium);
     expect(mockTakePhoto).toHaveBeenCalledWith({ enableShutterSound: false });
     expect(result.current.capturedPhoto).toBe('file:///tmp/captured-photo.jpg');
-    expect(result.current.flashAnim.value).toBe(0);
   });
 
   it('captures a live photo by taking a still photo and pairing it with a recorded motion clip', async () => {

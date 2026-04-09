@@ -1,8 +1,7 @@
 import { memo } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { CaptureAnimatedPressable } from './CaptureAnimatedPressable';
-
-const DOODLE_COLOR_BUTTON_SIZE = 32;
+import { styles } from './captureCardStyles';
 
 export interface DoodleColorPaletteProps {
   colors: string[];
@@ -73,34 +72,4 @@ export const DoodleColorPalette = memo(function DoodleColorPalette({
       </ScrollView>
     </View>
   );
-});
-
-const styles = StyleSheet.create({
-  doodleColorPalette: {
-    width: 96,
-    overflow: 'hidden',
-  },
-  doodleColorPaletteScroll: {
-    flexGrow: 0,
-  },
-  doodleColorPaletteContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingRight: 4,
-  },
-  doodleColorButton: {
-    width: DOODLE_COLOR_BUTTON_SIZE,
-    height: DOODLE_COLOR_BUTTON_SIZE,
-    borderRadius: DOODLE_COLOR_BUTTON_SIZE / 2,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  doodleColorSwatch: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
 });

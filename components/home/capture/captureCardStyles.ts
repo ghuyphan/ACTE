@@ -9,20 +9,26 @@ export const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
 export const TOP_CONTROL_INSET = 24;
 export const TOP_CONTROL_HEIGHT = 38;
 export const TOP_CONTROL_RADIUS = 19;
+export const CARD_CONTENT_PADDING = 28;
 export const CARD_CHROME_SAFE_TOP = 30;
+export const AUTO_EMOJI_POP_TOP = 56;
 export const DECORATE_OPTION_ACTIVE_SCALE = 1;
 export const DECORATE_OPTION_CONTENT_SCALE = 1;
 export const SHUTTER_OUTER_SIZE = 74;
 export const SHUTTER_INNER_SIZE = 58;
 export const SIDE_ACTION_SIZE = 46;
+export const DOODLE_COLOR_BUTTON_SIZE = 32;
 export const SHUTTER_SIDE_ACTION_GAP = 24;
 export const SHUTTER_SIDE_ACTION_OFFSET =
   SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP + SIDE_ACTION_SIZE;
 export const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
 export const PHOTO_CAPTION_MAX_LENGTH = 60;
+export const PHOTO_FILTER_BUTTON_SIZE = 34;
+export const PHOTO_FILTER_PREVIEW_SIZE = 30;
 export const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
 export const CAMERA_FOCUS_RING_SIZE = 64;
 export const DOCKED_HEADER_CONTENT_OVERLAP = 8;
+export const CAMERA_ZOOM_BADGE_BACKGROUND = 'rgba(28,28,30,0.52)';
 const SHEET_HORIZONTAL_PADDING =
   Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
 
@@ -37,13 +43,17 @@ export const styles = StyleSheet.create({
     gap: 6,
   },
   captureToggleIconWrap: {
-    width: 20,
-    height: 20,
+    width: 22,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
   captureToggleIconLayer: {
     position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -63,7 +73,7 @@ export const styles = StyleSheet.create({
     borderRadius: Layout.cardRadius,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 28,
+    padding: CARD_CONTENT_PADDING,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -103,7 +113,7 @@ export const styles = StyleSheet.create({
   },
   autoEmojiPopWrap: {
     position: 'absolute',
-    top: 56,
+    top: AUTO_EMOJI_POP_TOP,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -260,9 +270,9 @@ export const styles = StyleSheet.create({
     paddingRight: 4,
   },
   doodleColorButton: {
-    width: TOP_CONTROL_HEIGHT,
-    height: TOP_CONTROL_HEIGHT,
-    borderRadius: TOP_CONTROL_RADIUS,
+    width: DOODLE_COLOR_BUTTON_SIZE,
+    height: DOODLE_COLOR_BUTTON_SIZE,
+    borderRadius: DOODLE_COLOR_BUTTON_SIZE / 2,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
@@ -282,98 +292,6 @@ export const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     ...STICKER_ARTBOARD_FRAME,
     zIndex: 0,
-  },
-  cardRestaurantPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    minHeight: 42,
-    paddingHorizontal: 10,
-    paddingVertical: 0,
-    borderRadius: Radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    width: '100%',
-    overflow: 'hidden',
-    position: 'relative',
-    zIndex: 3,
-  },
-  cardRestaurantPillOverlay: {
-    width: 'auto',
-    maxWidth: CARD_SIZE - 140,
-    minWidth: 210,
-    alignSelf: 'center',
-    paddingHorizontal: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 3,
-  },
-  cardRestaurantPillBelow: {
-    marginTop: 0,
-  },
-  captureMetaComposite: {
-    width: '100%',
-    maxWidth: 344,
-    alignSelf: 'center',
-    paddingHorizontal: 12,
-    gap: 0,
-  },
-  captureMetaStack: {
-    width: '100%',
-    alignItems: 'center',
-    gap: 8,
-  },
-  captureMetaInputWrap: {
-    flex: 1,
-    minHeight: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  captureMetaActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  cardRestaurantInput: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 17,
-    paddingTop: 0,
-    paddingBottom: 0,
-    paddingRight: 48,
-  },
-  cardRestaurantInputCompact: {
-    paddingRight: 0,
-  },
-  captureMetaDivider: {
-    width: StyleSheet.hairlineWidth,
-    alignSelf: 'stretch',
-    marginHorizontal: 5,
-    opacity: 0.45,
-  },
-  captureInlineRadiusButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  captureInlineColorButton: {
-    width: 31,
-    height: 31,
-    borderRadius: 15.5,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  captureInlineColorPreview: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
   },
   cameraContainer: {
     width: CARD_SIZE,
@@ -452,7 +370,7 @@ export const styles = StyleSheet.create({
     borderRadius: TOP_CONTROL_RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(28,28,30,0.52)',
+    backgroundColor: CAMERA_ZOOM_BADGE_BACKGROUND,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.18)',
     zIndex: 10,
@@ -622,17 +540,6 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cameraStatusText: {
-    ...Typography.pill,
-    textAlign: 'center',
-  },
-  cameraStatusSlot: {
-    minHeight: 20,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
   cameraInstructionText: {
     ...Typography.pill,
     textAlign: 'center',
@@ -728,28 +635,34 @@ export const styles = StyleSheet.create({
     maxWidth: '100%',
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 5,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
     overflow: 'hidden',
+  },
+  photoFilterScroll: {
+    flexGrow: 0,
   },
   photoFilterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
+  },
+  photoFilterEmbeddedScroll: {
+    maxWidth: 166,
   },
   photoFilterButton: {
-    width: 38,
-    height: 38,
+    width: PHOTO_FILTER_BUTTON_SIZE,
+    height: PHOTO_FILTER_BUTTON_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 19,
+    borderRadius: PHOTO_FILTER_BUTTON_SIZE / 2,
     borderWidth: 2,
     padding: 1,
   },
   photoFilterPreviewClip: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: PHOTO_FILTER_PREVIEW_SIZE,
+    height: PHOTO_FILTER_PREVIEW_SIZE,
+    borderRadius: PHOTO_FILTER_PREVIEW_SIZE / 2,
     overflow: 'hidden',
   },
   photoFilterPreviewCanvas: {
@@ -782,6 +695,9 @@ export const styles = StyleSheet.create({
   secondaryActionButtonContent: {
     width: '100%',
     height: '100%',
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
   shutterOuter: {
     width: SHUTTER_OUTER_SIZE,

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { type ComponentProps, memo, type ReactNode, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import Reanimated, {
   interpolateColor,
   useAnimatedStyle,
@@ -8,7 +8,12 @@ import Reanimated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
-import { CAPTURE_BUTTON_STATE_IN, CAPTURE_BUTTON_STATE_OUT } from './captureMotion';
+import { styles } from './captureCardStyles';
+import {
+  CAPTURE_BUTTON_STATE_IN,
+  CAPTURE_BUTTON_STATE_OUT,
+  getCaptureTiming,
+} from './captureMotion';
 import {
   CaptureAnimatedPressable,
   type CaptureAnimatedPressableProps,
@@ -54,7 +59,7 @@ export const CaptureToggleIconButton = memo(function CaptureToggleIconButton({
 
   useEffect(() => {
     const transition = reduceMotionEnabled
-      ? { duration: 110, easing: CAPTURE_BUTTON_STATE_IN.easing }
+      ? getCaptureTiming(active ? CAPTURE_BUTTON_STATE_IN : CAPTURE_BUTTON_STATE_OUT, true)
       : active
         ? CAPTURE_BUTTON_STATE_IN
         : CAPTURE_BUTTON_STATE_OUT;
@@ -108,22 +113,4 @@ export const CaptureToggleIconButton = memo(function CaptureToggleIconButton({
       </View>
     </CaptureAnimatedPressable>
   );
-});
-
-const styles = StyleSheet.create({
-  captureToggleIconWrap: {
-    width: 22,
-    height: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  captureToggleIconLayer: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 });

@@ -410,8 +410,6 @@ function createCaptureCardProps(
     t: ((_: string, fallback?: string) => fallback ?? '') as any,
     noteText: 'Draft memory',
     onChangeNoteText: () => undefined,
-    restaurantName: 'Cafe',
-    onChangeRestaurantName: () => undefined,
     capturedPhoto: null,
     onRetakePhoto: () => undefined,
     needsCameraPermission: false,
@@ -430,7 +428,6 @@ function createCaptureCardProps(
       maxZoom: 4,
     } as any,
     isCameraPreviewActive: false,
-    flashAnim: zeroValue,
     permissionGranted: true,
     onShutterPressIn: () => undefined,
     onShutterPressOut: () => undefined,
@@ -440,7 +437,6 @@ function createCaptureCardProps(
     saving: false,
     shutterScale: animatedValue,
     isLivePhotoSaveGuardActive: false,
-    cameraStatusText: null,
     libraryImportLocked: false,
     importingPhoto: false,
     radius: 150,
@@ -545,9 +541,7 @@ describe('CaptureCard doodle handle', () => {
 
   it('removes the restaurant field in text mode and keeps the action row', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
-      restaurantName: '',
-    });
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref);
 
     expect(queryByTestId('capture-restaurant-input')).toBeNull();
     expect(getByTestId('capture-doodle-toggle')).toBeTruthy();
@@ -557,7 +551,6 @@ describe('CaptureCard doodle handle', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
       captureMode: 'camera',
-      restaurantName: '',
     });
 
     expect(queryByTestId('capture-restaurant-input')).toBeNull();
@@ -987,8 +980,6 @@ describe('CaptureCard doodle handle', () => {
         t={((_: string, fallback?: string) => fallback ?? '') as any}
         noteText="Draft memory"
         onChangeNoteText={() => undefined}
-        restaurantName="Cafe"
-        onChangeRestaurantName={() => undefined}
         capturedPhoto="file:///photo.jpg"
         onRetakePhoto={() => undefined}
         needsCameraPermission={false}
@@ -1000,7 +991,6 @@ describe('CaptureCard doodle handle', () => {
         onChangePhotoFilter={() => undefined}
         cameraRef={{ current: null }}
         isCameraPreviewActive={false}
-        flashAnim={createSharedValue(0)}
         permissionGranted
         onShutterPressIn={() => undefined}
         onShutterPressOut={() => undefined}
@@ -1008,7 +998,6 @@ describe('CaptureCard doodle handle', () => {
         onSaveNote={() => undefined}
         saving={false}
         shutterScale={createSharedValue(1)}
-        cameraStatusText={null}
         libraryImportLocked={false}
         importingPhoto={false}
         radius={150}
@@ -1209,7 +1198,6 @@ describe('CaptureCard doodle handle', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const handleChangeShareTarget = jest.fn();
     const { getByTestId } = renderCaptureCard(ref, {
-      restaurantName: '',
       onChangeShareTarget: handleChangeShareTarget,
     });
 

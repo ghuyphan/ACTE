@@ -2,7 +2,13 @@ import { AppState, Platform } from 'react-native';
 import { Camera, type CameraPermissionStatus, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Easing, runOnJS, useSharedValue, withTiming } from 'react-native-reanimated';
+import { runOnJS, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import {
+  CAPTURE_BUTTON_PRESS_IN,
+  CAPTURE_BUTTON_PRESS_OUT,
+  CAPTURE_MODE_SWITCH_IN,
+  CAPTURE_MODE_SWITCH_OUT,
+} from '../components/home/capture/captureMotion';
 import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
 import type { PhotoFilterId } from '../services/photoFilters';
 import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../services/livePhotoProcessing';
@@ -40,7 +46,6 @@ export function useCaptureFlow() {
   const [captureMode, setCaptureMode] = useState<CaptureMode>('text');
   const [isModeSwitchAnimating, setIsModeSwitchAnimating] = useState(false);
   const [cameraSessionKey, setCameraSessionKey] = useState(0);
-  const [restaurantName, setRestaurantName] = useState('');
   const [noteText, setNoteText] = useState('');
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [capturedPairedVideo, setCapturedPairedVideo] = useState<string | null>(null);
@@ -48,12 +53,6 @@ export function useCaptureFlow() {
   const [isLivePhotoCaptureInProgress, setIsLivePhotoCaptureInProgress] = useState(false);
   const [isLivePhotoCaptureSettling, setIsLivePhotoCaptureSettling] = useState(false);
   const [isLivePhotoSaveGuardActive, setIsLivePhotoSaveGuardActive] = useState(false);
-  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
-  const [selectedPromptText, setSelectedPromptText] = useState<string | null>(null);
-  const [promptAnswer, setPromptAnswer] = useState('');
-  const [moodEmoji, setMoodEmoji] = useState<string | null>(null);
-  const [promptExpanded, setPromptExpanded] = useState(false);
-  const [hasShuffledPrompt, setHasShuffledPrompt] = useState(false);
   const [radius, setRadius] = useState(DEFAULT_NOTE_RADIUS);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [selectedPhotoFilterId, setSelectedPhotoFilterId] = useState<PhotoFilterId>('original');
@@ -86,7 +85,6 @@ export function useCaptureFlow() {
   const suppressNextPhotoTapRef = useRef(false);
   const captureScale = useSharedValue(1);
   const captureTranslateY = useSharedValue(0);
-  const flashAnim = useSharedValue(0);
   const shutterScale = useSharedValue(1);
 
   useEffect(() => {
@@ -229,27 +227,15 @@ export function useCaptureFlow() {
 
   const animateModeSwitch = useCallback((callback: () => void) => {
     setIsModeSwitchAnimating(true);
-    captureScale.value = withTiming(0.97, {
-      duration: 110,
-      easing: Easing.out(Easing.cubic),
-    });
-    captureTranslateY.value = withTiming(-10, {
-      duration: 110,
-      easing: Easing.out(Easing.cubic),
-    }, (finished) => {
+    captureScale.value = withTiming(0.97, CAPTURE_MODE_SWITCH_OUT);
+    captureTranslateY.value = withTiming(-10, CAPTURE_MODE_SWITCH_OUT, (finished) => {
       if (!finished) {
         return;
       }
 
       runOnJS(callback)();
-      captureScale.value = withTiming(1, {
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
-      });
-      captureTranslateY.value = withTiming(0, {
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
-      }, (settled) => {
+      captureScale.value = withTiming(1, CAPTURE_MODE_SWITCH_IN);
+      captureTranslateY.value = withTiming(0, CAPTURE_MODE_SWITCH_IN, (settled) => {
         if (!settled) {
           return;
         }
@@ -280,12 +266,6 @@ export function useCaptureFlow() {
       setIsLivePhotoCaptureInProgress(false);
       setIsLivePhotoCaptureSettling(false);
       setIsLivePhotoSaveGuardActive(false);
-      setSelectedPromptId(null);
-      setSelectedPromptText(null);
-      setPromptAnswer('');
-      setMoodEmoji(null);
-      setPromptExpanded(false);
-      setHasShuffledPrompt(false);
     });
   }, [animateModeSwitch, cancelLivePhotoCapture, isModeSwitchAnimating]);
 
@@ -294,10 +274,7 @@ export function useCaptureFlow() {
   }, []);
 
   const handleShutterPressIn = useCallback(() => {
-    shutterScale.value = withTiming(0.85, {
-      duration: 120,
-      easing: Easing.out(Easing.quad),
-    });
+    shutterScale.value = withTiming(0.85, CAPTURE_BUTTON_PRESS_IN);
   }, [shutterScale]);
 
   const finishLivePhotoCapture = useCallback(async () => {
@@ -356,9 +333,10 @@ export function useCaptureFlow() {
   }, [cameraRef, clearLivePhotoSaveGuard, clearLivePhotoSettleTimeout, clearLivePhotoStopTimeout, resetLivePhotoCaptureRefs]);
 
   const handleShutterPressOut = useCallback(() => {
-    shutterScale.value = withTiming(1, {
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
+    shutterScale.value = withSpring(1, {
+      stiffness: 520,
+      damping: 34,
+      mass: 0.38,
     });
     if (livePhotoRecordingActiveRef.current) {
       const startedAt = livePhotoRecordingStartedAtRef.current;
@@ -519,7 +497,6 @@ export function useCaptureFlow() {
 
   const resetCapture = useCallback(() => {
     setNoteText('');
-    setRestaurantName('');
     void cancelLivePhotoCapture();
     setCapturedPhoto(null);
     setCapturedPairedVideo(null);
@@ -528,12 +505,6 @@ export function useCaptureFlow() {
     setIsLivePhotoCaptureSettling(false);
     setIsLivePhotoSaveGuardActive(false);
     clearLivePhotoTapSuppression();
-    setSelectedPromptId(null);
-    setSelectedPromptText(null);
-    setPromptAnswer('');
-    setMoodEmoji(null);
-    setPromptExpanded(false);
-    setHasShuffledPrompt(false);
     setRadius(DEFAULT_NOTE_RADIUS);
   }, [cancelLivePhotoCapture]);
 
@@ -543,8 +514,6 @@ export function useCaptureFlow() {
     captureMode,
     cameraSessionKey,
     setCaptureMode,
-    restaurantName,
-    setRestaurantName,
     noteText,
     setNoteText,
     capturedPhoto,
@@ -555,18 +524,6 @@ export function useCaptureFlow() {
     isLivePhotoCaptureInProgress,
     isLivePhotoCaptureSettling,
     isLivePhotoSaveGuardActive,
-    selectedPromptId,
-    setSelectedPromptId,
-    selectedPromptText,
-    setSelectedPromptText,
-    promptAnswer,
-    setPromptAnswer,
-    moodEmoji,
-    setMoodEmoji,
-    promptExpanded,
-    setPromptExpanded,
-    hasShuffledPrompt,
-    setHasShuffledPrompt,
     radius,
     setRadius,
     facing,
@@ -579,7 +536,6 @@ export function useCaptureFlow() {
     cameraRef,
     captureScale,
     captureTranslateY,
-    flashAnim,
     shutterScale,
     isModeSwitchAnimating,
     animateModeSwitch,

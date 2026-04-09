@@ -21,6 +21,8 @@ import {
 } from 'react-native';
 import { Camera, type CameraDevice } from 'react-native-vision-camera';
 import Reanimated, {
+  FadeIn,
+  FadeOut,
   Easing,
   runOnJS,
   type SharedValue,
@@ -45,15 +47,17 @@ import AppSheetScaffold from '../sheets/AppSheetScaffold';
 import StickerSourceSheet from '../sheets/StickerSourceSheet';
 import NoteColorPicker from '../ui/NoteColorPicker';
 import {
-  CaptureActionRow,
-  LiveCameraActionBar,
   LiveCameraSurface,
-  PhotoCaptureBottomBar,
   PhotoCaptureSurface,
-  TextCaptureBottomBar,
   TextCaptureSurface,
 } from './capture/CaptureCardSections';
-import type { CameraUiStage } from './capture/CaptureCardSections';
+import type { CameraUiStage } from './capture/captureShared';
+import { CaptureActionRow } from './capture/CaptureActionRow';
+import {
+  PhotoCaptureBottomBar,
+  TextCaptureBottomBar,
+} from './capture/CaptureDecorateRail';
+import { LiveCameraActionBar } from './capture/LiveCameraActionBar';
 import { triggerCaptureCardHaptic } from './capture/CaptureControls';
 import StampCutterEditor from './capture/StampCutterEditor';
 import {
@@ -63,6 +67,25 @@ import {
   PHOTO_DOODLE_DEFAULT_COLOR,
   styles,
 } from './capture/captureCardStyles';
+import {
+  CAPTURE_BUTTON_PRESS_IN,
+  CAPTURE_BUTTON_PRESS_OUT,
+  CAPTURE_EMOJI_POP_BOUNCE,
+  CAPTURE_EMOJI_POP_DRIFT,
+  CAPTURE_EMOJI_POP_ENTER,
+  CAPTURE_EMOJI_POP_EXIT,
+  CAPTURE_EMOJI_POP_HOLD,
+  CAPTURE_EMOJI_POP_LIFT,
+  CAPTURE_EMOJI_POP_SETTLE,
+  CAPTURE_SAVE_BUSY_SCALE,
+  CAPTURE_SAVE_SUCCESS_EXIT,
+  CAPTURE_SAVE_SUCCESS_RESET,
+  CAPTURE_SAVE_SUCCESS_SCALE,
+  CAPTURE_TOOLBAR_ENTER,
+  CAPTURE_TOOLBAR_EXIT,
+  getCaptureTiming,
+  scaleCaptureDuration,
+} from './capture/captureMotion';
 import { useCaptureCardCameraController } from './useCaptureCardCameraController';
 import { useCaptureCardDecorations } from './useCaptureCardDecorations';
 import { useCaptureCardMetaSheets } from './useCaptureCardMetaSheets';
@@ -77,6 +100,7 @@ const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Anything here worth saving for later?',
   'Drop a small memory here...',
 ];
+const LIGHT_CAPTURE_ACTIVE_ICON_COLOR = '#FFFFFF';
 
 function getCaptureTextPlaceholderVariants(t: TFunction) {
   const translated = t('capture.textPlaceholderVariants', {
@@ -138,8 +162,6 @@ interface CaptureCardProps {
   lockedNoteColorIds?: string[];
   previewOnlyNoteColorIds?: string[];
   onPressLockedNoteColor?: (colorId: string) => void;
-  restaurantName: string;
-  onChangeRestaurantName: (nextName: string) => void;
   capturedPhoto: string | null;
   capturedPairedVideo?: string | null;
   onRetakePhoto: () => void;
@@ -156,7 +178,6 @@ interface CaptureCardProps {
   cameraRef: RefObject<Camera | null>;
   cameraDevice?: CameraDevice;
   isCameraPreviewActive: boolean;
-  flashAnim: SharedValue<number>;
   permissionGranted: boolean;
   onShutterPressIn: () => void;
   onShutterPressOut: () => void;
@@ -170,7 +191,6 @@ interface CaptureCardProps {
   isLivePhotoCaptureInProgress?: boolean;
   isLivePhotoCaptureSettling?: boolean;
   isLivePhotoSaveGuardActive?: boolean;
-  cameraStatusText?: string | null;
   cameraInstructionText?: string | null;
   remainingPhotoSlots?: number | null;
   libraryImportLocked?: boolean;
@@ -203,8 +223,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   lockedNoteColorIds = [],
   previewOnlyNoteColorIds = [],
   onPressLockedNoteColor,
-  restaurantName,
-  onChangeRestaurantName,
   capturedPhoto,
   capturedPairedVideo = null,
   onRetakePhoto,
@@ -221,7 +239,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   cameraRef,
   cameraDevice,
   isCameraPreviewActive,
-  flashAnim,
   permissionGranted,
   onShutterPressIn,
   onShutterPressOut,
@@ -235,7 +252,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   isLivePhotoCaptureInProgress = false,
   isLivePhotoCaptureSettling = false,
   isLivePhotoSaveGuardActive = false,
-  cameraStatusText = null,
   cameraInstructionText = null,
   remainingPhotoSlots,
   libraryImportLocked = false,
@@ -249,15 +265,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onTextEntryFocusChange,
   footerContent,
 }, ref) {
-  void restaurantName;
-  void onChangeRestaurantName;
-  void flashAnim;
-  void cameraStatusText;
-
   const reduceMotionEnabled = useReducedMotion();
   const isSharedTarget = shareTarget === 'shared';
   const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
-  const textCardActiveIconColor = isDarkCaptureTheme ? colors.captureCardText : '#FFFFFF';
+  const textCardActiveIconColor = isDarkCaptureTheme
+    ? colors.captureCardText
+    : LIGHT_CAPTURE_ACTIVE_ICON_COLOR;
   const textCaptureNoteColor = DEFAULT_NOTE_COLOR_ID;
   const effectiveTextModeNoteColor = captureMode === 'text' ? textCaptureNoteColor : noteColor;
   const hasLivePhotoMotion = Boolean(capturedPairedVideo);
@@ -277,7 +290,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
   const noteInputRef = useRef<TextInput | null>(null);
-  const restaurantInputRef = useRef<TextInput | null>(null);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
   const textInputDynamicStyle = useMemo(
     () =>
@@ -309,13 +321,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     rotatePlaceholderIfNeeded,
   } = useCaptureCardTextInputState({
     captureMode,
-    minimumVisibleInputY: topInset + 24,
     noteText,
     noteInputRef,
     onChangeNoteText,
     placeholderVariants,
-    reduceMotionEnabled,
-    restaurantInputRef,
   });
 
   const isCaptureTextEntryFocused = isTextEntryFocused || isPhotoCaptionFocused;
@@ -369,7 +378,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
   const dismissCaptureInputs = useCallback(() => {
     noteInputRef.current?.blur();
-    restaurantInputRef.current?.blur();
     setIsPhotoCaptionFocused(false);
     dismissCaptureInputsState();
   }, [dismissCaptureInputsState]);
@@ -542,31 +550,25 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
   useEffect(() => {
     if (saveState === 'success') {
-      saveSuccessProgress.value = withTiming(1, {
-        duration: reduceMotionEnabled ? 120 : 220,
-        easing: Easing.out(Easing.cubic),
-      });
+      saveSuccessProgress.value = withTiming(
+        1,
+        getCaptureTiming(CAPTURE_SAVE_SUCCESS_SCALE, reduceMotionEnabled)
+      );
       saveStateScale.value = withSequence(
-        withTiming(reduceMotionEnabled ? 1.01 : 1.05, {
-          duration: reduceMotionEnabled ? 90 : 150,
-          easing: Easing.out(Easing.cubic),
-        }),
-        withTiming(1, {
-          duration: reduceMotionEnabled ? 120 : 220,
-          easing: Easing.out(Easing.back(1.1)),
-        })
+        withTiming(reduceMotionEnabled ? 1.01 : 1.05, getCaptureTiming(CAPTURE_SAVE_BUSY_SCALE, reduceMotionEnabled)),
+        withTiming(1, getCaptureTiming(CAPTURE_SAVE_SUCCESS_RESET, reduceMotionEnabled))
       );
       return;
     }
 
-    saveSuccessProgress.value = withTiming(0, {
-      duration: reduceMotionEnabled ? 90 : 170,
-      easing: Easing.out(Easing.cubic),
-    });
-    saveStateScale.value = withTiming(saveState === 'saving' ? 0.98 : 1, {
-      duration: reduceMotionEnabled ? 90 : 150,
-      easing: Easing.out(Easing.cubic),
-    });
+    saveSuccessProgress.value = withTiming(
+      0,
+      getCaptureTiming(CAPTURE_SAVE_SUCCESS_EXIT, reduceMotionEnabled)
+    );
+    saveStateScale.value = withTiming(
+      saveState === 'saving' ? 0.98 : 1,
+      getCaptureTiming(CAPTURE_SAVE_BUSY_SCALE, reduceMotionEnabled)
+    );
   }, [reduceMotionEnabled, saveState, saveStateScale, saveSuccessProgress]);
 
   useEffect(() => {
@@ -584,37 +586,23 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     }
 
     autoEmojiPopOpacity.value = withSequence(
-      withTiming(1, {
-        duration: reduceMotionEnabled ? 90 : 180,
-        easing: Easing.out(Easing.cubic),
-      }),
-      withTiming(1, {
-        duration: reduceMotionEnabled ? 140 : 520,
-      }),
-      withTiming(0, {
-        duration: reduceMotionEnabled ? 140 : 240,
-        easing: Easing.in(Easing.quad),
-      })
+      withTiming(1, getCaptureTiming(CAPTURE_EMOJI_POP_ENTER, reduceMotionEnabled)),
+      withTiming(1, getCaptureTiming(CAPTURE_EMOJI_POP_HOLD, reduceMotionEnabled)),
+      withTiming(0, getCaptureTiming(CAPTURE_EMOJI_POP_EXIT, reduceMotionEnabled))
     );
     autoEmojiPopTranslateY.value = withSequence(
-      withTiming(reduceMotionEnabled ? 0 : -12, {
-        duration: reduceMotionEnabled ? 90 : 220,
-        easing: Easing.out(Easing.cubic),
-      }),
-      withTiming(reduceMotionEnabled ? 0 : -18, {
-        duration: reduceMotionEnabled ? 180 : 620,
-        easing: Easing.out(Easing.quad),
-      })
+      withTiming(
+        reduceMotionEnabled ? 0 : -12,
+        getCaptureTiming(CAPTURE_EMOJI_POP_LIFT, reduceMotionEnabled)
+      ),
+      withTiming(
+        reduceMotionEnabled ? 0 : -18,
+        getCaptureTiming(CAPTURE_EMOJI_POP_DRIFT, reduceMotionEnabled)
+      )
     );
     autoEmojiPopScale.value = withSequence(
-      withTiming(1.06, {
-        duration: reduceMotionEnabled ? 90 : 180,
-        easing: Easing.out(Easing.back(1.2)),
-      }),
-      withTiming(1, {
-        duration: reduceMotionEnabled ? 140 : 220,
-        easing: Easing.out(Easing.cubic),
-      })
+      withTiming(1.06, getCaptureTiming(CAPTURE_EMOJI_POP_BOUNCE, reduceMotionEnabled)),
+      withTiming(1, getCaptureTiming(CAPTURE_EMOJI_POP_SETTLE, reduceMotionEnabled))
     );
   }, [
     autoEmojiPopOpacity,
@@ -679,17 +667,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       return;
     }
 
-    savePressScale.value = withTiming(0.85, {
-      duration: 120,
-      easing: Easing.out(Easing.quad),
-    });
+    savePressScale.value = withTiming(0.85, CAPTURE_BUTTON_PRESS_IN);
   }, [isSaveDisabled, savePressScale]);
 
   const handleSavePressOut = useCallback(() => {
-    savePressScale.value = withTiming(1, {
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
-    });
+    savePressScale.value = withTiming(1, CAPTURE_BUTTON_PRESS_OUT);
   }, [savePressScale]);
 
   useImperativeHandle(
@@ -825,7 +807,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     if (shouldShowCaptureCover) {
       setShouldRenderCaptureCover(true);
       captureCoverOpacity.value = withTiming(1, {
-        duration: reduceMotionEnabled ? 90 : 140,
+        duration: scaleCaptureDuration(140, reduceMotionEnabled),
         easing: Easing.out(Easing.quad),
       });
       return;
@@ -839,7 +821,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     captureCoverOpacity.value = withTiming(
       0,
       {
-        duration: reduceMotionEnabled ? 180 : 680,
+        duration: scaleCaptureDuration(680, reduceMotionEnabled),
         easing: Easing.out(Easing.cubic),
       },
       (finished) => {
@@ -921,6 +903,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         })}
       </View>
     </AppSheetScaffold>
+  );
+
+  const toolbarEntering = useMemo(
+    () => FadeIn.duration(getCaptureTiming(CAPTURE_TOOLBAR_ENTER, reduceMotionEnabled).duration).easing(CAPTURE_TOOLBAR_ENTER.easing),
+    [reduceMotionEnabled]
+  );
+  const toolbarExiting = useMemo(
+    () => FadeOut.duration(getCaptureTiming(CAPTURE_TOOLBAR_EXIT, reduceMotionEnabled).duration).easing(CAPTURE_TOOLBAR_EXIT.easing),
+    [reduceMotionEnabled]
   );
 
   return (
@@ -1067,63 +1058,69 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
             pointerEvents={interactionsDisabled || isCameraUiCapturing ? 'none' : 'auto'}
           >
             {controlsUiStage === 'text' ? (
-              <TextCaptureBottomBar
-                colors={colors}
-                doodleColor={doodleColor}
-                doodleColorOptions={doodleColorOptions}
-                doodleModeEnabled={doodleModeEnabled}
-                doodleStrokes={doodleStrokes}
-                handleClearDoodle={handleClearDoodle}
-                handleInlinePasteStickerPress={handleInlinePasteStickerPress}
-                handleNativeInlinePasteStickerPress={handleNativeInlinePasteStickerPress}
-                handleSelectDoodleColor={handleSelectDoodleColor}
-                handleSelectedStickerAction={handleSelectedStickerAction}
-                handleShowStickerSourceOptions={handleShowStickerSourceOptions}
-                handleToggleDoodleMode={handleToggleDoodleMode}
-                handleToggleStickerMode={handleToggleStickerMode}
-                handleUndoDoodle={handleUndoDoodle}
-                importingSticker={importingSticker}
-                inlinePasteLoading={inlinePasteLoading}
-                selectedStickerId={selectedStickerId}
-                showInlinePasteButton={showInlinePasteButton}
-                stickerModeEnabled={stickerModeEnabled}
-                t={t}
-                textCardActiveIconColor={textCardActiveIconColor}
-                useNativeInlinePasteButton={useNativeInlinePasteButton}
-              />
+              <Reanimated.View key="toolbar-text" entering={toolbarEntering} exiting={toolbarExiting}>
+                <TextCaptureBottomBar
+                  colors={colors}
+                  doodleColor={doodleColor}
+                  doodleColorOptions={doodleColorOptions}
+                  doodleModeEnabled={doodleModeEnabled}
+                  doodleStrokes={doodleStrokes}
+                  handleClearDoodle={handleClearDoodle}
+                  handleInlinePasteStickerPress={handleInlinePasteStickerPress}
+                  handleNativeInlinePasteStickerPress={handleNativeInlinePasteStickerPress}
+                  handleSelectDoodleColor={handleSelectDoodleColor}
+                  handleSelectedStickerAction={handleSelectedStickerAction}
+                  handleShowStickerSourceOptions={handleShowStickerSourceOptions}
+                  handleToggleDoodleMode={handleToggleDoodleMode}
+                  handleToggleStickerMode={handleToggleStickerMode}
+                  handleUndoDoodle={handleUndoDoodle}
+                  importingSticker={importingSticker}
+                  inlinePasteLoading={inlinePasteLoading}
+                  selectedStickerId={selectedStickerId}
+                  showInlinePasteButton={showInlinePasteButton}
+                  stickerModeEnabled={stickerModeEnabled}
+                  t={t}
+                  textCardActiveIconColor={textCardActiveIconColor}
+                  useNativeInlinePasteButton={useNativeInlinePasteButton}
+                />
+              </Reanimated.View>
             ) : controlsUiStage === 'review' ? (
-              <PhotoCaptureBottomBar
-                colors={colors}
-                doodleColor={doodleColor}
-                doodleColorOptions={doodleColorOptions}
-                doodleModeEnabled={doodleModeEnabled}
-                doodleStrokes={doodleStrokes}
-                handleClearDoodle={handleClearDoodle}
-                handleSelectDoodleColor={handleSelectDoodleColor}
-                handleSelectedStickerAction={handleSelectedStickerAction}
-                handleShowStickerSourceOptions={handleShowStickerSourceOptions}
-                handleToggleDoodleMode={handleToggleDoodleMode}
-                handleToggleStickerMode={handleToggleStickerMode}
-                handleUndoDoodle={handleUndoDoodle}
-                hasLivePhotoMotion={hasLivePhotoMotion}
-                importingSticker={importingSticker}
-                onImportMotionClip={onImportMotionClip}
-                onRemoveMotionClip={onRemoveMotionClip}
-                selectedStickerId={selectedStickerId}
-                stickerModeEnabled={stickerModeEnabled}
-                t={t}
-                textCardActiveIconColor={textCardActiveIconColor}
-              />
+              <Reanimated.View key="toolbar-review" entering={toolbarEntering} exiting={toolbarExiting}>
+                <PhotoCaptureBottomBar
+                  colors={colors}
+                  doodleColor={doodleColor}
+                  doodleColorOptions={doodleColorOptions}
+                  doodleModeEnabled={doodleModeEnabled}
+                  doodleStrokes={doodleStrokes}
+                  handleClearDoodle={handleClearDoodle}
+                  handleSelectDoodleColor={handleSelectDoodleColor}
+                  handleSelectedStickerAction={handleSelectedStickerAction}
+                  handleShowStickerSourceOptions={handleShowStickerSourceOptions}
+                  handleToggleDoodleMode={handleToggleDoodleMode}
+                  handleToggleStickerMode={handleToggleStickerMode}
+                  handleUndoDoodle={handleUndoDoodle}
+                  hasLivePhotoMotion={hasLivePhotoMotion}
+                  importingSticker={importingSticker}
+                  onImportMotionClip={onImportMotionClip}
+                  onRemoveMotionClip={onRemoveMotionClip}
+                  selectedStickerId={selectedStickerId}
+                  stickerModeEnabled={stickerModeEnabled}
+                  t={t}
+                  textCardActiveIconColor={textCardActiveIconColor}
+                />
+              </Reanimated.View>
             ) : (
-              <LiveCameraActionBar
-                cameraInstructionText={cameraInstructionText}
-                colors={colors}
-                importingPhoto={importingPhoto}
-                libraryImportLocked={libraryImportLocked}
-                needsCameraPermission={needsCameraPermission}
-                onOpenPhotoLibrary={onOpenPhotoLibrary}
-                t={t}
-              />
+              <Reanimated.View key="toolbar-live" entering={toolbarEntering} exiting={toolbarExiting}>
+                <LiveCameraActionBar
+                  cameraInstructionText={cameraInstructionText}
+                  colors={colors}
+                  importingPhoto={importingPhoto}
+                  libraryImportLocked={libraryImportLocked}
+                  needsCameraPermission={needsCameraPermission}
+                  onOpenPhotoLibrary={onOpenPhotoLibrary}
+                  t={t}
+                />
+              </Reanimated.View>
             )}
             <CaptureActionRow
               animatedSaveHaloStyle={animatedSaveHaloStyle}

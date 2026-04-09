@@ -2,14 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { styles } from './captureCardStyles';
 import { GlassView } from '../../ui/GlassView';
 import { isOlderIOS } from '../../../utils/platform';
 import {
   CaptureAnimatedPressable,
   type CaptureAnimatedPressableProps,
 } from './CaptureAnimatedPressable';
-
-const SIDE_ACTION_SIZE = 46;
 
 export type CaptureGlassActionButtonProps = Omit<CaptureAnimatedPressableProps, 'children'> & {
   iconName: ComponentProps<typeof Ionicons>['name'];
@@ -63,23 +62,4 @@ export const CaptureGlassActionButton = memo(function CaptureGlassActionButton({
       <Ionicons name={iconName} size={iconSize} color={iconColor} />
     </CaptureAnimatedPressable>
   );
-});
-
-const styles = StyleSheet.create({
-  secondaryActionButton: {
-    width: SIDE_ACTION_SIZE,
-    height: SIDE_ACTION_SIZE,
-    borderRadius: SIDE_ACTION_SIZE / 2,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryActionButtonContent: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
 });

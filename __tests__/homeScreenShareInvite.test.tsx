@@ -123,12 +123,9 @@ jest.mock('../hooks/useCaptureFlow', () => ({
     return {
       captureScale: createSharedValue(1),
       captureTranslateY: createSharedValue(0),
-      flashAnim: createSharedValue(0),
       shutterScale: createSharedValue(1),
       captureMode: 'text',
       cameraSessionKey: 0,
-      restaurantName: '',
-      setRestaurantName: jest.fn(),
       noteText: '',
       setNoteText: jest.fn(),
       capturedPhoto: null,

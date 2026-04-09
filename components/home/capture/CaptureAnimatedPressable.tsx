@@ -4,7 +4,6 @@ import {
   Pressable,
   type PressableProps,
   type StyleProp,
-  StyleSheet,
   type ViewStyle,
 } from 'react-native';
 import Reanimated, {
@@ -14,11 +13,13 @@ import Reanimated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
+import { styles } from './captureCardStyles';
 import {
   CAPTURE_BUTTON_PRESS_IN,
   CAPTURE_BUTTON_PRESS_OUT,
   CAPTURE_BUTTON_STATE_IN,
   CAPTURE_BUTTON_STATE_OUT,
+  getCaptureTiming,
   triggerCaptureCardHaptic,
 } from './captureMotion';
 
@@ -63,7 +64,7 @@ export const CaptureAnimatedPressable = memo(function CaptureAnimatedPressable({
 
   useEffect(() => {
     const transition = reduceMotionEnabled
-      ? { duration: 110, easing: CAPTURE_BUTTON_STATE_IN.easing }
+      ? getCaptureTiming(active ? CAPTURE_BUTTON_STATE_IN : CAPTURE_BUTTON_STATE_OUT, true)
       : active
         ? CAPTURE_BUTTON_STATE_IN
         : CAPTURE_BUTTON_STATE_OUT;
@@ -76,7 +77,7 @@ export const CaptureAnimatedPressable = memo(function CaptureAnimatedPressable({
     }
 
     const transition = reduceMotionEnabled
-      ? { duration: 110, easing: CAPTURE_BUTTON_STATE_IN.easing }
+      ? getCaptureTiming(disabled ? CAPTURE_BUTTON_STATE_IN : CAPTURE_BUTTON_STATE_OUT, true)
       : disabled
         ? CAPTURE_BUTTON_STATE_IN
         : CAPTURE_BUTTON_STATE_OUT;
@@ -143,18 +144,11 @@ export const CaptureAnimatedPressable = memo(function CaptureAnimatedPressable({
       onPressOut={handlePressOut}
       style={[style, animatedStyle]}
     >
-      <Reanimated.View style={[styles.captureButtonContent, childrenContainerStyle, animatedChildrenStyle]}>
+      <Reanimated.View
+        style={[styles.captureButtonContent, childrenContainerStyle, animatedChildrenStyle]}
+      >
         {children}
       </Reanimated.View>
     </AnimatedPressable>
   );
-});
-
-const styles = StyleSheet.create({
-  captureButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
 });

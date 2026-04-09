@@ -1,13 +1,14 @@
 import { memo } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import type { TFunction } from 'i18next';
 import { PHOTO_FILTER_PRESETS, type PhotoFilterId } from '../../../services/photoFilters';
 import type { ThemeColors } from '../../../hooks/useTheme';
 import { CaptureAnimatedPressable } from './CaptureAnimatedPressable';
 import { FilteredPhotoCanvas } from './FilteredPhotoCanvas';
-
-const PHOTO_FILTER_BUTTON_SIZE = 34;
-const PHOTO_FILTER_PREVIEW_SIZE = 30;
+import {
+  PHOTO_FILTER_PREVIEW_SIZE,
+  styles,
+} from './captureCardStyles';
 
 export type PhotoFilterCarouselProps = {
   embedded?: boolean;
@@ -98,45 +99,4 @@ export const PhotoFilterCarousel = memo(function PhotoFilterCarousel({
       {content}
     </View>
   );
-});
-
-const styles = StyleSheet.create({
-  photoFilterTray: {
-    maxWidth: '100%',
-    paddingHorizontal: 6,
-    paddingVertical: 5,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 999,
-    overflow: 'hidden',
-  },
-  photoFilterScroll: {
-    flexGrow: 0,
-  },
-  photoFilterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  photoFilterEmbeddedScroll: {
-    maxWidth: 166,
-  },
-  photoFilterButton: {
-    width: PHOTO_FILTER_BUTTON_SIZE,
-    height: PHOTO_FILTER_BUTTON_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: PHOTO_FILTER_BUTTON_SIZE / 2,
-    borderWidth: 2,
-    padding: 1,
-  },
-  photoFilterPreviewClip: {
-    width: PHOTO_FILTER_PREVIEW_SIZE,
-    height: PHOTO_FILTER_PREVIEW_SIZE,
-    overflow: 'hidden',
-    borderRadius: PHOTO_FILTER_PREVIEW_SIZE / 2,
-  },
-  photoFilterPreviewCanvas: {
-    width: '100%',
-    height: '100%',
-  },
 });

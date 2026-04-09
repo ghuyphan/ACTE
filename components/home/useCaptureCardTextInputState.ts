@@ -1,19 +1,14 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, type TextInput, type ViewStyle } from 'react-native';
+import { Keyboard, type TextInput } from 'react-native';
 import { applyCommittedInlineEmoji, resolveCommittedInlineEmoji } from '../../services/noteDecorations';
 
 interface UseCaptureCardTextInputStateOptions {
   captureMode: 'text' | 'camera';
-  minimumVisibleInputY: number;
   noteText: string;
   noteInputRef: RefObject<TextInput | null>;
   onChangeNoteText: (nextText: string) => void;
   placeholderVariants: string[];
-  reduceMotionEnabled: boolean;
-  restaurantInputRef: RefObject<TextInput | null>;
 }
-
-type CaptureInputTarget = 'note' | 'restaurant';
 
 type CaptureKeyboardLiftOptions = {
   extraGap: number;
@@ -51,25 +46,19 @@ export function resolveCaptureKeyboardLift({
 }
 export function useCaptureCardTextInputState({
   captureMode,
-  minimumVisibleInputY,
   noteText,
   noteInputRef,
   onChangeNoteText,
   placeholderVariants,
-  reduceMotionEnabled,
-  restaurantInputRef,
 }: UseCaptureCardTextInputStateOptions) {
-  void minimumVisibleInputY;
-  void reduceMotionEnabled;
   const [textPlaceholderIndex, setTextPlaceholderIndex] = useState(0);
   const [isNoteInputFocused, setIsNoteInputFocused] = useState(false);
-  const [isRestaurantInputFocused, setIsRestaurantInputFocused] = useState(false);
   const [recentAutoEmoji, setRecentAutoEmoji] = useState<{ emoji: string; token: number } | null>(null);
-  const focusedInputRef = useRef<CaptureInputTarget | null>(null);
+  const focusedInputRef = useRef(false);
   const pendingBlurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recentAutoEmojiTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recentAutoEmojiTokenRef = useRef(0);
-  const isTextEntryFocused = isNoteInputFocused || isRestaurantInputFocused;
+  const isTextEntryFocused = isNoteInputFocused;
   const activeTextPlaceholder =
     placeholderVariants[textPlaceholderIndex % placeholderVariants.length] ?? placeholderVariants[0] ?? '';
   const clearRecentAutoEmoji = useCallback(() => {
@@ -91,44 +80,27 @@ export function useCaptureCardTextInputState({
   const resetKeyboardLift = useCallback((clearFocus = false) => {
     cancelPendingBlurResolution();
     if (clearFocus) {
-      focusedInputRef.current = null;
+      focusedInputRef.current = false;
       setIsNoteInputFocused(false);
-      setIsRestaurantInputFocused(false);
     }
   }, [cancelPendingBlurResolution]);
 
-  const endTextEntrySession = useCallback((target?: CaptureInputTarget) => {
+  const endTextEntrySession = useCallback(() => {
     cancelPendingBlurResolution();
-    if (!target || focusedInputRef.current === target) {
-      focusedInputRef.current = null;
-    }
-    if (!target || target === 'note') {
-      setIsNoteInputFocused(false);
-    }
-    if (!target || target === 'restaurant') {
-      setIsRestaurantInputFocused(false);
-    }
+    focusedInputRef.current = false;
+    setIsNoteInputFocused(false);
   }, [cancelPendingBlurResolution]);
-  const scheduleBlurResolution = useCallback((target: CaptureInputTarget) => {
+  const scheduleBlurResolution = useCallback(() => {
     cancelPendingBlurResolution();
     pendingBlurTimeoutRef.current = setTimeout(() => {
       pendingBlurTimeoutRef.current = null;
-
-      if (focusedInputRef.current === target) {
-        focusedInputRef.current = null;
-      }
-
-      if (target === 'note') {
-        setIsNoteInputFocused(false);
-      } else {
-        setIsRestaurantInputFocused(false);
-      }
+      focusedInputRef.current = false;
+      setIsNoteInputFocused(false);
     }, 0);
   }, [cancelPendingBlurResolution]);
   const blurCaptureInputs = useCallback(() => {
     noteInputRef.current?.blur();
-    restaurantInputRef.current?.blur();
-  }, [noteInputRef, restaurantInputRef]);
+  }, [noteInputRef]);
 
   useEffect(() => {
     if (captureMode !== 'text') {
@@ -138,7 +110,7 @@ export function useCaptureCardTextInputState({
 
   useEffect(() => {
     const keyboardDidHideSubscription = Keyboard.addListener('keyboardDidHide', () => {
-      if (focusedInputRef.current == null) {
+      if (!focusedInputRef.current) {
         return;
       }
 
@@ -167,7 +139,6 @@ export function useCaptureCardTextInputState({
     clearRecentAutoEmoji();
     setRecentAutoEmoji(null);
   }, [captureMode, clearRecentAutoEmoji]);
-  const keyboardLiftAnimatedStyle = useMemo<ViewStyle>(() => ({}), []);
 
   const dismissCaptureInputs = useCallback(() => {
     blurCaptureInputs();
@@ -199,24 +170,12 @@ export function useCaptureCardTextInputState({
 
   const handleNoteInputFocus = useCallback(() => {
     cancelPendingBlurResolution();
-    focusedInputRef.current = 'note';
+    focusedInputRef.current = true;
     setIsNoteInputFocused(true);
-    setIsRestaurantInputFocused(false);
   }, [cancelPendingBlurResolution]);
 
   const handleNoteInputBlur = useCallback(() => {
-    scheduleBlurResolution('note');
-  }, [scheduleBlurResolution]);
-
-  const handleRestaurantInputFocus = useCallback(() => {
-    cancelPendingBlurResolution();
-    focusedInputRef.current = 'restaurant';
-    setIsRestaurantInputFocused(true);
-    setIsNoteInputFocused(false);
-  }, [cancelPendingBlurResolution]);
-
-  const handleRestaurantInputBlur = useCallback(() => {
-    scheduleBlurResolution('restaurant');
+    scheduleBlurResolution();
   }, [scheduleBlurResolution]);
 
   const rotatePlaceholderIfNeeded = useCallback(
@@ -243,12 +202,9 @@ export function useCaptureCardTextInputState({
       handleChangeNoteText,
       handleNoteInputBlur,
       handleNoteInputFocus,
-      handleRestaurantInputBlur,
-      handleRestaurantInputFocus,
       isNoteInputFocused,
       recentAutoEmoji,
       isTextEntryFocused,
-      keyboardLiftAnimatedStyle,
       rotatePlaceholderIfNeeded,
     }),
     [
@@ -257,12 +213,9 @@ export function useCaptureCardTextInputState({
       handleChangeNoteText,
       handleNoteInputBlur,
       handleNoteInputFocus,
-      handleRestaurantInputBlur,
-      handleRestaurantInputFocus,
       isNoteInputFocused,
       recentAutoEmoji,
       isTextEntryFocused,
-      keyboardLiftAnimatedStyle,
       rotatePlaceholderIfNeeded,
     ]
   );

@@ -215,8 +215,6 @@ export default function HomeScreen() {
   const {
     captureMode,
     cameraSessionKey,
-    restaurantName,
-    setRestaurantName,
     noteText,
     setNoteText,
     capturedPhoto,
@@ -235,7 +233,6 @@ export default function HomeScreen() {
     cameraRef,
     captureScale,
     captureTranslateY,
-    flashAnim,
     shutterScale,
     isModeSwitchAnimating,
     toggleCaptureMode,
@@ -287,23 +284,6 @@ export default function HomeScreen() {
     () => (isPhotoNoteQuotaReady ? getRemainingPhotoSlots(tier, photoNoteCount) : null),
     [isPhotoNoteQuotaReady, photoNoteCount, tier]
   );
-  const cameraStatusText = useMemo(() => {
-    if (tier !== 'plus' && !isPhotoNoteQuotaReady) {
-      return t(
-        'capture.photoLimitCheckingHint',
-        'Checking your free photo note limit...'
-      );
-    }
-
-    if (tier !== 'plus' && remainingPhotoSlots === 0) {
-      return t(
-        'capture.photoLimitReachedHint',
-        'Free plan photo limit reached. Upgrade to Noto Plus to add more photo notes and import from your library.'
-      );
-    }
-
-    return null;
-  }, [isPhotoNoteQuotaReady, remainingPhotoSlots, t, tier]);
   useEffect(() => {
     const isCameraHintEligible =
       captureMode === 'camera' &&
@@ -1298,7 +1278,7 @@ export default function HomeScreen() {
         const lat = currentLocation.coords.latitude;
         const lon = currentLocation.coords.longitude;
         const geocodedName = await reverseGeocode(lat, lon);
-        const locationName = restaurantName.trim() || geocodedName;
+        const locationName = geocodedName;
 
         let content = noteText.trim();
 
@@ -1434,7 +1414,6 @@ export default function HomeScreen() {
     capturedPairedVideo,
     selectedPhotoFilterId,
     reverseGeocode,
-    restaurantName,
     createNote,
     radius,
     finalizeSavedCapture,
@@ -1650,8 +1629,6 @@ export default function HomeScreen() {
           lockedNoteColorIds={lockedPremiumNoteColorIds}
           previewOnlyNoteColorIds={previewOnlyNoteColorIds}
           onPressLockedNoteColor={() => showPlusSheet('color')}
-          restaurantName={restaurantName}
-          onChangeRestaurantName={setRestaurantName}
           capturedPhoto={capturedPhoto}
           capturedPairedVideo={capturedPairedVideo}
           onRetakePhoto={() => {
@@ -1677,7 +1654,6 @@ export default function HomeScreen() {
           cameraRef={cameraRef}
           cameraDevice={cameraDevice}
           isCameraPreviewActive={isCameraPreviewActive}
-          flashAnim={flashAnim}
           permissionGranted={Boolean(permission?.granted)}
           onShutterPressIn={handleShutterPressIn}
           onShutterPressOut={handleShutterPressOut}
@@ -1697,7 +1673,6 @@ export default function HomeScreen() {
           isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
           isLivePhotoCaptureSettling={isLivePhotoCaptureSettling}
           isLivePhotoSaveGuardActive={isLivePhotoSaveGuardActive}
-          cameraStatusText={captureMode === 'camera' ? cameraStatusText : null}
           cameraInstructionText={
             captureMode === 'camera' && showLivePhotoCameraHint
               ? t('capture.livePhotoCaptureHint', 'Tap for a photo. Hold for a live photo.')
@@ -1720,7 +1695,6 @@ export default function HomeScreen() {
       cameraPermissionRequiresSettings,
       cameraRef,
       cameraSessionKey,
-      cameraStatusText,
       canImportFromLibrary,
       captureMode,
       captureScale,
@@ -1730,7 +1704,6 @@ export default function HomeScreen() {
       capturedPhoto,
       colors,
       facing,
-      flashAnim,
       handleCaptureTargetChange,
       handleChangeNoteColor,
       handleCaptureTextEntryFocusChange,
@@ -1756,7 +1729,6 @@ export default function HomeScreen() {
       previewOnlyNoteColorIds,
       radius,
       remainingPhotoSlots,
-      restaurantName,
       saveButtonState,
       saving,
       selectedPhotoFilterId,
@@ -1765,7 +1737,6 @@ export default function HomeScreen() {
       setFacing,
       setNoteText,
       setRadius,
-      setRestaurantName,
       setSelectedPhotoFilterId,
       saveNote,
       shutterScale,

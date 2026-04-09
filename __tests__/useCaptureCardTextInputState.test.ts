@@ -53,13 +53,8 @@ describe('resolveCaptureKeyboardLift', () => {
 });
 
 describe('useCaptureCardTextInputState', () => {
-  it('keeps text-entry focus active while switching between capture inputs', async () => {
+  it('keeps text-entry focus active until the note field blur resolves', async () => {
     const noteInputRef = {
-      current: {
-        measureInWindow: jest.fn(),
-      },
-    } as any;
-    const restaurantInputRef = {
       current: {
         measureInWindow: jest.fn(),
       },
@@ -67,13 +62,10 @@ describe('useCaptureCardTextInputState', () => {
     const { result } = renderHook(() =>
       useCaptureCardTextInputState({
         captureMode: 'text',
-        minimumVisibleInputY: 120,
         noteText: '',
         noteInputRef,
         onChangeNoteText: jest.fn(),
         placeholderVariants: ['Note about this place...'],
-        reduceMotionEnabled: false,
-        restaurantInputRef,
       })
     );
 
@@ -87,14 +79,9 @@ describe('useCaptureCardTextInputState', () => {
 
     act(() => {
       result.current.handleNoteInputBlur();
-      result.current.handleRestaurantInputFocus();
     });
 
     expect(result.current.isTextEntryFocused).toBe(true);
-
-    act(() => {
-      result.current.handleRestaurantInputBlur();
-    });
 
     await waitFor(() => {
       expect(result.current.isTextEntryFocused).toBe(false);
@@ -119,23 +106,14 @@ describe('useCaptureCardTextInputState', () => {
         measureInWindow: jest.fn(),
       },
     } as any;
-    const restaurantInputRef = {
-      current: {
-        blur: restaurantBlur,
-        measureInWindow: jest.fn(),
-      },
-    } as any;
 
     const { result, unmount } = renderHook(() =>
       useCaptureCardTextInputState({
         captureMode: 'text',
-        minimumVisibleInputY: 120,
         noteText: '',
         noteInputRef,
         onChangeNoteText: jest.fn(),
         placeholderVariants: ['Note about this place...'],
-        reduceMotionEnabled: false,
-        restaurantInputRef,
       })
     );
 
@@ -150,7 +128,6 @@ describe('useCaptureCardTextInputState', () => {
     });
 
     expect(noteBlur).toHaveBeenCalled();
-    expect(restaurantBlur).toHaveBeenCalled();
     expect(result.current.isTextEntryFocused).toBe(false);
 
     unmount();
