@@ -1,6 +1,10 @@
 import type { ReactNode } from 'react';
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
-import { environment, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
+import {
+  environment,
+  interactiveDismissDisabled,
+  presentationDragIndicator,
+} from '@expo/ui/swift-ui/modifiers';
 import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Sheet } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
@@ -82,9 +86,12 @@ export default function AppSheet({
       : null,
     iosContainerStyle,
   ];
-  const groupModifiers: any[] = iosGroupModifiers ?? [
-    presentationDragIndicator('visible'),
-    environment('colorScheme', resolvedIOSColorScheme),
+  const groupModifiers: any[] = [
+    ...(iosGroupModifiers ?? [
+      presentationDragIndicator('visible'),
+      environment('colorScheme', resolvedIOSColorScheme),
+    ]),
+    interactiveDismissDisabled(!dismissible),
   ];
 
   return (

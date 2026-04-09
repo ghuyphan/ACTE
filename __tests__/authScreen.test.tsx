@@ -104,6 +104,7 @@ jest.mock('@expo/ui/jetpack-compose', () => ({
 
 jest.mock('@expo/ui/swift-ui/modifiers', () => ({
   environment: jest.fn(),
+  interactiveDismissDisabled: jest.fn(),
   presentationDetents: jest.fn(),
   presentationDragIndicator: jest.fn(),
 }));

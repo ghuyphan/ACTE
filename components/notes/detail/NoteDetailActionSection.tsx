@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Keyboard, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { AnimatedActionButton } from './NoteDetailPrimitives';
 
@@ -69,21 +69,39 @@ export default function NoteDetailActionSection({
                 </View>
             </AnimatedActionButton>
 
-            <AnimatedActionButton
-                onPress={onDownloadPolaroid}
-                testID="note-detail-download-polaroid"
-                style={[
-                    styles.actionBtn,
-                    {
-                        backgroundColor: actionButtonBackground,
-                        borderColor: actionButtonBorder,
-                    },
-                ]}
-                delay={140}
-                disabled={isDeleting || isDownloadingPolaroid || isEditing}
-            >
-                <Ionicons name="download-outline" size={20} color={colors.secondaryText} />
-            </AnimatedActionButton>
+            {isEditing ? (
+                <AnimatedActionButton
+                    onPress={Keyboard.dismiss}
+                    testID="note-detail-dismiss-keyboard"
+                    style={[
+                        styles.actionBtn,
+                        {
+                            backgroundColor: actionButtonBackground,
+                            borderColor: actionButtonBorder,
+                        },
+                    ]}
+                    delay={140}
+                    disabled={isDeleting}
+                >
+                    <Ionicons name="chevron-down-outline" size={20} color={colors.secondaryText} />
+                </AnimatedActionButton>
+            ) : (
+                <AnimatedActionButton
+                    onPress={onDownloadPolaroid}
+                    testID="note-detail-download-polaroid"
+                    style={[
+                        styles.actionBtn,
+                        {
+                            backgroundColor: actionButtonBackground,
+                            borderColor: actionButtonBorder,
+                        },
+                    ]}
+                    delay={140}
+                    disabled={isDeleting || isDownloadingPolaroid}
+                >
+                    <Ionicons name="download-outline" size={20} color={colors.secondaryText} />
+                </AnimatedActionButton>
+            )}
 
             <AnimatedActionButton
                 onPress={onDelete}

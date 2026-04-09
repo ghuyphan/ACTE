@@ -1,6 +1,7 @@
 import React from 'react';
-import { Alert, ScrollView } from 'react-native';
+import { Alert, Keyboard, ScrollView } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { interactiveDismissDisabled } from '@expo/ui/swift-ui/modifiers';
 
 const mockGetNoteById = jest.fn<Promise<unknown>, [string]>();
 const mockDeleteNote = jest.fn<Promise<void>, [string]>(async () => undefined);
@@ -65,6 +66,7 @@ jest.mock('@expo/ui/swift-ui', () => {
 
 jest.mock('@expo/ui/swift-ui/modifiers', () => ({
   environment: jest.fn(),
+  interactiveDismissDisabled: jest.fn(),
   presentationDragIndicator: jest.fn(),
 }));
 
@@ -510,6 +512,42 @@ describe('NoteDetailSheet', () => {
 
     await waitFor(() => {
       expect(getByTestId('note-detail-location-input')).toBeTruthy();
+    });
+  });
+
+  it('disables interactive sheet dismissal while editing', async () => {
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+
+    await waitFor(() => {
+      expect(interactiveDismissDisabled).toHaveBeenCalledWith(true);
+      expect(getByTestId('note-detail-dismiss-keyboard')).toBeTruthy();
+    });
+  });
+
+  it('dismisses the keyboard when the sheet closes', async () => {
+    const dismissSpy = jest.spyOn(Keyboard, 'dismiss');
+    const onClose = jest.fn();
+    const { rerender } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={onClose} />
+    );
+
+    await waitFor(() => {
+      expect(mockGetNoteById).toHaveBeenCalledWith('note-1');
+    });
+
+    rerender(<NoteDetailSheet noteId="note-1" visible={false} onClose={onClose} />);
+
+    await waitFor(() => {
+      expect(dismissSpy).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
     });
   });
 

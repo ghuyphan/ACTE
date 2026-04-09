@@ -259,6 +259,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [showPolaroidCapture, setShowPolaroidCapture] = useState(false);
     const [polaroidAnimationUri, setPolaroidAnimationUri] = useState<string | null>(null);
     const [polaroidAnimationSuccess, setPolaroidAnimationSuccess] = useState(false);
+    const [locationKeyboardScrollToken, setLocationKeyboardScrollToken] = useState(0);
 
     const cardScaleValue = useSharedValue(0.92);
     const cardOpacityValue = useSharedValue(0);
@@ -275,7 +276,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const scrollContainerRef = useRef<any>(null);
     const infoSectionOffsetYRef = useRef(0);
     const locationFieldOffsetYRef = useRef(0);
-    const shouldScrollLocationIntoViewRef = useRef(false);
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingDeleteNoteIdRef = useRef<string | null>(null);
@@ -731,6 +731,16 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         });
     }, [editModeAnim, isEditing, reduceMotionEnabled]);
 
+    const scrollLocationFieldIntoView = useCallback((animated = true) => {
+        if (Platform.OS === 'android') {
+            const targetY = Math.max(0, infoSectionOffsetYRef.current + locationFieldOffsetYRef.current - 28);
+            scrollContainerRef.current?.scrollTo?.({ y: targetY, animated });
+            return;
+        }
+
+        scrollContainerRef.current?.scrollToEnd?.({ animated });
+    }, []);
+
     useEffect(() => {
         if (!isEditing) {
             setDoodleModeEnabled(false);
@@ -805,15 +815,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
     }, [locationSelection]);
 
-    const scrollLocationFieldIntoView = useCallback((animated = true) => {
-        if (Platform.OS !== 'android') {
-            return;
-        }
-
-        const targetY = Math.max(0, infoSectionOffsetYRef.current + locationFieldOffsetYRef.current - 28);
-        scrollContainerRef.current?.scrollTo?.({ y: targetY, animated });
-    }, []);
-
     const handleInfoSectionLayout = useCallback((event: LayoutChangeEvent) => {
         infoSectionOffsetYRef.current = event.nativeEvent.layout.y;
     }, []);
@@ -827,44 +828,30 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             return;
         }
 
-        if (Platform.OS === 'android') {
-            shouldScrollLocationIntoViewRef.current = true;
-            setTimeout(() => {
-                scrollLocationFieldIntoView();
-            }, 120);
-            return;
-        }
+        requestAnimationFrame(() => {
+            scrollLocationFieldIntoView();
+        });
 
-        setTimeout(() => {
-            scrollContainerRef.current?.scrollToEnd?.({ animated: true });
-        }, 120);
+        if (Platform.OS === 'android') {
+            setLocationKeyboardScrollToken((current) => current + 1);
+        }
     }, [isEditing, scrollLocationFieldIntoView]);
 
     useEffect(() => {
-        if (Platform.OS !== 'android') {
+        if (Platform.OS !== 'android' || !isEditing || locationKeyboardScrollToken === 0) {
             return;
         }
 
         const keyboardDidShowSubscription = Keyboard.addListener('keyboardDidShow', () => {
-            if (!shouldScrollLocationIntoViewRef.current) {
-                return;
-            }
-
-            setTimeout(() => {
+            requestAnimationFrame(() => {
                 scrollLocationFieldIntoView();
-                shouldScrollLocationIntoViewRef.current = false;
-            }, 60);
-        });
-
-        const keyboardDidHideSubscription = Keyboard.addListener('keyboardDidHide', () => {
-            shouldScrollLocationIntoViewRef.current = false;
+            });
         });
 
         return () => {
             keyboardDidShowSubscription.remove();
-            keyboardDidHideSubscription.remove();
         };
-    }, [scrollLocationFieldIntoView]);
+    }, [isEditing, locationKeyboardScrollToken, scrollLocationFieldIntoView]);
 
     const importStickerFromSource = useCallback(async (
         source: StickerImportSource,
@@ -1399,6 +1386,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     }, [onClosed, performDelete, reduceMotionEnabled, visible]);
 
     const handleSheetDismiss = useCallback(() => {
+        Keyboard.dismiss();
         onClose();
     }, [onClose]);
 
@@ -1798,6 +1786,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 <AppSheet
                     visible={visible}
                     onClose={handleSheetDismiss}
+                    dismissible={!isEditing}
                     androidScrollable
                     androidKeyboardBehavior="fillParent"
                 >
@@ -1817,7 +1806,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     return (
         <>
-            <AppSheet visible={visible} onClose={handleSheetDismiss}>
+            <AppSheet visible={visible} onClose={handleSheetDismiss} dismissible={!isEditing}>
                 {renderBody()}
             </AppSheet>
             <StickerSourceSheet

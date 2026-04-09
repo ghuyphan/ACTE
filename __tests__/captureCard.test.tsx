@@ -50,6 +50,7 @@ jest.mock('@expo/ui/swift-ui', () => {
 
 jest.mock('@expo/ui/swift-ui/modifiers', () => ({
   environment: jest.fn(),
+  interactiveDismissDisabled: jest.fn(),
   presentationDragIndicator: jest.fn(),
 }));
 

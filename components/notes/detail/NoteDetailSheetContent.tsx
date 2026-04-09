@@ -5,7 +5,6 @@ import { type TFunction } from 'i18next';
 import React from 'react';
 import {
     Dimensions,
-    KeyboardAvoidingView,
     type LayoutChangeEvent,
     Platform,
     Pressable,
@@ -660,10 +659,7 @@ export default function NoteDetailSheetContent({
     );
 
     return (
-        <KeyboardAvoidingView
-            style={styles.sheetSurface}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        <View style={styles.sheetSurface}>
             {interactionFeedback ? (
                 <View pointerEvents="none" style={styles.feedbackOverlay}>
                     <TransientStatusChip
@@ -692,7 +688,10 @@ export default function NoteDetailSheetContent({
             {Platform.OS === 'android' ? (
                 <BottomSheetScrollView
                     ref={scrollContainerRef}
-                    contentContainerStyle={styles.scrollContent}
+                    contentContainerStyle={[
+                        styles.scrollContent,
+                        Platform.OS === 'android' ? styles.scrollContentAndroid : null,
+                    ]}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                 >
@@ -710,7 +709,7 @@ export default function NoteDetailSheetContent({
                     {scrollContent}
                 </ScrollView>
             )}
-        </KeyboardAvoidingView>
+        </View>
     );
 }
 
@@ -730,6 +729,9 @@ const styles = StyleSheet.create({
         padding: Layout.screenPadding,
         paddingTop: 16,
         paddingBottom: 60,
+    },
+    scrollContentAndroid: {
+        paddingBottom: 80,
     },
     feedbackOverlay: {
         position: 'absolute',
