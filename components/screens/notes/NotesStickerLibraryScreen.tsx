@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Layout, Radii, Spacing, Typography } from '../../../constants/theme';
+import { Layout } from '../../../constants/theme';
 import { useNotesStore } from '../../../hooks/useNotes';
 import { useTheme } from '../../../hooks/useTheme';
 import StampStickerArtwork from '../../notes/StampStickerArtwork';
@@ -263,36 +263,27 @@ export default function NotesStickerLibraryScreen() {
     >
       <View
         style={[
-          styles.emptyState,
           styles.emptyStateScreen,
+          styles.emptyScreen,
           {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            marginHorizontal: Layout.screenPadding,
-            marginTop: 12,
-            marginBottom: insets.bottom + 28,
+            paddingBottom: insets.bottom + 28,
           },
         ]}
       >
-        <View
-          style={[
-            styles.emptyIconWrap,
-            {
-              backgroundColor: colors.primarySoft,
-            },
-          ]}
-        >
-          <Ionicons name="sparkles-outline" size={24} color={colors.primary} />
+        <View style={styles.emptyState}>
+          <View style={styles.emptyIconWrap}>
+            <Ionicons name="sparkles-outline" size={44} color={colors.secondaryText} />
+          </View>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+            {t('notes.stickerLibrary.emptyTitle', 'No stamps yet')}
+          </Text>
+          <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
+            {t(
+              'notes.stickerLibrary.emptyBody',
+              'Create a sticker or stamp in a note and it will start filling this shelf.'
+            )}
+          </Text>
         </View>
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>
-          {t('notes.stickerLibrary.emptyTitle', 'No stamps yet')}
-        </Text>
-        <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-          {t(
-            'notes.stickerLibrary.emptyBody',
-            'Create a sticker or stamp in a note and it will start filling this shelf.'
-          )}
-        </Text>
       </View>
     </View>
   );
@@ -301,6 +292,11 @@ export default function NotesStickerLibraryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  emptyScreen: {
+    flex: 1,
+    paddingHorizontal: Layout.screenPadding,
+    justifyContent: 'center',
   },
   sectionHeaderRow: {
     width: '100%',
@@ -359,34 +355,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   emptyState: {
+    width: '100%',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: Radii.lg,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.xl,
-    marginTop: 4,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
   },
   emptyStateScreen: {
     flex: 1,
-    justifyContent: 'center',
   },
   emptyIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+    marginBottom: 16,
   },
   emptyTitle: {
-    ...Typography.screenTitle,
-    fontSize: 20,
+    fontSize: 22,
+    fontWeight: '600',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans',
   },
   emptyBody: {
-    ...Typography.body,
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
+    fontFamily: 'Noto Sans',
     marginTop: 8,
     maxWidth: 240,
   },

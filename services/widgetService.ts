@@ -966,6 +966,18 @@ function getWidgetSharedContainerUri(): string | null {
     return uri.endsWith('/') ? uri : `${uri}/`;
 }
 
+function getWidgetFileContainerUri(): string | null {
+    if (Platform.OS === 'ios') {
+        return getWidgetSharedContainerUri();
+    }
+
+    if (Platform.OS === 'android') {
+        return FileSystem.cacheDirectory;
+    }
+
+    return null;
+}
+
 async function copyPhotoForWidget(photoUri: string, destinationToken: string): Promise<string | undefined> {
     return copyFileForWidgetContainer(photoUri, WIDGET_IMAGE_DIRECTORY_NAME, destinationToken, 'jpg');
 }
@@ -1003,12 +1015,8 @@ async function copyFileForWidgetContainer(
     destinationToken: string,
     extensionHint?: string | null
 ): Promise<string | undefined> {
-    if (Platform.OS !== 'ios') {
-        return undefined;
-    }
-
-    const sharedContainerUri = getWidgetSharedContainerUri();
-    if (!sharedContainerUri) {
+    const containerUri = getWidgetFileContainerUri();
+    if (!containerUri) {
         return undefined;
     }
 
@@ -1017,12 +1025,12 @@ async function copyFileForWidgetContainer(
         return undefined;
     }
 
-    if (normalizedFileUri.startsWith(sharedContainerUri)) {
+    if (normalizedFileUri.startsWith(containerUri)) {
         return normalizedFileUri;
     }
 
     const safeToken = destinationToken.replace(/[^a-zA-Z0-9_-]/g, '');
-    const destinationDirectory = `${sharedContainerUri}${destinationDirectoryName}/`;
+    const destinationDirectory = `${containerUri}${destinationDirectoryName}/`;
     const resolvedExtension =
         sanitizeWidgetFileExtension(extensionHint) ??
         getWidgetFileExtensionFromUri(normalizedFileUri) ??
@@ -1170,8 +1178,8 @@ async function downloadRemoteImageToWidgetContainer(
     destinationDirectoryName: string,
     destinationToken: string
 ) {
-    const sharedContainerUri = getWidgetSharedContainerUri();
-    if (!sharedContainerUri) {
+    const containerUri = getWidgetFileContainerUri();
+    if (!containerUri) {
         return undefined;
     }
 
@@ -1181,7 +1189,7 @@ async function downloadRemoteImageToWidgetContainer(
     }
 
     const safeToken = destinationToken.replace(/[^a-zA-Z0-9_-]/g, '');
-    const destinationDirectory = `${sharedContainerUri}${destinationDirectoryName}/`;
+    const destinationDirectory = `${containerUri}${destinationDirectoryName}/`;
     const destinationPath = `${destinationDirectory}${safeToken}-${hashString(normalizedRemoteImageUrl)}.jpg`;
 
     try {
@@ -1213,12 +1221,12 @@ async function findExistingWidgetFileInSharedContainer(
     directoryName: string,
     filenamePrefix: string
 ) {
-    const sharedContainerUri = getWidgetSharedContainerUri();
-    if (!sharedContainerUri) {
+    const containerUri = getWidgetFileContainerUri();
+    if (!containerUri) {
         return undefined;
     }
 
-    const directoryUri = `${sharedContainerUri}${directoryName}/`;
+    const directoryUri = `${containerUri}${directoryName}/`;
 
     try {
         const entries = await FileSystem.readDirectoryAsync(directoryUri);

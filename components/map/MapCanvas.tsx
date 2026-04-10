@@ -106,6 +106,9 @@ interface MarkerContentProps {
   pulseActive: boolean;
   pulseKey: number;
   reduceMotionEnabled: boolean;
+  imageTrackingKey?: string | null;
+  onImageLoadStart?: (key: string) => void;
+  onImageLoadEnd?: (key: string) => void;
 }
 
 function getClusterSize(pointCount: number) {
@@ -202,6 +205,9 @@ const MarkerContent = memo(function MarkerContent({
   pulseActive,
   pulseKey,
   reduceMotionEnabled,
+  imageTrackingKey,
+  onImageLoadStart,
+  onImageLoadEnd,
 }: MarkerContentProps) {
   const activeProgress = useSharedValue(selected ? 1 : 0);
   const pulseProgress = useSharedValue(0);
@@ -277,6 +283,18 @@ const MarkerContent = memo(function MarkerContent({
     };
   });
 
+  const handleImageLoadStart = () => {
+    if (imageTrackingKey) {
+      onImageLoadStart?.(imageTrackingKey);
+    }
+  };
+
+  const handleImageLoadEnd = () => {
+    if (imageTrackingKey) {
+      onImageLoadEnd?.(imageTrackingKey);
+    }
+  };
+
   const clusterStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
       Math.max(activeProgress.value, pulseProgress.value),
@@ -351,6 +369,9 @@ const MarkerContent = memo(function MarkerContent({
                   style={styles.richMarkerImage}
                   contentFit="cover"
                   transition={0}
+                  onLoadStart={handleImageLoadStart}
+                  onLoad={handleImageLoadEnd}
+                  onError={handleImageLoadEnd}
                 />
               ) : (
                 <View style={[styles.richMarkerIconWrap, { backgroundColor: `${accentColor}14` }]}>
@@ -406,6 +427,9 @@ const MarkerContent = memo(function MarkerContent({
                   style={styles.stackMarkerImage}
                   contentFit="cover"
                   transition={0}
+                  onLoadStart={handleImageLoadStart}
+                  onLoad={handleImageLoadEnd}
+                  onError={handleImageLoadEnd}
                 />
               ) : (
                 <View style={[styles.stackMarkerIconWrap, { backgroundColor: `${color}16` }]}>
@@ -451,6 +475,9 @@ const MarkerContent = memo(function MarkerContent({
                   style={styles.photoMarkerImage}
                   contentFit="cover"
                   transition={0}
+                  onLoadStart={handleImageLoadStart}
+                  onLoad={handleImageLoadEnd}
+                  onError={handleImageLoadEnd}
                 />
               </View>
               <View
@@ -523,6 +550,7 @@ function MapCanvas({
   const isAndroid = Platform.OS === 'android';
   const palette = useMemo(() => getMapPalette(colors, isDark), [colors, isDark]);
   const [androidShouldTrackMarkerViews, setAndroidShouldTrackMarkerViews] = useState(isAndroid);
+  const [pendingMarkerImageKeys, setPendingMarkerImageKeys] = useState<Set<string>>(new Set());
   const androidMarkerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedCalloutAnchor = useMemo(() => ({ x: 0.5, y: 0.86 }), []);
   // Android applies map color scheme only from initial props, so remount on theme flips.
@@ -632,6 +660,65 @@ function MapCanvas({
       selectedNote?.id,
     ]
   );
+  const expectedMarkerImageKeys = useMemo(() => {
+    const nextKeys = new Set<string>();
+
+    for (const item of markerRenderItems) {
+      if (item.photoUri) {
+        nextKeys.add(`${item.key}::${item.photoUri}`);
+      }
+    }
+
+    for (const post of friendMarkers) {
+      const avatarUri = post.authorPhotoURLSnapshot?.trim();
+      if (avatarUri) {
+        nextKeys.add(`friend-${post.id}::${avatarUri}`);
+      }
+    }
+
+    return nextKeys;
+  }, [friendMarkers, markerRenderItems]);
+
+  useEffect(() => {
+    if (!isAndroid) {
+      setPendingMarkerImageKeys(new Set());
+      return;
+    }
+
+    setPendingMarkerImageKeys(new Set(expectedMarkerImageKeys));
+  }, [expectedMarkerImageKeys, isAndroid]);
+
+  const handleMarkerImageLoadStart = (imageKey: string) => {
+    if (!isAndroid) {
+      return;
+    }
+
+    setPendingMarkerImageKeys((currentKeys) => {
+      if (currentKeys.has(imageKey)) {
+        return currentKeys;
+      }
+
+      const nextKeys = new Set(currentKeys);
+      nextKeys.add(imageKey);
+      return nextKeys;
+    });
+  };
+
+  const handleMarkerImageLoadEnd = (imageKey: string) => {
+    if (!isAndroid) {
+      return;
+    }
+
+    setPendingMarkerImageKeys((currentKeys) => {
+      if (!currentKeys.has(imageKey)) {
+        return currentKeys;
+      }
+
+      const nextKeys = new Set(currentKeys);
+      nextKeys.delete(imageKey);
+      return nextKeys;
+    });
+  };
   useEffect(() => {
     return () => {
       if (androidMarkerRefreshTimerRef.current) {
@@ -714,6 +801,7 @@ function MapCanvas({
           node.groupId === selectedGroup!.id;
         const markerKey = showSelectedCallout ? `${key}-selected-${selectedNote!.id}` : key;
         const markerZIndex = showSelectedCallout ? 30 : isSelected ? 20 : node.isCluster ? 5 : 10;
+        const imageTrackingKey = photoUri ? `${key}::${photoUri}` : null;
 
         return (
           preferLiteMarkers && !node.isCluster ? (
@@ -743,7 +831,9 @@ function MapCanvas({
                 isSelected ||
                 pulseActive ||
                 reduceMotionEnabled ||
-                (isAndroid && androidShouldTrackMarkerViews)
+                (isAndroid &&
+                  (androidShouldTrackMarkerViews ||
+                    (imageTrackingKey ? pendingMarkerImageKeys.has(imageTrackingKey) : false)))
               }
               onPress={(event) => {
                 event.stopPropagation?.();
@@ -802,6 +892,9 @@ function MapCanvas({
                   pulseActive={pulseActive}
                   pulseKey={markerPulseKey}
                   reduceMotionEnabled={reduceMotionEnabled}
+                  imageTrackingKey={imageTrackingKey}
+                  onImageLoadStart={handleMarkerImageLoadStart}
+                  onImageLoadEnd={handleMarkerImageLoadEnd}
                 />
               </View>
             </Marker>
@@ -811,6 +904,9 @@ function MapCanvas({
       {friendMarkers.map((post) => {
         const isSelected = selectedFriendPostId === post.id;
         const authorLabel = post.authorDisplayName?.trim() || 'F';
+        const friendImageTrackingKey = post.authorPhotoURLSnapshot?.trim()
+          ? `friend-${post.id}::${post.authorPhotoURLSnapshot.trim()}`
+          : null;
 
         return (
           preferLiteMarkers ? (
@@ -831,7 +927,13 @@ function MapCanvas({
               coordinate={{ latitude: post.latitude, longitude: post.longitude }}
               anchor={{ x: 0.5, y: 0.5 }}
               tracksViewChanges={
-                isSelected || reduceMotionEnabled || (isAndroid && androidShouldTrackMarkerViews)
+                isSelected ||
+                reduceMotionEnabled ||
+                (isAndroid &&
+                  (androidShouldTrackMarkerViews ||
+                    (friendImageTrackingKey
+                      ? pendingMarkerImageKeys.has(friendImageTrackingKey)
+                      : false)))
               }
               zIndex={isSelected ? 20 : 10}
               onPress={(event) => {
@@ -855,6 +957,21 @@ function MapCanvas({
                       style={styles.friendAvatar}
                       contentFit="cover"
                       transition={0}
+                      onLoadStart={() => {
+                        if (friendImageTrackingKey) {
+                          handleMarkerImageLoadStart(friendImageTrackingKey);
+                        }
+                      }}
+                      onLoad={() => {
+                        if (friendImageTrackingKey) {
+                          handleMarkerImageLoadEnd(friendImageTrackingKey);
+                        }
+                      }}
+                      onError={() => {
+                        if (friendImageTrackingKey) {
+                          handleMarkerImageLoadEnd(friendImageTrackingKey);
+                        }
+                      }}
                     />
                   ) : (
                     <View style={[styles.friendAvatar, { backgroundColor: palette.friendSoft }]}>
