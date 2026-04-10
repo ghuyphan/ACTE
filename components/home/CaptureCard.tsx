@@ -21,8 +21,6 @@ import {
 } from 'react-native';
 import { Camera, type CameraDevice } from 'react-native-vision-camera';
 import Reanimated, {
-  FadeIn,
-  FadeOut,
   Easing,
   runOnJS,
   type SharedValue,
@@ -82,8 +80,6 @@ import {
   CAPTURE_SAVE_SUCCESS_EXIT,
   CAPTURE_SAVE_SUCCESS_RESET,
   CAPTURE_SAVE_SUCCESS_SCALE,
-  CAPTURE_TOOLBAR_ENTER,
-  CAPTURE_TOOLBAR_EXIT,
   getCaptureTiming,
   scaleCaptureDuration,
 } from './capture/captureMotion';
@@ -188,6 +184,7 @@ interface CaptureCardProps {
   cameraRef: RefObject<Camera | null>;
   cameraDevice?: CameraDevice;
   isCameraPreviewActive: boolean;
+  isCameraRevealAllowed?: boolean;
   permissionGranted: boolean;
   onShutterPressIn: () => void;
   onShutterPressOut: () => void;
@@ -251,6 +248,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   cameraRef,
   cameraDevice,
   isCameraPreviewActive,
+  isCameraRevealAllowed = true,
   permissionGranted,
   onShutterPressIn,
   onShutterPressOut,
@@ -556,6 +554,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     cameraSessionKey,
     permissionGranted,
     isCameraPreviewActive,
+    isCameraRevealAllowed,
     facing,
     cameraInstructionText,
     isLivePhotoCaptureInProgress,
@@ -952,15 +951,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     </AppSheetScaffold>
   );
 
-  const toolbarEntering = useMemo(
-    () => FadeIn.duration(getCaptureTiming(CAPTURE_TOOLBAR_ENTER, reduceMotionEnabled).duration).easing(CAPTURE_TOOLBAR_ENTER.easing),
-    [reduceMotionEnabled]
-  );
-  const toolbarExiting = useMemo(
-    () => FadeOut.duration(getCaptureTiming(CAPTURE_TOOLBAR_EXIT, reduceMotionEnabled).duration).easing(CAPTURE_TOOLBAR_EXIT.easing),
-    [reduceMotionEnabled]
-  );
-
   return (
     <>
       <View
@@ -1114,8 +1104,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               {controlsUiStage === 'text' ? (
                 <Reanimated.View
                   key="toolbar-text"
-                  entering={toolbarEntering}
-                  exiting={toolbarExiting}
                   style={styles.belowCardToolbarLayer}
                 >
                   <TextCaptureBottomBar
@@ -1146,8 +1134,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               ) : controlsUiStage === 'review' ? (
                 <Reanimated.View
                   key="toolbar-review"
-                  entering={toolbarEntering}
-                  exiting={toolbarExiting}
                   style={styles.belowCardToolbarLayer}
                 >
                   <PhotoCaptureBottomBar
@@ -1176,8 +1162,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               ) : (
                 <Reanimated.View
                   key="toolbar-live"
-                  entering={toolbarEntering}
-                  exiting={toolbarExiting}
                   style={styles.belowCardToolbarLayer}
                 >
                   <LiveCameraActionBar
@@ -1187,6 +1171,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     libraryImportLocked={libraryImportLocked}
                     needsCameraPermission={needsCameraPermission}
                     onOpenPhotoLibrary={onOpenPhotoLibrary}
+                    remainingPhotoSlots={remainingPhotoSlots}
                     t={t}
                   />
                 </Reanimated.View>

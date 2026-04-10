@@ -1047,12 +1047,18 @@ async function resolveWidgetStickerPlacementsJson(candidate: WidgetCandidate) {
         return null;
     }
 
+    // Widget surfaces should match the capture card's fully opaque sticker/stamp rendering.
+    const widgetPlacementsBase = parsedPlacements.map((placement) => ({
+        ...placement,
+        opacity: 1,
+    }));
+
     if (Platform.OS !== 'ios') {
-        return JSON.stringify(parsedPlacements);
+        return JSON.stringify(widgetPlacementsBase);
     }
 
     const widgetPlacements = await Promise.all(
-        parsedPlacements.map(async (placement) => {
+        widgetPlacementsBase.map(async (placement) => {
             const readableStickerUri = await getReadablePhotoUri(placement.asset.localUri);
             if (!readableStickerUri) {
                 const existingSharedStickerUri = await findExistingWidgetFileInSharedContainer(

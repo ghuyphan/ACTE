@@ -51,6 +51,7 @@ interface UseCaptureCardCameraControllerOptions {
   cameraSessionKey: number;
   permissionGranted: boolean;
   isCameraPreviewActive: boolean;
+  isCameraRevealAllowed: boolean;
   facing: 'back' | 'front';
   cameraInstructionText?: string | null;
   isLivePhotoCaptureInProgress: boolean;
@@ -76,6 +77,7 @@ export function useCaptureCardCameraController({
   cameraSessionKey,
   permissionGranted,
   isCameraPreviewActive,
+  isCameraRevealAllowed,
   facing,
   cameraInstructionText = null,
   isLivePhotoCaptureInProgress,
@@ -337,7 +339,7 @@ export function useCaptureCardCameraController({
     cameraAutoRecoveryCountRef.current = 0;
     setCameraUnavailable(false);
     setCameraIssueDetail(null);
-    if (!canShowLiveCameraPreview) {
+    if (!canShowLiveCameraPreview || !isCameraRevealAllowed) {
       return;
     }
 
@@ -356,6 +358,7 @@ export function useCaptureCardCameraController({
   }, [
     cameraTransitionMaskOpacity,
     canShowLiveCameraPreview,
+    isCameraRevealAllowed,
     reduceMotionEnabled,
   ]);
 
@@ -366,6 +369,11 @@ export function useCaptureCardCameraController({
     setCameraUnavailable(false);
     setCameraIssueDetail(null);
     setIsCameraReady(true);
+    if (!isCameraRevealAllowed) {
+      cameraTransitionMaskOpacity.value = withTiming(1, { duration: 0 });
+      return;
+    }
+
     cameraTransitionMaskOpacity.value = isSwitchingCamera
       ? reduceMotionEnabled
         ? withTiming(0, { duration: 0 })
@@ -380,6 +388,7 @@ export function useCaptureCardCameraController({
         });
   }, [
     cameraTransitionMaskOpacity,
+    isCameraRevealAllowed,
     reduceMotionEnabled,
   ]);
 
@@ -388,6 +397,14 @@ export function useCaptureCardCameraController({
     const previousShouldRenderCameraPreview = previousShouldRenderCameraPreviewRef.current;
     previousCanShowLiveCameraPreviewRef.current = canShowLiveCameraPreview;
     previousShouldRenderCameraPreviewRef.current = shouldRenderCameraPreview;
+
+    if (
+      !canShowLiveCameraPreview &&
+      previousCanShowLiveCameraPreview &&
+      shouldRenderCameraPreview
+    ) {
+      setIsCameraReady(false);
+    }
 
     if (
       canShowLiveCameraPreview &&
@@ -426,6 +443,46 @@ export function useCaptureCardCameraController({
     cameraRetryNonce,
     cameraSessionKey,
     cameraTransitionMaskOpacity,
+    reduceMotionEnabled,
+    shouldRenderCameraPreview,
+  ]);
+
+  useEffect(() => {
+    if (!shouldRenderCameraPreview) {
+      return;
+    }
+
+    if (!canShowLiveCameraPreview || !isCameraRevealAllowed) {
+      cameraTransitionMaskOpacity.value = withTiming(1, { duration: 0 });
+    }
+  }, [
+    cameraTransitionMaskOpacity,
+    canShowLiveCameraPreview,
+    isCameraRevealAllowed,
+    shouldRenderCameraPreview,
+  ]);
+
+  useEffect(() => {
+    if (
+      !shouldRenderCameraPreview ||
+      !canShowLiveCameraPreview ||
+      !isCameraRevealAllowed ||
+      !isCameraReady ||
+      cameraUnavailable
+    ) {
+      return;
+    }
+
+    cameraTransitionMaskOpacity.value = withTiming(0, {
+      duration: reduceMotionEnabled ? 0 : CAMERA_TRANSITION_FADE_OUT_MS,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [
+    cameraTransitionMaskOpacity,
+    cameraUnavailable,
+    canShowLiveCameraPreview,
+    isCameraReady,
+    isCameraRevealAllowed,
     reduceMotionEnabled,
     shouldRenderCameraPreview,
   ]);

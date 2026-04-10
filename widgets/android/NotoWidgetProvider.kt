@@ -43,9 +43,9 @@ private const val MEDIUM_WIDGET_MAX_RENDER_EDGE_PX = 960
 private const val SMALL_WIDGET_MAX_RENDER_PIXELS = 440_000
 private const val MEDIUM_WIDGET_MAX_RENDER_PIXELS = 600_000
 private const val STICKER_OUTLINE_COLOR = "#FAFAFA"
-private const val STICKER_OUTLINE_OPACITY = 0.72f
+private const val STICKER_OUTLINE_OPACITY = 1f
 private const val STAMP_OUTLINE_COLOR = "#FFFAF0"
-private const val STAMP_OUTLINE_OPACITY = 0.98f
+private const val STAMP_OUTLINE_OPACITY = 1f
 private const val STAMP_PAPER_BORDER_COLOR = "#8F7048"
 private const val STAMP_PAPER_BORDER_OPACITY = 0.10f
 private val STICKER_OUTLINE_OFFSETS = listOf(
@@ -229,7 +229,7 @@ private fun renderWidgetStampBitmap(
     strokeWidth = max(2.6f, metrics.perforationRadius * 0.72f)
     strokeCap = Paint.Cap.ROUND
     strokeJoin = Paint.Join.ROUND
-    color = Color.argb((250f * normalizedOpacity).toInt().coerceIn(0, 255), 255, 250, 240)
+    color = Color.argb((255f * STAMP_OUTLINE_OPACITY * normalizedOpacity).toInt().coerceIn(0, 255), 255, 250, 240)
   }
   val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     style = Paint.Style.STROKE
@@ -239,7 +239,7 @@ private fun renderWidgetStampBitmap(
     color = Color.argb((26f * normalizedOpacity).toInt().coerceIn(0, 255), 143, 112, 72)
   }
   val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-    isFilterBitmap = true
+    isFilterBitmap = false
     alpha = (255f * normalizedOpacity).toInt().coerceIn(0, 255)
   }
 
@@ -578,7 +578,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         stickerPlacementsJson = snapshot.stickerPlacementsJson,
         widthPx = resolveContentWidthPx(context, options, isMedium),
         heightPx = resolveContentHeightPx(context, options, isMedium),
-        overlayOpacity = getStickerOverlayOpacity(snapshot),
+        overlayOpacity = getStickerOverlayOpacity(),
         renderSpec = getWidgetOverlayRenderSpec(isMedium)
       )
 
@@ -1282,14 +1282,14 @@ class NotoWidgetProvider : AppWidgetProvider() {
           stickerHeight / 2f
         )
         val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-          isFilterBitmap = true
+          isFilterBitmap = false
           colorFilter = android.graphics.PorterDuffColorFilter(
             parseColor(STICKER_OUTLINE_COLOR, STICKER_OUTLINE_OPACITY * opacity * overlayOpacity),
             android.graphics.PorterDuff.Mode.SRC_IN
           )
         }
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-          isFilterBitmap = true
+          isFilterBitmap = false
           alpha = (opacity * (if (isStamp) 1f else overlayOpacity) * 255f).toInt().coerceIn(0, 255)
         }
 
@@ -1366,7 +1366,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
     }
 
-    private fun getStickerOverlayOpacity(_snapshot: NotoWidgetSnapshot): Float {
+    private fun getStickerOverlayOpacity(): Float {
       return STICKER_OVERLAY_OPACITY
     }
 
@@ -1386,8 +1386,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
         WidgetOverlayRenderSpec(
           doodleInsetDp = 0f,
           stickerInsetDp = 0f,
-          stickerMinimumBaseSizeDp = 48f,
-          stickerBaseSizeRatio = 0.24f
+          stickerMinimumBaseSizeDp = 56f,
+          stickerBaseSizeRatio = 0.30f
         )
       }
     }

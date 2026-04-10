@@ -232,6 +232,14 @@ jest.mock('../components/home/NotesFeed', () => {
         <Text testID="capture-scroll-enabled">{String(props.scrollEnabled)}</Text>
         <Pressable testID="hide-capture" onPress={() => props.onCaptureVisibilityChange?.(false)} />
         <Pressable testID="show-capture" onPress={() => props.onCaptureVisibilityChange?.(true)} />
+        <Pressable
+          testID="unsettle-capture"
+          onPress={() => props.onCaptureScrollSettledChange?.(false)}
+        />
+        <Pressable
+          testID="settle-capture"
+          onPress={() => props.onCaptureScrollSettledChange?.(true)}
+        />
       </View>
     );
   };
@@ -334,6 +342,27 @@ describe('HomeScreen camera lifecycle', () => {
     await waitFor(() => {
       expect(getByTestId('camera-preview-state')).toHaveTextContent('true');
       expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(true);
+    });
+  });
+
+  it('keeps the preview mounted but blocks reveal until the capture scroll settles again', async () => {
+    const { getByTestId } = render(<HomeScreen />);
+
+    expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(true);
+    expect(mockCaptureCardProps?.isCameraRevealAllowed).toBe(true);
+
+    fireEvent.press(getByTestId('unsettle-capture'));
+
+    await waitFor(() => {
+      expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(true);
+      expect(mockCaptureCardProps?.isCameraRevealAllowed).toBe(false);
+    });
+
+    fireEvent.press(getByTestId('settle-capture'));
+
+    await waitFor(() => {
+      expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(true);
+      expect(mockCaptureCardProps?.isCameraRevealAllowed).toBe(true);
     });
   });
 

@@ -8,7 +8,12 @@ import {
   isGoogleSigninConfigured,
 } from '../constants/auth';
 import i18n from '../constants/i18n';
-import { LOCAL_NOTES_SCOPE, migrateLocalNotesScopeToUser, setActiveNotesScope } from '../services/database';
+import {
+  getPersistedActiveNotesScopeSync,
+  LOCAL_NOTES_SCOPE,
+  migrateLocalNotesScopeToUser,
+  setActiveNotesScope,
+} from '../services/database';
 import { purgeLocalAccountScope } from '../services/accountCleanup';
 import { upsertPublicUserProfile } from '../services/publicProfileService';
 import { clearSharedFeedCache } from '../services/sharedFeedCache';
@@ -52,6 +57,10 @@ function isSupabaseAuthAvailable() {
 
 function isGoogleAuthAvailable() {
   return isSupabaseAuthAvailable() && isGoogleSigninConfigured;
+}
+
+function getStoredNotesScope() {
+  return getPersistedActiveNotesScopeSync() ?? LOCAL_NOTES_SCOPE;
 }
 
 function getUnavailableResult(provider: 'auth' | 'google'): AuthActionResult {
@@ -265,6 +274,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    setActiveNotesScope(getStoredNotesScope());
+
     const supabase = getSupabase();
     if (!isSupportedPlatform() || !supabase) {
       setIsReady(true);
@@ -296,7 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         const fallbackUser = mapSupabaseUser(session?.user);
-        setActiveNotesScope(fallbackUser?.uid ?? LOCAL_NOTES_SCOPE);
+        setActiveNotesScope(fallbackUser?.uid ?? getStoredNotesScope());
         setUser(fallbackUser);
         setIsReady(true);
       }
@@ -316,7 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn('[auth] Failed to load Supabase session:', error);
         if (active && authSyncRequestIdRef.current === requestId) {
           setUser(null);
-          setActiveNotesScope(LOCAL_NOTES_SCOPE);
+          setActiveNotesScope(getStoredNotesScope());
           setIsReady(true);
         }
       }

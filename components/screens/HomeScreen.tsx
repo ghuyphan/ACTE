@@ -140,6 +140,7 @@ export default function HomeScreen() {
   const [lockedCaptureSnapHeight, setLockedCaptureSnapHeight] = useState<number | null>(null);
   const [captureInteractionScrollLocked, setCaptureInteractionScrollLocked] = useState(false);
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
+  const [isCaptureScrollSettled, setIsCaptureScrollSettled] = useState(true);
   const [isFriendsFilterEnabled, setIsFriendsFilterEnabled] = useState(false);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [noteColor, setNoteColor] = useState<string | null>(DEFAULT_NOTE_COLOR_ID);
@@ -1713,6 +1714,7 @@ export default function HomeScreen() {
           cameraRef={cameraRef}
           cameraDevice={cameraDevice}
           isCameraPreviewActive={isCameraPreviewActive}
+          isCameraRevealAllowed={isCaptureScrollSettled}
           permissionGranted={Boolean(permission?.granted)}
           onShutterPressIn={handleShutterPressIn}
           onShutterPressOut={handleShutterPressOut}
@@ -1774,6 +1776,7 @@ export default function HomeScreen() {
       importingPhoto,
       insets.top,
       isCameraPreviewActive,
+      isCaptureScrollSettled,
       isStillPhotoCaptureInProgress,
       isLivePhotoCaptureInProgress,
       isLivePhotoCaptureSettling,
@@ -1833,6 +1836,7 @@ export default function HomeScreen() {
           revealToken={revealToken}
           onSettledArchiveItemChange={handleSettledArchiveItemChange}
           onCaptureVisibilityChange={setIsCaptureVisible}
+          onCaptureScrollSettledChange={setIsCaptureScrollSettled}
           scrollEnabled={
             !captureInteractionScrollLocked &&
             !isCaptureTextEntryFocused

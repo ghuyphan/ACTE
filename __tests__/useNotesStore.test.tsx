@@ -11,6 +11,7 @@ const mockCleanupOrphanMediaFiles = jest.fn();
 const mockGetInfoAsync = jest.fn();
 const mockDeleteAsync = jest.fn();
 const mockGetAllNotesForScope = jest.fn();
+const mockGetActiveNotesScope = jest.fn(() => '__local__');
 const mockUseAuth = jest.fn(() => ({
   user: null,
   isReady: true,
@@ -39,6 +40,7 @@ jest.mock('../services/mediaIntegrity', () => ({
 }));
 
 jest.mock('../services/database', () => ({
+  getActiveNotesScope: () => mockGetActiveNotesScope(),
   getAllNotes: jest.fn(async () => [...mockNotesDb]),
   getAllNotesForScope: (...args: unknown[]) => mockGetAllNotesForScope(...args),
   getNoteById: jest.fn(async (id: string) => mockNotesDb.find((note) => note.id === id) ?? null),
@@ -125,6 +127,7 @@ beforeEach(() => {
   mockSkipImmediateReminderForNewNote.mockResolvedValue(undefined);
   mockUpdateWidgetData.mockResolvedValue(undefined);
   mockGetAllNotesForScope.mockImplementation(async () => [...mockNotesDb]);
+  mockGetActiveNotesScope.mockReturnValue('__local__');
 });
 
 describe('useNotesStore', () => {
@@ -207,6 +210,18 @@ describe('useNotesStore', () => {
     });
 
     rerender({});
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-42');
+  });
+
+  it('loads the persisted active scope when auth is ready but the user session is unavailable', async () => {
+    mockGetActiveNotesScope.mockReturnValue('user-42');
+
+    const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);

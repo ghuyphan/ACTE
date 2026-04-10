@@ -431,6 +431,7 @@ function createCaptureCardProps(
       maxZoom: 4,
     } as any,
     isCameraPreviewActive: false,
+    isCameraRevealAllowed: true,
     permissionGranted: true,
     onShutterPressIn: () => undefined,
     onShutterPressOut: () => undefined,
@@ -817,6 +818,52 @@ describe('CaptureCard doodle handle', () => {
     expect(mockCameraUnmountCount).toBeGreaterThan(initialUnmountCount);
   });
 
+  it('keeps the live camera mounted while the reveal gate toggles during a settled scroll transition', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      permissionGranted: true,
+      needsCameraPermission: false,
+      isCameraPreviewActive: true,
+      isCameraRevealAllowed: true,
+    });
+
+    const initialMountCount = mockCameraMountCount;
+    const initialUnmountCount = mockCameraUnmountCount;
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          captureMode: 'camera',
+          permissionGranted: true,
+          needsCameraPermission: false,
+          isCameraPreviewActive: true,
+          isCameraRevealAllowed: false,
+        })}
+      />
+    );
+
+    expect(mockCameraViewProps?.isActive).toBe(true);
+    expect(mockCameraMountCount).toBe(initialMountCount);
+    expect(mockCameraUnmountCount).toBe(initialUnmountCount);
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          captureMode: 'camera',
+          permissionGranted: true,
+          needsCameraPermission: false,
+          isCameraPreviewActive: true,
+          isCameraRevealAllowed: true,
+        })}
+      />
+    );
+
+    expect(mockCameraViewProps?.isActive).toBe(true);
+    expect(mockCameraMountCount).toBe(initialMountCount);
+    expect(mockCameraUnmountCount).toBe(initialUnmountCount);
+  });
+
   it('starts Android camera active when the preview is active', () => {
     const originalPlatform = Platform.OS;
     Platform.OS = 'android';
@@ -917,6 +964,24 @@ describe('CaptureCard doodle handle', () => {
     expect(getByTestId('capture-shutter-button')).toBeTruthy();
     expect(getByTestId('capture-share-target-toggle')).toBeTruthy();
     expect(queryByTestId('capture-radius-toggle')).toBeNull();
+  });
+
+  it('explains that the remaining photo count includes imported photos once saved', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const t = ((key: string, fallback?: string, options?: { count?: number }) => {
+      if (key === 'capture.photoSlotsRemainingIncludingImports') {
+        return `${options?.count ?? 0} free photo notes left. Imports count when saved.`;
+      }
+
+      return fallback ?? key;
+    }) as any;
+    const { getByText } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      remainingPhotoSlots: 10,
+      t,
+    });
+
+    expect(getByText('10 free photo notes left. Imports count when saved.')).toBeTruthy();
   });
 
   it('lets you change the text-card doodle color', () => {

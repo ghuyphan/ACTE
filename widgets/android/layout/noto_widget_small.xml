@@ -188,12 +188,12 @@
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:letterSpacing="-0.03"
-                android:lineSpacingExtra="4dp"
+                android:lineSpacingExtra="3dp"
                 android:maxLines="4"
                 android:paddingLeft="20dp"
                 android:paddingRight="20dp"
                 android:textColor="#2B2621"
-                android:textSize="19sp" />
+                android:textSize="17sp" />
 
             <LinearLayout
                 android:id="@+id/widget_bottom_content"

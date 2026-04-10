@@ -8,8 +8,6 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
-  FadeInLeft,
-  FadeInRight,
   FadeInUp,
   useAnimatedStyle,
   useSharedValue,
@@ -28,7 +26,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout } from '../../../constants/theme';
 import { DOODLE_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
 import { useAuth } from '../../../hooks/useAuth';
-import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useFeedFocus } from '../../../hooks/useFeedFocus';
 import { useNotesStore } from '../../../hooks/useNotes';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
@@ -60,8 +57,6 @@ type NoteGridItem =
 
 const GRID_DOODLE_STROKE_WIDTH = 4.5;
 const GRID_STICKER_MIN_SIZE = 0;
-const GRID_TILE_ENTRY_STAGGER_MS = 28;
-const GRID_TILE_ENTRY_ANIMATION_LIMIT = 5;
 const GRID_DECORATION_REVEAL_DELAY_MS = 180;
 const MODE_TRANSITION_DURATION_MS = 220;
 const MODE_SWIPE_DISTANCE = 56;
@@ -96,25 +91,6 @@ export function resolveNotesModeFromSwipe(
   return currentMode;
 }
 
-function getGridTileEntering(index: number, shouldAnimate: boolean) {
-  if (!shouldAnimate || index > GRID_TILE_ENTRY_ANIMATION_LIMIT) {
-    return undefined;
-  }
-
-  const delay = Math.min(index, 8) * GRID_TILE_ENTRY_STAGGER_MS;
-  const column = index % 3;
-
-  if (column === 0) {
-    return FadeInLeft.delay(delay).springify().damping(18).stiffness(210).mass(0.72);
-  }
-
-  if (column === 2) {
-    return FadeInRight.delay(delay).springify().damping(18).stiffness(210).mass(0.72);
-  }
-
-  return FadeInUp.delay(delay).springify().damping(18).stiffness(210).mass(0.72);
-}
-
 function areStringArraysEqual(left: readonly string[], right: readonly string[]) {
   if (left.length !== right.length) {
     return false;
@@ -137,7 +113,6 @@ const GridTile = memo(function GridTile({
   onPress,
   index,
   photoFallbackLabel,
-  animateOnMount,
   showDecorations,
   sharedPhotoUri,
 }: {
@@ -153,7 +128,6 @@ const GridTile = memo(function GridTile({
   onPress: () => void;
   index: number;
   photoFallbackLabel: string;
-  animateOnMount: boolean;
   showDecorations: boolean;
   sharedPhotoUri: string | null;
 }) {
@@ -206,8 +180,6 @@ const GridTile = memo(function GridTile({
   }, [isPhotoTile, noteColor, textGradient]);
   const tileText = text || (isPhotoTile ? photoFallbackLabel : '');
   const showPhotoPlaceholder = item.kind === 'shared-post' && item.post.type === 'photo' && !imageUri;
-  const sharedTransitionTag = item.kind === 'note' ? `feed-note-card-${item.note.id}` : undefined;
-
   return (
     <Pressable
       onPress={onPress}
@@ -223,8 +195,6 @@ const GridTile = memo(function GridTile({
       ]}
     >
       <Reanimated.View
-        entering={getGridTileEntering(index, animateOnMount)}
-        sharedTransitionTag={sharedTransitionTag}
         style={[styles.tile, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
         {imageUri ? (
@@ -304,7 +274,6 @@ const GridTile = memo(function GridTile({
     </Pressable>
   );
 }, (prevProps, nextProps) => (
-  prevProps.animateOnMount === nextProps.animateOnMount &&
   prevProps.showDecorations === nextProps.showDecorations &&
   prevProps.index === nextProps.index &&
   prevProps.size === nextProps.size &&
@@ -325,7 +294,6 @@ const GridTile = memo(function GridTile({
 export default function NotesIndexScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const reduceMotionEnabled = useReducedMotion();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -402,9 +370,6 @@ export default function NotesIndexScreen() {
   const hasRecapNotes = notes.length > 0;
   const shouldRenderRecap = hasRecapNotes && (hasPreparedRecap || mode === 'recap');
   const shouldRenderAllMode = showAllModeLayer;
-  const shouldAnimateGridTiles =
-    !reduceMotionEnabled && Platform.OS !== 'android' && items.length <= GRID_TILE_ENTRY_ANIMATION_LIMIT + 1;
-
   useEffect(() => {
     if (!hasRecapNotes && mode === 'recap') {
       setMode('all');
@@ -643,7 +608,6 @@ export default function NotesIndexScreen() {
                           gap={gridGap}
                           colors={colors}
                           photoFallbackLabel={t('shared.photoMemory', 'Photo memory')}
-                          animateOnMount={shouldAnimateGridTiles}
                           showDecorations={showGridDecorations && mode === 'all'}
                           sharedPhotoUri={
                             item.kind === 'shared-post'

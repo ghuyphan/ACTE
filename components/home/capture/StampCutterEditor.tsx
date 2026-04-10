@@ -5,6 +5,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -842,7 +843,7 @@ function StampCutterEditor({
     scheduleStageAreaMeasurement();
   }, [scheduleStageAreaMeasurement, stageHeight, stageWidth, visible]);
 
-  if (!visible || !draft || !previewUri) {
+  if (!draft || !previewUri) {
     return null;
   }
   const previewSource = { uri: previewUri };
@@ -1112,7 +1113,20 @@ function StampCutterEditor({
     </View>
   );
 
-  return <GestureHandlerRootView style={styles.gestureRoot}>{content}</GestureHandlerRootView>;
+  return (
+    <Modal
+      animationType="none"
+      hardwareAccelerated
+      navigationBarTranslucent
+      onRequestClose={onClose}
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      transparent
+      visible={visible}
+    >
+      <GestureHandlerRootView style={styles.gestureRoot}>{content}</GestureHandlerRootView>
+    </Modal>
+  );
 }
 
 export default memo(StampCutterEditor);

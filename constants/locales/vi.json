@@ -101,6 +101,7 @@
         "photoLimitCheckingTitle": "Đang kiểm tra giới hạn ảnh",
         "photoLimitCheckingMessage": "Noto vẫn đang kiểm tra số ảnh bạn đã dùng. Hãy thử lại sau ít phút.",
         "photoLimitReachedHint": "Đã đạt giới hạn ảnh miễn phí",
+        "photoSlotsRemainingIncludingImports": "Còn {{count}} ghi chú ảnh miễn phí. Ảnh nhập từ thư viện sẽ tính khi bạn lưu.",
         "photoSlotsRemaining": "Còn {{count}} ghi chú ảnh miễn phí",
         "photoLibraryPermissionTitle": "Cần quyền ảnh",
         "photoLibraryPermissionMsg": "Cho phép truy cập thư viện ảnh để nhập ảnh vào ghi chú này.",

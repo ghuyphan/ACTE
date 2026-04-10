@@ -601,7 +601,7 @@ private func renderWidgetStampImage(_ image: UIImage, width: CGFloat, height: CG
             red: 1,
             green: 250.0 / 255.0,
             blue: 240.0 / 255.0,
-            alpha: 0.98 * normalizedOpacity
+            alpha: locketWidgetStampOutlineOpacity * normalizedOpacity
         )
         let borderColor = UIColor(
             red: 143.0 / 255.0,
@@ -654,11 +654,12 @@ private struct LocketWidgetStampStickerView: View {
         if let renderedStamp = renderWidgetStampImage(image, width: width, height: height, opacity: opacity) {
             Image(uiImage: renderedStamp)
                 .resizable()
-                .interpolation(.high)
+                .interpolation(.none)
                 .frame(width: width, height: height)
         } else {
             Image(uiImage: image)
                 .resizable()
+                .interpolation(.none)
                 .scaledToFit()
                 .frame(width: width, height: height)
                 .opacity(opacity)
@@ -684,7 +685,11 @@ private let locketWidgetStickerOutlineOffsets: [CGPoint] = [
     CGPoint(x: -0.71, y: 0.71),
     CGPoint(x: -0.92, y: 0.38)
 ]
-private let locketWidgetStickerOutlineOpacity: Double = 0.72
+private let locketWidgetTextOverlayOpacity: Double = 0.5
+private let locketWidgetPhotoOverlayOpacity: Double = 0.92
+private let locketWidgetStickerOverlayOpacity: Double = 1
+private let locketWidgetStickerOutlineOpacity: Double = 1
+private let locketWidgetStampOutlineOpacity: Double = 1
 
 private func getWidgetStickerOutlineSize(width: CGFloat, height: CGFloat) -> CGFloat {
     max(2.5, min(6, min(width, height) * 0.032))
@@ -740,6 +745,7 @@ private struct LocketWidgetStickerOverlay: View {
                                     Image(uiImage: outlineImage)
                                         .resizable()
                                         .renderingMode(.template)
+                                        .interpolation(.none)
                                         .scaledToFit()
                                         .frame(width: stickerWidth, height: stickerHeight)
                                         .foregroundStyle(Color.white)
@@ -761,6 +767,7 @@ private struct LocketWidgetStickerOverlay: View {
                             } else {
                                 Image(uiImage: renderedImage)
                                     .resizable()
+                                    .interpolation(.none)
                                     .scaledToFit()
                                     .frame(width: stickerWidth, height: stickerHeight)
                                     .opacity(placement.opacity * overlayOpacity)
@@ -1062,11 +1069,13 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var noteOverlayOpacity: Double {
-        payload.noteType == "photo" ? 0.92 : 0.5
+        payload.noteType == "photo"
+            ? locketWidgetPhotoOverlayOpacity
+            : locketWidgetTextOverlayOpacity
     }
 
     private var noteStickerOverlayOpacity: Double {
-        1
+        locketWidgetStickerOverlayOpacity
     }
 
     private var hasVisualOnlyTextContent: Bool {
@@ -1776,8 +1785,8 @@ private struct LocketWidgetEntryView: View {
                     placements: stickerPlacements,
                     overlayOpacity: noteStickerOverlayOpacity,
                     artboardInset: isExpanded ? 16 : 10,
-                    minimumBaseSize: isExpanded ? 64 : 48,
-                    baseSizeRatio: isExpanded ? 0.26 : 0.22
+                    minimumBaseSize: isExpanded ? 64 : 56,
+                    baseSizeRatio: isExpanded ? 0.26 : 0.30
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }

@@ -1087,6 +1087,7 @@ describe('widgetService', () => {
       })
     );
     expect(stickerPayload).toHaveLength(1);
+    expect(stickerPayload[0]?.opacity).toBe(1);
     expect(stickerPayload[0]?.renderMode).toBe('stamp');
     expect(stickerPayload[0]?.outlineEnabled).toBe(false);
     expect(String(stickerPayload[0]?.asset?.localUri ?? '')).toContain('file:///mock-group/widget-stickers/');

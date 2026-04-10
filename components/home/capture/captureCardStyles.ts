@@ -558,6 +558,11 @@ export const styles = StyleSheet.create({
     ...Typography.pill,
     textAlign: 'center',
   },
+  captureQuotaHintText: {
+    marginTop: 8,
+    maxWidth: '88%',
+    opacity: 0.84,
+  },
   cameraActionHintWrap: {
     flexDirection: 'row',
     alignItems: 'center',

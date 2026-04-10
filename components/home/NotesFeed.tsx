@@ -27,8 +27,6 @@ import { buildHomeFeedItems, type HomeFeedItem, getHomeFeedItemKey } from './fee
 import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
 import { getPolaroidFeelConfig } from './polaroidFeel';
 
-const MAX_STAGGERED_ENTRANCE_INDEX = 2;
-const ENTRANCE_DELAY_MS = 24;
 const DOCKED_HEADER_CONTENT_OVERLAP = 22;
 const CAPTURE_PAGE_STICKY_THRESHOLD = 0.62;
 const CAPTURE_PAGE_STICKY_VELOCITY_THRESHOLD = 0.9;
@@ -37,9 +35,6 @@ const REFRESH_PULL_THRESHOLD = -6;
 const INACTIVE_CARD_SCALE = 0.968;
 const INACTIVE_CARD_OPACITY = 0.78;
 const INACTIVE_CARD_TRANSLATE_Y = 24;
-function getEntranceDelay(index: number) {
-  return Math.min(index, MAX_STAGGERED_ENTRANCE_INDEX) * ENTRANCE_DELAY_MS;
-}
 
 const AnimatedNoteCard = memo(function AnimatedNoteCard({
   item,
@@ -73,33 +68,16 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   snapHeight: number;
 }) {
   const reduceMotionEnabled = useReducedMotion();
-  const scale = useSharedValue(0.9);
-  const cardTranslateY = useSharedValue(18);
-  const metaTranslateY = useSharedValue(10);
+  const scale = useSharedValue(1);
+  const cardTranslateY = useSharedValue(0);
+  const metaTranslateY = useSharedValue(0);
   const revealScale = useSharedValue(1);
   const revealTranslateY = useSharedValue(0);
   const revealRotation = useSharedValue(0);
   const revealGlow = useSharedValue(0);
   const revealFlash = useSharedValue(0);
   const lastRevealTokenRef = useRef<number | null>(null);
-  const mountIndex = useRef(index).current;
   const sharedTransitionTag = `feed-note-card-${item.id}`;
-  const entranceDelay = getEntranceDelay(mountIndex);
-
-  useEffect(() => {
-    scale.value = withDelay(entranceDelay, withTiming(1, {
-        duration: 260,
-        easing: Easing.out(Easing.cubic),
-      }));
-    cardTranslateY.value = withDelay(entranceDelay, withTiming(0, {
-        duration: 280,
-        easing: Easing.out(Easing.cubic),
-      }));
-    metaTranslateY.value = withDelay(entranceDelay, withTiming(0, {
-        duration: 240,
-        easing: Easing.out(Easing.cubic),
-      }));
-  }, [cardTranslateY, entranceDelay, metaTranslateY, scale]);
 
   useEffect(() => {
     if (!shouldReveal || revealToken === 0 || lastRevealTokenRef.current === revealToken) {
@@ -296,21 +274,8 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   scrollOffsetY: SharedValue<number>;
   snapHeight: number;
 }) {
-  const scale = useSharedValue(0.9);
-  const translateY = useSharedValue(18);
-  const mountIndex = useRef(index).current;
-  const entranceDelay = getEntranceDelay(mountIndex);
-
-  useEffect(() => {
-    scale.value = withDelay(entranceDelay, withTiming(1, {
-        duration: 260,
-        easing: Easing.out(Easing.cubic),
-      }));
-    translateY.value = withDelay(entranceDelay, withTiming(0, {
-        duration: 280,
-        easing: Easing.out(Easing.cubic),
-      }));
-  }, [entranceDelay, scale, translateY]);
+  const scale = useSharedValue(1);
+  const translateY = useSharedValue(0);
 
   const animatedCardStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }, { scale: scale.value }],
@@ -404,6 +369,7 @@ interface NotesFeedProps {
   };
   t: TFunction;
   onCaptureVisibilityChange?: (isVisible: boolean) => void;
+  onCaptureScrollSettledChange?: (settled: boolean) => void;
   capturePageLocked?: boolean;
   scrollEnabled?: boolean;
   revealedNoteId?: string | null;
@@ -431,6 +397,7 @@ export default function NotesFeed({
   colors,
   t,
   onCaptureVisibilityChange,
+  onCaptureScrollSettledChange,
   capturePageLocked = false,
   scrollEnabled = true,
   revealedNoteId = null,
@@ -441,6 +408,7 @@ export default function NotesFeed({
 }: NotesFeedProps) {
   const { height } = useWindowDimensions();
   const captureVisibilityRef = useRef(true);
+  const captureScrollSettledRef = useRef(true);
   const refreshGestureActiveRef = useRef(false);
   const lastOffsetYRef = useRef(0);
   const previousItemKeysRef = useRef<string[] | null>(null);
@@ -513,10 +481,24 @@ export default function NotesFeed({
     [onCaptureVisibilityChange, snapHeight]
   );
 
+  const reportCaptureScrollSettled = useCallback(
+    (nextSettled: boolean) => {
+      if (captureScrollSettledRef.current === nextSettled) {
+        return;
+      }
+
+      captureScrollSettledRef.current = nextSettled;
+      onCaptureScrollSettledChange?.(nextSettled);
+    },
+    [onCaptureScrollSettledChange]
+  );
+
   useEffect(() => {
     captureVisibilityRef.current = true;
     onCaptureVisibilityChange?.(true);
-  }, [onCaptureVisibilityChange]);
+    captureScrollSettledRef.current = true;
+    onCaptureScrollSettledChange?.(true);
+  }, [onCaptureScrollSettledChange, onCaptureVisibilityChange]);
 
   useEffect(() => {
     if (lastOffsetYRef.current >= 0) {
@@ -577,6 +559,7 @@ export default function NotesFeed({
       lastOffsetYRef.current = normalizedOffset;
       scrollOffsetY.value = normalizedOffset;
       reportCaptureVisibility(normalizedOffset);
+      reportCaptureScrollSettled(true);
       reportActiveCard(normalizedOffset);
       reportSettledArchiveItem(normalizedOffset);
 
@@ -588,6 +571,7 @@ export default function NotesFeed({
       refreshing,
       reportActiveCard,
       reportCaptureVisibility,
+      reportCaptureScrollSettled,
       reportSettledArchiveItem,
       scrollOffsetY,
       updateRefreshGestureActive,
@@ -840,9 +824,12 @@ export default function NotesFeed({
       }
       onScroll={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
-        lastOffsetYRef.current = offsetY;
+        const previousSettledOffsetY = lastOffsetYRef.current;
         scrollOffsetY.value = offsetY;
         updateRefreshGestureActive(offsetY < REFRESH_PULL_THRESHOLD);
+        if (Math.abs(offsetY - previousSettledOffsetY) > SCROLL_SNAP_EPSILON) {
+          reportCaptureScrollSettled(false);
+        }
         reportCaptureVisibility(offsetY);
         onScrollOffsetChange?.(offsetY);
       }}
@@ -875,6 +862,7 @@ export default function NotesFeed({
       }}
       onMomentumScrollBegin={() => {
         setActiveCardKey(null);
+        reportCaptureScrollSettled(false);
       }}
       onMomentumScrollEnd={(event) => {
         if (capturePageLocked) {

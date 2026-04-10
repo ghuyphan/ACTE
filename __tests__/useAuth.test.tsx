@@ -44,6 +44,7 @@ const mockUnregisterCurrentSocialPushToken = jest.fn<Promise<void>, []>(async ()
 const mockPurgeLocalAccountScope = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
 const mockMigrateLocalNotesScopeToUser = jest.fn<Promise<void>, [string]>(async () => undefined);
 const mockSetActiveNotesScope = jest.fn<void, [string | null | undefined]>();
+const mockGetPersistedActiveNotesScopeSync = jest.fn<string | null | undefined, []>(() => null);
 let authStateChangeCallback: ((event: string, session: Session | null) => void) | null = null;
 const mockGetSession = jest.fn(async () => ({
   data: { session: mockAuthState.initialSession },
@@ -170,6 +171,7 @@ jest.mock('../services/accountCleanup', () => ({
 
 jest.mock('../services/database', () => ({
   LOCAL_NOTES_SCOPE: '__local__',
+  getPersistedActiveNotesScopeSync: () => mockGetPersistedActiveNotesScopeSync(),
   migrateLocalNotesScopeToUser: (userUid: string) => mockMigrateLocalNotesScopeToUser(userUid),
   setActiveNotesScope: (scope: string | null | undefined) => mockSetActiveNotesScope(scope),
 }));
@@ -248,6 +250,7 @@ describe('useAuth', () => {
     mockAuthState.iosClientId = 'ios-client-id.apps.googleusercontent.com';
     mockInvokeFunction.mockResolvedValue({ data: { success: true }, error: null });
     mockMigrateLocalNotesScopeToUser.mockClear();
+    mockGetPersistedActiveNotesScopeSync.mockReturnValue(null);
     mockSetActiveNotesScope.mockClear();
   });
 
@@ -449,6 +452,21 @@ describe('useAuth', () => {
 
     expect(hook.result.current.user).toBeNull();
     expect(mockUnregisterCurrentSocialPushToken).toHaveBeenCalled();
+  });
+
+  it('keeps the persisted notes scope when restoring the Supabase session fails', async () => {
+    mockGetPersistedActiveNotesScopeSync.mockReturnValue('user-42');
+    mockGetSession.mockRejectedValueOnce(new Error('network down'));
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user).toBeNull();
+    });
+
+    expect(mockSetActiveNotesScope).toHaveBeenCalledWith('user-42');
+    expect(mockSetActiveNotesScope).not.toHaveBeenCalledWith('__local__');
   });
 
   it('requires a recent sign-in message from delete account when the backend rejects it', async () => {

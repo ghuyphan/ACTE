@@ -3,6 +3,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, u
 import { useAuth } from '../useAuth';
 import {
   CreateNoteInput,
+  getActiveNotesScope,
   LOCAL_NOTES_SCOPE,
   createNote as dbCreate,
   deleteAllNotes as dbDeleteAll,
@@ -51,12 +52,16 @@ interface NotesStoreValue {
 
 const NotesStoreContext = createContext<NotesStoreValue | undefined>(undefined);
 
+function resolveNotesScope(userUid: string | null | undefined) {
+  return userUid ?? getActiveNotesScope() ?? LOCAL_NOTES_SCOPE;
+}
+
 function useNotesStoreValue(): NotesStoreValue {
   const { user, isReady: authReady } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const notesRef = useRef<Note[]>([]);
-  const activeScopeRef = useRef<string>(user?.uid ?? LOCAL_NOTES_SCOPE);
+  const activeScopeRef = useRef<string>(resolveNotesScope(user?.uid));
   const widgetSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshRequestIdRef = useRef(0);
 
@@ -153,8 +158,10 @@ function useNotesStoreValue(): NotesStoreValue {
     let cleanupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
     let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
     (async () => {
+      const nextScope = resolveNotesScope(user?.uid);
+      activeScopeRef.current = nextScope;
       await refreshNotes(true, {
-        scope: activeScopeRef.current,
+        scope: nextScope,
         syncGeofences: true,
         updateWidget: true,
       });
@@ -178,14 +185,14 @@ function useNotesStoreValue(): NotesStoreValue {
         clearTimeout(cleanupTimeout);
       }
     };
-  }, [authReady, refreshNotes]);
+  }, [authReady, refreshNotes, user?.uid]);
 
   useEffect(() => {
     if (!authReady) {
       return;
     }
 
-    const nextScope = user?.uid ?? LOCAL_NOTES_SCOPE;
+    const nextScope = resolveNotesScope(user?.uid);
     if (activeScopeRef.current === nextScope) {
       return;
     }

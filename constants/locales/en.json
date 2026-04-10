@@ -101,6 +101,7 @@
         "photoLimitCheckingTitle": "Checking photo limit",
         "photoLimitCheckingMessage": "We are still loading your account photo usage. Try again in a moment.",
         "photoLimitReachedHint": "Free photo limit reached",
+        "photoSlotsRemainingIncludingImports": "{{count}} free photo notes left. Imports count when saved.",
         "photoSlotsRemaining": "{{count}} free photo notes left",
         "photoLibraryPermissionTitle": "Photo access needed",
         "photoLibraryPermissionMsg": "Allow photo library access so you can import an image into this note.",
