@@ -44,6 +44,8 @@ import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
 import { useAndroidBottomTabOverlayInset } from '../../hooks/useAndroidBottomTabOverlayInset';
+import { useBottomTabVisualInset } from '../../hooks/useBottomTabVisualInset';
+import { useSavedNoteRevealUi } from '../../hooks/ui/useSavedNoteRevealUi';
 import {
   canCreatePhotoNote,
   countPhotoNotes,
@@ -87,6 +89,8 @@ export default function HomeScreen() {
   const reduceMotionEnabled = useReducedMotion();
   const insets = useSafeAreaInsets();
   const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
+  const bottomTabVisualInset = useBottomTabVisualInset();
+  const { setSavedNoteRevealActive } = useSavedNoteRevealUi();
   const { notes, loading, refreshNotes, createNote } = useNotesStore();
   const { user, isAuthAvailable } = useAuth();
   const {
@@ -145,9 +149,6 @@ export default function HomeScreen() {
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [noteColor, setNoteColor] = useState<string | null>(DEFAULT_NOTE_COLOR_ID);
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
-  const [revealedNoteId, setRevealedNoteId] = useState<string | null>(null);
-  const [revealToken, setRevealToken] = useState(0);
-  const [pendingFeedRevealNoteId, setPendingFeedRevealNoteId] = useState<string | null>(null);
   const [savedNoteRevealNote, setSavedNoteRevealNote] = useState<Note | null>(null);
   const [savedNoteRevealToken, setSavedNoteRevealToken] = useState(0);
   const lockedPremiumNoteColorIds = useMemo(
@@ -484,8 +485,13 @@ export default function HomeScreen() {
   useEffect(() => {
     return () => {
       clearInlineSaveTimers();
+      setSavedNoteRevealActive(false);
     };
-  }, [clearInlineSaveTimers]);
+  }, [clearInlineSaveTimers, setSavedNoteRevealActive]);
+
+  useEffect(() => {
+    setSavedNoteRevealActive(Boolean(savedNoteRevealNote));
+  }, [savedNoteRevealNote, setSavedNoteRevealActive]);
 
   const completeInlineSaveFlow = useCallback(
     (note: Note) => {
@@ -496,7 +502,6 @@ export default function HomeScreen() {
       clearInlineSaveTimers();
       setSavedNoteRevealNote(note);
       setSavedNoteRevealToken((current) => current + 1);
-      setPendingFeedRevealNoteId(noteId);
       setSuppressedHomeNoteIds((current) => (current.includes(noteId) ? current : [...current, noteId]));
       setSaveButtonState('success');
 
@@ -520,20 +525,10 @@ export default function HomeScreen() {
     }
 
     setPendingSavedNoteScrollTargetId(noteId);
-    setPendingFeedRevealNoteId(noteId);
   }, []);
 
   const handleSavedNoteRevealFinished = useCallback(() => {
     setSavedNoteRevealNote(null);
-  }, []);
-
-  const triggerFeedReveal = useCallback((noteId?: string | null) => {
-    if (!noteId) {
-      return;
-    }
-
-    setRevealedNoteId(noteId);
-    setRevealToken((current) => current + 1);
   }, []);
 
   const handleSettledArchiveItemChange = useCallback(
@@ -595,17 +590,6 @@ export default function HomeScreen() {
       setPendingSavedNoteScrollTargetId((current) => (current === scheduledTargetId ? null : current));
     });
   }, [archiveFeedItems, pendingSavedNoteScrollTargetId, snapHeight, suppressedHomeNoteIds]);
-
-  useEffect(() => {
-    if (isCaptureVisible || !pendingFeedRevealNoteId) {
-      return;
-    }
-
-    triggerFeedReveal(pendingFeedRevealNoteId);
-    setPendingFeedRevealNoteId((current) =>
-      current === pendingFeedRevealNoteId ? null : current
-    );
-  }, [isCaptureVisible, pendingFeedRevealNoteId, triggerFeedReveal]);
 
   useEffect(() => {
     const nextVisibleFeedItemKeys = visibleFeedItems.map(getHomeFeedItemKey);
@@ -1832,8 +1816,6 @@ export default function HomeScreen() {
           onOpenSharedPost={openSharedPost}
           colors={colors}
           t={t}
-          revealedNoteId={revealedNoteId}
-          revealToken={revealToken}
           onSettledArchiveItemChange={handleSettledArchiveItemChange}
           onCaptureVisibilityChange={setIsCaptureVisible}
           onCaptureScrollSettledChange={setIsCaptureScrollSettled}
@@ -1849,6 +1831,7 @@ export default function HomeScreen() {
       <SavedNotePolaroidReveal
         note={savedNoteRevealNote}
         revealToken={savedNoteRevealToken}
+        bottomTabInset={bottomTabVisualInset}
         colors={colors}
         t={t}
         onFinished={handleSavedNoteRevealFinished}

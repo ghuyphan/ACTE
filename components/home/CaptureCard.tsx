@@ -281,8 +281,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const textCardActiveIconColor = isDarkCaptureTheme
     ? colors.captureCardText
     : LIGHT_CAPTURE_ACTIVE_ICON_COLOR;
-  const textCaptureNoteColor = DEFAULT_NOTE_COLOR_ID;
-  const effectiveTextModeNoteColor = captureMode === 'text' ? textCaptureNoteColor : noteColor;
+  const effectiveTextModeNoteColor =
+    captureMode === 'text' ? (noteColor ?? DEFAULT_NOTE_COLOR_ID) : noteColor;
   const hasLivePhotoMotion = Boolean(capturedPairedVideo);
   const saveStateScale = useSharedValue(1);
   const saveSuccessProgress = useSharedValue(saveState === 'success' ? 1 : 0);
@@ -351,21 +351,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   }, [isCaptureTextEntryFocused, onTextEntryFocusChange]);
 
   useEffect(() => {
-    if (captureMode !== 'text' || !onChangeNoteColor) {
-      return;
-    }
-
-    if (noteColor !== textCaptureNoteColor) {
-      onChangeNoteColor(textCaptureNoteColor);
-    }
-  }, [captureMode, noteColor, onChangeNoteColor, textCaptureNoteColor]);
-
-  useEffect(
-    () => () => {
+    return () => {
       onTextEntryFocusChange?.(false);
-    },
-    [onTextEntryFocusChange]
-  );
+    };
+  }, [onTextEntryFocusChange]);
 
   useEffect(() => {
     if (captureMode === 'camera' && capturedPhoto) {
@@ -504,6 +493,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const {
     handleCloseNoteColorSheet,
     handleCloseRadiusSheet,
+    handleOpenNoteColorSheet,
     handlePressLockedNoteColor,
     handleSelectNoteColor,
     handleSelectRadius,
@@ -1115,6 +1105,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     handleClearDoodle={handleClearDoodle}
                     handleInlinePasteStickerPress={handleInlinePasteStickerPress}
                     handleNativeInlinePasteStickerPress={handleNativeInlinePasteStickerPress}
+                    handleOpenNoteColorSheet={handleOpenNoteColorSheet}
                     handleSelectDoodleColor={handleSelectDoodleColor}
                     handleSelectedStickerAction={handleSelectedStickerAction}
                     handleShowStickerSourceOptions={handleShowStickerSourceOptions}
@@ -1123,6 +1114,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     handleUndoDoodle={handleUndoDoodle}
                     importingSticker={importingSticker}
                     inlinePasteLoading={inlinePasteLoading}
+                    noteColor={effectiveTextModeNoteColor}
                     selectedStickerId={selectedStickerId}
                     showInlinePasteButton={showInlinePasteButton}
                     stickerModeEnabled={stickerModeEnabled}

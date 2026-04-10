@@ -237,6 +237,21 @@ function AppContent() {
               },
             }}
           />
+          <Stack.Screen
+            name="notes/stickers"
+            options={{
+              headerShown: true,
+              headerTransparent: false,
+              headerShadowVisible: false,
+              title: t('notes.stickerLibrary.title', 'Your stickers & stamps'),
+              headerTintColor: colors.text,
+              headerBackButtonDisplayMode: 'minimal',
+              headerBackButtonMenuEnabled: false,
+              headerStyle: {
+                backgroundColor: colors.background,
+              },
+            }}
+          />
           <Stack.Screen name="shared/index" />
           <Stack.Screen
             name="shared/[id]"

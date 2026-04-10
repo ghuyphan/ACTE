@@ -320,12 +320,6 @@ export default function SearchScreen() {
                 <Text style={[styles.discoveryTitle, { color: colors.text }]}>
                   {t('search.discoveryTitle', 'Recent & favorite memories')}
                 </Text>
-                <Text style={[styles.discoverySubtitle, { color: colors.secondaryText }]}>
-                  {t(
-                    'search.discoveryBody',
-                    'Start with something you saved lately or marked as a favorite.'
-                  )}
-                </Text>
               </View>
             ) : null
           }
@@ -365,11 +359,6 @@ const styles = StyleSheet.create({
   discoveryTitle: {
     fontSize: 18,
     fontWeight: '700',
-    fontFamily: 'Noto Sans',
-  },
-  discoverySubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
     fontFamily: 'Noto Sans',
   },
   resultPress: {

@@ -59,7 +59,7 @@ const corsHeaders = {
 };
 
 function jsonResponse(body: SocialNotificationResponse, status = 200) {
-  return Response.json<SocialNotificationResponse>(body, {
+  return Response.json(body, {
     status,
     headers: corsHeaders,
   });
@@ -379,9 +379,9 @@ Deno.serve(async (request) => {
       });
     }
 
-    const messages = pushTokens.map((to) => ({
+    const messages: PushMessage[] = pushTokens.map((to) => ({
       to,
-      sound: 'default',
+      sound: 'default' as const,
       title: payload.title,
       body: payload.body,
       channelId: ANDROID_SOCIAL_CHANNEL_ID,

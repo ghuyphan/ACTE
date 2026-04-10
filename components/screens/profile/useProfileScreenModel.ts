@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { showAppAlert } from '../../../utils/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,12 +22,28 @@ export function useProfileScreenModel() {
   const legalLinkActions = useMemo(createLegalLinkActions, []);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [transitionUser, setTransitionUser] = useState(user);
+  const isTransitioningAccount = isSigningOut || isDeletingAccount;
 
-  const profileName = user?.displayName || user?.email || t('settings.notSignedIn', 'Not signed in');
+  useEffect(() => {
+    if (user) {
+      setTransitionUser(user);
+      return;
+    }
+
+    if (!isTransitioningAccount) {
+      setTransitionUser(null);
+    }
+  }, [isTransitioningAccount, user]);
+
+  const displayUser = user ?? (isTransitioningAccount ? transitionUser : null);
+
+  const profileName =
+    displayUser?.displayName || displayUser?.email || t('settings.notSignedIn', 'Not signed in');
   const avatarLabel = useMemo(() => {
-    const base = user?.displayName || user?.email || 'C';
+    const base = displayUser?.displayName || displayUser?.email || 'C';
     return base.trim().charAt(0).toUpperCase();
-  }, [user?.displayName, user?.email]);
+  }, [displayUser?.displayName, displayUser?.email]);
 
   const membershipLabel =
     tier === 'plus' ? t('settings.plusTitle', 'Noto Plus') : t('settings.plusInactive', 'Standard');
@@ -42,6 +58,7 @@ export function useProfileScreenModel() {
     }
 
     setIsSigningOut(true);
+    setTransitionUser(user);
     try {
       await signOut();
       await refreshNotes(false).catch(() => undefined);
@@ -97,6 +114,7 @@ export function useProfileScreenModel() {
           onPress: async () => {
             try {
               setIsDeletingAccount(true);
+              setTransitionUser(user);
               const result = await deleteAccount();
 
               if (result.status !== 'success') {
@@ -148,7 +166,7 @@ export function useProfileScreenModel() {
   };
 
   return {
-    avatarUrl: user?.photoURL ?? null,
+    avatarUrl: displayUser?.photoURL ?? null,
     avatarLabel,
     colors,
     insets,
@@ -161,7 +179,7 @@ export function useProfileScreenModel() {
     profileName,
     t,
     tier,
-    user,
+    user: displayUser,
     handleDeleteAccount,
     handleSignOut,
   };

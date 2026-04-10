@@ -14,6 +14,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { useSavedNoteRevealUi } from '../../hooks/ui/useSavedNoteRevealUi';
 import { useTheme } from '../../hooks/useTheme';
 import {
   requestAndroidTabSearchFocus,
@@ -268,6 +269,7 @@ export default function AndroidFloatingTabBar({
 }: BottomTabBarProps) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const { isSavedNoteRevealActive } = useSavedNoteRevealUi();
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -281,7 +283,10 @@ export default function AndroidFloatingTabBar({
   const searchSelected = activeRoute.name === 'search';
   const searchMorphActive = searchSelected || searchPreviewActive;
   const keyboardVisible = keyboardHeight > 0;
-  const tabBarVisible = shouldDisplayTabBar(activeRoute) && (!keyboardVisible || searchMorphActive);
+  const tabBarVisible =
+    shouldDisplayTabBar(activeRoute) &&
+    (!keyboardVisible || searchMorphActive) &&
+    !isSavedNoteRevealActive;
   const primaryRoutes = useMemo(
     () => state.routes.filter((route) => route.name !== 'search'),
     [state.routes]

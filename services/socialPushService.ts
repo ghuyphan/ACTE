@@ -5,6 +5,8 @@ import { Platform } from 'react-native';
 import { getPersistentItem, removePersistentItem, setPersistentItem } from '../utils/appStorage';
 import { AppUser } from '../utils/appUser';
 import {
+  getSupabaseAnonKey,
+  getSupabaseUrl,
   getSupabase,
   getSupabaseErrorMessage,
   hasSupabaseConfig,
@@ -55,6 +57,166 @@ type SocialNotificationResponse =
       success: false;
       error: string;
     };
+
+type JwtDiagnostics = {
+  isJwt: boolean;
+  length: number;
+  prefix: string;
+  suffix: string;
+  sub: string | null;
+  aud: string | string[] | null;
+  role: string | null;
+  iss: string | null;
+  exp: number | null;
+  expiresAt: string | null;
+  decodeError: string | null;
+};
+
+function isFunctionsHttpStatus(error: unknown, status: number) {
+  if (typeof error !== 'object' || !error || !('context' in error)) {
+    return false;
+  }
+
+  const context = (error as { context?: { status?: unknown } }).context;
+  return Number(context?.status) === status;
+}
+
+function decodeJwtPayloadSegment(segment: string) {
+  const decodeBase64 = globalThis.atob;
+  if (typeof decodeBase64 !== 'function') {
+    throw new Error('atob is unavailable in this runtime.');
+  }
+
+  const normalizedSegment = segment.replace(/-/g, '+').replace(/_/g, '/');
+  const paddedSegment = normalizedSegment.padEnd(
+    normalizedSegment.length + ((4 - (normalizedSegment.length % 4)) % 4),
+    '='
+  );
+
+  return JSON.parse(decodeBase64(paddedSegment)) as Record<string, unknown>;
+}
+
+function getJwtDiagnostics(token: string | null): JwtDiagnostics {
+  const safeToken = token?.trim() ?? '';
+  const parts = safeToken.split('.');
+
+  if (parts.length < 2) {
+    return {
+      isJwt: false,
+      length: safeToken.length,
+      prefix: safeToken.slice(0, 12),
+      suffix: safeToken.slice(-12),
+      sub: null,
+      aud: null,
+      role: null,
+      iss: null,
+      exp: null,
+      expiresAt: null,
+      decodeError: 'Token is not in JWT format.',
+    };
+  }
+
+  try {
+    const payload = decodeJwtPayloadSegment(parts[1]);
+    const exp = typeof payload.exp === 'number' ? payload.exp : null;
+
+    return {
+      isJwt: true,
+      length: safeToken.length,
+      prefix: safeToken.slice(0, 12),
+      suffix: safeToken.slice(-12),
+      sub: typeof payload.sub === 'string' ? payload.sub : null,
+      aud:
+        typeof payload.aud === 'string' || Array.isArray(payload.aud)
+          ? (payload.aud as string | string[])
+          : null,
+      role: typeof payload.role === 'string' ? payload.role : null,
+      iss: typeof payload.iss === 'string' ? payload.iss : null,
+      exp,
+      expiresAt: exp ? new Date(exp * 1000).toISOString() : null,
+      decodeError: null,
+    };
+  } catch (error) {
+    return {
+      isJwt: true,
+      length: safeToken.length,
+      prefix: safeToken.slice(0, 12),
+      suffix: safeToken.slice(-12),
+      sub: null,
+      aud: null,
+      role: null,
+      iss: null,
+      exp: null,
+      expiresAt: null,
+      decodeError: getSupabaseErrorMessage(error),
+    };
+  }
+}
+
+async function invokeSocialNotificationByFetch(options: {
+  accessToken: string;
+  event: SocialNotificationEvent;
+}) {
+  const supabaseUrl = getSupabaseUrl();
+  const supabaseAnonKey = getSupabaseAnonKey();
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase function endpoint is not configured.');
+  }
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/send-social-notifications`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${options.accessToken}`,
+    },
+    body: JSON.stringify(options.event),
+  });
+
+  const responseText = await response.text();
+  let data: SocialNotificationResponse | null = null;
+
+  try {
+    data = responseText ? (JSON.parse(responseText) as SocialNotificationResponse) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+        ? data.error
+        : responseText || `Edge function returned ${response.status}.`
+    );
+  }
+
+  return data;
+}
+
+async function getFreshSupabaseAccessToken(
+  supabase: NonNullable<ReturnType<typeof getSupabase>>
+) {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) {
+    throw sessionError;
+  }
+
+  const currentSession = sessionData.session;
+  const expiresAtMs = (currentSession?.expires_at ?? 0) * 1000;
+  const shouldRefresh = !currentSession?.access_token || expiresAtMs <= Date.now() + 60_000;
+
+  if (!shouldRefresh) {
+    return currentSession.access_token;
+  }
+
+  const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
+  if (refreshError) {
+    throw refreshError;
+  }
+
+  return refreshedData.session?.access_token ?? null;
+}
 
 function isNativePlatform(platformOS = Platform.OS) {
   return platformOS === 'ios' || platformOS === 'android';
@@ -286,12 +448,87 @@ export async function syncSocialPushRegistration(
 export async function sendSocialNotificationEvent(event: SocialNotificationEvent) {
   const supabase = getSupabase();
   if (!supabase) {
+    console.warn('[social-push] Supabase client unavailable; skipping social notification event.', {
+      event,
+    });
     return;
   }
 
-  const { data, error } = await supabase.functions.invoke('send-social-notifications', {
-    body: event,
+  console.log('[social-push] Invoking send-social-notifications:', {
+    event,
   });
+
+  const accessToken = await getFreshSupabaseAccessToken(supabase).catch((sessionError) => {
+    console.warn('[social-push] Failed to load a fresh Supabase access token before invoking edge function.', {
+      event,
+      sessionError,
+    });
+    return null;
+  });
+
+  const jwtDiagnostics = getJwtDiagnostics(accessToken);
+  const { data: authUserData, error: authUserError } = accessToken
+    ? await supabase.auth.getUser(accessToken)
+    : { data: { user: null }, error: null };
+
+  console.log('[social-push] Access token diagnostics before edge function:', {
+    event,
+    jwtDiagnostics,
+    authUserId: authUserData.user?.id ?? null,
+    authUserError: authUserError ? getSupabaseErrorMessage(authUserError) : null,
+  });
+
+  const functionsClient = supabase.functions;
+  if (accessToken) {
+    functionsClient.setAuth(accessToken);
+  }
+
+  const { data, error } = await functionsClient.invoke('send-social-notifications', {
+    body: event,
+    headers: accessToken
+      ? {
+          Authorization: `Bearer ${accessToken}`,
+        }
+      : undefined,
+  });
+
+  console.log('[social-push] send-social-notifications response:', {
+    event,
+    data,
+    error,
+    hasAccessToken: Boolean(accessToken),
+  });
+
+  if (error && isFunctionsHttpStatus(error, 401) && accessToken) {
+    console.warn('[social-push] Functions client returned 401; retrying edge function with direct fetch.', {
+      event,
+    });
+
+    const fetchedData = await invokeSocialNotificationByFetch({
+      accessToken,
+      event,
+    });
+
+    console.log('[social-push] direct fetch send-social-notifications response:', {
+      event,
+      data: fetchedData,
+    });
+
+    if (
+      fetchedData &&
+      typeof fetchedData === 'object' &&
+      'success' in fetchedData &&
+      fetchedData.success === false
+    ) {
+      throw new Error(
+        typeof fetchedData.error === 'string'
+          ? fetchedData.error
+          : 'Could not send this notification right now.'
+      );
+    }
+
+    return;
+  }
 
   if (error) {
     throw error;

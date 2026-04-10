@@ -109,7 +109,7 @@ export default function SharedPostDetailSheet({
         }}
         showsVerticalScrollIndicator={false}
       >
-        <SharedPostMemoryCard post={post} colors={colors} t={t} />
+        <SharedPostMemoryCard post={post} colors={colors} t={t} showSharedBadge={isOwnedPost} />
 
         <View
           style={[

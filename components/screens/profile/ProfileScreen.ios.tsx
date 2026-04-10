@@ -21,7 +21,7 @@ import {
   scrollContentBackground,
 } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import ProfileAvatar from './ProfileAvatar';
 import { useProfileScreenModel } from './useProfileScreenModel';
 
@@ -135,19 +135,29 @@ export default function ProfileScreenIOS() {
               <Section title={t('profile.actionsTitle', 'Actions')}>
                 <Button onPress={handleSignOut}>
                   <HStack>
+                    {isSigningOut && !isDeletingAccount ? (
+                      <RNHostView matchContents>
+                        <View style={styles.rowSpinner}>
+                          <ActivityIndicator size="small" color={colors.text} />
+                        </View>
+                      </RNHostView>
+                    ) : null}
                     <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                      {isSigningOut && !isDeletingAccount
-                        ? t('profile.logout', 'Log out')
-                        : t('profile.logout', 'Log out')}
+                      {t('profile.logout', 'Log out')}
                     </SwiftUIText>
                   </HStack>
                 </Button>
                 <Button onPress={handleDeleteAccount}>
                   <HStack>
+                    {isDeletingAccount ? (
+                      <RNHostView matchContents>
+                        <View style={styles.rowSpinner}>
+                          <ActivityIndicator size="small" color={colors.danger} />
+                        </View>
+                      </RNHostView>
+                    ) : null}
                     <SwiftUIText modifiers={[foregroundStyle(colors.danger)]}>
-                      {isDeletingAccount
-                        ? t('profile.deleteAccount', 'Delete account')
-                        : t('profile.deleteAccount', 'Delete account')}
+                      {t('profile.deleteAccount', 'Delete account')}
                     </SwiftUIText>
                   </HStack>
                 </Button>
@@ -217,5 +227,12 @@ const styles = StyleSheet.create({
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  rowSpinner: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
 });

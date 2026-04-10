@@ -95,19 +95,15 @@ function getUnavailableResult(provider: 'auth' | 'google'): AuthActionResult {
 }
 
 async function clearAuthenticatedUserState(currentUserUid: string | null, setUser: (nextUser: AppUser | null) => void) {
-  await clearSharedFeedCache(currentUserUid).catch(() => undefined);
   setActiveNotesScope(LOCAL_NOTES_SCOPE);
   setUser(null);
+  await clearSharedFeedCache(currentUserUid).catch(() => undefined);
 }
 
-async function purgeAndClearAuthenticatedUserState(
-  currentUserUid: string | null,
-  setUser: (nextUser: AppUser | null) => void
-) {
+async function purgeAuthenticatedUserState(currentUserUid: string | null) {
   await purgeLocalAccountScope(currentUserUid).catch((error) => {
     console.warn('[auth] Failed to purge local account data:', error);
   });
-  await clearAuthenticatedUserState(currentUserUid, setUser);
 }
 
 function normalizeGoogleIdToken(response: unknown) {
@@ -567,7 +563,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           await supabase.auth.signOut().catch(() => undefined);
-          await purgeAndClearAuthenticatedUserState(user.uid, setUser);
+          await clearAuthenticatedUserState(user.uid, setUser);
+          await purgeAuthenticatedUserState(user.uid);
           return { status: 'success' };
         } catch (error) {
           const message = getSupabaseErrorMessage(error);
@@ -620,7 +617,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        await purgeAndClearAuthenticatedUserState(user?.uid ?? null, setUser);
+        await clearAuthenticatedUserState(user?.uid ?? null, setUser);
+        await purgeAuthenticatedUserState(user?.uid ?? null);
       },
     }),
     [isReady, user]

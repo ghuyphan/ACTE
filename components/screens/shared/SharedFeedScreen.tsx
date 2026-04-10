@@ -121,6 +121,7 @@ export default function SharedIndexScreen() {
               colors={colors}
               t={t}
               containerStyle={styles.cardRow}
+              showSharedBadge={user?.uid === item.authorUid}
               onPress={() => {
                 router.push(`/shared/${item.id}` as any);
               }}

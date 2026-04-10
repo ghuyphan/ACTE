@@ -165,7 +165,6 @@ export default function LoginScreen() {
   const { colors, isDark } = useTheme();
   const { isOnline } = useConnectivity();
   const {
-    user,
     isReady,
     isAuthAvailable,
     isGoogleAvailable,
@@ -824,50 +823,6 @@ export default function LoginScreen() {
     );
   };
 
-  if (user) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <LinearGradient
-          colors={gradientColors}
-          style={StyleSheet.absoluteFill}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
-
-        <View style={[styles.content, { paddingTop: insets.top }]}>
-          <View style={styles.iconContainer}>
-            <Image source={appIconSource} style={styles.appIcon} />
-          </View>
-          <Text style={[styles.title, { color: colors.text }]}>{t('auth.title', 'Noto')}</Text>
-          <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-            {landingSubtitle}
-          </Text>
-          <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.infoTitle, { color: colors.text }]}>
-              {t('auth.signedInAs', 'Signed in as')}
-            </Text>
-            <Text style={[styles.infoText, { color: colors.secondaryText }]}>
-              {user.displayName || user.email || t('settings.signedIn', 'Signed in')}
-            </Text>
-          </View>
-        </View>
-
-        <View style={[styles.bottom, { paddingBottom: insets.bottom + 32 }]}>
-          <PrimaryButton
-            label={t('settings.manageAccount', 'Manage account')}
-            onPress={() => router.replace('/auth/profile' as Href)}
-            variant="neutral"
-          />
-          <PrimaryButton
-            label={t('auth.continueApp', 'Continue to Noto')}
-            onPress={continueToApp}
-            variant="secondary"
-          />
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient
@@ -949,7 +904,7 @@ export default function LoginScreen() {
             }}
             loading={!isReady || activeAction === 'google'}
             variant="neutral"
-            disabled={!isOnline}
+            disabled={!isOnline || activeAction !== null}
             testID="auth-google-button"
           />
         ) : null}
@@ -959,14 +914,15 @@ export default function LoginScreen() {
             label={t('auth.continueWithEmail', 'Continue with email')}
             onPress={() => openForm('signIn')}
             variant={isGoogleAvailable ? 'secondary' : 'neutral'}
-            disabled={!isOnline}
+            disabled={!isOnline || activeAction !== null}
             testID="auth-continue-email"
           />
         ) : null}
 
         <Pressable
-          onPress={continueToApp}
+          onPress={activeAction ? undefined : continueToApp}
           style={({ pressed }) => [styles.linkButton, pressed ? styles.linkButtonPressed : null]}
+          disabled={activeAction !== null}
           testID="auth-continue-local"
         >
           <Text style={[styles.linkButtonLabel, { color: colors.secondaryText }]}>

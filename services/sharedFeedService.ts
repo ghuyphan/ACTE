@@ -12,6 +12,7 @@ import {
 } from '../utils/supabase';
 import { Note, NoteType } from './database';
 import { normalizeSavedTextNoteColor } from './noteAppearance';
+import { getNoteDoodle, parseNoteDoodleStrokes } from './noteDoodles';
 import {
   deletePairedVideoFromStorage,
   deletePhotoFromStorage,
@@ -20,6 +21,7 @@ import {
   uploadPairedVideoToStorage,
 } from './remoteMedia';
 import {
+  getNoteStickers,
   clearRemoteStickerAssetRefs,
   parseNoteStickerPlacements,
   reconcileRemoteStickerAssetRefs,
@@ -188,6 +190,41 @@ function requireSupabase() {
 
 function getNowIso() {
   return new Date().toISOString();
+}
+
+function hasStoredDoodlePayload(strokesJson: string | null | undefined) {
+  return parseNoteDoodleStrokes(strokesJson).length > 0;
+}
+
+function hasStoredStickerPayload(placementsJson: string | null | undefined) {
+  return parseNoteStickerPlacements(placementsJson).length > 0;
+}
+
+async function hydrateShareableNote(note: Note): Promise<Note> {
+  const noteId = typeof note.id === 'string' ? note.id.trim() : '';
+  if (!noteId) {
+    return {
+      ...note,
+      hasDoodle: hasStoredDoodlePayload(note.doodleStrokesJson),
+      hasStickers: hasStoredStickerPayload(note.stickerPlacementsJson),
+    };
+  }
+
+  const [storedDoodle, storedStickers] = await Promise.all([
+    hasStoredDoodlePayload(note.doodleStrokesJson) ? Promise.resolve(null) : getNoteDoodle(noteId).catch(() => null),
+    hasStoredStickerPayload(note.stickerPlacementsJson) ? Promise.resolve(null) : getNoteStickers(noteId).catch(() => null),
+  ]);
+
+  const doodleStrokesJson = note.doodleStrokesJson ?? storedDoodle?.strokesJson ?? null;
+  const stickerPlacementsJson = note.stickerPlacementsJson ?? storedStickers?.placements_json ?? null;
+
+  return {
+    ...note,
+    hasDoodle: hasStoredDoodlePayload(doodleStrokesJson),
+    doodleStrokesJson,
+    hasStickers: hasStoredStickerPayload(stickerPlacementsJson),
+    stickerPlacementsJson,
+  };
 }
 
 function getDisplayName(user: AppUser) {
@@ -929,6 +966,7 @@ export async function createSharedPost(
   await ensureSupabaseSessionMatchesUser(user.id);
 
   const supabase = requireSupabase();
+  const shareableNote = await hydrateShareableNote(note);
   const dedupedAudience = Array.from(new Set([user.id, ...audienceUserIds.filter(Boolean)]));
 
   if (dedupedAudience.length <= 1) {
@@ -943,22 +981,22 @@ export async function createSharedPost(
 
   try {
     photoPath =
-      note.type === 'photo'
+      shareableNote.type === 'photo'
         ? await uploadPhotoToStorage(
             SHARED_POST_MEDIA_BUCKET,
             `${user.id}/${postId}`,
-            note.photoLocalUri ?? note.content
+            shareableNote.photoLocalUri ?? shareableNote.content
           )
         : null;
     pairedVideoPath =
-      note.type === 'photo' && note.isLivePhoto
+      shareableNote.type === 'photo' && shareableNote.isLivePhoto
         ? await uploadPairedVideoToStorage(
             SHARED_POST_MEDIA_BUCKET,
-            getRemotePairedVideoPath(`${user.id}/${postId}`, note.pairedVideoLocalUri ?? null),
-            note.pairedVideoLocalUri ?? null
+            getRemotePairedVideoPath(`${user.id}/${postId}`, shareableNote.pairedVideoLocalUri ?? null),
+            shareableNote.pairedVideoLocalUri ?? null
           )
         : null;
-    const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
+    const stickerPlacements = parseNoteStickerPlacements(shareableNote.stickerPlacementsJson);
     stickerPlacementsJson =
       stickerPlacements.length > 0
         ? await serializeStickerPlacementsForStorage(
@@ -978,21 +1016,21 @@ export async function createSharedPost(
       author_display_name: getDisplayName(user),
       author_photo_url_snapshot: user.photoURL ?? null,
       audience_user_ids: dedupedAudience,
-      type: note.type,
+      type: shareableNote.type,
       text:
-        note.type === 'text'
-          ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji)
-          : note.caption?.trim() ?? '',
+        shareableNote.type === 'text'
+          ? formatNoteTextWithEmoji(shareableNote.content.trim(), shareableNote.moodEmoji)
+          : shareableNote.caption?.trim() ?? '',
       photo_path: photoPath ?? null,
-      is_live_photo: Boolean(note.isLivePhoto && pairedVideoPath),
+      is_live_photo: Boolean(shareableNote.isLivePhoto && pairedVideoPath),
       paired_video_path: pairedVideoPath ?? null,
-      doodle_strokes_json: note.doodleStrokesJson ?? null,
+      doodle_strokes_json: shareableNote.doodleStrokesJson ?? null,
       sticker_placements_json: stickerPlacementsJson,
-      note_color: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
-      place_name: note.locationName ?? null,
-      source_note_id: note.id,
-      latitude: note.latitude,
-      longitude: note.longitude,
+      note_color: shareableNote.type === 'text' ? normalizeSavedTextNoteColor(shareableNote.noteColor) : null,
+      place_name: shareableNote.locationName ?? null,
+      source_note_id: shareableNote.id,
+      latitude: shareableNote.latitude,
+      longitude: shareableNote.longitude,
       created_at: now,
       updated_at: null,
     };
@@ -1013,6 +1051,12 @@ export async function createSharedPost(
         .in('friend_user_id', friendRefs);
     }
 
+    console.log('[shared-feed] Triggering shared post notification event:', {
+      postId,
+      authorUserId: user.id,
+      audienceUserIds: dedupedAudience,
+    });
+
     void sendSocialNotificationEvent({
       type: 'shared_post_created',
       postId,
@@ -1022,11 +1066,11 @@ export async function createSharedPost(
 
     return {
       ...mapSharedPost(record),
-      photoLocalUri: note.type === 'photo' ? note.photoLocalUri ?? note.content : null,
-      pairedVideoLocalUri: note.type === 'photo' ? note.pairedVideoLocalUri ?? null : null,
-      hasStickers: Boolean(note.hasStickers && note.stickerPlacementsJson),
+      photoLocalUri: shareableNote.type === 'photo' ? shareableNote.photoLocalUri ?? shareableNote.content : null,
+      pairedVideoLocalUri: shareableNote.type === 'photo' ? shareableNote.pairedVideoLocalUri ?? null : null,
+      hasStickers: hasStoredStickerPayload(stickerPlacementsJson),
       stickerPlacementsJson,
-      noteColor: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
+      noteColor: shareableNote.type === 'text' ? normalizeSavedTextNoteColor(shareableNote.noteColor) : null,
     };
   } catch (error) {
     await cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
@@ -1045,6 +1089,7 @@ export async function updateSharedPost(
   postId: string,
   note: Note
 ): Promise<void> {
+  const shareableNote = await hydrateShareableNote(note);
   const supabase = requireSupabase();
   const { data: existing, error: fetchError } = await supabase
     .from('shared_posts')
@@ -1075,30 +1120,30 @@ export async function updateSharedPost(
 
   try {
     const currentPhotoUri = normalizeRemoteArtifactPath(note.photoLocalUri ?? note.content);
-    const currentPairedVideoUri = normalizeRemoteArtifactPath(note.pairedVideoLocalUri ?? null);
+    const currentPairedVideoUri = normalizeRemoteArtifactPath(shareableNote.pairedVideoLocalUri ?? null);
     nextPhotoPath =
-      note.type === 'photo'
+      shareableNote.type === 'photo'
         ? current.photo_path && !currentPhotoUri
           ? current.photo_path
           : await uploadPhotoToStorage(
             SHARED_POST_MEDIA_BUCKET,
             `${user.id}/${postId}`,
-            note.photoLocalUri ?? note.content,
+            shareableNote.photoLocalUri ?? shareableNote.content,
             { allowOverwrite: true }
           )
         : null;
     nextPairedVideoPath =
-      note.type === 'photo' && note.isLivePhoto
+      shareableNote.type === 'photo' && shareableNote.isLivePhoto
         ? current.paired_video_path && !currentPairedVideoUri
           ? current.paired_video_path
           : await uploadPairedVideoToStorage(
             SHARED_POST_MEDIA_BUCKET,
-            getRemotePairedVideoPath(`${user.id}/${postId}`, note.pairedVideoLocalUri ?? null),
-            note.pairedVideoLocalUri ?? null,
+            getRemotePairedVideoPath(`${user.id}/${postId}`, shareableNote.pairedVideoLocalUri ?? null),
+            shareableNote.pairedVideoLocalUri ?? null,
             { allowOverwrite: true }
           )
         : null;
-    const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
+    const stickerPlacements = parseNoteStickerPlacements(shareableNote.stickerPlacementsJson);
     nextStickerPlacementsJson =
       stickerPlacements.length > 0
         ? await serializeStickerPlacementsForStorage(
@@ -1135,20 +1180,20 @@ export async function updateSharedPost(
     .from('shared_posts')
     .update({
       text:
-        note.type === 'text'
-          ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji)
-          : note.caption?.trim() ?? '',
+        shareableNote.type === 'text'
+          ? formatNoteTextWithEmoji(shareableNote.content.trim(), shareableNote.moodEmoji)
+          : shareableNote.caption?.trim() ?? '',
       photo_path: nextPhotoPath ?? null,
-      is_live_photo: Boolean(note.isLivePhoto && nextPairedVideoPath),
+      is_live_photo: Boolean(shareableNote.isLivePhoto && nextPairedVideoPath),
       paired_video_path: nextPairedVideoPath ?? null,
-      doodle_strokes_json: note.doodleStrokesJson ?? null,
+      doodle_strokes_json: shareableNote.doodleStrokesJson ?? null,
       sticker_placements_json: nextStickerPlacementsJson,
-      note_color: note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null,
-      place_name: note.locationName ?? null,
-      latitude: note.latitude,
-      longitude: note.longitude,
+      note_color: shareableNote.type === 'text' ? normalizeSavedTextNoteColor(shareableNote.noteColor) : null,
+      place_name: shareableNote.locationName ?? null,
+      latitude: shareableNote.latitude,
+      longitude: shareableNote.longitude,
       updated_at: getNowIso(),
-      type: note.type,
+      type: shareableNote.type,
     })
     .eq('id', postId)
     .eq('author_user_id', user.id);

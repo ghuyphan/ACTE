@@ -275,6 +275,21 @@
     "notes": {
         "viewAllTitle": "Tất cả ghi chú",
         "viewAllButton": "Xem tất cả",
+        "stickerLibrary": {
+            "buttonA11y": "Mở thư viện sticker của bạn",
+            "title": "Sticker và tem của bạn",
+            "subtitle": "Những sticker cắt nền và tem ảnh bạn đã tạo cho các ghi chú sẽ nằm ở đây.",
+            "savedCount": "Đã lưu {{count}} món",
+            "savedCount_one": "Đã lưu {{count}} món",
+            "savedCount_other": "Đã lưu {{count}} món",
+            "stickerLabel": "Sticker",
+            "stampLabel": "Tem",
+            "usedCount": "Đã dùng {{count}} lần",
+            "usedCount_one": "Đã dùng {{count}} lần",
+            "usedCount_other": "Đã dùng {{count}} lần",
+            "emptyTitle": "Chưa có sticker nào",
+            "emptyBody": "Tạo sticker hoặc tem trong một ghi chú rồi chúng sẽ xuất hiện ở đây."
+        },
         "recap": {
             "allLabel": "Tất cả",
             "recapLabel": "Lịch",
@@ -324,6 +339,8 @@
         "friendsCount": "{{count}} bạn bè",
         "postsCount": "{{count}} bài chia sẻ",
         "someone": "Ai đó",
+        "cardBadge": "Chia sẻ",
+        "fromAuthor": "Từ {{name}}",
         "sharedNow": "Vừa chia sẻ",
         "photoMemory": "Kỷ niệm ảnh",
         "noteFallback": "Ghi chú chia sẻ",
@@ -776,7 +793,6 @@
     },
     "search": {
         "discoveryTitle": "Kỷ niệm gần đây và yêu thích",
-        "discoveryBody": "Bắt đầu với điều bạn vừa lưu gần đây hoặc đã đánh dấu yêu thích.",
         "errorTitle": "Tìm kiếm tạm thời chưa khả dụng",
         "errorBody": "Noto chưa thể tìm trong ghi chú lúc này. Hãy thử lại sau ít phút nhé."
     },

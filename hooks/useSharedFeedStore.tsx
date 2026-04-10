@@ -524,7 +524,10 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           return {
             ...post,
             type: nextType,
-            text: nextType === 'text' ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji) : '',
+            text:
+              nextType === 'text'
+                ? formatNoteTextWithEmoji(note.content.trim(), note.moodEmoji)
+                : note.caption?.trim() ?? '',
             photoPath: nextPhotoPath,
             photoLocalUri: nextType === 'photo' ? getNotePhotoUri(note) : null,
             isLivePhoto: Boolean(nextType === 'photo' && note.isLivePhoto && nextPairedVideoPath),

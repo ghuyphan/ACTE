@@ -78,9 +78,11 @@ describe('SharedPostMemoryCard', () => {
           card: '#FFFFFF',
         }}
         t={(key: string, fallback?: string) => fallback ?? key}
+        showSharedBadge
       />
     );
 
+    expect(getByText('Shared')).toBeTruthy();
     expect(getByText('2h')).toBeTruthy();
     expect(queryByText(/Apr\s+10/i)).toBeNull();
   });

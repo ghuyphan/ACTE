@@ -40,3 +40,6 @@ enabled = true
 
 [functions.cleanup-sticker-assets]
 verify_jwt = false
+
+[functions.send-social-notifications]
+verify_jwt = false

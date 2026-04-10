@@ -47,6 +47,7 @@ interface SharedPostMemoryCardProps {
   cardSize?: number;
   containerStyle?: StyleProp<ViewStyle>;
   isActive?: boolean;
+  showSharedBadge?: boolean;
 }
 
 export function NoteMemoryCard({
@@ -189,6 +190,7 @@ export function SharedPostMemoryCard({
   cardSize,
   containerStyle,
   isActive = false,
+  showSharedBadge = false,
 }: SharedPostMemoryCardProps) {
   const { width } = useWindowDimensions();
   const now = useRelativeTimeNow();
@@ -210,6 +212,23 @@ export function SharedPostMemoryCard({
               debugTiltOverride={debugTiltOverride}
             />
           </View>
+          {showSharedBadge ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.sharedBadge,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.primarySoft ?? colors.border ?? colors.card,
+                },
+              ]}
+            >
+              <Ionicons name="paper-plane-outline" size={14} color={colors.primary} />
+              <Text style={[styles.sharedBadgeText, { color: colors.primary }]}>
+                {t('shared.cardBadge', 'Shared')}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={[styles.metaContainer, { width: resolvedCardSize }]}>
@@ -254,7 +273,10 @@ export function SharedPostMemoryCard({
                     <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
                   </View>
                   <View style={styles.metadataPillAction}>
-                    <Text style={[styles.metadataActionText, { color: colors.primary }]}>
+                    <Text
+                      numberOfLines={1}
+                      style={[styles.metadataActionText, { color: colors.primary }]}
+                    >
                       {t('home.openDetails', 'Details')}
                     </Text>
                     <Ionicons name="chevron-forward" size={14} color={colors.primary} />
@@ -341,6 +363,29 @@ const styles = StyleSheet.create({
   },
   sharedCardWrap: {
     alignSelf: 'center',
+  },
+  sharedBadge: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  sharedBadgeText: {
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
   },
   sharedAvatarImage: {
     width: 24,

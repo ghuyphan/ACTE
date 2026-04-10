@@ -13,6 +13,7 @@ import { SharedFeedProvider } from '../../hooks/useSharedFeed';
 import { SyncStatusProvider } from '../../hooks/useSyncStatus';
 import { SubscriptionProvider } from '../../hooks/useSubscription';
 import { ThemeProvider } from '../../hooks/useTheme';
+import { SavedNoteRevealUiProvider } from '../../hooks/ui/useSavedNoteRevealUi';
 import { AppAlertProvider } from '../ui/AppAlertProvider';
 
 type AppProvidersProps = {
@@ -54,8 +55,10 @@ function FeatureProviders({ children }: AppProvidersProps) {
 function UiProviders({ children }: AppProvidersProps) {
   return (
     <BottomSheetModalProvider>
-      <AppAlertProvider />
-      {children}
+      <SavedNoteRevealUiProvider>
+        <AppAlertProvider />
+        {children}
+      </SavedNoteRevealUiProvider>
     </BottomSheetModalProvider>
   );
 }

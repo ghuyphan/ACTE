@@ -279,6 +279,17 @@ const mockDeletePhotoFromStorage = jest.fn<Promise<void>, [string, string | null
 const mockDeleteVideoFromStorage = jest.fn<Promise<void>, [string, string | null]>(async () => undefined);
 const mockCacheSharedFeedSnapshot = jest.fn<Promise<void>, [string, unknown]>(async () => undefined);
 const mockSendSocialNotificationEvent = jest.fn<Promise<void>, [unknown]>(async () => undefined);
+const mockGetNoteDoodle = jest.fn<Promise<{ noteId: string; strokesJson: string; updatedAt: string } | null>, [string]>(
+  async () => null
+);
+const mockGetNoteStickers = jest.fn<
+  Promise<{ note_id: string; placements_json: string; updated_at: string } | null>,
+  [string]
+>(async () => null);
+const mockSerializeStickerPlacementsForStorage = jest.fn<
+  Promise<string>,
+  [unknown[], string, string, Record<string, unknown>?]
+>(async (placements) => JSON.stringify(placements));
 jest.mock('../services/remoteMedia', () => ({
   SHARED_POST_MEDIA_BUCKET: 'shared-post-media',
   uploadPhotoToStorage: (bucket: string, path: string, localUri?: string | null) =>
@@ -329,6 +340,28 @@ jest.mock('../services/sharedFeedCache', () => ({
 jest.mock('../services/socialPushService', () => ({
   sendSocialNotificationEvent: (event: unknown) => mockSendSocialNotificationEvent(event),
 }));
+
+jest.mock('../services/noteDoodles', () => {
+  const actual = jest.requireActual('../services/noteDoodles');
+  return {
+    ...actual,
+    getNoteDoodle: (noteId: string) => mockGetNoteDoodle(noteId),
+  };
+});
+
+jest.mock('../services/noteStickers', () => {
+  const actual = jest.requireActual('../services/noteStickers');
+  return {
+    ...actual,
+    getNoteStickers: (noteId: string) => mockGetNoteStickers(noteId),
+    serializeStickerPlacementsForStorage: (
+      placements: unknown[],
+      bucket: string,
+      ownerUid: string,
+      options?: Record<string, unknown>
+    ) => mockSerializeStickerPlacementsForStorage(placements, bucket, ownerUid, options),
+  };
+});
 
 jest.mock('../services/inviteTokenStorage', () => ({
   setStoredInviteToken: jest.fn(async () => undefined),
@@ -665,6 +698,12 @@ const secondFriendUser = {
     mockFriendships.clear();
   mockPublicProfiles.clear();
   mockCachedActiveInvites.clear();
+  mockGetNoteDoodle.mockReset();
+  mockGetNoteDoodle.mockResolvedValue(null);
+  mockGetNoteStickers.mockReset();
+  mockGetNoteStickers.mockResolvedValue(null);
+  mockSerializeStickerPlacementsForStorage.mockReset();
+  mockSerializeStickerPlacementsForStorage.mockImplementation(async (placements) => JSON.stringify(placements));
   mockPublicProfiles.set(ownerUser.id, {
     displayNameSnapshot: ownerUser.displayName,
     photoURLSnapshot: ownerUser.photoURL,
@@ -797,6 +836,82 @@ describe('sharedFeedService', () => {
       expect.stringMatching(new RegExp(`${ownerUser.id}/shared-post-.*\\.motion\\.mov$`)),
       'file:///photos/note-live-motion.mov'
     );
+  });
+
+  it('hydrates stored doodles and stickers before creating a shared post', async () => {
+    mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
+      display_name_snapshot: friendUser.displayName,
+      photo_url_snapshot: friendUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+    mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
+      display_name_snapshot: ownerUser.displayName,
+      photo_url_snapshot: ownerUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+    mockGetNoteDoodle.mockResolvedValue({
+      noteId: 'note-decorated',
+      strokesJson: JSON.stringify([{ color: '#111111', points: [0.1, 0.1, 0.2, 0.2] }]),
+      updatedAt: '2026-03-25T00:00:00.000Z',
+    });
+    mockGetNoteStickers.mockResolvedValue({
+      note_id: 'note-decorated',
+      placements_json: JSON.stringify([
+        {
+          id: 'placement-1',
+          assetId: 'asset-1',
+          x: 0.5,
+          y: 0.5,
+          scale: 1,
+          rotation: 0,
+          zIndex: 1,
+          opacity: 1,
+          outlineEnabled: true,
+          motionLocked: false,
+          renderMode: 'stamp',
+          asset: {
+            id: 'asset-1',
+            ownerUid: ownerUser.id,
+            localUri: 'file:///stickers/asset-1.jpg',
+            remotePath: null,
+            mimeType: 'image/jpeg',
+            width: 300,
+            height: 240,
+            createdAt: '2026-03-25T00:00:00.000Z',
+            updatedAt: null,
+            source: 'import',
+          },
+        },
+      ]),
+      updated_at: '2026-03-25T00:00:00.000Z',
+    });
+
+    const note = {
+      id: 'note-decorated',
+      type: 'text',
+      content: 'Decorated note',
+      doodleStrokesJson: null,
+      stickerPlacementsJson: null,
+      hasDoodle: false,
+      hasStickers: false,
+      locationName: 'Saigon',
+      latitude: 10.77,
+      longitude: 106.69,
+      moodEmoji: null,
+      noteColor: null,
+    } as any;
+
+    const post = await createSharedPost(ownerUser, note, [friendUser.id]);
+
+    expect(mockGetNoteDoodle).toHaveBeenCalledWith('note-decorated');
+    expect(mockGetNoteStickers).toHaveBeenCalledWith('note-decorated');
+    expect(post.doodleStrokesJson).toContain('#111111');
+    expect(post.hasStickers).toBe(true);
+    expect(post.stickerPlacementsJson).toContain('"renderMode":"stamp"');
   });
 
   it('cleans up uploaded shared media when post creation fails', async () => {

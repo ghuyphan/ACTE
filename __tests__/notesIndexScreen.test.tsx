@@ -62,7 +62,16 @@ jest.mock('expo-router', () => ({
     push: (...args: unknown[]) => mockRouterPush(...args),
   }),
   Stack: {
-    Screen: () => null,
+    Screen: ({ options }: any) => {
+      const React = require('react');
+      const { View } = require('react-native');
+
+      if (options?.headerRight) {
+        return <View>{options.headerRight()}</View>;
+      }
+
+      return null;
+    },
   },
 }));
 
@@ -523,6 +532,14 @@ describe('NotesIndexScreen', () => {
     await waitFor(() => {
       expect(queryByTestId('shared-photo-grid-placeholder')).toBeNull();
     });
+  });
+
+  it('pushes to the sticker library screen from the header action', () => {
+    const { getByTestId } = render(<NotesIndexScreen />);
+
+    fireEvent.press(getByTestId('notes-sticker-library-button'));
+
+    expect(mockRouterPush).toHaveBeenCalledWith('/notes/stickers');
   });
 
   it('re-renders tiles when grid decorations are revealed in all mode', async () => {

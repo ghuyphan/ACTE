@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
+import { Dimensions, Platform, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   runOnJS,
@@ -17,10 +17,13 @@ import { NoteMemoryCard } from './MemoryCardPrimitives';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const CARD_SIZE = Math.min(screenWidth - 64, 264);
+const DEFAULT_BOTTOM_PADDING = 34;
+const BOTTOM_TAB_CLEARANCE = 20;
 
 type SavedNotePolaroidRevealProps = {
   note: Note | null;
   revealToken: number;
+  bottomTabInset?: number;
   colors: {
     primary: string;
     text: string;
@@ -35,6 +38,7 @@ type SavedNotePolaroidRevealProps = {
 function SavedNotePolaroidReveal({
   note,
   revealToken,
+  bottomTabInset = 0,
   colors,
   t,
   onFinished,
@@ -154,13 +158,19 @@ function SavedNotePolaroidReveal({
   const flashAnimatedStyle = useAnimatedStyle(() => ({
     opacity: flashOpacity.value,
   }));
+  const bottomPadding =
+    Platform.OS === 'android'
+      ? DEFAULT_BOTTOM_PADDING
+      : bottomTabInset > 0
+        ? bottomTabInset + BOTTOM_TAB_CLEARANCE
+        : DEFAULT_BOTTOM_PADDING;
 
   if (!note) {
     return null;
   }
 
   return (
-    <View pointerEvents="none" style={styles.overlay}>
+    <View pointerEvents="none" style={[styles.overlay, { paddingBottom: bottomPadding }]}>
       <Animated.View style={[styles.cardWrap, cardAnimatedStyle]}>
         <View style={styles.cardShadowWrap}>
           <NoteMemoryCard note={note} colors={colors} t={t} cardSize={CARD_SIZE} />
@@ -179,7 +189,6 @@ const styles = StyleSheet.create({
     zIndex: 14,
     justifyContent: 'flex-end',
     alignItems: 'center',
-    paddingBottom: 34,
     backgroundColor: 'rgba(29, 21, 15, 0.18)',
   },
   cardWrap: {

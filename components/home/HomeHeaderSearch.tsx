@@ -1,15 +1,26 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Button, HStack, Host, Image as SwiftUIImage, Menu, Text as SwiftUIText } from '@expo/ui/swift-ui';
+import {
+  Button,
+  Circle,
+  HStack,
+  Host,
+  Image as SwiftUIImage,
+  Menu,
+  Text as SwiftUIText,
+  ZStack,
+} from '@expo/ui/swift-ui';
 import {
   accessibilityLabel,
   backgroundOverlay,
   buttonStyle,
   controlSize,
   cornerRadius,
+  frame,
   font,
   foregroundStyle,
   glassEffect,
   labelStyle,
+  offset,
   padding,
   tint,
 } from '@expo/ui/swift-ui/modifiers';
@@ -35,6 +46,11 @@ import GlassHeader from '../ui/GlassHeader';
 const HEADER_BUTTON_HIT_SLOP = { top: 8, right: 8, bottom: 8, left: 8 } as const;
 const HEADER_BUTTON_PRESS_RETENTION_OFFSET = { top: 14, right: 14, bottom: 14, left: 14 } as const;
 const BRAND_ICON_SOURCE = require('../../assets/images/icon/icon-default.png');
+type SharedFilterBadgeVariant = 'all' | 'friends' | 'mine';
+type SharedFilterBadgeSymbols = {
+  ios: ComponentProps<typeof SwiftUIImage>['systemName'];
+  android: ComponentProps<typeof Ionicons>['name'];
+};
 
 interface HomeHeaderSearchProps {
   topInset: number;
@@ -94,7 +110,9 @@ export default function HomeHeaderSearch({
   showDockedBlur = false,
 }: HomeHeaderSearchProps) {
   const modeIconScale = useSharedValue(1);
+  const sharedControlAnim = useSharedValue(1);
   const didMountRef = useRef(false);
+  const didMountSharedControlRef = useRef(false);
   const [showAndroidSharedMenuSheet, setShowAndroidSharedMenuSheet] = useState(false);
   const isAndroid = Platform.OS === 'android';
   const useDetachedWordmark = isIOS26OrNewer;
@@ -108,6 +126,10 @@ export default function HomeHeaderSearch({
   const androidHeaderStandaloneBorderColor = colors.border ?? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(113,86,26,0.18)');
   const androidHeaderControlForegroundColor = isDark ? '#FFF7E8' : '#6D530F';
   const androidHeaderSearchBackgroundColor = isDark ? 'rgba(255,247,232,0.22)' : 'rgba(255,255,255,0.88)';
+  const sharedFilterBaseSystemImage = 'line.3.horizontal.decrease';
+  const sharedFilterBaseAndroidIcon = sharedButtonActive ? 'funnel' : 'funnel-outline';
+  const sharedFilterBadgeBackgroundColor = colors.primary;
+  const sharedFilterBadgeForegroundColor = isDark ? '#1C1C1E' : '#FFFDF8';
   const notesButtonRef = useRef<View>(null);
 
   useEffect(() => {
@@ -123,8 +145,28 @@ export default function HomeHeaderSearch({
     });
   }, [captureMode, modeIconScale]);
 
+  useEffect(() => {
+    if (!didMountSharedControlRef.current) {
+      didMountSharedControlRef.current = true;
+      return;
+    }
+
+    sharedControlAnim.value = 0.92;
+    sharedControlAnim.value = withTiming(1, {
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [sharedButtonActive, sharedFilterValue, sharedControlAnim]);
+
   const modeIconAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: modeIconScale.value }],
+  }));
+  const sharedControlAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(sharedControlAnim.value, [0.92, 1], [0.82, 1]),
+    transform: [
+      { scale: sharedControlAnim.value },
+      { translateY: interpolate(sharedControlAnim.value, [0.92, 1], [0.5, 0]) },
+    ],
   }));
   const defaultHeaderAnimatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(searchAnim.value, [0, 1], [1, 0]),
@@ -182,6 +224,98 @@ export default function HomeHeaderSearch({
     return modifiers;
   };
 
+  const getSharedFilterBadgeVariant = (): SharedFilterBadgeVariant => {
+    if (sharedFilterValue === 'friends') {
+      return 'friends';
+    }
+
+    return 'all';
+  };
+
+  const getSharedFilterBadgeSymbols = (variant: SharedFilterBadgeVariant): SharedFilterBadgeSymbols => {
+    switch (variant) {
+      case 'friends':
+        return {
+          ios: 'person.2.fill',
+          android: 'people',
+        };
+      case 'mine':
+        return {
+          ios: 'person.fill',
+          android: 'person',
+        };
+      case 'all':
+      default:
+        return {
+          ios: 'square.grid.2x2.fill',
+          android: 'grid',
+        };
+    }
+  };
+
+  const renderSharedFilterSwiftIcon = (size: 'regular' | 'large' = 'regular') => {
+    const metrics = getHeaderControlMetrics(size);
+    const badgeVariant = getSharedFilterBadgeVariant();
+    const badgeSymbols = getSharedFilterBadgeSymbols(badgeVariant);
+    const baseColor = useNativeLiquidGlassControls ? undefined : headerControlForegroundColor;
+    const badgeDiameter = size === 'large' ? 14 : 12;
+    const badgeIconSize = size === 'large' ? 8 : 7;
+    const badgeOffset = size === 'large' ? { x: 5, y: 4 } : { x: 4, y: 3 };
+
+    return (
+      <ZStack alignment="bottomTrailing">
+        <SwiftUIImage
+          systemName={sharedFilterBaseSystemImage}
+          color={baseColor}
+          size={metrics.iconSize + (size === 'large' ? 1 : 0)}
+        />
+        <ZStack alignment="center" modifiers={[offset(badgeOffset)]}>
+          <Circle
+            modifiers={[
+              frame({ width: badgeDiameter, height: badgeDiameter }),
+              foregroundStyle(sharedFilterBadgeBackgroundColor),
+            ]}
+          />
+          <SwiftUIImage
+            systemName={badgeSymbols.ios}
+            color={sharedFilterBadgeForegroundColor}
+            size={badgeIconSize}
+          />
+        </ZStack>
+      </ZStack>
+    );
+  };
+
+  const renderSharedFilterAndroidIcon = (size: number, color: string) => {
+    const badgeVariant = getSharedFilterBadgeVariant();
+    const badgeSymbols = getSharedFilterBadgeSymbols(badgeVariant);
+    const badgeDiameter = size >= 20 ? 14 : 12;
+    const badgeIconSize = size >= 20 ? 8 : 7;
+
+    return (
+      <View style={[styles.sharedFilterIconWrap, { width: size + 8, height: size + 6 }]}>
+        <Ionicons name={sharedFilterBaseAndroidIcon} size={size} color={color} />
+        <View
+          style={[
+            styles.sharedFilterBadge,
+            {
+              width: badgeDiameter,
+              height: badgeDiameter,
+              borderRadius: badgeDiameter / 2,
+              backgroundColor: sharedFilterBadgeBackgroundColor,
+            },
+          ]}
+        >
+          <Ionicons
+            name={badgeSymbols.android}
+            size={badgeIconSize}
+            color={sharedFilterBadgeForegroundColor}
+          />
+        </View>
+      </View>
+    );
+  };
+
   const renderHeaderControlLabel = (
     systemName: ComponentProps<typeof SwiftUIImage>['systemName'],
     label: string,
@@ -219,6 +353,51 @@ export default function HomeHeaderSearch({
           color={useNativeLiquidGlassControls ? undefined : headerControlForegroundColor}
           size={metrics.iconSize}
         />
+        {!isIconOnly ? (
+          <SwiftUIText
+            modifiers={[
+              font({ size: metrics.textSize, weight: 'semibold' }),
+              ...(!useNativeLiquidGlassControls ? [foregroundStyle(headerControlForegroundColor)] : []),
+            ]}
+          >
+            {label}
+          </SwiftUIText>
+        ) : null}
+      </HStack>
+    );
+  };
+
+  const renderSharedControlLabel = (label: string, size: 'regular' | 'large' = 'regular') => {
+    const metrics = getHeaderControlMetrics(size);
+    const isIconOnly = useIconOnlyHeaderControls;
+
+    return (
+      <HStack
+        spacing={isIconOnly ? 0 : 6}
+        alignment="center"
+        modifiers={[
+          isIconOnly
+            ? padding({ all: metrics.iconOnlyPadding })
+            : padding({
+                top: metrics.verticalPadding,
+                bottom: metrics.verticalPadding,
+                leading: metrics.horizontalPadding,
+                trailing: metrics.horizontalPadding,
+              }),
+          ...(useNativeLiquidGlassControls
+            ? [
+                glassEffect({
+                  glass: {
+                    variant: 'regular',
+                    interactive: true,
+                  },
+                  shape: isIconOnly ? 'circle' : 'capsule',
+                }),
+              ]
+            : [backgroundOverlay({ color: headerControlBackgroundColor }), cornerRadius(999)]),
+        ]}
+      >
+        {renderSharedFilterSwiftIcon(size)}
         {!isIconOnly ? (
           <SwiftUIText
             modifiers={[
@@ -379,63 +558,62 @@ export default function HomeHeaderSearch({
       isSharedFilterControl && Boolean(onChangeSharedFilter);
     const sharedSystemName =
       isSharedFilterControl
-        ? sharedButtonActive
-          ? 'line.3.horizontal.decrease.circle.fill'
-          : 'line.3.horizontal.decrease.circle'
+        ? sharedFilterBaseSystemImage
         : 'person.2';
-    const sharedAndroidIcon =
-      isSharedFilterControl
-        ? sharedButtonActive
-          ? 'filter'
-          : 'filter-outline'
-        : 'people-outline';
     if (Platform.OS === 'ios') {
-      const controlLabel = renderHeaderControlLabel(sharedSystemName, sharedLabel, size);
+      const controlLabel =
+        isSharedFilterControl
+          ? renderSharedControlLabel(sharedLabel, size)
+          : renderHeaderControlLabel(sharedSystemName, sharedLabel, size);
 
       if (canShowFilterMenu) {
         return (
           <View style={styles.sharedButtonContainer}>
-            <Host
-              matchContents
-              colorScheme={isDark ? 'dark' : 'light'}
-              style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
-            >
-              <Menu
-                label={controlLabel}
-                modifiers={getHeaderControlModifiers(sharedA11yLabel)}
+            <Animated.View style={sharedControlAnimatedStyle}>
+              <Host
+                matchContents
+                colorScheme={isDark ? 'dark' : 'light'}
+                style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
               >
-                <Button
-                  label={t('home.feedFilterAll', 'All posts')}
-                  systemImage={sharedFilterValue === 'all' ? 'checkmark' : undefined}
-                  onPress={() => onChangeSharedFilter?.('all')}
-                />
-                <Button
-                  label={t('home.feedFilterFriends', 'Friends only')}
-                  systemImage={sharedFilterValue === 'friends' ? 'checkmark' : undefined}
-                  onPress={() => onChangeSharedFilter?.('friends')}
-                />
-                <Button
-                  label={t('shared.manageTitle', 'Friends')}
-                  systemImage="person.crop.circle"
-                  onPress={onOpenShared}
-                />
-              </Menu>
-            </Host>
+                <Menu
+                  label={controlLabel}
+                  modifiers={getHeaderControlModifiers(sharedA11yLabel)}
+                >
+                  <Button
+                    label={t('home.feedFilterAll', 'All posts')}
+                    systemImage={sharedFilterValue === 'all' ? 'checkmark' : undefined}
+                    onPress={() => onChangeSharedFilter?.('all')}
+                  />
+                  <Button
+                    label={t('home.feedFilterFriends', 'Friends only')}
+                    systemImage={sharedFilterValue === 'friends' ? 'checkmark' : undefined}
+                    onPress={() => onChangeSharedFilter?.('friends')}
+                  />
+                  <Button
+                    label={t('shared.manageTitle', 'Friends')}
+                    systemImage="person.crop.circle"
+                    onPress={onOpenShared}
+                  />
+                </Menu>
+              </Host>
+            </Animated.View>
           </View>
         );
       }
 
       return (
         <View style={styles.sharedButtonContainer}>
-          <Host
-            matchContents
-            colorScheme={isDark ? 'dark' : 'light'}
-            style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
-          >
-            <Button onPress={onOpenShared} modifiers={getHeaderControlModifiers(sharedA11yLabel)}>
-              {controlLabel}
-            </Button>
-          </Host>
+          <Animated.View style={sharedControlAnimatedStyle}>
+            <Host
+              matchContents
+              colorScheme={isDark ? 'dark' : 'light'}
+              style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
+            >
+              <Button onPress={onOpenShared} modifiers={getHeaderControlModifiers(sharedA11yLabel)}>
+                {controlLabel}
+              </Button>
+            </Host>
+          </Animated.View>
         </View>
       );
     }
@@ -443,18 +621,46 @@ export default function HomeHeaderSearch({
     if (canShowFilterMenu) {
       return (
         <View>
+          <Animated.View style={sharedControlAnimatedStyle}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={sharedA11yLabel}
+              hitSlop={HEADER_BUTTON_HIT_SLOP}
+              onPress={() => {
+                if (hasFriendsForFilter) {
+                  setShowAndroidSharedMenuSheet(true);
+                  return;
+                }
+
+                onOpenShared();
+              }}
+              pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
+              style={[
+                styles.modeToggleBtn,
+                styles.androidHeaderActionButton,
+                {
+                  backgroundColor: androidHeaderControlBackgroundColor,
+                  borderColor: androidHeaderControlBorderColor,
+                },
+              ]}
+            >
+              {isSharedFilterControl
+                ? renderSharedFilterAndroidIcon(20, colors.primary)
+                : <Ionicons name="people-outline" size={20} color={colors.primary} />}
+            </Pressable>
+          </Animated.View>
+        </View>
+      );
+    }
+
+    return (
+      <View>
+        <Animated.View style={sharedControlAnimatedStyle}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={sharedA11yLabel}
             hitSlop={HEADER_BUTTON_HIT_SLOP}
-            onPress={() => {
-              if (hasFriendsForFilter) {
-                setShowAndroidSharedMenuSheet(true);
-                return;
-              }
-
-              onOpenShared();
-            }}
+            onPress={onOpenShared}
             pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
             style={[
               styles.modeToggleBtn,
@@ -463,33 +669,13 @@ export default function HomeHeaderSearch({
                 backgroundColor: androidHeaderControlBackgroundColor,
                 borderColor: androidHeaderControlBorderColor,
               },
-            ]}
-          >
-            <Ionicons name={sharedAndroidIcon} size={20} color={colors.primary} />
-          </Pressable>
-        </View>
-      );
-    }
-
-    return (
-      <View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={sharedA11yLabel}
-          hitSlop={HEADER_BUTTON_HIT_SLOP}
-          onPress={onOpenShared}
-          pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
-          style={[
-            styles.modeToggleBtn,
-            styles.androidHeaderActionButton,
-            {
-              backgroundColor: androidHeaderControlBackgroundColor,
-              borderColor: androidHeaderControlBorderColor,
-            },
-            ]}
-          >
-            <Ionicons name={sharedAndroidIcon} size={20} color={colors.primary} />
-          </Pressable>
+              ]}
+            >
+              {isSharedFilterControl
+                ? renderSharedFilterAndroidIcon(20, colors.primary)
+                : <Ionicons name="people-outline" size={20} color={colors.primary} />}
+            </Pressable>
+        </Animated.View>
       </View>
     );
   };
@@ -546,35 +732,33 @@ export default function HomeHeaderSearch({
         <HStack spacing={10} alignment="center">
           {showSharedButton && onOpenShared ? (
             sharedButtonMode === 'filter' && onChangeSharedFilter && hasFriendsForFilter ? (
-              <Menu
-                label={
-                  sharedButtonActive
-                    ? t('home.friendsFilterActive', 'Friends filter on')
-                    : t('home.friendsFilterInactive', 'Filter by friends')
-                }
-                systemImage={
-                  sharedButtonActive
-                    ? 'line.3.horizontal.decrease.circle.fill'
-                    : 'line.3.horizontal.decrease.circle'
-                }
-                modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
-              >
-                <Button
-                  label={t('home.feedFilterAll', 'All posts')}
-                  systemImage={sharedFilterValue === 'all' ? 'checkmark' : undefined}
-                  onPress={() => onChangeSharedFilter?.('all')}
-                />
-                <Button
-                  label={t('home.feedFilterFriends', 'Friends only')}
-                  systemImage={sharedFilterValue === 'friends' ? 'checkmark' : undefined}
-                  onPress={() => onChangeSharedFilter?.('friends')}
-                />
-                <Button
-                  label={t('shared.manageTitle', 'Friends')}
-                  systemImage="person.crop.circle"
-                  onPress={onOpenShared}
-                />
-              </Menu>
+              <Animated.View style={sharedControlAnimatedStyle}>
+                <Menu
+                  label={renderSharedControlLabel(
+                    sharedButtonActive
+                      ? t('home.friendsFilterActive', 'Friends filter on')
+                      : t('home.friendsFilterInactive', 'Filter by friends'),
+                    'large'
+                  )}
+                  modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
+                >
+                  <Button
+                    label={t('home.feedFilterAll', 'All posts')}
+                    systemImage={sharedFilterValue === 'all' ? 'checkmark' : undefined}
+                    onPress={() => onChangeSharedFilter?.('all')}
+                  />
+                  <Button
+                    label={t('home.feedFilterFriends', 'Friends only')}
+                    systemImage={sharedFilterValue === 'friends' ? 'checkmark' : undefined}
+                    onPress={() => onChangeSharedFilter?.('friends')}
+                  />
+                  <Button
+                    label={t('shared.manageTitle', 'Friends')}
+                    systemImage="person.crop.circle"
+                    onPress={onOpenShared}
+                  />
+                </Menu>
+              </Animated.View>
             ) : (
               renderDetachedGlassIconButton({
                 label: t('shared.manageTitle', 'Friends'),
@@ -656,21 +840,19 @@ export default function HomeHeaderSearch({
                   }
 
                   onOpenShared();
-                }}
-                pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
-                style={({ pressed }) => [styles.androidGroupedAction, pressed ? styles.androidGroupedActionPressed : null]}
-                >
-                  <Ionicons
-                    name={
-                      sharedButtonMode === 'filter' && hasFriendsForFilter
-                        ? sharedButtonActive
-                          ? 'filter'
-                          : 'filter-outline'
-                        : 'people-outline'
-                    }
-                    size={18}
-                    color={androidHeaderControlForegroundColor}
-                  />
+            }}
+            pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
+            style={({ pressed }) => [styles.androidGroupedAction, pressed ? styles.androidGroupedActionPressed : null]}
+              >
+                <Animated.View style={sharedControlAnimatedStyle}>
+                  {sharedButtonMode === 'filter' && hasFriendsForFilter
+                    ? renderSharedFilterAndroidIcon(18, androidHeaderControlForegroundColor)
+                    : <Ionicons
+                        name="people-outline"
+                        size={18}
+                        color={androidHeaderControlForegroundColor}
+                      />}
+                </Animated.View>
               </Pressable>
             </View>
           </>
@@ -963,6 +1145,17 @@ const styles = StyleSheet.create({
   },
   sharedButtonContainer: {
     position: 'relative',
+  },
+  sharedFilterIconWrap: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sharedFilterBadge: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   searchHeader: {
     paddingHorizontal: 20,

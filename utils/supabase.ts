@@ -9,6 +9,14 @@ import { mapSupabaseUser } from './appUser';
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() ?? '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? '';
 
+export function getSupabaseUrl() {
+  return SUPABASE_URL;
+}
+
+export function getSupabaseAnonKey() {
+  return SUPABASE_ANON_KEY;
+}
+
 type SupportedStorage = {
   getItem: (key: string) => Promise<string | null>;
   setItem: (key: string, value: string) => Promise<void>;

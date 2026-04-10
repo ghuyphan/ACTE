@@ -3,14 +3,10 @@ import { TFunction } from 'i18next';
 import { ReactElement, RefObject, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Animated, {
   Extrapolation,
-  Easing,
   interpolate,
   type SharedValue,
   useAnimatedStyle,
   useSharedValue,
-  withDelay,
-  withSequence,
-  withTiming,
 } from 'react-native-reanimated';
 import {
   Platform,
@@ -22,10 +18,8 @@ import {
 import { Note } from '../../services/database';
 import { SharedPost } from '../../services/sharedFeedService';
 import { Layout } from '../../constants/theme';
-import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { buildHomeFeedItems, type HomeFeedItem, getHomeFeedItemKey } from './feedItems';
 import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
-import { getPolaroidFeelConfig } from './polaroidFeel';
 
 const DOCKED_HEADER_CONTENT_OVERLAP = 22;
 const CAPTURE_PAGE_STICKY_THRESHOLD = 0.62;
@@ -42,12 +36,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   onOpenNote,
   colors,
   t,
-  shouldReveal,
-  revealToken,
   isActive,
-  pageOffset,
-  scrollOffsetY,
-  snapHeight,
 }: {
   item: Note;
   index: number;
@@ -60,162 +49,18 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
     card: string;
   };
   t: TFunction;
-  shouldReveal: boolean;
-  revealToken: number;
   isActive: boolean;
-  pageOffset: number;
-  scrollOffsetY: SharedValue<number>;
-  snapHeight: number;
 }) {
-  const reduceMotionEnabled = useReducedMotion();
-  const scale = useSharedValue(1);
-  const cardTranslateY = useSharedValue(0);
-  const metaTranslateY = useSharedValue(0);
-  const revealScale = useSharedValue(1);
-  const revealTranslateY = useSharedValue(0);
-  const revealRotation = useSharedValue(0);
-  const revealGlow = useSharedValue(0);
-  const revealFlash = useSharedValue(0);
-  const lastRevealTokenRef = useRef<number | null>(null);
-  const sharedTransitionTag = `feed-note-card-${item.id}`;
-
-  useEffect(() => {
-    if (!shouldReveal || revealToken === 0 || lastRevealTokenRef.current === revealToken) {
-      return;
-    }
-
-    lastRevealTokenRef.current = revealToken;
-    const feel = getPolaroidFeelConfig(reduceMotionEnabled);
-
-    revealScale.value = feel.initialScale;
-    revealTranslateY.value = reduceMotionEnabled ? 4 : 16;
-    revealRotation.value = feel.initialRotation;
-    revealGlow.value = 0;
-    revealFlash.value = 0;
-    revealScale.value = withSequence(
-      withTiming(feel.overshootScale, {
-        duration: Math.max(90, Math.round(feel.enterDuration * 0.74)),
-        easing: Easing.out(Easing.cubic),
-      }),
-      withTiming(1, {
-        duration: feel.settleDuration,
-        easing: Easing.out(Easing.back(1.05)),
-      })
-    );
-    revealTranslateY.value = withTiming(0, {
-      duration: feel.enterDuration,
-      easing: Easing.out(Easing.cubic),
-    });
-    revealRotation.value = withTiming(feel.settleRotation, {
-      duration: feel.enterDuration,
-      easing: Easing.out(Easing.cubic),
-    });
-    revealGlow.value = withSequence(
-      withTiming(feel.glowPeakOpacity, {
-        duration: Math.max(100, Math.round(feel.enterDuration * 0.82)),
-        easing: Easing.out(Easing.cubic),
-      }),
-      withTiming(0, {
-        duration: Math.max(220, Math.round(feel.holdDuration * 0.54)),
-        easing: Easing.out(Easing.cubic),
-      })
-    );
-    revealFlash.value = feel.flashPeakOpacity
-      ? withSequence(
-          withDelay(
-            Math.round(feel.enterDuration * 0.22),
-            withTiming(feel.flashPeakOpacity, {
-              duration: Math.max(70, Math.round(feel.enterDuration * 0.32)),
-              easing: Easing.out(Easing.cubic),
-            })
-          ),
-          withTiming(0, {
-            duration: Math.max(140, Math.round(feel.enterDuration * 0.54)),
-            easing: Easing.out(Easing.cubic),
-          })
-        )
-      : withTiming(0, { duration: 0 });
-  }, [
-    reduceMotionEnabled,
-    revealFlash,
-    revealGlow,
-    revealRotation,
-    revealScale,
-    revealToken,
-    revealTranslateY,
-    shouldReveal,
-  ]);
-
-  const revealGlowAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: revealGlow.value,
-    transform: [{ scale: revealScale.value }],
-  }));
-  const revealFlashAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: revealFlash.value,
-  }));
-  const pageAnimatedStyle = useAnimatedStyle(() => {
-    const distanceFromFocus = Math.min(
-      Math.abs(Math.max(0, scrollOffsetY.value) - pageOffset) / Math.max(snapHeight, 1),
-      1
-    );
-
-    return {
-      opacity: interpolate(distanceFromFocus, [0, 1], [1, INACTIVE_CARD_OPACITY], Extrapolation.CLAMP),
-      transform: [
-        {
-          translateY: interpolate(
-            distanceFromFocus,
-            [0, 1],
-            [0, INACTIVE_CARD_TRANSLATE_Y],
-            Extrapolation.CLAMP
-          ),
-        },
-        {
-          scale: interpolate(distanceFromFocus, [0, 1], [1, INACTIVE_CARD_SCALE], Extrapolation.CLAMP),
-        },
-      ],
-    };
-  }, [pageOffset, scrollOffsetY, snapHeight]);
-  const noteCardAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: cardTranslateY.value + revealTranslateY.value },
-      { rotate: `${revealRotation.value}deg` },
-      { scale: scale.value * revealScale.value },
-    ],
-  }), [cardTranslateY, revealRotation, revealScale, revealTranslateY, scale]);
-  const noteMetaAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: metaTranslateY.value }],
-  }));
-
   return (
-    <Animated.View style={pageAnimatedStyle}>
-      <View style={styles.revealWrap}>
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.revealGlow,
-            {
-              backgroundColor: colors.primary,
-            },
-            revealGlowAnimatedStyle,
-          ]}
-        />
-        <Animated.View sharedTransitionTag={sharedTransitionTag}>
-          <Animated.View style={noteCardAnimatedStyle}>
-            <Animated.View style={noteMetaAnimatedStyle}>
-              <NoteMemoryCard
-                note={item}
-                onPress={() => onOpenNote(item.id)}
-                colors={colors}
-                t={t}
-                isActive={isActive}
-              />
-            </Animated.View>
-            <Animated.View pointerEvents="none" style={[styles.revealFlash, revealFlashAnimatedStyle]} />
-          </Animated.View>
-        </Animated.View>
-      </View>
-    </Animated.View>
+    <View>
+      <NoteMemoryCard
+        note={item}
+        onPress={() => onOpenNote(item.id)}
+        colors={colors}
+        t={t}
+        isActive={isActive}
+      />
+    </View>
   );
 }, (prevProps, nextProps) => (
   prevProps.index === nextProps.index &&
@@ -238,12 +83,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   prevProps.item.doodleStrokesJson === nextProps.item.doodleStrokesJson &&
   prevProps.item.hasStickers === nextProps.item.hasStickers &&
   prevProps.item.stickerPlacementsJson === nextProps.item.stickerPlacementsJson &&
-  prevProps.shouldReveal === nextProps.shouldReveal &&
-  prevProps.revealToken === nextProps.revealToken &&
-  prevProps.isActive === nextProps.isActive &&
-  prevProps.pageOffset === nextProps.pageOffset &&
-  prevProps.snapHeight === nextProps.snapHeight &&
-  prevProps.scrollOffsetY === nextProps.scrollOffsetY
+  prevProps.isActive === nextProps.isActive
 ));
 
 const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
@@ -372,8 +212,6 @@ interface NotesFeedProps {
   onCaptureScrollSettledChange?: (settled: boolean) => void;
   capturePageLocked?: boolean;
   scrollEnabled?: boolean;
-  revealedNoteId?: string | null;
-  revealToken?: number;
   onSettledArchiveItemChange?: (item: { id: string; kind: 'note' | 'shared-post' } | null) => void;
   onScrollOffsetChange?: (offsetY: number) => void;
   bottomOverlayInset?: number;
@@ -400,8 +238,6 @@ export default function NotesFeed({
   onCaptureScrollSettledChange,
   capturePageLocked = false,
   scrollEnabled = true,
-  revealedNoteId = null,
-  revealToken = 0,
   onSettledArchiveItemChange,
   onScrollOffsetChange,
   bottomOverlayInset = 0,
@@ -411,6 +247,7 @@ export default function NotesFeed({
   const captureScrollSettledRef = useRef(true);
   const refreshGestureActiveRef = useRef(false);
   const lastOffsetYRef = useRef(0);
+  const currentOffsetYRef = useRef(0);
   const previousItemKeysRef = useRef<string[] | null>(null);
   const scrollOffsetY = useSharedValue(0);
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null);
@@ -556,6 +393,7 @@ export default function NotesFeed({
   const applySettledOffset = useCallback(
     (offsetY: number) => {
       const normalizedOffset = Math.max(0, offsetY);
+      currentOffsetYRef.current = normalizedOffset;
       lastOffsetYRef.current = normalizedOffset;
       scrollOffsetY.value = normalizedOffset;
       reportCaptureVisibility(normalizedOffset);
@@ -675,9 +513,8 @@ export default function NotesFeed({
       return;
     }
 
-    maybeCorrectSnapOffset(lastOffsetYRef.current, { animated: false });
+    maybeCorrectSnapOffset(currentOffsetYRef.current, { animated: false });
   }, [
-    flatListRef,
     itemKeys,
     capturePageLocked,
     maybeCorrectSnapOffset,
@@ -692,7 +529,7 @@ export default function NotesFeed({
       return;
     }
 
-    maybeCorrectSnapOffset(lastOffsetYRef.current, { animated: false });
+    maybeCorrectSnapOffset(currentOffsetYRef.current, { animated: false });
   }, [
     capturePageLocked,
     maybeCorrectSnapOffset,
@@ -755,12 +592,7 @@ export default function NotesFeed({
               onOpenNote={onOpenNote}
               colors={colors}
               t={t}
-              shouldReveal={item.note.id === revealedNoteId}
-              revealToken={revealToken}
               isActive={isActive}
-              pageOffset={(index + 1) * snapHeight}
-              scrollOffsetY={scrollOffsetY}
-              snapHeight={snapHeight}
             />
           </View>
         </View>
@@ -771,8 +603,6 @@ export default function NotesFeed({
       colors,
       onOpenNote,
       onOpenSharedPost,
-      revealedNoteId,
-      revealToken,
       screenActive,
       snapHeight,
       scrollOffsetY,
@@ -825,6 +655,7 @@ export default function NotesFeed({
       onScroll={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
         const previousSettledOffsetY = lastOffsetYRef.current;
+        currentOffsetYRef.current = Math.max(0, offsetY);
         scrollOffsetY.value = offsetY;
         updateRefreshGestureActive(offsetY < REFRESH_PULL_THRESHOLD);
         if (Math.abs(offsetY - previousSettledOffsetY) > SCROLL_SNAP_EPSILON) {
@@ -908,18 +739,5 @@ const styles = StyleSheet.create({
   cardStage: {
     flex: 1,
     justifyContent: 'center',
-  },
-  revealWrap: {
-    alignSelf: 'center',
-    overflow: 'visible',
-  },
-  revealGlow: {
-    ...StyleSheet.absoluteFill,
-    borderRadius: Layout.cardRadius + 18,
-  },
-  revealFlash: {
-    ...StyleSheet.absoluteFill,
-    borderRadius: Layout.cardRadius + 18,
-    backgroundColor: '#FFFFFF',
   },
 });

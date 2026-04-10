@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import { Href, useRouter } from 'expo-router';
+import { Href, Stack, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -49,6 +49,7 @@ import { SHARED_POST_MEDIA_BUCKET } from '../../../services/remoteMedia';
 import { Note } from '../../../services/database';
 import { SharedPost } from '../../../services/sharedFeedService';
 import { scheduleOnIdle } from '../../../utils/scheduleOnIdle';
+import { buildCreatedStickerLibrary } from './stickerLibrary';
 import { useNotesGridSharedPhotoHydration } from './useNotesGridSharedPhotoHydration';
 
 type NoteGridItem =
@@ -103,6 +104,39 @@ function areStringArraysEqual(left: readonly string[], right: readonly string[])
   }
 
   return true;
+}
+
+function StickerLibraryHeaderButton({
+  accessibilityLabel,
+  borderColor,
+  fillColor,
+  iconColor,
+  onPress,
+}: {
+  accessibilityLabel: string;
+  borderColor: string;
+  fillColor: string;
+  iconColor: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.headerActionButton,
+        {
+          backgroundColor: fillColor,
+          borderColor,
+          opacity: pressed ? 0.82 : 1,
+        },
+      ]}
+      testID="notes-sticker-library-button"
+    >
+      <Ionicons name="sparkles-outline" size={18} color={iconColor} />
+    </Pressable>
+  );
 }
 
 const GridTile = memo(function GridTile({
@@ -321,6 +355,7 @@ export default function NotesIndexScreen() {
     sharedPhotoPosts,
     visibleSharedPhotoIds
   );
+  const createdStickerLibrary = useMemo(() => buildCreatedStickerLibrary(notes), [notes]);
   const items = useMemo<NoteGridItem[]>(
     () =>
       [
@@ -554,101 +589,122 @@ export default function NotesIndexScreen() {
   ) : null;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {isLoading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : (
-        <>
-          {modeSwitch}
-          <GestureDetector gesture={modeContentGesture}>
-            <View style={styles.modeContentStack}>
-              {shouldRenderAllMode ? (
-                <Reanimated.View
-                  pointerEvents={mode === 'all' ? 'auto' : 'none'}
-                  style={[styles.modeContentLayer, allLayerAnimatedStyle]}
-                >
-                  {items.length === 0 ? (
-                    <View
-                      testID="notes-empty-state"
-                      style={[
-                        styles.center,
-                        styles.emptyScreen,
-                        styles.modeContentFill,
-                        {
-                          paddingBottom: insets.bottom + 28,
-                        },
-                      ]}
-                    >
-                      <View style={styles.emptyState}>
-                        <View style={styles.emptyIconWrap}>
-                          <Ionicons name="document-text-outline" size={44} color={colors.secondaryText} />
-                        </View>
-                        <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                          {t('home.emptyTitle', 'No notes yet')}
-                        </Text>
-                        <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-                          {t('home.emptySubtitle', 'Write down what she likes or dislikes\nat each restaurant — we\'ll remind you!')}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : (
-                    <FlashList
-                      data={items}
-                      keyExtractor={(item) => item.id}
-                      getItemType={(item) => `${item.kind}:${item.kind === 'note' ? item.note.type : item.post.type}`}
-                      drawDistance={gridSize * 2}
-                      removeClippedSubviews={Platform.OS === 'android'}
-                      renderItem={({ item, index }) => (
-                        <GridTile
-                          item={item}
-                          index={index}
-                          size={gridSize}
-                          gap={gridGap}
-                          colors={colors}
-                          photoFallbackLabel={t('shared.photoMemory', 'Photo memory')}
-                          showDecorations={showGridDecorations && mode === 'all'}
-                          sharedPhotoUri={
-                            item.kind === 'shared-post'
-                              ? sharedPhotoUrisById[item.post.id] ?? item.post.photoLocalUri ?? null
-                              : null
-                          }
-                          onPress={() => openItem(item)}
-                        />
-                      )}
-                      onViewableItemsChanged={handleViewableItemsChanged}
-                      viewabilityConfig={gridViewabilityConfig}
-                      numColumns={3}
-                      showsVerticalScrollIndicator={false}
-                      contentContainerStyle={{
-                        paddingBottom: insets.bottom + 28,
-                        paddingHorizontal: Layout.screenPadding,
-                      }}
-                      style={styles.modeContentFill}
-                    />
-                  )}
-                </Reanimated.View>
-              ) : null}
-
-              {shouldRenderRecap ? (
-                <Reanimated.View
-                  pointerEvents={mode === 'recap' ? 'auto' : 'none'}
-                  style={[styles.modeContentLayer, recapLayerAnimatedStyle]}
-                >
-                  <NotesRecapView
-                    notes={notes}
-                    bottomInset={insets.bottom}
-                    isVisible={mode === 'recap'}
-                    suspendPhysics={isRecapPhysicsSuspended}
+    <>
+      <Stack.Screen
+        options={{
+          headerRight:
+            createdStickerLibrary.length > 0
+              ? () => (
+                  <StickerLibraryHeaderButton
+                    accessibilityLabel={t(
+                      'notes.stickerLibrary.buttonA11y',
+                      'Open your sticker library'
+                    )}
+                    borderColor={colors.border}
+                    fillColor={colors.primarySoft}
+                    iconColor={colors.primary}
+                    onPress={() => router.push('/notes/stickers' as Href)}
                   />
-                </Reanimated.View>
-              ) : null}
-            </View>
-          </GestureDetector>
-        </>
-      )}
-    </View>
+                )
+              : undefined,
+        }}
+      />
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {isLoading ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : (
+          <>
+            {modeSwitch}
+            <GestureDetector gesture={modeContentGesture}>
+              <View style={styles.modeContentStack}>
+                {shouldRenderAllMode ? (
+                  <Reanimated.View
+                    pointerEvents={mode === 'all' ? 'auto' : 'none'}
+                    style={[styles.modeContentLayer, allLayerAnimatedStyle]}
+                  >
+                    {items.length === 0 ? (
+                      <View
+                        testID="notes-empty-state"
+                        style={[
+                          styles.center,
+                          styles.emptyScreen,
+                          styles.modeContentFill,
+                          {
+                            paddingBottom: insets.bottom + 28,
+                          },
+                        ]}
+                      >
+                        <View style={styles.emptyState}>
+                          <View style={styles.emptyIconWrap}>
+                            <Ionicons name="document-text-outline" size={44} color={colors.secondaryText} />
+                          </View>
+                          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                            {t('home.emptyTitle', 'No notes yet')}
+                          </Text>
+                          <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
+                            {t('home.emptySubtitle', 'Write down what she likes or dislikes\nat each restaurant — we\'ll remind you!')}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <FlashList
+                        data={items}
+                        keyExtractor={(item) => item.id}
+                        getItemType={(item) => `${item.kind}:${item.kind === 'note' ? item.note.type : item.post.type}`}
+                        drawDistance={gridSize * 2}
+                        removeClippedSubviews={Platform.OS === 'android'}
+                        renderItem={({ item, index }) => (
+                          <GridTile
+                            item={item}
+                            index={index}
+                            size={gridSize}
+                            gap={gridGap}
+                            colors={colors}
+                            photoFallbackLabel={t('shared.photoMemory', 'Photo memory')}
+                            showDecorations={showGridDecorations && mode === 'all'}
+                            sharedPhotoUri={
+                              item.kind === 'shared-post'
+                                ? sharedPhotoUrisById[item.post.id] ?? item.post.photoLocalUri ?? null
+                                : null
+                            }
+                            onPress={() => openItem(item)}
+                          />
+                        )}
+                        onViewableItemsChanged={handleViewableItemsChanged}
+                        viewabilityConfig={gridViewabilityConfig}
+                        numColumns={3}
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={{
+                          paddingBottom: insets.bottom + 28,
+                          paddingHorizontal: Layout.screenPadding,
+                        }}
+                        style={styles.modeContentFill}
+                      />
+                    )}
+                  </Reanimated.View>
+                ) : null}
+
+                {shouldRenderRecap ? (
+                  <Reanimated.View
+                    pointerEvents={mode === 'recap' ? 'auto' : 'none'}
+                    style={[styles.modeContentLayer, recapLayerAnimatedStyle]}
+                  >
+                    <NotesRecapView
+                      notes={notes}
+                      bottomInset={insets.bottom}
+                      isVisible={mode === 'recap'}
+                      suspendPhysics={isRecapPhysicsSuspended}
+                    />
+                  </Reanimated.View>
+                ) : null}
+              </View>
+            </GestureDetector>
+          </>
+        )}
+      </View>
+    </>
   );
 }
 
@@ -677,6 +733,15 @@ const styles = StyleSheet.create({
   },
   modeContentFill: {
     flex: 1,
+  },
+  headerActionButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 2,
   },
   tilePressable: {
     borderRadius: 28,

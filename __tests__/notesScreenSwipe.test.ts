@@ -60,6 +60,9 @@ jest.mock('expo-router', () => ({
     push: jest.fn(),
     replace: jest.fn(),
   }),
+  Stack: {
+    Screen: () => null,
+  },
 }));
 
 jest.mock('../components/notes/DynamicStickerCanvas', () => () => null);

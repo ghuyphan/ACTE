@@ -510,7 +510,7 @@ describe('HomeScreen doodle save flow', () => {
     }
   });
 
-  it('queues the saved note reveal for the feed once Home leaves the capture page', async () => {
+  it('does not pass a home feed reveal animation after saving a note', async () => {
     jest.useFakeTimers();
     mockRemindersEnabled = true;
 
@@ -530,16 +530,16 @@ describe('HomeScreen doodle save flow', () => {
       });
 
       expect(latestSavedNoteRevealProps?.note?.id).toBe(createdInput.id);
-      expect(latestNotesFeedProps?.revealedNoteId).toBeNull();
-      expect(latestNotesFeedProps?.revealToken).toBe(0);
+      expect(latestNotesFeedProps?.revealedNoteId).toBeUndefined();
+      expect(latestNotesFeedProps?.revealToken).toBeUndefined();
 
       act(() => {
         latestNotesFeedProps?.onCaptureVisibilityChange?.(false);
       });
 
       await waitFor(() => {
-        expect(latestNotesFeedProps?.revealedNoteId).toBe(createdInput.id);
-        expect(latestNotesFeedProps?.revealToken).toBeGreaterThan(0);
+        expect(latestNotesFeedProps?.revealedNoteId).toBeUndefined();
+        expect(latestNotesFeedProps?.revealToken).toBeUndefined();
       });
     } finally {
       jest.useRealTimers();

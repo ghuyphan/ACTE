@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ClipboardPasteButton } from 'expo-clipboard';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { TFunction } from 'i18next';
 import { type ComponentProps, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, View, type ViewStyle } from 'react-native';
 import { ENABLE_PHOTO_STICKERS } from '../../../constants/experiments';
+import { DEFAULT_NOTE_COLOR_ID, getCaptureNoteGradient } from '../../../services/noteAppearance';
 import DoodleIcon from '../../ui/DoodleIcon';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
 import StickerIcon from '../../ui/StickerIcon';
@@ -36,6 +38,54 @@ interface CaptureDecorateRailTheme {
   paletteSelectedBorderColor: string;
   paletteSwatchBorderColor: string;
   railBorderColor: string;
+}
+
+interface CaptureTextColorButtonProps {
+  colors: CaptureCardColors;
+  noteColor?: string | null;
+  onPress: () => void;
+  t: TFunction;
+}
+
+function CaptureTextColorButton({
+  colors,
+  noteColor = DEFAULT_NOTE_COLOR_ID,
+  onPress,
+  t,
+}: CaptureTextColorButtonProps) {
+  return (
+    <CaptureAnimatedPressable
+      testID="capture-note-color-trigger"
+      accessibilityLabel={t('capture.noteColor', 'Card color')}
+      onPress={onPress}
+      style={[
+        styles.textBottomToolsButton,
+        {
+          backgroundColor: 'transparent',
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.textBottomToolsAction,
+          {
+            width: 30,
+            height: 30,
+            borderRadius: 15,
+            overflow: 'hidden',
+          },
+        ]}
+        pointerEvents="none"
+      >
+        <LinearGradient
+          colors={getCaptureNoteGradient({ noteColor })}
+          start={{ x: 0.08, y: 0.06 }}
+          end={{ x: 0.94, y: 0.94 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </View>
+    </CaptureAnimatedPressable>
+  );
 }
 
 interface CaptureDecorateRailProps {
@@ -151,7 +201,7 @@ function CaptureDecorateRail({
           style={styles.textBottomToolsButton}
         />
       ) : null}
-      {afterToggles}
+      {!isShowingDoodleControls && !isShowingStickerControls ? afterToggles : null}
       {isShowingDoodleControls ? (
         <>
           <CaptureAnimatedPressable
@@ -252,6 +302,7 @@ interface TextCaptureBottomBarProps {
   handleClearDoodle: () => void;
   handleInlinePasteStickerPress: () => void;
   handleNativeInlinePasteStickerPress: ComponentProps<typeof ClipboardPasteButton>['onPress'];
+  handleOpenNoteColorSheet: () => void;
   handleSelectDoodleColor: (nextColor: string) => void;
   handleSelectedStickerAction: (action: StickerAction) => void;
   handleShowStickerSourceOptions: ComponentProps<typeof CaptureAnimatedPressable>['onPress'];
@@ -260,6 +311,7 @@ interface TextCaptureBottomBarProps {
   handleUndoDoodle: () => void;
   importingSticker: boolean;
   inlinePasteLoading: boolean;
+  noteColor?: string | null;
   selectedStickerId: string | null;
   showInlinePasteButton: boolean;
   stickerModeEnabled: boolean;
@@ -277,6 +329,7 @@ export function TextCaptureBottomBar({
   handleClearDoodle,
   handleInlinePasteStickerPress,
   handleNativeInlinePasteStickerPress,
+  handleOpenNoteColorSheet,
   handleSelectDoodleColor,
   handleSelectedStickerAction,
   handleShowStickerSourceOptions,
@@ -285,6 +338,7 @@ export function TextCaptureBottomBar({
   handleUndoDoodle,
   importingSticker,
   inlinePasteLoading,
+  noteColor,
   selectedStickerId,
   showInlinePasteButton,
   stickerModeEnabled,
@@ -328,69 +382,77 @@ export function TextCaptureBottomBar({
           railBorderColor: colors.captureCardBorder,
         }}
         defaultActions={
-          showInlinePasteButton ? (
-            <View style={styles.inlinePasteStickerWrap}>
-              {inlinePasteLoading ? (
-                <CaptureAnimatedPressable
-                  testID="capture-inline-paste-sticker"
-                  accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
-                  disabled
-                  disabledOpacity={1}
-                  style={[
-                    styles.textBottomToolsButton,
-                    styles.textBottomToolsAction,
-                    {
-                      borderColor: 'transparent',
-                      backgroundColor: colors.captureGlassFill,
-                    },
-                  ]}
-                >
-                  <ActivityIndicator
-                    testID="capture-inline-paste-sticker-loading"
-                    size="small"
-                    color={colors.captureGlassText}
+          <>
+            <CaptureTextColorButton
+              colors={colors}
+              noteColor={noteColor}
+              onPress={handleOpenNoteColorSheet}
+              t={t}
+            />
+            {showInlinePasteButton ? (
+              <View style={styles.inlinePasteStickerWrap}>
+                {inlinePasteLoading ? (
+                  <CaptureAnimatedPressable
+                    testID="capture-inline-paste-sticker"
+                    accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
+                    disabled
+                    disabledOpacity={1}
+                    style={[
+                      styles.textBottomToolsButton,
+                      styles.textBottomToolsAction,
+                      {
+                        borderColor: 'transparent',
+                        backgroundColor: colors.captureGlassFill,
+                      },
+                    ]}
+                  >
+                    <ActivityIndicator
+                      testID="capture-inline-paste-sticker-loading"
+                      size="small"
+                      color={colors.captureGlassText}
+                    />
+                  </CaptureAnimatedPressable>
+                ) : useNativeInlinePasteButton ? (
+                  <ClipboardPasteButton
+                    testID="capture-inline-paste-sticker"
+                    accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
+                    acceptedContentTypes={['image']}
+                    imageOptions={{ format: 'png' }}
+                    displayMode="iconOnly"
+                    cornerStyle="capsule"
+                    backgroundColor={colors.captureGlassFill}
+                    foregroundColor={colors.captureGlassText}
+                    onPress={handleNativeInlinePasteStickerPress}
+                    style={[
+                      styles.nativeInlinePasteStickerButton,
+                      {
+                        borderWidth: StyleSheet.hairlineWidth,
+                        borderColor: 'transparent',
+                      },
+                    ]}
                   />
-                </CaptureAnimatedPressable>
-              ) : useNativeInlinePasteButton ? (
-                <ClipboardPasteButton
-                  testID="capture-inline-paste-sticker"
-                  accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
-                  acceptedContentTypes={['image']}
-                  imageOptions={{ format: 'png' }}
-                  displayMode="iconOnly"
-                  cornerStyle="capsule"
-                  backgroundColor={colors.captureGlassFill}
-                  foregroundColor={colors.captureGlassText}
-                  onPress={handleNativeInlinePasteStickerPress}
-                  style={[
-                    styles.nativeInlinePasteStickerButton,
-                    {
-                      borderWidth: StyleSheet.hairlineWidth,
-                      borderColor: 'transparent',
-                    },
-                  ]}
-                />
-              ) : (
-                <CaptureAnimatedPressable
-                  testID="capture-inline-paste-sticker"
-                  accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
-                  onPress={handleInlinePasteStickerPress}
-                  disabled={inlinePasteLoading}
-                  disabledOpacity={1}
-                  style={[
-                    styles.textBottomToolsButton,
-                    styles.textBottomToolsAction,
-                    {
-                      borderColor: 'transparent',
-                      backgroundColor: colors.captureGlassFill,
-                    },
-                  ]}
-                >
-                  <Ionicons name="clipboard-outline" size={16} color={colors.captureGlassText} />
-                </CaptureAnimatedPressable>
-              )}
-            </View>
-          ) : null
+                ) : (
+                  <CaptureAnimatedPressable
+                    testID="capture-inline-paste-sticker"
+                    accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
+                    onPress={handleInlinePasteStickerPress}
+                    disabled={inlinePasteLoading}
+                    disabledOpacity={1}
+                    style={[
+                      styles.textBottomToolsButton,
+                      styles.textBottomToolsAction,
+                      {
+                        borderColor: 'transparent',
+                        backgroundColor: colors.captureGlassFill,
+                      },
+                    ]}
+                  >
+                    <Ionicons name="clipboard-outline" size={16} color={colors.captureGlassText} />
+                  </CaptureAnimatedPressable>
+                )}
+              </View>
+            ) : null}
+          </>
         }
       />
     </View>
