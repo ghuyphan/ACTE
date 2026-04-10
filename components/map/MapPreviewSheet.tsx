@@ -5,6 +5,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
   interpolate,
+  type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -18,6 +19,7 @@ const DISMISS_TRAVEL = 108;
 const MAX_DRAG_TRAVEL = 120;
 const DRAG_RESISTANCE_START = 54;
 const DRAG_RESISTANCE_FACTOR = 0.38;
+const EXPAND_TRANSLATE_FACTOR = 0.32;
 
 function applyDragResistance(distance: number) {
   'worklet';
@@ -47,7 +49,16 @@ interface MapPreviewSheetProps {
   onDismiss: () => void;
   reduceMotionEnabled: boolean;
   allowDragDismiss?: boolean;
+  allowExpand?: boolean;
   handleVisible?: boolean;
+  isExpanded?: boolean;
+  previewProgress?: SharedValue<number>;
+  previewGestureRange?: number;
+  expansionProgress?: SharedValue<number>;
+  expansionGestureRange?: number;
+  onPeek?: () => void;
+  onExpand?: () => void;
+  onCollapse?: () => void;
   children: ReactNode;
 }
 
@@ -61,13 +72,25 @@ export default function MapPreviewSheet({
   onDismiss,
   reduceMotionEnabled,
   allowDragDismiss = true,
+  allowExpand = false,
   handleVisible = true,
+  isExpanded = false,
+  previewProgress,
+  previewGestureRange = 1,
+  expansionProgress,
+  expansionGestureRange = 1,
+  onPeek,
+  onExpand,
+  onCollapse,
   children,
 }: MapPreviewSheetProps) {
   const { t } = useTranslation();
   const translateY = useSharedValue(400);
   const dismissing = useSharedValue(false);
   const handleVisibility = useSharedValue(handleVisible ? 1 : 0);
+  const didHandleGestureEnd = useSharedValue(false);
+  const panStartPreviewProgress = useSharedValue(0);
+  const panStartExpansionProgress = useSharedValue(0);
   const closeSequenceRef = useRef(0);
   const closeFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -238,7 +261,7 @@ export default function MapPreviewSheet({
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
-        .enabled(allowDragDismiss)
+        .enabled(allowDragDismiss || allowExpand)
         .maxPointers(1)
         .activeOffsetY([-4, 4])
         .failOffsetX([-24, 24])
@@ -246,15 +269,168 @@ export default function MapPreviewSheet({
         .onBegin(() => {
           cancelAnimation(translateY);
           dismissing.value = false;
+          didHandleGestureEnd.value = false;
+          panStartPreviewProgress.value = previewProgress?.value ?? 0;
+          panStartExpansionProgress.value = expansionProgress?.value ?? (isExpanded ? 1 : 0);
         })
         .onUpdate((event) => {
+          if (allowExpand && previewProgress && expansionProgress) {
+            const peekRange = Math.max(previewGestureRange, 1);
+            const expandRange = Math.max(expansionGestureRange, 1);
+            const startTotal =
+              panStartPreviewProgress.value * peekRange +
+              panStartExpansionProgress.value * expandRange;
+            const nextTotal = Math.max(
+              0,
+              Math.min(peekRange + expandRange, startTotal - event.translationY)
+            );
+
+            previewProgress.value = Math.max(0, Math.min(1, nextTotal / peekRange));
+            expansionProgress.value =
+              nextTotal <= peekRange
+                ? 0
+                : Math.max(0, Math.min(1, (nextTotal - peekRange) / expandRange));
+
+            const extraDismissDrag =
+              nextTotal <= 0 && event.translationY > startTotal
+                ? event.translationY - startTotal
+                : 0;
+
+            translateY.value =
+              extraDismissDrag > 0 ? applyDragResistance(extraDismissDrag) : 0;
+            return;
+          }
+
+          if (allowExpand && expansionProgress) {
+            const dragRange = Math.max(expansionGestureRange, 1);
+            const startProgress = panStartExpansionProgress.value;
+            const nextProgress = Math.max(
+              0,
+              Math.min(1, startProgress - event.translationY / dragRange)
+            );
+
+            expansionProgress.value = nextProgress;
+
+            const extraDismissDrag =
+              nextProgress <= 0 && event.translationY > startProgress * dragRange
+                ? event.translationY - startProgress * dragRange
+                : 0;
+
+            translateY.value =
+              extraDismissDrag > 0 ? applyDragResistance(extraDismissDrag) : 0;
+            return;
+          }
+
+          if (allowExpand && isExpanded) {
+            translateY.value = applyDragResistance(Math.max(0, event.translationY));
+            return;
+          }
+
+          if (allowExpand && event.translationY < 0) {
+            translateY.value = event.translationY * EXPAND_TRANSLATE_FACTOR;
+            return;
+          }
+
           translateY.value = applyDragResistance(event.translationY);
         })
         .onEnd((event) => {
+          didHandleGestureEnd.value = true;
+
+          if (allowExpand && previewProgress && expansionProgress) {
+            const peekRange = Math.max(previewGestureRange, 1);
+            const expandRange = Math.max(expansionGestureRange, 1);
+            const projectedTotal = Math.max(
+              0,
+              Math.min(
+                peekRange + expandRange,
+                previewProgress.value * peekRange +
+                  expansionProgress.value * expandRange -
+                  event.velocityY * 0.18
+              )
+            );
+            const expandThreshold = peekRange + expandRange * 0.45;
+            const peekThreshold = peekRange * 0.5;
+
+            if (projectedTotal >= expandThreshold) {
+              previewProgress.value = withSpring(1);
+              expansionProgress.value = withSpring(1);
+              scheduleOnRN(onExpand ?? (() => {}));
+              scheduleOnRN(resetPosition, 0);
+              return;
+            }
+
+            if (projectedTotal >= peekThreshold) {
+              previewProgress.value = withSpring(1);
+              expansionProgress.value = withSpring(0);
+              scheduleOnRN(onPeek ?? (() => {}));
+              scheduleOnRN(resetPosition, 0);
+              return;
+            }
+
+            previewProgress.value = withSpring(0);
+            expansionProgress.value = withSpring(0);
+            scheduleOnRN(onCollapse ?? (() => {}));
+            scheduleOnRN(resetPosition, event.velocityY);
+            return;
+          }
+
+          if (allowExpand && expansionProgress) {
+            const dragRange = Math.max(expansionGestureRange, 1);
+            const projectedProgress = Math.max(
+              0,
+              Math.min(1, expansionProgress.value - event.velocityY / dragRange * 0.18)
+            );
+            const shouldExpand = projectedProgress >= 0.5;
+
+            if (shouldExpand) {
+              scheduleOnRN(onExpand ?? (() => {}));
+              scheduleOnRN(resetPosition, 0);
+              return;
+            }
+
+            const projectedDismissDrag =
+              Math.max(0, event.translationY - panStartExpansionProgress.value * dragRange) +
+              event.velocityY * 0.1;
+            const shouldDismiss =
+              allowDragDismiss &&
+              expansionProgress.value <= 0 &&
+              projectedDismissDrag >= DISMISS_DISTANCE;
+
+            if (shouldDismiss) {
+              scheduleOnRN(finishDismiss, event.velocityY);
+              return;
+            }
+
+            scheduleOnRN(onCollapse ?? (() => {}));
+            scheduleOnRN(resetPosition, 0);
+            return;
+          }
+
+          const shouldExpand =
+            allowExpand &&
+            !isExpanded &&
+            (event.translationY <= -22 || event.velocityY <= -280);
+          if (shouldExpand) {
+            scheduleOnRN(onExpand ?? (() => {}));
+            scheduleOnRN(resetPosition, 0);
+            return;
+          }
+
+          const shouldCollapse =
+            allowExpand &&
+            isExpanded &&
+            (event.translationY >= 22 || event.velocityY >= 240);
+          if (shouldCollapse) {
+            scheduleOnRN(onCollapse ?? (() => {}));
+            scheduleOnRN(resetPosition, 0);
+            return;
+          }
+
           const projectedTranslation = event.translationY + event.velocityY * 0.1;
           const shouldDismiss =
-            translateY.value >= DISMISS_DISTANCE ||
-            projectedTranslation >= DISMISS_DISTANCE;
+            allowDragDismiss &&
+            !isExpanded &&
+            (translateY.value >= DISMISS_DISTANCE || projectedTranslation >= DISMISS_DISTANCE);
 
           if (shouldDismiss) {
             scheduleOnRN(finishDismiss, event.velocityY);
@@ -264,11 +440,67 @@ export default function MapPreviewSheet({
           scheduleOnRN(resetPosition, event.velocityY);
         })
         .onFinalize(() => {
-          if (!dismissing.value && translateY.value !== 0) {
+          if (didHandleGestureEnd.value || dismissing.value) {
+            return;
+          }
+
+          if (allowExpand && previewProgress && expansionProgress) {
+            const peekRange = Math.max(previewGestureRange, 1);
+            const expandRange = Math.max(expansionGestureRange, 1);
+            const totalProgress =
+              previewProgress.value * peekRange + expansionProgress.value * expandRange;
+            const expandThreshold = peekRange + expandRange * 0.45;
+            const peekThreshold = peekRange * 0.5;
+
+            if (totalProgress >= expandThreshold) {
+              previewProgress.value = withSpring(1);
+              expansionProgress.value = withSpring(1);
+              scheduleOnRN(onExpand ?? (() => {}));
+            } else if (totalProgress >= peekThreshold) {
+              previewProgress.value = withSpring(1);
+              expansionProgress.value = withSpring(0);
+              scheduleOnRN(onPeek ?? (() => {}));
+            } else {
+              previewProgress.value = withSpring(0);
+              expansionProgress.value = withSpring(0);
+              scheduleOnRN(onCollapse ?? (() => {}));
+            }
+
+            scheduleOnRN(resetPosition, 0);
+            return;
+          }
+
+          if (allowExpand && expansionProgress) {
+            const shouldExpand = expansionProgress.value >= 0.5;
+            expansionProgress.value = withSpring(shouldExpand ? 1 : 0);
+            scheduleOnRN((shouldExpand ? onExpand : onCollapse) ?? (() => {}));
+            scheduleOnRN(resetPosition, 0);
+            return;
+          }
+
+          if (translateY.value !== 0) {
             scheduleOnRN(resetPosition, 0);
           }
         }),
-    [allowDragDismiss, dismissing, finishDismiss, resetPosition, translateY]
+    [
+      allowDragDismiss,
+      allowExpand,
+      didHandleGestureEnd,
+      dismissing,
+      expansionGestureRange,
+      expansionProgress,
+      finishDismiss,
+      isExpanded,
+      onPeek,
+      onCollapse,
+      onExpand,
+      panStartPreviewProgress,
+      panStartExpansionProgress,
+      previewGestureRange,
+      previewProgress,
+      resetPosition,
+      translateY,
+    ]
   );
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -300,8 +532,8 @@ export default function MapPreviewSheet({
       ]}
       pointerEvents="box-none"
     >
-      <GestureDetector gesture={panGesture}>
-        <View pointerEvents="box-none">
+      <View pointerEvents="box-none">
+        <GestureDetector gesture={panGesture}>
           <View
             style={styles.handleGestureZone}
             pointerEvents={handleVisible ? 'auto' : 'none'}
@@ -322,9 +554,11 @@ export default function MapPreviewSheet({
               />
             </Pressable>
           </View>
+        </GestureDetector>
+        <View pointerEvents="box-none">
           {children}
         </View>
-      </GestureDetector>
+      </View>
     </Animated.View>
   );
 }
@@ -342,12 +576,12 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 2,
-    height: 44,
+    height: 52,
   },
   dismissHandlePressable: {
     alignItems: 'center',
     paddingTop: 8,
-    paddingBottom: 18,
+    paddingBottom: 24,
   },
   dismissHandle: {
     width: 42,

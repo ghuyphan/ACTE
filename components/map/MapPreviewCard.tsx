@@ -9,6 +9,7 @@ import {
   NativeSyntheticEvent,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -22,9 +23,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { GlassView } from '../ui/GlassView';
 import type { MapPointGroup, NearbyNoteItem } from '../../hooks/map/mapDomain';
+import { getDistanceMeters } from '../../hooks/map/mapDomain';
 import { useTheme } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
-import { getDistanceMeters } from '../../hooks/map/mapDomain';
 import { getTextNoteCardGradient } from '../../services/noteAppearance';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
@@ -40,6 +41,9 @@ import {
 const PREVIEW_HORIZONTAL_INSET = 14;
 const STATUS_HEIGHT = 76;
 const PREVIEW_HEIGHT = 168;
+const EXPANDED_PREVIEW_HEIGHT = 344;
+const EXPANDED_BODY_HEIGHT = EXPANDED_PREVIEW_HEIGHT - PREVIEW_HEIGHT;
+const COLLAPSED_TO_PREVIEW_GESTURE_RANGE = 92;
 const PREVIEW_MEDIA_SIZE = 56;
 const PREVIEW_ROW_GAP = 12;
 const PREVIEW_FOOTER_OFFSET = PREVIEW_MEDIA_SIZE + PREVIEW_ROW_GAP;
@@ -69,6 +73,7 @@ interface MapPreviewCardProps {
   statusActionLabel?: string;
   statusActionTestID?: string;
   onStatusAction?: () => void;
+  onStatusExpand?: () => void;
   onFocusPreviewNote: (noteId: string) => void;
   onActivatePreviewNote: (noteId: string) => void;
   onPrimaryAction: () => void;
@@ -127,6 +132,7 @@ export default function MapPreviewCard({
   statusActionLabel,
   statusActionTestID,
   onStatusAction,
+  onStatusExpand,
   onFocusPreviewNote,
   onActivatePreviewNote,
   onPrimaryAction,
@@ -152,12 +158,14 @@ export default function MapPreviewCard({
   } | null>(null);
 
   const [isMounted, setIsMounted] = useState(visible);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [cachedStatusAction, setCachedStatusAction] = useState<{
     label: string;
     testID?: string;
   } | null>(statusActionLabel ? { label: statusActionLabel, testID: statusActionTestID } : null);
 
   const previewProgress = useSharedValue(mode === 'preview' ? 1 : 0);
+  const sheetExpansionProgress = useSharedValue(0);
   const fullSurfaceWidth = Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2);
   const nearbyPageWidth = Math.max(0, fullSurfaceWidth - mapOverlayTokens.overlayPadding * 2);
   const hasStatusCopy = Boolean(statusTitle || statusSubtitle);
@@ -197,6 +205,12 @@ export default function MapPreviewCard({
   }, [visible, isMounted]);
 
   useEffect(() => {
+    if ((!visible || mode !== 'preview') && isExpanded) {
+      setIsExpanded(false);
+    }
+  }, [isExpanded, mode, visible]);
+
+  useEffect(() => {
     if (!visible) {
       return;
     }
@@ -209,6 +223,20 @@ export default function MapPreviewCard({
 
     previewProgress.value = withSpring(nextValue, PREVIEW_MORPH_SPRING);
   }, [mode, previewProgress, reduceMotionEnabled, visible]);
+
+  useEffect(() => {
+    const nextValue = visible && mode === 'preview' && isExpanded ? 1 : 0;
+    if (reduceMotionEnabled) {
+      sheetExpansionProgress.value = nextValue;
+      return;
+    }
+
+    sheetExpansionProgress.value = withSpring(nextValue, {
+      damping: 24,
+      stiffness: 220,
+      mass: 0.86,
+    });
+  }, [isExpanded, mode, reduceMotionEnabled, sheetExpansionProgress, visible]);
 
   const handleFullyClosed = useCallback(() => {
     setIsMounted(false);
@@ -346,11 +374,12 @@ export default function MapPreviewCard({
     ? `${Math.max(renderData.activeIndex, 0) + 1}/${renderData.previewItems.length}`
     : '';
   const statusAction = cachedStatusAction;
+  const canExpandStatusOverlay = mode === 'status' && typeof onStatusExpand === 'function';
   const shouldShowStatusLayer = mode === 'status' && (hasStatusCopy || Boolean(statusAction));
   const statusHeight = isPassiveStatusPill
     ? 48
     : isActionOnlyStatus
-      ? 72
+      ? 62
       : statusAction
         ? hasStatusSubtitle
           ? 116
@@ -359,20 +388,22 @@ export default function MapPreviewCard({
           ? 88
           : STATUS_HEIGHT;
   const compactWidth = isPassiveStatusPill ? Math.min(fullSurfaceWidth, 168) : fullSurfaceWidth;
+  const showPlaceMeta = isGroupMode && renderData ? renderData.previewItems.length > 1 : false;
 
-  const animatedShellStyle = useAnimatedStyle(() => ({
-    width: interpolate(previewProgress.value, [0, 1], [compactWidth, fullSurfaceWidth]),
-    height: interpolate(
-      previewProgress.value,
-      [0, 1],
-      [statusHeight, PREVIEW_HEIGHT]
-    ),
-    borderRadius: interpolate(
-      previewProgress.value,
-      [0, 1],
-      [mapOverlayTokens.overlayCompactRadius + 2, mapOverlayTokens.overlayRadius]
-    ),
-  }), [compactWidth, fullSurfaceWidth, statusHeight]);
+  const animatedShellStyle = useAnimatedStyle(() => {
+    const previewHeight =
+      PREVIEW_HEIGHT + (EXPANDED_PREVIEW_HEIGHT - PREVIEW_HEIGHT) * sheetExpansionProgress.value;
+
+    return {
+      width: interpolate(previewProgress.value, [0, 1], [compactWidth, fullSurfaceWidth]),
+      height: interpolate(previewProgress.value, [0, 1], [statusHeight, previewHeight]),
+      borderRadius: interpolate(
+        previewProgress.value,
+        [0, 1],
+        [mapOverlayTokens.overlayCompactRadius + 2, mapOverlayTokens.overlayRadius]
+      ),
+    };
+  }, [compactWidth, fullSurfaceWidth, sheetExpansionProgress, statusHeight]);
 
   const animatedCompactContentStyle = useAnimatedStyle(() => ({
     opacity: interpolate(previewProgress.value, [0, 0.24, 0.42], [1, 0.96, 0]),
@@ -384,7 +415,11 @@ export default function MapPreviewCard({
     transform: [{ translateY: interpolate(previewProgress.value, [0, 1], [10, 0]) }],
   }));
 
-  const showPlaceMeta = isGroupMode && renderData ? renderData.previewItems.length > 1 : false;
+  const animatedExpandedBodyStyle = useAnimatedStyle(() => ({
+    height: EXPANDED_BODY_HEIGHT * sheetExpansionProgress.value,
+    opacity: interpolate(sheetExpansionProgress.value, [0, 0.12, 1], [0, 0.24, 1]),
+    transform: [{ translateY: interpolate(sheetExpansionProgress.value, [0, 1], [8, 0]) }],
+  }), [sheetExpansionProgress]);
 
   if (!isMounted && !visible) {
     return null;
@@ -405,10 +440,34 @@ export default function MapPreviewCard({
       onDismiss={onDismiss}
       reduceMotionEnabled={reduceMotionEnabled}
       allowDragDismiss={mode === 'preview'}
-      handleVisible={mode === 'preview'}
+      allowExpand={mode === 'preview' || canExpandStatusOverlay}
+      handleVisible={mode === 'preview' || canExpandStatusOverlay}
+      isExpanded={isExpanded}
+      previewProgress={canExpandStatusOverlay ? previewProgress : undefined}
+      previewGestureRange={COLLAPSED_TO_PREVIEW_GESTURE_RANGE}
+      expansionProgress={mode === 'preview' || canExpandStatusOverlay ? sheetExpansionProgress : undefined}
+      expansionGestureRange={EXPANDED_BODY_HEIGHT}
+      onPeek={() => {
+        if (!canExpandStatusOverlay) {
+          return;
+        }
+
+        setIsExpanded(false);
+        onStatusExpand?.();
+      }}
+      onExpand={() => {
+        if (mode === 'preview') {
+          setIsExpanded(true);
+          return;
+        }
+
+        setIsExpanded(true);
+        onStatusExpand?.();
+      }}
+      onCollapse={() => setIsExpanded(false)}
     >
       <View
-        style={[styles.surfaceHost, { width: fullSurfaceWidth, height: PREVIEW_HEIGHT }]}
+        style={[styles.surfaceHost, { width: fullSurfaceWidth }]}
         pointerEvents="box-none"
       >
         <Animated.View
@@ -740,17 +799,135 @@ export default function MapPreviewCard({
                           {previewActionLabel}
                         </Text>
                       </Pressable>
-                      {showPreviewCount ? (
-                        <View style={styles.indexLabelWrap}>
+                      <View style={styles.footerMetaRow}>
+                        {showPreviewCount ? (
+                          <View style={styles.indexLabelWrap}>
+                            <Text
+                              style={[styles.indexText, { color: colors.secondaryText }]}
+                              testID="map-preview-index"
+                            >
+                              {previewCountLabel}
+                            </Text>
+                          </View>
+                        ) : null}
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            isExpanded
+                              ? t('map.collapseNearby', 'Collapse')
+                              : t('map.expandNearby', 'Expand')
+                          }
+                          onPress={() => {
+                            onInteraction?.();
+                            setIsExpanded((current) => !current);
+                          }}
+                          style={({ pressed }) => [
+                            styles.expandButton,
+                            {
+                              opacity: pressed ? 0.72 : 1,
+                            },
+                          ]}
+                          hitSlop={8}
+                        >
                           <Text
-                            style={[styles.indexText, { color: colors.secondaryText }]}
-                            testID="map-preview-index"
+                            style={[
+                              styles.expandButtonText,
+                              { color: isExpanded ? colors.primary : colors.secondaryText },
+                            ]}
                           >
-                            {previewCountLabel}
+                            {isExpanded
+                              ? t('map.collapseNearby', 'Collapse')
+                              : t('map.expandNearby', 'Expand')}
                           </Text>
-                        </View>
-                      ) : null}
+                          <Ionicons
+                            name={isExpanded ? 'chevron-down' : 'chevron-up'}
+                            size={13}
+                            color={isExpanded ? colors.primary : colors.secondaryText}
+                          />
+                        </Pressable>
+                      </View>
                     </View>
+
+                    <Animated.View
+                      style={[styles.expandedBody, animatedExpandedBodyStyle]}
+                      pointerEvents={isExpanded ? 'auto' : 'none'}
+                    >
+                      <View style={[styles.expandedDivider, { backgroundColor: `${colors.border}B8` }]} />
+                      <Text style={[styles.expandedHeaderTitle, { color: colors.text }]}>
+                        {renderPreviewMode === 'group'
+                          ? t('map.groupSummaryOther', '{{count}} notes here', {
+                              count: renderData.previewItems.length,
+                            })
+                          : t('map.nearbySummary', 'Nearby notes')}
+                      </Text>
+                      <ScrollView
+                        nestedScrollEnabled
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={styles.expandedListContent}
+                      >
+                        {renderData.previewItems.map((item) => {
+                          const detailPreview = getPreviewText(
+                            item.note,
+                            t('map.photoNote', 'Photo Note'),
+                            t('map.noContent', 'No note content')
+                          );
+                          const isExpandedItemActive = item.note.id === renderData.activePreviewItem.note.id;
+
+                          return (
+                            <Pressable
+                              key={item.note.id}
+                              testID={`map-preview-expanded-item-${item.note.id}`}
+                              accessibilityRole="button"
+                              onPress={() => {
+                                onInteraction?.();
+                                onActivatePreviewNote(item.note.id);
+                              }}
+                              style={({ pressed }) => [
+                                styles.expandedRow,
+                                {
+                                  backgroundColor: isExpandedItemActive ? colors.primarySoft : 'transparent',
+                                  borderColor: isExpandedItemActive ? `${colors.primary}2E` : `${colors.border}88`,
+                                  opacity: pressed ? 0.78 : 1,
+                                },
+                              ]}
+                            >
+                              <View style={styles.expandedCopyWrap}>
+                                <Text
+                                  style={[styles.expandedRowTitle, { color: colors.text }]}
+                                  numberOfLines={1}
+                                >
+                                  {item.note.locationName || t('map.unknownLocation', 'Unknown')}
+                                </Text>
+                                <Text
+                                  style={[styles.expandedRowText, { color: colors.secondaryText }]}
+                                  numberOfLines={2}
+                                >
+                                  {detailPreview}
+                                </Text>
+                                <View style={styles.expandedRowMeta}>
+                                  <Ionicons
+                                    name={showPlaceMeta || item.distanceMeters == null ? 'pin' : 'navigate'}
+                                    size={11}
+                                    color={isExpandedItemActive ? colors.primary : colors.secondaryText}
+                                  />
+                                  <Text
+                                    style={[
+                                      styles.expandedMetaText,
+                                      { color: isExpandedItemActive ? colors.primary : colors.secondaryText },
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {showPlaceMeta || item.distanceMeters == null
+                                      ? t('map.noteAtPlace', 'Saved here')
+                                      : formatDistanceLabel(item.distanceMeters)}
+                                  </Text>
+                                </View>
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
+                    </Animated.View>
                   </View>
                 </View>
               </Animated.View>
@@ -767,8 +944,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   surfaceShadow: {
-    position: 'absolute',
-    bottom: 0,
     alignSelf: 'center',
   },
   surface: {
@@ -790,9 +965,10 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
   },
   compactLayerActionOnly: {
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingTop: 18,
+    paddingBottom: 12,
   },
   statusContent: {
     gap: 10,
@@ -812,7 +988,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   previewViewport: {
-    minHeight: PREVIEW_HEIGHT,
+    minHeight: EXPANDED_PREVIEW_HEIGHT,
   },
   statusActionIconWrap: {
     width: 22,
@@ -825,6 +1001,8 @@ const styles = StyleSheet.create({
     minHeight: 32,
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'center',
+    justifyContent: 'center',
     gap: 7,
   },
   statusPillRow: {
@@ -919,8 +1097,8 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
     borderWidth: 1,
     paddingHorizontal: 8,
-    paddingVertical: 9,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 4,
   },
   textThumbLine: {
     height: 3,
@@ -930,10 +1108,10 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   textThumbLineMedium: {
-    width: '78%',
+    width: '72%',
   },
   textThumbLineShort: {
-    width: '62%',
+    width: '46%',
   },
   title: {
     fontSize: 16,
@@ -951,7 +1129,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
   },
   metaText: {
     fontSize: 12,
@@ -959,12 +1137,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   footer: {
-    marginTop: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 10,
+    justifyContent: 'space-between',
+    marginTop: 4,
     paddingLeft: PREVIEW_FOOTER_OFFSET,
+  },
+  footerMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   actionButton: {
     minHeight: 30,
@@ -984,6 +1167,69 @@ const styles = StyleSheet.create({
   },
   indexText: {
     fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'Noto Sans',
+  },
+  expandButton: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  expandButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  expandedBody: {
+    overflow: 'hidden',
+  },
+  expandedDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginBottom: 12,
+  },
+  expandedHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 10,
+  },
+  expandedListContent: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  expandedRow: {
+    minHeight: 58,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  expandedCopyWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  expandedRowTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 3,
+    fontFamily: 'Noto Sans',
+  },
+  expandedRowText: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: 'Noto Sans',
+    marginBottom: 6,
+  },
+  expandedRowMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  expandedMetaText: {
+    fontSize: 11,
     fontWeight: '600',
     fontFamily: 'Noto Sans',
   },

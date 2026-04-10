@@ -738,7 +738,7 @@ describe('MapScreen', () => {
     let now = 1000;
     nowSpy.mockImplementation(() => now);
 
-    const { getAllByTestId, getByTestId, getByText, queryByTestId } = render(<MapScreen />);
+    const { getAllByTestId, getByTestId, getAllByText, queryByTestId } = render(<MapScreen />);
 
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
@@ -751,7 +751,7 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(getByTestId('map-preview-list')).toBeTruthy();
-      expect(getByText(/^\d+(?:\.\d)?(?:m|km)$/)).toBeTruthy();
+      expect(getAllByText(/^\d+(?:\.\d)?(?:m|km)$/).length).toBeGreaterThan(0);
       expect(queryByTestId('map-preview-index')).toBeNull();
       expect(queryByTestId('map-preview-group-count')).toBeNull();
     });

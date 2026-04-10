@@ -1006,6 +1006,13 @@ export default function MapScreenIOS() {
               revealNotesPreview();
             }
           }}
+          onStatusExpand={
+            bottomOverlayKind === 'collapsed'
+              ? () => {
+                  revealNotesPreview();
+                }
+              : undefined
+          }
           onFocusPreviewNote={focusPreviewNote}
           onActivatePreviewNote={handleActivatePreviewNote}
           onPrimaryAction={handlePreviewPrimaryAction}
