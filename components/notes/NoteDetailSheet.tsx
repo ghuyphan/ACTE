@@ -1419,7 +1419,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             emitInteractionFeedback('deleted');
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-            if (user) {
+            if (user && isSharedByMe) {
                 try {
                     await deleteSharedNote(targetNoteId);
                 } catch (error) {
@@ -1442,7 +1442,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         } finally {
             setIsDeleting(false);
         }
-    }, [deleteNote, deleteSharedNote, t, user]);
+    }, [deleteNote, deleteSharedNote, isSharedByMe, t, user]);
 
     useEffect(() => {
         if (visible) {
@@ -1694,7 +1694,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setIsEditing(false);
 
-            if (user) {
+            if (user && isSharedByMe) {
                 void updateSharedNote(nextNote).catch((error) => {
                     console.warn('Shared note update failed:', error);
                     showAppAlert(

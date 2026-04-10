@@ -15,9 +15,9 @@ const mockMakeDirectoryAsync = jest.fn(async () => undefined);
 const mockManipulateAsync = jest.fn();
 const mockStorageUpload = jest.fn(async () => ({ error: null }));
 const mockRemoteStickerAssets = new Map<string, any>();
-const mockIsSupabaseNetworkError = jest.fn(() => false);
-const mockIsSupabasePolicyError = jest.fn(() => false);
-const mockIsSupabaseSchemaMismatchError = jest.fn(() => false);
+const mockIsSupabaseNetworkError = jest.fn((_: unknown) => false);
+const mockIsSupabasePolicyError = jest.fn((_: unknown) => false);
+const mockIsSupabaseSchemaMismatchError = jest.fn((_: unknown) => false);
 let mockRemoteStickerAssetInsertError: unknown = null;
 
 function bytesToHex(bytes: Uint8Array) {
@@ -72,9 +72,9 @@ jest.mock('../services/database', () => ({
 
 jest.mock('../utils/supabase', () => ({
   getSupabaseErrorMessage: jest.fn((error: Error) => error.message),
-  isSupabaseNetworkError: (...args: unknown[]) => mockIsSupabaseNetworkError(...args),
-  isSupabasePolicyError: (...args: unknown[]) => mockIsSupabasePolicyError(...args),
-  isSupabaseSchemaMismatchError: (...args: unknown[]) => mockIsSupabaseSchemaMismatchError(...args),
+  isSupabaseNetworkError: (error: unknown) => mockIsSupabaseNetworkError(error),
+  isSupabasePolicyError: (error: unknown) => mockIsSupabasePolicyError(error),
+  isSupabaseSchemaMismatchError: (error: unknown) => mockIsSupabaseSchemaMismatchError(error),
   requireSupabase: jest.fn(() => ({
     from: (table: string) => {
       if (table !== 'sticker_assets') {

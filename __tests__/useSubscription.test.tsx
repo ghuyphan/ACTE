@@ -309,6 +309,25 @@ describe('useSubscription', () => {
     expect(mockPurchases.removeCustomerInfoUpdateListener).not.toHaveBeenCalled();
   });
 
+  it('attaches the customer-info listener after auth becomes ready', async () => {
+    mockAuthState.isReady = false;
+
+    const hook = renderHook(() => useSubscription(), { wrapper });
+
+    expect(mockPurchases.addCustomerInfoUpdateListener).not.toHaveBeenCalled();
+
+    await act(async () => {
+      mockAuthState.isReady = true;
+      hook.rerender({});
+    });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+    });
+
+    expect(mockPurchases.addCustomerInfoUpdateListener).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the last known entitlement while the device is offline', async () => {
     mockPurchases.getCustomerInfo.mockResolvedValue({
       entitlements: { active: { noto_pro: {} } },

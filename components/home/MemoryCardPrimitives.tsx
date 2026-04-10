@@ -26,6 +26,7 @@ type MemoryColors = {
   secondaryText: string;
   danger: string;
   card: string;
+  border?: string;
   primarySoft?: string;
 };
 

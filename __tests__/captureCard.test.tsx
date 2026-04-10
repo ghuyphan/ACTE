@@ -1336,7 +1336,7 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(queryByTestId('capture-note-color-toggle')).toBeNull();
-    expect(handleChangeNoteColor).toHaveBeenCalledWith('marigold-glow');
+    expect(handleChangeNoteColor).not.toHaveBeenCalled();
   });
 
   it('hides the compact radius picker in text mode', () => {

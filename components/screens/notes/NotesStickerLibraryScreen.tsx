@@ -249,7 +249,6 @@ export default function NotesStickerLibraryScreen() {
       getItemType={getItemType}
       overrideItemLayout={overrideItemLayout as any}
       numColumns={3}
-      estimatedItemSize={cardWidth + 28}
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={{
         paddingHorizontal: Layout.screenPadding,

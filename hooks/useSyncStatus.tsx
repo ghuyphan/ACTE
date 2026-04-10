@@ -47,9 +47,12 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const [recentQueueItems, setRecentQueueItems] = useState<SyncQueueItem[]>([]);
   const [syncEnabledState, setSyncEnabledState] = useState<boolean>(true);
   const [isSyncPrefReady, setIsSyncPrefReady] = useState(false);
+  const currentUserUidRef = useRef<string | null>(user?.uid ?? null);
+  currentUserUidRef.current = user?.uid ?? null;
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncInFlightRef = useRef<Promise<void> | null>(null);
+  const syncRequestIdRef = useRef(0);
   const pendingRunRef = useRef(false);
   const previousUserUidRef = useRef<string | null>(null);
   const skipNextNotesEffectRef = useRef(false);
@@ -119,8 +122,15 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     await setPersistentItem(SYNC_ENABLED_KEY, enabled.toString());
   }, []);
 
+  const isCurrentSyncRequest = useCallback(
+    (requestId: number, requestUserUid: string | null) =>
+      syncRequestIdRef.current === requestId && currentUserUidRef.current === requestUserUid,
+    []
+  );
+
   runSyncNowRef.current = async (mode: SyncMode = 'incremental') => {
-    if (!isReady || !isAuthAvailable || !user || loading || !syncEnabledState || !isSyncPrefReady) {
+    const requestUserUid = currentUserUidRef.current;
+    if (!isReady || !isAuthAvailable || !requestUserUid || loading || !syncEnabledState || !isSyncPrefReady) {
       await refreshQueueStats();
       return;
     }
@@ -144,11 +154,12 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     clearDebounceTimer();
 
     const currentUser = {
-      uid: user.uid,
-      displayName: user.displayName,
-      email: user.email,
-      photoURL: user.photoURL,
+      uid: requestUserUid,
+      displayName: user?.displayName ?? null,
+      email: user?.email ?? null,
+      photoURL: user?.photoURL ?? null,
     };
+    const requestId = ++syncRequestIdRef.current;
 
     const syncTask = (async () => {
       setStatus('syncing');
@@ -156,6 +167,9 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
       const result = await syncNotes(currentUser, notes, { mode });
       const queueStats = await refreshQueueStats();
+      if (!isCurrentSyncRequest(requestId, requestUserUid)) {
+        return;
+      }
       const hasPendingChanges = (queueStats?.pendingCount ?? pendingCount) > 0;
 
       if (result.status === 'success') {
@@ -170,6 +184,9 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
         if ((result.importedCount ?? 0) > 0) {
           suppressNextNotesEffectRef.current = true;
           await refreshNotes(false, { updateWidget: true, syncGeofences: true });
+          if (!isCurrentSyncRequest(requestId, requestUserUid)) {
+            return;
+          }
         }
 
         return;

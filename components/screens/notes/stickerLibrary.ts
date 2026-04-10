@@ -1,6 +1,5 @@
 import type { Note } from '../../../services/database';
-import { parseNoteStickerPlacements, type StickerRenderMode } from '../../../services/noteStickers';
-import type { StickerAsset } from '../../../services/noteStickers';
+import { parseNoteStickerPlacements, type StickerAsset, type StickerRenderMode } from '../../../services/noteStickers';
 
 export interface CreatedStickerLibraryItem {
   id: string;

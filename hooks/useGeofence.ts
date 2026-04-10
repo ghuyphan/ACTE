@@ -3,7 +3,11 @@ import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
 import { Linking } from 'react-native';
 import { useAuth } from './useAuth';
-import { getReminderPermissionState, syncGeofenceRegions } from '../services/geofenceService';
+import {
+    arePlaceRemindersEnabled,
+    getReminderPermissionState,
+    syncGeofenceRegions,
+} from '../services/geofenceService';
 import { syncSocialPushRegistration } from '../services/socialPushService';
 import { scheduleOnIdle } from '../utils/scheduleOnIdle';
 
@@ -32,6 +36,11 @@ export interface ReminderPermissionRequestResult {
     requiresSettings: boolean;
 }
 
+interface ForegroundPermissionRequestResult {
+    granted: boolean;
+    requiresSettings: boolean;
+}
+
 export function useGeofence() {
     const { user } = useAuth();
     const [hasLocationPermission, setHasLocationPermission] = useState(false);
@@ -39,6 +48,15 @@ export function useGeofence() {
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
 
     const refreshPermissions = useCallback(async () => {
+        if (!arePlaceRemindersEnabled()) {
+            setHasLocationPermission(false);
+            setRemindersEnabled(false);
+            return {
+                foregroundGranted: false,
+                remindersEnabled: false,
+            };
+        }
+
         const permissionState = await getReminderPermissionState();
         setHasLocationPermission(permissionState.foregroundGranted);
         setRemindersEnabled(permissionState.remindersEnabled);
@@ -113,6 +131,14 @@ export function useGeofence() {
         let cancelled = false;
         const idleHandle = scheduleOnIdle(() => {
             void (async () => {
+                if (!arePlaceRemindersEnabled()) {
+                    if (!cancelled) {
+                        setHasLocationPermission(false);
+                        setRemindersEnabled(false);
+                    }
+                    return;
+                }
+
                 const foregroundStatus = await Location.getForegroundPermissionsAsync();
                 if (cancelled) {
                     return;
@@ -129,7 +155,16 @@ export function useGeofence() {
         };
     }, [refreshPermissions]);
 
-    const requestForegroundLocation = useCallback(async (): Promise<ForegroundLocationRequestResult> => {
+    const requestForegroundPermission = useCallback(async (): Promise<ForegroundPermissionRequestResult> => {
+        if (!arePlaceRemindersEnabled()) {
+            setHasLocationPermission(false);
+            setRemindersEnabled(false);
+            return {
+                granted: false,
+                requiresSettings: false,
+            };
+        }
+
         let foregroundStatus = await Location.getForegroundPermissionsAsync();
         if (foregroundStatus.status !== 'granted') {
             foregroundStatus = await Location.requestForegroundPermissionsAsync();
@@ -140,22 +175,45 @@ export function useGeofence() {
 
         if (!granted) {
             return {
-                location: null,
+                granted: false,
                 requiresSettings: foregroundStatus.canAskAgain === false,
+            };
+        }
+
+        return {
+            granted: true,
+            requiresSettings: false,
+        };
+    }, []);
+
+    const requestForegroundLocation = useCallback(async (): Promise<ForegroundLocationRequestResult> => {
+        const foregroundPermission = await requestForegroundPermission();
+        if (!foregroundPermission.granted) {
+            return {
+                location: null,
+                requiresSettings: foregroundPermission.requiresSettings,
                 reason: 'permission_denied',
             };
         }
 
         return refreshLocation();
-    }, [refreshLocation]);
+    }, [refreshLocation, requestForegroundPermission]);
 
     const requestReminderPermissions = useCallback(async (): Promise<ReminderPermissionRequestResult> => {
-        const foregroundResult = await requestForegroundLocation();
-        if (!foregroundResult.location) {
+        if (!arePlaceRemindersEnabled()) {
             setRemindersEnabled(false);
             return {
                 enabled: false,
-                requiresSettings: foregroundResult.requiresSettings,
+                requiresSettings: false,
+            };
+        }
+
+        const foregroundPermission = await requestForegroundPermission();
+        if (!foregroundPermission.granted) {
+            setRemindersEnabled(false);
+            return {
+                enabled: false,
+                requiresSettings: foregroundPermission.requiresSettings,
             };
         }
 
@@ -175,6 +233,7 @@ export function useGeofence() {
         setRemindersEnabled(enabled);
         if (enabled) {
             await syncGeofenceRegions();
+            void refreshLocation().catch(() => undefined);
             if (user) {
                 void syncSocialPushRegistration(user).catch((error) => {
                     console.warn('[social-push] Registration refresh failed:', error);
@@ -190,7 +249,7 @@ export function useGeofence() {
             enabled,
             requiresSettings,
         };
-    }, [requestForegroundLocation, user]);
+    }, [refreshLocation, requestForegroundPermission, user]);
 
     const openAppSettings = useCallback(async () => {
         try {

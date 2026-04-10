@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { i18nReady } from '../../constants/i18n';
 import { getDB, resetLocalDatabase } from '../../services/database';
-import { syncGeofenceRegions } from '../../services/geofenceService';
+import { arePlaceRemindersEnabled, syncGeofenceRegions } from '../../services/geofenceService';
 import { runMediaCacheEviction } from '../../services/mediaCacheManager';
 import {
   configureForegroundNotificationPresentation,
@@ -67,7 +68,11 @@ export function useAppStartupBootstrap() {
     }
 
     configureForegroundNotificationPresentation();
-    void configureNotificationChannels();
+    void i18nReady
+      .then(() => configureNotificationChannels())
+      .catch((error) => {
+        console.error('Notification channel setup failed:', error);
+      });
 
     getDB()
       .then(() => {
@@ -79,7 +84,9 @@ export function useAppStartupBootstrap() {
         setIsRecovering(false);
         startupIdleHandle = scheduleOnIdle(() => {
           startupTimeout = setTimeout(() => {
-            syncGeofenceRegions().catch((err) => console.warn('Geofence sync failed:', err));
+            if (arePlaceRemindersEnabled()) {
+              syncGeofenceRegions().catch((err) => console.warn('Geofence sync failed:', err));
+            }
             runMediaCacheEviction().catch((err) => console.warn('Cache eviction failed:', err));
           }, 400);
         });

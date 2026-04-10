@@ -182,16 +182,33 @@ interface FlushQueueResult {
   hadLocalWrites: boolean;
 }
 
+interface RemoteNoteCursor {
+  syncedAt: string;
+  id: string;
+}
+
+interface RemoteTombstoneCursor {
+  deletedAt: string;
+  noteId: string;
+}
+
+interface RemoteSyncCursor {
+  notes: RemoteNoteCursor | null;
+  tombstones: RemoteTombstoneCursor | null;
+}
+
 interface RemoteMergeResult {
   importedCount: number;
-  latestSyncedAt: string | null;
+  noteCursor: RemoteNoteCursor | null;
+  cursorBlocked: boolean;
+  scanCompleted: boolean;
   remoteNoteIds: Set<string>;
   remoteNoteSyncMarks: Map<string, string>;
 }
 
 interface RemoteTombstoneMergeResult {
   deletedCount: number;
-  latestDeletedAt: string | null;
+  tombstoneCursor: RemoteTombstoneCursor | null;
 }
 
 interface QueueRow {
@@ -504,6 +521,141 @@ async function assertExpectedDeleteIds(
   }
 }
 
+function buildRemoteNoteCursor(row: Pick<NoteRow, 'id' | 'synced_at'>): RemoteNoteCursor | null {
+  const syncedAt = typeof row.synced_at === 'string' ? row.synced_at.trim() : '';
+  const id = typeof row.id === 'string' ? row.id.trim() : '';
+
+  if (!syncedAt || !id) {
+    return null;
+  }
+
+  return {
+    syncedAt,
+    id,
+  };
+}
+
+function buildRemoteTombstoneCursor(
+  row: Pick<NoteTombstoneRow, 'deleted_at' | 'note_id'>
+): RemoteTombstoneCursor | null {
+  const deletedAt = typeof row.deleted_at === 'string' ? row.deleted_at.trim() : '';
+  const noteId = typeof row.note_id === 'string' ? row.note_id.trim() : '';
+
+  if (!deletedAt || !noteId) {
+    return null;
+  }
+
+  return {
+    deletedAt,
+    noteId,
+  };
+}
+
+function normalizeRemoteNoteCursor(value: unknown): RemoteNoteCursor | null {
+  if (typeof value !== 'object' || !value) {
+    return null;
+  }
+
+  const syncedAt = typeof (value as { syncedAt?: unknown }).syncedAt === 'string'
+    ? (value as { syncedAt: string }).syncedAt.trim()
+    : '';
+  const id = typeof (value as { id?: unknown }).id === 'string'
+    ? (value as { id: string }).id.trim()
+    : '';
+
+  if (!syncedAt) {
+    return null;
+  }
+
+  return {
+    syncedAt,
+    id,
+  };
+}
+
+function normalizeRemoteTombstoneCursor(value: unknown): RemoteTombstoneCursor | null {
+  if (typeof value !== 'object' || !value) {
+    return null;
+  }
+
+  const deletedAt = typeof (value as { deletedAt?: unknown }).deletedAt === 'string'
+    ? (value as { deletedAt: string }).deletedAt.trim()
+    : '';
+  const noteId = typeof (value as { noteId?: unknown }).noteId === 'string'
+    ? (value as { noteId: string }).noteId.trim()
+    : '';
+
+  if (!deletedAt) {
+    return null;
+  }
+
+  return {
+    deletedAt,
+    noteId,
+  };
+}
+
+function parseStoredRemoteSyncCursor(rawValue: string | null): RemoteSyncCursor | null {
+  const normalizedValue = typeof rawValue === 'string' ? rawValue.trim() : '';
+  if (!normalizedValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(normalizedValue) as {
+      notes?: unknown;
+      tombstones?: unknown;
+    };
+
+    return {
+      notes: normalizeRemoteNoteCursor(parsed?.notes),
+      tombstones: normalizeRemoteTombstoneCursor(parsed?.tombstones),
+    };
+  } catch {
+    return {
+      notes: {
+        syncedAt: normalizedValue,
+        id: '',
+      },
+      tombstones: {
+        deletedAt: normalizedValue,
+        noteId: '',
+      },
+    };
+  }
+}
+
+function buildKeysetFilter(
+  primaryField: string,
+  secondaryField: string,
+  primaryValue: string,
+  secondaryValue: string
+) {
+  if (!secondaryValue) {
+    return null;
+  }
+
+  return `${primaryField}.gt.${primaryValue},and(${primaryField}.eq.${primaryValue},${secondaryField}.gt.${secondaryValue})`;
+}
+
+function logDeferredArtifactCleanupFailure(context: string, error: unknown) {
+  console.warn(`[syncService] Deferred remote artifact cleanup failed for ${context}:`, error);
+}
+
+async function cleanupRemoteArtifactsBestEffort(
+  context: string,
+  bucket: string,
+  artifacts: {
+    photoPath?: string | null;
+    pairedVideoPath?: string | null;
+    stickerPaths?: string[];
+  }
+) {
+  await cleanupRemoteArtifacts(bucket, artifacts).catch((error) => {
+    logDeferredArtifactCleanupFailure(context, error);
+  });
+}
+
 async function upsertRemoteNoteTombstones(
   userId: string,
   noteIds: Iterable<string>,
@@ -635,11 +787,12 @@ function getRemoteSyncCursorKey(userUid: string) {
 }
 
 async function getLastRemoteSyncCursor(userUid: string) {
-  return getPersistentItem(getRemoteSyncCursorKey(userUid));
+  const rawValue = await getPersistentItem(getRemoteSyncCursorKey(userUid));
+  return parseStoredRemoteSyncCursor(rawValue);
 }
 
-async function setLastRemoteSyncCursor(userUid: string, cursor: string) {
-  await setPersistentItem(getRemoteSyncCursorKey(userUid), cursor);
+async function setLastRemoteSyncCursor(userUid: string, cursor: RemoteSyncCursor) {
+  await setPersistentItem(getRemoteSyncCursorKey(userUid), JSON.stringify(cursor));
 }
 
 function getSyncedNoteIdsKey(userUid: string) {
@@ -752,7 +905,7 @@ async function fetchRemoteArtifactSnapshots(
 
 async function fetchRemoteNotePage(
   userId: string,
-  options: { since: string | null; offset: number; limit: number }
+  options: { since: RemoteNoteCursor | null; limit: number }
 ): Promise<NoteRow[]> {
   const supabase = getSupabase();
   if (!supabase) {
@@ -767,10 +920,16 @@ async function fetchRemoteNotePage(
     .eq('user_id', userId)
     .order('synced_at', { ascending: true })
     .order('id', { ascending: true })
-    .range(options.offset, options.offset + options.limit - 1);
+    .range(0, options.limit - 1);
 
-  if (options.since) {
-    request = request.gt('synced_at', options.since);
+  if (options.since?.syncedAt) {
+    const keysetFilter = buildKeysetFilter(
+      'synced_at',
+      'id',
+      options.since.syncedAt,
+      options.since.id
+    );
+    request = keysetFilter ? request.or(keysetFilter) : request.gt('synced_at', options.since.syncedAt);
   }
 
   const { data, error } = await request;
@@ -783,7 +942,7 @@ async function fetchRemoteNotePage(
 
 async function fetchRemoteNoteTombstonePage(
   userId: string,
-  options: { since: string | null; offset: number; limit: number }
+  options: { since: RemoteTombstoneCursor | null; limit: number }
 ): Promise<NoteTombstoneRow[]> {
   const supabase = getSupabase();
   if (!supabase) {
@@ -796,10 +955,18 @@ async function fetchRemoteNoteTombstonePage(
     .eq('user_id', userId)
     .order('deleted_at', { ascending: true })
     .order('note_id', { ascending: true })
-    .range(options.offset, options.offset + options.limit - 1);
+    .range(0, options.limit - 1);
 
-  if (options.since) {
-    request = request.gt('deleted_at', options.since);
+  if (options.since?.deletedAt) {
+    const keysetFilter = buildKeysetFilter(
+      'deleted_at',
+      'note_id',
+      options.since.deletedAt,
+      options.since.noteId
+    );
+    request = keysetFilter
+      ? request.or(keysetFilter)
+      : request.gt('deleted_at', options.since.deletedAt);
   }
 
   const { data, error } = await request;
@@ -1075,20 +1242,6 @@ async function deleteRemoteNote(userId: string, noteId: string) {
     ((sharedPosts ?? []) as { id?: string | null }[]).map((row) => row.id)
   );
   if (sharedPostIds.length > 0) {
-    await Promise.all(
-      ((sharedPosts ?? []) as (RemoteArtifactSnapshot & { id?: string })[]).map(async (row) => {
-        await cleanupRemoteArtifacts(
-          SHARED_POST_MEDIA_BUCKET,
-          {
-            photoPath: row.photoPath ?? (row as { photo_path?: string | null }).photo_path ?? null,
-            pairedVideoPath:
-              row.pairedVideoPath ?? (row as { paired_video_path?: string | null }).paired_video_path ?? null,
-          },
-          { strict: true }
-        );
-      })
-    );
-
     const { data: deletedSharedPosts, error: sharedDeleteError } = await supabase
       .from('shared_posts')
       .delete()
@@ -1130,17 +1283,22 @@ async function deleteRemoteNote(userId: string, noteId: string) {
         }
       })
     );
+
+    await Promise.all(
+      ((sharedPosts ?? []) as (RemoteArtifactSnapshot & { id?: string })[]).map(async (row) => {
+        await cleanupRemoteArtifactsBestEffort(
+          `shared post ${typeof row.id === 'string' ? row.id : 'unknown'}`,
+          SHARED_POST_MEDIA_BUCKET,
+          {
+            photoPath: row.photoPath ?? (row as { photo_path?: string | null }).photo_path ?? null,
+            pairedVideoPath:
+              row.pairedVideoPath ?? (row as { paired_video_path?: string | null }).paired_video_path ?? null,
+          }
+        );
+      })
+    );
   }
   const expectedDeletedNoteIds = existingNote ? [noteId] : [];
-  await cleanupRemoteArtifacts(
-    NOTE_MEDIA_BUCKET,
-    {
-      photoPath: (existingNote as { photo_path?: string | null } | null)?.photo_path ?? null,
-      pairedVideoPath:
-        (existingNote as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
-    },
-    { strict: true }
-  );
   const { data: deletedNotes, error } = await supabase
     .from('notes')
     .delete()
@@ -1174,6 +1332,11 @@ async function deleteRemoteNote(userId: string, noteId: string) {
 
   await upsertRemoteNoteTombstones(userId, [noteId], deletedAt);
   await clearRemoteStickerAssetRefs(userId, 'note', noteId);
+  await cleanupRemoteArtifactsBestEffort(`note ${noteId}`, NOTE_MEDIA_BUCKET, {
+    photoPath: (existingNote as { photo_path?: string | null } | null)?.photo_path ?? null,
+    pairedVideoPath:
+      (existingNote as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
+  });
 }
 
 async function deleteAllRemoteNotesForUser(userId: string) {
@@ -1203,23 +1366,6 @@ async function deleteAllRemoteNotesForUser(userId: string) {
 
   const expectedSharedPostIds = normalizeRemoteEntityIds(
     ((sharedPosts ?? []) as { id?: string | null }[]).map((row) => row.id)
-  );
-  await Promise.all(
-    ((sharedPosts ?? []) as {
-      photo_path?: string | null;
-      paired_video_path?: string | null;
-      sticker_placements_json?: string | null;
-    }[]).map((row) =>
-      cleanupRemoteArtifacts(
-        SHARED_POST_MEDIA_BUCKET,
-        {
-          photoPath: row.photo_path ?? null,
-          pairedVideoPath: row.paired_video_path ?? null,
-          stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
-        },
-        { strict: true }
-      )
-    )
   );
   const { data: deletedSharedPosts, error: deleteSharedPostsError } = await supabase
     .from('shared_posts')
@@ -1272,26 +1418,27 @@ async function deleteAllRemoteNotesForUser(userId: string) {
       }
     )
   );
-
-  const expectedNoteIds = normalizeRemoteEntityIds(
-    ((data ?? []) as { id?: string | null }[]).map((row) => row.id)
-  );
   await Promise.all(
-    ((data ?? []) as {
+    ((sharedPosts ?? []) as {
+      id?: string;
       photo_path?: string | null;
       paired_video_path?: string | null;
       sticker_placements_json?: string | null;
-    }[]).map((row) =>
-      cleanupRemoteArtifacts(
-        NOTE_MEDIA_BUCKET,
+    }[]).map(async (row) => {
+      await cleanupRemoteArtifactsBestEffort(
+        `shared post ${typeof row.id === 'string' ? row.id : 'unknown'}`,
+        SHARED_POST_MEDIA_BUCKET,
         {
           photoPath: row.photo_path ?? null,
           pairedVideoPath: row.paired_video_path ?? null,
           stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
-        },
-        { strict: true }
-      )
-    )
+        }
+      );
+    })
+  );
+
+  const expectedNoteIds = normalizeRemoteEntityIds(
+    ((data ?? []) as { id?: string | null }[]).map((row) => row.id)
   );
   const { data: deletedNotes, error: deleteError } = await supabase
     .from('notes')
@@ -1332,6 +1479,24 @@ async function deleteAllRemoteNotesForUser(userId: string) {
     ((data ?? []) as { id?: string }[]).map((row) => {
       const noteId = typeof row.id === 'string' ? row.id.trim() : '';
       return noteId ? clearRemoteStickerAssetRefs(userId, 'note', noteId) : Promise.resolve();
+    })
+  );
+  await Promise.all(
+    ((data ?? []) as {
+      id?: string;
+      photo_path?: string | null;
+      paired_video_path?: string | null;
+      sticker_placements_json?: string | null;
+    }[]).map(async (row) => {
+      await cleanupRemoteArtifactsBestEffort(
+        `note ${typeof row.id === 'string' ? row.id : 'unknown'}`,
+        NOTE_MEDIA_BUCKET,
+        {
+          photoPath: row.photo_path ?? null,
+          pairedVideoPath: row.paired_video_path ?? null,
+          stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
+        }
+      );
     })
   );
 }
@@ -1557,13 +1722,13 @@ async function reconcileLocallyDeletedNotes(
   ownerScope: string,
   remoteNoteIds: Set<string>,
   syncedNoteIds: Set<string>,
-  lastRemoteCursor: string | null
+  lastRemoteCursor: RemoteNoteCursor | null
 ) {
   if (!lastRemoteCursor) {
     return 0;
   }
 
-  const cutoffTime = new Date(lastRemoteCursor).getTime();
+  const cutoffTime = new Date(lastRemoteCursor.syncedAt).getTime();
   if (Number.isNaN(cutoffTime)) {
     return 0;
   }
@@ -1589,16 +1754,14 @@ async function mergeRemoteNoteTombstonesFromSupabase(
   ownerScope: string,
   syncedNoteIds: Set<string>,
   remoteNoteSyncMarks: Map<string, string>,
-  options: { since: string | null }
+  options: { since: RemoteTombstoneCursor | null }
 ): Promise<RemoteTombstoneMergeResult> {
   let deletedCount = 0;
-  let latestDeletedAt = options.since;
-  let offset = 0;
+  let tombstoneCursor = options.since;
 
   while (true) {
     const rows = await fetchRemoteNoteTombstonePage(userId, {
-      since: options.since,
-      offset,
+      since: tombstoneCursor,
       limit: REMOTE_SYNC_PAGE_SIZE,
     });
     if (rows.length === 0) {
@@ -1610,7 +1773,7 @@ async function mergeRemoteNoteTombstonesFromSupabase(
         continue;
       }
 
-      latestDeletedAt = row.deleted_at ?? latestDeletedAt;
+      tombstoneCursor = buildRemoteTombstoneCursor(row) ?? tombstoneCursor;
       const existingLocalNote = await getNoteByIdForScope(row.note_id, ownerScope);
       if (shouldIgnoreRemoteTombstone(row, remoteNoteSyncMarks, existingLocalNote)) {
         continue;
@@ -1629,31 +1792,28 @@ async function mergeRemoteNoteTombstonesFromSupabase(
     if (rows.length < REMOTE_SYNC_PAGE_SIZE) {
       break;
     }
-
-    offset += rows.length;
   }
 
-  return { deletedCount, latestDeletedAt };
+  return { deletedCount, tombstoneCursor };
 }
 
 async function mergeRemoteNotesFromSupabase(
   userId: string,
   ownerScope: string,
   localNotes: Note[],
-  options: { since: string | null }
+  options: { since: RemoteNoteCursor | null }
 ): Promise<RemoteMergeResult> {
   const localNoteMap = new Map(localNotes.map((note) => [note.id, note]));
   let importedCount = 0;
-  let latestSyncedAt: string | null = options.since;
+  let noteCursor = options.since;
   const remoteNoteIds = new Set<string>();
   const remoteNoteSyncMarks = new Map<string, string>();
   let cursorBlockedByMissingMedia = false;
-  let offset = 0;
+  let scanCompleted = true;
 
   while (true) {
     const rows = await fetchRemoteNotePage(userId, {
-      since: options.since,
-      offset,
+      since: noteCursor,
       limit: REMOTE_SYNC_PAGE_SIZE,
     });
     if (rows.length === 0) {
@@ -1669,39 +1829,40 @@ async function mergeRemoteNotesFromSupabase(
       const existingLocalNote =
         localNoteMap.get(row.id) ?? (await getNoteByIdForScope(row.id, ownerScope));
       if (existingLocalNote && getSyncTimestamp(existingLocalNote) >= getSyncTimestamp(row)) {
-        if (!cursorBlockedByMissingMedia) {
-          latestSyncedAt = row.synced_at ?? latestSyncedAt;
-        }
+        noteCursor = buildRemoteNoteCursor(row) ?? noteCursor;
         continue;
       }
 
       const { note: nextLocalNote, advanceCursor } = await deserializeRemoteNote(row, existingLocalNote);
-      if (advanceCursor && !cursorBlockedByMissingMedia) {
-        latestSyncedAt = row.synced_at ?? latestSyncedAt;
-      }
       if (!advanceCursor) {
         cursorBlockedByMissingMedia = true;
+        scanCompleted = false;
+        break;
       }
       if (!nextLocalNote) {
+        noteCursor = buildRemoteNoteCursor(row) ?? noteCursor;
         continue;
       }
 
       await upsertNoteForScope(nextLocalNote, ownerScope);
       localNoteMap.set(nextLocalNote.id, nextLocalNote);
       importedCount += 1;
-      if (!cursorBlockedByMissingMedia) {
-        latestSyncedAt = row.synced_at ?? latestSyncedAt;
-      }
+      noteCursor = buildRemoteNoteCursor(row) ?? noteCursor;
     }
 
-    if (rows.length < REMOTE_SYNC_PAGE_SIZE) {
+    if (cursorBlockedByMissingMedia || rows.length < REMOTE_SYNC_PAGE_SIZE) {
       break;
     }
-
-    offset += rows.length;
   }
 
-  return { importedCount, latestSyncedAt, remoteNoteIds, remoteNoteSyncMarks };
+  return {
+    importedCount,
+    noteCursor,
+    cursorBlocked: cursorBlockedByMissingMedia,
+    scanCompleted,
+    remoteNoteIds,
+    remoteNoteSyncMarks,
+  };
 }
 
 function createSqliteSyncRepository(resolveScope: () => string): SyncRepository {
@@ -1939,7 +2100,10 @@ export async function syncNotes(
 
     let uploadedSnapshotCount = 0;
     let importedCount = 0;
-    let nextCursor = lastRemoteCursor ?? syncMarker;
+    let nextCursor: RemoteSyncCursor = lastRemoteCursor ?? {
+      notes: null,
+      tombstones: null,
+    };
     let finalNoteCount = notes.length;
     let finalPhotoNoteCount = countPhotoNotes(notes);
 
@@ -1953,7 +2117,14 @@ export async function syncNotes(
         { since: null }
       );
       importedCount = remoteMergeResult.importedCount + tombstoneMergeResult.deletedCount;
-      await reconcileLocallyDeletedNotes(ownerScope, remoteMergeResult.remoteNoteIds, syncedNoteIds, lastRemoteCursor);
+      if (remoteMergeResult.scanCompleted) {
+        await reconcileLocallyDeletedNotes(
+          ownerScope,
+          remoteMergeResult.remoteNoteIds,
+          syncedNoteIds,
+          lastRemoteCursor?.notes ?? null
+        );
+      }
       const latestLocalNotes = await getAllNotesForScope(ownerScope);
       finalNoteCount = latestLocalNotes.length;
       finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
@@ -1966,31 +2137,29 @@ export async function syncNotes(
         syncMarker,
         ownerScope
       );
-      nextCursor = syncMarker;
+      nextCursor = {
+        notes: remoteMergeResult.noteCursor,
+        tombstones: tombstoneMergeResult.tombstoneCursor,
+      };
     } else {
       const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, ownerScope, notes, {
-        since: lastRemoteCursor,
+        since: lastRemoteCursor?.notes ?? null,
       });
       const tombstoneMergeResult = await mergeRemoteNoteTombstonesFromSupabase(
         userId,
         ownerScope,
         syncedNoteIds,
         remoteMergeResult.remoteNoteSyncMarks,
-        { since: lastRemoteCursor }
+        { since: lastRemoteCursor?.tombstones ?? null }
       );
       importedCount = remoteMergeResult.importedCount + tombstoneMergeResult.deletedCount;
       for (const remoteNoteId of remoteMergeResult.remoteNoteIds) {
         syncedNoteIds.add(remoteNoteId);
       }
-      if (remoteMergeResult.latestSyncedAt && remoteMergeResult.latestSyncedAt > nextCursor) {
-        nextCursor = remoteMergeResult.latestSyncedAt;
-      }
-      if (tombstoneMergeResult.latestDeletedAt && tombstoneMergeResult.latestDeletedAt > nextCursor) {
-        nextCursor = tombstoneMergeResult.latestDeletedAt;
-      }
-      if (queueResult.hadLocalWrites && syncMarker > nextCursor) {
-        nextCursor = syncMarker;
-      }
+      nextCursor = {
+        notes: remoteMergeResult.noteCursor ?? lastRemoteCursor?.notes ?? null,
+        tombstones: tombstoneMergeResult.tombstoneCursor ?? lastRemoteCursor?.tombstones ?? null,
+      };
       if (importedCount > 0) {
         const latestLocalNotes = await getAllNotesForScope(ownerScope);
         finalNoteCount = latestLocalNotes.length;

@@ -1,6 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import {
   GOOGLE_IOS_CLIENT_ID,
@@ -94,7 +94,12 @@ function getUnavailableResult(provider: 'auth' | 'google'): AuthActionResult {
   };
 }
 
-async function clearAuthenticatedUserState(currentUserUid: string | null, setUser: (nextUser: AppUser | null) => void) {
+async function clearAuthenticatedUserState(
+  currentUserUid: string | null,
+  setUser: (nextUser: AppUser | null) => void,
+  invalidateAuthSyncRequests: () => void
+) {
+  invalidateAuthSyncRequests();
   setActiveNotesScope(LOCAL_NOTES_SCOPE);
   setUser(null);
   await clearSharedFeedCache(currentUserUid).catch(() => undefined);
@@ -258,6 +263,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(() => !isSupportedPlatform());
   const authSyncRequestIdRef = useRef(0);
 
+  const invalidateAuthSyncRequests = useCallback(() => {
+    authSyncRequestIdRef.current += 1;
+    return authSyncRequestIdRef.current;
+  }, []);
+
+  const syncAuthSession = useCallback(
+    async (
+      session: Session | null,
+      errorContext: 'load Supabase session' | 'sync auth state',
+      requestId = invalidateAuthSyncRequests()
+    ) => {
+      try {
+        if (authSyncRequestIdRef.current !== requestId) {
+          return null;
+        }
+
+        if (!session) {
+          await unregisterCurrentSocialPushToken().catch(() => undefined);
+        }
+
+        if (authSyncRequestIdRef.current !== requestId) {
+          return null;
+        }
+
+        const nextUser = await syncUserProfile(session);
+        if (authSyncRequestIdRef.current !== requestId) {
+          return null;
+        }
+
+        setUser(nextUser);
+        setIsReady(true);
+        return nextUser;
+      } catch (error) {
+        console.warn(`[auth] Failed to ${errorContext}:`, error);
+        if (authSyncRequestIdRef.current !== requestId) {
+          return null;
+        }
+
+        const fallbackUser = mapSupabaseUser(session?.user);
+        setActiveNotesScope(fallbackUser?.uid ?? getStoredNotesScope());
+        setUser(fallbackUser);
+        setIsReady(true);
+        return fallbackUser;
+      }
+    },
+    [invalidateAuthSyncRequests]
+  );
+
   useEffect(() => {
     if (!isSupportedPlatform() || !isGoogleSigninConfigured) {
       return;
@@ -279,43 +332,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let active = true;
-    const syncAuthSession = async (
-      session: Session | null,
-      errorContext: 'load Supabase session' | 'sync auth state',
-      requestId: number
-    ) => {
-      try {
-        if (!session) {
-          await unregisterCurrentSocialPushToken().catch(() => undefined);
-        }
-
-        const nextUser = await syncUserProfile(session);
-        if (!active || authSyncRequestIdRef.current !== requestId) {
-          return;
-        }
-
-        setUser(nextUser);
-        setIsReady(true);
-      } catch (error) {
-        console.warn(`[auth] Failed to ${errorContext}:`, error);
-        if (!active || authSyncRequestIdRef.current !== requestId) {
-          return;
-        }
-
-        const fallbackUser = mapSupabaseUser(session?.user);
-        setActiveNotesScope(fallbackUser?.uid ?? getStoredNotesScope());
-        setUser(fallbackUser);
-        setIsReady(true);
-      }
-    };
 
     void (async () => {
-      const requestId = ++authSyncRequestIdRef.current;
+      const requestId = invalidateAuthSyncRequests();
 
       try {
         const { data, error } = await supabase.auth.getSession();
         if (error) {
           throw error;
+        }
+
+        if (!active || authSyncRequestIdRef.current !== requestId) {
+          return;
         }
 
         await syncAuthSession(data.session ?? null, 'load Supabase session', requestId);
@@ -332,15 +360,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      const requestId = ++authSyncRequestIdRef.current;
-      void syncAuthSession(session, 'sync auth state', requestId);
+      void syncAuthSession(session, 'sync auth state');
     });
 
     return () => {
       active = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [invalidateAuthSyncRequests, syncAuthSession]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -409,8 +436,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw error;
           }
 
-          const nextUser = await syncUserProfile(data.session ?? null);
-          setUser(nextUser);
+          await syncAuthSession(data.session ?? null, 'sync auth state');
           return { status: 'success' };
         } catch (error: unknown) {
           if (typeof error === 'object' && error && 'code' in error) {
@@ -445,8 +471,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw error;
           }
 
-          const nextUser = await syncUserProfile(data.session ?? null);
-          setUser(nextUser);
+          await syncAuthSession(data.session ?? null, 'sync auth state');
           return { status: 'success' };
         } catch (error) {
           return {
@@ -481,8 +506,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw error;
           }
 
-          const nextUser = await syncUserProfile(data.session ?? null);
-          setUser(nextUser ?? mapSupabaseUser(data.user));
+          await syncAuthSession(data.session ?? null, 'sync auth state');
+          if (!data.session) {
+            setUser(mapSupabaseUser(data.user));
+          }
           return { status: 'success' };
         } catch (error) {
           return {
@@ -563,7 +590,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           await supabase.auth.signOut().catch(() => undefined);
-          await clearAuthenticatedUserState(user.uid, setUser);
+          await clearAuthenticatedUserState(user.uid, setUser, invalidateAuthSyncRequests);
           await purgeAuthenticatedUserState(user.uid);
           return { status: 'success' };
         } catch (error) {
@@ -617,11 +644,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        await clearAuthenticatedUserState(user?.uid ?? null, setUser);
+        await clearAuthenticatedUserState(user?.uid ?? null, setUser, invalidateAuthSyncRequests);
         await purgeAuthenticatedUserState(user?.uid ?? null);
       },
     }),
-    [isReady, user]
+    [invalidateAuthSyncRequests, isReady, syncAuthSession, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

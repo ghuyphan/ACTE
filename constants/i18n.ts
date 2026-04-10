@@ -12,6 +12,7 @@ const EXPLICIT_LANGUAGE_SOURCE = 'user';
 export const SUPPORTED_LANGUAGE_CODES = ['en', 'vi'] as const;
 export type AppLanguageCode = (typeof SUPPORTED_LANGUAGE_CODES)[number];
 const DEFAULT_LANGUAGE: AppLanguageCode = 'en';
+let isI18nInitialized = i18n.isInitialized;
 
 export function normalizeAppLanguage(language: string | null | undefined): AppLanguageCode {
     if (!language) {
@@ -43,7 +44,12 @@ export async function detectInitialLanguage(): Promise<AppLanguageCode> {
     }
 
     const [deviceLocale] = getLocales();
-    return normalizeAppLanguage(deviceLocale?.languageCode ?? deviceLocale?.languageTag);
+    const localeCandidate = [
+        deviceLocale?.languageTag,
+        deviceLocale?.languageCode,
+    ].find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+    return normalizeAppLanguage(localeCandidate);
 }
 
 // Language detection and caching
@@ -80,7 +86,15 @@ export const i18nReady = i18n
         react: {
             useSuspense: false,
         },
+    })
+    .then((instance) => {
+        isI18nInitialized = true;
+        return instance;
     });
+
+export function hasInitializedI18n() {
+    return isI18nInitialized;
+}
 
 export async function setAppLanguage(language: string): Promise<void> {
     const normalizedLanguage = normalizeAppLanguage(language);

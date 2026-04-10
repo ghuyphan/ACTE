@@ -49,7 +49,12 @@ export function useProfileScreenModel() {
     tier === 'plus' ? t('settings.plusTitle', 'Noto Plus') : t('settings.plusInactive', 'Standard');
 
   const openSignIn = () => {
-    router.replace('/auth');
+    router.replace({
+      pathname: '/auth',
+      params: {
+        returnTo: '/auth/profile',
+      },
+    });
   };
 
   const performSignOut = async () => {

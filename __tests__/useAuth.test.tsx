@@ -454,6 +454,39 @@ describe('useAuth', () => {
     expect(mockUnregisterCurrentSocialPushToken).toHaveBeenCalled();
   });
 
+  it('keeps a successful sign-in from being overwritten by a stale bootstrap load', async () => {
+    let resolveGetSession!: (value: { data: { session: Session | null }; error: null }) => void;
+    mockGetSession.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveGetSession = resolve;
+        })
+    );
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    let signInResult!: { status: string; message?: string };
+    await act(async () => {
+      signInResult = await hook.result.current.signInWithEmail('new@example.com', 'secret123');
+    });
+
+    expect(signInResult).toEqual({ status: 'success' });
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+    });
+    expect(hook.result.current.user?.email).toBe('new@example.com');
+
+    await act(async () => {
+      resolveGetSession({
+        data: { session: null },
+        error: null,
+      });
+      await Promise.resolve();
+    });
+
+    expect(hook.result.current.user?.email).toBe('new@example.com');
+  });
+
   it('keeps the persisted notes scope when restoring the Supabase session fails', async () => {
     mockGetPersistedActiveNotesScopeSync.mockReturnValue('user-42');
     mockGetSession.mockRejectedValueOnce(new Error('network down'));

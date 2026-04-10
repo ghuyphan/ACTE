@@ -276,6 +276,7 @@ const config = {
     eas: {
       projectId: easProjectId,
     },
+    enablePlaceReminders,
   },
 };
 

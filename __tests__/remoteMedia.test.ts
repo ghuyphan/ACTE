@@ -73,6 +73,7 @@ jest.mock('../utils/supabase', () => ({
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const {
   downloadPhotoFromStorage,
+  downloadPairedVideoFromStorage,
   uploadPairedVideoToStorage,
   uploadPhotoToStorage,
 } = require('../services/remoteMedia') as typeof import('../services/remoteMedia');
@@ -120,6 +121,82 @@ describe('remoteMedia uploads', () => {
     await expect(secondDownload).resolves.toBe('file:///cache/shared-photo.jpg');
     expect(mockCreateSignedUrl).toHaveBeenCalledTimes(1);
     expect(mockDownloadAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-downloads when the remote photo path changes for the same local id', async () => {
+    mockGetInfoAsync
+      .mockResolvedValueOnce({
+        exists: false,
+        isDirectory: false,
+        size: 0,
+        uri: 'file:///cache/shared-photo-old.jpg',
+      })
+      .mockResolvedValueOnce({
+        exists: false,
+        isDirectory: false,
+        size: 0,
+        uri: 'file:///cache/shared-photo-new.jpg',
+      });
+    mockDownloadAsync
+      .mockResolvedValueOnce({
+        uri: 'file:///cache/shared-photo-old.jpg',
+      })
+      .mockResolvedValueOnce({
+        uri: 'file:///cache/shared-photo-new.jpg',
+      });
+
+    await expect(
+      downloadPhotoFromStorage('shared-post-media', 'friends/shared-photo-v1.jpg', 'shared-photo-1')
+    ).resolves.toBe('file:///cache/shared-photo-old.jpg');
+    await expect(
+      downloadPhotoFromStorage('shared-post-media', 'friends/shared-photo-v2.jpg', 'shared-photo-1')
+    ).resolves.toBe('file:///cache/shared-photo-new.jpg');
+
+    expect(mockCreateSignedUrl).toHaveBeenCalledTimes(2);
+    expect(mockDownloadAsync).toHaveBeenCalledTimes(2);
+    expect(mockDownloadAsync.mock.calls[0]?.[1]).not.toBe(mockDownloadAsync.mock.calls[1]?.[1]);
+  });
+
+  it('re-downloads when the remote video path changes for the same local id', async () => {
+    mockGetInfoAsync
+      .mockResolvedValueOnce({
+        exists: false,
+        isDirectory: false,
+        size: 0,
+        uri: 'file:///cache/shared-video-old.mov',
+      })
+      .mockResolvedValueOnce({
+        exists: false,
+        isDirectory: false,
+        size: 0,
+        uri: 'file:///cache/shared-video-new.mov',
+      });
+    mockDownloadAsync
+      .mockResolvedValueOnce({
+        uri: 'file:///cache/shared-video-old.mov',
+      })
+      .mockResolvedValueOnce({
+        uri: 'file:///cache/shared-video-new.mov',
+      });
+
+    await expect(
+      downloadPairedVideoFromStorage(
+        'shared-post-media',
+        'friends/shared-photo-v1.motion.mov',
+        'shared-photo-1-motion'
+      )
+    ).resolves.toBe('file:///cache/shared-video-old.mov');
+    await expect(
+      downloadPairedVideoFromStorage(
+        'shared-post-media',
+        'friends/shared-photo-v2.motion.mov',
+        'shared-photo-1-motion'
+      )
+    ).resolves.toBe('file:///cache/shared-video-new.mov');
+
+    expect(mockCreateSignedUrl).toHaveBeenCalledTimes(2);
+    expect(mockDownloadAsync).toHaveBeenCalledTimes(2);
+    expect(mockDownloadAsync.mock.calls[0]?.[1]).not.toBe(mockDownloadAsync.mock.calls[1]?.[1]);
   });
 
   it('uploads photos using raw array buffers instead of base64 payloads', async () => {

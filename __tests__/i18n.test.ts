@@ -1,19 +1,40 @@
-jest.mock('expo-localization', () => ({
-  getLocales: jest.fn(() => [{ languageCode: 'en', languageTag: 'en-US' }]),
-}));
+function loadI18nModule(options?: {
+  locales?: Array<{ languageCode?: string | null; languageTag?: string | null }>;
+  storage?: Map<string, string>;
+}) {
+  const locales = options?.locales ?? [{ languageCode: 'en', languageTag: 'en-US' }];
+  const storage = options?.storage ?? new Map<string, string>();
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getLocales } from 'expo-localization';
-import i18n, { detectInitialLanguage, normalizeAppLanguage, setAppLanguage } from '../constants/i18n';
+  jest.resetModules();
+  jest.doMock('expo-localization', () => ({
+    getLocales: jest.fn(() => locales),
+  }));
+  jest.doMock('../utils/appStorage', () => ({
+    getPersistentItem: jest.fn(async (key: string) => storage.get(key) ?? null),
+    multiSetPersistent: jest.fn(async (entries: Array<[string, string]>) => {
+      entries.forEach(([key, value]) => {
+        storage.set(key, value);
+      });
+    }),
+  }));
+
+  return {
+    storage,
+    module: require('../constants/i18n') as typeof import('../constants/i18n'),
+  };
+}
 
 describe('i18n language resolution', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     jest.clearAllMocks();
-    await AsyncStorage.clear();
-    (getLocales as jest.Mock).mockReturnValue([{ languageCode: 'en', languageTag: 'en-US' }]);
+    jest.resetModules();
   });
 
   it('normalizes region-tagged languages to supported app locales', () => {
+    const {
+      module: { normalizeAppLanguage },
+    } = loadI18nModule();
+
     expect(normalizeAppLanguage('vi-VN')).toBe('vi');
     expect(normalizeAppLanguage('en_US')).toBe('en');
     expect(normalizeAppLanguage('fr-FR')).toBe('en');
@@ -21,30 +42,47 @@ describe('i18n language resolution', () => {
   });
 
   it('prefers a stored language and normalizes it', async () => {
-    await AsyncStorage.setItem('settings.lang', 'vi-VN');
-    await AsyncStorage.setItem('settings.lang.source', 'user');
+    const storage = new Map<string, string>([
+      ['settings.lang', 'vi-VN'],
+      ['settings.lang.source', 'user'],
+    ]);
+    const {
+      module: { detectInitialLanguage },
+    } = loadI18nModule({ storage });
 
     await expect(detectInitialLanguage()).resolves.toBe('vi');
   });
 
   it('falls back to the device locale when there is no stored preference', async () => {
-    (getLocales as jest.Mock).mockReturnValue([{ languageCode: null, languageTag: 'vi-VN' }]);
+    const {
+      module: { detectInitialLanguage },
+    } = loadI18nModule({
+      locales: [{ languageCode: null, languageTag: 'vi-VN' }],
+    });
 
     await expect(detectInitialLanguage()).resolves.toBe('vi');
   });
 
   it('ignores legacy auto-cached language values without an explicit user preference marker', async () => {
-    await AsyncStorage.setItem('settings.lang', 'en');
-    (getLocales as jest.Mock).mockReturnValue([{ languageCode: 'vi', languageTag: 'vi-VN' }]);
+    const storage = new Map<string, string>([['settings.lang', 'en']]);
+    const {
+      module: { detectInitialLanguage },
+    } = loadI18nModule({
+      locales: [{ languageCode: 'vi', languageTag: 'vi-VN' }],
+      storage,
+    });
 
     await expect(detectInitialLanguage()).resolves.toBe('vi');
   });
 
   it('persists an explicit language choice for future launches', async () => {
-    await setAppLanguage('vi-VN');
+    const { storage, module } = loadI18nModule();
 
-    await expect(AsyncStorage.getItem('settings.lang')).resolves.toBe('vi');
-    await expect(AsyncStorage.getItem('settings.lang.source')).resolves.toBe('user');
-    expect(i18n.language).toBe('vi');
+    await module.i18nReady;
+    await module.setAppLanguage('vi-VN');
+
+    expect(storage.get('settings.lang')).toBe('vi');
+    expect(storage.get('settings.lang.source')).toBe('user');
+    expect(module.default.language).toBe('vi');
   });
 });

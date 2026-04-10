@@ -251,11 +251,53 @@ function executeNotesQuery(state: any) {
     });
   }
 
+  if (state.keysetFilter) {
+    rows = rows.filter((row) => {
+      const primaryValue = String(row?.[state.keysetFilter.primaryField] ?? '');
+      const secondaryValue = String(row?.[state.keysetFilter.secondaryField] ?? '');
+
+      return (
+        primaryValue > state.keysetFilter.primaryValue ||
+        (primaryValue === state.keysetFilter.primaryValue &&
+          secondaryValue > state.keysetFilter.secondaryValue)
+      );
+    });
+  }
+
+  if (state.keysetFilter) {
+    rows = rows.filter((row) => {
+      const primaryValue = String(row?.[state.keysetFilter.primaryField] ?? '');
+      const secondaryValue = String(row?.[state.keysetFilter.secondaryField] ?? '');
+
+      return (
+        primaryValue > state.keysetFilter.primaryValue ||
+        (primaryValue === state.keysetFilter.primaryValue &&
+          secondaryValue > state.keysetFilter.secondaryValue)
+      );
+    });
+  }
+
   if (typeof state.rangeStart === 'number' && typeof state.rangeEnd === 'number') {
     rows = rows.slice(state.rangeStart, state.rangeEnd + 1);
   }
 
   return rows;
+}
+
+function parseKeysetFilter(clause: string) {
+  const match = clause.match(
+    /^([a-z_]+)\.gt\.([^,]+),and\(\1\.eq\.([^,]+),([a-z_]+)\.gt\.([^)]+)\)$/
+  );
+  if (!match) {
+    throw new Error(`Unsupported keyset filter: ${clause}`);
+  }
+
+  return {
+    primaryField: match[1],
+    primaryValue: match[2],
+    secondaryField: match[4],
+    secondaryValue: match[5],
+  };
 }
 
 function executeSharedPostsQuery(state: any) {
@@ -352,6 +394,14 @@ function mockCreateNotesQueryBuilder() {
     orderFields: [] as { field: string; ascending: boolean }[],
     rangeStart: null as number | null,
     rangeEnd: null as number | null,
+    keysetFilter: null as
+      | {
+          primaryField: string;
+          primaryValue: string;
+          secondaryField: string;
+          secondaryValue: string;
+        }
+      | null,
     deleteMode: false,
   };
 
@@ -371,6 +421,10 @@ function mockCreateNotesQueryBuilder() {
     },
     order: (field: string, options?: { ascending?: boolean }) => {
       state.orderFields.push({ field, ascending: options?.ascending ?? true });
+      return builder;
+    },
+    or: (clause: string) => {
+      state.keysetFilter = parseKeysetFilter(clause);
       return builder;
     },
     range: (from: number, to: number) => {
@@ -481,6 +535,14 @@ function mockCreateTombstonesQueryBuilder(
     orderFields: [] as { field: string; ascending: boolean }[],
     rangeStart: null as number | null,
     rangeEnd: null as number | null,
+    keysetFilter: null as
+      | {
+          primaryField: string;
+          primaryValue: string;
+          secondaryField: string;
+          secondaryValue: string;
+        }
+      | null,
     deleteMode: false,
   };
 
@@ -496,6 +558,10 @@ function mockCreateTombstonesQueryBuilder(
     },
     order: (field: string, options?: { ascending?: boolean }) => {
       state.orderFields.push({ field, ascending: options?.ascending ?? true });
+      return builder;
+    },
+    or: (clause: string) => {
+      state.keysetFilter = parseKeysetFilter(clause);
       return builder;
     },
     range: (from: number, to: number) => {
@@ -855,6 +921,11 @@ function createRemoteStickerPlacementsJson(remotePath: string) {
 
 async function setPreviouslySyncedNoteIds(ids: string[]) {
   await AsyncStorage.setItem('sync.syncedNoteIds.user-1', JSON.stringify(ids));
+}
+
+async function getStoredRemoteSyncCursor() {
+  const rawValue = await AsyncStorage.getItem('sync.lastRemoteCursor.user-1');
+  return rawValue ? (JSON.parse(rawValue) as { notes: unknown; tombstones: unknown }) : null;
 }
 
 const syncUser = {
@@ -1306,7 +1377,7 @@ describe('syncService', () => {
     expect(mockUpsertNote).not.toHaveBeenCalled();
   });
 
-  it('keeps incremental sync running when a remote photo object is missing', async () => {
+  it('stops advancing the note cursor when a remote photo object is missing', async () => {
     await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-09T00:00:00.000Z');
     mockRemoteNotes.set('note-photo-missing', {
       id: 'note-photo-missing',
@@ -1366,18 +1437,24 @@ describe('syncService', () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
-        importedCount: 1,
+        importedCount: 0,
       })
     );
-    expect(mockUpsertNote).toHaveBeenCalledWith(
+    expect(mockUpsertNote).not.toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'note-text-later',
-        content: 'later text',
       })
     );
-    expect(await AsyncStorage.getItem('sync.lastRemoteCursor.user-1')).toBe(
-      '2026-03-09T00:00:00.000Z'
-    );
+    await expect(getStoredRemoteSyncCursor()).resolves.toEqual({
+      notes: {
+        syncedAt: '2026-03-09T00:00:00.000Z',
+        id: '',
+      },
+      tombstones: {
+        deletedAt: '2026-03-09T00:00:00.000Z',
+        noteId: '',
+      },
+    });
   });
 
   it('removes local notes when note tombstones arrive during incremental sync', async () => {
@@ -1400,9 +1477,16 @@ describe('syncService', () => {
     );
     expect(localNotesStore).toHaveLength(0);
     expect(mockDeleteNote).toHaveBeenCalledWith('note-deleted');
-    expect(await AsyncStorage.getItem('sync.lastRemoteCursor.user-1')).toBe(
-      '2026-03-11T00:00:00.000Z'
-    );
+    await expect(getStoredRemoteSyncCursor()).resolves.toEqual({
+      notes: {
+        syncedAt: '2026-03-09T00:00:00.000Z',
+        id: '',
+      },
+      tombstones: {
+        deletedAt: '2026-03-11T00:00:00.000Z',
+        noteId: 'note-deleted',
+      },
+    });
   });
 
   it('keeps local-only notes that were never synced when full sync sees them missing remotely', async () => {
@@ -1698,7 +1782,7 @@ describe('syncService', () => {
     expect(mockRemoteStickerAssetRefs.size).toBe(0);
   });
 
-  it('retries queued deletes when remote media cleanup fails', async () => {
+  it('keeps queued deletes successful when remote media cleanup fails after row deletion', async () => {
     mockRemoteNotes.set('note-photo-error', {
       id: 'note-photo-error',
       user_id: 'user-1',
@@ -1720,20 +1804,17 @@ describe('syncService', () => {
 
     expect(result).toEqual(
       expect.objectContaining({
-        status: 'error',
-        failedCount: 1,
-        message: 'storage delete failed',
+        status: 'success',
       })
     );
-    expect(mockRemoteNotes.has('note-photo-error')).toBe(true);
-    expect(mockRemoteNoteTombstones.has('note-photo-error')).toBe(false);
-    expect(queueRows).toHaveLength(1);
-    expect(queueRows[0]).toEqual(
+    expect(mockRemoteNotes.has('note-photo-error')).toBe(false);
+    expect(mockRemoteNoteTombstones.get('note-photo-error')).toEqual(
       expect.objectContaining({
-        entity_id: 'note-photo-error',
-        status: 'failed',
+        note_id: 'note-photo-error',
+        user_id: 'user-1',
       })
     );
+    expect(queueRows).toHaveLength(0);
   });
 
   it('cleans up newly uploaded remote media when note upsert fails', async () => {

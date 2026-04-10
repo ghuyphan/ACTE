@@ -2,6 +2,8 @@ import React from 'react';
 import { render } from '@testing-library/react-native';
 import { NoteMemoryCard, SharedPostMemoryCard } from '../components/home/MemoryCardPrimitives';
 
+const mockT = ((key: string, fallback?: string) => fallback ?? key) as any;
+
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: ({ name }: { name: string }) => {
     const React = require('react');
@@ -101,7 +103,7 @@ describe('SharedPostMemoryCard', () => {
           danger: '#FF3B30',
           card: '#FFFFFF',
         }}
-        t={(key: string, fallback?: string) => fallback ?? key}
+        t={mockT}
         showSharedBadge
       />
     );
@@ -156,7 +158,7 @@ describe('NoteMemoryCard', () => {
       <NoteMemoryCard
         note={note}
         colors={colors}
-        t={(key: string, fallback?: string) => fallback ?? key}
+        t={mockT}
         isSharedByMe
       />
     );
@@ -200,7 +202,7 @@ describe('NoteMemoryCard', () => {
       <NoteMemoryCard
         note={note}
         colors={colors}
-        t={(key: string, fallback?: string) => fallback ?? key}
+        t={mockT}
         isSharedByMe
       />
     );

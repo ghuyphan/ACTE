@@ -8,6 +8,11 @@ const mockStopGeofencingAsync = jest.fn();
 const mockNotificationsGetPermissionsAsync = jest.fn();
 const mockGetAllNotes = jest.fn();
 const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+const mockExpoConfig = {
+  extra: {
+    enablePlaceReminders: true,
+  },
+};
 
 jest.mock('../constants/i18n', () => ({
   __esModule: true,
@@ -45,6 +50,15 @@ jest.mock('expo-location', () => ({
   stopGeofencingAsync: (...args: unknown[]) => mockStopGeofencingAsync(...args),
 }));
 
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: {
+    get expoConfig() {
+      return mockExpoConfig;
+    },
+  },
+}));
+
 jest.mock('expo-notifications', () => ({
   getPermissionsAsync: (...args: unknown[]) => mockNotificationsGetPermissionsAsync(...args),
   setNotificationHandler: jest.fn(),
@@ -62,8 +76,10 @@ jest.mock('../services/database', () => ({
 
 import type { Note } from '../services/database';
 import {
+  arePlaceRemindersEnabled,
   clearGeofenceRegions,
   getMaxGeofenceRegionCount,
+  getReminderPermissionState,
   prioritizeNotesForGeofencing,
   summarizeGeofenceSelection,
   syncGeofenceRegions,
@@ -94,6 +110,7 @@ function buildBackgroundLocationAuthorizationError() {
 beforeEach(() => {
   mockStorage.clear();
   jest.clearAllMocks();
+  mockExpoConfig.extra.enablePlaceReminders = true;
 
   mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
   mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
@@ -118,12 +135,43 @@ afterAll(() => {
 });
 
 describe('geofenceService', () => {
+  it('surfaces the runtime feature flag', () => {
+    expect(arePlaceRemindersEnabled()).toBe(true);
+    mockExpoConfig.extra.enablePlaceReminders = false;
+    expect(arePlaceRemindersEnabled()).toBe(false);
+  });
+
+  it('short-circuits permission state when place reminders are disabled', async () => {
+    mockExpoConfig.extra.enablePlaceReminders = false;
+
+    await expect(getReminderPermissionState()).resolves.toEqual({
+      foregroundGranted: false,
+      remindersEnabled: false,
+    });
+
+    expect(mockGetForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(mockGetBackgroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(mockNotificationsGetPermissionsAsync).not.toHaveBeenCalled();
+  });
+
   it('returns false when reminders are not enabled', async () => {
     mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
 
     const result = await syncGeofenceRegions();
     expect(result).toBe(false);
     expect(mockStartGeofencingAsync).not.toHaveBeenCalled();
+  });
+
+  it('clears active geofences when the runtime feature flag is disabled', async () => {
+    mockExpoConfig.extra.enablePlaceReminders = false;
+    mockStorage.set('geofence.signature', 'existing-signature');
+    mockHasStartedGeofencingAsync.mockResolvedValue(true);
+
+    const result = await syncGeofenceRegions();
+
+    expect(result).toBe(false);
+    expect(mockStopGeofencingAsync).toHaveBeenCalledWith('BACKGROUND_GEOFENCE_TASK');
+    expect(mockStorage.has('geofence.signature')).toBe(false);
   });
 
   it('clears active geofencing when reminder permissions are revoked', async () => {

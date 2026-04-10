@@ -59,7 +59,7 @@ export async function loadStartupRoute(variant: StartupRouteVariant): Promise<St
       ? resolveStartupRoute(hasLaunched, 'entry')
       : resolveStartupRoute(hasLaunched, 'index');
   } catch {
-    return variant === 'entry' ? '/' : '/(tabs)';
+    return variant === 'entry' ? '/auth/onboarding' : '/auth/onboarding';
   }
 }
 

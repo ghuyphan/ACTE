@@ -49,7 +49,6 @@ import { SHARED_POST_MEDIA_BUCKET } from '../../../services/remoteMedia';
 import { Note } from '../../../services/database';
 import { SharedPost } from '../../../services/sharedFeedService';
 import { scheduleOnIdle } from '../../../utils/scheduleOnIdle';
-import { buildCreatedStickerLibrary } from './stickerLibrary';
 import { useNotesGridSharedPhotoHydration } from './useNotesGridSharedPhotoHydration';
 
 type NoteGridItem =
@@ -355,7 +354,6 @@ export default function NotesIndexScreen() {
     sharedPhotoPosts,
     visibleSharedPhotoIds
   );
-  const createdStickerLibrary = useMemo(() => buildCreatedStickerLibrary(notes), [notes]);
   const items = useMemo<NoteGridItem[]>(
     () =>
       [

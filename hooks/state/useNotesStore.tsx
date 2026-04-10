@@ -62,6 +62,7 @@ function useNotesStoreValue(): NotesStoreValue {
   const [loading, setLoading] = useState(true);
   const notesRef = useRef<Note[]>([]);
   const activeScopeRef = useRef<string>(resolveNotesScope(user?.uid));
+  const activeScopeRevisionRef = useRef(0);
   const widgetSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshRequestIdRef = useRef(0);
 
@@ -118,6 +119,21 @@ function useNotesStoreValue(): NotesStoreValue {
     }
   }, []);
 
+  const applyActiveScope = useCallback((nextScope: string) => {
+    if (activeScopeRef.current !== nextScope) {
+      activeScopeRef.current = nextScope;
+      activeScopeRevisionRef.current += 1;
+    }
+
+    return activeScopeRef.current;
+  }, []);
+
+  const isCurrentScope = useCallback(
+    (scope: string, revision: number) =>
+      activeScopeRef.current === scope && activeScopeRevisionRef.current === revision,
+    []
+  );
+
   const refreshNotes = useCallback(async (
     showLoading = true,
     options?: { updateWidget?: boolean; scope?: string; syncGeofences?: boolean }
@@ -159,7 +175,7 @@ function useNotesStoreValue(): NotesStoreValue {
     let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
     (async () => {
       const nextScope = resolveNotesScope(user?.uid);
-      activeScopeRef.current = nextScope;
+      applyActiveScope(nextScope);
       await refreshNotes(true, {
         scope: nextScope,
         syncGeofences: true,
@@ -185,7 +201,7 @@ function useNotesStoreValue(): NotesStoreValue {
         clearTimeout(cleanupTimeout);
       }
     };
-  }, [authReady, refreshNotes, user?.uid]);
+  }, [applyActiveScope, authReady, refreshNotes, user?.uid]);
 
   useEffect(() => {
     if (!authReady) {
@@ -197,7 +213,7 @@ function useNotesStoreValue(): NotesStoreValue {
       return;
     }
 
-    activeScopeRef.current = nextScope;
+    applyActiveScope(nextScope);
     notesRef.current = [];
     setNotes([]);
     setLoading(true);
@@ -206,7 +222,7 @@ function useNotesStoreValue(): NotesStoreValue {
       syncGeofences: true,
       updateWidget: true,
     });
-  }, [authReady, refreshNotes, user?.uid]);
+  }, [applyActiveScope, authReady, refreshNotes, user?.uid]);
 
   useEffect(() => () => {
     if (widgetSyncTimeoutRef.current) {
@@ -216,6 +232,8 @@ function useNotesStoreValue(): NotesStoreValue {
 
   const createNote = useCallback(
     async (input: CreateNoteInput): Promise<Note> => {
+      const scope = activeScopeRef.current;
+      const scopeRevision = activeScopeRevisionRef.current;
       const timestamp = new Date().toISOString();
       const note = await dbCreate(input, {
         syncChange: {
@@ -225,6 +243,9 @@ function useNotesStoreValue(): NotesStoreValue {
           timestamp,
         },
       });
+      if (!isCurrentScope(scope, scopeRevision)) {
+        return note;
+      }
       const nextNotes = prependNote(notesRef.current, note);
       commitNotes(nextNotes);
 
@@ -235,11 +256,13 @@ function useNotesStoreValue(): NotesStoreValue {
 
       return note;
     },
-    [commitNotes, syncGeofencesForNotes]
+    [commitNotes, isCurrentScope, syncGeofencesForNotes]
   );
 
   const updateNote = useCallback(
     async (id: string, updates: NoteUpdates) => {
+      const scope = activeScopeRef.current;
+      const scopeRevision = activeScopeRevisionRef.current;
       await dbUpdate(id, updates, {
         syncChange: {
           type: 'update',
@@ -249,15 +272,20 @@ function useNotesStoreValue(): NotesStoreValue {
           timestamp: new Date().toISOString(),
         },
       });
+      if (!isCurrentScope(scope, scopeRevision)) {
+        return;
+      }
       const nextNotes = updateNoteInCollection(notesRef.current, id, updates);
       commitNotes(nextNotes);
       syncGeofencesForNotes('note update', nextNotes);
     },
-    [commitNotes, syncGeofencesForNotes]
+    [commitNotes, isCurrentScope, syncGeofencesForNotes]
   );
 
   const toggleFavorite = useCallback(
     async (id: string) => {
+      const scope = activeScopeRef.current;
+      const scopeRevision = activeScopeRevisionRef.current;
       const currentNote = notesRef.current.find((note) => note.id === id);
       const nextFavoriteValue = currentNote ? !currentNote.isFavorite : true;
       const timestamp = new Date().toISOString();
@@ -270,6 +298,9 @@ function useNotesStoreValue(): NotesStoreValue {
           timestamp,
         },
       });
+      if (!isCurrentScope(scope, scopeRevision)) {
+        return newValue;
+      }
       const nextNotes = replaceNoteInCollection(notesRef.current, id, (note) => ({
         ...note,
         isFavorite: newValue,
@@ -278,7 +309,7 @@ function useNotesStoreValue(): NotesStoreValue {
       syncGeofencesForNotes('favorite change', nextNotes);
       return newValue;
     },
-    [commitNotes, syncGeofencesForNotes]
+    [commitNotes, isCurrentScope, syncGeofencesForNotes]
   );
 
   const searchNotes = useCallback(async (query: string) => {
@@ -312,6 +343,8 @@ function useNotesStoreValue(): NotesStoreValue {
 
   const deleteNote = useCallback(
     async (id: string) => {
+      const scope = activeScopeRef.current;
+      const scopeRevision = activeScopeRevisionRef.current;
       const note = await dbGetById(id);
 
       await dbDelete(id, {
@@ -322,16 +355,21 @@ function useNotesStoreValue(): NotesStoreValue {
           timestamp: new Date().toISOString(),
         },
       });
+      if (!isCurrentScope(scope, scopeRevision)) {
+        return;
+      }
       const nextNotes = removeNoteFromCollection(notesRef.current, id);
       commitNotes(nextNotes);
 
       await deletePhotoFileIfPresent(note);
       syncGeofencesForNotes('note deletion', nextNotes);
     },
-    [commitNotes, deletePhotoFileIfPresent, syncGeofencesForNotes]
+    [commitNotes, deletePhotoFileIfPresent, isCurrentScope, syncGeofencesForNotes]
   );
 
   const deleteAllNotes = useCallback(async () => {
+    const scope = activeScopeRef.current;
+    const scopeRevision = activeScopeRevisionRef.current;
     const allNotes = await getAllNotesForScope(activeScopeRef.current);
 
     await dbDeleteAll({
@@ -341,6 +379,9 @@ function useNotesStoreValue(): NotesStoreValue {
         timestamp: new Date().toISOString(),
       },
     });
+    if (!isCurrentScope(scope, scopeRevision)) {
+      return;
+    }
     commitNotes([]);
 
     for (const note of allNotes) {
@@ -348,7 +389,7 @@ function useNotesStoreValue(): NotesStoreValue {
     }
 
     await clearGeofenceRegions();
-  }, [commitNotes, deletePhotoFileIfPresent]);
+  }, [commitNotes, deletePhotoFileIfPresent, isCurrentScope]);
 
   const getNoteById = useCallback(async (id: string) => {
     const inMemory = notesRef.current.find((n) => n.id === id);

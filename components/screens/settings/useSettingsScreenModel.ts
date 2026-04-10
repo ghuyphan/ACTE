@@ -42,14 +42,25 @@ export function useSettingsScreenModel() {
   const [showTheme, setShowTheme] = useState(false);
   const [showLanguage, setShowLanguage] = useState(false);
   const [showSync, setShowSync] = useState(false);
+  const authProfileRoute = '/auth/profile' as Href;
 
   const openAccountScreen = useCallback(() => {
     if (!isAuthAvailable) {
       return;
     }
 
-    router.push((user ? '/auth/profile' : '/auth') as Href);
-  }, [isAuthAvailable, router, user]);
+    if (user) {
+      router.push(authProfileRoute);
+      return;
+    }
+
+    router.push({
+      pathname: '/auth',
+      params: {
+        returnTo: authProfileRoute,
+      },
+    } as Href);
+  }, [authProfileRoute, isAuthAvailable, router, user]);
 
   const openPlusScreen = () => {
     router.push('/plus');

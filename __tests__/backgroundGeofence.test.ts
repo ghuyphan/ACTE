@@ -4,6 +4,8 @@ const mockGetNoteByIdForScope = jest.fn();
 const mockGetAllNotesForScope = jest.fn();
 const mockGetPersistedActiveNotesScope = jest.fn();
 const mockUpdateWidgetData = jest.fn();
+const mockBuildNearbyReminderCopy = jest.fn();
+const mockBuildReminderNotificationContent = jest.fn();
 
 (globalThis as any).__mockGeofenceTaskHandler = null;
 
@@ -47,6 +49,11 @@ jest.mock('../services/widgetService', () => ({
   updateWidgetData: (...args: unknown[]) => mockUpdateWidgetData(...args),
 }));
 
+jest.mock('../services/notificationService', () => ({
+  buildNearbyReminderCopy: (...args: unknown[]) => mockBuildNearbyReminderCopy(...args),
+  buildReminderNotificationContent: (...args: unknown[]) => mockBuildReminderNotificationContent(...args),
+}));
+
 jest.mock('../constants/i18n', () => ({
   __esModule: true,
   default: {
@@ -76,7 +83,6 @@ jest.mock('../constants/i18n', () => ({
 }));
 
 import { getGeofenceCooldownKey, getLocationCooldownId, getSkipNextEnterKey } from '../utils/geofenceKeys';
-require('../utils/backgroundGeofence');
 
 function buildNote(overrides: Partial<any> = {}) {
   return {
@@ -101,10 +107,28 @@ function setMockNotes(notes: Array<any>) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.resetModules();
   mockStorage.clear();
+  (globalThis as any).__mockGeofenceTaskHandler = null;
   mockGetPersistedActiveNotesScope.mockResolvedValue('user-1');
   mockUpdateWidgetData.mockResolvedValue(undefined);
+  mockBuildNearbyReminderCopy.mockImplementation(
+    async ({ locationName, noteBody, noteType }: { locationName?: string | null; noteBody?: string | null; noteType: 'text' | 'photo' }) => ({
+      title: locationName?.trim() ? `Này, ${locationName.trim()} quen không?` : 'Nearby reminder',
+      body: noteBody?.trim() || (noteType === 'photo'
+        ? 'Có một kỷ niệm từ nơi này đang chờ bạn.'
+        : 'A note is ready when you open Noto.'),
+    })
+  );
+  mockBuildReminderNotificationContent.mockImplementation(
+    ({ title, body, noteId }: { title: string; body: string; noteId?: string | null }) => ({
+      title,
+      body,
+      data: noteId ? { noteId } : {},
+    })
+  );
   setMockNotes([buildNote()]);
+  require('../utils/backgroundGeofence');
 });
 
 async function runEnterEvent(noteId = 'note-1') {

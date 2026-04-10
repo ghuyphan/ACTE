@@ -275,6 +275,24 @@ async function cleanupRemoteArtifacts(
   }
 }
 
+function logDeferredArtifactCleanupFailure(context: string, error: unknown) {
+  console.warn(`[sharedFeedService] Deferred remote artifact cleanup failed for ${context}:`, error);
+}
+
+async function cleanupRemoteArtifactsBestEffort(
+  context: string,
+  bucket: string,
+  artifacts: {
+    photoPath?: string | null;
+    pairedVideoPath?: string | null;
+    stickerPaths?: string[];
+  }
+) {
+  await cleanupRemoteArtifacts(bucket, artifacts).catch((error) => {
+    logDeferredArtifactCleanupFailure(context, error);
+  });
+}
+
 function getReusableSharedPostCleanupArtifacts(artifacts: {
   photoPath?: string | null;
   pairedVideoPath?: string | null;
@@ -1281,19 +1299,6 @@ export async function deleteOwnedSharedPostsForNotes(
 
   const postIds = normalizeRemoteEntityIds(rows.map((row) => row.id));
   const deletedAt = getNowIso();
-  await Promise.all(
-    rows.map((row) =>
-      cleanupRemoteArtifacts(
-        SHARED_POST_MEDIA_BUCKET,
-        getReusableSharedPostCleanupArtifacts({
-          photoPath: row.photo_path ?? null,
-          pairedVideoPath: row.paired_video_path ?? null,
-          stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
-        }),
-        { strict: true }
-      )
-    )
-  );
 
   const { data: deletedPosts, error: deleteError } = await supabase
     .from('shared_posts')
@@ -1335,6 +1340,20 @@ export async function deleteOwnedSharedPostsForNotes(
     })
   );
 
+  await Promise.all(
+    rows.map((row) =>
+      cleanupRemoteArtifactsBestEffort(
+        `shared post ${row.id}`,
+        SHARED_POST_MEDIA_BUCKET,
+        getReusableSharedPostCleanupArtifacts({
+          photoPath: row.photo_path ?? null,
+          pairedVideoPath: row.paired_video_path ?? null,
+          stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
+        })
+      )
+    )
+  );
+
   return postIds;
 }
 
@@ -1355,19 +1374,6 @@ export async function deleteSharedPost(
   }
 
   const expectedDeletedPostIds = existing ? [postId] : [];
-  await cleanupRemoteArtifacts(
-    SHARED_POST_MEDIA_BUCKET,
-    getReusableSharedPostCleanupArtifacts({
-      photoPath: (existing as { photo_path?: string | null } | null)?.photo_path ?? null,
-      pairedVideoPath:
-        (existing as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
-      stickerPaths: getRemoteStickerAssetPaths(
-        (existing as { sticker_placements_json?: string | null } | null)?.sticker_placements_json ?? null
-      ),
-    }),
-    { strict: true }
-  );
-
   const { data: deletedPosts, error } = await supabase
     .from('shared_posts')
     .delete()
@@ -1402,4 +1408,16 @@ export async function deleteSharedPost(
 
   await upsertSharedPostTombstones(user.id, [postId], getNowIso());
   await clearRemoteStickerAssetRefs(user.id, 'shared_post', postId);
+  await cleanupRemoteArtifactsBestEffort(
+    `shared post ${postId}`,
+    SHARED_POST_MEDIA_BUCKET,
+    getReusableSharedPostCleanupArtifacts({
+      photoPath: (existing as { photo_path?: string | null } | null)?.photo_path ?? null,
+      pairedVideoPath:
+        (existing as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
+      stickerPaths: getRemoteStickerAssetPaths(
+        (existing as { sticker_placements_json?: string | null } | null)?.sticker_placements_json ?? null
+      ),
+    })
+  );
 }

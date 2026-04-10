@@ -817,6 +817,7 @@
         "recoveryInProgress": "Trying to recover your local data..."
     },
     "common": {
+        "error": "Something went wrong",
         "cancel": "Cancel",
         "continue": "Continue",
         "delete": "Delete",

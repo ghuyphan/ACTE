@@ -16,6 +16,22 @@ const mockUseAuth = jest.fn(() => ({
   user: null,
   isReady: true,
 }));
+const mockDbCreateNote = jest.fn(async (input: any) => {
+  const nextNote: Note = {
+    id: input.id ?? `note-${mockIdCounter++}`,
+    type: input.type,
+    content: input.content,
+    locationName: input.locationName ?? null,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    radius: input.radius ?? 150,
+    isFavorite: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: null,
+  };
+  mockNotesDb = [nextNote, ...mockNotesDb];
+  return nextNote;
+});
 
 let mockNotesDb: Note[] = [];
 let mockIdCounter = 1;
@@ -42,24 +58,9 @@ jest.mock('../services/mediaIntegrity', () => ({
 jest.mock('../services/database', () => ({
   getActiveNotesScope: () => mockGetActiveNotesScope(),
   getAllNotes: jest.fn(async () => [...mockNotesDb]),
-  getAllNotesForScope: (...args: unknown[]) => mockGetAllNotesForScope(...args),
+  getAllNotesForScope: (scope: string) => mockGetAllNotesForScope(scope),
   getNoteById: jest.fn(async (id: string) => mockNotesDb.find((note) => note.id === id) ?? null),
-  createNote: jest.fn(async (input: any) => {
-    const nextNote: Note = {
-      id: input.id ?? `note-${mockIdCounter++}`,
-      type: input.type,
-      content: input.content,
-      locationName: input.locationName ?? null,
-      latitude: input.latitude,
-      longitude: input.longitude,
-      radius: input.radius ?? 150,
-      isFavorite: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: null,
-    };
-    mockNotesDb = [nextNote, ...mockNotesDb];
-    return nextNote;
-  }),
+  createNote: (input: any) => mockDbCreateNote(input),
   updateNote: jest.fn(async (id: string, updates: Partial<Note>) => {
     mockNotesDb = mockNotesDb.map((note) =>
       note.id === id
@@ -192,6 +193,78 @@ describe('useNotesStore', () => {
     await act(async () => {
       deferred.resolve();
     });
+  });
+
+  it('ignores a stale note creation after switching scopes', async () => {
+    const deferredCreate = createDeferred<Note>();
+    mockDbCreateNote.mockImplementationOnce(() => deferredCreate.promise);
+
+    mockUseAuth.mockReturnValue({
+      user: { uid: 'user-1' } as any,
+      isReady: true,
+    });
+
+    const userTwoNote: Note = {
+      id: 'note-user-2',
+      type: 'text',
+      content: 'User two note',
+      locationName: 'User two place',
+      latitude: 10.2,
+      longitude: 106.2,
+      radius: 150,
+      isFavorite: false,
+      createdAt: '2026-03-24T00:00:00.000Z',
+      updatedAt: null,
+    };
+    mockGetAllNotesForScope.mockImplementation(async (scope: string) =>
+      scope === 'user-2' ? [userTwoNote] : []
+    );
+
+    const { result, rerender } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let pendingCreatePromise: Promise<Note> = Promise.resolve({} as Note);
+    await act(async () => {
+      pendingCreatePromise = result.current.createNote({
+        type: 'text',
+        content: 'Stale user one note',
+        locationName: 'User one place',
+        latitude: 10.1,
+        longitude: 106.1,
+      });
+    });
+
+    mockUseAuth.mockReturnValue({
+      user: { uid: 'user-2' } as any,
+      isReady: true,
+    });
+
+    rerender({});
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.notes).toHaveLength(1);
+      expect(result.current.notes[0]?.id).toBe('note-user-2');
+    });
+
+    await act(async () => {
+      deferredCreate.resolve({
+        id: 'note-user-1',
+        type: 'text',
+        content: 'Stale user one note',
+        locationName: 'User one place',
+        latitude: 10.1,
+        longitude: 106.1,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-24T00:00:00.000Z',
+        updatedAt: null,
+      });
+      await pendingCreatePromise;
+    });
+
+    expect(result.current.notes).toHaveLength(1);
+    expect(result.current.notes[0]?.id).toBe('note-user-2');
   });
 
   it('waits for auth readiness before loading scoped notes for a signed-in user', async () => {

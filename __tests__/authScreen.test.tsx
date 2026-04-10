@@ -19,6 +19,7 @@ const mockSendPasswordReset = jest.fn<Promise<{ status: 'success' }>, [string]>(
 );
 const mockOpenPrivacyPolicy = jest.fn();
 const mockOpenSupport = jest.fn();
+const mockMarkOnboardingComplete = jest.fn(async () => undefined);
 const mockCompleteOnboardingAndEnterApp = jest.fn(async (complete: (route: string) => void) => {
   complete('/');
 });
@@ -196,6 +197,7 @@ jest.mock('../services/legalLinks', () => ({
 }));
 
 jest.mock('../services/startupRouting', () => ({
+  markOnboardingComplete: () => mockMarkOnboardingComplete(),
   completeOnboardingAndEnterApp: (complete: (route: string) => void) =>
     mockCompleteOnboardingAndEnterApp(complete),
 }));
@@ -353,6 +355,23 @@ describe('LoginScreen', () => {
       expect(mockSignInWithGoogle).toHaveBeenCalled();
       expect(mockCompleteOnboardingAndEnterApp).toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith('/');
+    });
+  });
+
+  it('returns to the caller route after auth success when returnTo is provided', async () => {
+    mockUseLocalSearchParams.mockReturnValue({ returnTo: '/shared' });
+
+    const { getByTestId } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-landing-policy-consent'));
+    await act(async () => {
+      fireEvent.press(getByTestId('auth-google-button'));
+    });
+
+    await waitFor(() => {
+      expect(mockMarkOnboardingComplete).toHaveBeenCalled();
+      expect(mockCompleteOnboardingAndEnterApp).not.toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledWith('/shared');
     });
   });
 

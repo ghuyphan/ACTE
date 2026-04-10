@@ -36,7 +36,7 @@ import { EmailRegistrationInput, useAuth } from '../../../hooks/useAuth';
 import { useConnectivity } from '../../../hooks/useConnectivity';
 import { useTheme } from '../../../hooks/useTheme';
 import { hasPrivacyPolicyLink, hasSupportLink, openPrivacyPolicy, openSupport } from '../../../services/legalLinks';
-import { completeOnboardingAndEnterApp } from '../../../services/startupRouting';
+import { completeOnboardingAndEnterApp, markOnboardingComplete } from '../../../services/startupRouting';
 
 type AuthScreenMode = 'landing' | 'signIn' | 'register' | 'resetPassword';
 type AuthIntent = 'share-note';
@@ -160,7 +160,7 @@ function NativeConsentControl({
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { intent } = useLocalSearchParams<{ intent?: AuthIntent }>();
+  const { intent, returnTo } = useLocalSearchParams<{ intent?: AuthIntent; returnTo?: string }>();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const { isOnline } = useConnectivity();
@@ -188,6 +188,7 @@ export default function LoginScreen() {
   const [previousFormContentHeight, setPreviousFormContentHeight] = useState(0);
   const formProgress = useSharedValue(0);
   const isShareIntent = intent === 'share-note';
+  const returnToRoute = typeof returnTo === 'string' && returnTo.trim() ? returnTo.trim() : null;
   const canOpenPrivacyPolicy = hasPrivacyPolicyLink();
   const canOpenSupport = hasSupportLink();
 
@@ -310,6 +311,12 @@ export default function LoginScreen() {
   const handleAuthSuccess = async () => {
     resetMessages();
     try {
+      if (returnToRoute) {
+        await markOnboardingComplete();
+        router.replace(returnToRoute as Href);
+        return true;
+      }
+
       await completeOnboardingAndEnterApp((route) => {
         router.replace(route as Href);
       });

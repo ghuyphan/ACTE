@@ -48,6 +48,8 @@ const mockImpactAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined)
 const mockNotificationAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockSetActiveNote = jest.fn();
 const mockClearActiveNote = jest.fn();
+const mockDeleteSharedNote = jest.fn(async () => undefined);
+const mockUpdateSharedNote = jest.fn(async () => undefined);
 let mockSharedPosts: any[] = [];
 let latestAppBottomSheetProps: any = null;
 const mockNotesStore = {
@@ -201,9 +203,9 @@ jest.mock('../hooks/useAuth', () => ({
 
 jest.mock('../hooks/useSharedFeed', () => ({
   useSharedFeedStore: () => ({
-    deleteSharedNote: jest.fn(async () => undefined),
+    deleteSharedNote: mockDeleteSharedNote,
     sharedPosts: mockSharedPosts,
-    updateSharedNote: jest.fn(async () => undefined),
+    updateSharedNote: mockUpdateSharedNote,
   }),
 }));
 
@@ -459,6 +461,8 @@ import NoteDetailSheet from '../components/notes/NoteDetailSheet';
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockDeleteSharedNote.mockClear();
+  mockUpdateSharedNote.mockClear();
   mockSharedPosts = [];
   latestAppBottomSheetProps = null;
   mockHasClipboardStickerImage.mockResolvedValue(false);
@@ -666,6 +670,7 @@ describe('NoteDetailSheet', () => {
         radius: 250,
       })
     );
+    expect(mockUpdateSharedNote).not.toHaveBeenCalled();
   });
 
   it('uses keyboard-aware scrolling on iOS', async () => {
@@ -1267,6 +1272,7 @@ describe('NoteDetailSheet', () => {
       expect(mockDeleteNote).toHaveBeenCalledWith('note-1');
     });
 
+    expect(mockDeleteSharedNote).not.toHaveBeenCalled();
     expect(onClosed).toHaveBeenCalled();
   });
 

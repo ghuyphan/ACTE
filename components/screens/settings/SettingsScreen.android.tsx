@@ -49,6 +49,7 @@ function SettingsCard({
 function SettingRow({
   colors,
   icon,
+  subtitle,
   title,
   value,
   onPress,
@@ -70,6 +71,9 @@ function SettingRow({
       </View>
       <View style={styles.rowCopy}>
         <Text style={[styles.rowTitle, { color: destructive ? colors.danger : colors.text }]}>{title}</Text>
+        {subtitle ? (
+          <Text style={[styles.rowSubtitle, { color: colors.secondaryText }]}>{subtitle}</Text>
+        ) : null}
       </View>
       <View style={styles.rowTrailing}>
         {value ? <Text style={[styles.rowValue, { color: colors.secondaryText }]}>{value}</Text> : null}
@@ -416,6 +420,12 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: 'Noto Sans',
+  },
+  rowSubtitle: {
+    marginTop: 3,
+    fontSize: 13,
+    lineHeight: 18,
     fontFamily: 'Noto Sans',
   },
   rowValue: {

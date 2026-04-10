@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
@@ -22,6 +23,16 @@ export interface GeofenceSelectionSummary {
 const GEOFENCE_SIGNATURE_STORAGE_KEY = 'geofence.signature';
 const IOS_GEOFENCE_REGION_LIMIT = 20;
 const ANDROID_GEOFENCE_REGION_LIMIT = 100;
+
+function readPlaceRemindersConfig() {
+  const extra = Constants.expoConfig?.extra as { enablePlaceReminders?: unknown } | undefined;
+  return extra?.enablePlaceReminders;
+}
+
+export function arePlaceRemindersEnabled() {
+  const configuredValue = readPlaceRemindersConfig();
+  return configuredValue !== false && configuredValue !== 'false';
+}
 
 function isBackgroundLocationAuthorizationError(error: unknown) {
   if (!(error instanceof Error)) {
@@ -85,6 +96,13 @@ export function summarizeGeofenceSelection(notes: Note[], maxRegions: number): G
 }
 
 export async function getReminderPermissionState(): Promise<ReminderPermissionState> {
+  if (!arePlaceRemindersEnabled()) {
+    return {
+      foregroundGranted: false,
+      remindersEnabled: false,
+    };
+  }
+
   const [foregroundStatus, backgroundStatus, notificationStatus] = await Promise.all([
     Location.getForegroundPermissionsAsync(),
     Location.getBackgroundPermissionsAsync(),
@@ -99,6 +117,11 @@ export async function getReminderPermissionState(): Promise<ReminderPermissionSt
 }
 
 export async function syncGeofenceRegions(options: { notes?: Note[] | null } = {}): Promise<boolean> {
+  if (!arePlaceRemindersEnabled()) {
+    await clearGeofenceRegions();
+    return false;
+  }
+
   const { remindersEnabled } = await getReminderPermissionState();
   if (!remindersEnabled) {
     await clearGeofenceRegions();
@@ -156,6 +179,10 @@ export async function syncGeofenceRegions(options: { notes?: Note[] | null } = {
 
 export async function skipImmediateReminderForNewNote(noteId: string): Promise<void> {
   if (!noteId) {
+    return;
+  }
+
+  if (!arePlaceRemindersEnabled()) {
     return;
   }
 

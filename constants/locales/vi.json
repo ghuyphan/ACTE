@@ -817,6 +817,7 @@
         "recoveryInProgress": "Noto đang cố khôi phục dữ liệu cục bộ..."
     },
     "common": {
+        "error": "Đã xảy ra lỗi",
         "cancel": "Hủy",
         "continue": "Tiếp tục",
         "delete": "Xóa",

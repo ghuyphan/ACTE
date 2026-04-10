@@ -100,6 +100,7 @@ const baseProps = {
   polaroidExporting: false,
   polaroidFallbackLocationLabel: 'Unknown place',
   previewOnlyNoteColorIds: [],
+  richDecorationsReady: false,
   saveIconAnimatedStyle: {},
   scrollContainerRef: { current: null },
   selectedStickerId: null,

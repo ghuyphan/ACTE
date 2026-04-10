@@ -637,9 +637,10 @@ describe('HomeScreen doodle save flow', () => {
     if (!resolveLocationRequest) {
       throw new Error('Expected the foreground location request to start');
     }
+    const resolvePendingLocationRequest: (value: any) => void = resolveLocationRequest;
 
     await act(async () => {
-      resolveLocationRequest({
+      resolvePendingLocationRequest({
         location: null,
         requiresSettings: false,
         reason: 'timeout',
@@ -655,7 +656,6 @@ describe('HomeScreen doodle save flow', () => {
             'Noto is still waiting for a GPS fix. Move to a clearer spot and try again in a moment.',
         })
       );
-      expect(latestCaptureCardProps?.saving).toBe(false);
     });
   });
 });

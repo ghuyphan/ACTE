@@ -16,6 +16,26 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useFriendInviteJoin } from '../../../hooks/useFriendInviteJoin';
 import { useTheme } from '../../../hooks/useTheme';
 
+function buildReturnToJoinHref(
+  inviteId: string | undefined,
+  invite: string | undefined,
+  fallbackInviteValue: string
+) {
+  const queryParams: string[] = [];
+  const normalizedInviteId = inviteId?.trim();
+  const normalizedInvite = invite?.trim() || fallbackInviteValue.trim();
+
+  if (normalizedInviteId) {
+    queryParams.push(`inviteId=${encodeURIComponent(normalizedInviteId)}`);
+  }
+
+  if (normalizedInvite) {
+    queryParams.push(`invite=${encodeURIComponent(normalizedInvite)}`);
+  }
+
+  return queryParams.length > 0 ? `/friends/join?${queryParams.join('&')}` : '/friends/join';
+}
+
 export default function FriendJoinScreen() {
   const { inviteId, invite } = useLocalSearchParams<{ inviteId?: string; invite?: string }>();
   const { t } = useTranslation();
@@ -68,7 +88,14 @@ export default function FriendJoinScreen() {
 
     const target = dismissTargetRef.current;
     if (target === 'auth') {
-      router.replace('/auth' as any);
+      router.replace(
+        {
+          pathname: '/auth',
+          params: {
+            returnTo: buildReturnToJoinHref(inviteId, invite, inviteValue),
+          },
+        } as any
+      );
       return;
     }
 
@@ -83,7 +110,7 @@ export default function FriendJoinScreen() {
     }
 
     router.replace('/' as any);
-  }, [router]);
+  }, [invite, inviteId, inviteValue, router]);
 
   const scheduleDismiss = useCallback((delay: number) => {
     if (dismissTimerRef.current) {

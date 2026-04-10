@@ -301,7 +301,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         customerInfoListenerRef.current = null;
       }
     };
-  }, [isConfigured]);
+  }, [authReady, isConfigured]);
 
   useEffect(() => {
     if (!isConfigured || !authReady || !isOnline || !isInitializedRef.current) {

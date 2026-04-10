@@ -93,7 +93,12 @@ export default function SharedIndexScreen() {
           </Text>
           <Pressable
             onPress={() => {
-              router.push('/auth');
+              router.push({
+                pathname: '/auth',
+                params: {
+                  returnTo: '/shared',
+                },
+              } as any);
             }}
             style={[styles.signInButton, { backgroundColor: colors.primary }]}
           >

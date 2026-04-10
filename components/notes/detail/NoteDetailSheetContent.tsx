@@ -57,6 +57,7 @@ const CARD_FEEDBACK_SIDE_PADDING = 34;
 const { width } = Dimensions.get('window');
 const CARD_SIZE = width - Layout.screenPadding * 2;
 const SheetTextInput = Platform.OS === 'android' ? BottomSheetTextInput : TextInput;
+const FALLBACK_TEXT_GRADIENT = ['#6E5960', '#8E767E'] as const;
 
 type InteractionFeedbackType = 'favorited' | 'unfavorited' | 'deleted';
 
@@ -236,7 +237,7 @@ export default function NoteDetailSheetContent({
         () => (note ? formatNoteTimestamp(note.createdAt, 'detail', now) : ''),
         [note, now]
     );
-    const gradient = useMemo(
+    const gradient = useMemo<readonly [string, string]>(
         () => (
             note
                 ? getTextNoteCardGradient({
@@ -245,7 +246,7 @@ export default function NoteDetailSheetContent({
                     emoji: note.moodEmoji,
                     noteColor: displayedNoteColor,
                 })
-                : []
+                : FALLBACK_TEXT_GRADIENT
         ),
         [displayedCardText, displayedNoteColor, note]
     );

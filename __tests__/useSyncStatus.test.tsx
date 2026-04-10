@@ -97,6 +97,16 @@ function createNote(id: string) {
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
@@ -286,6 +296,55 @@ describe('useSyncStatus', () => {
     await waitFor(() => {
       expect(mockSyncNotes).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('drops a stale sync completion after signing out', async () => {
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+
+    const deferredSync = createDeferred<{
+      status: 'success';
+      syncedCount: number;
+      importedCount: number;
+      uploadedCount: number;
+      failedCount: number;
+    }>();
+    mockSyncNotes.mockImplementation(() => deferredSync.promise);
+
+    const { result, rerender } = renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
+
+    await waitFor(() => {
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
+      expect(result.current.status).toBe('syncing');
+    });
+
+    mockAuthState.user = null;
+    rerender(undefined as never);
+
+    await waitFor(() => {
+      expect(result.current.status).toBe('idle');
+      expect(result.current.lastSyncedAt).toBeNull();
+    });
+
+    await act(async () => {
+      deferredSync.resolve({
+        status: 'success',
+        syncedCount: 1,
+        importedCount: 0,
+        uploadedCount: 1,
+        failedCount: 0,
+      });
+      await Promise.resolve();
+    });
+
+    expect(result.current.status).toBe('idle');
+    expect(result.current.lastSyncedAt).toBeNull();
+    expect(mockRefreshNotes).not.toHaveBeenCalled();
   });
 
   it('uses refreshed queue stats when composing the post-sync status message', async () => {

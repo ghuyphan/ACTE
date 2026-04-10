@@ -20,6 +20,7 @@ module.exports = {
       + ')/)',
   ],
   moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1',
     '^supercluster$': '<rootDir>/node_modules/supercluster/dist/supercluster.js',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],

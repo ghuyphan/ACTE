@@ -80,6 +80,7 @@ import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 import { getPersistentItem, setPersistentItem } from '../../utils/appStorage';
 import { setAndroidSoftInputMode } from '../../utils/androidSoftInputMode';
+import { isIOS26OrNewer } from '../../utils/platform';
 
 const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
 type SaveButtonState = 'idle' | 'saving' | 'success';
@@ -112,7 +113,6 @@ export default function HomeScreen() {
     tier,
     isConfigured: isPlusConfigured,
     isPurchaseAvailable,
-    isPurchaseInFlight,
     plusPriceLabel,
     remotePhotoNoteCount,
     isRemotePhotoNoteCountReady,
@@ -136,6 +136,7 @@ export default function HomeScreen() {
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
   const isScreenFocused = useIsFocused();
+  const showLegacySearchButton = Platform.OS === 'ios' && !isIOS26OrNewer;
 
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1905,9 +1906,11 @@ export default function HomeScreen() {
         searchAnim={searchAnim}
         searchQuery=""
         onSearchChange={() => {}}
-        onOpenSearch={() => {}}
+        onOpenSearch={() => {
+          router.push('/search' as Href);
+        }}
         onCloseSearch={() => {}}
-        showSearchButton={false}
+        showSearchButton={showLegacySearchButton}
         showSharedButton
         showNotesButton
         onOpenShared={handleOpenSharedManage}

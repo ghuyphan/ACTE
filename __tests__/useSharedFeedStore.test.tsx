@@ -393,6 +393,57 @@ describe('useSharedFeedStore', () => {
     expect(mockReplaceCachedActiveInvite).not.toHaveBeenCalled();
   });
 
+  it('drops a stale invite mutation after switching accounts', async () => {
+    const deferredInvite = createDeferred<any>();
+    mockCreateFriendInvite.mockImplementationOnce(() => deferredInvite.promise);
+
+    const { result, rerender } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+    });
+
+    let pendingInvitePromise: Promise<any> = Promise.resolve(undefined);
+    await act(async () => {
+      pendingInvitePromise = result.current.createFriendInvite();
+    });
+
+    mockAuthState.user = {
+      id: 'other-user',
+      uid: 'other-user',
+      displayName: 'Other',
+      email: 'other@example.com',
+      photoURL: null,
+      providerData: [],
+    } as any;
+
+    rerender({});
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+      expect(result.current.activeInvite).toBeNull();
+    });
+
+    await act(async () => {
+      deferredInvite.resolve({
+        id: 'invite-2',
+        inviterUid: 'me',
+        inviterDisplayNameSnapshot: 'Me',
+        inviterPhotoURLSnapshot: null,
+        token: 'token-2',
+        createdAt: '2026-03-25T00:00:00.000Z',
+        revokedAt: null,
+        acceptedByUid: null,
+        acceptedAt: null,
+        expiresAt: null,
+        url: 'noto://friends/join?inviteId=invite-2&invite=token-2',
+      });
+      await pendingInvitePromise;
+    });
+
+    expect(result.current.activeInvite).toBeNull();
+  });
+
   it('keeps a revoked invite hidden even if a stale snapshot still includes it', async () => {
     mockCachedSnapshot = {
       friends: [],

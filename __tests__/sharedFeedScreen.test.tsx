@@ -1,8 +1,11 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import SharedFeedScreen from '../app/shared/index';
 
 const mockPush = jest.fn();
+const mockAuthState = {
+  user: { uid: 'me' } as { uid: string } | null,
+};
 const mockSharedFeedState = {
   enabled: true,
   loading: false,
@@ -58,7 +61,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
-    user: { uid: 'me' },
+    user: mockAuthState.user,
   }),
 }));
 
@@ -99,6 +102,7 @@ jest.mock('../utils/dateUtils', () => ({
 describe('SharedFeedScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuthState.user = { uid: 'me' };
     mockSharedFeedState.enabled = true;
     mockSharedFeedState.loading = false;
     mockSharedFeedState.dataSource = 'cache';
@@ -119,5 +123,19 @@ describe('SharedFeedScreen', () => {
     const { queryByTestId } = render(<SharedFeedScreen />);
 
     expect(queryByTestId('shared-feed-cache-banner')).toBeNull();
+  });
+
+  it('returns to the shared feed after signing in', () => {
+    mockAuthState.user = null;
+    const { getByText } = render(<SharedFeedScreen />);
+
+    fireEvent.press(getByText('Sign in'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/auth',
+      params: {
+        returnTo: '/shared',
+      },
+    });
   });
 });

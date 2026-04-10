@@ -4,8 +4,10 @@ import { useAppStartupBootstrap } from '../hooks/app/useAppStartupBootstrap';
 
 const mockGetDB = jest.fn();
 const mockResetLocalDatabase = jest.fn();
+const mockConfigureForegroundNotificationPresentation = jest.fn();
 const mockConfigureNotificationChannels = jest.fn();
 const mockSyncGeofenceRegions = jest.fn();
+const mockArePlaceRemindersEnabled = jest.fn();
 const mockRunMediaCacheEviction = jest.fn();
 const mockScheduleOnIdle = jest.fn();
 const mockGetCachedStartupRoute = jest.fn();
@@ -17,6 +19,7 @@ jest.mock('../services/database', () => ({
 }));
 
 jest.mock('../services/geofenceService', () => ({
+  arePlaceRemindersEnabled: (...args: unknown[]) => mockArePlaceRemindersEnabled(...args),
   syncGeofenceRegions: (...args: unknown[]) => mockSyncGeofenceRegions(...args),
 }));
 
@@ -25,7 +28,13 @@ jest.mock('../services/mediaCacheManager', () => ({
 }));
 
 jest.mock('../services/notificationService', () => ({
+  configureForegroundNotificationPresentation: (...args: unknown[]) =>
+    mockConfigureForegroundNotificationPresentation(...args),
   configureNotificationChannels: (...args: unknown[]) => mockConfigureNotificationChannels(...args),
+}));
+
+jest.mock('../constants/i18n', () => ({
+  i18nReady: Promise.resolve(),
 }));
 
 jest.mock('../services/startupRouting', () => ({
@@ -63,7 +72,9 @@ beforeEach(() => {
     return { cancel: jest.fn() };
   });
   mockGetDB.mockResolvedValue({});
+  mockConfigureForegroundNotificationPresentation.mockImplementation(() => undefined);
   mockConfigureNotificationChannels.mockResolvedValue(undefined);
+  mockArePlaceRemindersEnabled.mockReturnValue(true);
   mockSyncGeofenceRegions.mockResolvedValue(undefined);
   mockRunMediaCacheEviction.mockResolvedValue(undefined);
 });
@@ -79,6 +90,10 @@ describe('useAppStartupBootstrap', () => {
     mockGetDB.mockReturnValueOnce(deferredDb.promise);
 
     const { result } = renderHook(() => useAppStartupBootstrap(), { wrapper });
+
+    await waitFor(() => {
+      expect(mockConfigureNotificationChannels).toHaveBeenCalledTimes(1);
+    });
 
     expect(mockConfigureNotificationChannels).toHaveBeenCalledTimes(1);
     expect(mockSyncGeofenceRegions).not.toHaveBeenCalled();
@@ -107,6 +122,22 @@ describe('useAppStartupBootstrap', () => {
       expect(mockSyncGeofenceRegions).toHaveBeenCalledTimes(1);
       expect(mockRunMediaCacheEviction).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('skips startup geofence sync when reminders are disabled', async () => {
+    mockArePlaceRemindersEnabled.mockReturnValue(false);
+
+    renderHook(() => useAppStartupBootstrap(), { wrapper });
+
+    await act(async () => {
+      jest.advanceTimersByTime(400);
+    });
+
+    await waitFor(() => {
+      expect(mockRunMediaCacheEviction).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSyncGeofenceRegions).not.toHaveBeenCalled();
   });
 
   it('surfaces a startup error when database initialization fails', async () => {

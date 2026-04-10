@@ -5,8 +5,8 @@ import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 
 // Android channel sound settings are immutable after the channel is first created,
 // so we version the id when fixing channel-level sound behavior.
-export const ANDROID_REMINDER_CHANNEL_ID = 'reminders-v2';
-export const ANDROID_SOCIAL_CHANNEL_ID = 'social-v1';
+export const ANDROID_REMINDER_CHANNEL_ID = 'reminders-v3';
+export const ANDROID_SOCIAL_CHANNEL_ID = 'social-v2';
 const REMINDER_VARIANT_CURSOR_STORAGE_KEY = 'notification.reminderVariantCursor.v1';
 let hasConfiguredForegroundNotificationPresentation = false;
 

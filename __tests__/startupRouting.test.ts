@@ -8,7 +8,6 @@ jest.mock('../utils/appStorage', () => ({
 
 import {
   getCachedStartupRoute,
-  getDefaultStartupRoute,
   HAS_LAUNCHED_KEY,
   loadStartupRoute,
   resolveStartupRoute,
@@ -52,7 +51,7 @@ describe('startupRouting', () => {
   it('falls back to the app route when async storage lookup fails', async () => {
     mockGetPersistentItem.mockRejectedValue(new Error('storage unavailable'));
 
-    await expect(loadStartupRoute('entry')).resolves.toBe(getDefaultStartupRoute('entry'));
-    await expect(loadStartupRoute('index')).resolves.toBe(getDefaultStartupRoute('index'));
+    await expect(loadStartupRoute('entry')).resolves.toBe('/auth/onboarding');
+    await expect(loadStartupRoute('index')).resolves.toBe('/auth/onboarding');
   });
 });

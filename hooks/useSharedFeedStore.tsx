@@ -88,6 +88,12 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const previousUserUidRef = useRef<string | null>(null);
   const sharedFeedSessionRef = useRef(0);
 
+  const isCurrentSharedFeedSession = useCallback(
+    (sessionId: number, userUid: string) =>
+      sharedFeedSessionRef.current === sessionId && previousUserUidRef.current === userUid,
+    []
+  );
+
   const enabled = isAuthAvailable;
 
   const commitSnapshot = useCallback(
@@ -174,13 +180,13 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
   const hydrateFromCache = useCallback(async (userUid: string, sessionId: number) => {
     const snapshot = await getCachedSharedFeedSnapshot(userUid);
-    if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== userUid) {
+    if (!isCurrentSharedFeedSession(sessionId, userUid)) {
       return false;
     }
     applySnapshot(snapshot, 'cache', snapshot.lastUpdatedAt);
     setReady(true);
     return true;
-  }, [applySnapshot]);
+  }, [applySnapshot, isCurrentSharedFeedSession]);
 
   const refreshAll = useCallback(async () => {
     if (!enabled || !user) {
@@ -211,17 +217,17 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     const sessionId = sharedFeedSessionRef.current;
     try {
       const snapshot = await fetchSharedFeed(user);
-      if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== userUid) {
+      if (!isCurrentSharedFeedSession(sessionId, userUid)) {
         return;
       }
       commitSnapshotAndPersist(userUid, snapshot, new Date().toISOString());
     } finally {
-      if (sharedFeedSessionRef.current === sessionId && previousUserUidRef.current === userUid) {
+      if (isCurrentSharedFeedSession(sessionId, userUid)) {
         setLoading(false);
         setReady(true);
       }
     }
-  }, [commitSnapshotAndPersist, enabled, isOnline, user]);
+  }, [commitSnapshotAndPersist, enabled, isCurrentSharedFeedSession, isOnline, user]);
 
   const resolveOwnedPostIdsForNote = useCallback(
     async (activeUser: typeof user, noteId: string) => {
@@ -384,8 +390,13 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         }
 
         const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
         const invitePromise = createInvite(activeUser)
           .then((invite) => {
+            if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+              return invite;
+            }
+
             suppressActiveInviteRef.current = false;
             commitSnapshotAndPersist(
               activeUser.uid,
@@ -408,7 +419,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       revokeFriendInvite: async (inviteId: string) => {
         requireOnline();
         const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
         await revokeInvite(activeUser, inviteId);
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return;
+        }
         suppressActiveInviteRef.current = true;
         commitSnapshotAndPersist(
           activeUser.uid,
@@ -423,7 +438,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       acceptFriendInvite: async (inviteValue: string) => {
         requireOnline();
         const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
         const connection = await acceptInvite(activeUser, inviteValue);
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return;
+        }
         const nextFriends = upsertFriendConnection(friendsRef.current, connection);
         commitSnapshotAndPersist(
           activeUser.uid,
@@ -439,7 +458,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       removeFriend: async (friendUid: string) => {
         requireOnline();
         const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
         await deleteFriend(activeUser, friendUid);
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return;
+        }
         const nextFriends = friendsRef.current.filter((friend) => friend.userId !== friendUid);
         const nextFriendUidSet = new Set(nextFriends.map((friend) => friend.userId));
         const nextSharedPosts = sharedPostsRef.current.flatMap((post) => {
@@ -483,6 +506,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       createSharedPost: async (note: Note, audienceUserIds?: string[]) => {
         requireOnline();
         const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
         const nextAudience = Array.from(
           new Set([
             activeUser.uid,
@@ -492,6 +516,9 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           ].filter(Boolean))
         );
         const post = await createPost(activeUser, note, nextAudience);
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return post;
+        }
         const nextSharedPosts = [post, ...sharedPostsRef.current.filter((item) => item.id !== post.id)];
         commitSnapshotAndPersist(
           activeUser.uid,
@@ -507,9 +534,13 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       updateSharedNote: async (note: Note) => {
         requireOnline();
         const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
         const matchingPostIds = await resolveOwnedPostIdsForNote(activeUser, note.id);
 
         await Promise.all(matchingPostIds.map((postId) => updatePost(activeUser, postId, note)));
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return;
+        }
         const matchingPostIdSet = new Set(matchingPostIds);
         const updatedAt = new Date().toISOString();
         const nextSharedPosts = sharedPostsRef.current.map((post) => {
@@ -557,9 +588,13 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       deleteSharedNote: async (noteId: string) => {
         requireOnline();
         const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
         const matchingPostIds = await resolveOwnedPostIdsForNote(activeUser, noteId);
 
         await Promise.all(matchingPostIds.map((postId) => deletePost(activeUser, postId)));
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return;
+        }
         const matchingPostIdSet = new Set(matchingPostIds);
         const nextSharedPosts = sharedPostsRef.current.filter(
           (post) =>
@@ -579,7 +614,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       deleteSharedNotes: async (noteIds: string[]) => {
         requireOnline();
         const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
         const deletedPostIds = await deleteOwnedSharedPostsForNotes(activeUser, noteIds);
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return;
+        }
         const deletedPostIdSet = new Set(deletedPostIds);
         const nextNoteIdSet = new Set(noteIds.filter((noteId) => noteId.trim()));
         const nextSharedPosts = sharedPostsRef.current.filter(
@@ -600,7 +639,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       deleteSharedPostById: async (postId: string) => {
         requireOnline();
         const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
         await deletePost(activeUser, postId);
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return;
+        }
         const nextSharedPosts = sharedPostsRef.current.filter(
           (post) => post.id !== postId && !(post.authorUid === activeUser.uid && post.id === postId)
         );
@@ -628,6 +671,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       persistSnapshot,
       ready,
       refreshAll,
+      isCurrentSharedFeedSession,
       requireOnline,
       requireUser,
       resolveOwnedPostIdsForNote,

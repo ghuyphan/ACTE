@@ -57,6 +57,16 @@ function getDownloadCacheKey(bucket: string, path: string, localId: string) {
   return `${bucket}::${path}::${localId}`;
 }
 
+function hashPathFingerprint(value: string) {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+
+  return hash.toString(36);
+}
+
 function getFileExtension(path: string | null | undefined, fallbackExtension: string) {
   const normalizedPath = typeof path === 'string' ? path.trim() : '';
   if (!normalizedPath) {
@@ -361,7 +371,8 @@ export async function downloadPhotoFromStorage(
     localId,
     options,
     bucket === NOTE_MEDIA_BUCKET ? ensurePhotoDirectory : ensureSharedPhotoCacheDirectory,
-    (directory, _normalizedPath, normalizedLocalId) => `${directory}${normalizedLocalId}.jpg`
+    (directory, normalizedPath, normalizedLocalId) =>
+      `${directory}${normalizedLocalId}-${hashPathFingerprint(normalizedPath)}${getFileExtension(normalizedPath, '.jpg')}`
   );
 }
 
@@ -380,7 +391,7 @@ export async function downloadPairedVideoFromStorage(
       ? ensureLivePhotoVideoDirectory
       : ensureSharedLivePhotoVideoCacheDirectory,
     (directory, normalizedPath, normalizedLocalId) =>
-      `${directory}${normalizedLocalId}${getFileExtension(normalizedPath, '.mp4')}`
+      `${directory}${normalizedLocalId}-${hashPathFingerprint(normalizedPath)}${getFileExtension(normalizedPath, '.mp4')}`
   );
 }
 

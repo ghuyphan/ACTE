@@ -6,6 +6,7 @@ import HomeScreen from '../app/(tabs)/index';
 
 const mockConsumeFeedFocus = jest.fn();
 const mockScrollToOffset = jest.fn();
+const mockPush = jest.fn();
 let mockNotesState = [
   {
     id: 'note-new',
@@ -55,6 +56,7 @@ const mockSharedFeedState = {
   ],
 };
 let latestNotesFeedProps: any = null;
+let latestHomeHeaderSearchProps: any = null;
 
 function renderHomeScreen() {
   return render(
@@ -85,7 +87,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
-    push: jest.fn(),
+    push: (...args: unknown[]) => mockPush(...args),
   }),
   useLocalSearchParams: () => ({}),
 }));
@@ -269,7 +271,8 @@ jest.mock('../components/home/CaptureCard', () => {
 jest.mock('../components/home/HomeHeaderSearch', () => {
   const React = require('react');
   const { View } = require('react-native');
-  return function MockHomeHeaderSearch() {
+  return function MockHomeHeaderSearch(props: any) {
+    latestHomeHeaderSearchProps = props;
     return <View testID="home-header-search" />;
   };
 });
@@ -322,6 +325,7 @@ describe('HomeScreen archive focus', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
     latestNotesFeedProps = null;
+    latestHomeHeaderSearchProps = null;
     mockNotesState = [
       {
         id: 'note-new',
@@ -508,5 +512,17 @@ describe('HomeScreen archive focus', () => {
         animated: false,
       });
     });
+  });
+
+  it('exposes a legacy search entrypoint on older iOS and routes to search', () => {
+    renderHomeScreen();
+
+    expect(latestHomeHeaderSearchProps.showSearchButton).toBe(true);
+
+    act(() => {
+      latestHomeHeaderSearchProps.onOpenSearch();
+    });
+
+    expect(mockPush).toHaveBeenCalledWith('/search');
   });
 });

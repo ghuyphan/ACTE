@@ -6,10 +6,18 @@ const mockRouter = {
   canGoBack: jest.fn(),
   replace: jest.fn(),
 };
+const mockAuthState = {
+  isAuthAvailable: true,
+  user: { uid: 'user-1' } as { uid: string } | null,
+};
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockUseLocalSearchParams(),
   useRouter: () => mockRouter,
+}));
+
+jest.mock('../hooks/useAuth', () => ({
+  useAuth: () => mockAuthState,
 }));
 
 jest.mock('../components/notes/NoteDetailSheet', () => {
@@ -42,6 +50,7 @@ describe('detail routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouter.canGoBack.mockReturnValue(false);
+    mockAuthState.user = { uid: 'user-1' };
   });
 
   it('falls back to /notes when the note route has no back stack', () => {
@@ -64,5 +73,20 @@ describe('detail routes', () => {
 
     expect(mockRouter.replace).toHaveBeenCalledWith('/shared');
     expect(mockRouter.back).not.toHaveBeenCalled();
+  });
+
+  it('routes signed-out shared detail deep links through auth with a return route', () => {
+    mockAuthState.user = null;
+    mockUseLocalSearchParams.mockReturnValue({ id: 'post-1' });
+    const SharedPostDetailRoute = require('../app/shared/[id]').default;
+
+    render(<SharedPostDetailRoute />);
+
+    expect(mockRouter.replace).toHaveBeenCalledWith({
+      pathname: '/auth',
+      params: {
+        returnTo: '/shared/post-1',
+      },
+    });
   });
 });

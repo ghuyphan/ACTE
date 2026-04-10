@@ -270,19 +270,6 @@ function StampCutterEditor({
     ? PROCESSING_HOLD_REDUCED_MS
     : PROCESSING_HOLD_MS;
 
-  const stageLocalRect = useMemo(() => {
-    if (!stageAreaWindowRect) {
-      return null;
-    }
-
-    return {
-      x: stageAreaWindowRect.x + (stageAreaWindowRect.width - stageWidth) / 2,
-      y: stageAreaWindowRect.y + (stageAreaWindowRect.height - stageHeight) / 2,
-      width: stageWidth,
-      height: stageHeight,
-    };
-  }, [stageAreaWindowRect, stageHeight, stageWidth]);
-
   const resolveDetachedBaseRect = useCallback(
     (nextStageAreaWindowRect: WindowRect | null | undefined) => {
       if (!nextStageAreaWindowRect) {

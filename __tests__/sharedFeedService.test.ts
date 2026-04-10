@@ -1077,7 +1077,7 @@ describe('sharedFeedService', () => {
     );
   });
 
-  it('fails shared post deletion when shared media cleanup fails', async () => {
+  it('keeps shared post deletion successful when shared media cleanup fails after row deletion', async () => {
     mockSharedPosts.set('shared-photo-error', {
       id: 'shared-photo-error',
       author_user_id: ownerUser.id,
@@ -1100,12 +1100,15 @@ describe('sharedFeedService', () => {
     });
     mockDeletePhotoFromStorage.mockRejectedValueOnce(new Error('shared media delete failed'));
 
-    await expect(deleteSharedPost(ownerUser, 'shared-photo-error')).rejects.toThrow(
-      'shared media delete failed'
-    );
+    await deleteSharedPost(ownerUser, 'shared-photo-error');
 
-    expect(mockSharedPosts.has('shared-photo-error')).toBe(true);
-    expect(mockSharedPostTombstones.has('shared-photo-error')).toBe(false);
+    expect(mockSharedPosts.has('shared-photo-error')).toBe(false);
+    expect(mockSharedPostTombstones.get('shared-photo-error')).toEqual(
+      expect.objectContaining({
+        post_id: 'shared-photo-error',
+        author_user_id: ownerUser.id,
+      })
+    );
   });
 
   it('revokes old shared audiences and hides author-only leftovers after removing a friend', async () => {

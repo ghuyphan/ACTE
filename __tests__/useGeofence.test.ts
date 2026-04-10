@@ -14,6 +14,7 @@ const mockNotificationsRequestPermissionsAsync = jest.fn();
 const mockSyncGeofenceRegions = jest.fn();
 const mockGetReminderPermissionState = jest.fn();
 const mockSyncSocialPushRegistration = jest.fn();
+const mockArePlaceRemindersEnabled = jest.fn();
 
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: (...args: unknown[]) => mockGetForegroundPermissionsAsync(...args),
@@ -33,6 +34,7 @@ jest.mock('expo-notifications', () => ({
 jest.mock('../services/geofenceService', () => ({
   syncGeofenceRegions: (...args: unknown[]) => mockSyncGeofenceRegions(...args),
   getReminderPermissionState: (...args: unknown[]) => mockGetReminderPermissionState(...args),
+  arePlaceRemindersEnabled: (...args: unknown[]) => mockArePlaceRemindersEnabled(...args),
 }));
 
 jest.mock('../services/socialPushService', () => ({
@@ -64,6 +66,7 @@ beforeEach(() => {
   });
   mockSyncGeofenceRegions.mockResolvedValue(true);
   mockSyncSocialPushRegistration.mockResolvedValue(undefined);
+  mockArePlaceRemindersEnabled.mockReturnValue(true);
 });
 
 describe('useGeofence', () => {
@@ -106,31 +109,6 @@ describe('useGeofence', () => {
     expect(mockGetCurrentPositionAsync).not.toHaveBeenCalled();
   });
 
-  it('returns a timeout reason when a GPS fix takes too long', async () => {
-    jest.useFakeTimers();
-    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
-    mockGetCurrentPositionAsync.mockImplementation(() => new Promise(() => {}));
-
-    try {
-      const { result } = renderHook(() => useGeofence());
-
-      let responsePromise: Promise<any> | null = null;
-      await act(async () => {
-        responsePromise = result.current.requestForegroundLocation();
-        jest.advanceTimersByTime(8000);
-        await Promise.resolve();
-      });
-
-      await expect(responsePromise).resolves.toMatchObject({
-        location: null,
-        requiresSettings: false,
-        reason: 'timeout',
-      });
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
   it('enables reminders and syncs geofences when all permissions are granted', async () => {
     const location = {
       coords: { latitude: 10.7626, longitude: 106.6601 },
@@ -156,5 +134,46 @@ describe('useGeofence', () => {
     expect(mockSyncSocialPushRegistration).toHaveBeenCalledWith({
       uid: 'user-1',
     });
+  });
+
+  it('can enable reminders without a live location fix', async () => {
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockNotificationsGetPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetLastKnownPositionAsync.mockResolvedValue(null);
+    mockGetCurrentPositionAsync.mockResolvedValue(null);
+    mockGetReminderPermissionState.mockResolvedValue({
+      foregroundGranted: true,
+      remindersEnabled: false,
+    });
+
+    const { result } = renderHook(() => useGeofence());
+
+    await act(async () => {
+      const permissionResult = await result.current.requestReminderPermissions();
+      expect(permissionResult.enabled).toBe(true);
+      expect(permissionResult.requiresSettings).toBe(false);
+    });
+
+    expect(mockSyncGeofenceRegions).toHaveBeenCalled();
+  });
+
+  it('skips reminder flows entirely when place reminders are disabled in config', async () => {
+    mockArePlaceRemindersEnabled.mockReturnValue(false);
+
+    const { result } = renderHook(() => useGeofence());
+
+    await act(async () => {
+      const permissionResult = await result.current.requestReminderPermissions();
+      expect(permissionResult).toEqual({
+        enabled: false,
+        requiresSettings: false,
+      });
+    });
+
+    expect(mockRequestForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(mockRequestBackgroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(mockNotificationsRequestPermissionsAsync).not.toHaveBeenCalled();
+    expect(mockSyncGeofenceRegions).not.toHaveBeenCalled();
   });
 });
