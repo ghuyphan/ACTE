@@ -11,6 +11,13 @@ export interface CreatedStickerLibraryItem {
   lastUsedAt: string;
 }
 
+export type CreatedStickerLibrarySectionKey = 'today' | 'yesterday' | 'earlier';
+
+export interface CreatedStickerLibrarySection {
+  key: CreatedStickerLibrarySectionKey;
+  items: CreatedStickerLibraryItem[];
+}
+
 export function buildCreatedStickerLibrary(notes: readonly Note[]): CreatedStickerLibraryItem[] {
   const itemsById = new Map<string, CreatedStickerLibraryItem>();
 
@@ -55,4 +62,47 @@ export function buildCreatedStickerLibrary(notes: readonly Note[]): CreatedStick
 
     return new Date(right.asset.createdAt).getTime() - new Date(left.asset.createdAt).getTime();
   });
+}
+
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function getDayDifference(left: Date, right: Date) {
+  const leftDay = startOfLocalDay(left).getTime();
+  const rightDay = startOfLocalDay(right).getTime();
+
+  return Math.round((leftDay - rightDay) / (24 * 60 * 60 * 1000));
+}
+
+export function groupCreatedStickerLibrary(
+  items: readonly CreatedStickerLibraryItem[],
+  now = new Date()
+): CreatedStickerLibrarySection[] {
+  const grouped: CreatedStickerLibrarySection[] = [
+    { key: 'today', items: [] },
+    { key: 'yesterday', items: [] },
+    { key: 'earlier', items: [] },
+  ];
+
+  for (const item of items) {
+    const itemDate = new Date(item.lastUsedAt);
+    const dayDifference = Number.isNaN(itemDate.getTime())
+      ? 2
+      : getDayDifference(now, itemDate);
+
+    if (dayDifference <= 0) {
+      grouped[0].items.push(item);
+      continue;
+    }
+
+    if (dayDifference === 1) {
+      grouped[1].items.push(item);
+      continue;
+    }
+
+    grouped[2].items.push(item);
+  }
+
+  return grouped.filter((section) => section.items.length > 0);
 }

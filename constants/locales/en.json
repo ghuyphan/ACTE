@@ -277,8 +277,9 @@
         "viewAllButton": "View all notes",
         "stickerLibrary": {
             "buttonA11y": "Open your sticker library",
-            "title": "Your stickers & stamps",
-            "subtitle": "Tiny cutouts and stamp-style pieces you already made for your notes.",
+            "eyebrow": "Collected",
+            "title": "Stamps",
+            "subtitle": "A little shelf for the stamps and sticker cutouts you have already made.",
             "savedCount": "{{count}} saved",
             "savedCount_one": "{{count}} saved",
             "savedCount_other": "{{count}} saved",
@@ -287,8 +288,13 @@
             "usedCount": "Used {{count}} times",
             "usedCount_one": "Used {{count}} time",
             "usedCount_other": "Used {{count}} times",
-            "emptyTitle": "No stickers yet",
-            "emptyBody": "Create a sticker or stamp in a note and it will show up here."
+            "emptyTitle": "No stamps yet",
+            "emptyBody": "Create a sticker or stamp in a note and it will start filling this shelf.",
+            "section": {
+                "today": "Today",
+                "yesterday": "Yesterday",
+                "earlier": "Earlier"
+            }
         },
         "recap": {
             "allLabel": "All",

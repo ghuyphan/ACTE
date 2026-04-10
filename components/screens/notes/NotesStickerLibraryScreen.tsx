@@ -1,9 +1,9 @@
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -14,41 +14,108 @@ import { Layout, Radii, Spacing, Typography } from '../../../constants/theme';
 import { useNotesStore } from '../../../hooks/useNotes';
 import { useTheme } from '../../../hooks/useTheme';
 import StampStickerArtwork from '../../notes/StampStickerArtwork';
-import { buildCreatedStickerLibrary } from './stickerLibrary';
+import {
+  getStickerOutlineOffsets,
+  getStickerOutlineSize,
+} from '../../notes/stickerCanvasMetrics';
+import {
+  buildCreatedStickerLibrary,
+  groupCreatedStickerLibrary,
+  type CreatedStickerLibraryItem,
+  type CreatedStickerLibrarySectionKey,
+} from './stickerLibrary';
+
+type GalleryVariant = 'circle' | 'stamp' | 'square' | 'tall' | 'soft';
+type StickerLibraryListItem =
+  | {
+      id: string;
+      kind: 'section-header';
+      sectionKey: CreatedStickerLibrarySectionKey;
+      title: string;
+    }
+  | {
+      id: string;
+      kind: 'sticker';
+      item: CreatedStickerLibraryItem;
+      itemIndex: number;
+    };
+
+function getGalleryVariant(item: CreatedStickerLibraryItem, index: number): GalleryVariant {
+  if (item.renderMode === 'stamp') {
+    if (index % 5 === 1) {
+      return 'tall';
+    }
+
+    if (index % 4 === 0) {
+      return 'circle';
+    }
+
+    return 'stamp';
+  }
+
+  if (index % 4 === 2) {
+    return 'soft';
+  }
+
+  return 'square';
+}
 
 function StickerPreview({
-  localUri,
-  previewSize,
-  renderMode,
+  item,
+  previewWidth,
+  previewHeight,
   fallbackColor,
 }: {
-  localUri: string;
-  previewSize: number;
-  renderMode: 'default' | 'stamp';
+  item: CreatedStickerLibraryItem;
+  previewWidth: number;
+  previewHeight: number;
   fallbackColor: string;
 }) {
-  if (!localUri) {
+  if (!item.asset.localUri) {
     return <Ionicons name="image-outline" size={28} color={fallbackColor} />;
   }
 
-  if (renderMode === 'stamp') {
+  if (item.renderMode === 'stamp') {
     return (
       <StampStickerArtwork
-        localUri={localUri}
-        width={previewSize * 0.7}
-        height={previewSize * 0.82}
+        localUri={item.asset.localUri}
+        width={previewWidth}
+        height={previewHeight}
         shadowEnabled={false}
       />
     );
   }
 
+  const outlineSize = getStickerOutlineSize(previewWidth, previewHeight);
+  const outlineOffsets = getStickerOutlineOffsets(outlineSize);
+
   return (
-    <ExpoImage
-      source={{ uri: localUri }}
-      style={styles.previewImage}
-      contentFit="contain"
-      transition={120}
-    />
+    <View style={[styles.stickerPreviewCanvas, { width: previewWidth, height: previewHeight }]}>
+      {outlineOffsets.map((offset, index) => (
+        <ExpoImage
+          key={`${item.id}-outline-${index}`}
+          source={{ uri: item.asset.localUri }}
+          style={[
+            styles.stickerPreviewImage,
+            styles.stickerPreviewOutline,
+            {
+              transform: [
+                { translateX: offset.x * outlineSize },
+                { translateY: offset.y * outlineSize },
+              ],
+            },
+          ]}
+          contentFit="contain"
+          transition={0}
+        />
+      ))}
+      <ExpoImage
+        source={{ uri: item.asset.localUri }}
+        style={styles.stickerPreviewImage}
+        contentFit="contain"
+        transition={120}
+      />
+    </View>
   );
 }
 
@@ -59,139 +126,183 @@ export default function NotesStickerLibraryScreen() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const items = useMemo(() => buildCreatedStickerLibrary(notes), [notes]);
+  const sections = useMemo(() => groupCreatedStickerLibrary(items), [items]);
   const gridGap = 12;
-  const cardSize = Math.max(
+  const cardWidth = Math.max(
     96,
     Math.floor((width - Layout.screenPadding * 2 - gridGap * 2) / 3)
   );
+  const listData = useMemo<StickerLibraryListItem[]>(
+    () =>
+      sections.flatMap((section) => [
+        {
+          id: `section-${section.key}`,
+          kind: 'section-header' as const,
+          sectionKey: section.key,
+          title: t(`notes.stickerLibrary.section.${section.key}`, section.key),
+        },
+        ...section.items.map((item, itemIndex) => ({
+          id: item.id,
+          kind: 'sticker' as const,
+          item,
+          itemIndex,
+        })),
+      ]),
+    [sections, t]
+  );
+  const getItemType = useCallback(
+    (item: StickerLibraryListItem) => item.kind,
+    []
+  );
+  const overrideItemLayout = useCallback((layout: { span?: number }, item: StickerLibraryListItem) => {
+    layout.span = item.kind === 'section-header' ? 3 : 1;
+  }, []);
+  const renderItem = useCallback(
+    ({ item }: { item: StickerLibraryListItem }) => {
+      if (item.kind === 'section-header') {
+        return (
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              {item.title}
+            </Text>
+          </View>
+        );
+      }
 
-  return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={{
-        paddingHorizontal: Layout.screenPadding,
-        paddingTop: 18,
-        paddingBottom: insets.bottom + 28,
-      }}
-      showsVerticalScrollIndicator={false}
-    >
-      <View
-        style={[
-          styles.heroCard,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <View
-          style={[
-            styles.countChip,
-            {
-              backgroundColor: colors.primarySoft,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
-          <Text style={[styles.countChipText, { color: colors.primary }]}>
-            {t('notes.stickerLibrary.savedCount', {
-              count: items.length,
-              defaultValue: '{{count}} saved',
-            })}
-          </Text>
-        </View>
-        <Text style={[styles.heroTitle, { color: colors.text }]}>
-          {t('notes.stickerLibrary.title', 'Your stickers & stamps')}
-        </Text>
-        <Text style={[styles.heroBody, { color: colors.secondaryText }]}>
-          {t(
-            'notes.stickerLibrary.subtitle',
-            'Tiny cutouts and stamp-style pieces you already made for your notes.'
-          )}
-        </Text>
-      </View>
+      const variant = getGalleryVariant(item.item, item.itemIndex);
+      const previewHeight =
+        variant === 'tall'
+          ? cardWidth * 1.34
+          : variant === 'soft'
+            ? cardWidth * 1.08
+            : cardWidth;
+      const stampWidth =
+        variant === 'circle'
+          ? cardWidth * 0.82
+          : variant === 'tall'
+            ? cardWidth * 0.76
+            : cardWidth * 0.9;
+      const stampHeight =
+        variant === 'circle'
+          ? cardWidth * 0.82
+          : variant === 'tall'
+            ? cardWidth * 1.02
+            : cardWidth * 0.92;
+      const stickerWidth =
+        variant === 'soft' ? cardWidth * 0.82 : cardWidth * 0.76;
+      const stickerHeight =
+        variant === 'soft' ? cardWidth * 0.88 : cardWidth * 0.76;
 
-      {items.length > 0 ? (
-        <View style={styles.grid}>
-          {items.map((item, index) => (
+      return (
+        <View style={[styles.cardCell, { paddingHorizontal: gridGap / 2, marginBottom: gridGap + 8 }]}>
+          <View style={styles.card}>
             <View
-              key={item.id}
               style={[
-                styles.card,
+                styles.previewWrap,
+                variant === 'circle' ? styles.previewWrapCircle : null,
                 {
-                  width: cardSize,
-                  marginRight: index % 3 === 2 ? 0 : gridGap,
-                  marginBottom: gridGap,
+                  height: previewHeight,
+                  backgroundColor:
+                    item.item.renderMode === 'stamp' ? 'transparent' : colors.surface,
+                  borderColor:
+                    item.item.renderMode === 'stamp' ? 'transparent' : colors.border,
+                  transform: [
+                    {
+                      rotate:
+                        item.item.renderMode === 'stamp'
+                          ? item.itemIndex % 2 === 0
+                            ? '-2deg'
+                            : '1.5deg'
+                          : item.itemIndex % 2 === 0
+                            ? '1deg'
+                            : '-1deg',
+                    },
+                  ],
+                },
+              ]}
+            >
+              <StickerPreview
+                item={item.item}
+                previewWidth={item.item.renderMode === 'stamp' ? stampWidth : stickerWidth}
+                previewHeight={item.item.renderMode === 'stamp' ? stampHeight : stickerHeight}
+                fallbackColor={colors.secondaryText}
+              />
+            </View>
+            <View
+              style={[
+                styles.usageChip,
+                {
                   backgroundColor: colors.surface,
                   borderColor: colors.border,
                 },
               ]}
             >
-              <View
-                style={[
-                  styles.previewWrap,
-                  {
-                    backgroundColor: colors.card,
-                  },
-                ]}
-              >
-                <StickerPreview
-                  localUri={item.asset.localUri}
-                  previewSize={cardSize}
-                  renderMode={item.renderMode}
-                  fallbackColor={colors.secondaryText}
-                />
-              </View>
-              <View style={styles.cardMeta}>
-                <Text numberOfLines={1} style={[styles.cardLabel, { color: colors.text }]}>
-                  {item.renderMode === 'stamp'
-                    ? t('notes.stickerLibrary.stampLabel', 'Stamp')
-                    : t('notes.stickerLibrary.stickerLabel', 'Sticker')}
-                </Text>
-                <Text numberOfLines={1} style={[styles.cardUsage, { color: colors.secondaryText }]}>
-                  {t('notes.stickerLibrary.usedCount', {
-                    count: item.usageCount,
-                    defaultValue_one: 'Used {{count}} time',
-                    defaultValue_other: 'Used {{count}} times',
-                  })}
-                </Text>
-              </View>
+              <Text style={[styles.usageChipText, { color: colors.text }]}>
+                {item.item.usageCount}x
+              </Text>
             </View>
-          ))}
+          </View>
         </View>
-      ) : (
+      );
+    },
+    [cardWidth, colors.border, colors.secondaryText, colors.surface, colors.text, gridGap]
+  );
+
+  return items.length > 0 ? (
+    <FlashList
+      data={listData}
+      keyExtractor={(item) => item.id}
+      renderItem={renderItem}
+      getItemType={getItemType}
+      overrideItemLayout={overrideItemLayout as any}
+      numColumns={3}
+      estimatedItemSize={cardWidth + 28}
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={{
+        paddingHorizontal: Layout.screenPadding,
+        paddingTop: 12,
+        paddingBottom: insets.bottom + 28,
+      }}
+      showsVerticalScrollIndicator={false}
+    />
+  ) : (
+    <View
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
+      <View
+        style={[
+          styles.emptyState,
+          styles.emptyStateScreen,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            marginHorizontal: Layout.screenPadding,
+            marginTop: 12,
+            marginBottom: insets.bottom + 28,
+          },
+        ]}
+      >
         <View
           style={[
-            styles.emptyState,
+            styles.emptyIconWrap,
             {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
+              backgroundColor: colors.primarySoft,
             },
           ]}
         >
-          <View
-            style={[
-              styles.emptyIconWrap,
-              {
-                backgroundColor: colors.primarySoft,
-              },
-            ]}
-          >
-            <Ionicons name="sparkles-outline" size={24} color={colors.primary} />
-          </View>
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            {t('notes.stickerLibrary.emptyTitle', 'No stickers yet')}
-          </Text>
-          <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-            {t(
-              'notes.stickerLibrary.emptyBody',
-              'Create a sticker or stamp in a note and it will show up here.'
-            )}
-          </Text>
+          <Ionicons name="sparkles-outline" size={24} color={colors.primary} />
         </View>
-      )}
-    </ScrollView>
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>
+          {t('notes.stickerLibrary.emptyTitle', 'No stamps yet')}
+        </Text>
+        <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
+          {t(
+            'notes.stickerLibrary.emptyBody',
+            'Create a sticker or stamp in a note and it will start filling this shelf.'
+          )}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -199,69 +310,64 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  heroCard: {
-    borderRadius: Radii.lg,
-    borderWidth: 1,
-    padding: 18,
-    marginBottom: 18,
+  sectionHeaderRow: {
+    width: '100%',
+    paddingTop: 2,
+    paddingBottom: 14,
   },
-  countChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: Radii.pill,
-    borderWidth: 1,
-    marginBottom: 14,
+  sectionTitle: {
+    fontFamily: 'Noto Sans',
+    fontSize: 18,
+    fontWeight: '800',
   },
-  countChipText: {
-    ...Typography.pill,
-    fontSize: 13,
-  },
-  heroTitle: {
-    ...Typography.screenTitle,
-    marginBottom: 6,
-  },
-  heroBody: {
-    ...Typography.body,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  cardCell: {
+    width: '100%',
   },
   card: {
-    borderRadius: Radii.lg,
-    borderWidth: 1,
-    padding: 10,
+    position: 'relative',
+    width: '100%',
   },
   previewWrap: {
-    height: 96,
-    borderRadius: Radii.md,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    borderWidth: 1,
+    padding: 8,
   },
-  previewImage: {
-    width: '76%',
-    height: '76%',
+  previewWrapCircle: {
+    borderRadius: 999,
   },
-  cardMeta: {
-    marginTop: 10,
-    gap: 2,
+  stickerPreviewCanvas: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
-  cardLabel: {
-    fontFamily: 'Noto Sans',
-    fontSize: 14,
-    fontWeight: '700',
+  stickerPreviewImage: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
   },
-  cardUsage: {
+  stickerPreviewOutline: {
+    tintColor: '#FFFFFF',
+    opacity: 0.98,
+  },
+  usageChip: {
+    position: 'absolute',
+    left: 8,
+    bottom: 8,
+    minWidth: 34,
+    height: 24,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  usageChipText: {
     fontFamily: 'Noto Sans',
     fontSize: 12,
-    lineHeight: 16,
+    fontWeight: '700',
   },
   emptyState: {
     alignItems: 'center',
@@ -270,6 +376,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.xl,
     marginTop: 4,
+  },
+  emptyStateScreen: {
+    flex: 1,
+    justifyContent: 'center',
   },
   emptyIconWrap: {
     width: 52,

@@ -1,4 +1,7 @@
-import { buildCreatedStickerLibrary } from '../components/screens/notes/stickerLibrary';
+import {
+  buildCreatedStickerLibrary,
+  groupCreatedStickerLibrary,
+} from '../components/screens/notes/stickerLibrary';
 import type { Note } from '../services/database';
 
 function createPlacement({
@@ -115,5 +118,42 @@ describe('buildCreatedStickerLibrary', () => {
       'asset-1:default',
       'asset-1:stamp',
     ]);
+  });
+
+  it('groups items into today, yesterday, and earlier sections', () => {
+    const items = buildCreatedStickerLibrary([
+      createNote({
+        id: 'today-note',
+        createdAt: '2026-04-10T08:00:00.000Z',
+        stickerPlacementsJson: JSON.stringify([
+          createPlacement({ placementId: 'today-placement', assetId: 'today-asset' }),
+        ]),
+      }),
+      createNote({
+        id: 'yesterday-note',
+        createdAt: '2026-04-09T08:00:00.000Z',
+        stickerPlacementsJson: JSON.stringify([
+          createPlacement({ placementId: 'yesterday-placement', assetId: 'yesterday-asset' }),
+        ]),
+      }),
+      createNote({
+        id: 'earlier-note',
+        createdAt: '2026-04-06T08:00:00.000Z',
+        stickerPlacementsJson: JSON.stringify([
+          createPlacement({ placementId: 'earlier-placement', assetId: 'earlier-asset' }),
+        ]),
+      }),
+    ]);
+
+    const sections = groupCreatedStickerLibrary(items, new Date('2026-04-10T12:00:00.000Z'));
+
+    expect(sections.map((section) => section.key)).toEqual([
+      'today',
+      'yesterday',
+      'earlier',
+    ]);
+    expect(sections[0]?.items[0]?.assetId).toBe('today-asset');
+    expect(sections[1]?.items[0]?.assetId).toBe('yesterday-asset');
+    expect(sections[2]?.items[0]?.assetId).toBe('earlier-asset');
   });
 });

@@ -277,8 +277,9 @@
         "viewAllButton": "Xem tất cả",
         "stickerLibrary": {
             "buttonA11y": "Mở thư viện sticker của bạn",
-            "title": "Sticker và tem của bạn",
-            "subtitle": "Những sticker cắt nền và tem ảnh bạn đã tạo cho các ghi chú sẽ nằm ở đây.",
+            "eyebrow": "Đã sưu tầm",
+            "title": "Tem",
+            "subtitle": "Một góc nhỏ để cất những chiếc tem và sticker cắt nền bạn đã tạo.",
             "savedCount": "Đã lưu {{count}} món",
             "savedCount_one": "Đã lưu {{count}} món",
             "savedCount_other": "Đã lưu {{count}} món",
@@ -287,8 +288,13 @@
             "usedCount": "Đã dùng {{count}} lần",
             "usedCount_one": "Đã dùng {{count}} lần",
             "usedCount_other": "Đã dùng {{count}} lần",
-            "emptyTitle": "Chưa có sticker nào",
-            "emptyBody": "Tạo sticker hoặc tem trong một ghi chú rồi chúng sẽ xuất hiện ở đây."
+            "emptyTitle": "Chưa có tem nào",
+            "emptyBody": "Tạo sticker hoặc tem trong một ghi chú rồi chiếc kệ này sẽ dần đầy lên.",
+            "section": {
+                "today": "Hôm nay",
+                "yesterday": "Hôm qua",
+                "earlier": "Trước đó"
+            }
         },
         "recap": {
             "allLabel": "Tất cả",
