@@ -28,7 +28,6 @@ import { Radii, Typography } from '../../../constants/theme';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
-import { measureWindowRect, type MeasurableView, type WindowRect } from '../../../utils/measureWindowRect';
 import {
   getStampCutterBaseScale,
   getStampCutterWindowRect,
@@ -62,6 +61,17 @@ const RESET_TRANSFORM: StampCutterTransform = {
   rotation: 0,
 };
 
+interface WindowRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type MeasurableView = View & {
+  measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void;
+};
+
 interface StampCutterEditorProps {
   visible: boolean;
   draft: StampCutterDraft | null;
@@ -84,6 +94,39 @@ interface StampCutterEditorProps {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function measureWindowRect(node: MeasurableView | null): Promise<WindowRect | null> {
+  return new Promise((resolve) => {
+    if (!node?.measureInWindow) {
+      resolve(null);
+      return;
+    }
+
+    let settled = false;
+    const finish = (rect: WindowRect | null) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve(rect);
+    };
+    const fallbackTimeout = setTimeout(() => {
+      finish(null);
+    }, 32);
+
+    node.measureInWindow((x, y, width, height) => {
+      clearTimeout(fallbackTimeout);
+
+      if (width <= 0 || height <= 0) {
+        finish(null);
+        return;
+      }
+
+      finish({ x, y, width, height });
+    });
+  });
 }
 
 function StampCutterEditor({

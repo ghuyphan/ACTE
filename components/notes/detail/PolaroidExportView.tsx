@@ -130,7 +130,11 @@ function PolaroidExportViewInner(
                 imageStyle={styles.photoMedia}
               />
               {stickerPlacements.length > 0 ? (
-                <View pointerEvents="none" style={styles.stickerOverlay}>
+                <View
+                  pointerEvents="none"
+                  testID="polaroid-export-sticker-overlay"
+                  style={styles.stickerOverlay}
+                >
                   <DynamicStickerCanvas
                     placements={stickerPlacements}
                     motionVariant={stickerMotionVariant}
@@ -138,7 +142,11 @@ function PolaroidExportViewInner(
                 </View>
               ) : null}
               {doodleStrokes.length > 0 ? (
-                <View pointerEvents="none" style={styles.doodleOverlay}>
+                <View
+                  pointerEvents="none"
+                  testID="polaroid-export-doodle-overlay"
+                  style={styles.doodleOverlay}
+                >
                   <NoteDoodleCanvas strokes={doodleStrokes} strokeWidth={11} />
                 </View>
               ) : null}
@@ -147,6 +155,7 @@ function PolaroidExportViewInner(
                 color="#2C241E"
                 isDark={false}
                 numberOfLines={2}
+                overlayStyle={styles.photoCaptionOverlay}
                 fieldStyle={styles.exportCaptionField}
                 textStyle={styles.exportCaptionText}
               />
@@ -165,27 +174,37 @@ function PolaroidExportViewInner(
                 previewMode="saved"
               />
               {stickerPlacements.length > 0 ? (
-                <View pointerEvents="none" style={styles.stickerOverlay}>
+                <View
+                  pointerEvents="none"
+                  testID="polaroid-export-sticker-overlay"
+                  style={styles.stickerOverlay}
+                >
                   <DynamicStickerCanvas placements={stickerPlacements} motionVariant={stickerMotionVariant} />
                 </View>
               ) : null}
               {doodleStrokes.length > 0 ? (
-                <View pointerEvents="none" style={styles.doodleOverlay}>
+                <View
+                  pointerEvents="none"
+                  testID="polaroid-export-doodle-overlay"
+                  style={styles.doodleOverlay}
+                >
                   <NoteDoodleCanvas strokes={doodleStrokes} strokeWidth={11} />
                 </View>
               ) : null}
-              <Text
-                numberOfLines={8}
-                style={[
-                  noteCardTextStyles.memoryText,
-                  getNoteCardTextSizeStyle(displayedText),
-                  styles.exportText,
-                  displayedText.length > 100 ? styles.exportTextMedium : null,
-                  displayedText.length > 200 ? styles.exportTextSmall : null,
-                ]}
-              >
-                {displayedText}
-              </Text>
+              <View testID="polaroid-export-text-content" style={styles.textContent}>
+                <Text
+                  numberOfLines={8}
+                  style={[
+                    noteCardTextStyles.memoryText,
+                    getNoteCardTextSizeStyle(displayedText),
+                    styles.exportText,
+                    displayedText.length > 100 ? styles.exportTextMedium : null,
+                    displayedText.length > 200 ? styles.exportTextSmall : null,
+                  ]}
+                >
+                  {displayedText}
+                </Text>
+              </View>
             </LinearGradient>
           )}
         </View>
@@ -279,11 +298,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 64,
   },
+  textContent: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    zIndex: 1,
+  },
   exportText: {
     fontSize: 56,
     lineHeight: 72,
     letterSpacing: -1.2,
     textShadowRadius: 8,
+    position: 'relative',
+    zIndex: 1,
   },
   exportTextMedium: {
     fontSize: 42,
@@ -296,10 +324,15 @@ const styles = StyleSheet.create({
   stickerOverlay: {
     position: 'absolute',
     ...STICKER_ARTBOARD_FRAME,
+    zIndex: 0,
   },
   doodleOverlay: {
     position: 'absolute',
     ...DOODLE_ARTBOARD_FRAME,
+    zIndex: 0,
+  },
+  photoCaptionOverlay: {
+    zIndex: 1,
   },
   exportCaptionField: {
     maxWidth: '82%',

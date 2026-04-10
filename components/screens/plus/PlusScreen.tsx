@@ -75,7 +75,7 @@ export default function PlusScreen() {
         t('plus.upgradeSuccessTitle', 'Plus unlocked'),
         t(
           'plus.upgradeSuccessMessage',
-          'You can now save more photo notes and import images from your library.'
+          'You can now use premium photo filters, save unlimited photo notes, and unlock the premium finishes too.'
         )
       );
     }
@@ -156,11 +156,11 @@ export default function PlusScreen() {
             )}
           />
           <FeatureRow
-            icon="images"
-            title={t('plus.features.libraryTitle', 'Import from your library')}
+            icon="color-filter-outline"
+            title={t('plus.features.filterTitle', 'Premium photo filters')}
             description={t(
-              'plus.features.libraryDesc',
-              'Turn older camera roll moments into place-linked memories inside Noto.'
+              'plus.features.filterDesc',
+              'Unlock warm, cool, mono, vivid, and vintage looks when you want the photo to carry more mood.'
             )}
           />
           <FeatureRow

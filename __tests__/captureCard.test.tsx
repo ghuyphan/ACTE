@@ -421,6 +421,8 @@ function createCaptureCardProps(
     onOpenPhotoLibrary: () => undefined,
     selectedPhotoFilterId: 'original' as const,
     onChangePhotoFilter: () => undefined,
+    lockedPhotoFilterIds: [],
+    onPressLockedPhotoFilter: () => undefined,
     cameraRef: { current: null },
     cameraDevice: {
       id: 'back-camera',
@@ -758,6 +760,33 @@ describe('CaptureCard doodle handle', () => {
     expect(view.getByTestId('mock-camera-view')).toBeTruthy();
   });
 
+  it('mounts the live camera only once when switching over from text mode', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'text',
+    });
+
+    expect(view.queryByTestId('mock-camera-view')).toBeNull();
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          captureMode: 'camera',
+          permissionGranted: true,
+          needsCameraPermission: false,
+          isCameraPreviewActive: true,
+        })}
+      />
+    );
+
+    await waitFor(() => {
+      expect(view.getByTestId('mock-camera-view')).toBeTruthy();
+    });
+
+    expect(mockCameraMountCount).toBe(1);
+    expect(mockCameraUnmountCount).toBe(0);
+  });
+
   it('remounts the camera when the live preview becomes active again', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const view = renderCaptureCard(ref, {
@@ -822,6 +851,25 @@ describe('CaptureCard doodle handle', () => {
     expect(onChangePhotoFilter).toHaveBeenCalledWith('vivid');
   });
 
+  it('routes locked filter taps through the premium action instead of selecting them', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const onChangePhotoFilter = jest.fn();
+    const onPressLockedPhotoFilter = jest.fn();
+    const { getByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///captured-photo.jpg',
+      selectedPhotoFilterId: 'original',
+      lockedPhotoFilterIds: ['vivid'],
+      onChangePhotoFilter,
+      onPressLockedPhotoFilter,
+    });
+
+    fireEvent.press(getByTestId('capture-filter-vivid'));
+
+    expect(onChangePhotoFilter).not.toHaveBeenCalled();
+    expect(onPressLockedPhotoFilter).toHaveBeenCalledWith('vivid');
+  });
+
   it('keeps the original captured-photo controls and blocks save during the live-photo guard', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const onSaveNote = jest.fn();
@@ -865,7 +913,7 @@ describe('CaptureCard doodle handle', () => {
 
     expect(queryByLabelText('Tap for a photo. Hold for a live photo.')).toBeNull();
     expect(getByText('Hold for live photo')).toBeTruthy();
-    expect(queryByTestId('capture-library-button')).toBeNull();
+    expect(getByTestId('capture-library-button')).toBeTruthy();
     expect(getByTestId('capture-shutter-button')).toBeTruthy();
     expect(getByTestId('capture-share-target-toggle')).toBeTruthy();
     expect(queryByTestId('capture-radius-toggle')).toBeNull();

@@ -43,42 +43,40 @@ export function LiveCameraActionBar({
             </Text>
           </View>
         ) : null}
-        {!showLivePhotoGuide ? (
-          <CaptureAnimatedPressable
-            testID="capture-library-button"
-            accessibilityLabel={
-              libraryImportLocked
-                ? t('capture.plusLibraryLocked', 'Plus')
-                : t('capture.importPhoto', 'Photos')
-            }
-            onPress={onOpenPhotoLibrary}
-            active={importingPhoto}
-            activeScale={1.015}
-            activeTranslateY={0}
-            contentActiveScale={1}
-            style={[
-              styles.textCardActionPill,
-              styles.captureActionTextPill,
-              {
-                backgroundColor: colors.captureGlassFill,
-                borderColor: 'transparent',
-              },
-            ]}
-          >
-            {importingPhoto ? (
-              <ActivityIndicator size="small" color={colors.captureGlassText} />
-            ) : (
-              <>
-                <Ionicons name="images-outline" size={16} color={colors.captureGlassText} />
-                <Text style={[styles.captureActionPillLabel, { color: colors.captureGlassText }]}>
-                  {libraryImportLocked
-                    ? t('capture.plusLibraryLocked', 'Plus')
-                    : t('capture.importPhoto', 'Photos')}
-                </Text>
-              </>
-            )}
-          </CaptureAnimatedPressable>
-        ) : null}
+        <CaptureAnimatedPressable
+          testID="capture-library-button"
+          accessibilityLabel={
+            libraryImportLocked
+              ? t('capture.plusLibraryLocked', 'Plus')
+              : t('capture.importPhoto', 'Photos')
+          }
+          onPress={onOpenPhotoLibrary}
+          active={importingPhoto}
+          activeScale={1.015}
+          activeTranslateY={0}
+          contentActiveScale={1}
+          style={[
+            styles.textCardActionPill,
+            styles.captureActionTextPill,
+            {
+              backgroundColor: colors.captureGlassFill,
+              borderColor: 'transparent',
+            },
+          ]}
+        >
+          {importingPhoto ? (
+            <ActivityIndicator size="small" color={colors.captureGlassText} />
+          ) : (
+            <>
+              <Ionicons name="images-outline" size={16} color={colors.captureGlassText} />
+              <Text style={[styles.captureActionPillLabel, { color: colors.captureGlassText }]}>
+                {libraryImportLocked
+                  ? t('capture.plusLibraryLocked', 'Plus')
+                  : t('capture.importPhoto', 'Photos')}
+              </Text>
+            </>
+          )}
+        </CaptureAnimatedPressable>
       </CaptureControlRail>
     </View>
   );

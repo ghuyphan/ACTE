@@ -19,9 +19,15 @@ import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../sheets/AppSheetAlert';
 import CaptureCard, { type CaptureCardHandle } from '../home/CaptureCard';
-import { buildHomeFeedItems, findHomeFeedItemIndex, type HomeFeedItem } from '../home/feedItems';
+import {
+  buildHomeFeedItems,
+  findHomeFeedItemIndex,
+  getHomeFeedItemKey,
+  type HomeFeedItem,
+} from '../home/feedItems';
 import HomeHeaderSearch from '../home/HomeHeaderSearch';
 import NotesFeed from '../home/NotesFeed';
+import SavedNotePolaroidReveal from '../home/SavedNotePolaroidReveal';
 import SharedManageSheet from '../home/SharedManageSheet';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
@@ -46,7 +52,11 @@ import {
 import { DEFAULT_NOTE_COLOR_ID, PREMIUM_NOTE_COLOR_IDS } from '../../services/noteAppearance';
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { saveNoteDoodle } from '../../services/noteDoodles';
-import { renderFilteredPhotoToFile } from '../../services/photoFilters';
+import {
+  PREMIUM_PHOTO_FILTER_IDS,
+  renderFilteredPhotoToFile,
+  type PhotoFilterId,
+} from '../../services/photoFilters';
 import {
   LIVE_PHOTO_MAX_DURATION_SECONDS,
   persistLivePhotoVideo,
@@ -58,7 +68,7 @@ import {
   isPreviewablePremiumNoteColor,
   PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
 } from '../../services/premiumNoteFinish';
-import { generateNoteId } from '../../services/database';
+import { generateNoteId, type Note } from '../../services/database';
 import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
 import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition';
@@ -97,7 +107,6 @@ export default function HomeScreen() {
     isPurchaseAvailable,
     isPurchaseInFlight,
     plusPriceLabel,
-    canImportFromLibrary,
     remotePhotoNoteCount,
     isRemotePhotoNoteCountReady,
     presentPaywallIfNeeded,
@@ -135,12 +144,21 @@ export default function HomeScreen() {
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [noteColor, setNoteColor] = useState<string | null>(DEFAULT_NOTE_COLOR_ID);
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
+  const [revealedNoteId, setRevealedNoteId] = useState<string | null>(null);
+  const [revealToken, setRevealToken] = useState(0);
+  const [pendingFeedRevealNoteId, setPendingFeedRevealNoteId] = useState<string | null>(null);
+  const [savedNoteRevealNote, setSavedNoteRevealNote] = useState<Note | null>(null);
+  const [savedNoteRevealToken, setSavedNoteRevealToken] = useState(0);
   const lockedPremiumNoteColorIds = useMemo(
     () => (tier === 'plus' ? [] : PREMIUM_NOTE_COLOR_IDS),
     [tier]
   );
   const previewOnlyNoteColorIds = useMemo(
     () => (tier === 'plus' ? [] : PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS),
+    [tier]
+  );
+  const lockedPremiumPhotoFilterIds = useMemo(
+    () => (tier === 'plus' ? [] : PREMIUM_PHOTO_FILTER_IDS),
     [tier]
   );
   const [pendingSavedNoteScrollTargetId, setPendingSavedNoteScrollTargetId] = useState<string | null>(null);
@@ -155,7 +173,7 @@ export default function HomeScreen() {
   const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveInFlightRef = useRef(false);
   const settledArchiveItemRef = useRef<{ id: string; kind: 'note' | 'shared-post' } | null>(null);
-  const previousVisibleSharedPostIdsRef = useRef<string[]>([]);
+  const previousVisibleFeedItemKeysRef = useRef<string[] | null>(null);
   const lastHandledOpenSharedManageAtRef = useRef<string | null>(null);
   useScrollToTop(flatListRef);
 
@@ -469,11 +487,15 @@ export default function HomeScreen() {
   }, [clearInlineSaveTimers]);
 
   const completeInlineSaveFlow = useCallback(
-    (noteId: string) => {
+    (note: Note) => {
+      const noteId = note.id;
       const finalizeDelay = reduceMotionEnabled ? 120 : 220;
       const resetStateDelay = reduceMotionEnabled ? 240 : 900;
 
       clearInlineSaveTimers();
+      setSavedNoteRevealNote(note);
+      setSavedNoteRevealToken((current) => current + 1);
+      setPendingFeedRevealNoteId(noteId);
       setSuppressedHomeNoteIds((current) => (current.includes(noteId) ? current : [...current, noteId]));
       setSaveButtonState('success');
 
@@ -497,6 +519,20 @@ export default function HomeScreen() {
     }
 
     setPendingSavedNoteScrollTargetId(noteId);
+    setPendingFeedRevealNoteId(noteId);
+  }, []);
+
+  const handleSavedNoteRevealFinished = useCallback(() => {
+    setSavedNoteRevealNote(null);
+  }, []);
+
+  const triggerFeedReveal = useCallback((noteId?: string | null) => {
+    if (!noteId) {
+      return;
+    }
+
+    setRevealedNoteId(noteId);
+    setRevealToken((current) => current + 1);
   }, []);
 
   const handleSettledArchiveItemChange = useCallback(
@@ -560,15 +596,30 @@ export default function HomeScreen() {
   }, [archiveFeedItems, pendingSavedNoteScrollTargetId, snapHeight, suppressedHomeNoteIds]);
 
   useEffect(() => {
-    const nextSharedPostIds = visibleSharedPosts.map((post) => post.id);
-    const previousSharedPostIds = previousVisibleSharedPostIdsRef.current;
-    const sharedFeedOrderChanged =
-      previousSharedPostIds.length !== nextSharedPostIds.length ||
-      previousSharedPostIds.some((postId, index) => nextSharedPostIds[index] !== postId);
+    if (isCaptureVisible || !pendingFeedRevealNoteId) {
+      return;
+    }
 
-    previousVisibleSharedPostIdsRef.current = nextSharedPostIds;
+    triggerFeedReveal(pendingFeedRevealNoteId);
+    setPendingFeedRevealNoteId((current) =>
+      current === pendingFeedRevealNoteId ? null : current
+    );
+  }, [isCaptureVisible, pendingFeedRevealNoteId, triggerFeedReveal]);
 
-    if (!sharedFeedOrderChanged) {
+  useEffect(() => {
+    const nextVisibleFeedItemKeys = visibleFeedItems.map(getHomeFeedItemKey);
+    const previousVisibleFeedItemKeys = previousVisibleFeedItemKeysRef.current;
+    previousVisibleFeedItemKeysRef.current = nextVisibleFeedItemKeys;
+
+    if (!previousVisibleFeedItemKeys) {
+      return;
+    }
+
+    const visibleFeedOrderChanged =
+      previousVisibleFeedItemKeys.length !== nextVisibleFeedItemKeys.length ||
+      previousVisibleFeedItemKeys.some((itemKey, index) => nextVisibleFeedItemKeys[index] !== itemKey);
+
+    if (!visibleFeedOrderChanged) {
       return;
     }
 
@@ -581,7 +632,7 @@ export default function HomeScreen() {
       return;
     }
 
-    const targetIndex = findHomeFeedItemIndex(archiveFeedItems, anchor);
+    const targetIndex = findHomeFeedItemIndex(visibleFeedItems, anchor);
     if (targetIndex < 0) {
       return;
     }
@@ -592,7 +643,7 @@ export default function HomeScreen() {
         animated: false,
       });
     });
-  }, [archiveFeedItems, pendingSavedNoteScrollTargetId, snapHeight, visibleSharedPosts]);
+  }, [pendingSavedNoteScrollTargetId, snapHeight, visibleFeedItems]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -943,18 +994,18 @@ export default function HomeScreen() {
   );
 
   const showPlusSheet = useCallback(
-    (reason: 'limit' | 'library' | 'color') => {
+    (reason: 'limit' | 'filter' | 'color') => {
       const title =
-        reason === 'library'
-          ? t('plus.libraryTitle', 'Noto Plus unlock')
+        reason === 'filter'
+          ? t('plus.filterTitle', 'Premium photo filters')
           : reason === 'color'
             ? t('plus.colorTitle', 'Premium card finishes')
             : t('plus.limitTitle', 'Photo limit reached');
       const message =
-        reason === 'library'
+        reason === 'filter'
           ? t(
-              'plus.libraryMessage',
-              'Upgrade to Noto Plus to create notes from photos already in your library.'
+              'plus.filterMessage',
+              'Warm, cool, mono, vivid, and vintage filters are part of Noto Plus.'
             )
           : reason === 'color'
             ? t(
@@ -963,7 +1014,7 @@ export default function HomeScreen() {
               )
             : t(
               'plus.limitMessage',
-              'Free plan includes up to 10 photo notes. Upgrade to Noto Plus to save more image notes and import from your library.'
+              'Free plan includes up to 10 photo notes. Upgrade to Noto Plus for unlimited photo notes, premium filters, and premium finishes.'
             );
 
       showAlert({
@@ -985,7 +1036,7 @@ export default function HomeScreen() {
                     title: t('plus.upgradeSuccessTitle', 'Noto Plus is ready'),
                     message: t(
                       'plus.upgradeSuccessMessage',
-                      'You can now save more photo notes and import images from your library.'
+                      'You can now use premium photo filters, save unlimited photo notes, and keep the premium card finishes too.'
                     ),
                     primaryAction: {
                       label: t('common.done', 'Done'),
@@ -1138,6 +1189,24 @@ export default function HomeScreen() {
       );
     });
   }, [isPurchaseAvailable, plusPriceLabel, presentPaywallIfNeeded, t]);
+
+  useEffect(() => {
+    if (lockedPremiumPhotoFilterIds.includes(selectedPhotoFilterId)) {
+      setSelectedPhotoFilterId('original');
+    }
+  }, [lockedPremiumPhotoFilterIds, selectedPhotoFilterId, setSelectedPhotoFilterId]);
+
+  const handleChangePhotoFilter = useCallback(
+    (filterId: PhotoFilterId) => {
+      if (lockedPremiumPhotoFilterIds.includes(filterId)) {
+        showPlusSheet('filter');
+        return;
+      }
+
+      setSelectedPhotoFilterId(filterId);
+    },
+    [lockedPremiumPhotoFilterIds, setSelectedPhotoFilterId, showPlusSheet]
+  );
 
   const reverseGeocode = useCallback(
     async (lat: number, lon: number): Promise<string> => {
@@ -1359,9 +1428,9 @@ export default function HomeScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
         if (shareOutcome === 'default' && remindersEnabled) {
-          completeInlineSaveFlow(createdNote.id);
+          completeInlineSaveFlow(createdNote);
         } else if (shareOutcome === 'shared') {
-          completeInlineSaveFlow(createdNote.id);
+          completeInlineSaveFlow(createdNote);
         } else if (shareOutcome === 'default') {
           setSaveButtonState('idle');
           finalizeSavedCapture();
@@ -1433,11 +1502,6 @@ export default function HomeScreen() {
   ]);
 
   const handleImportPhoto = useCallback(async () => {
-    if (!canImportFromLibrary) {
-      showPlusSheet('library');
-      return;
-    }
-
     let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
     if (mediaPermission.status !== 'granted') {
       mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -1491,21 +1555,14 @@ export default function HomeScreen() {
       setImportingPhoto(false);
     }
   }, [
-    canImportFromLibrary,
     setCapturedPairedVideo,
     setCapturedPhoto,
     setSelectedPhotoFilterId,
     showDoneSheet,
-    showPlusSheet,
     t,
   ]);
 
   const handleImportMotionClip = useCallback(async () => {
-    if (!canImportFromLibrary) {
-      showPlusSheet('library');
-      return;
-    }
-
     let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
     if (mediaPermission.status !== 'granted') {
       mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -1554,7 +1611,7 @@ export default function HomeScreen() {
     } finally {
       setImportingPhoto(false);
     }
-  }, [canImportFromLibrary, setCapturedPairedVideo, setSelectedPhotoFilterId, showDoneSheet, showPlusSheet, t]);
+  }, [setCapturedPairedVideo, setSelectedPhotoFilterId, showDoneSheet, t]);
 
   const handleToggleCaptureMode = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1650,7 +1707,9 @@ export default function HomeScreen() {
             void handleImportPhoto();
           }}
           selectedPhotoFilterId={selectedPhotoFilterId}
-          onChangePhotoFilter={setSelectedPhotoFilterId}
+          onChangePhotoFilter={handleChangePhotoFilter}
+          lockedPhotoFilterIds={lockedPremiumPhotoFilterIds}
+          onPressLockedPhotoFilter={handleChangePhotoFilter}
           cameraRef={cameraRef}
           cameraDevice={cameraDevice}
           isCameraPreviewActive={isCameraPreviewActive}
@@ -1679,8 +1738,8 @@ export default function HomeScreen() {
               : null
           }
           remainingPhotoSlots={captureMode === 'camera' ? remainingPhotoSlots : null}
-          libraryImportLocked={!canImportFromLibrary}
-          importingPhoto={importingPhoto || isPurchaseInFlight}
+          libraryImportLocked={false}
+          importingPhoto={importingPhoto}
           radius={radius}
           onChangeRadius={setRadius}
           shareTarget={captureTarget}
@@ -1695,7 +1754,6 @@ export default function HomeScreen() {
       cameraPermissionRequiresSettings,
       cameraRef,
       cameraSessionKey,
-      canImportFromLibrary,
       captureMode,
       captureScale,
       captureTarget,
@@ -1706,6 +1764,7 @@ export default function HomeScreen() {
       facing,
       handleCaptureTargetChange,
       handleChangeNoteColor,
+      handleChangePhotoFilter,
       handleCaptureTextEntryFocusChange,
       handleImportMotionClip,
       handleImportPhoto,
@@ -1720,8 +1779,8 @@ export default function HomeScreen() {
       isLivePhotoCaptureSettling,
       isLivePhotoSaveGuardActive,
       isModeSwitchAnimating,
-      isPurchaseInFlight,
       lockedPremiumNoteColorIds,
+      lockedPremiumPhotoFilterIds,
       needsCameraPermission,
       noteColor,
       noteText,
@@ -1737,7 +1796,6 @@ export default function HomeScreen() {
       setFacing,
       setNoteText,
       setRadius,
-      setSelectedPhotoFilterId,
       saveNote,
       shutterScale,
       showLivePhotoCameraHint,
@@ -1771,8 +1829,8 @@ export default function HomeScreen() {
           onOpenSharedPost={openSharedPost}
           colors={colors}
           t={t}
-          revealedNoteId={null}
-          revealToken={0}
+          revealedNoteId={revealedNoteId}
+          revealToken={revealToken}
           onSettledArchiveItemChange={handleSettledArchiveItemChange}
           onCaptureVisibilityChange={setIsCaptureVisible}
           scrollEnabled={
@@ -1783,6 +1841,14 @@ export default function HomeScreen() {
           bottomOverlayInset={bottomTabOverlayInset}
         />
       </View>
+
+      <SavedNotePolaroidReveal
+        note={savedNoteRevealNote}
+        revealToken={savedNoteRevealToken}
+        colors={colors}
+        t={t}
+        onFinished={handleSavedNoteRevealFinished}
+      />
 
       <HomeHeaderSearch
         topInset={insets.top}

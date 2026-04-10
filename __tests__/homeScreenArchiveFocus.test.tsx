@@ -6,6 +6,32 @@ import HomeScreen from '../app/(tabs)/index';
 
 const mockConsumeFeedFocus = jest.fn();
 const mockScrollToOffset = jest.fn();
+let mockNotesState = [
+  {
+    id: 'note-new',
+    type: 'text',
+    content: 'Newest note',
+    locationName: 'District 1',
+    latitude: 10.7,
+    longitude: 106.6,
+    radius: 150,
+    isFavorite: false,
+    createdAt: '2026-03-11T00:00:00.000Z',
+    updatedAt: null,
+  },
+  {
+    id: 'note-old',
+    type: 'text',
+    content: 'Older note',
+    locationName: 'District 3',
+    latitude: 10.8,
+    longitude: 106.7,
+    radius: 150,
+    isFavorite: false,
+    createdAt: '2026-03-10T00:00:00.000Z',
+    updatedAt: null,
+  },
+];
 const mockSharedFeedState = {
   sharedPosts: [
     {
@@ -183,32 +209,7 @@ jest.mock('../hooks/useCaptureFlow', () => ({
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
-    notes: [
-      {
-        id: 'note-new',
-        type: 'text',
-        content: 'Newest note',
-        locationName: 'District 1',
-        latitude: 10.7,
-        longitude: 106.6,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-11T00:00:00.000Z',
-        updatedAt: null,
-      },
-      {
-        id: 'note-old',
-        type: 'text',
-        content: 'Older note',
-        locationName: 'District 3',
-        latitude: 10.8,
-        longitude: 106.7,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-03-10T00:00:00.000Z',
-        updatedAt: null,
-      },
-    ],
+    notes: mockNotesState,
     refreshNotes: jest.fn(async () => undefined),
     createNote: jest.fn(async () => undefined),
   }),
@@ -294,6 +295,12 @@ jest.mock('../components/home/NotesFeed', () => {
   };
 });
 
+jest.mock('../components/home/SavedNotePolaroidReveal', () => {
+  return function MockSavedNotePolaroidReveal() {
+    return null;
+  };
+});
+
 jest.mock('../components/home/SharedManageSheet', () => {
   const React = require('react');
   const { View } = require('react-native');
@@ -315,6 +322,32 @@ describe('HomeScreen archive focus', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
     latestNotesFeedProps = null;
+    mockNotesState = [
+      {
+        id: 'note-new',
+        type: 'text',
+        content: 'Newest note',
+        locationName: 'District 1',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'note-old',
+        type: 'text',
+        content: 'Older note',
+        locationName: 'District 3',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-10T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ];
     mockSharedFeedState.sharedPosts = [
       {
         id: 'shared-friend',
@@ -416,6 +449,47 @@ describe('HomeScreen archive focus', () => {
         createdAt: '2026-03-14T00:00:00.000Z',
       },
       ...mockSharedFeedState.sharedPosts,
+    ];
+
+    rerender(
+      <ActiveFeedTargetProvider>
+        <HomeScreen />
+      </ActiveFeedTargetProvider>
+    );
+
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    await waitFor(() => {
+      expect(mockScrollToOffset).toHaveBeenCalledWith({
+        offset: snapHeight * 4,
+        animated: false,
+      });
+    });
+  });
+
+  it('keeps the currently viewed card anchored when a newer note is inserted above it', async () => {
+    const { rerender } = renderHomeScreen();
+
+    act(() => {
+      latestNotesFeedProps?.onSettledArchiveItemChange?.({ kind: 'note', id: 'note-old' });
+    });
+
+    mockNotesState = [
+      {
+        id: 'note-latest',
+        type: 'text',
+        content: 'Latest note',
+        locationName: 'District 7',
+        latitude: 10.9,
+        longitude: 106.8,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-14T00:00:00.000Z',
+        updatedAt: null,
+      },
+      ...mockNotesState,
     ];
 
     rerender(

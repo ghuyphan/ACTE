@@ -67,9 +67,21 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: HORIZONTAL_PADDING,
   },
-  textCard: {
+  textCardShadow: {
     width: CARD_SIZE,
     height: CARD_SIZE,
+    borderRadius: Layout.cardRadius,
+    borderCurve: 'continuous',
+    ...(Platform.OS === 'android' ? {} : Shadows.card),
+  },
+  textCardShadowLightContrast: {
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.12,
+    shadowRadius: 28,
+    elevation: 10,
+  },
+  textCard: {
+    flex: 1,
     borderRadius: Layout.cardRadius,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
@@ -78,14 +90,9 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
     position: 'relative',
-    ...(Platform.OS === 'android' ? {} : Shadows.card),
   },
   textCardLightContrast: {
     borderWidth: 1,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.12,
-    shadowRadius: 28,
-    elevation: 10,
   },
   cardPasteSurface: {
     ...StyleSheet.absoluteFill,
@@ -666,11 +673,27 @@ export const styles = StyleSheet.create({
     borderWidth: 2,
     padding: 1,
   },
+  photoFilterButtonLocked: {
+    opacity: 0.84,
+  },
   photoFilterPreviewClip: {
     width: PHOTO_FILTER_PREVIEW_SIZE,
     height: PHOTO_FILTER_PREVIEW_SIZE,
     borderRadius: PHOTO_FILTER_PREVIEW_SIZE / 2,
     overflow: 'hidden',
+  },
+  photoFilterLockBadge: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(28,28,30,0.88)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   photoFilterPreviewCanvas: {
     width: '100%',

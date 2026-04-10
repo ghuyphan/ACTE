@@ -300,12 +300,7 @@ export default function NoteDetailSheetContent({
                 {displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled) ? (
                     <View
                         pointerEvents={isEditing && stickerModeEnabled ? 'box-none' : 'none'}
-                        style={[
-                            styles.doodleOverlay,
-                            styles.photoDoodleOverlay,
-                            isEditing ? styles.doodleOverlayEditing : null,
-                            isEditing && stickerModeEnabled ? styles.doodleOverlayActive : null,
-                        ]}
+                        style={styles.stickerOverlay}
                     >
                         {isEditing ? (
                             <NoteStickerCanvas
@@ -476,11 +471,8 @@ export default function NoteDetailSheetContent({
                     <View
                         pointerEvents={isEditing && stickerModeEnabled ? 'box-none' : 'none'}
                         style={[
-                            styles.doodleOverlay,
+                            styles.stickerOverlay,
                             styles.textStickerOverlay,
-                            isEditing && stickerModeEnabled ? styles.textStickerOverlayActive : null,
-                            isEditing ? styles.doodleOverlayEditing : null,
-                            isEditing && stickerModeEnabled ? styles.doodleOverlayActive : null,
                         ]}
                     >
                         {isEditing ? (
@@ -840,11 +832,11 @@ const styles = StyleSheet.create({
         ...STICKER_ARTBOARD_FRAME,
         opacity: 0.5,
     },
-    textStickerOverlay: {
+    stickerOverlay: {
+        position: 'absolute',
         ...STICKER_ARTBOARD_FRAME,
-        zIndex: 0,
     },
-    textStickerOverlayActive: {
+    textStickerOverlay: {
         zIndex: 0,
     },
     doodleOverlayEditing: {

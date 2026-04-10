@@ -495,7 +495,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         availablePackages.length > 0,
       isPurchaseInFlight,
       hasProEntitlement: tier === 'plus',
-      canImportFromLibrary: tier === 'plus',
+      canImportFromLibrary: true,
       photoNoteLimit: getPhotoNoteLimitForTier(tier),
       remotePhotoNoteCount: remotePhotoNoteCount ?? cachedRemotePhotoNoteCount,
       isRemotePhotoNoteCountReady,

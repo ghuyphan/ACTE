@@ -96,6 +96,30 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
         ? 'text'
         : 'marker';
   const isPhotoMode = contentMode === 'photo';
+  const floatingOverflowBadge =
+    overflowCount > 0 ? (
+      <View
+        pointerEvents="none"
+        style={mergeStyles(
+          styles.dayOverflowBadge,
+          compact ? styles.dayOverflowBadgeCompact : null,
+          {
+            backgroundColor: palette.primary,
+            borderColor: palette.card,
+          }
+        )}
+        testID={isPhotoMode && day.dateKey ? `notes-recap-day-secondary-photo-${day.dateKey}` : undefined}
+      >
+        <Text
+          style={mergeStyles(
+            styles.dayOverflowBadgeText,
+            compact ? styles.dayOverflowBadgeTextCompact : null
+          )}
+        >
+          +{overflowCount}
+        </Text>
+      </View>
+    ) : null;
   const haloAnimatedStyle = useAnimatedStyle(
     () => ({
       opacity: withTiming(isSelected ? 1 : 0, { duration: 180 }),
@@ -205,29 +229,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                 >
                   {day.dayNumber}
                 </Text>
-                {overflowCount > 0 ? (
-                  <View
-                    pointerEvents="none"
-                    style={mergeStyles(
-                      styles.photoBadge,
-                      compact ? styles.photoBadgeCompact : null,
-                      {
-                        backgroundColor: palette.primary,
-                        borderColor: palette.card,
-                      }
-                    )}
-                    testID={day.dateKey ? `notes-recap-day-secondary-photo-${day.dateKey}` : undefined}
-                  >
-                    <Text
-                      style={mergeStyles(
-                        styles.photoBadgeText,
-                        compact ? styles.photoBadgeTextCompact : null
-                      )}
-                    >
-                      +{overflowCount}
-                    </Text>
-                  </View>
-                ) : null}
+                {floatingOverflowBadge}
               </View>
             </>
           ) : (
@@ -267,6 +269,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                 >
                   {day.dayNumber}
                 </Text>
+                {contentMode === 'text' ? floatingOverflowBadge : null}
                 {!isEmptyDay ? (
                   <View
                     style={mergeStyles(
@@ -294,27 +297,6 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                             color={isSelected ? palette.primary : palette.text}
                           />
                         </View>
-                        {overflowCount > 0 ? (
-                          <View
-                            style={mergeStyles(
-                              styles.textDayOverflowBadge,
-                              compact ? styles.textDayOverflowBadgeCompact : null,
-                              {
-                                backgroundColor: palette.primarySoft,
-                              }
-                            )}
-                          >
-                            <Text
-                              style={mergeStyles(
-                                styles.overflowText,
-                                compact ? styles.overflowTextCompact : null,
-                                { color: palette.primary }
-                              )}
-                            >
-                              +{overflowCount}
-                            </Text>
-                          </View>
-                        ) : null}
                       </View>
                     ) : contentMode === 'marker' ? (
                       <View
@@ -808,7 +790,7 @@ const styles = StyleSheet.create({
     textShadowColor: 'transparent',
     textShadowRadius: 0,
   },
-  photoBadge: {
+  dayOverflowBadge: {
     position: 'absolute',
     top: 6,
     right: 6,
@@ -826,7 +808,7 @@ const styles = StyleSheet.create({
     elevation: 2,
     zIndex: 5,
   },
-  photoBadgeCompact: {
+  dayOverflowBadgeCompact: {
     top: 5,
     right: 5,
     minWidth: 18,
@@ -834,7 +816,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     paddingHorizontal: 3,
   },
-  photoBadgeText: {
+  dayOverflowBadgeText: {
     ...Typography.pill,
     fontSize: 9,
     lineHeight: 10,
@@ -842,7 +824,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     includeFontPadding: false,
   },
-  photoBadgeTextCompact: {
+  dayOverflowBadgeTextCompact: {
     fontSize: 8,
     lineHeight: 9,
   },
@@ -896,20 +878,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  textDayOverflowBadge: {
-    minWidth: 22,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  textDayOverflowBadgeCompact: {
-    minWidth: 20,
-    height: 16,
-    borderRadius: 8,
-    paddingHorizontal: 3,
   },
   marker: {
     width: 11,

@@ -300,7 +300,7 @@ describe('useSettingsScreenModel', () => {
 
     const unlimitedResult = renderHook(() => useSettingsScreenModel());
     expect(unlimitedResult.result.current.plusHint).toBe(
-      'Upgrade to Noto Plus to unlock unlimited photo notes, interactive hologram cards, premium finishes, and import from your photo library.'
+      'Upgrade to Noto Plus to unlock unlimited photo notes, premium photo filters, interactive hologram cards, and premium finishes.'
     );
 
     unlimitedResult.unmount();
@@ -308,7 +308,7 @@ describe('useSettingsScreenModel', () => {
 
     const cappedResult = renderHook(() => useSettingsScreenModel());
     expect(cappedResult.result.current.plusHint).toBe(
-      'Free plan includes up to 10 photo notes. Upgrade to Noto Plus for unlimited photo notes, interactive hologram cards, premium finishes, and library import.'
+      'Free plan includes up to 10 photo notes. Upgrade to Noto Plus for unlimited photo notes, premium photo filters, interactive hologram cards, and premium finishes.'
     );
   });
 });

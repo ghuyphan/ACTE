@@ -37,8 +37,7 @@ import kotlin.math.sqrt
 
 private const val TEXT_NOTE_OVERLAY_OPACITY = 0.5f
 private const val PHOTO_NOTE_OVERLAY_OPACITY = 0.92f
-// Match the in-app photo memory card more closely than the SwiftUI widget.
-private const val PHOTO_NOTE_STICKER_OVERLAY_OPACITY = 0.82f
+private const val STICKER_OVERLAY_OPACITY = 1f
 private const val SMALL_WIDGET_MAX_RENDER_EDGE_PX = 760
 private const val MEDIUM_WIDGET_MAX_RENDER_EDGE_PX = 960
 private const val SMALL_WIDGET_MAX_RENDER_PIXELS = 440_000
@@ -1367,12 +1366,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
     }
 
-    private fun getStickerOverlayOpacity(snapshot: NotoWidgetSnapshot): Float {
-      return if (snapshot.noteType == "photo") {
-        PHOTO_NOTE_STICKER_OVERLAY_OPACITY
-      } else {
-        TEXT_NOTE_OVERLAY_OPACITY
-      }
+    private fun getStickerOverlayOpacity(_snapshot: NotoWidgetSnapshot): Float {
+      return STICKER_OVERLAY_OPACITY
     }
 
     private fun getStickerOutlineSize(width: Float, height: Float): Float {

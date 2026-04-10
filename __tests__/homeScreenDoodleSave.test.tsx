@@ -33,6 +33,8 @@ const mockGetDoodleSnapshot = jest.fn(() => ({
   enabled: true,
   strokes: [{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }],
 }));
+let latestNotesFeedProps: any = null;
+let latestSavedNoteRevealProps: any = null;
 const originalRequestAnimationFrame = global.requestAnimationFrame;
 const originalRequestIdleCallback = (global as any).requestIdleCallback;
 const originalCancelIdleCallback = (global as any).cancelIdleCallback;
@@ -282,6 +284,7 @@ jest.mock('../components/home/NotesFeed', () => {
   const React = require('react');
   const { Text, View } = require('react-native');
   return function MockNotesFeed(props: any) {
+    latestNotesFeedProps = props;
     props.flatListRef.current = {
       scrollToOffset: (...args: unknown[]) => mockScrollToOffset(...args),
     };
@@ -293,6 +296,15 @@ jest.mock('../components/home/NotesFeed', () => {
         ))}
       </View>
     );
+  };
+});
+
+jest.mock('../components/home/SavedNotePolaroidReveal', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return function MockSavedNotePolaroidReveal(props: any) {
+    latestSavedNoteRevealProps = props;
+    return props.note ? <View testID="saved-note-polaroid-reveal" /> : null;
   };
 });
 
@@ -333,6 +345,8 @@ describe('HomeScreen doodle save flow', () => {
     mockRemindersEnabled = false;
     mockNoteText = 'A doodled note';
     mockNotes = [];
+    latestNotesFeedProps = null;
+    latestSavedNoteRevealProps = null;
     mockGetDoodleSnapshot.mockImplementation(() => ({
       enabled: true,
       strokes: [{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }],
@@ -490,6 +504,42 @@ describe('HomeScreen doodle save flow', () => {
 
       await waitFor(() => {
         expect(queryByText(createdInput.id)).not.toBeNull();
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('queues the saved note reveal for the feed once Home leaves the capture page', async () => {
+    jest.useFakeTimers();
+    mockRemindersEnabled = true;
+
+    try {
+      const { getByTestId } = renderHomeScreen();
+
+      fireEvent.press(getByTestId('capture-save-button'));
+
+      await waitFor(() => {
+        expect(mockCreateNote).toHaveBeenCalledTimes(1);
+      });
+
+      const createdInput = mockCreateNote.mock.calls[0]?.[0];
+
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      expect(latestSavedNoteRevealProps?.note?.id).toBe(createdInput.id);
+      expect(latestNotesFeedProps?.revealedNoteId).toBeNull();
+      expect(latestNotesFeedProps?.revealToken).toBe(0);
+
+      act(() => {
+        latestNotesFeedProps?.onCaptureVisibilityChange?.(false);
+      });
+
+      await waitFor(() => {
+        expect(latestNotesFeedProps?.revealedNoteId).toBe(createdInput.id);
+        expect(latestNotesFeedProps?.revealToken).toBeGreaterThan(0);
       });
     } finally {
       jest.useRealTimers();

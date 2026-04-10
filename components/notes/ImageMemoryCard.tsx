@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { STICKER_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { Layout, Shadows } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
@@ -49,39 +49,41 @@ function ImageMemoryCard({
   const normalizedCaption = caption?.trim() ?? '';
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card }]}>
-      <PhotoMediaView
-        imageUrl={imageUrl}
-        isLivePhoto={isLivePhoto}
-        pairedVideoUri={pairedVideoUri}
-        showLiveBadge={showLiveBadge}
-        style={styles.image}
-        imageStyle={styles.image}
-        enablePlayback
-      />
-      {stickerPlacements.length > 0 ? (
-        <View
-          pointerEvents={__DEV__ && isActive ? 'box-none' : 'none'}
-          style={styles.stickerOverlay}
-        >
-          <DynamicStickerCanvas
-            placements={stickerPlacements}
-            remoteBucket={remoteBucket}
-            isActive={isActive}
-            debugTiltOverride={debugTiltOverride}
-          />
-        </View>
-      ) : null}
-      {doodleStrokes.length > 0 ? (
-        <View pointerEvents="none" style={styles.doodleOverlay}>
-          <NoteDoodleCanvas strokes={doodleStrokes} />
-        </View>
-      ) : null}
-      <PhotoCaptionChip
-        caption={normalizedCaption}
-        color={colors.text}
-        isDark={isDark}
-      />
+    <View style={styles.cardShadow}>
+      <View style={[styles.cardSurface, { backgroundColor: colors.card }]}>
+        <PhotoMediaView
+          imageUrl={imageUrl}
+          isLivePhoto={isLivePhoto}
+          pairedVideoUri={pairedVideoUri}
+          showLiveBadge={showLiveBadge}
+          style={styles.image}
+          imageStyle={styles.image}
+          enablePlayback
+        />
+        {stickerPlacements.length > 0 ? (
+          <View
+            pointerEvents={__DEV__ && isActive ? 'box-none' : 'none'}
+            style={styles.stickerOverlay}
+          >
+            <DynamicStickerCanvas
+              placements={stickerPlacements}
+              remoteBucket={remoteBucket}
+              isActive={isActive}
+              debugTiltOverride={debugTiltOverride}
+            />
+          </View>
+        ) : null}
+        {doodleStrokes.length > 0 ? (
+          <View pointerEvents="none" style={styles.doodleOverlay}>
+            <NoteDoodleCanvas strokes={doodleStrokes} />
+          </View>
+        ) : null}
+        <PhotoCaptionChip
+          caption={normalizedCaption}
+          color={colors.text}
+          isDark={isDark}
+        />
+      </View>
     </View>
   );
 }
@@ -89,13 +91,18 @@ function ImageMemoryCard({
 export default memo(ImageMemoryCard);
 
 const styles = StyleSheet.create({
-  card: {
+  cardShadow: {
+    width: '100%',
+    height: '100%',
+    borderRadius: Layout.cardRadius,
+    borderCurve: 'continuous',
+    ...(Platform.OS === 'android' ? {} : Shadows.card),
+  },
+  cardSurface: {
+    flex: 1,
     borderRadius: Layout.cardRadius,
     borderCurve: 'continuous',
     overflow: 'hidden',
-    ...Shadows.card,
-    width: '100%',
-    height: '100%',
   },
   image: {
     width: '100%',
@@ -109,6 +116,5 @@ const styles = StyleSheet.create({
   stickerOverlay: {
     position: 'absolute',
     ...STICKER_ARTBOARD_FRAME,
-    opacity: 0.82,
   },
 });

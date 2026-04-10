@@ -23,7 +23,6 @@ import {
   hydrateStickerPlacements,
   type NoteStickerPlacement,
 } from '../../services/noteStickers';
-import { measureWindowRect, type MeasurableView, type WindowRect } from '../../utils/measureWindowRect';
 import {
   getStickerPinchScale,
   getStickerOutlineOffsets,
@@ -32,6 +31,17 @@ import {
 } from './stickerCanvasMetrics';
 import StampStickerArtwork from './StampStickerArtwork';
 import { getStickerPlacementFrame } from './stickerPlacementLayout';
+
+interface WindowRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type MeasurableView = View & {
+  measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void;
+};
 
 export interface StickerEntryAnimation {
   placementId: string;
@@ -69,6 +79,51 @@ function normalizePlacements(placements: NoteStickerPlacement[]) {
     ...placement,
     zIndex: index + 1,
   }));
+}
+
+function measureWindowRect(
+  node: MeasurableView | null,
+  fallbackSize?: { width: number; height: number }
+): Promise<WindowRect> {
+  return new Promise((resolve) => {
+    if (!node?.measureInWindow) {
+      resolve({
+        x: 0,
+        y: 0,
+        width: Math.max(1, fallbackSize?.width ?? 1),
+        height: Math.max(1, fallbackSize?.height ?? 1),
+      });
+      return;
+    }
+
+    let settled = false;
+    const finish = (rect: WindowRect) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve(rect);
+    };
+    const fallbackTimeout = setTimeout(() => {
+      finish({
+        x: 0,
+        y: 0,
+        width: Math.max(1, fallbackSize?.width ?? 1),
+        height: Math.max(1, fallbackSize?.height ?? 1),
+      });
+    }, 32);
+
+    node.measureInWindow((x, y, width, height) => {
+      clearTimeout(fallbackTimeout);
+      finish({
+        x,
+        y,
+        width: Math.max(1, width),
+        height: Math.max(1, height),
+      });
+    });
+  });
 }
 
 const StickerSelectionControls = memo(function StickerSelectionControls({
@@ -183,7 +238,6 @@ function EditableSticker({
     stampMetrics,
   } = placementFrame;
   const entryAnimationActive = Boolean(entryAnimation);
-  const selectionVisible = showSelection && !entryAnimationActive;
   const showOutline = activePlacement.renderMode !== 'stamp' && activePlacement.outlineEnabled !== false;
   const showOutlineToggle = activePlacement.renderMode !== 'stamp' && Boolean(onToggleSelectedPlacementOutline);
 
@@ -512,8 +566,8 @@ function EditableSticker({
       ]}
     >
       <View style={[styles.stickerTransformLayer, stickerTransformStyle]}>
-        {selectionVisible ? <View pointerEvents="none" style={styles.selectionRing} /> : null}
-        {selectionVisible ? (
+        {showSelection && !entryAnimationActive ? <View pointerEvents="none" style={styles.selectionRing} /> : null}
+        {showSelection && !entryAnimationActive ? (
           <StickerSelectionControls
             placementId={placement.id}
             motionLocked={activePlacement.motionLocked === true}
@@ -594,21 +648,9 @@ function NoteStickerCanvas({
 
   const renderedPlacements = editable ? placements : hydratedPlacements;
   const sortedPlacements = useMemo(() => sortStickerPlacements(renderedPlacements), [renderedPlacements]);
-  const activeEntryPlacementId = entryAnimation?.placementId ?? null;
 
   const measureCanvasInWindow = useCallback(async () => {
-    if (!activeEntryPlacementId) {
-      return null;
-    }
-
-    const nextRect = await measureWindowRect(
-      canvasRef.current as MeasurableView | null,
-      layout
-    );
-    if (!nextRect) {
-      return null;
-    }
-
+    const nextRect = await measureWindowRect(canvasRef.current as MeasurableView | null, layout);
     setCanvasWindowRect((current) => {
       if (
         current &&
@@ -623,13 +665,9 @@ function NoteStickerCanvas({
       return nextRect;
     });
     return nextRect;
-  }, [activeEntryPlacementId, layout]);
+  }, [layout]);
 
   const scheduleCanvasWindowMeasurement = useCallback(() => {
-    if (!activeEntryPlacementId) {
-      return;
-    }
-
     if (typeof requestAnimationFrame === 'function') {
       requestAnimationFrame(() => {
         void measureCanvasInWindow();
@@ -640,7 +678,7 @@ function NoteStickerCanvas({
     setTimeout(() => {
       void measureCanvasInWindow();
     }, 0);
-  }, [activeEntryPlacementId, measureCanvasInWindow]);
+  }, [measureCanvasInWindow]);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -657,23 +695,12 @@ function NoteStickerCanvas({
         height: nextHeight,
       };
     });
-  }, []);
-
-  useEffect(() => {
-    if (!activeEntryPlacementId) {
-      return;
-    }
-
-    setCanvasWindowRect(null);
-  }, [activeEntryPlacementId]);
-
-  useEffect(() => {
-    if (!activeEntryPlacementId) {
-      return;
-    }
-
     scheduleCanvasWindowMeasurement();
-  }, [activeEntryPlacementId, layout.height, layout.width, scheduleCanvasWindowMeasurement]);
+  }, [scheduleCanvasWindowMeasurement]);
+
+  useEffect(() => {
+    scheduleCanvasWindowMeasurement();
+  }, [entryAnimation?.placementId, layout.height, layout.width, scheduleCanvasWindowMeasurement]);
 
   const commitPlacement = useCallback((nextPlacement: NoteStickerPlacement) => {
     if (!onChangePlacements) {
@@ -711,12 +738,12 @@ function NoteStickerCanvas({
           showSelection={
             editable &&
             selectedPlacementId === placement.id &&
-            activeEntryPlacementId !== placement.id
+            entryAnimation?.placementId !== placement.id
           }
           interactiveRef={editableRef}
           stampShadowEnabled={stampShadowEnabled}
           canvasWindowRect={canvasWindowRect}
-          entryAnimation={activeEntryPlacementId === placement.id ? entryAnimation : null}
+          entryAnimation={entryAnimation?.placementId === placement.id ? entryAnimation : null}
           onChangeSelectedPlacementId={onChangeSelectedPlacementId}
           onCommit={commitPlacement}
           sizeMultiplier={sizeMultiplier}

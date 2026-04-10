@@ -1065,6 +1065,10 @@ private struct LocketWidgetEntryView: View {
         payload.noteType == "photo" ? 0.92 : 0.5
     }
 
+    private var noteStickerOverlayOpacity: Double {
+        1
+    }
+
     private var hasVisualOnlyTextContent: Bool {
         payload.noteType == "text" &&
         payload.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
@@ -1770,7 +1774,7 @@ private struct LocketWidgetEntryView: View {
             if shouldShowStickerOverlay {
                 LocketWidgetStickerOverlay(
                     placements: stickerPlacements,
-                    overlayOpacity: noteOverlayOpacity,
+                    overlayOpacity: noteStickerOverlayOpacity,
                     artboardInset: isExpanded ? 16 : 10,
                     minimumBaseSize: isExpanded ? 64 : 48,
                     baseSizeRatio: isExpanded ? 0.26 : 0.22

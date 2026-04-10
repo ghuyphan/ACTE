@@ -105,111 +105,120 @@ export function TextCaptureSurface({
   const usesLightCaptureChrome = colors.captureGlassColorScheme === 'light';
 
   return (
-    <LinearGradient
+    <View
       style={[
-        styles.textCard,
-        usesLightCaptureChrome ? styles.textCardLightContrast : null,
+        styles.textCardShadow,
+        usesLightCaptureChrome ? styles.textCardShadowLightContrast : null,
         {
-          borderColor: colors.captureCardBorder,
           shadowColor: usesLightCaptureChrome ? colors.text : '#000000',
         },
       ]}
-      colors={captureGradient}
-      start={{ x: 0.08, y: 0.06 }}
-      end={{ x: 0.94, y: 0.94 }}
     >
-      <PremiumNoteFinishOverlay
-        noteColor={noteColor}
-        animated
-        interactive={false}
-        previewMode="editor"
-      />
-
-      {ENABLE_PHOTO_STICKERS && (stickerPlacements.length > 0 || stickerModeEnabled) ? (
-        <View
-          pointerEvents={stickerModeEnabled ? 'box-none' : 'none'}
-          style={styles.textStickerCanvasLayer}
-        >
-          <NoteStickerCanvas
-            placements={stickerPlacements}
-            editable={stickerModeEnabled}
-            stampShadowEnabled={false}
-            onChangePlacements={handleChangeStickerPlacements}
-            onGestureActiveChange={onCanvasGestureActiveChange}
-            selectedPlacementId={selectedStickerId}
-            onChangeSelectedPlacementId={handleSelectSticker}
-            onPressCanvas={handlePressStickerCanvas}
-            entryAnimation={stickerEntryAnimation}
-            onEntryAnimationComplete={onStickerEntryAnimationComplete}
-            onToggleSelectedPlacementMotionLock={() =>
-              handleSelectedStickerAction('motion-lock-toggle')
-            }
-            onToggleSelectedPlacementOutline={() =>
-              handleSelectedStickerAction('outline-toggle')
-            }
-          />
-        </View>
-      ) : null}
-      {doodleStrokes.length > 0 || doodleModeEnabled ? (
-        <View
-          pointerEvents={doodleModeEnabled ? 'auto' : 'none'}
-          style={styles.doodleCanvasLayer}
-        >
-          <NoteDoodleCanvas
-            strokes={doodleStrokes}
-            editable={doodleModeEnabled}
-            activeColor={doodleColor}
-            onChangeStrokes={setTextDoodleStrokes}
-            onGestureActiveChange={onCanvasGestureActiveChange}
-          />
-        </View>
-      ) : null}
-
-      <View
-        pointerEvents={doodleModeEnabled || stickerModeEnabled ? 'none' : 'auto'}
-        style={styles.cardTextCenter}
+      <LinearGradient
+        style={[
+          styles.textCard,
+          usesLightCaptureChrome ? styles.textCardLightContrast : null,
+          {
+            borderColor: colors.captureCardBorder,
+          },
+        ]}
+        colors={captureGradient}
+        start={{ x: 0.08, y: 0.06 }}
+        end={{ x: 0.94, y: 0.94 }}
       >
-        {recentAutoEmoji ? (
-          <Reanimated.View
-            pointerEvents="none"
-            testID="capture-auto-emoji-pop"
-            style={[
-              styles.autoEmojiPopWrap,
-              {
-                backgroundColor: `${colors.captureGlassFill}F4`,
-                borderColor: colors.captureGlassBorder,
-                shadowColor: colors.primary,
-              },
-              animatedAutoEmojiPopStyle,
-            ]}
-          >
-            <Text testID="capture-auto-emoji-pop-label" style={styles.autoEmojiPopEmoji}>
-              {recentAutoEmoji.emoji}
-            </Text>
-            <Ionicons name="sparkles" size={13} color={colors.primary} />
-          </Reanimated.View>
-        ) : null}
-        <TextInput
-          ref={noteInputRef}
-          testID="capture-note-input"
-          style={[
-            styles.textInput,
-            { color: colors.captureCardText },
-            textInputDynamicStyle,
-          ]}
-          placeholder={activeTextPlaceholder}
-          placeholderTextColor={colors.captureCardPlaceholder}
-          multiline
-          value={noteText}
-          editable={!interactionsDisabled}
-          onChangeText={handleChangeNoteText}
-          onFocus={handleNoteInputFocus}
-          onBlur={handleNoteInputBlur}
-          maxLength={300}
-          selectionColor={colors.primary}
+        <PremiumNoteFinishOverlay
+          noteColor={noteColor}
+          animated
+          interactive={false}
+          previewMode="editor"
         />
-      </View>
-    </LinearGradient>
+
+        {ENABLE_PHOTO_STICKERS && (stickerPlacements.length > 0 || stickerModeEnabled) ? (
+          <View
+            pointerEvents={stickerModeEnabled ? 'box-none' : 'none'}
+            style={styles.textStickerCanvasLayer}
+          >
+            <NoteStickerCanvas
+              placements={stickerPlacements}
+              editable={stickerModeEnabled}
+              stampShadowEnabled={false}
+              onChangePlacements={handleChangeStickerPlacements}
+              onGestureActiveChange={onCanvasGestureActiveChange}
+              selectedPlacementId={selectedStickerId}
+              onChangeSelectedPlacementId={handleSelectSticker}
+              onPressCanvas={handlePressStickerCanvas}
+              entryAnimation={stickerEntryAnimation}
+              onEntryAnimationComplete={onStickerEntryAnimationComplete}
+              onToggleSelectedPlacementMotionLock={() =>
+                handleSelectedStickerAction('motion-lock-toggle')
+              }
+              onToggleSelectedPlacementOutline={() =>
+                handleSelectedStickerAction('outline-toggle')
+              }
+            />
+          </View>
+        ) : null}
+        {doodleStrokes.length > 0 || doodleModeEnabled ? (
+          <View
+            pointerEvents={doodleModeEnabled ? 'auto' : 'none'}
+            style={styles.doodleCanvasLayer}
+          >
+            <NoteDoodleCanvas
+              strokes={doodleStrokes}
+              editable={doodleModeEnabled}
+              activeColor={doodleColor}
+              onChangeStrokes={setTextDoodleStrokes}
+              onGestureActiveChange={onCanvasGestureActiveChange}
+            />
+          </View>
+        ) : null}
+
+        <View
+          pointerEvents={doodleModeEnabled || stickerModeEnabled ? 'none' : 'auto'}
+          style={styles.cardTextCenter}
+        >
+          {recentAutoEmoji ? (
+            <Reanimated.View
+              pointerEvents="none"
+              testID="capture-auto-emoji-pop"
+              style={[
+                styles.autoEmojiPopWrap,
+                {
+                  backgroundColor: `${colors.captureGlassFill}F4`,
+                  borderColor: colors.captureGlassBorder,
+                  shadowColor: colors.primary,
+                },
+                animatedAutoEmojiPopStyle,
+              ]}
+            >
+              <Text testID="capture-auto-emoji-pop-label" style={styles.autoEmojiPopEmoji}>
+                {recentAutoEmoji.emoji}
+              </Text>
+              <Ionicons name="sparkles" size={13} color={colors.primary} />
+            </Reanimated.View>
+          ) : null}
+          <TextInput
+            ref={noteInputRef}
+            testID="capture-note-input"
+            style={[
+              styles.textInput,
+              { color: colors.captureCardText },
+              textInputDynamicStyle,
+            ]}
+            placeholder={activeTextPlaceholder}
+            placeholderTextColor={colors.captureCardPlaceholder}
+            multiline
+            value={noteText}
+            editable={!interactionsDisabled}
+            onChangeText={handleChangeNoteText}
+            onFocus={handleNoteInputFocus}
+            onBlur={handleNoteInputBlur}
+            maxLength={300}
+            selectionColor={colors.primary}
+          />
+        </View>
+      </LinearGradient>
+    </View>
   );
 }
 
@@ -235,6 +244,8 @@ interface PhotoCaptureSurfaceProps {
   onCanvasGestureActiveChange: (active: boolean) => void;
   onChangeNoteText: (nextText: string) => void;
   onChangePhotoFilter: (filterId: PhotoFilterId) => void;
+  lockedPhotoFilterIds?: PhotoFilterId[];
+  onPressLockedPhotoFilter?: (filterId: PhotoFilterId) => void;
   onPhotoCaptionBlur: () => void;
   onPhotoCaptionFocus: () => void;
   onPhotoSurfaceReady: () => void;
@@ -276,6 +287,8 @@ export function PhotoCaptureSurface({
   onCanvasGestureActiveChange,
   onChangeNoteText,
   onChangePhotoFilter,
+  lockedPhotoFilterIds = [],
+  onPressLockedPhotoFilter,
   onPhotoCaptionBlur,
   onPhotoCaptionFocus,
   onPhotoSurfaceReady,
@@ -403,7 +416,9 @@ export function PhotoCaptureSurface({
           <PhotoFilterCarousel
             sourceUri={capturedPhoto}
             selectedFilterId={selectedPhotoFilterId}
+            lockedFilterIds={lockedPhotoFilterIds}
             onSelectFilter={onChangePhotoFilter}
+            onPressLockedFilter={onPressLockedPhotoFilter}
             t={t}
             colors={colors}
           />

@@ -127,6 +127,7 @@ export function useCaptureCardCameraController({
   const shouldRenderCameraPreview = shouldPrepareCameraPreview && Boolean(cameraDevice);
   const canShowLiveCameraPreview = shouldRenderCameraPreview && isCameraPreviewActive;
   const previousCanShowLiveCameraPreviewRef = useRef(canShowLiveCameraPreview);
+  const previousShouldRenderCameraPreviewRef = useRef(shouldRenderCameraPreview);
   const livePhotoProgressPath = useMemo(() => {
     const livePhotoCardProgressInset = livePhotoRingStrokeWidth / 2;
     const path = Skia.Path.Make();
@@ -384,12 +385,18 @@ export function useCaptureCardCameraController({
 
   useEffect(() => {
     const previousCanShowLiveCameraPreview = previousCanShowLiveCameraPreviewRef.current;
+    const previousShouldRenderCameraPreview = previousShouldRenderCameraPreviewRef.current;
     previousCanShowLiveCameraPreviewRef.current = canShowLiveCameraPreview;
+    previousShouldRenderCameraPreviewRef.current = shouldRenderCameraPreview;
 
-    if (canShowLiveCameraPreview && !previousCanShowLiveCameraPreview) {
+    if (
+      canShowLiveCameraPreview &&
+      !previousCanShowLiveCameraPreview &&
+      previousShouldRenderCameraPreview
+    ) {
       setCameraActivationNonce((current) => current + 1);
     }
-  }, [canShowLiveCameraPreview]);
+  }, [canShowLiveCameraPreview, shouldRenderCameraPreview]);
 
   useEffect(() => {
     if (!shouldRenderCameraPreview) {

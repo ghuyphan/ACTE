@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { memo } from 'react';
 import { ScrollView, View } from 'react-native';
 import type { TFunction } from 'i18next';
@@ -14,7 +15,9 @@ export type PhotoFilterCarouselProps = {
   embedded?: boolean;
   sourceUri: string;
   selectedFilterId: PhotoFilterId;
+  lockedFilterIds?: PhotoFilterId[];
   onSelectFilter: (filterId: PhotoFilterId) => void;
+  onPressLockedFilter?: (filterId: PhotoFilterId) => void;
   t: TFunction;
   colors: Pick<ThemeColors, 'captureGlassFill' | 'captureGlassBorder' | 'captureGlassText' | 'primary'>;
 };
@@ -41,7 +44,9 @@ export const PhotoFilterCarousel = memo(function PhotoFilterCarousel({
   embedded = false,
   sourceUri,
   selectedFilterId,
+  lockedFilterIds = [],
   onSelectFilter,
+  onPressLockedFilter,
   t,
   colors,
 }: PhotoFilterCarouselProps) {
@@ -55,6 +60,8 @@ export const PhotoFilterCarousel = memo(function PhotoFilterCarousel({
     >
       {PHOTO_FILTER_PRESETS.map((preset) => {
         const isSelected = preset.id === selectedFilterId;
+        const isLocked = lockedFilterIds.includes(preset.id);
+        const filterLabel = t(preset.labelKey, preset.defaultLabel);
 
         return (
           <CaptureAnimatedPressable
@@ -62,11 +69,21 @@ export const PhotoFilterCarousel = memo(function PhotoFilterCarousel({
             testID={`capture-filter-${preset.id}`}
             accessibilityRole="button"
             accessibilityState={{ selected: isSelected }}
-            accessibilityLabel={t(preset.labelKey, preset.defaultLabel)}
-            onPress={() => onSelectFilter(preset.id)}
+            accessibilityLabel={
+              isLocked ? `${filterLabel}, ${t('plus.badge', 'Plus')}` : filterLabel
+            }
+            onPress={() => {
+              if (isLocked) {
+                onPressLockedFilter?.(preset.id);
+                return;
+              }
+
+              onSelectFilter(preset.id);
+            }}
             pressedScale={0.985}
             style={[
               styles.photoFilterButton,
+              isLocked ? styles.photoFilterButtonLocked : null,
               {
                 borderColor: isSelected ? colors.primary : colors.captureGlassBorder,
                 backgroundColor: colors.captureGlassFill,
@@ -76,6 +93,11 @@ export const PhotoFilterCarousel = memo(function PhotoFilterCarousel({
             <View style={styles.photoFilterPreviewClip}>
               <PhotoFilterSwatch sourceUri={sourceUri} filterId={preset.id} />
             </View>
+            {isLocked ? (
+              <View style={styles.photoFilterLockBadge}>
+                <Ionicons name="lock-closed" size={10} color="#FFFDFC" />
+              </View>
+            ) : null}
           </CaptureAnimatedPressable>
         );
       })}

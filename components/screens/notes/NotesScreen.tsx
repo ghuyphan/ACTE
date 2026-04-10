@@ -742,7 +742,6 @@ const styles = StyleSheet.create({
     opacity: 0.48,
   },
   tileTextStickerOverlay: {
-    opacity: 0.48,
     zIndex: 0,
   },
   photoPlaceholder: {

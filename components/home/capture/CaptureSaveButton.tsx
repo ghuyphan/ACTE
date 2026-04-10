@@ -72,8 +72,8 @@ export function CaptureSaveButton({
           ) : (
             <Reanimated.View style={animatedSaveIconStyle}>
               <Ionicons
-                name={isSaveSuccessful ? 'checkmark-done' : 'checkmark'}
-                size={26}
+                name="paper-plane"
+                size={22}
                 color="#FFFFFF"
               />
             </Reanimated.View>

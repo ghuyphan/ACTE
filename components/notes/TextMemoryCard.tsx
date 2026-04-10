@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { memo, useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { STICKER_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { Layout, Shadows } from '../../constants/theme';
 import {
@@ -64,43 +64,45 @@ function TextMemoryCard({
     );
 
     return (
-        <View style={styles.card}>
-            <LinearGradient
-                colors={gradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.gradient}
-            >
-                <PremiumNoteFinishOverlay noteColor={noteColor} />
-                {stickerPlacements.length > 0 ? (
-                    <View
-                        pointerEvents={__DEV__ && isActive ? 'box-none' : 'none'}
-                        style={styles.stickerOverlay}
-                    >
-                        <DynamicStickerCanvas
-                            placements={stickerPlacements}
-                            remoteBucket={remoteBucket}
-                            isActive={isActive}
-                            motionVariant={stickerMotionVariant}
-                            debugTiltOverride={debugTiltOverride}
-                        />
-                    </View>
-                ) : null}
-                {doodleStrokes.length > 0 ? (
-                    <View pointerEvents="none" style={styles.doodleOverlay}>
-                        <NoteDoodleCanvas strokes={doodleStrokes} />
-                    </View>
-                ) : null}
-                <Text 
-                    style={[
-                        noteCardTextStyles.memoryText,
-                        getNoteCardTextSizeStyle(displayText),
-                    ]} 
-                    numberOfLines={8}
+        <View style={styles.cardShadow}>
+            <View style={styles.cardSurface}>
+                <LinearGradient
+                    colors={gradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.gradient}
                 >
-                    {displayText}
-                </Text>
-            </LinearGradient>
+                    <PremiumNoteFinishOverlay noteColor={noteColor} />
+                    {stickerPlacements.length > 0 ? (
+                        <View
+                            pointerEvents={__DEV__ && isActive ? 'box-none' : 'none'}
+                            style={styles.stickerOverlay}
+                        >
+                            <DynamicStickerCanvas
+                                placements={stickerPlacements}
+                                remoteBucket={remoteBucket}
+                                isActive={isActive}
+                                motionVariant={stickerMotionVariant}
+                                debugTiltOverride={debugTiltOverride}
+                            />
+                        </View>
+                    ) : null}
+                    {doodleStrokes.length > 0 ? (
+                        <View pointerEvents="none" style={styles.doodleOverlay}>
+                            <NoteDoodleCanvas strokes={doodleStrokes} />
+                        </View>
+                    ) : null}
+                    <Text 
+                        style={[
+                            noteCardTextStyles.memoryText,
+                            getNoteCardTextSizeStyle(displayText),
+                        ]} 
+                        numberOfLines={8}
+                    >
+                        {displayText}
+                    </Text>
+                </LinearGradient>
+            </View>
         </View>
     );
 }
@@ -108,13 +110,18 @@ function TextMemoryCard({
 export default memo(TextMemoryCard);
 
 const styles = StyleSheet.create({
-    card: {
+    cardShadow: {
+        width: '100%',
+        height: '100%',
+        borderRadius: Layout.cardRadius,
+        borderCurve: 'continuous',
+        ...(Platform.OS === 'android' ? {} : Shadows.card),
+    },
+    cardSurface: {
+        flex: 1,
         borderRadius: Layout.cardRadius,
         borderCurve: 'continuous',
         overflow: 'hidden',
-        width: '100%',
-        height: '100%',
-        ...Shadows.card,
     },
     gradient: {
         flex: 1,
@@ -130,7 +137,6 @@ const styles = StyleSheet.create({
     stickerOverlay: {
         position: 'absolute',
         ...STICKER_ARTBOARD_FRAME,
-        opacity: 0.5,
         zIndex: 0,
     },
 });

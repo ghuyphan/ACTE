@@ -25,6 +25,7 @@ import { Layout } from '../../constants/theme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { buildHomeFeedItems, type HomeFeedItem, getHomeFeedItemKey } from './feedItems';
 import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
+import { getPolaroidFeelConfig } from './polaroidFeel';
 
 const MAX_STAGGERED_ENTRANCE_INDEX = 2;
 const ENTRANCE_DELAY_MS = 24;
@@ -77,7 +78,9 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   const metaTranslateY = useSharedValue(10);
   const revealScale = useSharedValue(1);
   const revealTranslateY = useSharedValue(0);
+  const revealRotation = useSharedValue(0);
   const revealGlow = useSharedValue(0);
+  const revealFlash = useSharedValue(0);
   const lastRevealTokenRef = useRef<number | null>(null);
   const mountIndex = useRef(index).current;
   const sharedTransitionTag = `feed-note-card-${item.id}`;
@@ -104,38 +107,73 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
     }
 
     lastRevealTokenRef.current = revealToken;
-    revealScale.value = reduceMotionEnabled ? 0.99 : 0.965;
-    revealTranslateY.value = reduceMotionEnabled ? 4 : 12;
+    const feel = getPolaroidFeelConfig(reduceMotionEnabled);
+
+    revealScale.value = feel.initialScale;
+    revealTranslateY.value = reduceMotionEnabled ? 4 : 16;
+    revealRotation.value = feel.initialRotation;
     revealGlow.value = 0;
+    revealFlash.value = 0;
     revealScale.value = withSequence(
-      withTiming(1.02, {
-        duration: reduceMotionEnabled ? 90 : 190,
+      withTiming(feel.overshootScale, {
+        duration: Math.max(90, Math.round(feel.enterDuration * 0.74)),
         easing: Easing.out(Easing.cubic),
       }),
       withTiming(1, {
-        duration: reduceMotionEnabled ? 140 : 260,
+        duration: feel.settleDuration,
         easing: Easing.out(Easing.back(1.05)),
       })
     );
     revealTranslateY.value = withTiming(0, {
-      duration: reduceMotionEnabled ? 100 : 220,
+      duration: feel.enterDuration,
+      easing: Easing.out(Easing.cubic),
+    });
+    revealRotation.value = withTiming(feel.settleRotation, {
+      duration: feel.enterDuration,
       easing: Easing.out(Easing.cubic),
     });
     revealGlow.value = withSequence(
-      withTiming(1, {
-        duration: reduceMotionEnabled ? 90 : 180,
+      withTiming(feel.glowPeakOpacity, {
+        duration: Math.max(100, Math.round(feel.enterDuration * 0.82)),
         easing: Easing.out(Easing.cubic),
       }),
       withTiming(0, {
-        duration: reduceMotionEnabled ? 220 : 620,
+        duration: Math.max(220, Math.round(feel.holdDuration * 0.54)),
         easing: Easing.out(Easing.cubic),
       })
     );
-  }, [reduceMotionEnabled, revealGlow, revealScale, revealToken, revealTranslateY, shouldReveal]);
+    revealFlash.value = feel.flashPeakOpacity
+      ? withSequence(
+          withDelay(
+            Math.round(feel.enterDuration * 0.22),
+            withTiming(feel.flashPeakOpacity, {
+              duration: Math.max(70, Math.round(feel.enterDuration * 0.32)),
+              easing: Easing.out(Easing.cubic),
+            })
+          ),
+          withTiming(0, {
+            duration: Math.max(140, Math.round(feel.enterDuration * 0.54)),
+            easing: Easing.out(Easing.cubic),
+          })
+        )
+      : withTiming(0, { duration: 0 });
+  }, [
+    reduceMotionEnabled,
+    revealFlash,
+    revealGlow,
+    revealRotation,
+    revealScale,
+    revealToken,
+    revealTranslateY,
+    shouldReveal,
+  ]);
 
   const revealGlowAnimatedStyle = useAnimatedStyle(() => ({
     opacity: revealGlow.value,
     transform: [{ scale: revealScale.value }],
+  }));
+  const revealFlashAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: revealFlash.value,
   }));
   const pageAnimatedStyle = useAnimatedStyle(() => {
     const distanceFromFocus = Math.min(
@@ -163,9 +201,10 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   const noteCardAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
       { translateY: cardTranslateY.value + revealTranslateY.value },
+      { rotate: `${revealRotation.value}deg` },
       { scale: scale.value * revealScale.value },
     ],
-  }));
+  }), [cardTranslateY, revealRotation, revealScale, revealTranslateY, scale]);
   const noteMetaAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: metaTranslateY.value }],
   }));
@@ -194,6 +233,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
                 isActive={isActive}
               />
             </Animated.View>
+            <Animated.View pointerEvents="none" style={[styles.revealFlash, revealFlashAnimatedStyle]} />
           </Animated.View>
         </Animated.View>
       </View>
@@ -751,6 +791,7 @@ export default function NotesFeed({
       revealToken,
       screenActive,
       snapHeight,
+      scrollOffsetY,
       t,
       topInset,
     ]
@@ -887,5 +928,10 @@ const styles = StyleSheet.create({
   revealGlow: {
     ...StyleSheet.absoluteFill,
     borderRadius: Layout.cardRadius + 18,
+  },
+  revealFlash: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: Layout.cardRadius + 18,
+    backgroundColor: '#FFFFFF',
   },
 });

@@ -41,7 +41,6 @@ import {
 } from '../../services/noteAppearance';
 import { type NoteStickerPlacement } from '../../services/noteStickers';
 import type { PhotoFilterId } from '../../services/photoFilters';
-import type { WindowRect } from '../../utils/measureWindowRect';
 import type { DoodleStroke } from '../notes/NoteDoodleCanvas';
 import type { StickerEntryAnimation } from '../notes/NoteStickerCanvas';
 import AppSheet from '../sheets/AppSheet';
@@ -103,6 +102,13 @@ const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Drop a small memory here...',
 ];
 const LIGHT_CAPTURE_ACTIVE_ICON_COLOR = '#FFFFFF';
+
+interface WindowRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 function getCaptureTextPlaceholderVariants(t: TFunction) {
   const translated = t('capture.textPlaceholderVariants', {
@@ -177,6 +183,8 @@ interface CaptureCardProps {
   onOpenPhotoLibrary: () => void;
   selectedPhotoFilterId: PhotoFilterId;
   onChangePhotoFilter: (filterId: PhotoFilterId) => void;
+  lockedPhotoFilterIds?: PhotoFilterId[];
+  onPressLockedPhotoFilter?: (filterId: PhotoFilterId) => void;
   cameraRef: RefObject<Camera | null>;
   cameraDevice?: CameraDevice;
   isCameraPreviewActive: boolean;
@@ -238,6 +246,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onOpenPhotoLibrary,
   selectedPhotoFilterId,
   onChangePhotoFilter,
+  lockedPhotoFilterIds = [],
+  onPressLockedPhotoFilter = onChangePhotoFilter,
   cameraRef,
   cameraDevice,
   isCameraPreviewActive,
@@ -1071,6 +1081,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                       onCanvasGestureActiveChange={setCanvasGestureActive}
                       onChangeNoteText={onChangeNoteText}
                       onChangePhotoFilter={onChangePhotoFilter}
+                      lockedPhotoFilterIds={lockedPhotoFilterIds}
+                      onPressLockedPhotoFilter={onPressLockedPhotoFilter}
                       onPhotoCaptionBlur={handlePhotoCaptionBlur}
                       onPhotoCaptionFocus={handlePhotoCaptionFocus}
                       onPhotoSurfaceReady={handlePhotoSurfaceReady}

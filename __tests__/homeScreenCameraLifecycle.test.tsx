@@ -237,6 +237,12 @@ jest.mock('../components/home/NotesFeed', () => {
   };
 });
 
+jest.mock('../components/home/SavedNotePolaroidReveal', () => {
+  return function MockSavedNotePolaroidReveal() {
+    return null;
+  };
+});
+
 jest.mock('../components/home/SharedManageSheet', () => {
   const React = require('react');
   const { View } = require('react-native');
@@ -355,6 +361,15 @@ describe('HomeScreen camera lifecycle', () => {
     });
 
     expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
+  });
+
+  it('keeps photo import available on the free plan while locking premium filters', () => {
+    render(<HomeScreen />);
+
+    expect(mockCaptureCardProps?.libraryImportLocked).toBe(false);
+    expect(mockCaptureCardProps?.lockedPhotoFilterIds).toEqual(
+      expect.arrayContaining(['warm', 'cool', 'mono', 'vivid', 'vintage'])
+    );
   });
 
   it('locks capture scrolling while a text input session is active', () => {

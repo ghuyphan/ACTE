@@ -230,6 +230,12 @@ jest.mock('../components/home/NotesFeed', () => {
   };
 });
 
+jest.mock('../components/home/SavedNotePolaroidReveal', () => {
+  return function MockSavedNotePolaroidReveal() {
+    return null;
+  };
+});
+
 jest.mock('../components/home/SharedManageSheet', () => {
   const React = require('react');
   const { Pressable, Text, View } = require('react-native');

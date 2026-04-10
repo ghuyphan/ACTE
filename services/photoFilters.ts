@@ -1,4 +1,5 @@
 import { ImageFormat, Skia } from '@shopify/react-native-skia';
+import type { PlanTier } from '../constants/subscription';
 import { EncodingType, writeAsStringAsync } from '../utils/fileSystem';
 
 export type PhotoFilterId = 'original' | 'warm' | 'cool' | 'mono' | 'vivid' | 'vintage';
@@ -7,6 +8,7 @@ export type PhotoFilterPreset = {
   id: PhotoFilterId;
   labelKey: string;
   defaultLabel: string;
+  tier: PlanTier;
   matrix: number[];
 };
 
@@ -22,12 +24,14 @@ export const PHOTO_FILTER_PRESETS: PhotoFilterPreset[] = [
     id: 'original',
     labelKey: 'capture.filterOriginal',
     defaultLabel: 'Original',
+    tier: 'free',
     matrix: IDENTITY_MATRIX,
   },
   {
     id: 'warm',
     labelKey: 'capture.filterWarm',
     defaultLabel: 'Warm',
+    tier: 'plus',
     matrix: [
       1.08, 0.02, 0, 0, 0,
       0.01, 1.01, 0, 0, 0,
@@ -39,6 +43,7 @@ export const PHOTO_FILTER_PRESETS: PhotoFilterPreset[] = [
     id: 'cool',
     labelKey: 'capture.filterCool',
     defaultLabel: 'Cool',
+    tier: 'plus',
     matrix: [
       0.95, 0, 0.02, 0, 0,
       0, 1, 0.01, 0, 0,
@@ -50,6 +55,7 @@ export const PHOTO_FILTER_PRESETS: PhotoFilterPreset[] = [
     id: 'mono',
     labelKey: 'capture.filterMono',
     defaultLabel: 'Mono',
+    tier: 'plus',
     matrix: [
       0.2126, 0.7152, 0.0722, 0, 0,
       0.2126, 0.7152, 0.0722, 0, 0,
@@ -61,6 +67,7 @@ export const PHOTO_FILTER_PRESETS: PhotoFilterPreset[] = [
     id: 'vivid',
     labelKey: 'capture.filterVivid',
     defaultLabel: 'Vivid',
+    tier: 'plus',
     matrix: [
       1.12, -0.04, -0.04, 0, 0,
       -0.03, 1.12, -0.03, 0, 0,
@@ -72,6 +79,7 @@ export const PHOTO_FILTER_PRESETS: PhotoFilterPreset[] = [
     id: 'vintage',
     labelKey: 'capture.filterVintage',
     defaultLabel: 'Vintage',
+    tier: 'plus',
     matrix: [
       0.88, 0.08, 0.02, 0, 0,
       0.04, 0.9, 0.02, 0, 0,
@@ -80,6 +88,10 @@ export const PHOTO_FILTER_PRESETS: PhotoFilterPreset[] = [
     ],
   },
 ];
+
+export const PREMIUM_PHOTO_FILTER_IDS = PHOTO_FILTER_PRESETS
+  .filter((preset) => preset.tier === 'plus')
+  .map((preset) => preset.id);
 
 const PHOTO_FILTER_MAP = new Map(PHOTO_FILTER_PRESETS.map((preset) => [preset.id, preset]));
 
