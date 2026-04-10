@@ -37,6 +37,7 @@ const baseProps = {
     text: '#111111',
     secondaryText: '#666666',
     primary: '#0000ff',
+    danger: '#ff0000',
     border: '#dddddd',
     overlay: '#000000',
     shadow: '#000000',
@@ -63,6 +64,7 @@ const baseProps = {
   isDark: false,
   isDeleting: false,
   isEditing: false,
+  isSharedByMe: false,
   loading: true,
   locationInputRef: { current: null },
   locationSelection: undefined,
@@ -163,43 +165,22 @@ describe('NoteDetailSheetContent', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('only adds extra Android bottom padding while the keyboard is visible', () => {
+  it('uses the base Android scroll content style without extra keyboard padding hacks', () => {
     const originalPlatform = Platform.OS;
     Platform.OS = 'android';
 
     try {
-      const hidden = render(
+      const screen = render(
         <NoteDetailSheetContent
           {...baseProps}
           loading={false}
           note={note as any}
-          androidKeyboardVisible={false}
         />
       );
 
-      const hiddenScrollView = hidden.UNSAFE_getByType(ScrollView);
-      expect(hiddenScrollView.props.contentContainerStyle).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ paddingBottom: 60 }),
-          null,
-        ])
-      );
-
-      hidden.rerender(
-        <NoteDetailSheetContent
-          {...baseProps}
-          loading={false}
-          note={note as any}
-          androidKeyboardVisible
-        />
-      );
-
-      const visibleScrollView = hidden.UNSAFE_getByType(ScrollView);
-      expect(visibleScrollView.props.contentContainerStyle).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ paddingBottom: 60 }),
-          expect.objectContaining({ paddingBottom: 80 }),
-        ])
+      const scrollView = screen.UNSAFE_getByType(ScrollView);
+      expect(scrollView.props.contentContainerStyle).toEqual(
+        expect.objectContaining({ paddingBottom: 60 })
       );
     } finally {
       Platform.OS = originalPlatform;

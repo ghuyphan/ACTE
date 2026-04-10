@@ -22,6 +22,7 @@ const BOTTOM_TAB_CLEARANCE = 20;
 
 type SavedNotePolaroidRevealProps = {
   note: Note | null;
+  isSharedByMe?: boolean;
   revealToken: number;
   bottomTabInset?: number;
   colors: {
@@ -37,6 +38,7 @@ type SavedNotePolaroidRevealProps = {
 
 function SavedNotePolaroidReveal({
   note,
+  isSharedByMe = false,
   revealToken,
   bottomTabInset = 0,
   colors,
@@ -173,7 +175,13 @@ function SavedNotePolaroidReveal({
     <View pointerEvents="none" style={[styles.overlay, { paddingBottom: bottomPadding }]}>
       <Animated.View style={[styles.cardWrap, cardAnimatedStyle]}>
         <View style={styles.cardShadowWrap}>
-          <NoteMemoryCard note={note} colors={colors} t={t} cardSize={CARD_SIZE} />
+          <NoteMemoryCard
+            note={note}
+            colors={colors}
+            t={t}
+            cardSize={CARD_SIZE}
+            isSharedByMe={isSharedByMe}
+          />
           <Animated.View pointerEvents="none" style={[styles.flashOverlay, flashAnimatedStyle]} />
         </View>
       </Animated.View>

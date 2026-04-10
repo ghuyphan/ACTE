@@ -37,6 +37,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   colors,
   t,
   isActive,
+  isSharedByMe,
 }: {
   item: Note;
   index: number;
@@ -50,6 +51,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   };
   t: TFunction;
   isActive: boolean;
+  isSharedByMe: boolean;
 }) {
   return (
     <View>
@@ -59,6 +61,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
         colors={colors}
         t={t}
         isActive={isActive}
+        isSharedByMe={isSharedByMe}
       />
     </View>
   );
@@ -83,6 +86,7 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   prevProps.item.doodleStrokesJson === nextProps.item.doodleStrokesJson &&
   prevProps.item.hasStickers === nextProps.item.hasStickers &&
   prevProps.item.stickerPlacementsJson === nextProps.item.stickerPlacementsJson &&
+  prevProps.isSharedByMe === nextProps.isSharedByMe &&
   prevProps.isActive === nextProps.isActive
 ));
 
@@ -193,6 +197,7 @@ interface NotesFeedProps {
   items?: HomeFeedItem[];
   notes?: Note[];
   sharedPosts?: SharedPost[];
+  ownedSharedNoteIds?: string[];
   refreshing: boolean;
   onRefresh: () => void;
   topInset: number;
@@ -226,6 +231,7 @@ export default function NotesFeed({
   items,
   notes = [],
   sharedPosts = [],
+  ownedSharedNoteIds = [],
   refreshing,
   onRefresh,
   topInset,
@@ -252,6 +258,10 @@ export default function NotesFeed({
   const scrollOffsetY = useSharedValue(0);
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null);
   const [refreshGestureActive, setRefreshGestureActive] = useState(false);
+  const ownedSharedNoteIdSet = useMemo(
+    () => new Set(ownedSharedNoteIds),
+    [ownedSharedNoteIds]
+  );
   const listData = useMemo<HomeFeedItem[]>(
     () => items ?? buildHomeFeedItems(notes, sharedPosts),
     [items, notes, sharedPosts]
@@ -593,6 +603,7 @@ export default function NotesFeed({
               colors={colors}
               t={t}
               isActive={isActive}
+              isSharedByMe={ownedSharedNoteIdSet.has(item.note.id)}
             />
           </View>
         </View>
@@ -603,6 +614,7 @@ export default function NotesFeed({
       colors,
       onOpenNote,
       onOpenSharedPost,
+      ownedSharedNoteIdSet,
       screenActive,
       snapHeight,
       scrollOffsetY,

@@ -35,7 +35,10 @@ import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
 import { useAuth } from '../../hooks/useAuth';
 import { useCaptureFlow } from '../../hooks/useCaptureFlow';
 import { useFeedFocus } from '../../hooks/useFeedFocus';
-import { useGeofence } from '../../hooks/useGeofence';
+import {
+  useGeofence,
+  type ForegroundLocationRequestResult,
+} from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { showAppAlert } from '../../utils/alert';
 import { useNotesStore } from '../../hooks/useNotes';
@@ -145,6 +148,7 @@ export default function HomeScreen() {
   const [captureInteractionScrollLocked, setCaptureInteractionScrollLocked] = useState(false);
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
   const [isCaptureScrollSettled, setIsCaptureScrollSettled] = useState(true);
+  const [settledSharedButtonMode, setSettledSharedButtonMode] = useState<'manage' | 'filter'>('manage');
   const [isFriendsFilterEnabled, setIsFriendsFilterEnabled] = useState(false);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [noteColor, setNoteColor] = useState<string | null>(DEFAULT_NOTE_COLOR_ID);
@@ -225,6 +229,14 @@ export default function HomeScreen() {
     lastHandledOpenSharedManageAtRef.current = openSharedManageAt;
     presentSharedManageSheet();
   }, [openSharedManageAt, presentSharedManageSheet]);
+
+  useEffect(() => {
+    if (!isCaptureScrollSettled) {
+      return;
+    }
+
+    setSettledSharedButtonMode(isCaptureVisible ? 'manage' : 'filter');
+  }, [isCaptureScrollSettled, isCaptureVisible]);
 
   const openAuthForShare = useCallback(() => {
     router.push({
@@ -382,6 +394,24 @@ export default function HomeScreen() {
   const visibleSharedPosts = useMemo(
     () => friendPosts,
     [friendPosts]
+  );
+  const ownedSharedNoteIds = useMemo(
+    () => (
+      user
+        ? Array.from(
+            new Set(
+              sharedPosts
+                .filter((post) => post.authorUid === user.uid && typeof post.sourceNoteId === 'string' && post.sourceNoteId.trim().length > 0)
+                .map((post) => post.sourceNoteId as string)
+            )
+          )
+        : []
+    ),
+    [sharedPosts, user]
+  );
+  const savedNoteRevealIsSharedByMe = useMemo(
+    () => Boolean(savedNoteRevealNote && ownedSharedNoteIds.includes(savedNoteRevealNote.id)),
+    [ownedSharedNoteIds, savedNoteRevealNote]
   );
   const visibleFeedItems = useMemo(
     () => {
@@ -1210,40 +1240,45 @@ export default function HomeScreen() {
     [t]
   );
 
+  const getLocationUnavailableMessage = useCallback(
+    (locationResult: Pick<ForegroundLocationRequestResult, 'reason' | 'requiresSettings'>) => {
+      if (locationResult.requiresSettings) {
+        return t(
+          'capture.noLocationSettings',
+          'Noto needs location access to save a memory here. Open Settings to turn location access back on.'
+        );
+      }
+
+      if (locationResult.reason === 'permission_denied') {
+        return t(
+          'capture.noLocationPermission',
+          'Noto needs your location to save a memory here. Allow location access and try again.'
+        );
+      }
+
+      if (locationResult.reason === 'timeout') {
+        return t(
+          'capture.noLocationTimeout',
+          'Noto is still waiting for a GPS fix. Move to a clearer spot and try again in a moment.'
+        );
+      }
+
+      return t(
+        'capture.noLocation',
+        'Noto could not get your current location yet. Please try again in a moment.'
+      );
+    },
+    [t]
+  );
+
   const saveNote = useCallback(async () => {
     if (saveInFlightRef.current) {
       return;
     }
 
     saveInFlightRef.current = true;
-    let currentLocation = location;
-    let requiresSettings = false;
 
     try {
-      if (!currentLocation) {
-        const locationResult = await requestForegroundLocation();
-        currentLocation = locationResult.location;
-        requiresSettings = locationResult.requiresSettings;
-      }
-
-      if (!currentLocation) {
-        showDoneSheet(
-          'error',
-          t('capture.locationUnavailableTitle', 'Location unavailable'),
-          requiresSettings
-            ? t(
-                'capture.noLocationSettings',
-                'Noto needs location access to save a memory here. Open Settings to turn location access back on.'
-              )
-            : t(
-                'capture.noLocation',
-                'Noto could not get your current location yet. Please try again in a moment.'
-              ),
-          requiresSettings
-        );
-        return;
-      }
-
       const doodleSnapshot = captureCardRef.current?.getDoodleSnapshot() ?? {
         enabled: false,
         strokes: [],
@@ -1313,6 +1348,30 @@ export default function HomeScreen() {
       clearInlineSaveTimers();
       setSaveButtonState('saving');
       setSaving(true);
+
+      let currentLocation = location;
+      let locationResult: ForegroundLocationRequestResult = {
+        location: currentLocation,
+        requiresSettings: false,
+        reason: null,
+      };
+
+      if (!currentLocation) {
+        locationResult = await requestForegroundLocation();
+        currentLocation = locationResult.location;
+      }
+
+      if (!currentLocation) {
+        setSaveButtonState('idle');
+        showDoneSheet(
+          'error',
+          t('capture.locationUnavailableTitle', 'Location unavailable'),
+          getLocationUnavailableMessage(locationResult),
+          locationResult.requiresSettings
+        );
+        return;
+      }
+
       let destinationPath: string | null = null;
       let pairedVideoDestinationPath: string | null = null;
       const pendingNoteId = generateNoteId();
@@ -1459,6 +1518,7 @@ export default function HomeScreen() {
     requestForegroundLocation,
     clearInlineSaveTimers,
     completeInlineSaveFlow,
+    getLocationUnavailableMessage,
     showDoneSheet,
     t,
     captureMode,
@@ -1806,6 +1866,7 @@ export default function HomeScreen() {
           items={visibleFeedItems}
           notes={displayedNotes}
           sharedPosts={visibleSharedPosts}
+          ownedSharedNoteIds={ownedSharedNoteIds}
           refreshing={refreshing}
           onRefresh={() => {
             void onRefresh();
@@ -1830,6 +1891,7 @@ export default function HomeScreen() {
 
       <SavedNotePolaroidReveal
         note={savedNoteRevealNote}
+        isSharedByMe={savedNoteRevealIsSharedByMe}
         revealToken={savedNoteRevealToken}
         bottomTabInset={bottomTabVisualInset}
         colors={colors}
@@ -1850,8 +1912,8 @@ export default function HomeScreen() {
         showNotesButton
         onOpenShared={handleOpenSharedManage}
         onOpenNotes={handleOpenNotes}
-        sharedButtonMode={isCaptureVisible ? 'manage' : 'filter'}
-        sharedButtonActive={!isCaptureVisible && isFriendsFilterEnabled}
+        sharedButtonMode={settledSharedButtonMode}
+        sharedButtonActive={settledSharedButtonMode === 'filter' && isFriendsFilterEnabled}
         sharedFilterValue={isFriendsFilterEnabled ? 'friends' : 'all'}
         onChangeSharedFilter={(nextFilter) => {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

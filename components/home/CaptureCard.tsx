@@ -12,6 +12,7 @@ import {
   useState,
 } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -87,7 +88,10 @@ import { useCaptureCardCameraController } from './useCaptureCardCameraController
 import { useCaptureCardDecorations } from './useCaptureCardDecorations';
 import { useCaptureCardMetaSheets } from './useCaptureCardMetaSheets';
 import { useCaptureCardStickerFlow } from './useCaptureCardStickerFlow';
-import { useCaptureCardTextInputState } from './useCaptureCardTextInputState';
+import {
+  resolveCaptureKeyboardLift,
+  useCaptureCardTextInputState,
+} from './useCaptureCardTextInputState';
 
 const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Note about this place...',
@@ -291,6 +295,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const autoEmojiPopTranslateY = useSharedValue(12);
   const autoEmojiPopScale = useSharedValue(0.86);
   const captureCoverOpacity = useSharedValue(0);
+  const iosKeyboardLift = useSharedValue(0);
   const [isPhotoCaptionFocused, setIsPhotoCaptionFocused] = useState(false);
   const [pendingPhotoReveal, setPendingPhotoReveal] = useState(false);
   const [shouldRenderCaptureCover, setShouldRenderCaptureCover] = useState(false);
@@ -301,6 +306,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
   const noteInputRef = useRef<TextInput | null>(null);
+  const latestIosKeyboardScreenYRef = useRef(0);
+  const pendingIosKeyboardLiftTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
   const textInputDynamicStyle = useMemo(
     () =>
@@ -339,9 +346,81 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   });
 
   const isCaptureTextEntryFocused = isTextEntryFocused || isPhotoCaptionFocused;
+  const animateIosKeyboardLift = useCallback(
+    (nextLift: number, duration?: number) => {
+      const nextDuration = reduceMotionEnabled ? 0 : Math.max(120, Math.round(duration ?? 240));
+
+      iosKeyboardLift.value =
+        nextDuration === 0
+          ? nextLift
+          : withTiming(nextLift, {
+              duration: nextDuration,
+              easing: Easing.out(Easing.cubic),
+            });
+    },
+    [iosKeyboardLift, reduceMotionEnabled]
+  );
+
+  const updateIosKeyboardLift = useCallback(
+    (keyboardScreenY: number, duration?: number) => {
+      if (Platform.OS !== 'ios' || keyboardScreenY <= 0) {
+        animateIosKeyboardLift(0, duration);
+        return;
+      }
+
+      const inputNode = noteInputRef.current as
+        | (TextInput & {
+            measureInWindow?: (
+              callback: (x: number, y: number, width: number, height: number) => void
+            ) => void;
+          })
+        | null;
+
+      if (!inputNode?.measureInWindow) {
+        animateIosKeyboardLift(0, duration);
+        return;
+      }
+
+      inputNode.measureInWindow((_x, inputY, _width, inputHeight) => {
+        const nextLift = resolveCaptureKeyboardLift({
+          extraGap: captureMode === 'camera' && capturedPhoto ? 24 : 18,
+          inputHeight,
+          inputY,
+          keyboardScreenY,
+          minimumVisibleInputY: topInset + Layout.headerHeight + 22,
+        });
+
+        animateIosKeyboardLift(nextLift, duration);
+      });
+    },
+    [animateIosKeyboardLift, captureMode, capturedPhoto, topInset]
+  );
+
+  const scheduleIosKeyboardLiftUpdate = useCallback(() => {
+    if (Platform.OS !== 'ios') {
+      return;
+    }
+
+    if (pendingIosKeyboardLiftTimeoutRef.current != null) {
+      clearTimeout(pendingIosKeyboardLiftTimeoutRef.current);
+    }
+
+    pendingIosKeyboardLiftTimeoutRef.current = setTimeout(() => {
+      pendingIosKeyboardLiftTimeoutRef.current = null;
+
+      const keyboardScreenY = latestIosKeyboardScreenYRef.current;
+      if (keyboardScreenY <= 0) {
+        return;
+      }
+
+      updateIosKeyboardLift(keyboardScreenY);
+    }, 0);
+  }, [updateIosKeyboardLift]);
+
   const handlePhotoCaptionFocus = useCallback(() => {
     setIsPhotoCaptionFocused(true);
-  }, []);
+    scheduleIosKeyboardLiftUpdate();
+  }, [scheduleIosKeyboardLiftUpdate]);
   const handlePhotoCaptionBlur = useCallback(() => {
     setIsPhotoCaptionFocused(false);
   }, []);
@@ -381,6 +460,67 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     setIsPhotoCaptionFocused(false);
     dismissCaptureInputsState();
   }, [dismissCaptureInputsState]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios') {
+      return;
+    }
+
+    const handleKeyboardWillChangeFrame = (event: {
+      duration?: number;
+      endCoordinates?: { screenY?: number };
+    }) => {
+      latestIosKeyboardScreenYRef.current = event.endCoordinates?.screenY ?? 0;
+
+      if (!isCaptureTextEntryFocused) {
+        animateIosKeyboardLift(0, event.duration);
+        return;
+      }
+
+      updateIosKeyboardLift(latestIosKeyboardScreenYRef.current, event.duration);
+    };
+
+    const handleKeyboardWillHide = (event: { duration?: number }) => {
+      latestIosKeyboardScreenYRef.current = 0;
+      animateIosKeyboardLift(0, event.duration);
+    };
+
+    const keyboardWillChangeFrameSubscription = Keyboard.addListener(
+      'keyboardWillChangeFrame',
+      handleKeyboardWillChangeFrame
+    );
+    const keyboardWillHideSubscription = Keyboard.addListener(
+      'keyboardWillHide',
+      handleKeyboardWillHide
+    );
+
+    return () => {
+      keyboardWillChangeFrameSubscription.remove();
+      keyboardWillHideSubscription.remove();
+    };
+  }, [animateIosKeyboardLift, isCaptureTextEntryFocused, updateIosKeyboardLift]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios') {
+      return;
+    }
+
+    if (!isCaptureTextEntryFocused) {
+      animateIosKeyboardLift(0);
+      return;
+    }
+
+    scheduleIosKeyboardLiftUpdate();
+  }, [animateIosKeyboardLift, isCaptureTextEntryFocused, scheduleIosKeyboardLiftUpdate]);
+
+  useEffect(
+    () => () => {
+      if (pendingIosKeyboardLiftTimeoutRef.current != null) {
+        clearTimeout(pendingIosKeyboardLiftTimeoutRef.current);
+      }
+    },
+    []
+  );
 
   const {
     applyImportedSticker,
@@ -775,11 +915,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const captureAreaAnimatedStyle = useAnimatedStyle(
     () => ({
       transform: [
-        { translateY: captureTranslateY.value },
+        { translateY: captureTranslateY.value - iosKeyboardLift.value },
         { scale: captureScale.value },
       ],
     }),
-    [captureScale, captureTranslateY]
+    [captureScale, captureTranslateY, iosKeyboardLift]
   );
   const belowCardAnimatedStyle = useAnimatedStyle(
     () => ({
@@ -953,136 +1093,139 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           },
         ]}
       >
+        <Reanimated.View
+          testID="capture-card-area"
+          style={[
+            styles.captureArea,
+            disableAndroidCaptureTransforms ? null : captureAreaAnimatedStyle,
+          ]}
+          pointerEvents={
+            isSearching || interactionsDisabled || isCameraUiCapturing ? 'none' : 'auto'
+          }
+        >
+          {cameraUiStage === 'text' ? (
+            <TextCaptureSurface
+              activeTextPlaceholder={activeTextPlaceholder}
+              animatedAutoEmojiPopStyle={animatedAutoEmojiPopStyle}
+              colors={colors}
+              doodleColor={doodleColor}
+              doodleModeEnabled={doodleModeEnabled}
+              doodleStrokes={doodleStrokes}
+              handleChangeNoteText={handleChangeNoteText}
+              handleChangeStickerPlacements={handleChangeStickerPlacements}
+              handleNoteInputBlur={handleNoteInputBlur}
+              handleNoteInputFocus={() => {
+                handleNoteInputFocus();
+                scheduleIosKeyboardLiftUpdate();
+              }}
+              handlePressStickerCanvas={handlePressStickerCanvas}
+              handleSelectedStickerAction={handleSelectedStickerAction}
+              handleSelectSticker={handleSelectSticker}
+              interactionsDisabled={interactionsDisabled}
+              noteInputRef={noteInputRef}
+              noteColor={effectiveTextModeNoteColor}
+              noteText={noteText}
+              onCanvasGestureActiveChange={setCanvasGestureActive}
+              recentAutoEmoji={recentAutoEmoji}
+              selectedStickerId={selectedStickerId}
+              setTextDoodleStrokes={setTextDoodleStrokes}
+              stickerEntryAnimation={stickerEntryAnimation}
+              stickerModeEnabled={stickerModeEnabled}
+              stickerPlacements={stickerPlacements}
+              textInputDynamicStyle={textInputDynamicStyle}
+              onStickerEntryAnimationComplete={handleStickerEntryAnimationComplete}
+            />
+          ) : (
+            <View style={styles.cameraSurfaceStack}>
+              {shouldRenderLiveCameraSurface ? (
+                <View style={styles.cameraSurfaceLayer}>
+                  <LiveCameraSurface
+                    cameraDevice={cameraDevice}
+                    cameraFocusPoint={cameraFocusPoint}
+                    cameraFocusRingAnimatedStyle={cameraFocusRingAnimatedStyle}
+                    cameraKey={cameraKey}
+                    cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
+                    cameraPreviewZoom={cameraPreviewZoom}
+                    cameraRef={cameraRef}
+                    cameraTransitionMaskAnimatedStyle={cameraTransitionMaskAnimatedStyle}
+                    cameraUnavailableDetail={cameraUnavailableDetail}
+                    cameraZoomGesture={cameraZoomGesture}
+                    cameraZoomLabel={cameraZoomLabel}
+                    canShowLiveCameraPreview={canShowLiveCameraPreview}
+                    colors={colors}
+                    facing={facing}
+                    captureCoverAnimatedStyle={captureCoverAnimatedStyle}
+                    handleCameraInitialized={handleCameraInitialized}
+                    handleCameraPreviewStarted={handleCameraPreviewStarted}
+                    handleCameraRetryPress={handleCameraRetryPress}
+                    handleCameraStartupFailure={handleCameraStartupFailure}
+                    handleRequestCameraPermissionPress={handleRequestCameraPermissionPress}
+                    isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
+                    livePhotoProgressPath={livePhotoProgressPath}
+                    livePhotoRingProgress={livePhotoRingProgress}
+                    needsCameraPermission={needsCameraPermission}
+                    shouldRenderCameraPreview={shouldRenderCameraPreview}
+                    showCaptureCover={
+                      shouldRenderCaptureCover && !shouldRenderPhotoCaptureSurface
+                    }
+                    showCameraUnavailableState={showCameraUnavailableState}
+                    showCameraZoomBadge={showCameraZoomBadge}
+                    t={t}
+                  />
+                </View>
+              ) : null}
+              {shouldRenderPhotoCaptureSurface && capturedPhoto ? (
+                <View style={[styles.cameraSurfaceLayer, styles.cameraSurfaceTopLayer]}>
+                  <PhotoCaptureSurface
+                    capturedPairedVideo={capturedPairedVideo}
+                    capturedPhoto={capturedPhoto}
+                    captureCoverAnimatedStyle={captureCoverAnimatedStyle}
+                    colors={colors}
+                    dismissPastePrompt={dismissPastePrompt}
+                    doodleColor={doodleColor}
+                    doodleModeEnabled={doodleModeEnabled}
+                    doodleStrokes={doodleStrokes}
+                    handleChangeStickerPlacements={handleChangeStickerPlacements}
+                    handleConfirmPasteFromPrompt={handleConfirmPasteFromPrompt}
+                    handlePressStickerCanvas={handlePressStickerCanvas}
+                    handleSelectedStickerAction={handleSelectedStickerAction}
+                    handleSelectSticker={handleSelectSticker}
+                    handleShowCardPastePrompt={handleShowCardPastePrompt}
+                    hasLivePhotoMotion={hasLivePhotoMotion}
+                    interactionsDisabled={interactionsDisabled}
+                    noteInputRef={noteInputRef}
+                    noteText={noteText}
+                    onCanvasGestureActiveChange={setCanvasGestureActive}
+                    onChangeNoteText={onChangeNoteText}
+                    onChangePhotoFilter={onChangePhotoFilter}
+                    lockedPhotoFilterIds={lockedPhotoFilterIds}
+                    onPressLockedPhotoFilter={onPressLockedPhotoFilter}
+                    onPhotoCaptionBlur={handlePhotoCaptionBlur}
+                    onPhotoCaptionFocus={handlePhotoCaptionFocus}
+                    onPhotoSurfaceReady={handlePhotoSurfaceReady}
+                    pastePrompt={pastePrompt}
+                    selectedPhotoFilterId={selectedPhotoFilterId}
+                    selectedStickerId={selectedStickerId}
+                    setPhotoDoodleStrokes={setPhotoDoodleStrokes}
+                    showCaptureCover={shouldRenderCaptureCover}
+                    stickerEntryAnimation={stickerEntryAnimation}
+                    stickerModeEnabled={stickerModeEnabled}
+                    stickerPlacements={stickerPlacements}
+                    t={t}
+                    onStickerEntryAnimationComplete={handleStickerEntryAnimationComplete}
+                  />
+                </View>
+              ) : null}
+            </View>
+          )}
+        </Reanimated.View>
+
         <KeyboardAvoidingView
           enabled={shouldUseSimpleKeyboardAvoidance}
           behavior="padding"
           keyboardVerticalOffset={captureKeyboardVerticalOffset}
           style={styles.captureKeyboardAvoiding}
         >
-          <Reanimated.View
-            testID="capture-card-area"
-            style={[
-              styles.captureArea,
-              disableAndroidCaptureTransforms ? null : captureAreaAnimatedStyle,
-            ]}
-            pointerEvents={
-              isSearching || interactionsDisabled || isCameraUiCapturing ? 'none' : 'auto'
-            }
-          >
-            {cameraUiStage === 'text' ? (
-              <TextCaptureSurface
-                activeTextPlaceholder={activeTextPlaceholder}
-                animatedAutoEmojiPopStyle={animatedAutoEmojiPopStyle}
-                colors={colors}
-                doodleColor={doodleColor}
-                doodleModeEnabled={doodleModeEnabled}
-                doodleStrokes={doodleStrokes}
-                handleChangeNoteText={handleChangeNoteText}
-                handleChangeStickerPlacements={handleChangeStickerPlacements}
-                handleNoteInputBlur={handleNoteInputBlur}
-                handleNoteInputFocus={handleNoteInputFocus}
-                handlePressStickerCanvas={handlePressStickerCanvas}
-                handleSelectedStickerAction={handleSelectedStickerAction}
-                handleSelectSticker={handleSelectSticker}
-                interactionsDisabled={interactionsDisabled}
-                noteInputRef={noteInputRef}
-                noteColor={effectiveTextModeNoteColor}
-                noteText={noteText}
-                onCanvasGestureActiveChange={setCanvasGestureActive}
-                recentAutoEmoji={recentAutoEmoji}
-                selectedStickerId={selectedStickerId}
-                setTextDoodleStrokes={setTextDoodleStrokes}
-                stickerEntryAnimation={stickerEntryAnimation}
-                stickerModeEnabled={stickerModeEnabled}
-                stickerPlacements={stickerPlacements}
-                textInputDynamicStyle={textInputDynamicStyle}
-                onStickerEntryAnimationComplete={handleStickerEntryAnimationComplete}
-              />
-            ) : (
-              <View style={styles.cameraSurfaceStack}>
-                {shouldRenderLiveCameraSurface ? (
-                  <View style={styles.cameraSurfaceLayer}>
-                    <LiveCameraSurface
-                      cameraDevice={cameraDevice}
-                      cameraFocusPoint={cameraFocusPoint}
-                      cameraFocusRingAnimatedStyle={cameraFocusRingAnimatedStyle}
-                      cameraKey={cameraKey}
-                      cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
-                      cameraPreviewZoom={cameraPreviewZoom}
-                      cameraRef={cameraRef}
-                      cameraTransitionMaskAnimatedStyle={cameraTransitionMaskAnimatedStyle}
-                      cameraUnavailableDetail={cameraUnavailableDetail}
-                      cameraZoomGesture={cameraZoomGesture}
-                      cameraZoomLabel={cameraZoomLabel}
-                      canShowLiveCameraPreview={canShowLiveCameraPreview}
-                      colors={colors}
-                      facing={facing}
-                      captureCoverAnimatedStyle={captureCoverAnimatedStyle}
-                      handleCameraInitialized={handleCameraInitialized}
-                      handleCameraPreviewStarted={handleCameraPreviewStarted}
-                      handleCameraRetryPress={handleCameraRetryPress}
-                      handleCameraStartupFailure={handleCameraStartupFailure}
-                      handleRequestCameraPermissionPress={handleRequestCameraPermissionPress}
-                      isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
-                      livePhotoProgressPath={livePhotoProgressPath}
-                      livePhotoRingProgress={livePhotoRingProgress}
-                      needsCameraPermission={needsCameraPermission}
-                      shouldRenderCameraPreview={shouldRenderCameraPreview}
-                      showCaptureCover={
-                        shouldRenderCaptureCover && !shouldRenderPhotoCaptureSurface
-                      }
-                      showCameraUnavailableState={showCameraUnavailableState}
-                      showCameraZoomBadge={showCameraZoomBadge}
-                      t={t}
-                    />
-                  </View>
-                ) : null}
-                {shouldRenderPhotoCaptureSurface && capturedPhoto ? (
-                  <View style={[styles.cameraSurfaceLayer, styles.cameraSurfaceTopLayer]}>
-                    <PhotoCaptureSurface
-                      capturedPairedVideo={capturedPairedVideo}
-                      capturedPhoto={capturedPhoto}
-                      captureCoverAnimatedStyle={captureCoverAnimatedStyle}
-                      colors={colors}
-                      dismissPastePrompt={dismissPastePrompt}
-                      doodleColor={doodleColor}
-                      doodleModeEnabled={doodleModeEnabled}
-                      doodleStrokes={doodleStrokes}
-                      handleChangeStickerPlacements={handleChangeStickerPlacements}
-                      handleConfirmPasteFromPrompt={handleConfirmPasteFromPrompt}
-                      handlePressStickerCanvas={handlePressStickerCanvas}
-                      handleSelectedStickerAction={handleSelectedStickerAction}
-                      handleSelectSticker={handleSelectSticker}
-                      handleShowCardPastePrompt={handleShowCardPastePrompt}
-                      hasLivePhotoMotion={hasLivePhotoMotion}
-                      interactionsDisabled={interactionsDisabled}
-                      noteInputRef={noteInputRef}
-                      noteText={noteText}
-                      onCanvasGestureActiveChange={setCanvasGestureActive}
-                      onChangeNoteText={onChangeNoteText}
-                      onChangePhotoFilter={onChangePhotoFilter}
-                      lockedPhotoFilterIds={lockedPhotoFilterIds}
-                      onPressLockedPhotoFilter={onPressLockedPhotoFilter}
-                      onPhotoCaptionBlur={handlePhotoCaptionBlur}
-                      onPhotoCaptionFocus={handlePhotoCaptionFocus}
-                      onPhotoSurfaceReady={handlePhotoSurfaceReady}
-                      pastePrompt={pastePrompt}
-                      selectedPhotoFilterId={selectedPhotoFilterId}
-                      selectedStickerId={selectedStickerId}
-                      setPhotoDoodleStrokes={setPhotoDoodleStrokes}
-                      showCaptureCover={shouldRenderCaptureCover}
-                      stickerEntryAnimation={stickerEntryAnimation}
-                      stickerModeEnabled={stickerModeEnabled}
-                      stickerPlacements={stickerPlacements}
-                      t={t}
-                      onStickerEntryAnimationComplete={handleStickerEntryAnimationComplete}
-                    />
-                  </View>
-                ) : null}
-              </View>
-            )}
-          </Reanimated.View>
-
           <Reanimated.View
             style={[
               styles.belowCardSection,
@@ -1115,7 +1258,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     importingSticker={importingSticker}
                     inlinePasteLoading={inlinePasteLoading}
                     noteColor={effectiveTextModeNoteColor}
-                    selectedStickerId={selectedStickerId}
                     showInlinePasteButton={showInlinePasteButton}
                     stickerModeEnabled={stickerModeEnabled}
                     t={t}
@@ -1145,7 +1287,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     importingSticker={importingSticker}
                     onImportMotionClip={onImportMotionClip}
                     onRemoveMotionClip={onRemoveMotionClip}
-                    selectedStickerId={selectedStickerId}
                     stickerModeEnabled={stickerModeEnabled}
                     t={t}
                     textCardActiveIconColor={textCardActiveIconColor}

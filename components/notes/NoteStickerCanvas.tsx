@@ -63,6 +63,7 @@ interface NoteStickerCanvasProps {
   minimumBaseSize?: number;
   onToggleSelectedPlacementMotionLock?: (placementId: string) => void;
   onToggleSelectedPlacementOutline?: (placementId: string) => void;
+  onRemoveSelectedPlacement?: (placementId: string) => void;
   onGestureActiveChange?: (active: boolean) => void;
   entryAnimation?: StickerEntryAnimation | null;
   onEntryAnimationComplete?: (placementId: string) => void;
@@ -133,6 +134,7 @@ const StickerSelectionControls = memo(function StickerSelectionControls({
   showOutlineToggle,
   onToggleSelectedPlacementMotionLock,
   onToggleSelectedPlacementOutline,
+  onRemoveSelectedPlacement,
 }: {
   placementId: string;
   motionLocked: boolean;
@@ -140,6 +142,7 @@ const StickerSelectionControls = memo(function StickerSelectionControls({
   showOutlineToggle: boolean;
   onToggleSelectedPlacementMotionLock?: (placementId: string) => void;
   onToggleSelectedPlacementOutline?: (placementId: string) => void;
+  onRemoveSelectedPlacement?: (placementId: string) => void;
 }) {
   return (
     <View style={styles.selectionControls}>
@@ -177,6 +180,15 @@ const StickerSelectionControls = memo(function StickerSelectionControls({
           />
         </Pressable>
       ) : null}
+      <Pressable
+        testID={`note-sticker-remove-${placementId}`}
+        accessibilityRole="button"
+        accessibilityLabel="Delete sticker"
+        onPress={() => onRemoveSelectedPlacement?.(placementId)}
+        style={styles.selectionControlButton}
+      >
+        <Ionicons name="trash-outline" size={14} color="#FF8A80" />
+      </Pressable>
     </View>
   );
 });
@@ -196,6 +208,7 @@ function EditableSticker({
   onEntryAnimationComplete,
   onToggleSelectedPlacementMotionLock,
   onToggleSelectedPlacementOutline,
+  onRemoveSelectedPlacement,
   onGestureActiveChange,
 }: {
   placement: NoteStickerPlacement;
@@ -212,6 +225,7 @@ function EditableSticker({
   onEntryAnimationComplete?: (placementId: string) => void;
   onToggleSelectedPlacementMotionLock?: (placementId: string) => void;
   onToggleSelectedPlacementOutline?: (placementId: string) => void;
+  onRemoveSelectedPlacement?: (placementId: string) => void;
   onGestureActiveChange?: (active: boolean) => void;
 }) {
   const panStartRef = useRef<{ x: number; y: number }>({ x: placement.x, y: placement.y });
@@ -565,7 +579,10 @@ function EditableSticker({
         entryAnimatedStyle,
       ]}
     >
-      <View style={[styles.stickerTransformLayer, stickerTransformStyle]}>
+      <View
+        testID={`note-sticker-transform-${placement.id}`}
+        style={[styles.stickerTransformLayer, stickerTransformStyle]}
+      >
         {showSelection && !entryAnimationActive ? <View pointerEvents="none" style={styles.selectionRing} /> : null}
         {showSelection && !entryAnimationActive ? (
           <StickerSelectionControls
@@ -575,6 +592,7 @@ function EditableSticker({
             showOutlineToggle={showOutlineToggle}
             onToggleSelectedPlacementMotionLock={onToggleSelectedPlacementMotionLock}
             onToggleSelectedPlacementOutline={onToggleSelectedPlacementOutline}
+            onRemoveSelectedPlacement={onRemoveSelectedPlacement}
           />
         ) : null}
         <Pressable
@@ -613,6 +631,7 @@ function NoteStickerCanvas({
   minimumBaseSize = 68,
   onToggleSelectedPlacementMotionLock,
   onToggleSelectedPlacementOutline,
+  onRemoveSelectedPlacement,
   onGestureActiveChange,
   entryAnimation = null,
   onEntryAnimationComplete,
@@ -751,6 +770,7 @@ function NoteStickerCanvas({
           onEntryAnimationComplete={onEntryAnimationComplete}
           onToggleSelectedPlacementMotionLock={onToggleSelectedPlacementMotionLock}
           onToggleSelectedPlacementOutline={onToggleSelectedPlacementOutline}
+          onRemoveSelectedPlacement={onRemoveSelectedPlacement}
           onGestureActiveChange={onGestureActiveChange}
         />
       ))}

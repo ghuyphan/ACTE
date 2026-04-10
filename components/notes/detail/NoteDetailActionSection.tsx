@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Keyboard, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { AnimatedActionButton } from './NoteDetailPrimitives';
+import PolaroidCaptureButton from './PolaroidCaptureButton';
 
 type NoteDetailActionSectionProps = {
     colors: {
-        danger: string;
         secondaryText: string;
         success: string;
     };
@@ -15,7 +15,6 @@ type NoteDetailActionSectionProps = {
     isDeleting: boolean;
     isDownloadingPolaroid: boolean;
     isEditing: boolean;
-    onDelete: () => void;
     onDownloadPolaroid: () => void;
     onPrimaryPress: () => void;
     saveIconAnimatedStyle: any;
@@ -28,7 +27,6 @@ export default function NoteDetailActionSection({
     isDeleting,
     isDownloadingPolaroid,
     isEditing,
-    onDelete,
     onDownloadPolaroid,
     onPrimaryPress,
     saveIconAnimatedStyle,
@@ -69,23 +67,7 @@ export default function NoteDetailActionSection({
                 </View>
             </AnimatedActionButton>
 
-            {isEditing ? (
-                <AnimatedActionButton
-                    onPress={Keyboard.dismiss}
-                    testID="note-detail-dismiss-keyboard"
-                    style={[
-                        styles.actionBtn,
-                        {
-                            backgroundColor: actionButtonBackground,
-                            borderColor: actionButtonBorder,
-                        },
-                    ]}
-                    delay={140}
-                    disabled={isDeleting}
-                >
-                    <Ionicons name="chevron-down-outline" size={20} color={colors.secondaryText} />
-                </AnimatedActionButton>
-            ) : (
+            {!isEditing ? (
                 <AnimatedActionButton
                     onPress={onDownloadPolaroid}
                     testID="note-detail-download-polaroid"
@@ -99,25 +81,13 @@ export default function NoteDetailActionSection({
                     delay={140}
                     disabled={isDeleting || isDownloadingPolaroid}
                 >
-                    <Ionicons name="download-outline" size={20} color={colors.secondaryText} />
+                    <PolaroidCaptureButton
+                        color={colors.secondaryText}
+                        isCapturing={isDownloadingPolaroid}
+                    />
                 </AnimatedActionButton>
-            )}
+            ) : null}
 
-            <AnimatedActionButton
-                onPress={onDelete}
-                testID="note-detail-delete"
-                style={[
-                    styles.actionBtn,
-                    {
-                        backgroundColor: actionButtonBackground,
-                        borderColor: actionButtonBorder,
-                    },
-                ]}
-                delay={180}
-                disabled={isDeleting}
-            >
-                <Ionicons name="trash-outline" size={20} color={colors.danger} />
-            </AnimatedActionButton>
         </Animated.View>
     );
 }

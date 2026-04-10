@@ -2,7 +2,7 @@ import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-shee
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { type TFunction } from 'i18next';
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
     Dimensions,
     type LayoutChangeEvent,
@@ -61,7 +61,6 @@ const SheetTextInput = Platform.OS === 'android' ? BottomSheetTextInput : TextIn
 type InteractionFeedbackType = 'favorited' | 'unfavorited' | 'deleted';
 
 type NoteDetailSheetContentProps = {
-    androidKeyboardVisible?: boolean;
     cardAnimatedStyle: any;
     colors: any;
     contentInputRef: any;
@@ -83,6 +82,7 @@ type NoteDetailSheetContentProps = {
     isDark: boolean;
     isDeleting: boolean;
     isEditing: boolean;
+    isSharedByMe: boolean;
     loading: boolean;
     locationInputRef: any;
     locationSelection?: { start: number; end: number };
@@ -119,6 +119,7 @@ type NoteDetailSheetContentProps = {
     polaroidFallbackLocationLabel: string;
     showPolaroidCapture: boolean;
     previewOnlyNoteColorIds: string[];
+    richDecorationsReady: boolean;
     saveIconAnimatedStyle: any;
     scrollContainerRef: any;
     selectedStickerId: string | null;
@@ -155,7 +156,6 @@ function getFeedbackPresentation(t: TFunction, type: InteractionFeedbackType) {
 }
 
 export default function NoteDetailSheetContent({
-    androidKeyboardVisible = false,
     cardAnimatedStyle,
     colors,
     contentInputRef,
@@ -177,6 +177,7 @@ export default function NoteDetailSheetContent({
     isDark,
     isDeleting,
     isEditing,
+    isSharedByMe,
     loading,
     locationInputRef,
     locationSelection,
@@ -222,11 +223,82 @@ export default function NoteDetailSheetContent({
     polaroidCaptureRef,
     polaroidExporting,
     polaroidFallbackLocationLabel,
+    richDecorationsReady,
     onPolaroidAnimationFinished,
     onPolaroidCaptureReady,
     showPolaroidCapture,
 }: NoteDetailSheetContentProps) {
     const now = useRelativeTimeNow();
+    const showRichDecorations = Boolean(note) && (richDecorationsReady || isEditing);
+    const displayedCardText = note ? (isEditing ? editContent : note.content) : '';
+    const displayedNoteColor = note ? (isEditing ? editNoteColor : note.noteColor) : null;
+    const dateStr = useMemo(
+        () => (note ? formatNoteTimestamp(note.createdAt, 'detail', now) : ''),
+        [note, now]
+    );
+    const gradient = useMemo(
+        () => (
+            note
+                ? getTextNoteCardGradient({
+                    text: displayedCardText,
+                    noteId: note.id,
+                    emoji: note.moodEmoji,
+                    noteColor: displayedNoteColor,
+                })
+                : []
+        ),
+        [displayedCardText, displayedNoteColor, note]
+    );
+    const textStickerMotionVariant = useMemo(
+        () => getNoteColorStickerMotion(displayedNoteColor) ?? getGradientStickerMotionVariant(gradient),
+        [displayedNoteColor, gradient]
+    );
+    const displayedDoodleStrokes = useMemo(
+        () => (
+            note
+                ? (
+                    isEditing
+                        ? editDoodleStrokes
+                        : showRichDecorations
+                            ? parseNoteDoodleStrokes(note.doodleStrokesJson)
+                            : []
+                )
+                : []
+        ),
+        [editDoodleStrokes, isEditing, note, showRichDecorations]
+    );
+    const displayedStickerPlacements = useMemo(
+        () => (
+            note
+                ? (
+                    isEditing
+                        ? editStickerPlacements
+                        : showRichDecorations
+                            ? parseNoteStickerPlacements(note.stickerPlacementsJson)
+                            : []
+                )
+                : []
+        ),
+        [editStickerPlacements, isEditing, note, showRichDecorations]
+    );
+    const displayedPhotoCaption = useMemo(
+        () => (
+            note?.type === 'photo'
+                ? (isEditing ? editContent : note.caption ?? '')
+                : ''
+        ),
+        [editContent, isEditing, note]
+    );
+    const displayedText = useMemo(
+        () => (
+            note?.type === 'text'
+                ? formatNoteTextWithEmoji(displayedCardText, note.moodEmoji)
+                : ''
+        ),
+        [displayedCardText, note]
+    );
+    const notePhotoUri = useMemo(() => (note ? getNotePhotoUri(note) : ''), [note]);
+    const notePairedVideoUri = useMemo(() => (note ? getNotePairedVideoUri(note) : null), [note]);
 
     if (loading) {
         return (
@@ -251,38 +323,14 @@ export default function NoteDetailSheetContent({
         );
     }
 
-    const dateStr = formatNoteTimestamp(note.createdAt, 'detail', now);
-    const gradient = getTextNoteCardGradient({
-        text: isEditing ? editContent : note.content,
-        noteId: note.id,
-        emoji: note.moodEmoji,
-        noteColor: isEditing ? editNoteColor : note.noteColor,
-    });
-    const textStickerMotionVariant =
-        getNoteColorStickerMotion(isEditing ? editNoteColor : note.noteColor) ??
-        getGradientStickerMotionVariant(gradient);
-    const displayedDoodleStrokes = isEditing ? editDoodleStrokes : parseNoteDoodleStrokes(note.doodleStrokesJson);
-    const displayedStickerPlacements = isEditing ? editStickerPlacements : parseNoteStickerPlacements(note.stickerPlacementsJson);
-    const selectedStickerPlacement =
-        displayedStickerPlacements.find((placement) => placement.id === selectedStickerId) ?? null;
-    const selectedStickerIsStamp = selectedStickerPlacement?.renderMode === 'stamp';
-    const selectedStickerOutlineEnabled = selectedStickerPlacement?.outlineEnabled !== false;
-    const selectedStickerMotionLocked = selectedStickerPlacement?.motionLocked === true;
-    const displayedPhotoCaption = note.type === 'photo'
-        ? (isEditing ? editContent : note.caption ?? '')
-        : '';
-    const displayedText = note.type === 'text'
-        ? formatNoteTextWithEmoji(isEditing ? editContent : note.content, note.moodEmoji)
-        : '';
-
     const cardContent = note.type === 'photo' ? (
         <View style={styles.photoContainer}>
             <View style={styles.photoCard}>
                 <View style={styles.photo}>
                     <PhotoMediaView
-                        imageUrl={getNotePhotoUri(note)}
+                        imageUrl={notePhotoUri}
                         isLivePhoto={note.isLivePhoto}
-                        pairedVideoUri={getNotePairedVideoUri(note)}
+                        pairedVideoUri={notePairedVideoUri}
                         showLiveBadge={false}
                         style={styles.photo}
                         imageStyle={styles.photo}
@@ -297,7 +345,7 @@ export default function NoteDetailSheetContent({
                         delayLongPress={320}
                     />
                 ) : null}
-                {displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled) ? (
+                {showRichDecorations && (displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled)) ? (
                     <View
                         pointerEvents={isEditing && stickerModeEnabled ? 'box-none' : 'none'}
                         style={styles.stickerOverlay}
@@ -310,6 +358,21 @@ export default function NoteDetailSheetContent({
                                 selectedPlacementId={selectedStickerId}
                                 onChangeSelectedPlacementId={setSelectedStickerId}
                                 onPressCanvas={onPressStickerCanvas}
+                                onToggleSelectedPlacementMotionLock={(placementId) => {
+                                    if (placementId === selectedStickerId) {
+                                        onToggleStickerMotionLock();
+                                    }
+                                }}
+                                onToggleSelectedPlacementOutline={(placementId) => {
+                                    if (placementId === selectedStickerId) {
+                                        onStickerAction('outline-toggle');
+                                    }
+                                }}
+                                onRemoveSelectedPlacement={(placementId) => {
+                                    if (placementId === selectedStickerId) {
+                                        onStickerAction('remove');
+                                    }
+                                }}
                             />
                         ) : (
                             <DynamicStickerCanvas
@@ -319,7 +382,7 @@ export default function NoteDetailSheetContent({
                         )}
                     </View>
                 ) : null}
-                {displayedDoodleStrokes.length > 0 || isEditing ? (
+                {showRichDecorations && (displayedDoodleStrokes.length > 0 || isEditing) ? (
                     <View
                         pointerEvents={isEditing && doodleModeEnabled ? 'auto' : 'none'}
                         style={[
@@ -339,25 +402,17 @@ export default function NoteDetailSheetContent({
                 ) : null}
                 <NoteDetailEditToolbar
                     colors={colors}
-                    displayedStickerPlacementsCount={displayedStickerPlacements.length}
                     doodleModeEnabled={doodleModeEnabled}
                     editDoodleStrokesCount={editDoodleStrokes.length}
                     importingSticker={importingSticker}
                     isEditing={isEditing}
                     onClearDoodle={onClearDoodle}
                     onShowStickerSourceOptions={onShowStickerSourceOptions}
-                    onStickerAction={onStickerAction}
                     onToggleDoodleMode={onToggleDoodleMode}
                     onToggleStickerMode={onToggleStickerMode}
-                    onToggleStickerMotionLock={onToggleStickerMotionLock}
                     onUndoDoodle={onUndoDoodle}
-                    selectedStickerId={selectedStickerId}
-                    selectedStickerIsStamp={selectedStickerIsStamp}
-                    selectedStickerMotionLocked={selectedStickerMotionLocked}
-                    selectedStickerOutlineEnabled={selectedStickerOutlineEnabled}
                     stickerModeEnabled={stickerModeEnabled}
                     stickersEnabled={ENABLE_PHOTO_STICKERS}
-                    t={t}
                 />
                 {!isEditing ? (
                     <NoteDetailStatusBadges
@@ -368,6 +423,7 @@ export default function NoteDetailSheetContent({
                         favoriteOutlineIconStyle={favoriteOutlineIconStyle}
                         inactiveColor={colors.secondaryText}
                         isLivePhoto={Boolean(note.isLivePhoto)}
+                        isSharedByMe={isSharedByMe}
                         onToggleFavorite={onToggleFavorite}
                     />
                 ) : null}
@@ -452,13 +508,15 @@ export default function NoteDetailSheetContent({
                 end={{ x: 1, y: 1 }}
                 style={styles.textGradient}
             >
-                <PremiumNoteFinishOverlay
-                    noteColor={isEditing ? editNoteColor : note.noteColor}
-                    animated
-                    interactive={!isEditing}
-                    previewMode={isEditing ? 'editor' : 'saved'}
-                    strength={isEditing ? 1 : 0.55}
-                />
+                {showRichDecorations ? (
+                    <PremiumNoteFinishOverlay
+                        noteColor={isEditing ? editNoteColor : note.noteColor}
+                        animated
+                        interactive={!isEditing}
+                        previewMode={isEditing ? 'editor' : 'saved'}
+                        strength={isEditing ? 1 : 0.55}
+                    />
+                ) : null}
                 {isEditing && ENABLE_PHOTO_STICKERS ? (
                     <Pressable
                         testID="note-detail-card-paste-surface"
@@ -467,7 +525,7 @@ export default function NoteDetailSheetContent({
                         delayLongPress={320}
                     />
                 ) : null}
-                {displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled) ? (
+                {showRichDecorations && (displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled)) ? (
                     <View
                         pointerEvents={isEditing && stickerModeEnabled ? 'box-none' : 'none'}
                         style={[
@@ -484,13 +542,28 @@ export default function NoteDetailSheetContent({
                                 selectedPlacementId={selectedStickerId}
                                 onChangeSelectedPlacementId={setSelectedStickerId}
                                 onPressCanvas={onPressStickerCanvas}
+                                onToggleSelectedPlacementMotionLock={(placementId) => {
+                                    if (placementId === selectedStickerId) {
+                                        onToggleStickerMotionLock();
+                                    }
+                                }}
+                                onToggleSelectedPlacementOutline={(placementId) => {
+                                    if (placementId === selectedStickerId) {
+                                        onStickerAction('outline-toggle');
+                                    }
+                                }}
+                                onRemoveSelectedPlacement={(placementId) => {
+                                    if (placementId === selectedStickerId) {
+                                        onStickerAction('remove');
+                                    }
+                                }}
                             />
                         ) : (
                             <DynamicStickerCanvas placements={displayedStickerPlacements} />
                         )}
                     </View>
                 ) : null}
-                {displayedDoodleStrokes.length > 0 || isEditing ? (
+                {showRichDecorations && (displayedDoodleStrokes.length > 0 || isEditing) ? (
                     <View
                         pointerEvents={isEditing && doodleModeEnabled ? 'auto' : 'none'}
                         style={[
@@ -509,25 +582,17 @@ export default function NoteDetailSheetContent({
                 ) : null}
                 <NoteDetailEditToolbar
                     colors={colors}
-                    displayedStickerPlacementsCount={displayedStickerPlacements.length}
                     doodleModeEnabled={doodleModeEnabled}
                     editDoodleStrokesCount={editDoodleStrokes.length}
                     importingSticker={importingSticker}
                     isEditing={isEditing}
                     onClearDoodle={onClearDoodle}
                     onShowStickerSourceOptions={onShowStickerSourceOptions}
-                    onStickerAction={onStickerAction}
                     onToggleDoodleMode={onToggleDoodleMode}
                     onToggleStickerMode={onToggleStickerMode}
-                    onToggleStickerMotionLock={onToggleStickerMotionLock}
                     onUndoDoodle={onUndoDoodle}
-                    selectedStickerId={selectedStickerId}
-                    selectedStickerIsStamp={selectedStickerIsStamp}
-                    selectedStickerMotionLocked={selectedStickerMotionLocked}
-                    selectedStickerOutlineEnabled={selectedStickerOutlineEnabled}
                     stickerModeEnabled={stickerModeEnabled}
                     stickersEnabled={ENABLE_PHOTO_STICKERS}
-                    t={t}
                 />
                 {!isEditing ? (
                     <NoteDetailStatusBadges
@@ -538,6 +603,7 @@ export default function NoteDetailSheetContent({
                         favoriteOutlineIconStyle={favoriteOutlineIconStyle}
                         inactiveColor={colors.secondaryText}
                         isLivePhoto={false}
+                        isSharedByMe={isSharedByMe}
                         onToggleFavorite={onToggleFavorite}
                     />
                 ) : null}
@@ -619,7 +685,6 @@ export default function NoteDetailSheetContent({
                 isDeleting={isDeleting}
                 isDownloadingPolaroid={polaroidExporting}
                 isEditing={isEditing}
-                onDelete={onDelete}
                 onDownloadPolaroid={onDownloadPolaroid}
                 onPrimaryPress={isEditing ? onSaveEdit : onStartEditing}
                 saveIconAnimatedStyle={saveIconAnimatedStyle}
@@ -650,6 +715,29 @@ export default function NoteDetailSheetContent({
                     t={t}
                 />
             </Animated.View>
+
+            {!isEditing ? (
+                <Pressable
+                    testID="note-detail-delete"
+                    accessibilityRole="button"
+                    accessibilityLabel={t('noteDetail.deleteTitle', 'Delete Note')}
+                    onPress={onDelete}
+                    disabled={isDeleting}
+                    style={[
+                        styles.deleteButton,
+                        {
+                            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+                            borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(43,38,33,0.12)',
+                        },
+                        isDeleting ? styles.deleteButtonDisabled : null,
+                    ]}
+                >
+                    <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                    <Text style={[styles.deleteButtonLabel, { color: colors.danger }]}>
+                        {t('noteDetail.deleteTitle', 'Delete Note')}
+                    </Text>
+                </Pressable>
+            ) : null}
         </>
     );
 
@@ -680,36 +768,42 @@ export default function NoteDetailSheetContent({
                 successLabel={t('noteDetail.polaroidSaved', 'Saved to your photos')}
                 onFinished={onPolaroidAnimationFinished}
             />
-            {Platform.OS === 'android' ? (
-                <BottomSheetScrollView
-                    ref={scrollContainerRef}
-                    contentContainerStyle={[
-                        styles.scrollContent,
-                        androidKeyboardVisible ? styles.scrollContentAndroidKeyboardVisible : null,
-                    ]}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    {scrollContent}
-                </BottomSheetScrollView>
-            ) : (
-                <ScrollView
-                    ref={scrollContainerRef}
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                    automaticallyAdjustKeyboardInsets
-                    keyboardDismissMode="interactive"
-                    keyboardShouldPersistTaps="handled"
-                >
-                    {scrollContent}
-                </ScrollView>
-            )}
+            <View style={styles.scrollClip}>
+                {Platform.OS === 'android' ? (
+                    <BottomSheetScrollView
+                        ref={scrollContainerRef}
+                        contentContainerStyle={styles.scrollContent}
+                        showsVerticalScrollIndicator={false}
+                        keyboardDismissMode="interactive"
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        {scrollContent}
+                    </BottomSheetScrollView>
+                ) : (
+                    <ScrollView
+                        ref={scrollContainerRef}
+                        contentContainerStyle={styles.scrollContent}
+                        showsVerticalScrollIndicator={false}
+                        automaticallyAdjustKeyboardInsets
+                        keyboardDismissMode="interactive"
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        {scrollContent}
+                    </ScrollView>
+                )}
+            </View>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     sheetSurface: {
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        overflow: 'visible',
+        position: 'relative',
+    },
+    scrollClip: {
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         overflow: 'hidden',
@@ -725,8 +819,23 @@ const styles = StyleSheet.create({
         paddingTop: 16,
         paddingBottom: 60,
     },
-    scrollContentAndroidKeyboardVisible: {
-        paddingBottom: 80,
+    deleteButton: {
+        marginTop: 20,
+        minHeight: 60,
+        borderRadius: 22,
+        borderWidth: StyleSheet.hairlineWidth,
+        paddingHorizontal: 18,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+    },
+    deleteButtonDisabled: {
+        opacity: 0.55,
+    },
+    deleteButtonLabel: {
+        fontSize: 15,
+        fontWeight: '700',
     },
     feedbackOverlay: {
         position: 'absolute',

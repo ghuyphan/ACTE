@@ -1,6 +1,6 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import { SharedPostMemoryCard } from '../components/home/MemoryCardPrimitives';
+import { NoteMemoryCard, SharedPostMemoryCard } from '../components/home/MemoryCardPrimitives';
 
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: ({ name }: { name: string }) => {
@@ -29,6 +29,30 @@ jest.mock('../components/home/SharedPostCardVisual', () => {
     const React = require('react');
     const { View } = require('react-native');
     return <View testID="shared-post-card-visual" />;
+  };
+});
+
+jest.mock('../components/notes/ImageMemoryCard', () => {
+  return function MockImageMemoryCard() {
+    const React = require('react');
+    const { View } = require('react-native');
+    return <View testID="image-memory-card" />;
+  };
+});
+
+jest.mock('../components/notes/TextMemoryCard', () => {
+  return function MockTextMemoryCard() {
+    const React = require('react');
+    const { View } = require('react-native');
+    return <View testID="text-memory-card" />;
+  };
+});
+
+jest.mock('../components/ui/LivePhotoIcon', () => {
+  return function MockLivePhotoIcon() {
+    const React = require('react');
+    const { Text } = require('react-native');
+    return <Text>live-photo-icon</Text>;
   };
 });
 
@@ -85,5 +109,103 @@ describe('SharedPostMemoryCard', () => {
     expect(getByText('Shared')).toBeTruthy();
     expect(getByText('2h')).toBeTruthy();
     expect(queryByText(/Apr\s+10/i)).toBeNull();
+  });
+});
+
+describe('NoteMemoryCard', () => {
+  const colors = {
+    primary: '#FFC107',
+    text: '#1C1C1E',
+    secondaryText: '#8E8E93',
+    danger: '#FF3B30',
+    card: '#FFFFFF',
+  };
+
+  it('shows the shared badge for a text note shared by me', () => {
+    const note = {
+      id: 'note-1',
+      type: 'text',
+      content: 'Shared memory',
+      caption: null,
+      photoLocalUri: null,
+      photoSyncedLocalUri: null,
+      photoRemoteBase64: null,
+      isLivePhoto: false,
+      pairedVideoLocalUri: null,
+      pairedVideoSyncedLocalUri: null,
+      pairedVideoRemotePath: null,
+      locationName: 'District 3',
+      promptId: null,
+      promptTextSnapshot: null,
+      promptAnswer: null,
+      moodEmoji: null,
+      noteColor: null,
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: false,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      createdAt: '2026-04-10T02:00:00.000Z',
+      updatedAt: null,
+    } as any;
+
+    const { getByTestId, queryByTestId } = render(
+      <NoteMemoryCard
+        note={note}
+        colors={colors}
+        t={(key: string, fallback?: string) => fallback ?? key}
+        isSharedByMe
+      />
+    );
+
+    expect(getByTestId('note-memory-shared-badge')).toBeTruthy();
+    expect(queryByTestId('note-memory-live-badge')).toBeNull();
+  });
+
+  it('shows both shared and live badges for a shared live photo', () => {
+    const note = {
+      id: 'note-2',
+      type: 'photo',
+      content: '',
+      caption: null,
+      photoLocalUri: 'file:///photo.jpg',
+      photoSyncedLocalUri: null,
+      photoRemoteBase64: null,
+      isLivePhoto: true,
+      pairedVideoLocalUri: 'file:///photo.mov',
+      pairedVideoSyncedLocalUri: null,
+      pairedVideoRemotePath: null,
+      locationName: 'District 1',
+      promptId: null,
+      promptTextSnapshot: null,
+      promptAnswer: null,
+      moodEmoji: null,
+      noteColor: null,
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: false,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      createdAt: '2026-04-10T02:00:00.000Z',
+      updatedAt: null,
+    } as any;
+
+    const { getByTestId } = render(
+      <NoteMemoryCard
+        note={note}
+        colors={colors}
+        t={(key: string, fallback?: string) => fallback ?? key}
+        isSharedByMe
+      />
+    );
+
+    expect(getByTestId('note-memory-shared-badge')).toBeTruthy();
+    expect(getByTestId('note-memory-live-badge')).toBeTruthy();
   });
 });

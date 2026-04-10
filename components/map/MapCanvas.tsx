@@ -529,8 +529,10 @@ function MapCanvas({
   const mapViewKey = isAndroid ? `map-${isDark ? 'dark' : 'light'}` : 'map';
 
   const markerRenderItems = useMemo<MarkerRenderItem[]>(
-    () =>
-      markerNodes.reduce<MarkerRenderItem[]>((items, node) => {
+    () => {
+      const items: MarkerRenderItem[] = [];
+
+      for (const node of markerNodes) {
         const markerColor = node.primaryType === 'photo' ? palette.photo : palette.text;
         const showRichPreviewMarker = false;
         const showStackPreviewMarker = false;
@@ -546,10 +548,10 @@ function MapCanvas({
             .filter((note): note is Note => note != null);
 
           if (splitNotes.length > 1) {
-            return items.concat(splitNotes.map<MarkerRenderItem>((note, index) => {
+            splitNotes.forEach((note, index) => {
               const canShowPhotoThumbnail = note.type === 'photo' && currentZoom >= photoOrbMinZoom;
 
-              return {
+              items.push({
                 key: `split-${note.id}`,
                 testID: `leaf-marker-${note.id}`,
                 coordinate: getSeparatedNoteCoordinate(
@@ -573,8 +575,10 @@ function MapCanvas({
                 previewText: null,
                 countBadgeLabel: null,
                 noteId: note.id,
-              };
-            }));
+              });
+            });
+
+            continue;
           }
         }
 
@@ -592,7 +596,7 @@ function MapCanvas({
           node.noteIds.length === 1 &&
           currentZoom >= photoOrbMinZoom;
 
-        return items.concat({
+        items.push({
           key: node.id,
           testID: node.isCluster ? `cluster-marker-${node.id}` : `leaf-marker-${node.groupId ?? node.id}`,
           coordinate: { latitude: node.latitude, longitude: node.longitude },
@@ -612,7 +616,10 @@ function MapCanvas({
           countBadgeLabel: node.pointCount > 1 ? String(node.pointCount) : null,
           noteId: null,
         });
-      }, []),
+      }
+
+      return items;
+    },
     [
       currentZoom,
       markerNodes,

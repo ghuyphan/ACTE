@@ -15,6 +15,7 @@ type NoteDetailStatusBadgesProps = {
     favoriteOutlineIconStyle: any;
     inactiveColor: string;
     isLivePhoto: boolean;
+    isSharedByMe: boolean;
     onToggleFavorite: () => void;
 };
 
@@ -26,6 +27,7 @@ export default function NoteDetailStatusBadges({
     favoriteOutlineIconStyle,
     inactiveColor,
     isLivePhoto,
+    isSharedByMe,
     onToggleFavorite,
 }: NoteDetailStatusBadgesProps) {
     const borderColor =
@@ -35,21 +37,40 @@ export default function NoteDetailStatusBadges({
 
     return (
         <View pointerEvents="box-none" style={styles.cardStatusBadgeRow}>
-            {isLivePhoto ? (
-                <View
-                    pointerEvents="none"
-                    style={[
-                        styles.cardStatusBadge,
-                        styles.cardLivePhotoBadge,
-                        {
-                            backgroundColor: colors.card,
-                            borderColor,
-                        },
-                    ]}
-                >
-                    <LivePhotoIcon size={18} color={inactiveColor} />
-                </View>
-            ) : null}
+            <View pointerEvents="box-none" style={styles.leftBadgeGroup}>
+                {isSharedByMe ? (
+                    <View
+                        pointerEvents="none"
+                        testID="note-detail-shared-post"
+                        style={[
+                            styles.cardStatusBadge,
+                            styles.cardSharedBadge,
+                            {
+                                backgroundColor: colors.card,
+                                borderColor,
+                            },
+                        ]}
+                    >
+                        <Ionicons name="people-outline" size={16} color={inactiveColor} />
+                    </View>
+                ) : null}
+                {isLivePhoto ? (
+                    <View
+                        pointerEvents="none"
+                        testID="note-detail-live-photo"
+                        style={[
+                            styles.cardStatusBadge,
+                            styles.cardLivePhotoBadge,
+                            {
+                                backgroundColor: colors.card,
+                                borderColor,
+                            },
+                        ]}
+                    >
+                        <LivePhotoIcon size={18} color={inactiveColor} />
+                    </View>
+                ) : null}
+            </View>
             <Pressable
                 testID="note-detail-favorite"
                 onPress={onToggleFavorite}
@@ -105,6 +126,10 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         zIndex: 3,
     },
+    leftBadgeGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
     cardStatusBadge: {
         width: 34,
         height: 34,
@@ -116,6 +141,9 @@ const styles = StyleSheet.create({
     },
     cardFavBadge: {
         marginLeft: 'auto',
+    },
+    cardSharedBadge: {
+        marginRight: 8,
     },
     cardLivePhotoBadge: {
         marginRight: 8,

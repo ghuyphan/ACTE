@@ -24,6 +24,7 @@ function getLocationErrorMessage(error: unknown) {
 export interface ForegroundLocationRequestResult {
     location: Location.LocationObject | null;
     requiresSettings: boolean;
+    reason: 'permission_denied' | 'services_disabled' | 'timeout' | 'unavailable' | null;
 }
 
 export interface ReminderPermissionRequestResult {
@@ -51,6 +52,7 @@ export function useGeofence() {
                 return {
                     location: null,
                     requiresSettings: true,
+                    reason: 'services_disabled',
                 };
             }
 
@@ -60,17 +62,27 @@ export function useGeofence() {
                 return {
                     location: known,
                     requiresSettings: false,
+                    reason: null,
                 };
             }
 
-            const currentLocation = await Promise.race<Location.LocationObject | null>([
+            const timeoutToken = Symbol('foreground-location-timeout');
+            const currentLocation = await Promise.race<Location.LocationObject | typeof timeoutToken>([
                 Location.getCurrentPositionAsync({
                     accuracy: Location.LocationAccuracy.Balanced,
                 }),
-                new Promise<null>((resolve) => {
-                    setTimeout(() => resolve(null), LOCATION_FIX_TIMEOUT_MS);
+                new Promise<typeof timeoutToken>((resolve) => {
+                    setTimeout(() => resolve(timeoutToken), LOCATION_FIX_TIMEOUT_MS);
                 }),
             ]);
+
+            if (currentLocation === timeoutToken) {
+                return {
+                    location: null,
+                    requiresSettings: false,
+                    reason: 'timeout',
+                };
+            }
 
             if (currentLocation) {
                 setLocation(currentLocation);
@@ -79,6 +91,7 @@ export function useGeofence() {
             return {
                 location: currentLocation,
                 requiresSettings: false,
+                reason: currentLocation ? null : 'unavailable',
             };
         } catch (error) {
             const errorMessage = getLocationErrorMessage(error);
@@ -87,6 +100,11 @@ export function useGeofence() {
                 requiresSettings:
                     errorMessage.includes('location services are disabled') ||
                     errorMessage.includes('provider is unavailable'),
+                reason:
+                    errorMessage.includes('location services are disabled') ||
+                    errorMessage.includes('provider is unavailable')
+                        ? 'services_disabled'
+                        : 'unavailable',
             };
         }
     }, []);
@@ -124,6 +142,7 @@ export function useGeofence() {
             return {
                 location: null,
                 requiresSettings: foregroundStatus.canAskAgain === false,
+                reason: 'permission_denied',
             };
         }
 

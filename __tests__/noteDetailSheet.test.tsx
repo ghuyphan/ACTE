@@ -39,11 +39,16 @@ const mockCreateStickerImportSourceFromSubjectCutout = jest.fn();
 const mockPrepareStickerSubjectCutout = jest.fn();
 const mockCleanupSubjectCutoutImportSource = jest.fn();
 const mockShouldImportSourceDirectlyAsSticker = jest.fn();
+const mockCleanupStickerTempUri = jest.fn();
+const mockCleanupStickerTempUris = jest.fn();
+const mockPrepareStampCutterDraft = jest.fn();
+const mockExportStampCutoutImageSource = jest.fn();
 const mockRouterPush = jest.fn();
 const mockImpactAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockNotificationAsync = jest.fn<Promise<void>, [unknown]>(async () => undefined);
 const mockSetActiveNote = jest.fn();
 const mockClearActiveNote = jest.fn();
+let mockSharedPosts: any[] = [];
 let latestAppBottomSheetProps: any = null;
 const mockNotesStore = {
   getNoteById: (noteId: string) => mockGetNoteById(noteId),
@@ -197,6 +202,7 @@ jest.mock('../hooks/useAuth', () => ({
 jest.mock('../hooks/useSharedFeed', () => ({
   useSharedFeedStore: () => ({
     deleteSharedNote: jest.fn(async () => undefined),
+    sharedPosts: mockSharedPosts,
     updateSharedNote: jest.fn(async () => undefined),
   }),
 }));
@@ -299,6 +305,20 @@ jest.mock('../services/stickerSubjectCutout', () => ({
     mockCleanupSubjectCutoutImportSource(...args),
 }));
 
+jest.mock('../services/stickerTempFiles', () => ({
+  cleanupStickerTempUri: (...args: unknown[]) => mockCleanupStickerTempUri(...args),
+  cleanupStickerTempUris: (...args: unknown[]) => mockCleanupStickerTempUris(...args),
+}));
+
+jest.mock('../services/stampCutter', () => {
+  const actual = jest.requireActual('../services/stampCutter');
+  return {
+    ...actual,
+    prepareStampCutterDraft: (...args: unknown[]) => mockPrepareStampCutterDraft(...args),
+    exportStampCutoutImageSource: (...args: unknown[]) => mockExportStampCutoutImageSource(...args),
+  };
+});
+
 jest.mock('../utils/interactionFeedback', () => ({
   emitInteractionFeedback: jest.fn(),
 }));
@@ -324,7 +344,9 @@ jest.mock('../components/sheets/AppBottomSheet', () => {
   const React = require('react');
   const { View } = require('react-native');
   return function MockAppBottomSheet(props: any) {
-    latestAppBottomSheetProps = props;
+    if (props.visible) {
+      latestAppBottomSheetProps = props;
+    }
     return <View>{props.children}</View>;
   };
 });
@@ -362,6 +384,10 @@ jest.mock('../components/notes/NoteStickerCanvas', () => {
   return {
     __esModule: true,
     default: function MockNoteStickerCanvas(props: any) {
+      const selectedPlacement = props.placements?.find(
+        (placement: any) => placement.id === props.selectedPlacementId
+      );
+
       return (
         <View testID="mock-note-sticker-canvas">
           <Text testID="mock-note-sticker-count">{String(props.placements?.length ?? 0)}</Text>
@@ -371,9 +397,61 @@ jest.mock('../components/notes/NoteStickerCanvas', () => {
             testID="mock-note-sticker-select-first"
             onPress={() => props.onChangeSelectedPlacementId?.(props.placements?.[0]?.id ?? null)}
           />
+          {selectedPlacement ? (
+            <>
+              <Pressable
+                testID={`note-sticker-lock-toggle-${selectedPlacement.id}`}
+                onPress={() => props.onToggleSelectedPlacementMotionLock?.(selectedPlacement.id)}
+              />
+              {selectedPlacement.renderMode !== 'stamp' ? (
+                <Pressable
+                  testID={`note-sticker-outline-toggle-${selectedPlacement.id}`}
+                  onPress={() => props.onToggleSelectedPlacementOutline?.(selectedPlacement.id)}
+                />
+              ) : null}
+              <Pressable
+                testID={`note-sticker-remove-${selectedPlacement.id}`}
+                onPress={() => props.onRemoveSelectedPlacement?.(selectedPlacement.id)}
+              />
+            </>
+          ) : null}
         </View>
       );
     },
+  };
+});
+
+jest.mock('../components/home/capture/StampCutterEditor', () => {
+  const React = require('react');
+  const { Pressable, View } = require('react-native');
+
+  return function MockStampCutterEditor(props: any) {
+    if (!props.visible) {
+      return null;
+    }
+
+    return (
+      <View testID="stamp-cutter-editor">
+        <Pressable
+          testID="stamp-cutter-confirm"
+          onPress={async () => {
+            const placement = await props.onConfirm({
+              viewportSize: { width: 320, height: 320 },
+              selectionRect: { x: 40, y: 48, width: 160, height: 192 },
+              transform: { zoom: 1, offsetX: 0, offsetY: 0, rotation: 0 },
+            });
+
+            if (placement) {
+              props.onCompletePlacement({
+                placement,
+                sourceRect: { x: 40, y: 48, width: 160, height: 192 },
+              });
+            }
+          }}
+        />
+        <Pressable testID="stamp-cutter-close" onPress={props.onClose} />
+      </View>
+    );
   };
 });
 
@@ -381,6 +459,7 @@ import NoteDetailSheet from '../components/notes/NoteDetailSheet';
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockSharedPosts = [];
   latestAppBottomSheetProps = null;
   mockHasClipboardStickerImage.mockResolvedValue(false);
   mockGetNoteById.mockResolvedValue({
@@ -421,6 +500,27 @@ beforeEach(() => {
   }));
   mockPrepareStickerSubjectCutout.mockResolvedValue({ available: true, ready: true });
   mockCleanupSubjectCutoutImportSource.mockResolvedValue(undefined);
+  mockCleanupStickerTempUri.mockResolvedValue(undefined);
+  mockCleanupStickerTempUris.mockResolvedValue(undefined);
+  mockPrepareStampCutterDraft.mockResolvedValue({
+    source: {
+      uri: 'file:///photo.jpg',
+      mimeType: 'image/jpeg',
+      name: 'photo.jpg',
+    },
+    sourceSize: { width: 1600, height: 1200 },
+    previewUri: 'file:///tmp/stamp-cutter-preview.jpg',
+    cleanupUri: 'file:///tmp/stamp-cutter-preview.jpg',
+  });
+  mockExportStampCutoutImageSource.mockResolvedValue({
+    source: {
+      uri: 'file:///tmp/cut-stamp.png',
+      mimeType: 'image/png',
+      name: 'cut-stamp.png',
+    },
+    cleanupUri: null,
+    intermediateCleanupUri: null,
+  });
   mockShouldImportSourceDirectlyAsSticker.mockResolvedValue(false);
 });
 
@@ -462,6 +562,78 @@ describe('NoteDetailSheet', () => {
     });
 
     expect(queryByTestId('note-detail-favorite')).toBeNull();
+  });
+
+  it('shows both the shared and live badges for a live photo shared by the active user', async () => {
+    mockSharedPosts = [
+      {
+        id: 'post-1',
+        authorUid: 'user-1',
+        sourceNoteId: 'note-1',
+        audienceUserIds: ['user-1', 'friend-1'],
+        type: 'photo',
+        text: '',
+        photoPath: 'shared-posts/post-1.jpg',
+        photoLocalUri: null,
+        placeName: 'Old place',
+        createdAt: '2026-03-23T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ];
+    mockGetNoteById.mockResolvedValue({
+      id: 'note-1',
+      type: 'photo',
+      content: '',
+      photoLocalUri: 'file:///photo.jpg',
+      photoRemoteBase64: null,
+      isLivePhoto: true,
+      pairedVideoLocalUri: 'file:///photo.mov',
+      locationName: 'Old place',
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: false,
+      createdAt: '2026-03-10T00:00:00.000Z',
+      updatedAt: null,
+    });
+
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-shared-post')).toBeTruthy();
+      expect(getByTestId('note-detail-live-photo')).toBeTruthy();
+    });
+  });
+
+  it('does not show the shared badge for posts shared by other people', async () => {
+    mockSharedPosts = [
+      {
+        id: 'post-2',
+        authorUid: 'friend-1',
+        sourceNoteId: 'note-1',
+        audienceUserIds: ['friend-1', 'user-1'],
+        type: 'text',
+        text: 'Shared by someone else',
+        photoPath: null,
+        photoLocalUri: null,
+        placeName: 'Old place',
+        createdAt: '2026-03-23T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ];
+
+    const { queryByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(mockGetNoteById).toHaveBeenCalledWith('note-1');
+    });
+
+    expect(queryByTestId('note-detail-shared-post')).toBeNull();
   });
 
   it('saves edited content, location, and radius', async () => {
@@ -530,7 +702,7 @@ describe('NoteDetailSheet', () => {
   });
 
   it('disables interactive sheet dismissal while editing', async () => {
-    const { getByTestId } = render(
+    const { getByTestId, queryByTestId } = render(
       <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
     );
 
@@ -542,7 +714,7 @@ describe('NoteDetailSheet', () => {
 
     await waitFor(() => {
       expect(interactiveDismissDisabled).toHaveBeenCalledWith(true);
-      expect(getByTestId('note-detail-dismiss-keyboard')).toBeTruthy();
+      expect(queryByTestId('note-detail-dismiss-keyboard')).toBeNull();
     });
   });
 
@@ -565,16 +737,23 @@ describe('NoteDetailSheet', () => {
     });
   });
 
-  it('uses interactive keyboard behavior on Android note detail sheets', async () => {
+  it('uses fill-parent keyboard behavior while editing Android note detail sheets', async () => {
     const originalPlatform = Platform.OS;
     Platform.OS = 'android';
 
     try {
-      render(<NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />);
+      const { getByTestId } = render(<NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />);
 
       await waitFor(() => {
         expect(mockGetNoteById).toHaveBeenCalledWith('note-1');
-        expect(latestAppBottomSheetProps?.androidKeyboardBehavior).toBe('interactive');
+        expect(latestAppBottomSheetProps?.androidDynamicSizing).toBe(false);
+        expect(latestAppBottomSheetProps?.androidSnapPoints).toEqual(['92%']);
+      });
+
+      fireEvent.press(getByTestId('note-detail-edit'));
+
+      await waitFor(() => {
+        expect(latestAppBottomSheetProps?.androidKeyboardBehavior).toBe('fillParent');
       });
     } finally {
       Platform.OS = originalPlatform;
@@ -612,6 +791,115 @@ describe('NoteDetailSheet', () => {
     });
 
     expect(queryByTestId('note-detail-card-paste-popover')).toBeNull();
+  });
+
+  it('uses inline sticker controls in note detail edit mode', async () => {
+    mockHasClipboardStickerImage.mockResolvedValue(true);
+
+    const { getByTestId, queryByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+
+    await act(async () => {
+      fireEvent(getByTestId('note-detail-card-paste-surface'), 'longPress', {
+        nativeEvent: { locationX: 120, locationY: 180 },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-card-paste-action'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('mock-note-sticker-count')).toHaveTextContent('1');
+    });
+
+    fireEvent.press(getByTestId('mock-note-sticker-select-first'));
+
+    expect(getByTestId('note-sticker-lock-toggle-detail-placement-1')).toBeTruthy();
+    expect(getByTestId('note-sticker-outline-toggle-detail-placement-1')).toBeTruthy();
+    expect(getByTestId('note-sticker-remove-detail-placement-1')).toBeTruthy();
+    expect(queryByTestId('note-detail-sticker-motion-lock')).toBeNull();
+    expect(queryByTestId('note-detail-sticker-outline-toggle')).toBeNull();
+    expect(queryByTestId('note-detail-sticker-remove')).toBeNull();
+  });
+
+  it('opens cut stamp from the detail sticker source sheet and imports the cropped result', async () => {
+    const mockImagePicker = jest.requireMock('expo-image-picker') as {
+      getMediaLibraryPermissionsAsync: jest.Mock;
+      requestMediaLibraryPermissionsAsync: jest.Mock;
+      launchImageLibraryAsync: jest.Mock;
+    };
+
+    mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri: 'file:///photo.jpg',
+          mimeType: 'image/jpeg',
+          fileName: 'photo.jpg',
+          width: 1600,
+          height: 1200,
+        },
+      ],
+    });
+
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+    fireEvent.press(getByTestId('note-detail-sticker-toggle'));
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-sticker-import'));
+    });
+
+    expect(getByTestId('sticker-source-option-cut-stamp')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-source-option-cut-stamp'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('stamp-cutter-editor')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('stamp-cutter-confirm'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('mock-note-sticker-count')).toHaveTextContent('1');
+    });
+
+    expect(mockPrepareStampCutterDraft).toHaveBeenCalledWith(
+      {
+        uri: 'file:///photo.jpg',
+        mimeType: 'image/jpeg',
+        name: 'photo.jpg',
+      },
+      1600,
+      1200
+    );
+    expect(mockImportStickerAsset).toHaveBeenCalledWith(
+      {
+        uri: 'file:///tmp/cut-stamp.png',
+        mimeType: 'image/png',
+        name: 'cut-stamp.png',
+      },
+      undefined
+    );
   });
 
   it('does not hijack text-input long press in the note editor', async () => {
@@ -834,7 +1122,7 @@ describe('NoteDetailSheet', () => {
     await waitFor(() => {
       expect(getByTestId('mock-note-sticker-selected')).toHaveTextContent('detail-placement-1');
     });
-    fireEvent.press(getByTestId('note-detail-sticker-motion-lock'));
+    fireEvent.press(getByTestId('note-sticker-lock-toggle-detail-placement-1'));
 
     await act(async () => {
       fireEvent.press(getByTestId('note-detail-edit'));

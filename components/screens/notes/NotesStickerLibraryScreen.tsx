@@ -25,7 +25,6 @@ import {
   type CreatedStickerLibrarySectionKey,
 } from './stickerLibrary';
 
-type GalleryVariant = 'circle' | 'stamp' | 'square' | 'tall' | 'soft';
 type StickerLibraryListItem =
   | {
       id: string;
@@ -40,24 +39,45 @@ type StickerLibraryListItem =
       itemIndex: number;
     };
 
-function getGalleryVariant(item: CreatedStickerLibraryItem, index: number): GalleryVariant {
-  if (item.renderMode === 'stamp') {
-    if (index % 5 === 1) {
-      return 'tall';
-    }
+function fitPreviewWithinBounds(
+  width: number,
+  height: number,
+  bounds: { maxWidth: number; maxHeight: number }
+) {
+  const safeWidth = Math.max(width, 1);
+  const safeHeight = Math.max(height, 1);
+  const widthScale = bounds.maxWidth / safeWidth;
+  const heightScale = bounds.maxHeight / safeHeight;
+  const scale = Math.min(widthScale, heightScale);
 
-    if (index % 4 === 0) {
-      return 'circle';
-    }
+  return {
+    width: safeWidth * scale,
+    height: safeHeight * scale,
+  };
+}
 
-    return 'stamp';
-  }
+function getCollectionTilt(item: CreatedStickerLibraryItem) {
+  const seed = item.id.split('').reduce((total, character) => total + character.charCodeAt(0), 0);
+  const tiltSteps = [-4, -3, -2, -1, 1, 2, 3, 4];
 
-  if (index % 4 === 2) {
-    return 'soft';
-  }
+  return `${tiltSteps[seed % tiltSteps.length]}deg`;
+}
 
-  return 'square';
+function getPreviewMetrics(item: CreatedStickerLibraryItem, cardWidth: number) {
+  const fitted = fitPreviewWithinBounds(item.asset.width, item.asset.height, {
+    maxWidth: item.renderMode === 'stamp' ? cardWidth * 0.9 : cardWidth * 0.78,
+    maxHeight: item.renderMode === 'stamp' ? cardWidth * 1.02 : cardWidth * 0.78,
+  });
+
+  return {
+    previewWidth: fitted.width,
+    previewHeight: fitted.height,
+    frameHeight:
+      item.renderMode === 'stamp'
+        ? Math.max(cardWidth * 0.9, Math.min(cardWidth * 1.12, fitted.height + 18))
+        : Math.max(cardWidth * 0.9, fitted.height + 22),
+    rotation: getCollectionTilt(item),
+  };
 }
 
 function StickerPreview({
@@ -169,29 +189,10 @@ export default function NotesStickerLibraryScreen() {
         );
       }
 
-      const variant = getGalleryVariant(item.item, item.itemIndex);
-      const previewHeight =
-        variant === 'tall'
-          ? cardWidth * 1.34
-          : variant === 'soft'
-            ? cardWidth * 1.08
-            : cardWidth;
-      const stampWidth =
-        variant === 'circle'
-          ? cardWidth * 0.82
-          : variant === 'tall'
-            ? cardWidth * 0.76
-            : cardWidth * 0.9;
-      const stampHeight =
-        variant === 'circle'
-          ? cardWidth * 0.82
-          : variant === 'tall'
-            ? cardWidth * 1.02
-            : cardWidth * 0.92;
-      const stickerWidth =
-        variant === 'soft' ? cardWidth * 0.82 : cardWidth * 0.76;
-      const stickerHeight =
-        variant === 'soft' ? cardWidth * 0.88 : cardWidth * 0.76;
+      const { frameHeight, previewWidth, previewHeight, rotation } = getPreviewMetrics(
+        item.item,
+        cardWidth
+      );
 
       return (
         <View style={[styles.cardCell, { paddingHorizontal: gridGap / 2, marginBottom: gridGap + 8 }]}>
@@ -199,23 +200,15 @@ export default function NotesStickerLibraryScreen() {
             <View
               style={[
                 styles.previewWrap,
-                variant === 'circle' ? styles.previewWrapCircle : null,
                 {
-                  height: previewHeight,
+                  height: frameHeight,
                   backgroundColor:
                     item.item.renderMode === 'stamp' ? 'transparent' : colors.surface,
                   borderColor:
                     item.item.renderMode === 'stamp' ? 'transparent' : colors.border,
                   transform: [
                     {
-                      rotate:
-                        item.item.renderMode === 'stamp'
-                          ? item.itemIndex % 2 === 0
-                            ? '-2deg'
-                            : '1.5deg'
-                          : item.itemIndex % 2 === 0
-                            ? '1deg'
-                            : '-1deg',
+                      rotate: rotation,
                     },
                   ],
                 },
@@ -223,8 +216,8 @@ export default function NotesStickerLibraryScreen() {
             >
               <StickerPreview
                 item={item.item}
-                previewWidth={item.item.renderMode === 'stamp' ? stampWidth : stickerWidth}
-                previewHeight={item.item.renderMode === 'stamp' ? stampHeight : stickerHeight}
+                previewWidth={previewWidth}
+                previewHeight={previewHeight}
                 fallbackColor={colors.secondaryText}
               />
             </View>
@@ -334,9 +327,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     padding: 8,
-  },
-  previewWrapCircle: {
-    borderRadius: 999,
   },
   stickerPreviewCanvas: {
     alignItems: 'center',

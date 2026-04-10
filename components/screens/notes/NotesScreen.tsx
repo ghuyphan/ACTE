@@ -592,21 +592,18 @@ export default function NotesIndexScreen() {
     <>
       <Stack.Screen
         options={{
-          headerRight:
-            createdStickerLibrary.length > 0
-              ? () => (
-                  <StickerLibraryHeaderButton
-                    accessibilityLabel={t(
-                      'notes.stickerLibrary.buttonA11y',
-                      'Open your sticker library'
-                    )}
-                    borderColor={colors.border}
-                    fillColor={colors.primarySoft}
-                    iconColor={colors.primary}
-                    onPress={() => router.push('/notes/stickers' as Href)}
-                  />
-                )
-              : undefined,
+          headerRight: () => (
+            <StickerLibraryHeaderButton
+              accessibilityLabel={t(
+                'notes.stickerLibrary.buttonA11y',
+                'Open your sticker library'
+              )}
+              borderColor={colors.border}
+              fillColor={colors.primarySoft}
+              iconColor={colors.primary}
+              onPress={() => router.push('/notes/stickers' as Href)}
+            />
+          ),
         }}
       />
       <View style={[styles.container, { backgroundColor: colors.background }]}>

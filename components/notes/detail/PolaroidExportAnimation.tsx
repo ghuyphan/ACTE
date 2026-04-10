@@ -36,7 +36,7 @@ export default function PolaroidExportAnimation({
 }: PolaroidExportAnimationProps) {
   const reduceMotionEnabled = useReducedMotion();
   const dismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cardTranslateY = useSharedValue(screenHeight * 0.44);
+  const stackTranslateY = useSharedValue(screenHeight * 0.72);
   const cardOpacity = useSharedValue(0);
   const cardScale = useSharedValue(0.96);
   const cardRotation = useSharedValue(2);
@@ -58,7 +58,7 @@ export default function PolaroidExportAnimation({
         clearTimeout(dismissTimeoutRef.current);
         dismissTimeoutRef.current = null;
       }
-      cardTranslateY.value = screenHeight * 0.44;
+      stackTranslateY.value = screenHeight * 0.72;
       cardOpacity.value = 0;
       cardScale.value = 0.96;
       cardRotation.value = 2;
@@ -68,7 +68,7 @@ export default function PolaroidExportAnimation({
       return;
     }
 
-    cardTranslateY.value = withTiming(reduceMotionEnabled ? 0 : 8, {
+    stackTranslateY.value = withTiming(0, {
       duration: reduceMotionEnabled ? 140 : 620,
       easing: Easing.out(Easing.cubic),
     });
@@ -98,9 +98,9 @@ export default function PolaroidExportAnimation({
     cardOpacity,
     cardRotation,
     cardScale,
-    cardTranslateY,
     flashOpacity,
     reduceMotionEnabled,
+    stackTranslateY,
     uri,
   ]);
 
@@ -130,7 +130,7 @@ export default function PolaroidExportAnimation({
           runOnJS(onFinished)();
         }
       });
-      cardTranslateY.value = withTiming(screenHeight * 0.18, {
+      stackTranslateY.value = withTiming(screenHeight * 0.18, {
         duration: reduceMotionEnabled ? 120 : 240,
         easing: Easing.in(Easing.cubic),
       });
@@ -146,17 +146,19 @@ export default function PolaroidExportAnimation({
     badgeOpacity,
     badgeTranslateY,
     cardOpacity,
-    cardTranslateY,
+    stackTranslateY,
     onFinished,
     reduceMotionEnabled,
     success,
     uri,
   ]);
 
+  const stackAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: stackTranslateY.value }],
+  }));
   const cardAnimatedStyle = useAnimatedStyle(() => ({
     opacity: cardOpacity.value,
     transform: [
-      { translateY: cardTranslateY.value },
       { rotate: `${cardRotation.value}deg` },
       { scale: cardScale.value },
     ],
@@ -175,9 +177,11 @@ export default function PolaroidExportAnimation({
 
   return (
     <View pointerEvents="none" style={styles.overlay}>
-      <Animated.View style={[styles.polaroidWrap, cardAnimatedStyle]}>
-        <Image resizeMode="contain" source={{ uri }} style={styles.previewImage} />
-        <Animated.View style={[styles.flashOverlay, flashAnimatedStyle]} />
+      <Animated.View style={[styles.cardStack, stackAnimatedStyle]}>
+        <Animated.View style={[styles.polaroidWrap, cardAnimatedStyle]}>
+          <Image resizeMode="contain" source={{ uri }} style={styles.previewImage} />
+          <Animated.View style={[styles.flashOverlay, flashAnimatedStyle]} />
+        </Animated.View>
       </Animated.View>
       <Animated.View style={[styles.badge, badgeAnimatedStyle]}>
         <Ionicons name="checkmark-circle" size={18} color="#2D6A4F" />
@@ -193,10 +197,14 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 20,
-    justifyContent: 'flex-end',
     alignItems: 'center',
-    paddingBottom: 34,
+    paddingBottom: 0,
     backgroundColor: 'rgba(29, 21, 15, 0.18)',
+  },
+  cardStack: {
+    position: 'absolute',
+    bottom: 42,
+    alignItems: 'center',
   },
   polaroidWrap: {
     width: Math.min(screenWidth - 64, 264),
@@ -219,7 +227,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   badge: {
-    marginTop: 18,
+    position: 'absolute',
+    bottom: -10,
     maxWidth: Math.min(screenWidth - 48, 320),
     minHeight: 42,
     flexDirection: 'row',

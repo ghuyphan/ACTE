@@ -9,18 +9,14 @@ import { STICKER_ARTBOARD_FRAME, DOODLE_ARTBOARD_FRAME } from '../../../constant
 import i18n from '../../../constants/i18n';
 import { Fonts, Layout, Typography } from '../../../constants/theme';
 import type { Note } from '../../../services/database';
-import {
-  getGradientStickerMotionVariant,
-  getNoteColorStickerMotion,
-  getTextNoteCardGradient,
-} from '../../../services/noteAppearance';
+import { getTextNoteCardGradient } from '../../../services/noteAppearance';
 import { parseNoteDoodleStrokes } from '../../../services/noteDoodles';
 import { parseNoteStickerPlacements } from '../../../services/noteStickers';
 import { formatNoteTextWithEmoji } from '../../../services/noteTextPresentation';
 import { getNotePairedVideoUri } from '../../../services/livePhotoStorage';
 import { getNotePhotoUri } from '../../../services/photoStorage';
-import DynamicStickerCanvas from '../DynamicStickerCanvas';
 import NoteDoodleCanvas from '../NoteDoodleCanvas';
+import NoteStickerCanvas from '../NoteStickerCanvas';
 import { getNoteCardTextSizeStyle, noteCardTextStyles } from '../noteCardTextStyles';
 import PhotoCaptionChip from '../PhotoCaptionChip';
 import PhotoMediaView from '../PhotoMediaView';
@@ -86,10 +82,6 @@ function PolaroidExportViewInner(
       }),
     [note.content, note.id, note.moodEmoji, note.noteColor]
   );
-  const stickerMotionVariant = useMemo(
-    () => getNoteColorStickerMotion(note.noteColor) ?? getGradientStickerMotionVariant(gradient),
-    [gradient, note.noteColor]
-  );
   const doodleStrokes = useMemo(
     () => parseNoteDoodleStrokes(note.doodleStrokesJson),
     [note.doodleStrokesJson]
@@ -135,9 +127,10 @@ function PolaroidExportViewInner(
                   testID="polaroid-export-sticker-overlay"
                   style={styles.stickerOverlay}
                 >
-                  <DynamicStickerCanvas
+                  <NoteStickerCanvas
                     placements={stickerPlacements}
-                    motionVariant={stickerMotionVariant}
+                    editable={false}
+                    stampShadowEnabled={false}
                   />
                 </View>
               ) : null}
@@ -179,7 +172,11 @@ function PolaroidExportViewInner(
                   testID="polaroid-export-sticker-overlay"
                   style={styles.stickerOverlay}
                 >
-                  <DynamicStickerCanvas placements={stickerPlacements} motionVariant={stickerMotionVariant} />
+                  <NoteStickerCanvas
+                    placements={stickerPlacements}
+                    editable={false}
+                    stampShadowEnabled={false}
+                  />
                 </View>
               ) : null}
               {doodleStrokes.length > 0 ? (

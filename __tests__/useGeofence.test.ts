@@ -106,6 +106,31 @@ describe('useGeofence', () => {
     expect(mockGetCurrentPositionAsync).not.toHaveBeenCalled();
   });
 
+  it('returns a timeout reason when a GPS fix takes too long', async () => {
+    jest.useFakeTimers();
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetCurrentPositionAsync.mockImplementation(() => new Promise(() => {}));
+
+    try {
+      const { result } = renderHook(() => useGeofence());
+
+      let responsePromise: Promise<any> | null = null;
+      await act(async () => {
+        responsePromise = result.current.requestForegroundLocation();
+        jest.advanceTimersByTime(8000);
+        await Promise.resolve();
+      });
+
+      await expect(responsePromise).resolves.toMatchObject({
+        location: null,
+        requiresSettings: false,
+        reason: 'timeout',
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('enables reminders and syncs geofences when all permissions are granted', async () => {
     const location = {
       coords: { latitude: 10.7626, longitude: 106.6601 },

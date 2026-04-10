@@ -107,7 +107,6 @@ interface CaptureDecorateRailProps {
   importingSticker: boolean;
   railStyle?: ViewStyle;
   rowStyle?: ViewStyle;
-  selectedStickerId: string | null;
   stickerModeEnabled: boolean;
   t: TFunction;
   theme: CaptureDecorateRailTheme;
@@ -132,7 +131,6 @@ function CaptureDecorateRail({
   importingSticker,
   railStyle,
   rowStyle,
-  selectedStickerId,
   stickerModeEnabled,
   t,
   theme,
@@ -270,21 +268,6 @@ function CaptureDecorateRail({
               <Ionicons name="add-outline" size={14} color={theme.detailIconColor} />
             )}
           </CaptureAnimatedPressable>
-          <CaptureAnimatedPressable
-            testID="capture-sticker-remove"
-            onPress={() => handleSelectedStickerAction('remove')}
-            disabled={!selectedStickerId}
-            disabledOpacity={0.45}
-            style={[
-              styles.textCardActionPill,
-              {
-                backgroundColor: theme.detailBackgroundColor,
-                borderColor: theme.detailBorderColor,
-              },
-            ]}
-          >
-            <Ionicons name="trash-outline" size={14} color={theme.detailIconColor} />
-          </CaptureAnimatedPressable>
         </>
       ) : (
         defaultActions
@@ -312,7 +295,6 @@ interface TextCaptureBottomBarProps {
   importingSticker: boolean;
   inlinePasteLoading: boolean;
   noteColor?: string | null;
-  selectedStickerId: string | null;
   showInlinePasteButton: boolean;
   stickerModeEnabled: boolean;
   t: TFunction;
@@ -339,7 +321,6 @@ export function TextCaptureBottomBar({
   importingSticker,
   inlinePasteLoading,
   noteColor,
-  selectedStickerId,
   showInlinePasteButton,
   stickerModeEnabled,
   t,
@@ -362,7 +343,6 @@ export function TextCaptureBottomBar({
         handleToggleStickerMode={handleToggleStickerMode}
         handleUndoDoodle={handleUndoDoodle}
         importingSticker={importingSticker}
-        selectedStickerId={selectedStickerId}
         stickerModeEnabled={stickerModeEnabled}
         t={t}
         theme={{
@@ -476,7 +456,6 @@ interface PhotoCaptureBottomBarProps {
   importingSticker: boolean;
   onImportMotionClip: () => void;
   onRemoveMotionClip: () => void;
-  selectedStickerId: string | null;
   stickerModeEnabled: boolean;
   t: TFunction;
   textCardActiveIconColor: string;
@@ -499,7 +478,6 @@ export function PhotoCaptureBottomBar({
   importingSticker,
   onImportMotionClip,
   onRemoveMotionClip,
-  selectedStickerId,
   stickerModeEnabled,
   t,
   textCardActiveIconColor,
@@ -520,7 +498,6 @@ export function PhotoCaptureBottomBar({
         handleToggleStickerMode={handleToggleStickerMode}
         handleUndoDoodle={handleUndoDoodle}
         importingSticker={importingSticker}
-        selectedStickerId={selectedStickerId}
         stickerModeEnabled={stickerModeEnabled}
         t={t}
         theme={{

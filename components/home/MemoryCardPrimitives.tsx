@@ -37,6 +37,7 @@ interface NoteMemoryCardProps {
   cardSize?: number;
   containerStyle?: StyleProp<ViewStyle>;
   isActive?: boolean;
+  isSharedByMe?: boolean;
 }
 
 interface SharedPostMemoryCardProps {
@@ -58,6 +59,7 @@ export function NoteMemoryCard({
   cardSize,
   containerStyle,
   isActive = false,
+  isSharedByMe = false,
 }: NoteMemoryCardProps) {
   const { width } = useWindowDimensions();
   const now = useRelativeTimeNow();
@@ -99,15 +101,24 @@ export function NoteMemoryCard({
         {note.isFavorite || note.isLivePhoto ? (
           <View style={styles.badgeStack}>
             {note.isLivePhoto ? (
-              <View style={[styles.badge, { backgroundColor: colors.card }]}>
+              <View testID="note-memory-live-badge" style={[styles.badge, { backgroundColor: colors.card }]}>
                 <LivePhotoIcon size={18} color={colors.primary} />
               </View>
             ) : null}
             {note.isFavorite ? (
-              <View style={[styles.badge, { backgroundColor: colors.card }]}>
+              <View testID="note-memory-favorite-badge" style={[styles.badge, { backgroundColor: colors.card }]}>
                 <Ionicons name="heart" size={16} color={colors.danger} />
               </View>
             ) : null}
+          </View>
+        ) : null}
+        {isSharedByMe ? (
+          <View
+            testID="note-memory-shared-badge"
+            pointerEvents="none"
+            style={[styles.badge, styles.leftBadge, { backgroundColor: colors.card }]}
+          >
+            <Ionicons name="people-outline" size={16} color={colors.secondaryText} />
           </View>
         ) : null}
       </View>
@@ -353,6 +364,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  leftBadge: {
+    position: 'absolute',
+    top: 18,
+    left: 24,
   },
   metaContainer: {
     alignSelf: 'center',

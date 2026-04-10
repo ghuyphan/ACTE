@@ -32,6 +32,7 @@ import { useActiveNote } from '../../hooks/useActiveNote';
 import { useNotes } from '../../hooks/useNotes';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { useStampCutterFlow } from '../../hooks/ui/useStampCutterFlow';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
 import { Note } from '../../services/database';
@@ -86,12 +87,14 @@ import {
     type SavePermissionStatus,
 } from '../../services/polaroidExport';
 import AppSheet from '../sheets/AppSheet';
+import StampCutterEditor from '../home/capture/StampCutterEditor';
 import { type DoodleStroke } from './NoteDoodleCanvas';
 import NoteDetailSheetContent from './detail/NoteDetailSheetContent';
 
 const { width } = Dimensions.get('window');
 const CARD_SIZE = width - Layout.screenPadding * 2;
 const STICKER_SOURCE_SHEET_DISMISS_DELAY_MS = 250;
+const NOTE_DETAIL_ANDROID_SNAP_POINTS = ['92%'];
 
 type StickerPastePromptState = {
     visible: boolean;
@@ -100,6 +103,7 @@ type StickerPastePromptState = {
 };
 
 type StickerImportIntent = 'sticker' | 'stamp';
+type StickerSourceIntent = StickerImportIntent | 'stamp-cut';
 
 function delay(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -224,7 +228,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const { getNoteById, deleteNote, refreshNotes, updateNote, toggleFavorite } = useNotes();
     const { user } = useAuth();
     const { setActiveNote, clearActiveNote } = useActiveNote();
-    const { deleteSharedNote, updateSharedNote } = useSharedFeedStore();
+    const { deleteSharedNote, sharedPosts, updateSharedNote } = useSharedFeedStore();
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
     const {
@@ -237,6 +241,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const reduceMotionEnabled = useReducedMotion();
     const [note, setNote] = useState<Note | null>(null);
     const [loading, setLoading] = useState(true);
+    const [richDecorationsReady, setRichDecorationsReady] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [editContent, setEditContent] = useState('');
@@ -250,7 +255,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
     const [importingSticker, setImportingSticker] = useState(false);
     const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
-    const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<StickerImportIntent | null>(null);
+    const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<StickerSourceIntent | null>(null);
     const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
     const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
@@ -259,8 +264,18 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [showPolaroidCapture, setShowPolaroidCapture] = useState(false);
     const [polaroidAnimationUri, setPolaroidAnimationUri] = useState<string | null>(null);
     const [polaroidAnimationSuccess, setPolaroidAnimationSuccess] = useState(false);
-    const [androidKeyboardVisible, setAndroidKeyboardVisible] = useState(false);
-    const [locationKeyboardScrollToken, setLocationKeyboardScrollToken] = useState(0);
+    const isSharedByMe = useMemo(
+        () => (
+            Boolean(
+                note &&
+                user &&
+                sharedPosts.some(
+                    (post) => post.authorUid === user.uid && post.sourceNoteId === note.id
+                )
+            )
+        ),
+        [note, sharedPosts, user]
+    );
 
     const cardScaleValue = useSharedValue(0.92);
     const cardOpacityValue = useSharedValue(0);
@@ -636,6 +651,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setSelectedStickerId(null);
         setLocationSelection(undefined);
         setShowStickerSourceSheet(false);
+        setRichDecorationsReady(false);
         resetPolaroidCaptureState();
         favoriteFillProgress.value = 0;
         cardScale.value = 0.97;
@@ -719,6 +735,25 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     }, [importingSticker, isEditing, note]);
 
     useEffect(() => {
+        if (!visible || loading || !note) {
+            setRichDecorationsReady(false);
+            return;
+        }
+
+        if (isEditing) {
+            setRichDecorationsReady(true);
+            return;
+        }
+
+        setRichDecorationsReady(false);
+        const timer = setTimeout(() => {
+            setRichDecorationsReady(true);
+        }, reduceMotionEnabled ? 40 : 180);
+
+        return () => clearTimeout(timer);
+    }, [isEditing, loading, note, reduceMotionEnabled, visible]);
+
+    useEffect(() => {
         cancelAnimation(favoriteFillProgress);
         favoriteFillProgress.value = withTiming(note?.isFavorite ? 1 : 0, {
             duration: reduceMotionEnabled ? 120 : 180,
@@ -734,8 +769,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     const scrollLocationFieldIntoView = useCallback((animated = true) => {
         if (Platform.OS === 'android') {
-            const targetY = Math.max(0, infoSectionOffsetYRef.current + locationFieldOffsetYRef.current - 28);
-            scrollContainerRef.current?.scrollTo?.({ y: targetY, animated });
+            scrollContainerRef.current?.scrollToEnd?.({ animated });
             return;
         }
 
@@ -832,50 +866,22 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         requestAnimationFrame(() => {
             scrollLocationFieldIntoView();
         });
-
-        if (Platform.OS === 'android') {
-            setLocationKeyboardScrollToken((current) => current + 1);
-        }
     }, [isEditing, scrollLocationFieldIntoView]);
 
-    useEffect(() => {
-        if (Platform.OS !== 'android' || !visible || !isEditing) {
-            return;
-        }
-
-        const keyboardDidShowSubscription = Keyboard.addListener('keyboardDidShow', () => {
-            setAndroidKeyboardVisible(true);
-            if (locationKeyboardScrollToken > 0) {
-                requestAnimationFrame(() => {
-                    scrollLocationFieldIntoView();
-                });
-            }
-        });
-        const keyboardDidHideSubscription = Keyboard.addListener('keyboardDidHide', () => {
-            setAndroidKeyboardVisible(false);
-        });
-
-        return () => {
-            keyboardDidShowSubscription.remove();
-            keyboardDidHideSubscription.remove();
-        };
-    }, [isEditing, locationKeyboardScrollToken, scrollLocationFieldIntoView, visible]);
-
-    useEffect(() => {
-        if (Platform.OS !== 'android' || !visible || isEditing) {
-            if (Platform.OS === 'android' && !visible) {
-                setAndroidKeyboardVisible(false);
-            }
-            return;
-        }
-
-        setAndroidKeyboardVisible(false);
-    }, [isEditing, visible]);
+    const applyImportedSticker = useCallback((nextPlacement: NoteStickerPlacement) => {
+        setEditStickerPlacements((current) => [...current, nextPlacement]);
+        setSelectedStickerId(nextPlacement.id);
+        setStickerModeEnabled(true);
+        setDoodleModeEnabled(false);
+    }, []);
 
     const importStickerFromSource = useCallback(async (
         source: StickerImportSource,
-        intent: StickerImportIntent
-    ) => {
+        intent: StickerImportIntent,
+        options?: {
+            apply?: boolean;
+        }
+    ): Promise<NoteStickerPlacement> => {
         let preparedSource = source;
         let cleanupUri: string | null = null;
 
@@ -909,22 +915,28 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 editStickerPlacements,
                 intent === 'stamp' ? { renderMode: 'stamp' } : undefined
             );
-            setEditStickerPlacements((current) => [...current, nextPlacement]);
-            setSelectedStickerId(nextPlacement.id);
-            setStickerModeEnabled(true);
-            setDoodleModeEnabled(false);
+            if (options?.apply !== false) {
+                applyImportedSticker(nextPlacement);
+            }
+            return nextPlacement;
         } finally {
             await cleanupSubjectCutoutImportSource(cleanupUri);
         }
-    }, [editStickerPlacements]);
+    }, [applyImportedSticker, editStickerPlacements]);
 
-    const handleImportSticker = useCallback(async (intent: StickerImportIntent = 'sticker') => {
-        if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
-            return;
+    const runImportingStickerTask = useCallback(async <T,>(task: () => Promise<T>): Promise<T> => {
+        setImportingSticker(true);
+        try {
+            return await task();
+        } finally {
+            setImportingSticker(false);
         }
+    }, []);
 
-        dismissPastePrompt();
-        Keyboard.dismiss();
+    const pickStickerImportSource = useCallback(async () => {
+        if (!ENABLE_PHOTO_STICKERS || !isEditing || !note) {
+            return null;
+        }
 
         let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
         if (mediaPermission.status !== 'granted') {
@@ -944,32 +956,71 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                         'Allow photo library access so you can import an image into this note.'
                     )
             );
-            return;
+            return null;
         }
 
-        setImportingSticker(true);
-        try {
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'],
-                allowsEditing: false,
-                quality: 1,
-                selectionLimit: 1,
-            });
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: false,
+            quality: 1,
+            selectionLimit: 1,
+        });
 
-            if (result.canceled || !result.assets?.[0]?.uri) {
-                return;
-            }
+        if (result.canceled || !result.assets?.[0]?.uri) {
+            return null;
+        }
 
-            const importSource = {
+        return {
+            source: {
                 uri: result.assets[0].uri,
                 mimeType: result.assets[0].mimeType,
                 name: result.assets[0].fileName,
-            };
+            },
+            width: result.assets[0].width ?? null,
+            height: result.assets[0].height ?? null,
+        };
+    }, [isEditing, note, t]);
+
+    const {
+        handleCloseStampCutterEditor,
+        handleConfirmStampCutter,
+        handlePrepareStampCutout,
+        showStampCutterEditor,
+        stampCutterDraft,
+    } = useStampCutterFlow({
+        dismissStickerUi: () => {
+            dismissPastePrompt();
+            Keyboard.dismiss();
+            setShowStickerSourceSheet(false);
+        },
+        enablePhotoStickers: ENABLE_PHOTO_STICKERS,
+        getErrorMessage: (error) => getStickerImportErrorMessage(t, error),
+        importStickerFromSource,
+        importingSticker,
+        pickStickerImportSource,
+        runImportingStickerTask,
+        t,
+    });
+
+    const handleImportSticker = useCallback(async (intent: StickerImportIntent = 'sticker') => {
+        if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
+            return;
+        }
+
+        dismissPastePrompt();
+        Keyboard.dismiss();
+
+        setImportingSticker(true);
+        try {
+            const pickedSource = await pickStickerImportSource();
+            if (!pickedSource) {
+                return;
+            }
 
             try {
-                await importStickerFromSource(importSource, intent);
+                await importStickerFromSource(pickedSource.source, intent);
             } catch (error) {
-                logStickerImportFailure('import-sticker', importSource, intent, error);
+                logStickerImportFailure('import-sticker', pickedSource.source, intent, error);
                 if (shouldOfferStampFallback(error)) {
                     showAppAlert(
                         t('capture.stickerCutoutFallbackTitle', 'Could not make a sticker'),
@@ -983,9 +1034,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                                 text: t('capture.importAsStamp', 'Import as stamp'),
                                 onPress: () => {
                                     setImportingSticker(true);
-                                    void importStickerFromSource(importSource, 'stamp')
+                                    void importStickerFromSource(pickedSource.source, 'stamp')
                                         .catch((stampError) => {
-                                            logStickerImportFailure('stamp-fallback', importSource, 'stamp', stampError);
+                                            logStickerImportFailure('stamp-fallback', pickedSource.source, 'stamp', stampError);
                                             showAppAlert(
                                                 t('capture.error', 'Error'),
                                                 getStickerImportErrorMessage(t, stampError)
@@ -1021,7 +1072,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         } finally {
             setImportingSticker(false);
         }
-    }, [dismissPastePrompt, importStickerFromSource, importingSticker, isEditing, note, t]);
+    }, [dismissPastePrompt, importStickerFromSource, importingSticker, isEditing, note, pickStickerImportSource, t]);
 
     useEffect(() => {
         if (!ENABLE_PHOTO_STICKERS || subjectCutoutPrewarmRequestedRef.current) {
@@ -1039,11 +1090,16 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         const timer = setTimeout(() => {
             const nextAction = pendingStickerSourceAction;
             setPendingStickerSourceAction(null);
+            if (nextAction === 'stamp-cut') {
+                void handlePrepareStampCutout();
+                return;
+            }
+
             void handleImportSticker(nextAction);
         }, STICKER_SOURCE_SHEET_DISMISS_DELAY_MS);
 
         return () => clearTimeout(timer);
-    }, [handleImportSticker, pendingStickerSourceAction, showStickerSourceSheet]);
+    }, [handleImportSticker, handlePrepareStampCutout, pendingStickerSourceAction, showStickerSourceSheet]);
     const handlePasteStickerFromClipboard = useCallback(async () => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
             return;
@@ -1170,6 +1226,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setPendingStickerSourceAction('stamp');
         setShowStickerSourceSheet(false);
     }, []);
+    const handleSelectStickerSourceCutStamp = useCallback(() => {
+        setPendingStickerSourceAction('stamp-cut');
+        setShowStickerSourceSheet(false);
+    }, []);
     const handleShowStickerSourceOptions = useCallback(async () => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
             return;
@@ -1184,7 +1244,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const stickerSourceActions = useMemo(() => {
         const actions: {
             key: string;
-            iconName: 'images-outline' | 'pricetag-outline' | 'clipboard-outline';
+            iconName: 'images-outline' | 'scan-outline' | 'pricetag-outline' | 'clipboard-outline';
             renderIcon?: ({ color, size }: { color: string; size: number }) => React.ReactNode;
             label: string;
             description: string;
@@ -1199,6 +1259,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 description: t('capture.createStickerDescription', 'Transparent PNG or WebP'),
                 onPress: handleSelectStickerSourceSticker,
                 testID: 'sticker-source-option-create-sticker',
+            },
+            {
+                key: 'cut-stamp',
+                iconName: 'scan-outline',
+                label: t('capture.cutStampLabel', 'Cut stamp'),
+                description: t('capture.cutStampDescription', 'Frame just part of a photo inside the cutter'),
+                onPress: handleSelectStickerSourceCutStamp,
+                testID: 'sticker-source-option-cut-stamp',
             },
             {
                 key: 'create-stamp',
@@ -1225,6 +1293,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         return actions;
     }, [
         handleSelectStickerSourceClipboard,
+        handleSelectStickerSourceCutStamp,
         handleSelectStickerSourceStamp,
         handleSelectStickerSourceSticker,
         stickerSourceCanPasteFromClipboard,
@@ -1618,6 +1687,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     ? normalizeSavedTextNoteColor(nextNote.noteColor)
                     : null
             );
+            handleCloseStampCutterEditor();
             setDoodleModeEnabled(false);
             setStickerModeEnabled(false);
             setSelectedStickerId(null);
@@ -1729,6 +1799,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         <NoteDetailSheetContent
             note={note}
             loading={loading}
+            richDecorationsReady={richDecorationsReady}
             isEditing={isEditing}
             isDeleting={isDeleting}
             editContent={editContent}
@@ -1757,6 +1828,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             favoriteFilledTintStyle={favoriteFilledTintStyle}
             favoriteOutlineIconStyle={favoriteOutlineIconStyle}
             favoriteFilledIconStyle={favoriteFilledIconStyle}
+            isSharedByMe={isSharedByMe}
             contentInputRef={contentInputRef}
             colors={colors}
             isDark={isDark}
@@ -1796,7 +1868,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             showPolaroidCapture={showPolaroidCapture}
             scrollContainerRef={scrollContainerRef}
             showPremiumColorAlert={showPremiumColorAlert}
-            androidKeyboardVisible={androidKeyboardVisible}
         />
     );
 
@@ -1808,7 +1879,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     onClose={handleSheetDismiss}
                     dismissible={!isEditing}
                     androidScrollable
-                    androidKeyboardBehavior="interactive"
+                    androidDynamicSizing={false}
+                    androidKeyboardBehavior={isEditing ? 'fillParent' : 'interactive'}
+                    androidSnapPoints={NOTE_DETAIL_ANDROID_SNAP_POINTS}
                 >
                     {renderBody()}
                 </AppSheet>
@@ -1820,6 +1893,25 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     actions={stickerSourceActions}
                     onClose={handleCloseStickerSourceSheet}
                 />
+                {stampCutterDraft ? (
+                    <StampCutterEditor
+                        visible={showStampCutterEditor}
+                        draft={stampCutterDraft}
+                        loading={importingSticker}
+                        title={t('capture.stampCutterTitle', 'Cut stamp')}
+                        subtitle={t(
+                            'capture.stampCutterHint',
+                            'Drag, pinch, or use the controls to frame the part of the photo you want on the stamp.'
+                        )}
+                        cancelLabel={t('common.cancel', 'Cancel')}
+                        confirmLabel={t('capture.stampCutterConfirm', 'Cut stamp')}
+                        onClose={handleCloseStampCutterEditor}
+                        onCompletePlacement={({ placement }) => {
+                            applyImportedSticker(placement);
+                        }}
+                        onConfirm={handleConfirmStampCutter}
+                    />
+                ) : null}
             </>
         );
     }
@@ -1837,6 +1929,25 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 actions={stickerSourceActions}
                 onClose={handleCloseStickerSourceSheet}
             />
+            {stampCutterDraft ? (
+                <StampCutterEditor
+                    visible={showStampCutterEditor}
+                    draft={stampCutterDraft}
+                    loading={importingSticker}
+                    title={t('capture.stampCutterTitle', 'Cut stamp')}
+                    subtitle={t(
+                        'capture.stampCutterHint',
+                        'Drag, pinch, or use the controls to frame the part of the photo you want on the stamp.'
+                    )}
+                    cancelLabel={t('common.cancel', 'Cancel')}
+                    confirmLabel={t('capture.stampCutterConfirm', 'Cut stamp')}
+                    onClose={handleCloseStampCutterEditor}
+                    onCompletePlacement={({ placement }) => {
+                        applyImportedSticker(placement);
+                    }}
+                    onConfirm={handleConfirmStampCutter}
+                />
+            ) : null}
         </>
     );
 }

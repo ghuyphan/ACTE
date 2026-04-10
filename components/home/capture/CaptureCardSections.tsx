@@ -155,6 +155,9 @@ export function TextCaptureSurface({
               onToggleSelectedPlacementOutline={() =>
                 handleSelectedStickerAction('outline-toggle')
               }
+              onRemoveSelectedPlacement={() =>
+                handleSelectedStickerAction('remove')
+              }
             />
           </View>
         ) : null}
@@ -372,6 +375,9 @@ export function PhotoCaptureSurface({
             }
             onToggleSelectedPlacementOutline={() =>
               handleSelectedStickerAction('outline-toggle')
+            }
+            onRemoveSelectedPlacement={() =>
+              handleSelectedStickerAction('remove')
             }
           />
         </View>

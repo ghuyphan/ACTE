@@ -180,7 +180,7 @@ describe('NoteStickerCanvas', () => {
       <NoteStickerCanvas placements={[{ ...stickerPlacement, scale: 1.8, rotation: 12 }]} editable />
     );
 
-    expect(getByTestId('note-sticker-wrap-placement-1').props.style).toEqual(
+    expect(getByTestId('note-sticker-transform-placement-1').props.style).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           transform: [{ scale: 1.8 }, { rotate: '12deg' }],
@@ -190,7 +190,7 @@ describe('NoteStickerCanvas', () => {
     expect(getByTestId('note-sticker-image-placement-1').props.transition).toBe(0);
   });
 
-  it('renders lock and outline controls on the selected editable sticker', () => {
+  it('renders lock, outline, and delete controls on the selected editable sticker', () => {
     const { getByTestId } = render(
       <NoteStickerCanvas
         placements={[stickerPlacement]}
@@ -198,14 +198,16 @@ describe('NoteStickerCanvas', () => {
         selectedPlacementId="placement-1"
         onToggleSelectedPlacementMotionLock={jest.fn()}
         onToggleSelectedPlacementOutline={jest.fn()}
+        onRemoveSelectedPlacement={jest.fn()}
       />
     );
 
     expect(getByTestId('note-sticker-lock-toggle-placement-1')).toBeTruthy();
     expect(getByTestId('note-sticker-outline-toggle-placement-1')).toBeTruthy();
+    expect(getByTestId('note-sticker-remove-placement-1')).toBeTruthy();
   });
 
-  it('hides the outline control for selected stamp stickers', () => {
+  it('keeps lock and delete controls for selected stamp stickers', () => {
     const { getByTestId, queryByTestId } = render(
       <NoteStickerCanvas
         placements={[{ ...stickerPlacement, renderMode: 'stamp' }]}
@@ -213,10 +215,12 @@ describe('NoteStickerCanvas', () => {
         selectedPlacementId="placement-1"
         onToggleSelectedPlacementMotionLock={jest.fn()}
         onToggleSelectedPlacementOutline={jest.fn()}
+        onRemoveSelectedPlacement={jest.fn()}
       />
     );
 
     expect(getByTestId('note-sticker-lock-toggle-placement-1')).toBeTruthy();
     expect(queryByTestId('note-sticker-outline-toggle-placement-1')).toBeNull();
+    expect(getByTestId('note-sticker-remove-placement-1')).toBeTruthy();
   });
 });

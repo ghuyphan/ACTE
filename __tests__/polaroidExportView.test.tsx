@@ -11,12 +11,12 @@ jest.mock('expo-linear-gradient', () => {
   };
 });
 
-jest.mock('../components/notes/DynamicStickerCanvas', () => {
+jest.mock('../components/notes/NoteStickerCanvas', () => {
   const React = require('react');
   const { View } = require('react-native');
 
-  return function MockDynamicStickerCanvas() {
-    return <View testID="mock-dynamic-sticker-canvas" />;
+  return function MockNoteStickerCanvas() {
+    return <View testID="mock-note-sticker-canvas" />;
   };
 });
 
@@ -107,5 +107,6 @@ describe('PolaroidExportView', () => {
     expect(view.getByTestId('polaroid-export-text-content').props.style).toEqual(
       expect.objectContaining({ zIndex: 1 })
     );
+    expect(view.getByTestId('mock-note-sticker-canvas')).toBeTruthy();
   });
 });

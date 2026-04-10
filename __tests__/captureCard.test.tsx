@@ -281,6 +281,10 @@ jest.mock('../components/notes/NoteStickerCanvas', () => {
                   onPress={() => props.onToggleSelectedPlacementOutline?.(selectedPlacement.id)}
                 />
               ) : null}
+              <Pressable
+                testID={`note-sticker-remove-${selectedPlacement.id}`}
+                onPress={() => props.onRemoveSelectedPlacement?.(selectedPlacement.id)}
+              />
             </>
           ) : null}
           <Pressable testID="mock-sticker-canvas-empty" onPress={() => props.onPressCanvas?.()} />
@@ -1630,6 +1634,8 @@ describe('CaptureCard doodle handle', () => {
     fireEvent.press(getByTestId('mock-sticker-select-first'));
     expect(getByTestId('note-sticker-lock-toggle-placement-1')).toBeTruthy();
     expect(getByTestId('note-sticker-outline-toggle-placement-1')).toBeTruthy();
+    expect(getByTestId('note-sticker-remove-placement-1')).toBeTruthy();
+    expect(queryByTestId('capture-sticker-remove')).toBeNull();
 
     fireEvent.press(getByTestId('note-sticker-lock-toggle-placement-1'));
 
@@ -1774,6 +1780,7 @@ describe('CaptureCard doodle handle', () => {
 
     expect(getByTestId('note-sticker-lock-toggle-placement-1')).toBeTruthy();
     expect(queryByTestId('note-sticker-outline-toggle-placement-1')).toBeNull();
+    expect(getByTestId('note-sticker-remove-placement-1')).toBeTruthy();
   });
 
   it('opens the sticker source sheet from a tap on the add button', async () => {

@@ -26,13 +26,23 @@ const mockResetDoodle = jest.fn();
 const mockResetStickers = jest.fn();
 const mockShowAlert = jest.fn();
 const mockScrollToOffset = jest.fn();
+const mockRequestForegroundLocation = jest.fn();
+const mockRequestReminderPermissions = jest.fn();
+const mockOpenAppSettings = jest.fn();
 let mockRemindersEnabled = false;
 let mockNoteText = 'A doodled note';
 let mockNotes: any[] = [];
+let mockLocation: any = {
+  coords: {
+    latitude: 10.77,
+    longitude: 106.69,
+  },
+};
 const mockGetDoodleSnapshot = jest.fn(() => ({
   enabled: true,
   strokes: [{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }],
 }));
+let latestCaptureCardProps: any = null;
 let latestNotesFeedProps: any = null;
 let latestSavedNoteRevealProps: any = null;
 const originalRequestAnimationFrame = global.requestAnimationFrame;
@@ -125,16 +135,11 @@ jest.mock('../hooks/useTheme', () => ({
 
 jest.mock('../hooks/useGeofence', () => ({
   useGeofence: () => ({
-    location: {
-      coords: {
-        latitude: 10.77,
-        longitude: 106.69,
-      },
-    },
+    location: mockLocation,
     remindersEnabled: mockRemindersEnabled,
-    requestForegroundLocation: jest.fn(async () => ({ location: null, requiresSettings: false })),
-    requestReminderPermissions: jest.fn(async () => ({ enabled: false, requiresSettings: false })),
-    openAppSettings: jest.fn(async () => undefined),
+    requestForegroundLocation: mockRequestForegroundLocation,
+    requestReminderPermissions: mockRequestReminderPermissions,
+    openAppSettings: mockOpenAppSettings,
   }),
 }));
 
@@ -252,6 +257,7 @@ jest.mock('../components/home/CaptureCard', () => {
   return {
     __esModule: true,
     default: React.forwardRef(function MockCaptureCard(props: any, ref: any) {
+      latestCaptureCardProps = props;
       React.useImperativeHandle(
         ref,
         () => ({
@@ -345,6 +351,23 @@ describe('HomeScreen doodle save flow', () => {
     mockRemindersEnabled = false;
     mockNoteText = 'A doodled note';
     mockNotes = [];
+    mockLocation = {
+      coords: {
+        latitude: 10.77,
+        longitude: 106.69,
+      },
+    };
+    mockRequestForegroundLocation.mockResolvedValue({
+      location: null,
+      requiresSettings: false,
+      reason: 'unavailable',
+    });
+    mockRequestReminderPermissions.mockResolvedValue({
+      enabled: false,
+      requiresSettings: false,
+    });
+    mockOpenAppSettings.mockResolvedValue(undefined);
+    latestCaptureCardProps = null;
     latestNotesFeedProps = null;
     latestSavedNoteRevealProps = null;
     mockGetDoodleSnapshot.mockImplementation(() => ({
@@ -587,6 +610,52 @@ describe('HomeScreen doodle save flow', () => {
 
     await waitFor(() => {
       expect(mockSaveNoteDoodle).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('shows save progress while waiting for location and then surfaces the GPS failure', async () => {
+    let resolveLocationRequest: ((value: any) => void) | null = null;
+    mockLocation = null;
+    mockRequestForegroundLocation.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveLocationRequest = resolve;
+        })
+    );
+
+    const { getByTestId } = renderHomeScreen();
+
+    fireEvent.press(getByTestId('capture-save-button'));
+
+    await waitFor(() => {
+      expect(mockRequestForegroundLocation).toHaveBeenCalledTimes(1);
+      expect(latestCaptureCardProps?.saving).toBe(true);
+    });
+
+    expect(mockCreateNote).not.toHaveBeenCalled();
+
+    if (!resolveLocationRequest) {
+      throw new Error('Expected the foreground location request to start');
+    }
+
+    await act(async () => {
+      resolveLocationRequest({
+        location: null,
+        requiresSettings: false,
+        reason: 'timeout',
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockShowAlert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: 'error',
+          title: 'Location unavailable',
+          message:
+            'Noto is still waiting for a GPS fix. Move to a clearer spot and try again in a moment.',
+        })
+      );
+      expect(latestCaptureCardProps?.saving).toBe(false);
     });
   });
 });
