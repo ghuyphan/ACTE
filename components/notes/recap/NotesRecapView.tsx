@@ -38,7 +38,7 @@ const NotesRecapView = memo(function NotesRecapView({
     pileTitle,
     previousMonthDisabled,
     recapHorizontalPadding,
-    selectedDayKey,
+    selectedDayKeys,
     selectDay,
     switchMonth,
     weekDayLabels,
@@ -198,7 +198,7 @@ const NotesRecapView = memo(function NotesRecapView({
                 <RecapCalendarGrid
                   days={calendarDays}
                   weekDayLabels={weekDayLabels}
-                  selectedDayKey={selectedDayKey}
+                  selectedDayKeys={selectedDayKeys}
                   onSelectDay={selectDay}
                   compact={isCompactRecap}
                 />

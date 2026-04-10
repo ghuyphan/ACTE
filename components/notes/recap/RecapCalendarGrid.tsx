@@ -31,7 +31,7 @@ export interface RecapCalendarDay {
 interface RecapCalendarGridProps {
   days: RecapCalendarDay[];
   weekDayLabels?: string[];
-  selectedDayKey?: string | null;
+  selectedDayKeys?: string[];
   onSelectDay?: (dayKey: string) => void;
   compact?: boolean;
 }
@@ -383,12 +383,13 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
 function RecapCalendarGrid({
   days,
   weekDayLabels = DEFAULT_WEEKDAY_LABELS,
-  selectedDayKey = null,
+  selectedDayKeys = [],
   onSelectDay,
   compact = false,
 }: RecapCalendarGridProps) {
   const { colors } = useTheme();
   const [calendarWidth, setCalendarWidth] = useState(0);
+  const selectedDayKeySet = useMemo(() => new Set(selectedDayKeys), [selectedDayKeys]);
   const palette = useMemo<CalendarPalette>(
     () => ({
       accent: colors.accent,
@@ -453,7 +454,7 @@ function RecapCalendarGrid({
           <RecapCalendarDayCell
             key={day.key}
             day={day}
-            isSelected={Boolean(day.dateKey && day.dateKey === selectedDayKey)}
+            isSelected={Boolean(day.dateKey && selectedDayKeySet.has(day.dateKey))}
             palette={palette}
             onSelectDay={onSelectDay}
             compact={isCompact}

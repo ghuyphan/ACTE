@@ -966,22 +966,23 @@ describe('CaptureCard doodle handle', () => {
     expect(queryByTestId('capture-radius-toggle')).toBeNull();
   });
 
-  it('explains that the remaining photo count includes imported photos once saved', () => {
+  it('shows the remaining photo count as a compact shutter label', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const t = ((key: string, fallback?: string, options?: { count?: number }) => {
-      if (key === 'capture.photoSlotsRemainingIncludingImports') {
-        return `${options?.count ?? 0} free photo notes left. Imports count when saved.`;
+      if (key === 'capture.photoSlotsRemainingCompact') {
+        return `${options?.count ?? 0} left`;
       }
 
       return fallback ?? key;
     }) as any;
-    const { getByText } = renderCaptureCard(ref, {
+    const { getByText, queryByText } = renderCaptureCard(ref, {
       captureMode: 'camera',
       remainingPhotoSlots: 10,
       t,
     });
 
-    expect(getByText('10 free photo notes left. Imports count when saved.')).toBeTruthy();
+    expect(getByText('10 left')).toBeTruthy();
+    expect(queryByText('10 free photo notes left. Imports count when saved.')).toBeNull();
   });
 
   it('lets you change the text-card doodle color', () => {

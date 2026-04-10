@@ -225,15 +225,29 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             return;
         }
 
+        let cancelled = false;
+
         getPersistentItem(THEME_STORAGE_KEY).then((savedTheme) => {
+            if (cancelled) {
+                return;
+            }
+
             const nextTheme = normalizeTheme(savedTheme);
             setThemeState(nextTheme);
             syncNativeColorScheme(nextTheme);
             setThemeReady(true);
         }).catch(() => {
+            if (cancelled) {
+                return;
+            }
+
             syncNativeColorScheme('system');
             setThemeReady(true);
         });
+
+        return () => {
+            cancelled = true;
+        };
     }, [theme, themeReady]);
 
     const setTheme = async (newTheme: ThemeType) => {

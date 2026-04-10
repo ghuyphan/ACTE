@@ -35,8 +35,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
-private const val TEXT_NOTE_OVERLAY_OPACITY = 0.5f
-private const val PHOTO_NOTE_OVERLAY_OPACITY = 0.92f
+private const val DOODLE_OVERLAY_OPACITY = 1f
 private const val STICKER_OVERLAY_OPACITY = 1f
 private const val SMALL_WIDGET_MAX_RENDER_EDGE_PX = 760
 private const val MEDIUM_WIDGET_MAX_RENDER_EDGE_PX = 960
@@ -239,7 +238,7 @@ private fun renderWidgetStampBitmap(
     color = Color.argb((26f * normalizedOpacity).toInt().coerceIn(0, 255), 143, 112, 72)
   }
   val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-    isFilterBitmap = false
+    isFilterBitmap = true
     alpha = (255f * normalizedOpacity).toInt().coerceIn(0, 255)
   }
 
@@ -578,7 +577,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         stickerPlacementsJson = snapshot.stickerPlacementsJson,
         widthPx = resolveContentWidthPx(context, options, isMedium),
         heightPx = resolveContentHeightPx(context, options, isMedium),
-        overlayOpacity = getStickerOverlayOpacity(),
+        overlayOpacity = getStickerOverlayOpacity(snapshot),
         renderSpec = getWidgetOverlayRenderSpec(isMedium)
       )
 
@@ -1282,14 +1281,14 @@ class NotoWidgetProvider : AppWidgetProvider() {
           stickerHeight / 2f
         )
         val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-          isFilterBitmap = false
+          isFilterBitmap = true
           colorFilter = android.graphics.PorterDuffColorFilter(
             parseColor(STICKER_OUTLINE_COLOR, STICKER_OUTLINE_OPACITY * opacity * overlayOpacity),
             android.graphics.PorterDuff.Mode.SRC_IN
           )
         }
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-          isFilterBitmap = false
+          isFilterBitmap = true
           alpha = (opacity * (if (isStamp) 1f else overlayOpacity) * 255f).toInt().coerceIn(0, 255)
         }
 
@@ -1359,14 +1358,10 @@ class NotoWidgetProvider : AppWidgetProvider() {
     }
 
     private fun getWidgetOverlayOpacity(snapshot: NotoWidgetSnapshot): Float {
-      return if (snapshot.noteType == "photo") {
-        PHOTO_NOTE_OVERLAY_OPACITY
-      } else {
-        TEXT_NOTE_OVERLAY_OPACITY
-      }
+      return DOODLE_OVERLAY_OPACITY
     }
 
-    private fun getStickerOverlayOpacity(): Float {
+    private fun getStickerOverlayOpacity(snapshot: NotoWidgetSnapshot): Float {
       return STICKER_OVERLAY_OPACITY
     }
 
@@ -1377,16 +1372,16 @@ class NotoWidgetProvider : AppWidgetProvider() {
     private fun getWidgetOverlayRenderSpec(isMedium: Boolean): WidgetOverlayRenderSpec {
       return if (isMedium) {
         WidgetOverlayRenderSpec(
-          doodleInsetDp = 18f,
-          stickerInsetDp = 18f,
+          doodleInsetDp = 6f,
+          stickerInsetDp = 6f,
           stickerMinimumBaseSizeDp = 68f,
           stickerBaseSizeRatio = 0.30f
         )
       } else {
         WidgetOverlayRenderSpec(
-          doodleInsetDp = 0f,
-          stickerInsetDp = 0f,
-          stickerMinimumBaseSizeDp = 56f,
+          doodleInsetDp = 6f,
+          stickerInsetDp = 6f,
+          stickerMinimumBaseSizeDp = 68f,
           stickerBaseSizeRatio = 0.30f
         )
       }

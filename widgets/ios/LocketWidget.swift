@@ -685,11 +685,13 @@ private let locketWidgetStickerOutlineOffsets: [CGPoint] = [
     CGPoint(x: -0.71, y: 0.71),
     CGPoint(x: -0.92, y: 0.38)
 ]
-private let locketWidgetTextOverlayOpacity: Double = 0.5
-private let locketWidgetPhotoOverlayOpacity: Double = 0.92
+private let locketWidgetDoodleOverlayOpacity: Double = 1
 private let locketWidgetStickerOverlayOpacity: Double = 1
 private let locketWidgetStickerOutlineOpacity: Double = 1
 private let locketWidgetStampOutlineOpacity: Double = 1
+private let locketWidgetDecorationInset: CGFloat = 6
+private let locketWidgetStickerMinimumBaseSize: CGFloat = 68
+private let locketWidgetStickerBaseSizeRatio: CGFloat = 0.30
 
 private func getWidgetStickerOutlineSize(width: CGFloat, height: CGFloat) -> CGFloat {
     max(2.5, min(6, min(width, height) * 0.032))
@@ -705,7 +707,7 @@ private struct LocketWidgetStickerOverlay: View {
     init(
         placements: [LocketWidgetStickerPlacement],
         overlayOpacity: Double,
-        artboardInset: CGFloat = 18,
+        artboardInset: CGFloat = locketWidgetDecorationInset,
         minimumBaseSize: CGFloat = 68,
         baseSizeRatio: CGFloat = 0.30
     ) {
@@ -1069,9 +1071,7 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var noteOverlayOpacity: Double {
-        payload.noteType == "photo"
-            ? locketWidgetPhotoOverlayOpacity
-            : locketWidgetTextOverlayOpacity
+        locketWidgetDoodleOverlayOpacity
     }
 
     private var noteStickerOverlayOpacity: Double {
@@ -1784,9 +1784,9 @@ private struct LocketWidgetEntryView: View {
                 LocketWidgetStickerOverlay(
                     placements: stickerPlacements,
                     overlayOpacity: noteStickerOverlayOpacity,
-                    artboardInset: isExpanded ? 16 : 10,
-                    minimumBaseSize: isExpanded ? 64 : 56,
-                    baseSizeRatio: isExpanded ? 0.26 : 0.30
+                    artboardInset: locketWidgetDecorationInset,
+                    minimumBaseSize: locketWidgetStickerMinimumBaseSize,
+                    baseSizeRatio: locketWidgetStickerBaseSizeRatio
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -1796,7 +1796,7 @@ private struct LocketWidgetEntryView: View {
                     strokes: doodleStrokes,
                     isLarge: isExpanded,
                     overlayOpacity: noteOverlayOpacity,
-                    contentInset: isExpanded ? 16 : 8
+                    contentInset: locketWidgetDecorationInset
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)

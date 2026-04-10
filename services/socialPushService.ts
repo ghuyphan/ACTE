@@ -1,11 +1,18 @@
+import * as Crypto from 'expo-crypto';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { getPersistentItem, removePersistentItem, setPersistentItem } from '../utils/appStorage';
 import { AppUser } from '../utils/appUser';
-import { getSupabase, getSupabaseErrorMessage, hasSupabaseConfig } from '../utils/supabase';
+import {
+  getSupabase,
+  getSupabaseErrorMessage,
+  hasSupabaseConfig,
+  isSupabaseSchemaMismatchError,
+} from '../utils/supabase';
 
 const PUSH_REGISTRATION_STORAGE_KEY = 'notification.socialPushRegistration.v1';
+const PUSH_INSTALLATION_ID_STORAGE_KEY = 'notification.socialPushInstallationId.v1';
 
 type PersistedPushRegistration = {
   token: string;
@@ -95,6 +102,21 @@ async function writePersistedRegistration(value: PersistedPushRegistration) {
   await setPersistentItem(PUSH_REGISTRATION_STORAGE_KEY, JSON.stringify(value));
 }
 
+async function getPushInstallationId() {
+  const existingInstallationId = (await getPersistentItem(PUSH_INSTALLATION_ID_STORAGE_KEY))?.trim() ?? '';
+  if (existingInstallationId) {
+    return existingInstallationId;
+  }
+
+  const nextInstallationId =
+    typeof Crypto.randomUUID === 'function'
+      ? Crypto.randomUUID()
+      : `push-install-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+  await setPersistentItem(PUSH_INSTALLATION_ID_STORAGE_KEY, nextInstallationId);
+  return nextInstallationId;
+}
+
 function getAppVersion() {
   return Constants.expoConfig?.version?.trim() || null;
 }
@@ -149,6 +171,32 @@ async function unregisterPushToken(token: string) {
 async function clearPersistedRegistrationAfterSuccessfulUnregister(token: string) {
   await unregisterPushToken(token);
   await removePersistentItem(PUSH_REGISTRATION_STORAGE_KEY);
+}
+
+async function registerPushTokenWithCompatibilityFallback(
+  supabase: NonNullable<ReturnType<typeof getSupabase>>,
+  expoPushToken: string,
+  installationId: string | null
+) {
+  const baseArgs = {
+    expo_push_token_input: expoPushToken,
+    platform_input: Platform.OS,
+    app_version_input: getAppVersion(),
+  };
+
+  const nextArgs = installationId
+    ? {
+        ...baseArgs,
+        installation_id_input: installationId,
+      }
+    : baseArgs;
+
+  const nextResult = await supabase.rpc('register_push_token', nextArgs);
+  if (!nextResult.error || !isSupabaseSchemaMismatchError(nextResult.error) || !installationId) {
+    return nextResult;
+  }
+
+  return supabase.rpc('register_push_token', baseArgs);
 }
 
 export async function unregisterCurrentSocialPushToken() {
@@ -211,15 +259,17 @@ export async function syncSocialPushRegistration(
     return 'skipped';
   }
 
+  const installationId = await getPushInstallationId();
+
   if (persisted?.token && (persisted.token !== expoPushToken || persisted.userId !== user.uid)) {
     await clearPersistedRegistrationAfterSuccessfulUnregister(persisted.token);
   }
 
-  const { error } = await supabase.rpc('register_push_token', {
-    expo_push_token_input: expoPushToken,
-    platform_input: Platform.OS,
-    app_version_input: getAppVersion(),
-  });
+  const { error } = await registerPushTokenWithCompatibilityFallback(
+    supabase,
+    expoPushToken,
+    installationId
+  );
 
   if (error) {
     throw error;
@@ -258,6 +308,22 @@ export async function sendSocialNotificationEvent(event: SocialNotificationEvent
         ? (data as { error: string }).error
         : 'Could not send this notification right now.'
     );
+  }
+
+  if (
+    data &&
+    typeof data === 'object' &&
+    'success' in data &&
+    (data as SocialNotificationResponse).success === true
+  ) {
+    const response = data as Extract<SocialNotificationResponse, { success: true }>;
+    if ((response.recipients ?? 0) > 0 && (response.delivered ?? 0) === 0) {
+      console.warn('[social-push] Notification request completed without any delivered devices.', {
+        event,
+        recipients: response.recipients ?? 0,
+        delivered: response.delivered ?? 0,
+      });
+    }
   }
 }
 

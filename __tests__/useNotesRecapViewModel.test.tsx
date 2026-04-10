@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import * as ReactNative from 'react-native';
 import { useNotesRecapViewModel } from '../hooks/useNotesRecapViewModel';
 import type { Note } from '../services/database';
@@ -26,6 +26,10 @@ jest.mock('../hooks/useTheme', () => ({
 jest.mock('../services/database', () => ({
   getCachedMonthlyRecaps: jest.fn(async () => new Map()),
   refreshCachedMonthlyRecapForMonthKey: jest.fn(async () => null),
+}));
+
+jest.mock('expo-haptics', () => ({
+  selectionAsync: jest.fn(async () => undefined),
 }));
 
 function buildNote(overrides: Partial<Note> = {}): Note {
@@ -172,6 +176,67 @@ describe('useNotesRecapViewModel', () => {
 
     await waitFor(() => {
       expect(result.current.activeMonthLabel).toBe('4/2026');
+    });
+  });
+
+  it('supports selecting multiple recap days at the same time', async () => {
+    const notes: Note[] = [
+      buildNote({
+        id: 'photo-1',
+        type: 'photo',
+        content: 'file:///photo-1.jpg',
+        photoLocalUri: 'file:///photo-1.jpg',
+        createdAt: '2026-04-03T08:00:00.000Z',
+      }),
+      buildNote({
+        id: 'photo-2',
+        type: 'photo',
+        content: 'file:///photo-2.jpg',
+        photoLocalUri: 'file:///photo-2.jpg',
+        createdAt: '2026-04-12T08:00:00.000Z',
+      }),
+      buildNote({
+        id: 'photo-3',
+        type: 'photo',
+        content: 'file:///photo-3.jpg',
+        photoLocalUri: 'file:///photo-3.jpg',
+        createdAt: '2026-04-19T08:00:00.000Z',
+      }),
+    ];
+
+    const { result } = renderHook(() => useNotesRecapViewModel({ notes }));
+
+    await waitFor(() => {
+      expect(result.current.pileItems).toHaveLength(3);
+    });
+
+    act(() => {
+      result.current.selectDay('2026-04-03');
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedDayKeys).toEqual(['2026-04-03']);
+      expect(result.current.pileItems).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.selectDay('2026-04-12');
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedDayKeys).toEqual(['2026-04-03', '2026-04-12']);
+      expect(result.current.pileItems).toHaveLength(2);
+      expect(result.current.pileTitle).toBe('Selected days');
+    });
+
+    act(() => {
+      result.current.selectDay('2026-04-03');
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedDayKeys).toEqual(['2026-04-12']);
+      expect(result.current.pileItems).toHaveLength(1);
+      expect(result.current.pileTitle).toBe('Apr 12');
     });
   });
 });

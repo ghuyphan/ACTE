@@ -23,6 +23,30 @@ const GEOFENCE_SIGNATURE_STORAGE_KEY = 'geofence.signature';
 const IOS_GEOFENCE_REGION_LIMIT = 20;
 const ANDROID_GEOFENCE_REGION_LIMIT = 100;
 
+function isBackgroundLocationAuthorizationError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    (message.includes('background location') || message.includes('location services')) &&
+    (message.includes('not authorized') || message.includes('not authorised'))
+  );
+}
+
+async function hasStartedGeofencingSafely() {
+  try {
+    return await Location.hasStartedGeofencingAsync(GEOFENCE_TASK_NAME);
+  } catch (error) {
+    if (isBackgroundLocationAuthorizationError(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
 export function getMaxGeofenceRegionCount(platformOS = Platform.OS) {
   return platformOS === 'android' ? ANDROID_GEOFENCE_REGION_LIMIT : IOS_GEOFENCE_REGION_LIMIT;
 }
@@ -108,7 +132,7 @@ export async function syncGeofenceRegions(options: { notes?: Note[] | null } = {
 
   const signature = buildGeofenceSignature(regions);
   const [hasTask, previousSignature] = await Promise.all([
-    Location.hasStartedGeofencingAsync(GEOFENCE_TASK_NAME),
+    hasStartedGeofencingSafely(),
     getPersistentItem(GEOFENCE_SIGNATURE_STORAGE_KEY),
   ]);
 
@@ -116,7 +140,16 @@ export async function syncGeofenceRegions(options: { notes?: Note[] | null } = {
     return true;
   }
 
-  await Location.startGeofencingAsync(GEOFENCE_TASK_NAME, regions);
+  try {
+    await Location.startGeofencingAsync(GEOFENCE_TASK_NAME, regions);
+  } catch (error) {
+    if (isBackgroundLocationAuthorizationError(error)) {
+      await removePersistentItem(GEOFENCE_SIGNATURE_STORAGE_KEY);
+      return false;
+    }
+
+    throw error;
+  }
   await setPersistentItem(GEOFENCE_SIGNATURE_STORAGE_KEY, signature);
   return true;
 }
@@ -135,9 +168,15 @@ export async function skipImmediateReminderForNewNote(noteId: string): Promise<v
 }
 
 export async function clearGeofenceRegions(): Promise<void> {
-  const hasTask = await Location.hasStartedGeofencingAsync(GEOFENCE_TASK_NAME);
+  const hasTask = await hasStartedGeofencingSafely();
   if (hasTask) {
-    await Location.stopGeofencingAsync(GEOFENCE_TASK_NAME);
+    try {
+      await Location.stopGeofencingAsync(GEOFENCE_TASK_NAME);
+    } catch (error) {
+      if (!isBackgroundLocationAuthorizationError(error)) {
+        throw error;
+      }
+    }
   }
   await removePersistentItem(GEOFENCE_SIGNATURE_STORAGE_KEY);
 }

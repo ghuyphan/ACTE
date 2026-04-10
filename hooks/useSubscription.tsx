@@ -158,6 +158,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const snapshotLoadRequestIdRef = useRef(0);
   const receivedLiveRemotePhotoNoteCountRef = useRef(false);
   const cachedSnapshotRef = useRef<SubscriptionSnapshot | null>(null);
+  const isMountedRef = useRef(true);
   const userId = user?.id ?? null;
   const snapshotStorageKey = `${SUBSCRIPTION_SNAPSHOT_KEY_PREFIX}${user?.uid ?? 'anonymous'}`;
   const availablePackages = useMemo(
@@ -183,12 +184,25 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         ? offerings.all[REVENUECAT_OFFERING_ID]
         : offerings.current) ?? offerings.current ?? null;
 
+    if (!isMountedRef.current) {
+      return;
+    }
+
     setCurrentOffering(offering);
     setCustomerInfo(customerInfo);
   }, [isOnline]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const requestId = ++snapshotLoadRequestIdRef.current;
+    let cancelled = false;
     receivedLiveRemotePhotoNoteCountRef.current = false;
     cachedSnapshotRef.current = null;
     setCachedSnapshot(null);
@@ -197,7 +211,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
     void getPersistentItem(snapshotStorageKey)
       .then((rawValue) => {
-        if (snapshotLoadRequestIdRef.current !== requestId) {
+        if (cancelled || snapshotLoadRequestIdRef.current !== requestId) {
           return;
         }
 
@@ -223,6 +237,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       .catch((error) => {
         console.warn('[subscription] Failed to load cached subscription snapshot:', error);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [snapshotStorageKey]);
 
   useEffect(() => {
@@ -257,7 +275,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         console.warn('[subscription] Failed to initialize RevenueCat:', error);
       })
       .finally(() => {
-        setIsReady(true);
+        if (isMountedRef.current) {
+          setIsReady(true);
+        }
       });
 
   }, [authReady, isConfigured, isOnline, loadRevenueCatState, revenueCatApiKey]);
@@ -268,7 +288,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     }
 
     const listener = (nextCustomerInfo: CustomerInfo) => {
-      setCustomerInfo(nextCustomerInfo);
+      if (isMountedRef.current) {
+        setCustomerInfo(nextCustomerInfo);
+      }
     };
     customerInfoListenerRef.current = listener;
     Purchases.addCustomerInfoUpdateListener(listener);
@@ -345,6 +367,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
+          if (!active || !isMountedRef.current) {
+            return;
+          }
+
           const nextCount =
             typeof payload.new === 'object' && payload.new && 'photo_note_count' in payload.new
               ? (payload.new as { photo_note_count?: unknown }).photo_note_count
@@ -401,6 +427,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     }
 
     const nextUserId = user?.uid ?? null;
+    let cancelled = false;
 
     if (!isOnline) {
       return;
@@ -414,18 +441,30 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       try {
         if (nextUserId) {
           const result = await Purchases.logIn(nextUserId);
+          if (cancelled || !isMountedRef.current) {
+            return;
+          }
           setCustomerInfo(result.customerInfo);
         } else {
           const customerInfo = await Purchases.logOut();
+          if (cancelled || !isMountedRef.current) {
+            return;
+          }
           setCustomerInfo(customerInfo);
         }
 
         await loadRevenueCatState();
-        currentRevenueCatUserIdRef.current = nextUserId;
+        if (!cancelled && isMountedRef.current) {
+          currentRevenueCatUserIdRef.current = nextUserId;
+        }
       } catch (error) {
         console.warn('[subscription] Failed to refresh RevenueCat user state:', error);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [authReady, isConfigured, isOnline, loadRevenueCatState, user?.uid]);
 
   const tier = customerInfo ? getTierFromCustomerInfo(customerInfo) : cachedSnapshot?.tier ?? 'free';

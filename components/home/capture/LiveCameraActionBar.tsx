@@ -14,7 +14,6 @@ interface LiveCameraActionBarProps {
   libraryImportLocked: boolean;
   needsCameraPermission: boolean;
   onOpenPhotoLibrary: () => void;
-  remainingPhotoSlots?: number | null;
   t: TFunction;
 }
 
@@ -25,7 +24,6 @@ export function LiveCameraActionBar({
   libraryImportLocked,
   needsCameraPermission,
   onOpenPhotoLibrary,
-  remainingPhotoSlots = null,
   t,
 }: LiveCameraActionBarProps) {
   if (needsCameraPermission) {
@@ -33,16 +31,6 @@ export function LiveCameraActionBar({
   }
 
   const showLivePhotoGuide = Boolean(cameraInstructionText);
-  const photoQuotaHint =
-    typeof remainingPhotoSlots === 'number'
-      ? remainingPhotoSlots > 0
-        ? t(
-            'capture.photoSlotsRemainingIncludingImports',
-            '{{count}} free photo notes left. Imports count when saved.',
-            { count: remainingPhotoSlots }
-          )
-        : t('capture.photoLimitReachedHint', 'Free photo limit reached')
-      : null;
 
   return (
     <View style={styles.captureActionBarWrap}>
@@ -90,11 +78,6 @@ export function LiveCameraActionBar({
           )}
         </CaptureAnimatedPressable>
       </CaptureControlRail>
-      {photoQuotaHint ? (
-        <Text style={[styles.cameraInstructionText, styles.captureQuotaHintText, { color: colors.captureGlassText }]}>
-          {photoQuotaHint}
-        </Text>
-      ) : null}
     </View>
   );
 }

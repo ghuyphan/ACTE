@@ -9,7 +9,7 @@ import { Note } from '../../services/database';
 import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { SharedPost } from '../../services/sharedFeedService';
-import { formatDate, formatNoteTimestamp } from '../../utils/dateUtils';
+import { formatNoteTimestamp } from '../../utils/dateUtils';
 import ImageMemoryCard from '../notes/ImageMemoryCard';
 import {
   DEFAULT_DEBUG_TILT_STATE,
@@ -191,9 +191,10 @@ export function SharedPostMemoryCard({
   isActive = false,
 }: SharedPostMemoryCardProps) {
   const { width } = useWindowDimensions();
+  const now = useRelativeTimeNow();
   const resolvedCardSize = cardSize ?? width - (Layout.screenPadding - 8) * 2;
   const authorLabel = post.authorDisplayName ?? t('shared.someone', 'Someone');
-  const dateStr = formatDate(post.createdAt, 'short');
+  const dateStr = formatNoteTimestamp(post.createdAt, 'card', now);
   const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
   const placeLabel = post.placeName ?? t('shared.sharedNow', 'Shared now');
 

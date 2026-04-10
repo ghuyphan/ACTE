@@ -4,7 +4,10 @@ import { useAppNotificationRouting } from '../hooks/app/useAppNotificationRoutin
 
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
+const mockDismissTo = jest.fn();
 const mockRequestFeedFocus = jest.fn();
+const mockCloseNoteDetail = jest.fn();
+const mockPeekActiveFeedTarget = jest.fn();
 const mockGetLastNotificationResponseAsync = jest.fn<
   Promise<Notifications.NotificationResponse | null>,
   []
@@ -21,6 +24,7 @@ let mockRootNavigationState: { key?: string } | null = null;
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
+    dismissTo: (...args: unknown[]) => mockDismissTo(...args),
     replace: (...args: unknown[]) => mockReplace(...args),
     push: (...args: unknown[]) => mockPush(...args),
   }),
@@ -40,11 +44,24 @@ jest.mock('../hooks/useFeedFocus', () => ({
   }),
 }));
 
+jest.mock('../hooks/useActiveFeedTarget', () => ({
+  useActiveFeedTarget: () => ({
+    peekActiveFeedTarget: (...args: unknown[]) => mockPeekActiveFeedTarget(...args),
+  }),
+}));
+
+jest.mock('../hooks/useNoteDetailSheet', () => ({
+  useNoteDetailSheet: () => ({
+    closeNoteDetail: (...args: unknown[]) => mockCloseNoteDetail(...args),
+  }),
+}));
+
 describe('useAppNotificationRouting', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRootNavigationState = null;
     mockGetLastNotificationResponseAsync.mockResolvedValue(null);
+    mockPeekActiveFeedTarget.mockReturnValue(null);
   });
 
   it('waits for the root navigation state before processing the last notification response', async () => {
@@ -74,8 +91,9 @@ describe('useAppNotificationRouting', () => {
     await waitFor(() => {
       expect(mockGetLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
       expect(mockAddNotificationResponseReceivedListener).toHaveBeenCalledTimes(1);
+      expect(mockCloseNoteDetail).toHaveBeenCalledTimes(1);
       expect(mockRequestFeedFocus).toHaveBeenCalledWith({ kind: 'note', id: 'note-42' });
-      expect(mockReplace).toHaveBeenCalledWith('/widget/note/note-42');
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
       expect(mockClearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
     });
   });

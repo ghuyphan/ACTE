@@ -27,6 +27,16 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
+jest.mock('../utils/appStorage', () => ({
+  getPersistentItem: async (key: string) => mockStorage.get(key) ?? null,
+  removePersistentItem: async (key: string) => {
+    mockStorage.delete(key);
+  },
+  setPersistentItem: async (key: string, value: string) => {
+    mockStorage.set(key, value);
+  },
+}));
+
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: (...args: unknown[]) => mockGetForegroundPermissionsAsync(...args),
   getBackgroundPermissionsAsync: (...args: unknown[]) => mockGetBackgroundPermissionsAsync(...args),
@@ -73,6 +83,12 @@ function buildNote(overrides: Partial<Note> = {}): Note {
     updatedAt: null,
     ...overrides,
   };
+}
+
+function buildBackgroundLocationAuthorizationError() {
+  return new Error(
+    "Call to function 'ExpoLocation.hasStartedGeofencingAsync' has been rejected.\n→ Caused by: Not authorized to use background location services"
+  );
 }
 
 beforeEach(() => {
@@ -143,6 +159,18 @@ describe('geofenceService', () => {
     const result = await syncGeofenceRegions();
     expect(result).toBe(true);
     expect(mockStartGeofencingAsync).not.toHaveBeenCalled();
+  });
+
+  it('treats background-location authorization rejections as a missing geofence task', async () => {
+    mockHasStartedGeofencingAsync.mockRejectedValue(buildBackgroundLocationAuthorizationError());
+
+    const result = await syncGeofenceRegions();
+
+    expect(result).toBe(true);
+    expect(mockStartGeofencingAsync).toHaveBeenCalledWith(
+      'BACKGROUND_GEOFENCE_TASK',
+      expect.any(Array)
+    );
   });
 
   it('limits the number of registered regions to the platform maximum', async () => {

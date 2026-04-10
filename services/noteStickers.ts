@@ -150,6 +150,10 @@ const STICKER_IMPORT_OPTIMIZATION_PRESETS = [
   { maxDimension: 768, compress: 0.82 },
   { maxDimension: 512, compress: 0.72 },
 ];
+const REMOTE_STICKER_REGISTRY_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
+
+let remoteStickerAssetRegistryUnavailableUntil = 0;
+let remoteStickerAssetRefsUnavailableUntil = 0;
 
 function normalizeMimeType(value: string | null | undefined) {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -389,6 +393,43 @@ function isRemoteStickerRegistryUnavailableError(error: unknown) {
   return isSupabaseSchemaMismatchError(error) || isSupabasePolicyError(error);
 }
 
+function isRemoteStickerRegistryTemporarilyDisabled(kind: 'assets' | 'refs') {
+  const disabledUntil =
+    kind === 'assets'
+      ? remoteStickerAssetRegistryUnavailableUntil
+      : remoteStickerAssetRefsUnavailableUntil;
+  return Date.now() < disabledUntil;
+}
+
+function markRemoteStickerRegistryUnavailable(kind: 'assets' | 'refs', message: string, error: unknown) {
+  const now = Date.now();
+  const disabledUntil =
+    kind === 'assets'
+      ? remoteStickerAssetRegistryUnavailableUntil
+      : remoteStickerAssetRefsUnavailableUntil;
+  const isAlreadyCoolingDown = now < disabledUntil;
+  const nextDisabledUntil = now + REMOTE_STICKER_REGISTRY_RETRY_COOLDOWN_MS;
+
+  if (kind === 'assets') {
+    remoteStickerAssetRegistryUnavailableUntil = nextDisabledUntil;
+  } else {
+    remoteStickerAssetRefsUnavailableUntil = nextDisabledUntil;
+  }
+
+  if (!isAlreadyCoolingDown) {
+    console.warn(message, error);
+  }
+}
+
+function clearRemoteStickerRegistryUnavailable(kind: 'assets' | 'refs') {
+  if (kind === 'assets') {
+    remoteStickerAssetRegistryUnavailableUntil = 0;
+    return;
+  }
+
+  remoteStickerAssetRefsUnavailableUntil = 0;
+}
+
 function getRemoteStickerAssetId(asset: StickerAsset) {
   const remoteAssetId = typeof asset.remoteAssetId === 'string' ? asset.remoteAssetId.trim() : '';
   return remoteAssetId || null;
@@ -449,6 +490,10 @@ async function registerRemoteStickerAsset(
   ownerUserId: string,
   asset: StickerAsset
 ): Promise<StickerAsset | null> {
+  if (isRemoteStickerRegistryTemporarilyDisabled('assets')) {
+    return null;
+  }
+
   const localUri = typeof asset.localUri === 'string' ? asset.localUri.trim() : '';
   if (!localUri) {
     return null;
@@ -469,6 +514,7 @@ async function registerRemoteStickerAsset(
     const existingRow = await getRemoteStickerAssetRowByContentHash(ownerUserId, contentHash);
     if (existingRow) {
       await touchRemoteStickerAssetLastSeen(existingRow.id);
+      clearRemoteStickerRegistryUnavailable('assets');
       return {
         ...mapRemoteStickerAsset(asset, existingRow),
         uploadFingerprint,
@@ -505,6 +551,7 @@ async function registerRemoteStickerAsset(
       }
 
       await touchRemoteStickerAssetLastSeen(concurrentRow.id);
+      clearRemoteStickerRegistryUnavailable('assets');
       return {
         ...mapRemoteStickerAsset(asset, concurrentRow),
         uploadFingerprint,
@@ -520,13 +567,18 @@ async function registerRemoteStickerAsset(
       throw new Error('Sticker asset registration finished without returning a server asset row.');
     }
 
+    clearRemoteStickerRegistryUnavailable('assets');
     return {
       ...mapRemoteStickerAsset(asset, insertedRow),
       uploadFingerprint,
     };
   } catch (error) {
     if (isRemoteStickerRegistryUnavailableError(error)) {
-      console.warn('[stickers] Remote sticker registry unavailable, falling back to legacy uploads:', error);
+      markRemoteStickerRegistryUnavailable(
+        'assets',
+        '[stickers] Remote sticker registry unavailable, falling back to legacy uploads:',
+        error
+      );
       return null;
     }
 
@@ -1496,6 +1548,10 @@ export async function reconcileRemoteStickerAssetRefs(
   containerId: string,
   placementsJson: string | null | undefined
 ) {
+  if (isRemoteStickerRegistryTemporarilyDisabled('refs')) {
+    return;
+  }
+
   const normalizedOwnerUserId = typeof ownerUserId === 'string' ? ownerUserId.trim() : '';
   const normalizedContainerId = typeof containerId === 'string' ? containerId.trim() : '';
   if (!normalizedOwnerUserId || !normalizedContainerId) {
@@ -1555,9 +1611,14 @@ export async function reconcileRemoteStickerAssetRefs(
         throw upsertError;
       }
     }
+    clearRemoteStickerRegistryUnavailable('refs');
   } catch (error) {
     if (isRemoteStickerRegistryUnavailableError(error)) {
-      console.warn('[stickers] Remote sticker refs unavailable, skipping ref reconciliation:', error);
+      markRemoteStickerRegistryUnavailable(
+        'refs',
+        '[stickers] Remote sticker refs unavailable, skipping ref reconciliation:',
+        error
+      );
       return;
     }
 
@@ -1570,6 +1631,10 @@ export async function clearRemoteStickerAssetRefs(
   containerType: RemoteStickerContainerType,
   containerId: string
 ) {
+  if (isRemoteStickerRegistryTemporarilyDisabled('refs')) {
+    return;
+  }
+
   const normalizedOwnerUserId = typeof ownerUserId === 'string' ? ownerUserId.trim() : '';
   const normalizedContainerId = typeof containerId === 'string' ? containerId.trim() : '';
   if (!normalizedOwnerUserId || !normalizedContainerId) {
@@ -1587,9 +1652,14 @@ export async function clearRemoteStickerAssetRefs(
     if (error) {
       throw error;
     }
+    clearRemoteStickerRegistryUnavailable('refs');
   } catch (error) {
     if (isRemoteStickerRegistryUnavailableError(error)) {
-      console.warn('[stickers] Remote sticker refs unavailable, skipping ref cleanup:', error);
+      markRemoteStickerRegistryUnavailable(
+        'refs',
+        '[stickers] Remote sticker refs unavailable, skipping ref cleanup:',
+        error
+      );
       return;
     }
 

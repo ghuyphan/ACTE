@@ -1,12 +1,15 @@
 import * as Notifications from 'expo-notifications';
 import { useRootNavigationState, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
-import { useFeedFocus } from '../useFeedFocus';
+import { useExternalEntryNavigation } from './useExternalEntryNavigation';
 
 export function useAppNotificationRouting() {
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
-  const { requestFeedFocus } = useFeedFocus();
+  const {
+    focusFeedTargetFromExternalEntry,
+    prepareForExternalNavigation,
+  } = useExternalEntryNavigation();
   const notificationResponseListener = useRef<Notifications.EventSubscription | null>(null);
   const lastHandledNotificationIdRef = useRef<string | null>(null);
   const isNavigationReady = Boolean(rootNavigationState?.key);
@@ -27,14 +30,11 @@ export function useAppNotificationRouting() {
       const sharedPostId = response.notification.request.content.data?.sharedPostId;
       const route = response.notification.request.content.data?.route;
       if (noteId && typeof noteId === 'string') {
-        // Match the widget flow: focus the feed item after the app tree is mounted
-        // instead of presenting a bottom sheet from the startup notification effect.
-        requestFeedFocus({ kind: 'note', id: noteId });
-        router.replace(`/widget/note/${encodeURIComponent(noteId)}` as any);
+        focusFeedTargetFromExternalEntry({ kind: 'note', id: noteId });
       } else if (sharedPostId && typeof sharedPostId === 'string') {
-        requestFeedFocus({ kind: 'shared-post', id: sharedPostId });
-        router.replace(`/widget/shared-post/${encodeURIComponent(sharedPostId)}` as any);
+        focusFeedTargetFromExternalEntry({ kind: 'shared-post', id: sharedPostId });
       } else if (route && typeof route === 'string') {
+        prepareForExternalNavigation();
         router.push(route as any);
       }
 
@@ -44,7 +44,7 @@ export function useAppNotificationRouting() {
         return;
       }
     },
-    [requestFeedFocus, router]
+    [focusFeedTargetFromExternalEntry, prepareForExternalNavigation, router]
   );
 
   useEffect(() => {

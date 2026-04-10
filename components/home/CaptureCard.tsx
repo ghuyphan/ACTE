@@ -1171,7 +1171,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     libraryImportLocked={libraryImportLocked}
                     needsCameraPermission={needsCameraPermission}
                     onOpenPhotoLibrary={onOpenPhotoLibrary}
-                    remainingPhotoSlots={remainingPhotoSlots}
                     t={t}
                   />
                 </Reanimated.View>

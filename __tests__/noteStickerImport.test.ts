@@ -15,6 +15,10 @@ const mockMakeDirectoryAsync = jest.fn(async () => undefined);
 const mockManipulateAsync = jest.fn();
 const mockStorageUpload = jest.fn(async () => ({ error: null }));
 const mockRemoteStickerAssets = new Map<string, any>();
+const mockIsSupabaseNetworkError = jest.fn(() => false);
+const mockIsSupabasePolicyError = jest.fn(() => false);
+const mockIsSupabaseSchemaMismatchError = jest.fn(() => false);
+let mockRemoteStickerAssetInsertError: unknown = null;
 
 function bytesToHex(bytes: Uint8Array) {
   return Array.from(bytes)
@@ -68,9 +72,9 @@ jest.mock('../services/database', () => ({
 
 jest.mock('../utils/supabase', () => ({
   getSupabaseErrorMessage: jest.fn((error: Error) => error.message),
-  isSupabaseNetworkError: jest.fn(() => false),
-  isSupabasePolicyError: jest.fn(() => false),
-  isSupabaseSchemaMismatchError: jest.fn(() => false),
+  isSupabaseNetworkError: (...args: unknown[]) => mockIsSupabaseNetworkError(...args),
+  isSupabasePolicyError: (...args: unknown[]) => mockIsSupabasePolicyError(...args),
+  isSupabaseSchemaMismatchError: (...args: unknown[]) => mockIsSupabaseSchemaMismatchError(...args),
   requireSupabase: jest.fn(() => ({
     from: (table: string) => {
       if (table !== 'sticker_assets') {
@@ -95,6 +99,10 @@ jest.mock('../utils/supabase', () => ({
           return { data: row, error: null };
         },
         insert: async (value: Record<string, unknown>) => {
+          if (mockRemoteStickerAssetInsertError) {
+            return { error: mockRemoteStickerAssetInsertError };
+          }
+
           const nextId = `remote-sticker-${mockRemoteStickerAssets.size + 1}`;
           mockRemoteStickerAssets.set(nextId, {
             id: nextId,
@@ -194,6 +202,10 @@ describe('importStickerAsset', () => {
       uri: 'file:///cache/optimized-sticker.webp',
     });
     mockStorageUpload.mockResolvedValue({ error: null });
+    mockIsSupabaseNetworkError.mockReturnValue(false);
+    mockIsSupabasePolicyError.mockReturnValue(false);
+    mockIsSupabaseSchemaMismatchError.mockReturnValue(false);
+    mockRemoteStickerAssetInsertError = null;
     mockRemoteStickerAssets.clear();
   });
 
@@ -585,6 +597,81 @@ describe('importStickerAsset', () => {
     expect(mockStorageUpload).not.toHaveBeenCalled();
     expect(reusedRow?.last_seen_at).toBeTruthy();
     expect(reusedRow?.last_seen_at).not.toBe(beforeLastSeenAt);
+  });
+
+  it('logs the remote sticker registry policy failure once per cooldown window and falls back', async () => {
+    const { serializeStickerPlacementsForStorage } = loadNoteStickersModule();
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    mockRemoteStickerAssetInsertError = {
+      code: '42501',
+      message: 'new row violates row-level security policy for table "sticker_assets"',
+    };
+    mockIsSupabasePolicyError.mockImplementation(
+      (error: unknown) =>
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        String((error as { code?: unknown }).code) === '42501'
+    );
+
+    const placements = [
+      {
+        id: 'placement-1',
+        assetId: 'asset-1',
+        x: 0.5,
+        y: 0.5,
+        scale: 1,
+        rotation: 0,
+        zIndex: 1,
+        opacity: 1,
+        asset: {
+          id: 'asset-1',
+          ownerUid: '__local__',
+          localUri: 'file:///documents/stickers/asset-1.png',
+          remotePath: null,
+          uploadFingerprint: null,
+          mimeType: 'image/png',
+          width: 320,
+          height: 240,
+          createdAt: '2026-03-10T00:00:00.000Z',
+          updatedAt: null,
+          source: 'import',
+        },
+      },
+    ];
+
+    const firstSerialized = await serializeStickerPlacementsForStorage(
+      placements,
+      'shared-post-media',
+      'owner-1/shared-post-1',
+      {
+        persistAssets: false,
+        serverOwnerUid: 'owner-1',
+      }
+    );
+    const firstUploadCount = mockStorageUpload.mock.calls.length;
+
+    const secondSerialized = await serializeStickerPlacementsForStorage(
+      placements,
+      'shared-post-media',
+      'owner-1/shared-post-1',
+      {
+        persistAssets: false,
+        serverOwnerUid: 'owner-1',
+      }
+    );
+
+    expect(JSON.parse(firstSerialized)[0]?.asset?.remotePath).toBe(
+      'owner-1/shared-post-1/stickers/asset-1.png'
+    );
+    expect(JSON.parse(secondSerialized)[0]?.asset?.remotePath).toBe(
+      'owner-1/shared-post-1/stickers/asset-1.png'
+    );
+    expect(firstUploadCount).toBe(2);
+    expect(mockStorageUpload.mock.calls).toHaveLength(3);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
   });
 
   it('skips re-uploading when the sticker bytes are unchanged but file metadata changed', async () => {

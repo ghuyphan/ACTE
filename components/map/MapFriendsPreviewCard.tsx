@@ -318,7 +318,6 @@ const styles = StyleSheet.create({
     borderWidth: Platform.OS === 'android' ? 1 : StyleSheet.hairlineWidth,
     borderRadius: mapOverlayTokens.overlayRadius,
     overflow: 'hidden',
-    ...mapOverlayTokens.overlayShadow,
   },
   cardContent: {
     paddingHorizontal: mapOverlayTokens.overlayPadding,

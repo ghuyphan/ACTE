@@ -16,6 +16,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  ToastAndroid,
   View,
 } from 'react-native';
 import Animated, {
@@ -192,11 +193,25 @@ export default function LoginScreen() {
   const canOpenSupport = hasSupportLink();
 
   const isFormVisible = screenMode !== 'landing';
+  const showLandingToast = Platform.OS === 'android';
 
   const resetMessages = useCallback(() => {
     setAuthMessage(null);
     setSuccessMessage(null);
   }, []);
+
+  const showLandingAuthMessage = useCallback(
+    (message: string) => {
+      if (showLandingToast) {
+        ToastAndroid.show(message, ToastAndroid.SHORT);
+        setAuthMessage(null);
+        return;
+      }
+
+      setAuthMessage(message);
+    },
+    [showLandingToast]
+  );
 
   const openForm = useCallback(
     (mode: Exclude<AuthScreenMode, 'landing'>) => {
@@ -284,7 +299,7 @@ export default function LoginScreen() {
 
   const continueToApp = () => {
     if (!hasAcceptedLandingPolicy && (canOpenPrivacyPolicy || canOpenSupport)) {
-      setAuthMessage(
+      showLandingAuthMessage(
         t('auth.validationLocalPolicy', 'Review and accept the privacy policy before continuing in local mode.')
       );
       return;
@@ -311,7 +326,7 @@ export default function LoginScreen() {
 
   const handleGoogleSignIn = async () => {
     if (!hasAcceptedLandingPolicy && (canOpenPrivacyPolicy || canOpenSupport)) {
-      setAuthMessage(
+      showLandingAuthMessage(
         t('auth.validationLandingPolicy', 'Accept the privacy policy before continuing.')
       );
       return;
@@ -335,7 +350,7 @@ export default function LoginScreen() {
       return;
     }
 
-    setAuthMessage(
+    showLandingAuthMessage(
       result.message ?? t('auth.signInFailed', 'Unable to sign in right now. Please try again later.')
     );
   };

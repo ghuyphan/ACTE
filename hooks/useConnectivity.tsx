@@ -1,6 +1,6 @@
 import NetInfo, { NetInfoState, NetInfoSubscription } from '@react-native-community/netinfo';
 import { AppState, AppStateStatus } from 'react-native';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 export type ConnectivityStatus = 'unknown' | 'online' | 'offline';
 
@@ -45,6 +45,7 @@ export function ConnectivityProvider({ children }: { children: ReactNode }) {
     isInternetReachable: null,
     lastChangedAt: null,
   });
+  const isMountedRef = useRef(true);
 
   const applyState = useCallback((state: NetInfoState) => {
     setConnectivity((current) => {
@@ -64,13 +65,26 @@ export function ConnectivityProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshConnectivity = useCallback(() => {
-    void NetInfo.refresh().then(applyState).catch(() => {
-      void NetInfo.fetch().then(applyState).catch(() => undefined);
+    void NetInfo.refresh().then((state) => {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      applyState(state);
+    }).catch(() => {
+      void NetInfo.fetch().then((state) => {
+        if (!isMountedRef.current) {
+          return;
+        }
+
+        applyState(state);
+      }).catch(() => undefined);
     });
   }, [applyState]);
 
   useEffect(() => {
     let mounted = true;
+    isMountedRef.current = true;
 
     NetInfo.configure({
       reachabilityShortTimeout: 5_000,
@@ -98,6 +112,7 @@ export function ConnectivityProvider({ children }: { children: ReactNode }) {
 
     return () => {
       mounted = false;
+      isMountedRef.current = false;
       unsubscribe();
       appStateSubscription.remove();
     };

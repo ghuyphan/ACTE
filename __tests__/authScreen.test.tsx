@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { Platform, ToastAndroid } from 'react-native';
 import LoginScreen from '../app/auth/index';
 
 const mockReplace = jest.fn();
@@ -209,6 +210,13 @@ describe('LoginScreen', () => {
     mockAuthState.isGoogleAvailable = true;
   });
 
+  afterEach(() => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'ios',
+    });
+  });
+
   it('renders the landing design with Google and email actions', () => {
     const { getByText, getByTestId } = render(<LoginScreen />);
 
@@ -346,6 +354,27 @@ describe('LoginScreen', () => {
       expect(mockCompleteOnboardingAndEnterApp).toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith('/');
     });
+  });
+
+  it('shows landing policy validation in an Android toast instead of inline text', () => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'android',
+    });
+    const toastSpy = jest.spyOn(ToastAndroid, 'show').mockImplementation(jest.fn());
+
+    const { getByTestId, queryByText } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-continue-local'));
+
+    expect(toastSpy).toHaveBeenCalledWith(
+      'Review and accept the privacy policy before continuing in local mode.',
+      ToastAndroid.SHORT
+    );
+    expect(
+      queryByText('Review and accept the privacy policy before continuing in local mode.')
+    ).toBeNull();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   it('steps back through the auth flow when navigation back is prevented', () => {

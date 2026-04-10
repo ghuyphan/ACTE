@@ -58,7 +58,7 @@ export interface UseNotesRecapViewModelResult {
   pileTitle?: string;
   previousMonthDisabled: boolean;
   recapHorizontalPadding: number;
-  selectedDayKey: string | null;
+  selectedDayKeys: string[];
   selectDay: (dayKey: string) => void;
   switchMonth: (direction: 'previous' | 'next') => void;
   weekDayLabels: string[];
@@ -165,7 +165,7 @@ export function useNotesRecapViewModel({
   const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
-  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [selectedDayKeys, setSelectedDayKeys] = useState<string[]>([]);
   const [activeMonthKey, setActiveMonthKey] = useState<string | null>(null);
   const [cachedRecapsByKey, setCachedRecapsByKey] = useState<Map<string, CachedMonthlyRecapEntry>>(
     () => new Map()
@@ -308,13 +308,20 @@ export function useNotesRecapViewModel({
   }, [activeMonthEntry, cachedRecapsByKey, monthDigestsByKey, timeZone]);
 
   useEffect(() => {
-    if (
-      selectedDayKey &&
-      (!activeRecap || !activeRecap.days.some((day) => day.dateKey === selectedDayKey && day.noteCount > 0))
-    ) {
-      setSelectedDayKey(null);
+    if (!activeRecap) {
+      setSelectedDayKeys((current) => (current.length > 0 ? [] : current));
+      return;
     }
-  }, [activeRecap, selectedDayKey]);
+
+    const validDayKeys = new Set(
+      activeRecap.days.filter((day) => day.noteCount > 0).map((day) => day.dateKey)
+    );
+
+    setSelectedDayKeys((current) => {
+      const next = current.filter((dayKey) => validDayKeys.has(dayKey));
+      return next.length === current.length ? current : next;
+    });
+  }, [activeRecap]);
 
   useEffect(() => {
     const firstMonthKey = monthEntries[0]?.monthKey ?? null;
@@ -344,7 +351,7 @@ export function useNotesRecapViewModel({
       void Haptics.selectionAsync();
       startTransition(() => {
         setActiveMonthKey(targetMonthEntry.monthKey);
-        setSelectedDayKey(null);
+        setSelectedDayKeys([]);
       });
     },
     [activeMonthIndex, monthEntries]
@@ -353,7 +360,11 @@ export function useNotesRecapViewModel({
   const selectDay = useCallback((dayKey: string) => {
     void Haptics.selectionAsync();
     startTransition(() => {
-      setSelectedDayKey((current) => (current === dayKey ? null : dayKey));
+      setSelectedDayKeys((current) =>
+        current.includes(dayKey)
+          ? current.filter((selectedDayKey) => selectedDayKey !== dayKey)
+          : [...current, dayKey]
+      );
     });
   }, []);
 
@@ -454,25 +465,31 @@ export function useNotesRecapViewModel({
       return null;
     }
 
-    const selectedRecapDay = selectedDayKey
-      ? activeRecapCalendarModel.dayByKey.get(selectedDayKey) ?? null
-      : null;
-    const pileSourceNotes = selectedRecapDay
-      ? activeRecapCalendarModel.dayNotesByKey.get(selectedRecapDay.dateKey) ?? []
-      : activeMonthEntry.notes;
-    const pileKeyPrefix = selectedRecapDay?.dateKey ?? activeRecap.month.monthKey;
+    const selectedRecapDays = selectedDayKeys
+      .map((dayKey) => activeRecapCalendarModel.dayByKey.get(dayKey) ?? null)
+      .filter((day): day is MonthlyRecapDay => Boolean(day));
+    const pileSourceNotes =
+      selectedRecapDays.length > 0
+        ? selectedRecapDays.flatMap(
+            (selectedRecapDay) =>
+              activeRecapCalendarModel.dayNotesByKey.get(selectedRecapDay.dateKey) ?? []
+          )
+        : activeMonthEntry.notes;
+    const pileKeyPrefix =
+      selectedRecapDays.length > 0
+        ? selectedRecapDays.map((day) => day.dateKey).join('|')
+        : activeRecap.month.monthKey;
     const photoPileItems = buildPhotoPileItemsFromNotes(pileSourceNotes, pileKeyPrefix);
-    const stickerUsage = selectedRecapDay
-      ? getMonthStickerUsage(pileSourceNotes)
-      : activeRecap.stickerUsage;
+    const stickerUsage =
+      selectedRecapDays.length > 0 ? getMonthStickerUsage(pileSourceNotes) : activeRecap.stickerUsage;
     const stickerPileItems = buildStickerPileItemsFromUsage(stickerUsage, pileKeyPrefix);
     const pileItems = [...photoPileItems, ...stickerPileItems];
-    const selectedDayLabel = selectedRecapDay
+    const selectedDayLabel = selectedRecapDays.length === 1
       ? formatRecapDayLabel(
           new Date(
             activeRecap.month.start.getFullYear(),
             activeRecap.month.start.getMonth(),
-            selectedRecapDay.dayOfMonth
+            selectedRecapDays[0].dayOfMonth
           ),
           locale
         )
@@ -481,12 +498,14 @@ export function useNotesRecapViewModel({
     return {
       title: selectedDayLabel
         ? selectedDayLabel
+        : selectedRecapDays.length > 1
+          ? t('notes.recap.selectedDaysTitle', 'Selected days')
         : photoPileItems.length > 0
           ? t('notes.recap.photoPileTitle', 'Saved this month')
           : t('notes.recap.stickerTrayTitle', 'Used this month'),
       items: pileItems,
     };
-  }, [activeMonthEntry, activeRecap, activeRecapCalendarModel, locale, selectedDayKey, t]);
+  }, [activeMonthEntry, activeRecap, activeRecapCalendarModel, locale, selectedDayKeys, t]);
 
   return {
     activeMonthLabel: activeRecap ? formatRecapMonthLabel(activeRecap.month.start, locale) : null,
@@ -498,7 +517,7 @@ export function useNotesRecapViewModel({
     pileTitle: activeRecapPileModel?.title,
     previousMonthDisabled: activeMonthIndex >= monthEntries.length - 1,
     recapHorizontalPadding,
-    selectedDayKey,
+    selectedDayKeys,
     selectDay,
     switchMonth,
     weekDayLabels,

@@ -25,6 +25,22 @@ type PushTargetRow = {
   expo_push_token: string;
 };
 
+type PushMessage = {
+  to: string;
+  sound: 'default';
+  title: string;
+  body: string;
+  channelId: string;
+  data: Record<string, unknown>;
+};
+
+type ExpoPushTicket = {
+  status?: 'ok' | 'error';
+  details?: {
+    error?: string;
+  };
+};
+
 type SharedPostRow = {
   id: string;
   author_user_id: string;
@@ -221,12 +237,33 @@ async function loadPushTokens(
   );
 }
 
+async function prunePushTokens(
+  adminClient: ReturnType<typeof createClient>,
+  pushTokens: string[]
+) {
+  if (pushTokens.length === 0) {
+    return;
+  }
+
+  const { error } = await adminClient
+    .from('device_push_tokens')
+    .delete()
+    .in('expo_push_token', pushTokens);
+
+  if (error) {
+    throw error;
+  }
+}
+
 async function sendExpoPushMessages(
-  messages: Array<Record<string, unknown>>,
+  messages: PushMessage[],
   expoAccessToken: string
 ) {
   if (messages.length === 0) {
-    return;
+    return {
+      delivered: 0,
+      invalidTokens: [] as string[],
+    };
   }
 
   const headers: Record<string, string> = {
@@ -247,6 +284,38 @@ async function sendExpoPushMessages(
     const errorText = await response.text();
     throw new Error(errorText || 'Expo push delivery failed.');
   }
+
+  const responseBody = (await response.json().catch(() => null)) as
+    | {
+        data?: ExpoPushTicket[];
+      }
+    | null;
+
+  if (!Array.isArray(responseBody?.data)) {
+    return {
+      delivered: messages.length,
+      invalidTokens: [] as string[],
+    };
+  }
+
+  const invalidTokens: string[] = [];
+  let delivered = 0;
+
+  responseBody.data.forEach((ticket, index) => {
+    if (ticket?.status === 'ok') {
+      delivered += 1;
+      return;
+    }
+
+    if (ticket?.details?.error === 'DeviceNotRegistered') {
+      invalidTokens.push(messages[index]?.to ?? '');
+    }
+  });
+
+  return {
+    delivered,
+    invalidTokens: invalidTokens.filter(Boolean),
+  };
 }
 
 Deno.serve(async (request) => {
@@ -319,12 +388,20 @@ Deno.serve(async (request) => {
       data: payload.data,
     }));
 
-    await sendExpoPushMessages(messages, expoAccessToken);
+    const delivery = await sendExpoPushMessages(messages, expoAccessToken);
+
+    if (delivery.invalidTokens.length > 0) {
+      try {
+        await prunePushTokens(adminClient, delivery.invalidTokens);
+      } catch (error) {
+        console.warn('Failed to prune invalid Expo push tokens:', error);
+      }
+    }
 
     return jsonResponse({
       success: true,
       recipients: payload.recipientUserIds.length,
-      delivered: messages.length,
+      delivered: delivery.delivered,
     });
   } catch (error) {
     const message =

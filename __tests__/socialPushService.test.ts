@@ -1,11 +1,13 @@
 const mockGetPermissionsAsync = jest.fn();
 const mockRequestPermissionsAsync = jest.fn();
 const mockGetExpoPushTokenAsync = jest.fn();
+const mockRandomUUID = jest.fn();
 const mockGetPersistentItem = jest.fn();
 const mockRemovePersistentItem = jest.fn();
 const mockSetPersistentItem = jest.fn();
 const mockHasSupabaseConfig = jest.fn();
 const mockGetSupabase = jest.fn();
+const mockIsSupabaseSchemaMismatchError = jest.fn();
 
 jest.mock('expo-constants', () => ({
   __esModule: true,
@@ -25,6 +27,10 @@ jest.mock('expo-notifications', () => ({
   getExpoPushTokenAsync: (...args: unknown[]) => mockGetExpoPushTokenAsync(...args),
 }));
 
+jest.mock('expo-crypto', () => ({
+  randomUUID: (...args: unknown[]) => mockRandomUUID(...args),
+}));
+
 jest.mock('react-native', () => ({
   Platform: {
     OS: 'ios',
@@ -41,6 +47,7 @@ jest.mock('../utils/supabase', () => ({
   getSupabase: (...args: unknown[]) => mockGetSupabase(...args),
   getSupabaseErrorMessage: jest.fn(() => ''),
   hasSupabaseConfig: (...args: unknown[]) => mockHasSupabaseConfig(...args),
+  isSupabaseSchemaMismatchError: (...args: unknown[]) => mockIsSupabaseSchemaMismatchError(...args),
 }));
 
 import { syncSocialPushRegistration } from '../services/socialPushService';
@@ -52,6 +59,8 @@ describe('syncSocialPushRegistration', () => {
     jest.clearAllMocks();
     mockHasSupabaseConfig.mockReturnValue(true);
     mockGetSupabase.mockReturnValue({ rpc });
+    mockIsSupabaseSchemaMismatchError.mockReturnValue(false);
+    mockRandomUUID.mockReturnValue('install-generated');
     mockGetPermissionsAsync.mockResolvedValue({
       status: 'denied',
       canAskAgain: true,
@@ -60,7 +69,17 @@ describe('syncSocialPushRegistration', () => {
       status: 'denied',
       canAskAgain: true,
     });
-    mockGetPersistentItem.mockResolvedValue(null);
+    mockGetPersistentItem.mockImplementation(async (key: string) => {
+      if (key === 'notification.socialPushRegistration.v1') {
+        return null;
+      }
+
+      if (key === 'notification.socialPushInstallationId.v1') {
+        return 'install-123';
+      }
+
+      return null;
+    });
     mockRemovePersistentItem.mockResolvedValue(undefined);
     mockSetPersistentItem.mockResolvedValue(undefined);
     mockGetExpoPushTokenAsync.mockResolvedValue({
@@ -115,6 +134,7 @@ describe('syncSocialPushRegistration', () => {
       expo_push_token_input: 'ExponentPushToken[token]',
       platform_input: 'ios',
       app_version_input: '1.0.0',
+      installation_id_input: 'install-123',
     });
   });
 
@@ -140,6 +160,7 @@ describe('syncSocialPushRegistration', () => {
       expo_push_token_input: 'ExponentPushToken[token]',
       platform_input: 'ios',
       app_version_input: '1.0.0',
+      installation_id_input: 'install-123',
     });
     expect(mockSetPersistentItem).toHaveBeenCalled();
   });
@@ -149,12 +170,20 @@ describe('syncSocialPushRegistration', () => {
       status: 'granted',
       canAskAgain: true,
     });
-    mockGetPersistentItem.mockResolvedValue(
-      JSON.stringify({
-        token: 'ExponentPushToken[old]',
-        userId: 'user-1',
-      })
-    );
+    mockGetPersistentItem.mockImplementation(async (key: string) => {
+      if (key === 'notification.socialPushRegistration.v1') {
+        return JSON.stringify({
+          token: 'ExponentPushToken[old]',
+          userId: 'user-1',
+        });
+      }
+
+      if (key === 'notification.socialPushInstallationId.v1') {
+        return 'install-123';
+      }
+
+      return null;
+    });
 
     await syncSocialPushRegistration({
       id: 'user-2',
@@ -172,16 +201,25 @@ describe('syncSocialPushRegistration', () => {
       expo_push_token_input: 'ExponentPushToken[token]',
       platform_input: 'ios',
       app_version_input: '1.0.0',
+      installation_id_input: 'install-123',
     });
   });
 
   it('unregisters and clears persisted tokens when the user signs out', async () => {
-    mockGetPersistentItem.mockResolvedValue(
-      JSON.stringify({
-        token: 'ExponentPushToken[old]',
-        userId: 'user-1',
-      })
-    );
+    mockGetPersistentItem.mockImplementation(async (key: string) => {
+      if (key === 'notification.socialPushRegistration.v1') {
+        return JSON.stringify({
+          token: 'ExponentPushToken[old]',
+          userId: 'user-1',
+        });
+      }
+
+      if (key === 'notification.socialPushInstallationId.v1') {
+        return 'install-123';
+      }
+
+      return null;
+    });
 
     await syncSocialPushRegistration(null);
 
@@ -192,12 +230,20 @@ describe('syncSocialPushRegistration', () => {
   });
 
   it('keeps the persisted token when unregister fails during sign-out', async () => {
-    mockGetPersistentItem.mockResolvedValue(
-      JSON.stringify({
-        token: 'ExponentPushToken[old]',
-        userId: 'user-1',
-      })
-    );
+    mockGetPersistentItem.mockImplementation(async (key: string) => {
+      if (key === 'notification.socialPushRegistration.v1') {
+        return JSON.stringify({
+          token: 'ExponentPushToken[old]',
+          userId: 'user-1',
+        });
+      }
+
+      if (key === 'notification.socialPushInstallationId.v1') {
+        return 'install-123';
+      }
+
+      return null;
+    });
     rpc.mockResolvedValueOnce({ error: new Error('network failed') });
 
     await expect(syncSocialPushRegistration(null)).rejects.toThrow('network failed');
@@ -209,7 +255,17 @@ describe('syncSocialPushRegistration', () => {
       status: 'granted',
       canAskAgain: true,
     });
-    mockGetPersistentItem.mockResolvedValue('{not-json');
+    mockGetPersistentItem.mockImplementation(async (key: string) => {
+      if (key === 'notification.socialPushRegistration.v1') {
+        return '{not-json';
+      }
+
+      if (key === 'notification.socialPushInstallationId.v1') {
+        return 'install-123';
+      }
+
+      return null;
+    });
 
     await syncSocialPushRegistration({
       id: 'user-1',
@@ -222,6 +278,79 @@ describe('syncSocialPushRegistration', () => {
 
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(rpc).toHaveBeenCalledWith('register_push_token', {
+      expo_push_token_input: 'ExponentPushToken[token]',
+      platform_input: 'ios',
+      app_version_input: '1.0.0',
+      installation_id_input: 'install-123',
+    });
+  });
+
+  it('creates and persists a new installation id when one is missing', async () => {
+    mockGetPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+      canAskAgain: true,
+    });
+    mockGetPersistentItem.mockImplementation(async (key: string) => {
+      if (key === 'notification.socialPushRegistration.v1') {
+        return null;
+      }
+
+      if (key === 'notification.socialPushInstallationId.v1') {
+        return null;
+      }
+
+      return null;
+    });
+
+    await syncSocialPushRegistration({
+      id: 'user-1',
+      uid: 'user-1',
+      email: 'hello@example.com',
+      displayName: 'Noto User',
+      photoURL: null,
+      providerData: [],
+    });
+
+    expect(rpc).toHaveBeenCalledWith('register_push_token', {
+      expo_push_token_input: 'ExponentPushToken[token]',
+      platform_input: 'ios',
+      app_version_input: '1.0.0',
+      installation_id_input: 'install-generated',
+    });
+    expect(mockSetPersistentItem).toHaveBeenCalledWith(
+      'notification.socialPushInstallationId.v1',
+      'install-generated'
+    );
+  });
+
+  it('falls back to the legacy register_push_token rpc when the installation-aware rpc is not deployed yet', async () => {
+    mockGetPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+      canAskAgain: true,
+    });
+
+    const schemaMismatchError = new Error('schema cache missing register_push_token with 4 args');
+    rpc
+      .mockResolvedValueOnce({ error: schemaMismatchError })
+      .mockResolvedValueOnce({ error: null });
+    mockIsSupabaseSchemaMismatchError.mockImplementation((error: unknown) => error === schemaMismatchError);
+
+    await syncSocialPushRegistration({
+      id: 'user-1',
+      uid: 'user-1',
+      email: 'hello@example.com',
+      displayName: 'Noto User',
+      photoURL: null,
+      providerData: [],
+    });
+
+    expect(rpc).toHaveBeenNthCalledWith(1, 'register_push_token', {
+      expo_push_token_input: 'ExponentPushToken[token]',
+      platform_input: 'ios',
+      app_version_input: '1.0.0',
+      installation_id_input: 'install-123',
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, 'register_push_token', {
       expo_push_token_input: 'ExponentPushToken[token]',
       platform_input: 'ios',
       app_version_input: '1.0.0',

@@ -34,6 +34,13 @@ describe('supabase migration hardening', () => {
     resolve(__dirname, '../supabase/migrations/20260402093000_add_live_photo_columns.sql'),
     'utf8'
   );
+  const pushTokenInstallDedupMigration = readFileSync(
+    resolve(
+      __dirname,
+      '../supabase/migrations/20260410104500_dedupe_device_push_tokens_by_installation.sql'
+    ),
+    'utf8'
+  );
   const syncTombstonesMigration = readFileSync(
     resolve(__dirname, '../supabase/migrations/20260402103000_add_sync_tombstones.sql'),
     'utf8'
@@ -105,6 +112,21 @@ describe('supabase migration hardening', () => {
     expect(socialPushMigration).toContain('alter table public.device_push_tokens enable row level security;');
     expect(socialPushMigration).toContain('create or replace function public.register_push_token');
     expect(socialPushMigration).toContain('create or replace function public.unregister_push_token');
+  });
+
+  it('dedupes push tokens per installation and keeps the RPC backward compatible', () => {
+    expect(pushTokenInstallDedupMigration).toContain(
+      'add column if not exists installation_id text;'
+    );
+    expect(pushTokenInstallDedupMigration).toContain(
+      'create unique index if not exists idx_device_push_tokens_installation'
+    );
+    expect(pushTokenInstallDedupMigration).toContain(
+      'delete from public.device_push_tokens'
+    );
+    expect(pushTokenInstallDedupMigration).toContain(
+      'grant execute on function public.register_push_token(text, text, text, text) to authenticated;'
+    );
   });
 
   it('adds sync tombstones with RLS for note and shared post deletes', () => {

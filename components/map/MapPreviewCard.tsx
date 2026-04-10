@@ -770,18 +770,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     alignSelf: 'center',
-    ...mapOverlayTokens.overlayShadow,
   },
   surface: {
     borderWidth: Platform.OS === 'android' ? 1 : StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
-  surfacePill: {
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
-  },
+  surfacePill: {},
   compactLayer: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',

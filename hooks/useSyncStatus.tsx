@@ -88,8 +88,14 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
   // Load persistence
   useEffect(() => {
+    let cancelled = false;
+
     void getPersistentItem(SYNC_ENABLED_KEY)
       .then((value) => {
+        if (cancelled) {
+          return;
+        }
+
         if (value !== null) {
           setSyncEnabledState(value === 'true');
         }
@@ -98,8 +104,14 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
         console.warn('[syncStatus] Failed to load sync preference:', error);
       })
       .finally(() => {
-        setIsSyncPrefReady(true);
+        if (!cancelled) {
+          setIsSyncPrefReady(true);
+        }
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const setSyncEnabled = useCallback(async (enabled: boolean) => {

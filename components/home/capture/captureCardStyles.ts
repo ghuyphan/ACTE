@@ -771,6 +771,15 @@ export const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '800',
   },
+  shutterInnerCompactText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    lineHeight: 12,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
+    textAlign: 'center',
+    maxWidth: '80%',
+  },
   footerSlot: {
     width: '100%',
     paddingTop: 2,

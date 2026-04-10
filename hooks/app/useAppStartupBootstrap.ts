@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { getDB, resetLocalDatabase } from '../../services/database';
 import { syncGeofenceRegions } from '../../services/geofenceService';
 import { runMediaCacheEviction } from '../../services/mediaCacheManager';
-import { configureNotificationChannels } from '../../services/notificationService';
+import {
+  configureForegroundNotificationPresentation,
+  configureNotificationChannels,
+} from '../../services/notificationService';
 import {
   getCachedStartupRoute,
   loadStartupRoute,
@@ -63,6 +66,7 @@ export function useAppStartupBootstrap() {
       setIsRecovering(true);
     }
 
+    configureForegroundNotificationPresentation();
     void configureNotificationChannels();
 
     getDB()

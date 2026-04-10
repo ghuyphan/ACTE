@@ -109,6 +109,11 @@ export function CaptureActionRow({
   shutterOuterAnimatedStyle,
   t,
 }: CaptureActionRowProps) {
+  const remainingPhotoSlotsLabel =
+    typeof remainingPhotoSlots === 'number' && remainingPhotoSlots > 0
+      ? t('capture.photoSlotsRemainingCompact', '{{count}} left', { count: remainingPhotoSlots })
+      : null;
+
   if (cameraUiStage === 'live' || cameraUiStage === 'capturing') {
     return (
       <View style={styles.cameraControlsWrap}>
@@ -158,8 +163,15 @@ export function CaptureActionRow({
               >
                 {isLivePhotoCaptureInProgress ? (
                   <Text style={styles.shutterInnerCountText}>{livePhotoCountdownSeconds}s</Text>
-                ) : typeof remainingPhotoSlots === 'number' && remainingPhotoSlots > 0 ? (
-                  <Text style={styles.shutterInnerCountText}>{remainingPhotoSlots}</Text>
+                ) : remainingPhotoSlotsLabel ? (
+                  <Text
+                    style={styles.shutterInnerCompactText}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}
+                  >
+                    {remainingPhotoSlotsLabel}
+                  </Text>
                 ) : null}
               </Reanimated.View>
             </CaptureAnimatedPressable>

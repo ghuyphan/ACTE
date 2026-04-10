@@ -8,6 +8,7 @@ import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 export const ANDROID_REMINDER_CHANNEL_ID = 'reminders-v2';
 export const ANDROID_SOCIAL_CHANNEL_ID = 'social-v1';
 const REMINDER_VARIANT_CURSOR_STORAGE_KEY = 'notification.reminderVariantCursor.v1';
+let hasConfiguredForegroundNotificationPresentation = false;
 
 const DEFAULT_REMINDER_TITLES_WITH_LOCATION = {
   en: [
@@ -199,6 +200,33 @@ export async function buildNearbyReminderCopy(options: {
     title,
     body,
   };
+}
+
+export function configureForegroundNotificationPresentation() {
+  if (
+    hasConfiguredForegroundNotificationPresentation ||
+    typeof Notifications.setNotificationHandler !== 'function'
+  ) {
+    return;
+  }
+
+  hasConfiguredForegroundNotificationPresentation = true;
+
+  Notifications.setNotificationHandler({
+    // Expo drops foreground notifications unless the app opts into presenting them.
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+    handleError: (notificationId, error) => {
+      console.warn('[notifications] Foreground notification handling failed:', {
+        notificationId,
+        error,
+      });
+    },
+  });
 }
 
 export async function configureNotificationChannels(platformOS = Platform.OS) {

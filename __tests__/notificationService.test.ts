@@ -1,4 +1,5 @@
 const mockSetNotificationChannelAsync = jest.fn(async () => undefined);
+const mockSetNotificationHandler = jest.fn();
 const mockStorage = new Map<string, string>();
 
 function loadNotificationService() {
@@ -31,6 +32,7 @@ function loadNotificationService() {
       PUBLIC: 'public',
     },
     setNotificationChannelAsync: mockSetNotificationChannelAsync,
+    setNotificationHandler: mockSetNotificationHandler,
   }));
 
   return require('../services/notificationService') as typeof import('../services/notificationService');
@@ -40,6 +42,28 @@ describe('notificationService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockStorage.clear();
+  });
+
+  it('shows incoming notifications while the app is already open', async () => {
+    const { configureForegroundNotificationPresentation } = loadNotificationService();
+
+    configureForegroundNotificationPresentation();
+    configureForegroundNotificationPresentation();
+
+    expect(mockSetNotificationHandler).toHaveBeenCalledTimes(1);
+
+    const handler = mockSetNotificationHandler.mock.calls[0]?.[0] as
+      | {
+          handleNotification?: () => Promise<Record<string, unknown>>;
+        }
+      | undefined;
+
+    await expect(handler?.handleNotification?.()).resolves.toEqual({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    });
   });
 
   it('creates the Android reminder channel with the expected configuration', async () => {
