@@ -1,20 +1,15 @@
 import * as FileSystem from '../utils/fileSystem';
+import { getUniqueNormalizedStrings, normalizeOptionalString } from './normalizedStrings';
 
 export function normalizeStickerTempUri(uri: string | null | undefined) {
-  const normalizedUri = typeof uri === 'string' ? uri.trim() : '';
+  const normalizedUri = normalizeOptionalString(uri);
   return normalizedUri || null;
 }
 
 export function getUniqueStickerTempUris(
   uris: readonly (string | null | undefined)[]
 ) {
-  return Array.from(
-    new Set(
-      uris
-        .map((uri) => normalizeStickerTempUri(uri))
-        .filter((uri): uri is string => Boolean(uri))
-    )
-  );
+  return getUniqueNormalizedStrings(uris);
 }
 
 export async function cleanupStickerTempUri(uri: string | null | undefined) {

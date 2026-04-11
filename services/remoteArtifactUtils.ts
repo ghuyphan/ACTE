@@ -1,5 +1,6 @@
 import { getPairedVideoFileExtension } from './livePhotoStorage';
 import { parseNoteStickerPlacements } from './noteStickers';
+import { getUniqueNormalizedStrings, normalizeOptionalString } from './normalizedStrings';
 
 export interface RemoteArtifactSnapshot {
   photoPath?: string | null;
@@ -21,26 +22,18 @@ export function getRemotePairedVideoPath(
 }
 
 export function normalizeRemoteArtifactPath(path: string | null | undefined) {
-  const normalizedPath = typeof path === 'string' ? path.trim() : '';
+  const normalizedPath = normalizeOptionalString(path);
   return normalizedPath || null;
 }
 
 export function normalizeRemoteEntityIds(ids: Iterable<string | null | undefined>) {
-  return Array.from(
-    new Set(
-      Array.from(ids)
-        .map((value) => (typeof value === 'string' ? value.trim() : ''))
-        .filter(Boolean)
-    )
-  );
+  return getUniqueNormalizedStrings(ids);
 }
 
 export function getRemoteStickerAssetPaths(stickerPlacementsJson: string | null | undefined) {
-  return Array.from(
-    new Set(
-      parseNoteStickerPlacements(stickerPlacementsJson)
-        .map((placement) => normalizeRemoteArtifactPath(placement.asset.remotePath))
-        .filter((path): path is string => Boolean(path))
+  return getUniqueNormalizedStrings(
+    parseNoteStickerPlacements(stickerPlacementsJson).map(
+      (placement) => normalizeRemoteArtifactPath(placement.asset.remotePath)
     )
   );
 }

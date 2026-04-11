@@ -1,5 +1,11 @@
 import * as FileSystem from '../utils/fileSystem';
 import type { Note } from './database';
+import {
+  ensureStoredMediaDirectory,
+  extractStoredFilename,
+  readStoredMediaFile,
+  resolveStoredMediaUri,
+} from './storedMediaFiles';
 
 export const LIVE_PHOTO_VIDEO_DIRECTORY = FileSystem.documentDirectory
   ? `${FileSystem.documentDirectory}live-photo-videos/`
@@ -11,25 +17,11 @@ export const SHARED_LIVE_PHOTO_VIDEO_CACHE_DIRECTORY = FileSystem.cacheDirectory
 
 export const MAX_SYNCABLE_LIVE_PHOTO_VIDEO_FILE_SIZE_BYTES = 2.5 * 1024 * 1024;
 
-function extractFilename(fileUri: string | null | undefined) {
-  const normalizedFileUri = typeof fileUri === 'string' ? fileUri.trim() : '';
-  if (!normalizedFileUri) {
-    return null;
-  }
-
-  const withoutHash = normalizedFileUri.split('#')[0] ?? normalizedFileUri;
-  const withoutQuery = withoutHash.split('?')[0] ?? withoutHash;
-  const segments = withoutQuery.split('/').filter(Boolean);
-  const filename = segments[segments.length - 1];
-
-  return filename ? decodeURIComponent(filename) : null;
-}
-
 export function getPairedVideoFileExtension(
   fileUri: string | null | undefined,
   fallbackExtension = '.mp4'
 ) {
-  const filename = extractFilename(fileUri);
+  const filename = extractStoredFilename(fileUri);
   if (!filename) {
     return fallbackExtension;
   }
@@ -51,29 +43,10 @@ export function getPairedVideoFileExtension(
 }
 
 export function resolveStoredPairedVideoUri(fileUri: string | null | undefined): string {
-  const normalizedFileUri = typeof fileUri === 'string' ? fileUri.trim() : '';
-  if (!normalizedFileUri || !LIVE_PHOTO_VIDEO_DIRECTORY) {
-    return normalizedFileUri;
-  }
-
-  if (normalizedFileUri.startsWith(LIVE_PHOTO_VIDEO_DIRECTORY)) {
-    return normalizedFileUri;
-  }
-
-  const filename = extractFilename(normalizedFileUri);
-  if (!filename) {
-    return normalizedFileUri;
-  }
-
-  if (
-    normalizedFileUri.startsWith('live-photo-videos/') ||
-    normalizedFileUri.includes('/Documents/live-photo-videos/') ||
-    !normalizedFileUri.includes('/')
-  ) {
-    return `${LIVE_PHOTO_VIDEO_DIRECTORY}${filename}`;
-  }
-
-  return normalizedFileUri;
+  return resolveStoredMediaUri(fileUri, {
+    directory: LIVE_PHOTO_VIDEO_DIRECTORY,
+    legacyDirectoryName: 'live-photo-videos',
+  });
 }
 
 export function getNotePairedVideoUri(
@@ -90,65 +63,31 @@ export function getNotePairedVideoUri(
 }
 
 export async function ensureLivePhotoVideoDirectory() {
-  if (!LIVE_PHOTO_VIDEO_DIRECTORY) {
-    return null;
-  }
-
-  await FileSystem.makeDirectoryAsync(LIVE_PHOTO_VIDEO_DIRECTORY, { intermediates: true });
-  return LIVE_PHOTO_VIDEO_DIRECTORY;
+  return ensureStoredMediaDirectory(LIVE_PHOTO_VIDEO_DIRECTORY);
 }
 
 export async function ensureSharedLivePhotoVideoCacheDirectory() {
-  if (!SHARED_LIVE_PHOTO_VIDEO_CACHE_DIRECTORY) {
-    return null;
-  }
-
-  await FileSystem.makeDirectoryAsync(SHARED_LIVE_PHOTO_VIDEO_CACHE_DIRECTORY, {
-    intermediates: true,
-  });
-  return SHARED_LIVE_PHOTO_VIDEO_CACHE_DIRECTORY;
+  return ensureStoredMediaDirectory(SHARED_LIVE_PHOTO_VIDEO_CACHE_DIRECTORY);
 }
 
 export async function readPairedVideoAsBase64(fileUri: string) {
-  const normalizedFileUri = resolveStoredPairedVideoUri(fileUri);
-  if (!normalizedFileUri) {
-    return null;
-  }
-
-  const info = await FileSystem.getInfoAsync(normalizedFileUri);
-  if (!info.exists || info.isDirectory) {
-    return null;
-  }
-
-  if (
-    typeof info.size === 'number' &&
-    info.size > MAX_SYNCABLE_LIVE_PHOTO_VIDEO_FILE_SIZE_BYTES
-  ) {
-    throw new Error('Live photo motion is too large to sync safely. Please retake it and try again.');
-  }
-
-  return FileSystem.readAsStringAsync(normalizedFileUri, {
-    encoding: FileSystem.EncodingType.Base64,
+  return readStoredMediaFile({
+    fileUri,
+    resolveUri: resolveStoredPairedVideoUri,
+    maxFileSizeBytes: MAX_SYNCABLE_LIVE_PHOTO_VIDEO_FILE_SIZE_BYTES,
+    tooLargeErrorMessage: 'Live photo motion is too large to sync safely. Please retake it and try again.',
+    read: (resolvedVideoUri) => FileSystem.readAsStringAsync(resolvedVideoUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    }),
   });
 }
 
 export async function readPairedVideoAsArrayBuffer(fileUri: string) {
-  const normalizedFileUri = resolveStoredPairedVideoUri(fileUri);
-  if (!normalizedFileUri) {
-    return null;
-  }
-
-  const info = await FileSystem.getInfoAsync(normalizedFileUri);
-  if (!info.exists || info.isDirectory) {
-    return null;
-  }
-
-  if (
-    typeof info.size === 'number' &&
-    info.size > MAX_SYNCABLE_LIVE_PHOTO_VIDEO_FILE_SIZE_BYTES
-  ) {
-    throw new Error('Live photo motion is too large to sync safely. Please retake it and try again.');
-  }
-
-  return FileSystem.readAsArrayBufferAsync(normalizedFileUri);
+  return readStoredMediaFile({
+    fileUri,
+    resolveUri: resolveStoredPairedVideoUri,
+    maxFileSizeBytes: MAX_SYNCABLE_LIVE_PHOTO_VIDEO_FILE_SIZE_BYTES,
+    tooLargeErrorMessage: 'Live photo motion is too large to sync safely. Please retake it and try again.',
+    read: (resolvedVideoUri) => FileSystem.readAsArrayBufferAsync(resolvedVideoUri),
+  });
 }

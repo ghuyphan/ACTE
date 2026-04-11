@@ -94,7 +94,6 @@ type NoteDetailSheetContentProps = {
     onDelete: () => void;
     onDownloadPolaroid: () => void;
     onLocationChangeText: (value: string) => void;
-    onLocationFocus: () => void;
     onLocationSelectionChange: (event: any) => void;
     onPolaroidCaptureReady: () => void;
     onPressStickerCanvas: () => void;
@@ -186,7 +185,6 @@ export default function NoteDetailSheetContent({
     onConfirmPasteFromPrompt,
     onDelete,
     onLocationChangeText,
-    onLocationFocus,
     onLocationSelectionChange,
     onPressStickerCanvas,
     onSaveEdit,
@@ -701,7 +699,6 @@ export default function NoteDetailSheetContent({
                     lockedPremiumNoteColorIds={lockedPremiumNoteColorIds}
                     note={note}
                     onChangeLocationText={onLocationChangeText}
-                    onFocusLocation={onLocationFocus}
                     onLockedColorPress={showPremiumColorAlert}
                     onLocationSelectionChange={onLocationSelectionChange}
                     onSelectColor={setEditNoteColor}

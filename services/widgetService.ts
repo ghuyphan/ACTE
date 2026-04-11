@@ -443,22 +443,25 @@ function getWidgetSelectionTimestamp(note: Pick<WidgetCandidate, 'createdAt' | '
     return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function compareRecentWidgetNotes(left: WidgetCandidate, right: WidgetCandidate) {
+function compareWidgetNotesByTimestamp(
+    left: WidgetCandidate,
+    right: WidgetCandidate,
+    direction: 'asc' | 'desc'
+) {
     const timestampDelta = getWidgetSelectionTimestamp(right) - getWidgetSelectionTimestamp(left);
     if (timestampDelta !== 0) {
-        return timestampDelta;
+        return direction === 'desc' ? timestampDelta : -timestampDelta;
     }
 
     return left.candidateKey.localeCompare(right.candidateKey);
 }
 
-function compareOldestWidgetNotes(left: WidgetCandidate, right: WidgetCandidate) {
-    const timestampDelta = getWidgetSelectionTimestamp(left) - getWidgetSelectionTimestamp(right);
-    if (timestampDelta !== 0) {
-        return timestampDelta;
-    }
+function compareRecentWidgetNotes(left: WidgetCandidate, right: WidgetCandidate) {
+    return compareWidgetNotesByTimestamp(left, right, 'desc');
+}
 
-    return left.candidateKey.localeCompare(right.candidateKey);
+function compareOldestWidgetNotes(left: WidgetCandidate, right: WidgetCandidate) {
+    return compareWidgetNotesByTimestamp(left, right, 'asc');
 }
 
 function hasWidgetCandidateCoordinates(candidate: WidgetCandidate): candidate is WidgetCandidate & {

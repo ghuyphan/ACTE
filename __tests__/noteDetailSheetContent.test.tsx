@@ -78,7 +78,6 @@ const baseProps = {
   onInfoSectionLayout: jest.fn(),
   onLocationChangeText: jest.fn(),
   onLocationFieldLayout: jest.fn(),
-  onLocationFocus: jest.fn(),
   onLocationSelectionChange: jest.fn(),
   onPolaroidAnimationFinished: jest.fn(),
   onPolaroidCaptureReady: jest.fn(),

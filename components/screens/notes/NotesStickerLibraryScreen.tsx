@@ -19,6 +19,7 @@ import {
   getStickerOutlineOffsets,
   getStickerOutlineSize,
 } from '../../notes/stickerCanvasMetrics';
+import { getStampFrameMetrics } from '../../notes/stampFrameMetrics';
 import {
   buildCreatedStickerLibrary,
   groupCreatedStickerLibrary,
@@ -39,6 +40,15 @@ type StickerLibraryListItem =
       item: CreatedStickerLibraryItem;
       itemIndex: number;
     };
+
+type CollectionAlignment = 'flex-start' | 'center' | 'flex-end';
+
+interface CollectionPose {
+  align: CollectionAlignment;
+  badgeAlign: CollectionAlignment;
+  scale: number;
+  translateY: number;
+}
 
 function fitPreviewWithinBounds(
   width: number,
@@ -64,19 +74,50 @@ function getCollectionTilt(item: CreatedStickerLibraryItem) {
   return `${tiltSteps[seed % tiltSteps.length]}deg`;
 }
 
-function getPreviewMetrics(item: CreatedStickerLibraryItem, cardWidth: number) {
+function getCollectionPose(item: CreatedStickerLibraryItem, itemIndex: number): CollectionPose {
+  const seed =
+    item.id.split('').reduce((total, character) => total + character.charCodeAt(0), 0) + itemIndex * 17;
+
+  const poses: CollectionPose[] =
+    item.renderMode === 'stamp'
+      ? [
+          { align: 'flex-start', badgeAlign: 'center', scale: 0.92, translateY: 5 },
+          { align: 'center', badgeAlign: 'flex-start', scale: 1.04, translateY: -2 },
+          { align: 'flex-end', badgeAlign: 'flex-end', scale: 0.96, translateY: 7 },
+          { align: 'center', badgeAlign: 'flex-end', scale: 1.08, translateY: 1 },
+        ]
+      : [
+          { align: 'flex-start', badgeAlign: 'flex-start', scale: 1.06, translateY: 6 },
+          { align: 'center', badgeAlign: 'flex-end', scale: 0.9, translateY: -3 },
+          { align: 'flex-end', badgeAlign: 'center', scale: 1, translateY: 8 },
+          { align: 'center', badgeAlign: 'flex-start', scale: 0.96, translateY: 2 },
+          { align: 'flex-start', badgeAlign: 'flex-end', scale: 1.1, translateY: 4 },
+        ];
+
+  return poses[seed % poses.length] ?? poses[0];
+}
+
+function getPreviewMetrics(item: CreatedStickerLibraryItem, cardWidth: number, pose: CollectionPose) {
   const fitted = fitPreviewWithinBounds(item.asset.width, item.asset.height, {
-    maxWidth: item.renderMode === 'stamp' ? cardWidth * 0.9 : cardWidth * 0.78,
-    maxHeight: item.renderMode === 'stamp' ? cardWidth * 1.02 : cardWidth * 0.78,
+    maxWidth:
+      (item.renderMode === 'stamp' ? cardWidth * 0.64 : cardWidth * 0.72) * pose.scale,
+    maxHeight:
+      (item.renderMode === 'stamp' ? cardWidth * 0.72 : cardWidth * 0.72) * pose.scale,
   });
+  const stampMetrics =
+    item.renderMode === 'stamp' ? getStampFrameMetrics(fitted.width, fitted.height) : null;
+  const previewFrameWidth = stampMetrics?.outerWidth ?? fitted.width;
+  const previewFrameHeight = stampMetrics?.outerHeight ?? fitted.height;
 
   return {
     previewWidth: fitted.width,
     previewHeight: fitted.height,
+    previewFrameWidth,
+    previewFrameHeight,
     frameHeight:
       item.renderMode === 'stamp'
-        ? Math.max(cardWidth * 0.9, Math.min(cardWidth * 1.12, fitted.height + 18))
-        : Math.max(cardWidth * 0.9, fitted.height + 22),
+        ? Math.max(cardWidth * 0.92, previewFrameHeight + 28)
+        : Math.max(cardWidth * 0.88, previewFrameHeight + 26),
     rotation: getCollectionTilt(item),
   };
 }
@@ -196,9 +237,11 @@ export function NotesStickerLibraryContent({
         );
       }
 
-      const { frameHeight, previewWidth, previewHeight, rotation } = getPreviewMetrics(
+      const pose = getCollectionPose(item.item, item.itemIndex);
+      const { frameHeight, previewFrameWidth, previewFrameHeight, previewWidth, previewHeight, rotation } = getPreviewMetrics(
         item.item,
-        cardWidth
+        cardWidth,
+        pose
       );
 
       return (
@@ -209,10 +252,8 @@ export function NotesStickerLibraryContent({
                 styles.previewWrap,
                 {
                   height: frameHeight,
-                  backgroundColor:
-                    item.item.renderMode === 'stamp' ? 'transparent' : colors.surface,
-                  borderColor:
-                    item.item.renderMode === 'stamp' ? 'transparent' : colors.border,
+                  width: '100%',
+                  alignItems: pose.align,
                   transform: [
                     {
                       rotate: rotation,
@@ -221,12 +262,23 @@ export function NotesStickerLibraryContent({
                 },
               ]}
             >
-              <StickerPreview
-                item={item.item}
-                previewWidth={previewWidth}
-                previewHeight={previewHeight}
-                fallbackColor={colors.secondaryText}
-              />
+              <View
+                style={[
+                  styles.previewArtworkWrap,
+                  {
+                    width: previewFrameWidth,
+                    height: previewFrameHeight,
+                    transform: [{ translateY: pose.translateY }],
+                  },
+                ]}
+              >
+                <StickerPreview
+                  item={item.item}
+                  previewWidth={previewWidth}
+                  previewHeight={previewHeight}
+                  fallbackColor={colors.secondaryText}
+                />
+              </View>
             </View>
             <View
               style={[
@@ -234,6 +286,7 @@ export function NotesStickerLibraryContent({
                 {
                   backgroundColor: colors.surface,
                   borderColor: colors.border,
+                  alignSelf: pose.badgeAlign,
                 },
               ]}
             >
@@ -332,12 +385,14 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   previewWrap: {
-    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-    borderWidth: 1,
-    padding: 8,
+    overflow: 'visible',
+  },
+  previewArtworkWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
   },
   stickerPreviewCanvas: {
     alignItems: 'center',

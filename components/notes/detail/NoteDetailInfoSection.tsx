@@ -26,7 +26,6 @@ type NoteDetailInfoSectionProps = {
     lockedPremiumNoteColorIds: string[];
     note: Note;
     onChangeLocationText: (value: string) => void;
-    onFocusLocation: () => void;
     onLockedColorPress: () => void;
     onLocationSelectionChange: (event: any) => void;
     onSelectColor: (nextColor: string | null) => void;
@@ -49,7 +48,6 @@ export default function NoteDetailInfoSection({
     lockedPremiumNoteColorIds,
     note,
     onChangeLocationText,
-    onFocusLocation,
     onLockedColorPress,
     onLocationSelectionChange,
     onSelectColor,
@@ -82,7 +80,6 @@ export default function NoteDetailInfoSection({
                                 style={[styles.editLocationInput, { color: colors.text }]}
                                 value={editLocation}
                                 onChangeText={onChangeLocationText}
-                                onFocus={onFocusLocation}
                                 onSelectionChange={onLocationSelectionChange}
                                 editable
                                 placeholder={t('noteDetail.editLocation', 'Edit location name...')}

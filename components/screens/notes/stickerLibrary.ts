@@ -17,49 +17,134 @@ export interface CreatedStickerLibrarySection {
   items: CreatedStickerLibraryItem[];
 }
 
+interface CachedCreatedStickerLibraryItem extends CreatedStickerLibraryItem {
+  assetCreatedAtMs: number;
+  lastUsedAtMs: number;
+}
+
+interface NoteStickerLibraryCacheEntry {
+  signature: string;
+  items: CachedCreatedStickerLibraryItem[];
+}
+
+const noteStickerLibraryCache = new Map<string, NoteStickerLibraryCacheEntry>();
+
+function getTimestampMs(value: string | null | undefined) {
+  if (!value) {
+    return 0;
+  }
+
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function getNoteStickerLibrarySignature(
+  note: Pick<Note, 'createdAt' | 'updatedAt' | 'stickerPlacementsJson'>
+) {
+  return `${note.updatedAt ?? ''}|${note.createdAt}|${note.stickerPlacementsJson ?? ''}`;
+}
+
+function buildCreatedStickerLibraryItemsForNote(note: Note): CachedCreatedStickerLibraryItem[] {
+  if (!note.stickerPlacementsJson) {
+    return [];
+  }
+
+  const signature = getNoteStickerLibrarySignature(note);
+  const cachedEntry = noteStickerLibraryCache.get(note.id);
+  if (cachedEntry?.signature === signature) {
+    return cachedEntry.items;
+  }
+
+  const placements = parseNoteStickerPlacements(note.stickerPlacementsJson);
+  const itemsById = new Map<string, CachedCreatedStickerLibraryItem>();
+  const lastUsedAt = note.updatedAt ?? note.createdAt;
+  const lastUsedAtMs = getTimestampMs(lastUsedAt);
+
+  for (const placement of placements) {
+    const renderMode = placement.renderMode === 'stamp' ? 'stamp' : 'default';
+    const itemId = `${placement.asset.id}:${renderMode}`;
+    const assetCreatedAtMs = getTimestampMs(placement.asset.createdAt);
+    const existing = itemsById.get(itemId);
+
+    if (!existing) {
+      itemsById.set(itemId, {
+        id: itemId,
+        asset: placement.asset,
+        assetId: placement.asset.id,
+        renderMode,
+        usageCount: 1,
+        lastUsedAt,
+        lastUsedAtMs,
+        assetCreatedAtMs,
+      });
+      continue;
+    }
+
+    existing.usageCount += 1;
+    if (lastUsedAtMs >= existing.lastUsedAtMs) {
+      existing.lastUsedAt = lastUsedAt;
+      existing.lastUsedAtMs = lastUsedAtMs;
+    }
+    if (assetCreatedAtMs > existing.assetCreatedAtMs) {
+      existing.assetCreatedAtMs = assetCreatedAtMs;
+    }
+  }
+
+  const items = Array.from(itemsById.values());
+  noteStickerLibraryCache.set(note.id, {
+    signature,
+    items,
+  });
+
+  return items;
+}
+
 export function buildCreatedStickerLibrary(notes: readonly Note[]): CreatedStickerLibraryItem[] {
-  const itemsById = new Map<string, CreatedStickerLibraryItem>();
+  const activeNoteIds = new Set<string>();
+  const itemsById = new Map<string, CachedCreatedStickerLibraryItem>();
 
   for (const note of notes) {
-    const placements = parseNoteStickerPlacements(note.stickerPlacementsJson);
+    activeNoteIds.add(note.id);
 
-    for (const placement of placements) {
-      const renderMode = placement.renderMode === 'stamp' ? 'stamp' : 'default';
-      const itemId = `${placement.asset.id}:${renderMode}`;
-      const lastUsedAt = note.updatedAt ?? note.createdAt ?? placement.asset.createdAt;
-      const existing = itemsById.get(itemId);
+    if (!note.stickerPlacementsJson) {
+      continue;
+    }
 
+    const noteItems = buildCreatedStickerLibraryItemsForNote(note);
+
+    for (const noteItem of noteItems) {
+      const existing = itemsById.get(noteItem.id);
       if (!existing) {
-        itemsById.set(itemId, {
-          id: itemId,
-          asset: placement.asset,
-          assetId: placement.asset.id,
-          renderMode,
-          usageCount: 1,
-          lastUsedAt,
+        itemsById.set(noteItem.id, {
+          ...noteItem,
         });
         continue;
       }
 
-      itemsById.set(itemId, {
-        ...existing,
-        usageCount: existing.usageCount + 1,
-        lastUsedAt:
-          new Date(lastUsedAt).getTime() > new Date(existing.lastUsedAt).getTime()
-            ? lastUsedAt
-            : existing.lastUsedAt,
-      });
+      existing.usageCount += noteItem.usageCount;
+      if (noteItem.lastUsedAtMs > existing.lastUsedAtMs) {
+        existing.lastUsedAt = noteItem.lastUsedAt;
+        existing.lastUsedAtMs = noteItem.lastUsedAtMs;
+      }
+      if (noteItem.assetCreatedAtMs > existing.assetCreatedAtMs) {
+        existing.assetCreatedAtMs = noteItem.assetCreatedAtMs;
+      }
+    }
+  }
+
+  for (const cachedNoteId of noteStickerLibraryCache.keys()) {
+    if (!activeNoteIds.has(cachedNoteId)) {
+      noteStickerLibraryCache.delete(cachedNoteId);
     }
   }
 
   return Array.from(itemsById.values()).sort((left, right) => {
-    const lastUsedDelta =
-      new Date(right.lastUsedAt).getTime() - new Date(left.lastUsedAt).getTime();
+    const lastUsedDelta = right.lastUsedAtMs - left.lastUsedAtMs;
     if (lastUsedDelta !== 0) {
       return lastUsedDelta;
     }
 
-    return new Date(right.asset.createdAt).getTime() - new Date(left.asset.createdAt).getTime();
+    return right.assetCreatedAtMs - left.assetCreatedAtMs;
   });
 }
 

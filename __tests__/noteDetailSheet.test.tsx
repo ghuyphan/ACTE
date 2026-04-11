@@ -742,7 +742,7 @@ describe('NoteDetailSheet', () => {
     });
   });
 
-  it('uses fill-parent keyboard behavior while editing Android note detail sheets', async () => {
+  it('uses the shared sheet keyboard config while editing Android note detail sheets', async () => {
     const originalPlatform = Platform.OS;
     Platform.OS = 'android';
 
@@ -758,7 +758,8 @@ describe('NoteDetailSheet', () => {
       fireEvent.press(getByTestId('note-detail-edit'));
 
       await waitFor(() => {
-        expect(latestAppBottomSheetProps?.androidKeyboardBehavior).toBe('fillParent');
+        expect(latestAppBottomSheetProps?.androidKeyboardBehavior).toBe('interactive');
+        expect(latestAppBottomSheetProps?.androidKeyboardInputMode).toBe('adjustPan');
       });
     } finally {
       Platform.OS = originalPlatform;

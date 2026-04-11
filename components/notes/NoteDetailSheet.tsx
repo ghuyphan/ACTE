@@ -765,10 +765,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         });
     }, [editModeAnim, isEditing, reduceMotionEnabled]);
 
-    const scrollLocationFieldIntoView = useCallback((animated = true) => {
-        scrollContainerRef.current?.scrollToEnd?.({ animated });
-    }, []);
-
     useEffect(() => {
         if (!isEditing) {
             setDoodleModeEnabled(false);
@@ -788,6 +784,16 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         return () => clearTimeout(focusTimer);
     }, [isEditing, note?.type]);
+
+    const blurEditorInputs = useCallback(() => {
+        contentInputRef.current?.blur?.();
+        locationInputRef.current?.blur?.();
+    }, []);
+
+    const dismissEditorKeyboard = useCallback(() => {
+        blurEditorInputs();
+        Keyboard.dismiss();
+    }, [blurEditorInputs]);
 
     useAndroidKeyboardBlurOnHide({
         enabled: visible && isEditing,
@@ -816,11 +822,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
 
         dismissPastePrompt();
-        Keyboard.dismiss();
+        dismissEditorKeyboard();
         setStickerModeEnabled(false);
         setSelectedStickerId(null);
         setDoodleModeEnabled((current) => !current);
-    }, [dismissPastePrompt, isEditing, note]);
+    }, [dismissEditorKeyboard, dismissPastePrompt, isEditing, note]);
 
     const handleUndoDoodle = useCallback(() => {
         setEditDoodleStrokes((current) => current.slice(0, -1));
@@ -847,16 +853,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             setLocationSelection(undefined);
         }
     }, [locationSelection]);
-
-    const handleLocationFocus = useCallback(() => {
-        if (!isEditing) {
-            return;
-        }
-
-        requestAnimationFrame(() => {
-            scrollLocationFieldIntoView();
-        });
-    }, [isEditing, scrollLocationFieldIntoView]);
 
     const applyImportedSticker = useCallback((nextPlacement: NoteStickerPlacement) => {
         setEditStickerPlacements((current) => [...current, nextPlacement]);
@@ -980,7 +976,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     } = useStampCutterFlow({
         dismissStickerUi: () => {
             dismissPastePrompt();
-            Keyboard.dismiss();
+            dismissEditorKeyboard();
             setShowStickerSourceSheet(false);
         },
         enablePhotoStickers: ENABLE_PHOTO_STICKERS,
@@ -998,7 +994,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
 
         dismissPastePrompt();
-        Keyboard.dismiss();
+        dismissEditorKeyboard();
 
         setImportingSticker(true);
         try {
@@ -1062,7 +1058,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         } finally {
             setImportingSticker(false);
         }
-    }, [dismissPastePrompt, importStickerFromSource, importingSticker, isEditing, note, pickStickerImportSource, t]);
+    }, [dismissEditorKeyboard, dismissPastePrompt, importStickerFromSource, importingSticker, isEditing, note, pickStickerImportSource, t]);
 
     useEffect(() => {
         if (!ENABLE_PHOTO_STICKERS || subjectCutoutPrewarmRequestedRef.current) {
@@ -1096,7 +1092,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
 
         dismissPastePrompt();
-        Keyboard.dismiss();
+        dismissEditorKeyboard();
         setImportingSticker(true);
         try {
             const importedAsset = await importStickerAssetFromClipboard({
@@ -1154,7 +1150,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         } finally {
             setImportingSticker(false);
         }
-    }, [dismissPastePrompt, editStickerPlacements, importingSticker, isEditing, note, t]);
+    }, [dismissEditorKeyboard, dismissPastePrompt, editStickerPlacements, importingSticker, isEditing, note, t]);
     const handleShowCardPastePrompt = useCallback(
         async (event: GestureResponderEvent) => {
             if (
@@ -1226,11 +1222,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
 
         dismissPastePrompt();
-        Keyboard.dismiss();
+        dismissEditorKeyboard();
         const canPasteFromClipboard = await hasClipboardStickerImage();
         setStickerSourceCanPasteFromClipboard(canPasteFromClipboard);
         setShowStickerSourceSheet(true);
-    }, [dismissPastePrompt, importingSticker, isEditing, note]);
+    }, [dismissEditorKeyboard, dismissPastePrompt, importingSticker, isEditing, note]);
     const stickerSourceActions = useMemo(() => {
         const actions: {
             key: string;
@@ -1295,13 +1291,13 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
 
         dismissPastePrompt();
-        Keyboard.dismiss();
+        dismissEditorKeyboard();
         setDoodleModeEnabled(false);
         setStickerModeEnabled((current) => !current);
         if (stickerModeEnabled) {
             setSelectedStickerId(null);
         }
-    }, [dismissPastePrompt, isEditing, note, stickerModeEnabled]);
+    }, [dismissEditorKeyboard, dismissPastePrompt, isEditing, note, stickerModeEnabled]);
     const handlePressStickerCanvas = useCallback(() => {
         if (!stickerModeEnabled) {
             return;
@@ -1464,9 +1460,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     }, [onClosed, performDelete, reduceMotionEnabled, visible]);
 
     const handleSheetDismiss = useCallback(() => {
-        Keyboard.dismiss();
+        dismissEditorKeyboard();
         onClose();
-    }, [onClose]);
+    }, [dismissEditorKeyboard, onClose]);
 
     const handleDelete = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1677,6 +1673,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     ? normalizeSavedTextNoteColor(nextNote.noteColor)
                     : null
             );
+            blurEditorInputs();
             handleCloseStampCutterEditor();
             setDoodleModeEnabled(false);
             setStickerModeEnabled(false);
@@ -1698,6 +1695,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             }
             return;
         }
+        blurEditorInputs();
         setDoodleModeEnabled(false);
         setStickerModeEnabled(false);
         setIsEditing(false);
@@ -1832,7 +1830,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             onUndoDoodle={handleUndoDoodle}
             onClearDoodle={handleClearDoodle}
             onLocationChangeText={handleLocationChangeText}
-            onLocationFocus={handleLocationFocus}
             onLocationSelectionChange={handleLocationSelectionChange}
             onPolaroidCaptureReady={handlePolaroidRenderReady}
             onShowCardPastePrompt={handleShowCardPastePrompt}
@@ -1868,7 +1865,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     dismissible={!isEditing}
                     androidScrollable
                     androidDynamicSizing={false}
-                    androidKeyboardBehavior={isEditing ? 'fillParent' : 'interactive'}
                     androidKeyboardInputMode="adjustPan"
                     androidSnapPoints={NOTE_DETAIL_ANDROID_SNAP_POINTS}
                 >

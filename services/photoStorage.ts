@@ -1,5 +1,11 @@
 import * as FileSystem from '../utils/fileSystem';
 import type { Note } from './database';
+import {
+  ensureStoredMediaDirectory,
+  extractStoredFilename,
+  readStoredMediaFile,
+  resolveStoredMediaUri,
+} from './storedMediaFiles';
 
 export const PHOTO_DIRECTORY = FileSystem.documentDirectory
   ? `${FileSystem.documentDirectory}photos/`
@@ -7,43 +13,14 @@ export const PHOTO_DIRECTORY = FileSystem.documentDirectory
 export const MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES = 700 * 1024;
 
 export function extractPhotoFilename(photoUri: string | null | undefined): string | null {
-  const normalizedPhotoUri = typeof photoUri === 'string' ? photoUri.trim() : '';
-  if (!normalizedPhotoUri) {
-    return null;
-  }
-
-  const withoutHash = normalizedPhotoUri.split('#')[0] ?? normalizedPhotoUri;
-  const withoutQuery = withoutHash.split('?')[0] ?? withoutHash;
-  const segments = withoutQuery.split('/').filter(Boolean);
-  const filename = segments[segments.length - 1];
-
-  return filename ? decodeURIComponent(filename) : null;
+  return extractStoredFilename(photoUri);
 }
 
 export function resolveStoredPhotoUri(photoUri: string | null | undefined): string {
-  const normalizedPhotoUri = typeof photoUri === 'string' ? photoUri.trim() : '';
-  if (!normalizedPhotoUri || !PHOTO_DIRECTORY) {
-    return normalizedPhotoUri;
-  }
-
-  if (normalizedPhotoUri.startsWith(PHOTO_DIRECTORY)) {
-    return normalizedPhotoUri;
-  }
-
-  const filename = extractPhotoFilename(normalizedPhotoUri);
-  if (!filename) {
-    return normalizedPhotoUri;
-  }
-
-  if (
-    normalizedPhotoUri.startsWith('photos/') ||
-    normalizedPhotoUri.includes('/Documents/photos/') ||
-    !normalizedPhotoUri.includes('/')
-  ) {
-    return `${PHOTO_DIRECTORY}${filename}`;
-  }
-
-  return normalizedPhotoUri;
+  return resolveStoredMediaUri(photoUri, {
+    directory: PHOTO_DIRECTORY,
+    legacyDirectoryName: 'photos',
+  });
 }
 
 export function getNotePhotoUri(
@@ -57,12 +34,7 @@ export function getNotePhotoUri(
 }
 
 export async function ensurePhotoDirectory() {
-  if (!PHOTO_DIRECTORY) {
-    return null;
-  }
-
-  await FileSystem.makeDirectoryAsync(PHOTO_DIRECTORY, { intermediates: true });
-  return PHOTO_DIRECTORY;
+  return ensureStoredMediaDirectory(PHOTO_DIRECTORY);
 }
 
 export const SHARED_PHOTO_CACHE_DIRECTORY = FileSystem.cacheDirectory
@@ -70,50 +42,29 @@ export const SHARED_PHOTO_CACHE_DIRECTORY = FileSystem.cacheDirectory
   : null;
 
 export async function ensureSharedPhotoCacheDirectory() {
-  if (!SHARED_PHOTO_CACHE_DIRECTORY) {
-    return null;
-  }
-
-  await FileSystem.makeDirectoryAsync(SHARED_PHOTO_CACHE_DIRECTORY, { intermediates: true });
-  return SHARED_PHOTO_CACHE_DIRECTORY;
+  return ensureStoredMediaDirectory(SHARED_PHOTO_CACHE_DIRECTORY);
 }
 
 export async function readPhotoAsBase64(photoUri: string) {
-  const normalizedPhotoUri = resolveStoredPhotoUri(photoUri);
-  if (!normalizedPhotoUri) {
-    return null;
-  }
-
-  const info = await FileSystem.getInfoAsync(normalizedPhotoUri);
-  if (!info.exists || info.isDirectory) {
-    return null;
-  }
-
-  if (typeof info.size === 'number' && info.size > MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES) {
-    throw new Error('Photo is too large to sync safely. Please retake it with a lower resolution.');
-  }
-
-  return FileSystem.readAsStringAsync(normalizedPhotoUri, {
-    encoding: FileSystem.EncodingType.Base64,
+  return readStoredMediaFile({
+    fileUri: photoUri,
+    resolveUri: resolveStoredPhotoUri,
+    maxFileSizeBytes: MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES,
+    tooLargeErrorMessage: 'Photo is too large to sync safely. Please retake it with a lower resolution.',
+    read: (resolvedPhotoUri) => FileSystem.readAsStringAsync(resolvedPhotoUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    }),
   });
 }
 
 export async function readPhotoAsArrayBuffer(photoUri: string) {
-  const normalizedPhotoUri = resolveStoredPhotoUri(photoUri);
-  if (!normalizedPhotoUri) {
-    return null;
-  }
-
-  const info = await FileSystem.getInfoAsync(normalizedPhotoUri);
-  if (!info.exists || info.isDirectory) {
-    return null;
-  }
-
-  if (typeof info.size === 'number' && info.size > MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES) {
-    throw new Error('Photo is too large to sync safely. Please retake it with a lower resolution.');
-  }
-
-  return FileSystem.readAsArrayBufferAsync(normalizedPhotoUri);
+  return readStoredMediaFile({
+    fileUri: photoUri,
+    resolveUri: resolveStoredPhotoUri,
+    maxFileSizeBytes: MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES,
+    tooLargeErrorMessage: 'Photo is too large to sync safely. Please retake it with a lower resolution.',
+    read: (resolvedPhotoUri) => FileSystem.readAsArrayBufferAsync(resolvedPhotoUri),
+  });
 }
 
 export async function writePhotoFromBase64(noteId: string, base64Data: string) {

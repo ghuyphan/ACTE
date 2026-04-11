@@ -72,6 +72,28 @@ function createNote(overrides: Partial<Note>): Note {
 }
 
 describe('buildCreatedStickerLibrary', () => {
+  it('reuses cached parsing for unchanged sticker notes across rebuilds', () => {
+    jest.isolateModules(() => {
+      const noteStickersModule =
+        require('../services/noteStickers') as typeof import('../services/noteStickers');
+      const parseSpy = jest.spyOn(noteStickersModule, 'parseNoteStickerPlacements');
+      const { buildCreatedStickerLibrary: buildCachedStickerLibrary } =
+        require('../components/screens/notes/stickerLibrary') as typeof import('../components/screens/notes/stickerLibrary');
+
+      const note = createNote({
+        id: 'cached-note',
+        stickerPlacementsJson: JSON.stringify([
+          createPlacement({ placementId: 'cached-placement', assetId: 'cached-asset' }),
+        ]),
+      });
+
+      buildCachedStickerLibrary([note]);
+      buildCachedStickerLibrary([note]);
+
+      expect(parseSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('groups repeated sticker usage from multiple notes', () => {
     const notes = [
       createNote({

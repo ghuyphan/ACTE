@@ -5,7 +5,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-nat
 import { Ionicons } from '@expo/vector-icons';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
-import { useNotesRecapViewModel } from '../../../hooks/useNotesRecapViewModel';
+import { useNotesRecapViewModel } from '../../../hooks/state/useNotesRecapViewModel';
 import type { Note } from '../../../services/database';
 import { scheduleOnIdle } from '../../../utils/scheduleOnIdle';
 import RecapCalendarGrid from './RecapCalendarGrid';
