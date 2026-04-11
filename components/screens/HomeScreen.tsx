@@ -1411,7 +1411,8 @@ export default function HomeScreen() {
         if (captureMode === 'camera' && capturedPairedVideo) {
           pairedVideoDestinationPath = await persistLivePhotoVideo(
             capturedPairedVideo,
-            `${pendingNoteId}-motion`
+            `${pendingNoteId}-motion`,
+            tier
           );
         }
 

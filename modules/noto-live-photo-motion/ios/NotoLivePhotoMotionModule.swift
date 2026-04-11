@@ -1,14 +1,8 @@
 import AVFoundation
+import CoreVideo
 import ExpoModulesCore
 
 public final class NotoLivePhotoMotionModule: Module {
-  private let presetCandidates = [
-    AVAssetExportPreset1280x720,
-    AVAssetExportPreset960x540,
-    AVAssetExportPreset640x480,
-    AVAssetExportPresetMediumQuality
-  ]
-
   public func definition() -> ModuleDefinition {
     Name("NotoLivePhotoMotion")
 
@@ -16,7 +10,8 @@ public final class NotoLivePhotoMotionModule: Module {
       sourceUri: String,
       destinationBasePath: String,
       maxDurationSeconds: Double,
-      maxDimension: Double
+      maxDimension: Double,
+      targetBitrate: Double
     ) async throws -> [String: Any] in
       let sourceUrl = try fileURL(from: sourceUri)
       let destinationBaseUrl = try fileURL(from: destinationBasePath)
@@ -45,57 +40,15 @@ public final class NotoLivePhotoMotionModule: Module {
         CMTime(seconds: max(0.1, maxDurationSeconds), preferredTimescale: 600)
       )
 
-      let composition = AVMutableComposition()
-      guard let compositionTrack = composition.addMutableTrack(
-        withMediaType: .video,
-        preferredTrackID: kCMPersistentTrackID_Invalid
-      ) else {
-        throw LivePhotoMotionExportException("Unable to create motion export track.")
-      }
-
-      try compositionTrack.insertTimeRange(
-        CMTimeRange(start: .zero, duration: trimmedDuration),
-        of: sourceVideoTrack,
-        at: .zero
-      )
-      compositionTrack.preferredTransform = sourceTransform
-
-      let videoComposition = makeVideoComposition(
-        for: compositionTrack,
+      try await transcodeMotionClip(
+        sourceVideoTrack: sourceVideoTrack,
+        destinationUrl: destinationUrl,
+        trimmedDuration: trimmedDuration,
         sourceTransform: sourceTransform,
         sourceSize: sourceSize,
-        duration: trimmedDuration,
-        maxDimension: CGFloat(max(1, maxDimension))
+        maxDimension: CGFloat(max(1, maxDimension)),
+        targetBitrate: max(1, targetBitrate)
       )
-
-      guard let exportSession = makeExportSession(for: composition) else {
-        throw LivePhotoMotionExportException("Unable to create motion export session.")
-      }
-
-      exportSession.outputURL = destinationUrl
-      exportSession.outputFileType = .mp4
-      exportSession.shouldOptimizeForNetworkUse = true
-      exportSession.videoComposition = videoComposition
-
-      try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-        exportSession.exportAsynchronously {
-          switch exportSession.status {
-          case .completed:
-            continuation.resume(returning: ())
-          case .failed:
-            continuation.resume(
-              throwing: exportSession.error ??
-                LivePhotoMotionExportException("Motion export failed.")
-            )
-          case .cancelled:
-            continuation.resume(throwing: LivePhotoMotionExportException("Motion export cancelled."))
-          default:
-            continuation.resume(
-              throwing: LivePhotoMotionExportException("Motion export finished in an unexpected state.")
-            )
-          }
-        }
-      }
 
       let outputAttributes = try FileManager.default.attributesOfItem(atPath: destinationUrl.path)
       let fileSize = (outputAttributes[.size] as? NSNumber)?.doubleValue ?? 0
@@ -107,14 +60,155 @@ public final class NotoLivePhotoMotionModule: Module {
     }
   }
 
-  private func makeExportSession(for asset: AVAsset) -> AVAssetExportSession? {
-    for preset in presetCandidates where AVAssetExportSession.exportPresets(compatibleWith: asset).contains(preset) {
-      if let exportSession = AVAssetExportSession(asset: asset, presetName: preset) {
-        return exportSession
-      }
+  private func transcodeMotionClip(
+    sourceVideoTrack: AVAssetTrack,
+    destinationUrl: URL,
+    trimmedDuration: CMTime,
+    sourceTransform: CGAffineTransform,
+    sourceSize: CGSize,
+    maxDimension: CGFloat,
+    targetBitrate: Double
+  ) async throws {
+    let composition = AVMutableComposition()
+    guard let compositionTrack = composition.addMutableTrack(
+      withMediaType: .video,
+      preferredTrackID: kCMPersistentTrackID_Invalid
+    ) else {
+      throw LivePhotoMotionExportException("Unable to create motion export track.")
     }
 
-    return nil
+    try compositionTrack.insertTimeRange(
+      CMTimeRange(start: .zero, duration: trimmedDuration),
+      of: sourceVideoTrack,
+      at: .zero
+    )
+    compositionTrack.preferredTransform = sourceTransform
+
+    let videoComposition = makeVideoComposition(
+      for: compositionTrack,
+      sourceTransform: sourceTransform,
+      sourceSize: sourceSize,
+      duration: trimmedDuration,
+      maxDimension: maxDimension
+    )
+
+    let reader = try AVAssetReader(asset: composition)
+    let videoOutput = AVAssetReaderVideoCompositionOutput(
+      videoTracks: [compositionTrack],
+      videoSettings: [
+        kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
+      ]
+    )
+    videoOutput.alwaysCopiesSampleData = false
+    videoOutput.videoComposition = videoComposition
+
+    guard reader.canAdd(videoOutput) else {
+      throw LivePhotoMotionExportException("Unable to read motion export frames.")
+    }
+    reader.add(videoOutput)
+
+    let writer = try AVAssetWriter(outputURL: destinationUrl, fileType: .mp4)
+    let writerInput = AVAssetWriterInput(
+      mediaType: .video,
+      outputSettings: makeWriterOutputSettings(
+        renderSize: videoComposition.renderSize,
+        targetBitrate: targetBitrate
+      )
+    )
+    writerInput.expectsMediaDataInRealTime = false
+    writerInput.performsMultiPassEncodingIfSupported = true
+
+    guard writer.canAdd(writerInput) else {
+      throw LivePhotoMotionExportException("Unable to configure motion export writer.")
+    }
+    writer.add(writerInput)
+
+    guard writer.startWriting() else {
+      throw writer.error ?? LivePhotoMotionExportException("Unable to start motion export writer.")
+    }
+    guard reader.startReading() else {
+      throw reader.error ?? LivePhotoMotionExportException("Unable to start motion export reader.")
+    }
+
+    writer.startSession(atSourceTime: .zero)
+    let queue = DispatchQueue(label: "com.acte.app.live-photo-motion-export")
+    let completionLock = NSLock()
+    var didResume = false
+
+    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+      func finish(_ result: Result<Void, Error>) {
+        completionLock.lock()
+        defer { completionLock.unlock() }
+
+        guard !didResume else {
+          return
+        }
+
+        didResume = true
+        continuation.resume(with: result)
+      }
+
+      writerInput.requestMediaDataWhenReady(on: queue) {
+        while writerInput.isReadyForMoreMediaData {
+          if let sampleBuffer = videoOutput.copyNextSampleBuffer() {
+            if !writerInput.append(sampleBuffer) {
+              reader.cancelReading()
+              writerInput.markAsFinished()
+              writer.cancelWriting()
+              finish(.failure(writer.error ?? LivePhotoMotionExportException("Motion export failed.")))
+              return
+            }
+
+            continue
+          }
+
+          writerInput.markAsFinished()
+          writer.finishWriting {
+            if let error = reader.error ?? writer.error {
+              finish(.failure(error))
+              return
+            }
+
+            switch writer.status {
+            case .completed:
+              finish(.success(()))
+            case .failed:
+              finish(.failure(writer.error ?? LivePhotoMotionExportException("Motion export failed.")))
+            case .cancelled:
+              finish(.failure(LivePhotoMotionExportException("Motion export cancelled.")))
+            default:
+              finish(.failure(LivePhotoMotionExportException("Motion export finished in an unexpected state.")))
+            }
+          }
+          return
+        }
+
+        if reader.status == .failed {
+          writerInput.markAsFinished()
+          writer.cancelWriting()
+          finish(.failure(reader.error ?? LivePhotoMotionExportException("Motion export reader failed.")))
+        }
+      }
+    }
+  }
+
+  private func makeWriterOutputSettings(
+    renderSize: CGSize,
+    targetBitrate: Double
+  ) -> [String: Any] {
+    let normalizedBitrate = max(1, Int(targetBitrate.rounded()))
+
+    return [
+      AVVideoCodecKey: AVVideoCodecType.h264,
+      AVVideoWidthKey: Int(renderSize.width),
+      AVVideoHeightKey: Int(renderSize.height),
+      AVVideoCompressionPropertiesKey: [
+        AVVideoAverageBitRateKey: normalizedBitrate,
+        AVVideoExpectedSourceFrameRateKey: 30,
+        AVVideoMaxKeyFrameIntervalKey: 30,
+        AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+      ]
+    ]
   }
 
   private func makeVideoComposition(

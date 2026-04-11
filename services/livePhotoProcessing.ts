@@ -1,3 +1,4 @@
+import type { PlanTier } from '../constants/subscription';
 import * as FileSystem from '../utils/fileSystem';
 import {
   ensureLivePhotoVideoDirectory,
@@ -7,6 +8,14 @@ import {
 import { normalizeLivePhotoMotionVideo } from './livePhotoMotionTranscoder';
 
 export const LIVE_PHOTO_MAX_DURATION_SECONDS = 2;
+export const LIVE_PHOTO_FREE_TARGET_BITRATE = 3_200_000;
+export const LIVE_PHOTO_PLUS_TARGET_BITRATE = 6_000_000;
+
+export function getLivePhotoTargetBitrate(tier: PlanTier) {
+  return tier === 'plus'
+    ? LIVE_PHOTO_PLUS_TARGET_BITRATE
+    : LIVE_PHOTO_FREE_TARGET_BITRATE;
+}
 
 async function getVideoInfo(videoUri: string) {
   const normalizedVideoUri = resolveStoredPairedVideoUri(videoUri);
@@ -25,7 +34,11 @@ async function getVideoInfo(videoUri: string) {
   };
 }
 
-export async function optimizeLivePhotoVideo(sourceUri: string, destinationBasePath: string) {
+export async function optimizeLivePhotoVideo(
+  sourceUri: string,
+  destinationBasePath: string,
+  tier: PlanTier = 'free'
+) {
   const originalInfo = await getVideoInfo(sourceUri);
   if (!originalInfo) {
     return null;
@@ -34,7 +47,10 @@ export async function optimizeLivePhotoVideo(sourceUri: string, destinationBaseP
   try {
     const normalizedVideo = await normalizeLivePhotoMotionVideo(
       originalInfo.uri,
-      destinationBasePath
+      destinationBasePath,
+      {
+        targetBitrate: getLivePhotoTargetBitrate(tier),
+      }
     );
     if (normalizedVideo?.uri) {
       return {
@@ -54,13 +70,21 @@ export async function optimizeLivePhotoVideo(sourceUri: string, destinationBaseP
   };
 }
 
-export async function persistLivePhotoVideo(sourceUri: string, fileBasename: string) {
+export async function persistLivePhotoVideo(
+  sourceUri: string,
+  fileBasename: string,
+  tier: PlanTier = 'free'
+) {
   const directory = await ensureLivePhotoVideoDirectory();
   if (!directory) {
     return null;
   }
 
-  const preparedVideo = await optimizeLivePhotoVideo(sourceUri, `${directory}${fileBasename}`);
+  const preparedVideo = await optimizeLivePhotoVideo(
+    sourceUri,
+    `${directory}${fileBasename}`,
+    tier
+  );
   if (!preparedVideo?.uri) {
     return null;
   }

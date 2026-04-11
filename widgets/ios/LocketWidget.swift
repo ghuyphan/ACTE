@@ -1625,6 +1625,26 @@ private struct LocketWidgetEntryView: View {
         !payload.isIdleState && shouldShowAuthorChip
     }
 
+    private var textBodyLineLimit: Int {
+        if shouldShowTopLocationChip {
+            return isLarge ? 4 : 3
+        }
+
+        return isLarge ? 5 : 4
+    }
+
+    private var textHeaderClearance: CGFloat {
+        guard shouldShowTopLocationChip, !hasPhotoBackground else {
+            return 0
+        }
+
+        if isLarge {
+            return 24
+        }
+
+        return isMedium ? 18 : 14
+    }
+
     @ViewBuilder
     private var bottomMetaChip: some View {
         if shouldShowAuthorChip {
@@ -1663,7 +1683,7 @@ private struct LocketWidgetEntryView: View {
                 .font(payload.isIdleState ? noteCardIdleFont : noteCardBodyFont)
                 .foregroundStyle(primaryTextColor)
                 .multilineTextAlignment(isLarge ? .leading : .center)
-                .lineLimit(isLarge ? 5 : 4)
+                .lineLimit(textBodyLineLimit)
                 .lineSpacing(noteCardLineSpacing)
                 .tracking(noteCardTracking)
                 .shadow(
@@ -1819,7 +1839,7 @@ private struct LocketWidgetEntryView: View {
                     }
                 }
 
-                Spacer(minLength: 0)
+                Spacer(minLength: textHeaderClearance)
 
                 if !hasPhotoBackground {
                     framedTextContent

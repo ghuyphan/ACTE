@@ -390,6 +390,13 @@ class NotoWidgetProvider : AppWidgetProvider() {
         isMedium &&
         snapshot.noteType == "photo" &&
         hasImage
+      val bodyMaxLines =
+        if (showLocationChip && !showTrailingPhotoLocationChip) {
+          if (isMedium) 4 else 3
+        } else {
+          4
+        }
+      views.setInt(R.id.widget_body, "setMaxLines", bodyMaxLines)
       bindLocationChip(
         views = views,
         chipId = R.id.widget_location_chip,

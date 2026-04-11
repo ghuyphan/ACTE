@@ -41,6 +41,14 @@ const COMPACT_COLUMN_WIDTH = 56;
 
 const mergeStyles = (...styles: any[]) => styles;
 
+function formatOverflowCount(count: number) {
+  if (count <= 0) {
+    return null;
+  }
+
+  return count > 99 ? '99+' : `+${count}`;
+}
+
 type CalendarPalette = {
   accent: string;
   card: string;
@@ -81,6 +89,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
   const hasTextContent = textCount > 0;
   const isTextOnlyDay = !hasPhotoPreview && hasTextContent;
   const isEmptyDay = day.count === 0;
+  const showDayNumber = isEmptyDay;
   const isInteractive = Boolean(day.dateKey && day.count > 0 && !day.disabled);
   const visibleContentCount = hasPhotoPreview
     ? 1
@@ -88,6 +97,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
       ? 1
       : Math.min(day.markers.length, 1);
   const overflowCount = Math.max(day.count - visibleContentCount, 0);
+  const overflowLabel = formatOverflowCount(overflowCount);
   const contentMode = isEmptyDay
     ? 'empty'
     : hasPhotoPreview
@@ -97,7 +107,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
         : 'marker';
   const isPhotoMode = contentMode === 'photo';
   const floatingOverflowBadge =
-    overflowCount > 0 ? (
+    overflowLabel ? (
       <View
         pointerEvents="none"
         style={mergeStyles(
@@ -115,8 +125,11 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
             styles.dayOverflowBadgeText,
             compact ? styles.dayOverflowBadgeTextCompact : null
           )}
+          adjustsFontSizeToFit
+          minimumFontScale={0.82}
+          numberOfLines={1}
         >
-          +{overflowCount}
+          {overflowLabel}
         </Text>
       </View>
     ) : null;
@@ -219,16 +232,18 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                     }
                   )}
                 />
-                <Text
-                  style={mergeStyles(
-                    styles.dayNumber,
-                    compact ? styles.dayNumberCompact : null,
-                    { color: '#FFFFFF' }
-                  )}
-                  numberOfLines={1}
-                >
-                  {day.dayNumber}
-                </Text>
+                {showDayNumber ? (
+                  <Text
+                    style={mergeStyles(
+                      styles.dayNumber,
+                      compact ? styles.dayNumberCompact : null,
+                      { color: '#FFFFFF' }
+                    )}
+                    numberOfLines={1}
+                  >
+                    {day.dayNumber}
+                  </Text>
+                ) : null}
                 {floatingOverflowBadge}
               </View>
             </>
@@ -256,25 +271,29 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                   }
                 )}
               >
-                <Text
-                  style={mergeStyles(
-                    styles.dayNumber,
-                    compact ? styles.dayNumberCompact : null,
-                    isEmptyDay ? styles.dayNumberEmpty : null,
-                    {
-                      color: isSelected ? palette.primary : palette.text,
-                    }
-                  )}
-                  numberOfLines={1}
-                >
-                  {day.dayNumber}
-                </Text>
+                {showDayNumber ? (
+                  <Text
+                    style={mergeStyles(
+                      styles.dayNumber,
+                      compact ? styles.dayNumberCompact : null,
+                      isEmptyDay ? styles.dayNumberEmpty : null,
+                      {
+                        color: isSelected ? palette.primary : palette.text,
+                      }
+                    )}
+                    numberOfLines={1}
+                  >
+                    {day.dayNumber}
+                  </Text>
+                ) : null}
                 {contentMode === 'text' ? floatingOverflowBadge : null}
                 {!isEmptyDay ? (
                   <View
                     style={mergeStyles(
                       styles.dayBody,
                       compact ? styles.dayBodyCompact : null,
+                      !showDayNumber ? styles.dayBodyNoDayLabel : null,
+                      !showDayNumber && compact ? styles.dayBodyNoDayLabelCompact : null,
                       isTextOnlyDay ? styles.dayBodyTextOnly : null
                     )}
                   >
@@ -283,6 +302,8 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                         style={mergeStyles(
                           styles.textDaySheet,
                           compact ? styles.textDaySheetCompact : null,
+                          !showDayNumber ? styles.textDaySheetContentOnly : null,
+                          !showDayNumber && compact ? styles.textDaySheetContentOnlyCompact : null,
                           {
                             backgroundColor: palette.primarySoft,
                             borderColor: `${palette.border}D0`,
@@ -338,7 +359,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                             />
                           )
                         )}
-                        {overflowCount > 0 ? (
+                        {overflowLabel ? (
                           <View
                             style={mergeStyles(
                               styles.overflowBadge,
@@ -355,8 +376,11 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                                 compact ? styles.overflowTextCompact : null,
                                 { color: hasPhotoPreview ? palette.text : palette.primary }
                               )}
+                              adjustsFontSizeToFit
+                              minimumFontScale={0.82}
+                              numberOfLines={1}
                             >
-                              +{overflowCount}
+                              {overflowLabel}
                             </Text>
                           </View>
                         ) : null}
@@ -748,6 +772,12 @@ const styles = StyleSheet.create({
   dayBodyCompact: {
     paddingTop: 12,
   },
+  dayBodyNoDayLabel: {
+    paddingTop: 0,
+  },
+  dayBodyNoDayLabelCompact: {
+    paddingTop: 0,
+  },
   dayBodyPhoto: {
     paddingTop: 18,
     paddingBottom: 4,
@@ -793,12 +823,13 @@ const styles = StyleSheet.create({
   },
   dayOverflowBadge: {
     position: 'absolute',
-    top: 6,
-    right: 6,
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 4,
+    top: 5,
+    right: 5,
+    minWidth: 24,
+    maxWidth: 34,
+    height: 24,
+    borderRadius: 12,
+    paddingHorizontal: 5,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
@@ -810,24 +841,26 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   dayOverflowBadgeCompact: {
-    top: 5,
-    right: 5,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 3,
+    top: 4,
+    right: 4,
+    minWidth: 22,
+    maxWidth: 30,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 4,
   },
   dayOverflowBadgeText: {
     ...Typography.pill,
-    fontSize: 9,
-    lineHeight: 10,
+    fontSize: 10,
+    lineHeight: 11,
     fontWeight: '800',
     color: '#FFFFFF',
     includeFontPadding: false,
+    maxWidth: '100%',
   },
   dayOverflowBadgeTextCompact: {
-    fontSize: 8,
-    lineHeight: 9,
+    fontSize: 9,
+    lineHeight: 10,
   },
   photoDayNumber: {
     position: 'absolute',
@@ -874,6 +907,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingTop: 21,
     paddingBottom: 5,
+  },
+  textDaySheetContentOnly: {
+    paddingTop: 9,
+    paddingBottom: 9,
+  },
+  textDaySheetContentOnlyCompact: {
+    paddingTop: 7,
+    paddingBottom: 7,
   },
   textDayIconWrap: {
     flex: 1,

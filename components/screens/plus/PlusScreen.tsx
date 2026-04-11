@@ -57,6 +57,7 @@ export default function PlusScreen() {
   const {
     isPurchaseAvailable,
     isPurchaseInFlight,
+    plusPriceLabel,
     presentCustomerCenter,
     presentPaywall,
     restorePurchases,
@@ -75,7 +76,7 @@ export default function PlusScreen() {
         t('plus.upgradeSuccessTitle', 'Plus unlocked'),
         t(
           'plus.upgradeSuccessMessage',
-          'You can now use premium photo filters, save unlimited photo notes, and unlock the premium finishes too.'
+          'You can now save unlimited photo memories, keep higher-quality Live Photos, and unlock the premium finishes too.'
         )
       );
     }
@@ -136,7 +137,10 @@ export default function PlusScreen() {
             </Text>
           </View>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-            {t('plus.subtitle', 'More room for your photo memories.')}
+            {t(
+              'plus.subtitle',
+              'For the places, photos, and tiny details you want Noto to remember beautifully.'
+            )}
           </Text>
         </View>
 
@@ -153,6 +157,14 @@ export default function PlusScreen() {
             description={t(
               'plus.features.unlimitedDesc',
               'Free includes 10 photo notes. Plus removes the cap so your visual journal can keep growing.'
+            )}
+          />
+          <FeatureRow
+            icon="images-outline"
+            title={t('plus.features.liveTitle', 'Higher-quality Live Photos')}
+            description={t(
+              'plus.features.liveDesc',
+              'Plus keeps more motion detail with a higher bitrate export, while the free plan now gets a cleaner baseline too.'
             )}
           />
           <FeatureRow
@@ -180,6 +192,10 @@ export default function PlusScreen() {
                 ? t('settings.plusActive', 'Plus Active')
                 : !isPurchaseAvailable
                 ? t('settings.plusUnavailable', 'Coming Soon')
+                : plusPriceLabel
+                ? t('plus.upgradeCtaWithPrice', 'Get Plus · {{price}}', {
+                    price: plusPriceLabel,
+                  })
                 : t('plus.cta', 'Get Noto Plus')
             }
             onPress={() => {

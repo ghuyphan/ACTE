@@ -19,7 +19,11 @@ jest.mock('../services/livePhotoMotionTranscoder', () => ({
   normalizeLivePhotoMotionVideo: (...args: unknown[]) => mockNormalizeLivePhotoMotionVideo(...args),
 }));
 
-import { persistLivePhotoVideo } from '../services/livePhotoProcessing';
+import {
+  LIVE_PHOTO_FREE_TARGET_BITRATE,
+  LIVE_PHOTO_PLUS_TARGET_BITRATE,
+  persistLivePhotoVideo,
+} from '../services/livePhotoProcessing';
 
 describe('livePhotoProcessing', () => {
   beforeEach(() => {
@@ -58,8 +62,31 @@ describe('livePhotoProcessing', () => {
     );
     expect(mockNormalizeLivePhotoMotionVideo).toHaveBeenCalledWith(
       'file:///tmp/captured-live-photo.mov',
-      'file:///current-container/Documents/live-photo-videos/note-123-motion'
+      'file:///current-container/Documents/live-photo-videos/note-123-motion',
+      {
+        targetBitrate: LIVE_PHOTO_FREE_TARGET_BITRATE,
+      }
     );
     expect(mockCopyAsync).not.toHaveBeenCalled();
+  });
+
+  it('uses the higher Plus bitrate profile for live photo motion clips', async () => {
+    mockNormalizeLivePhotoMotionVideo.mockResolvedValue({
+      uri: 'file:///current-container/Documents/live-photo-videos/note-123-motion.mp4',
+    });
+
+    await persistLivePhotoVideo(
+      'file:///tmp/captured-live-photo.mov',
+      'note-123-motion',
+      'plus'
+    );
+
+    expect(mockNormalizeLivePhotoMotionVideo).toHaveBeenCalledWith(
+      'file:///tmp/captured-live-photo.mov',
+      'file:///current-container/Documents/live-photo-videos/note-123-motion',
+      {
+        targetBitrate: LIVE_PHOTO_PLUS_TARGET_BITRATE,
+      }
+    );
   });
 });

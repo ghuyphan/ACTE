@@ -6,11 +6,13 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.Presentation
+import androidx.media3.transformer.DefaultEncoderFactory
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
+import androidx.media3.transformer.VideoEncoderSettings
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -26,7 +28,7 @@ class NotoLivePhotoMotionModule : Module() {
   override fun definition() = ModuleDefinition {
     Name(MODULE_NAME)
 
-    AsyncFunction("normalizeAsync") Coroutine { sourceUri: String, destinationBasePath: String, maxDurationSeconds: Double, maxDimension: Double ->
+    AsyncFunction("normalizeAsync") Coroutine { sourceUri: String, destinationBasePath: String, maxDurationSeconds: Double, maxDimension: Double, targetBitrate: Int ->
       val context = requireNotNull(appContext.reactContext) {
         "React application context is not available."
       }
@@ -66,7 +68,15 @@ class NotoLivePhotoMotionModule : Module() {
 
       val editedMediaItem = editedMediaItemBuilder.build()
 
+      val videoEncoderSettings = VideoEncoderSettings.Builder()
+        .setBitrate(targetBitrate.coerceAtLeast(1))
+        .setiFrameIntervalSeconds(1f)
+        .build()
+      val encoderFactory = DefaultEncoderFactory.Builder(context)
+        .setRequestedVideoEncoderSettings(videoEncoderSettings)
+        .build()
       val transformer = Transformer.Builder(context)
+        .setEncoderFactory(encoderFactory)
         .setVideoMimeType(MimeTypes.VIDEO_H264)
         .build()
 

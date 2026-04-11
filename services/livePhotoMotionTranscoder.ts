@@ -10,7 +10,8 @@ type NativeNotoLivePhotoMotionModule = {
     sourceUri: string,
     destinationBasePath: string,
     maxDurationSeconds: number,
-    maxDimension: number
+    maxDimension: number,
+    targetBitrate: number
   ): Promise<NormalizeLivePhotoMotionResult>;
 };
 
@@ -23,6 +24,7 @@ export async function normalizeLivePhotoMotionVideo(
   options: {
     maxDurationSeconds?: number;
     maxDimension?: number;
+    targetBitrate?: number;
   } = {}
 ) {
   if (!nativeModule) {
@@ -33,6 +35,7 @@ export async function normalizeLivePhotoMotionVideo(
     sourceUri,
     destinationBasePath,
     options.maxDurationSeconds ?? 2,
-    options.maxDimension ?? 720
+    options.maxDimension ?? 720,
+    options.targetBitrate ?? 3_200_000
   );
 }
