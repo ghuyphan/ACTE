@@ -36,6 +36,7 @@ export default function SettingsScreenIOS() {
     appVersion,
     alertProps,
     colors,
+    hapticsValue,
     i18n,
     isAuthAvailable,
     isDark,
@@ -60,6 +61,7 @@ export default function SettingsScreenIOS() {
     showSync,
     showTheme,
     tier,
+    toggleHapticsEnabled,
     syncValue,
     t,
     themeLabel,
@@ -205,6 +207,25 @@ export default function SettingsScreenIOS() {
                 </SwiftUIText>
                 <Spacer />
                 <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{themeLabel}</SwiftUIText>
+              </HStack>
+            </Button>
+            <Button onPress={toggleHapticsEnabled}>
+              <HStack>
+                <HStack
+                  modifiers={[
+                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+                    backgroundOverlay({ color: colors.primary + '18' }),
+                    cornerRadius(7),
+                    padding({ trailing: 12 }),
+                  ]}
+                >
+                  <SwiftUIImage systemName="iphone.radiowaves.left.and.right" color={colors.primary} size={18} />
+                </HStack>
+                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                  {t('settings.haptics', 'Haptics')}
+                </SwiftUIText>
+                <Spacer />
+                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{hapticsValue}</SwiftUIText>
               </HStack>
             </Button>
           </Section>

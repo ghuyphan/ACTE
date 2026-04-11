@@ -105,7 +105,8 @@ describe('useAppStartupBootstrap', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.startupTarget).toBe('/(tabs)');
+      expect(result.current.isDatabaseReady).toBe(true);
+      expect(result.current.isStartupRouteReady).toBe(true);
     });
 
     expect(mockLoadStartupRoute).toHaveBeenCalledWith('entry');
@@ -148,6 +149,7 @@ describe('useAppStartupBootstrap', () => {
 
     await waitFor(() => {
       expect(result.current.startupError).toBe('database-init-failed');
+      expect(result.current.isDatabaseReady).toBe(false);
     });
 
     consoleErrorSpy.mockRestore();
@@ -161,6 +163,7 @@ describe('useAppStartupBootstrap', () => {
 
     await waitFor(() => {
       expect(result.current.startupError).toBe('database-init-failed');
+      expect(result.current.isDatabaseReady).toBe(false);
     });
 
     mockGetDB.mockResolvedValueOnce({});
@@ -171,6 +174,7 @@ describe('useAppStartupBootstrap', () => {
 
     await waitFor(() => {
       expect(result.current.startupError).toBeNull();
+      expect(result.current.isDatabaseReady).toBe(true);
     });
 
     expect(mockGetDB).toHaveBeenCalledTimes(2);
@@ -185,6 +189,7 @@ describe('useAppStartupBootstrap', () => {
 
     await waitFor(() => {
       expect(result.current.startupError).toBe('database-init-failed');
+      expect(result.current.isDatabaseReady).toBe(false);
     });
 
     mockGetDB.mockResolvedValueOnce({});
@@ -197,6 +202,7 @@ describe('useAppStartupBootstrap', () => {
 
     await waitFor(() => {
       expect(result.current.startupError).toBeNull();
+      expect(result.current.isDatabaseReady).toBe(true);
     });
 
     consoleErrorSpy.mockRestore();

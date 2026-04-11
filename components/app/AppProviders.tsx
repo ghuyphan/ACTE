@@ -7,6 +7,7 @@ import { ActiveNoteProvider } from '../../hooks/useActiveNote';
 import { AuthProvider } from '../../hooks/useAuth';
 import { ConnectivityProvider } from '../../hooks/useConnectivity';
 import { FeedFocusProvider } from '../../hooks/useFeedFocus';
+import { HapticsProvider } from '../../hooks/useHaptics';
 import { NotesProvider } from '../../hooks/useNotes';
 import { NoteDetailSheetProvider } from '../../hooks/useNoteDetailSheet';
 import { SharedFeedProvider } from '../../hooks/useSharedFeed';
@@ -24,11 +25,13 @@ function CoreProviders({ children }: AppProvidersProps) {
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
-        <ConnectivityProvider>
-          <AuthProvider>
-            <SubscriptionProvider>{children}</SubscriptionProvider>
-          </AuthProvider>
-        </ConnectivityProvider>
+        <HapticsProvider>
+          <ConnectivityProvider>
+            <AuthProvider>
+              <SubscriptionProvider>{children}</SubscriptionProvider>
+            </AuthProvider>
+          </ConnectivityProvider>
+        </HapticsProvider>
       </ThemeProvider>
     </I18nextProvider>
   );

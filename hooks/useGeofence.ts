@@ -1,6 +1,6 @@
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking } from 'react-native';
 import { useAuth } from './useAuth';
 import {
@@ -12,6 +12,7 @@ import { syncSocialPushRegistration } from '../services/socialPushService';
 import { scheduleOnIdle } from '../utils/scheduleOnIdle';
 
 const LOCATION_FIX_TIMEOUT_MS = 8000;
+const RECENT_LOCATION_MAX_AGE_MS = 2 * 60 * 1000;
 
 function getLocationErrorMessage(error: unknown) {
     if (error instanceof Error) {
@@ -41,11 +42,35 @@ interface ForegroundPermissionRequestResult {
     requiresSettings: boolean;
 }
 
+function isRecentLocation(location: Location.LocationObject | null | undefined) {
+    if (!location) {
+        return false;
+    }
+
+    return Date.now() - location.timestamp <= RECENT_LOCATION_MAX_AGE_MS;
+}
+
 export function useGeofence() {
     const { user } = useAuth();
     const [hasLocationPermission, setHasLocationPermission] = useState(false);
     const [remindersEnabled, setRemindersEnabled] = useState(false);
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
+    const locationRef = useRef<Location.LocationObject | null>(null);
+    const foregroundLocationRequestRef = useRef<Promise<ForegroundLocationRequestResult> | null>(null);
+
+    useEffect(() => {
+        locationRef.current = location;
+    }, [location]);
+
+    const commitLocation = useCallback((nextLocation: Location.LocationObject | null) => {
+        if (!nextLocation) {
+            return null;
+        }
+
+        locationRef.current = nextLocation;
+        setLocation(nextLocation);
+        return nextLocation;
+    }, []);
 
     const refreshPermissions = useCallback(async () => {
         if (!arePlaceRemindersEnabled()) {
@@ -63,7 +88,28 @@ export function useGeofence() {
         return permissionState;
     }, []);
 
-    const refreshLocation = useCallback(async (): Promise<ForegroundLocationRequestResult> => {
+    const resolveCurrentPosition = useCallback(async (): Promise<Location.LocationObject | null> => {
+        const timeoutToken = Symbol('foreground-location-timeout');
+        const currentLocation = await Promise.race<Location.LocationObject | typeof timeoutToken>([
+            Location.getCurrentPositionAsync({
+                accuracy: Location.LocationAccuracy.Balanced,
+            }),
+            new Promise<typeof timeoutToken>((resolve) => {
+                setTimeout(() => resolve(timeoutToken), LOCATION_FIX_TIMEOUT_MS);
+            }),
+        ]);
+
+        if (currentLocation === timeoutToken) {
+            return null;
+        }
+
+        return currentLocation;
+    }, []);
+
+    const refreshLocation = useCallback(async (
+        options: { preferCached?: boolean; backgroundRefreshIfCached?: boolean } = {}
+    ): Promise<ForegroundLocationRequestResult> => {
+        const { preferCached = true, backgroundRefreshIfCached = false } = options;
         try {
             const servicesEnabled = await Location.hasServicesEnabledAsync();
             if (!servicesEnabled) {
@@ -74,36 +120,48 @@ export function useGeofence() {
                 };
             }
 
-            const known = await Location.getLastKnownPositionAsync();
-            if (known) {
-                setLocation(known);
+            const cachedLocation = locationRef.current;
+            if (preferCached && isRecentLocation(cachedLocation)) {
                 return {
-                    location: known,
+                    location: cachedLocation,
                     requiresSettings: false,
                     reason: null,
                 };
             }
 
-            const timeoutToken = Symbol('foreground-location-timeout');
-            const currentLocation = await Promise.race<Location.LocationObject | typeof timeoutToken>([
-                Location.getCurrentPositionAsync({
-                    accuracy: Location.LocationAccuracy.Balanced,
-                }),
-                new Promise<typeof timeoutToken>((resolve) => {
-                    setTimeout(() => resolve(timeoutToken), LOCATION_FIX_TIMEOUT_MS);
-                }),
-            ]);
+            const known = await Location.getLastKnownPositionAsync();
+            if (known) {
+                commitLocation(known);
+                if (preferCached) {
+                    if (backgroundRefreshIfCached) {
+                        void resolveCurrentPosition()
+                            .then((currentLocation) => {
+                                if (currentLocation) {
+                                    commitLocation(currentLocation);
+                                }
+                            })
+                            .catch(() => undefined);
+                    }
+                    return {
+                        location: known,
+                        requiresSettings: false,
+                        reason: null,
+                    };
+                }
+            }
 
-            if (currentLocation === timeoutToken) {
+            const currentLocation = await resolveCurrentPosition();
+
+            if (!currentLocation) {
                 return {
-                    location: null,
+                    location: known ?? cachedLocation ?? null,
                     requiresSettings: false,
-                    reason: 'timeout',
+                    reason: known || cachedLocation ? null : 'timeout',
                 };
             }
 
             if (currentLocation) {
-                setLocation(currentLocation);
+                commitLocation(currentLocation);
             }
 
             return {
@@ -125,7 +183,7 @@ export function useGeofence() {
                         : 'unavailable',
             };
         }
-    }, []);
+    }, [commitLocation, resolveCurrentPosition]);
 
     useEffect(() => {
         let cancelled = false;
@@ -144,8 +202,15 @@ export function useGeofence() {
                     return;
                 }
 
-                setHasLocationPermission(foregroundStatus.status === 'granted');
+                const foregroundGranted = foregroundStatus.status === 'granted';
+                setHasLocationPermission(foregroundGranted);
                 await refreshPermissions();
+                if (foregroundGranted) {
+                    void refreshLocation({
+                        preferCached: true,
+                        backgroundRefreshIfCached: true,
+                    }).catch(() => undefined);
+                }
             })();
         });
 
@@ -153,7 +218,7 @@ export function useGeofence() {
             cancelled = true;
             idleHandle.cancel();
         };
-    }, [refreshPermissions]);
+    }, [refreshLocation, refreshPermissions]);
 
     const requestForegroundPermission = useCallback(async (): Promise<ForegroundPermissionRequestResult> => {
         if (!arePlaceRemindersEnabled()) {
@@ -187,16 +252,35 @@ export function useGeofence() {
     }, []);
 
     const requestForegroundLocation = useCallback(async (): Promise<ForegroundLocationRequestResult> => {
-        const foregroundPermission = await requestForegroundPermission();
-        if (!foregroundPermission.granted) {
-            return {
-                location: null,
-                requiresSettings: foregroundPermission.requiresSettings,
-                reason: 'permission_denied',
-            };
+        if (foregroundLocationRequestRef.current) {
+            return foregroundLocationRequestRef.current;
         }
 
-        return refreshLocation();
+        const requestPromise: Promise<ForegroundLocationRequestResult> = (async () => {
+            const foregroundPermission = await requestForegroundPermission();
+            if (!foregroundPermission.granted) {
+                return {
+                    location: null,
+                    requiresSettings: foregroundPermission.requiresSettings,
+                    reason: 'permission_denied',
+                };
+            }
+
+            return refreshLocation({
+                preferCached: true,
+                backgroundRefreshIfCached: true,
+            });
+        })();
+
+        foregroundLocationRequestRef.current = requestPromise;
+
+        try {
+            return await requestPromise;
+        } finally {
+            if (foregroundLocationRequestRef.current === requestPromise) {
+                foregroundLocationRequestRef.current = null;
+            }
+        }
     }, [refreshLocation, requestForegroundPermission]);
 
     const requestReminderPermissions = useCallback(async (): Promise<ReminderPermissionRequestResult> => {
@@ -233,7 +317,10 @@ export function useGeofence() {
         setRemindersEnabled(enabled);
         if (enabled) {
             await syncGeofenceRegions();
-            void refreshLocation().catch(() => undefined);
+            void refreshLocation({
+                preferCached: true,
+                backgroundRefreshIfCached: true,
+            }).catch(() => undefined);
             if (user) {
                 void syncSocialPushRegistration(user).catch((error) => {
                     console.warn('[social-push] Registration refresh failed:', error);

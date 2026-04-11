@@ -1,4 +1,4 @@
-import * as Haptics from 'expo-haptics';
+import * as Haptics from './useHaptics';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { showAppAlert } from '../utils/alert';

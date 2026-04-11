@@ -574,6 +574,30 @@ describe('widgetService', () => {
     expect(result.selectionMode).toBe('latest_memory');
   });
 
+  it('pins a preferred note for the current slot when the refresh is not location-driven', () => {
+    const result = selectWidgetNote({
+      notes: [
+        buildNote({
+          id: 'favorite-photo',
+          type: 'photo',
+          content: 'file:///mock-documents/photos/latest.jpg',
+          isFavorite: true,
+          createdAt: '2026-03-10T11:00:00.000Z',
+        }),
+        buildNote({
+          id: 'new-note',
+          content: 'The newest note should win right after save',
+          createdAt: '2026-03-10T12:00:00.000Z',
+        }),
+      ],
+      preferredNoteId: 'new-note',
+      referenceDate: new Date('2026-03-10T12:05:00.000Z'),
+    });
+
+    expect(result.selectedNote?.id).toBe('new-note');
+    expect(result.selectionMode).toBe('latest_memory');
+  });
+
   it('uses shared friend content only when there are no eligible personal notes', async () => {
     mockCurrentUser = { id: 'me', uid: 'me' };
     mockGetAllNotes.mockResolvedValue([]);

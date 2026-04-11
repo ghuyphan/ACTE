@@ -9,6 +9,7 @@ import {
   deleteAllNotes as dbDeleteAll,
   deleteNote as dbDelete,
   getAllNotesForScope,
+  getNotesPageForScope,
   getNoteById as dbGetById,
   Note,
   NoteUpdates,
@@ -32,11 +33,13 @@ import { cleanupOrphanMediaFiles } from '../../services/mediaIntegrity';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { updateWidgetData } from '../../services/widgetService';
+import type { UpdateWidgetDataOptions } from '../../services/widgetService';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
 interface NotesStoreValue {
   notes: Note[];
   loading: boolean;
+  initialLoadComplete: boolean;
   refreshNotes: (
     showLoading?: boolean,
     options?: { updateWidget?: boolean; syncGeofences?: boolean }
@@ -51,6 +54,7 @@ interface NotesStoreValue {
 }
 
 const NotesStoreContext = createContext<NotesStoreValue | undefined>(undefined);
+const INITIAL_NOTES_BOOTSTRAP_LIMIT = 24;
 
 function resolveNotesScope(userUid: string | null | undefined) {
   return userUid ?? getActiveNotesScope() ?? LOCAL_NOTES_SCOPE;
@@ -60,6 +64,7 @@ function useNotesStoreValue(): NotesStoreValue {
   const { user, isReady: authReady } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const notesRef = useRef<Note[]>([]);
   const activeScopeRef = useRef<string>(resolveNotesScope(user?.uid));
   const activeScopeRevisionRef = useRef(0);
@@ -70,7 +75,11 @@ function useNotesStoreValue(): NotesStoreValue {
     notesRef.current = notes;
   }, [notes]);
 
-  const scheduleWidgetUpdate = useCallback((nextNotes?: Note[], delay = 120) => {
+  const scheduleWidgetUpdate = useCallback((
+    nextNotes?: Note[],
+    delay = 120,
+    options?: Pick<UpdateWidgetDataOptions, 'preferredNoteId'>
+  ) => {
     if (widgetSyncTimeoutRef.current) {
       clearTimeout(widgetSyncTimeoutRef.current);
     }
@@ -80,15 +89,16 @@ function useNotesStoreValue(): NotesStoreValue {
       void updateWidgetData({
         notes: nextNotes,
         includeLocationLookup: false,
+        preferredNoteId: options?.preferredNoteId ?? null,
       });
     }, delay);
   }, []);
 
   const commitNotes = useCallback(
-    (nextNotes: Note[]) => {
+    (nextNotes: Note[], options?: Pick<UpdateWidgetDataOptions, 'preferredNoteId'>) => {
       notesRef.current = nextNotes;
       setNotes(nextNotes);
-      scheduleWidgetUpdate(nextNotes);
+      scheduleWidgetUpdate(nextNotes, 120, options);
     },
     [scheduleWidgetUpdate]
   );
@@ -144,6 +154,20 @@ function useNotesStoreValue(): NotesStoreValue {
       if (showLoading) {
         setLoading(true);
       }
+      let stagedNotes: Note[] | null = null;
+      if (showLoading) {
+        stagedNotes = await getNotesPageForScope(scope, {
+          limit: INITIAL_NOTES_BOOTSTRAP_LIMIT,
+        });
+        if (refreshRequestIdRef.current !== requestId || activeScopeRef.current !== scope) {
+          return;
+        }
+        notesRef.current = stagedNotes;
+        setNotes(stagedNotes);
+        setInitialLoadComplete(true);
+        setLoading(false);
+      }
+
       const allNotes = await getAllNotesForScope(scope);
       if (refreshRequestIdRef.current !== requestId || activeScopeRef.current !== scope) {
         return;
@@ -158,6 +182,9 @@ function useNotesStoreValue(): NotesStoreValue {
       }
     } catch (error) {
       console.error('Failed to load notes:', error);
+      if (showLoading && refreshRequestIdRef.current === requestId) {
+        setInitialLoadComplete(true);
+      }
     } finally {
       if (showLoading && refreshRequestIdRef.current === requestId) {
         setLoading(false);
@@ -247,7 +274,7 @@ function useNotesStoreValue(): NotesStoreValue {
         return note;
       }
       const nextNotes = prependNote(notesRef.current, note);
-      commitNotes(nextNotes);
+      commitNotes(nextNotes, { preferredNoteId: note.id });
 
       void skipImmediateReminderForNewNote(note.id).catch((error) => {
         console.warn('Failed to suppress immediate reminder for new note:', error);
@@ -402,6 +429,7 @@ function useNotesStoreValue(): NotesStoreValue {
   return {
     notes,
     loading,
+    initialLoadComplete,
     refreshNotes,
     createNote,
     updateNote,

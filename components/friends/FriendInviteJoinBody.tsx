@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../hooks/useHaptics';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {

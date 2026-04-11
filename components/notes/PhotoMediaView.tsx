@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../hooks/useHaptics';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';

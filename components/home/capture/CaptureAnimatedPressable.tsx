@@ -1,4 +1,4 @@
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../../hooks/useHaptics';
 import { type ReactNode, memo, useCallback, useEffect } from 'react';
 import {
   Pressable,

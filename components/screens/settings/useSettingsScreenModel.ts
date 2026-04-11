@@ -10,6 +10,7 @@ import { useNotes } from '../../../hooks/useNotes';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useSubscription } from '../../../hooks/useSubscription';
 import { useSyncStatus } from '../../../hooks/useSyncStatus';
+import { useHaptics } from '../../../hooks/useHaptics';
 import { useTheme } from '../../../hooks/useTheme';
 import { createLegalLinkActions, getLegalLinkAvailability } from '../shared/legalLinkActions';
 import { getThemeLabel } from '../../settings/settingsSelectionOptions';
@@ -17,6 +18,7 @@ import { getThemeLabel } from '../../settings/settingsSelectionOptions';
 export function useSettingsScreenModel() {
   const { t, i18n } = useTranslation();
   const { theme, setTheme, colors, isDark } = useTheme();
+  const { isEnabled: hapticsEnabled, setIsEnabled: setHapticsEnabled } = useHaptics();
   const { isOnline } = useConnectivity();
   const { notes, deleteAllNotes } = useNotes();
   const { deleteSharedNotes } = useSharedFeedStore();
@@ -80,6 +82,13 @@ export function useSettingsScreenModel() {
   }, [isAuthAvailable, openAccountScreen, user]);
 
   const themeLabel = getThemeLabel(theme, t);
+  const hapticsValue = hapticsEnabled
+    ? t('settings.autoSyncOnShort', 'On')
+    : t('settings.autoSyncOff', 'Off');
+
+  const toggleHapticsEnabled = useCallback(() => {
+    void setHapticsEnabled(!hapticsEnabled);
+  }, [hapticsEnabled, setHapticsEnabled]);
 
   const accountValue = useMemo(() => {
     if (user) {
@@ -257,6 +266,8 @@ export function useSettingsScreenModel() {
     appVersion,
     alertProps,
     colors,
+    hapticsEnabled,
+    hapticsValue,
     i18n,
     insets,
     isAuthAvailable,
@@ -269,6 +280,7 @@ export function useSettingsScreenModel() {
     plusHint,
     plusValue,
     promptClearAll,
+    toggleHapticsEnabled,
     setShowLanguage,
     setShowSync,
     setShowTheme,

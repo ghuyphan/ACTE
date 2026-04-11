@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 let mockCaptureCardProps: any = null;
 let mockCaptureCardHandle: any = null;
 const mockNotes: any[] = [];
+let mockNotesLoading = false;
 const mockOpenAppSettings = jest.fn(async () => undefined);
 const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
 const mockShowAlert = jest.fn();
@@ -141,7 +142,7 @@ jest.mock('../utils/appStorage', () => ({
 
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
-    loading: false,
+    loading: mockNotesLoading,
     notes: mockNotes,
     refreshNotes: jest.fn(async () => undefined),
     createNote: jest.fn(async () => undefined),
@@ -230,6 +231,7 @@ jest.mock('../components/home/NotesFeed', () => {
       <View>
         {props.captureHeader}
         <Text testID="capture-scroll-enabled">{String(props.scrollEnabled)}</Text>
+        <Text testID="notes-feed-has-empty-state">{String(Boolean(props.emptyState))}</Text>
         <Pressable testID="hide-capture" onPress={() => props.onCaptureVisibilityChange?.(false)} />
         <Pressable testID="show-capture" onPress={() => props.onCaptureVisibilityChange?.(true)} />
         <Pressable
@@ -277,6 +279,7 @@ describe('HomeScreen camera lifecycle', () => {
       return 0;
     }) as typeof requestAnimationFrame;
     AppState.currentState = 'active';
+    mockNotesLoading = false;
     mockCaptureCardProps = null;
     mockCaptureCardHandle = null;
     mockOpenAppSettings.mockClear();
@@ -483,6 +486,14 @@ describe('HomeScreen camera lifecycle', () => {
 
     expect(mockOpenAppSettings).toHaveBeenCalledTimes(1);
     expect(mockRequestPermission).not.toHaveBeenCalled();
+  });
+
+  it('keeps a bootstrap page mounted while the initial home feed is still loading', () => {
+    mockNotesLoading = true;
+
+    const { getByTestId } = render(<HomeScreen />);
+
+    expect(getByTestId('notes-feed-has-empty-state')).toHaveTextContent('true');
   });
 
   it('keeps the first-time live photo hint visible until a capture exists', async () => {

@@ -451,6 +451,8 @@
         "preferences": "Giao diện & ngôn ngữ",
         "language": "Ngôn ngữ",
         "theme": "Giao diện",
+        "haptics": "Rung phản hồi",
+        "hapticsHint": "Bật hoặc tắt rung phản hồi trong toàn bộ ứng dụng.",
         "system": "Hệ thống",
         "dark": "Tối",
         "light": "Sáng",

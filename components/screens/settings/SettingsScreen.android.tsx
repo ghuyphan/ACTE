@@ -54,6 +54,7 @@ function SettingRow({
   value,
   onPress,
   destructive = false,
+  showChevron = Boolean(onPress),
 }: {
   colors: ThemeColors;
   icon: React.ComponentProps<typeof Ionicons>['name'];
@@ -62,6 +63,7 @@ function SettingRow({
   value?: string | null;
   onPress?: () => void;
   destructive?: boolean;
+  showChevron?: boolean;
 }) {
   const iconColor = destructive ? colors.danger : colors.primary;
   const content = (
@@ -77,7 +79,7 @@ function SettingRow({
       </View>
       <View style={styles.rowTrailing}>
         {value ? <Text style={[styles.rowValue, { color: colors.secondaryText }]}>{value}</Text> : null}
-        {onPress ? <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} /> : null}
+        {showChevron ? <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} /> : null}
       </View>
     </>
   );
@@ -112,6 +114,7 @@ export default function SettingsScreenAndroid() {
     appVersion,
     alertProps,
     colors,
+    hapticsValue,
     i18n,
     insets,
     isAuthAvailable,
@@ -138,6 +141,7 @@ export default function SettingsScreenAndroid() {
     syncValue,
     t,
     themeLabel,
+    toggleHapticsEnabled,
     user,
   } = useSettingsScreenModel();
   const languageCode = i18n.resolvedLanguage?.startsWith('vi') ? 'vi' : 'en';
@@ -264,6 +268,16 @@ export default function SettingsScreenAndroid() {
               title={t('settings.theme', 'Theme')}
               value={themeLabel}
               onPress={() => setShowTheme(true)}
+            />
+            <CardDivider colors={colors} />
+            <SettingRow
+              colors={colors}
+              icon="phone-portrait-outline"
+              title={t('settings.haptics', 'Haptics')}
+              subtitle={t('settings.hapticsHint', 'Turn vibration feedback on or off across the app.')}
+              value={hapticsValue}
+              onPress={toggleHapticsEnabled}
+              showChevron={false}
             />
           </SettingsCard>
         </View>

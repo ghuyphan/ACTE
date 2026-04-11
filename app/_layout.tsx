@@ -2,15 +2,16 @@ import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@rea
 import * as SystemUI from 'expo-system-ui';
 import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
-import { hasInitializedI18n, i18nReady } from '../constants/i18n';
 import AppProviders from '../components/app/AppProviders';
 import PrimaryButton from '../components/ui/PrimaryButton';
+import { useNotesStore } from '../hooks/useNotes';
 import { useTheme } from '../hooks/useTheme';
+import { useAppSplashGate } from '../hooks/app/useAppSplashGate';
 import { useAppNotificationRouting } from '../hooks/app/useAppNotificationRouting';
 import { useAppStartupBootstrap } from '../hooks/app/useAppStartupBootstrap';
 import { useAppWidgetRefresh } from '../hooks/app/useAppWidgetRefresh';
@@ -24,50 +25,30 @@ SplashScreen.preventAutoHideAsync();
 
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
+  const { initialLoadComplete } = useNotesStore();
   const { t } = useTranslation();
-  const [i18nInitialized, setI18nInitialized] = useState(() => hasInitializedI18n());
   const {
+    isDatabaseReady,
     isRecovering,
+    isStartupRouteReady,
     resetStartupData,
     retryStartup,
     startupError,
-    startupTarget,
   } = useAppStartupBootstrap();
   useAppWidgetRefresh();
   useAppNotificationRouting();
   useSocialPushRegistration();
-
-  useEffect(() => {
-    void i18nReady
-      .then(() => {
-        setI18nInitialized(true);
-      })
-      .catch((error) => {
-        console.error('i18n init failed:', error);
-        setI18nInitialized(true);
-      });
-  }, []);
+  useAppSplashGate({
+    isDatabaseReady,
+    isStartupRouteReady,
+    notesReady: initialLoadComplete,
+    startupError,
+    themeReady,
+  });
 
   useEffect(() => {
     void SystemUI.setBackgroundColorAsync(colors.background);
   }, [colors.background]);
-
-  useEffect(() => {
-    if (!themeReady || !i18nInitialized || (!startupTarget && !startupError)) {
-      return;
-    }
-
-    let cancelled = false;
-    requestAnimationFrame(() => {
-      if (!cancelled) {
-        void SplashScreen.hideAsync();
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [i18nInitialized, startupError, startupTarget, themeReady]);
 
   const navTheme = useMemo(() => {
     const baseTheme = isDark ? DarkTheme : DefaultTheme;

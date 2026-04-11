@@ -1404,6 +1404,24 @@ export async function getAllNotesForScope(scope: string): Promise<Note[]> {
     return rows.map(rowToNote);
 }
 
+export async function getNotesPageForScope(
+    scope: string,
+    options: { limit: number; offset?: number }
+): Promise<Note[]> {
+    const database = await getDB();
+    const rows = await database.getAllAsync<NoteRow>(
+        `SELECT ${NOTES_SELECT_FIELDS}
+         FROM ${NOTES_FROM_CLAUSE}
+         WHERE owner_uid = ?
+         ORDER BY created_at DESC
+         LIMIT ? OFFSET ?`,
+        scope,
+        options.limit,
+        options.offset ?? 0
+    );
+    return rows.map(rowToNote);
+}
+
 export async function getNoteById(id: string): Promise<Note | null> {
     const database = await getDB();
     const scope = getCurrentScope();

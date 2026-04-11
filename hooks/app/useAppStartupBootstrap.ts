@@ -10,20 +10,19 @@ import {
 import {
   getCachedStartupRoute,
   loadStartupRoute,
-  type StartupEntryRoute,
 } from '../../services/startupRouting';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
 export function useAppStartupBootstrap() {
-  const [startupTarget, setStartupTarget] = useState<StartupEntryRoute | null>(() =>
-    getCachedStartupRoute('entry')
-  );
   const [startupError, setStartupError] = useState<string | null>(null);
   const [isRecovering, setIsRecovering] = useState(false);
+  const [isDatabaseReady, setIsDatabaseReady] = useState(false);
+  const [isStartupRouteReady, setIsStartupRouteReady] = useState(() => Boolean(getCachedStartupRoute('entry')));
   const [databaseAttempt, setDatabaseAttempt] = useState(0);
 
   const retryStartup = useCallback(() => {
     setIsRecovering(true);
+    setIsDatabaseReady(false);
     setDatabaseAttempt((current) => current + 1);
   }, []);
 
@@ -32,6 +31,7 @@ export function useAppStartupBootstrap() {
 
     try {
       await resetLocalDatabase();
+      setIsDatabaseReady(false);
       setDatabaseAttempt((current) => current + 1);
     } catch (error) {
       console.error('Database reset failed:', error);
@@ -41,22 +41,22 @@ export function useAppStartupBootstrap() {
   }, []);
 
   useEffect(() => {
-    if (startupTarget) {
+    if (isStartupRouteReady) {
       return;
     }
 
     let cancelled = false;
 
-    void loadStartupRoute('entry').then((nextTarget) => {
+    void loadStartupRoute('entry').then(() => {
       if (!cancelled) {
-        setStartupTarget(nextTarget);
+        setIsStartupRouteReady(true);
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [startupTarget]);
+  }, [isStartupRouteReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +80,7 @@ export function useAppStartupBootstrap() {
           return;
         }
 
+        setIsDatabaseReady(true);
         setStartupError(null);
         setIsRecovering(false);
         startupIdleHandle = scheduleOnIdle(() => {
@@ -94,6 +95,7 @@ export function useAppStartupBootstrap() {
       .catch((err) => {
         console.error('Database init failed:', err);
         if (!cancelled) {
+          setIsDatabaseReady(false);
           setStartupError('database-init-failed');
           setIsRecovering(false);
         }
@@ -109,10 +111,11 @@ export function useAppStartupBootstrap() {
   }, [databaseAttempt]);
 
   return {
+    isDatabaseReady,
     isRecovering,
+    isStartupRouteReady,
     resetStartupData,
     retryStartup,
-    startupTarget,
     startupError,
   };
 }

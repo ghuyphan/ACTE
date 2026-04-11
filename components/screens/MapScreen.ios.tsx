@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../ui/GlassView';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../hooks/useHaptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';

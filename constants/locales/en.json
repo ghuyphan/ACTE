@@ -451,6 +451,8 @@
         "preferences": "Style & Language",
         "language": "Language",
         "theme": "Theme",
+        "haptics": "Haptics",
+        "hapticsHint": "Turn vibration feedback on or off across the app.",
         "system": "System",
         "dark": "Dark",
         "light": "Light",

@@ -81,6 +81,25 @@ describe('useGeofence', () => {
     expect(mockRequestForegroundPermissionsAsync).not.toHaveBeenCalled();
   });
 
+  it('prewarms a cached location on mount when foreground permission is already granted', async () => {
+    const location = {
+      coords: { latitude: 10.7626, longitude: 106.6601 },
+      timestamp: Date.now(),
+    };
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetLastKnownPositionAsync.mockResolvedValue(location);
+    mockGetReminderPermissionState.mockResolvedValue({
+      foregroundGranted: true,
+      remindersEnabled: false,
+    });
+
+    const { result } = renderHook(() => useGeofence());
+
+    await waitFor(() => {
+      expect(result.current.location).toEqual(location);
+    });
+  });
+
   it('returns requiresSettings when foreground permission is permanently denied', async () => {
     mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false });
     mockRequestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false });
@@ -107,6 +126,24 @@ describe('useGeofence', () => {
     });
 
     expect(mockGetCurrentPositionAsync).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the last known position when a fresh GPS fix is unavailable', async () => {
+    const location = {
+      coords: { latitude: 10.7626, longitude: 106.6601 },
+      timestamp: Date.now() - 10_000,
+    };
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetLastKnownPositionAsync.mockResolvedValue(location);
+
+    const { result } = renderHook(() => useGeofence());
+
+    await act(async () => {
+      const response = await result.current.requestForegroundLocation();
+      expect(response.location).toEqual(location);
+      expect(response.requiresSettings).toBe(false);
+      expect(response.reason).toBeNull();
+    });
   });
 
   it('enables reminders and syncs geofences when all permissions are granted', async () => {

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../../hooks/useHaptics';
 import { Canvas, Path as SkiaPath } from '@shopify/react-native-skia';
 import { Image as ExpoImage } from 'expo-image';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';

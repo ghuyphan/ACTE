@@ -1,6 +1,6 @@
 import { AppState, Platform } from 'react-native';
 import { Camera, type CameraPermissionStatus, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from './useHaptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { runOnJS, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import {

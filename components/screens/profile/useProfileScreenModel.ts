@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../../hooks/useHaptics';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { normalizeUsernameInput, validateUsernameInput } from '../../../services/publicProfileService';

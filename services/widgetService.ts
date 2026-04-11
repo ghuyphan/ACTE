@@ -742,6 +742,46 @@ function pickSharedFallbackCandidate(
     return null;
 }
 
+function getPreferredWidgetCandidate(
+    personalCandidates: WidgetCandidate[],
+    sharedCandidates: WidgetCandidate[],
+    preferredNoteId: string | null
+) {
+    if (!preferredNoteId) {
+        return null;
+    }
+
+    return (
+        personalCandidates.find((candidate) => candidate.id === preferredNoteId) ??
+        sharedCandidates.find((candidate) => candidate.id === preferredNoteId) ??
+        null
+    );
+}
+
+function getSelectionModeForPreferredCandidate(
+    candidate: WidgetCandidate,
+    referenceDate: Date
+): WidgetSelectionMode {
+    if (candidate.source === 'shared') {
+        return candidate.noteType === 'photo' ? 'shared_photo_memory' : 'shared_memory';
+    }
+
+    if (candidate.isFavorite) {
+        return candidate.noteType === 'photo' ? 'favorite_photo' : 'favorite_memory';
+    }
+
+    if (candidate.noteType === 'photo') {
+        return 'photo_memory';
+    }
+
+    const candidateAgeMs = referenceDate.getTime() - getWidgetSelectionTimestamp(candidate);
+    if (candidateAgeMs >= WIDGET_RESURFACE_AGE_MS) {
+        return 'resurfaced_memory';
+    }
+
+    return 'latest_memory';
+}
+
 function getAuthorInitials(displayName: string | null | undefined) {
     const normalized = typeof displayName === 'string' ? displayName.trim() : '';
     if (!normalized) {
@@ -923,6 +963,23 @@ export function selectWidgetNote(options: {
             nearbyPlacesCount: Math.max(0, nearbyPlaces.length - 1),
             isIdleState: !selectedCandidate,
             selectionMode: 'nearest_memory',
+        };
+    }
+
+    const preferredCandidate = getPreferredWidgetCandidate(
+        personalCandidates,
+        sharedCandidates,
+        preferredNoteId
+    );
+
+    if (preferredCandidate) {
+        return {
+            selectedNote: preferredCandidate,
+            selectedCandidate: preferredCandidate,
+            selectedLocationName: preferredCandidate.locationName ?? null,
+            nearbyPlacesCount: 0,
+            isIdleState: false,
+            selectionMode: getSelectionModeForPreferredCandidate(preferredCandidate, referenceDate),
         };
     }
 

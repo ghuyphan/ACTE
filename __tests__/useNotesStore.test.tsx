@@ -11,6 +11,7 @@ const mockCleanupOrphanMediaFiles = jest.fn();
 const mockGetInfoAsync = jest.fn();
 const mockDeleteAsync = jest.fn();
 const mockGetAllNotesForScope = jest.fn();
+const mockGetNotesPageForScope = jest.fn();
 const mockGetActiveNotesScope = jest.fn(() => '__local__');
 const mockUseAuth = jest.fn(() => ({
   user: null,
@@ -59,6 +60,8 @@ jest.mock('../services/database', () => ({
   getActiveNotesScope: () => mockGetActiveNotesScope(),
   getAllNotes: jest.fn(async () => [...mockNotesDb]),
   getAllNotesForScope: (scope: string) => mockGetAllNotesForScope(scope),
+  getNotesPageForScope: (scope: string, options: { limit: number; offset?: number }) =>
+    mockGetNotesPageForScope(scope, options),
   getNoteById: jest.fn(async (id: string) => mockNotesDb.find((note) => note.id === id) ?? null),
   createNote: (input: any) => mockDbCreateNote(input),
   updateNote: jest.fn(async (id: string, updates: Partial<Note>) => {
@@ -128,6 +131,9 @@ beforeEach(() => {
   mockSkipImmediateReminderForNewNote.mockResolvedValue(undefined);
   mockUpdateWidgetData.mockResolvedValue(undefined);
   mockGetAllNotesForScope.mockImplementation(async () => [...mockNotesDb]);
+  mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
+    mockNotesDb.slice(0, options.limit)
+  );
   mockGetActiveNotesScope.mockReturnValue('__local__');
 });
 
@@ -167,6 +173,45 @@ describe('useNotesStore', () => {
     });
   });
 
+  it('surfaces the newest notes first, then hydrates the full archive in the background', async () => {
+    mockNotesDb = Array.from({ length: 30 }, (_, index) => ({
+      id: `note-${index + 1}`,
+      type: 'text' as const,
+      content: `Note ${index + 1}`,
+      locationName: `Place ${index + 1}`,
+      latitude: 10 + index,
+      longitude: 106 + index,
+      radius: 150,
+      isFavorite: false,
+      createdAt: new Date(Date.now() - index * 1000).toISOString(),
+      updatedAt: null,
+    }));
+
+    const deferredAllNotes = createDeferred<Note[]>();
+    mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
+      mockNotesDb.slice(0, options.limit)
+    );
+    mockGetAllNotesForScope.mockImplementation(() => deferredAllNotes.promise);
+
+    const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+
+    expect(result.current.initialLoadComplete).toBe(false);
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.initialLoadComplete).toBe(true);
+      expect(result.current.notes).toHaveLength(24);
+    });
+
+    await act(async () => {
+      deferredAllNotes.resolve([...mockNotesDb]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.notes).toHaveLength(30);
+    });
+  });
+
   it('does not fail note creation when the skip-enter flag is still pending', async () => {
     const deferred = createDeferred<void>();
     mockSkipImmediateReminderForNewNote.mockImplementation(() => deferred.promise);
@@ -192,6 +237,35 @@ describe('useNotesStore', () => {
 
     await act(async () => {
       deferred.resolve();
+    });
+  });
+
+  it('prioritizes a newly created note in the next widget refresh', async () => {
+    const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    mockUpdateWidgetData.mockClear();
+
+    await act(async () => {
+      await result.current.createNote({
+        type: 'text',
+        content: 'Freshly created memory',
+        locationName: 'District 1',
+        latitude: 10.1,
+        longitude: 106.1,
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockUpdateWidgetData).toHaveBeenCalledWith({
+        notes: [
+          expect.objectContaining({
+            id: 'note-1',
+            content: 'Freshly created memory',
+          }),
+        ],
+        includeLocationLookup: false,
+        preferredNoteId: 'note-1',
+      });
     });
   });
 

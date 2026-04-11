@@ -1,12 +1,12 @@
 import { useFocusEffect, useIsFocused, useScrollToTop } from '@react-navigation/native';
 import * as FileSystem from '../../utils/fileSystem';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../hooks/useHaptics';
 import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
 import { Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  ActivityIndicator,
   AppState,
   Keyboard,
   Platform,
@@ -66,6 +66,7 @@ import {
   LIVE_PHOTO_MAX_DURATION_SECONDS,
   persistLivePhotoVideo,
 } from '../../services/livePhotoProcessing';
+import { resolveLocationNameFromCoordinates } from '../../services/locationLookup';
 import { saveNoteStickerPlacementsWithAssets } from '../../services/noteStickers';
 import {
   getFallbackFreeNoteColor,
@@ -84,6 +85,20 @@ import { isIOS26OrNewer } from '../../utils/platform';
 
 const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
 type SaveButtonState = 'idle' | 'saving' | 'success';
+
+function HomeFeedLoadingState({
+  colors,
+}: {
+  colors: {
+    primary: string;
+  };
+}) {
+  return (
+    <View style={styles.feedBootstrapIndicator}>
+      <ActivityIndicator color={colors.primary} />
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const { openSharedManageAt } = useLocalSearchParams<{ openSharedManageAt?: string }>();
@@ -432,6 +447,14 @@ export default function HomeScreen() {
       });
     },
     [archiveFeedItems, displayedNotes, friendPosts, notes, visibleSharedPosts]
+  );
+  const showHomeFeedBootstrapState = (loading || sharedLoading) && visibleFeedItems.length === 0;
+  const homeFeedEmptyState = useMemo(
+    () =>
+      showHomeFeedBootstrapState ? (
+        <HomeFeedLoadingState colors={colors} />
+      ) : null,
+    [colors, showHomeFeedBootstrapState]
   );
   useEffect(() => {
     if (friendPosts.length === 0 && isFriendsFilterEnabled) {
@@ -1224,23 +1247,6 @@ export default function HomeScreen() {
     [lockedPremiumPhotoFilterIds, setSelectedPhotoFilterId, showPlusSheet]
   );
 
-  const reverseGeocode = useCallback(
-    async (lat: number, lon: number): Promise<string> => {
-      try {
-        const results = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
-        if (results.length > 0) {
-          const result = results[0];
-          const parts = [result.name, result.street, result.city].filter(Boolean);
-          return parts.join(', ') || t('capture.unknownPlace', 'Unknown Place');
-        }
-      } catch {
-        return t('capture.unknownPlace', 'Unknown Place');
-      }
-      return t('capture.unknownPlace', 'Unknown Place');
-    },
-    [t]
-  );
-
   const getLocationUnavailableMessage = useCallback(
     (locationResult: Pick<ForegroundLocationRequestResult, 'reason' | 'requiresSettings'>) => {
       if (locationResult.requiresSettings) {
@@ -1391,8 +1397,8 @@ export default function HomeScreen() {
             : null;
         const lat = currentLocation.coords.latitude;
         const lon = currentLocation.coords.longitude;
-        const geocodedName = await reverseGeocode(lat, lon);
-        const locationName = geocodedName;
+        const geocodedName = await resolveLocationNameFromCoordinates(lat, lon);
+        const locationName = geocodedName ?? t('capture.unknownPlace', 'Unknown Place');
 
         let content = noteText.trim();
 
@@ -1529,7 +1535,6 @@ export default function HomeScreen() {
     capturedPhoto,
     capturedPairedVideo,
     selectedPhotoFilterId,
-    reverseGeocode,
     createNote,
     radius,
     finalizeSavedCapture,
@@ -1862,7 +1867,7 @@ export default function HomeScreen() {
         <NotesFeed
           flatListRef={flatListRef}
           captureHeader={captureHeader}
-          emptyState={null}
+          emptyState={homeFeedEmptyState}
           captureMode={captureMode}
           screenActive={isScreenFocused}
           items={visibleFeedItems}
@@ -1969,5 +1974,10 @@ const styles = StyleSheet.create({
   },
   captureItemWrapper: {
     width: '100%',
+  },
+  feedBootstrapIndicator: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -196,49 +196,40 @@
                     android:visibility="gone" />
             </LinearLayout>
 
-            <FrameLayout
-                android:id="@+id/widget_text_content"
+            <TextView
+                android:id="@+id/widget_idle_body"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_below="@id/widget_location_chip"
-                android:layout_above="@id/widget_bottom_content"
-                android:layout_marginTop="12dp">
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:lineSpacingExtra="4dp"
+                android:maxLines="4"
+                android:paddingLeft="32dp"
+                android:paddingRight="32dp"
+                android:textColor="#FFF7E8"
+                android:textSize="17sp"
+                android:textStyle="italic"
+                android:visibility="gone" />
 
-                <TextView
-                    android:id="@+id/widget_idle_body"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:ellipsize="end"
-                    android:fontFamily="sans-serif"
-                    android:gravity="center"
-                    android:includeFontPadding="false"
-                    android:lineSpacingExtra="4dp"
-                    android:maxLines="4"
-                    android:paddingLeft="32dp"
-                    android:paddingRight="32dp"
-                    android:textColor="#FFF7E8"
-                    android:textSize="17sp"
-                    android:textStyle="italic"
-                    android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/widget_body"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:ellipsize="end"
-                    android:fontFamily="sans-serif-black"
-                    android:gravity="center"
-                    android:includeFontPadding="false"
-                    android:letterSpacing="-0.03"
-                    android:lineSpacingExtra="5dp"
-                    android:maxLines="4"
-                    android:paddingLeft="28dp"
-                    android:paddingRight="28dp"
-                    android:textColor="#2B2621"
-                    android:textSize="22sp" />
-            </FrameLayout>
+            <TextView
+                android:id="@+id/widget_body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-black"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:letterSpacing="-0.03"
+                android:lineSpacingExtra="5dp"
+                android:maxLines="4"
+                android:paddingLeft="28dp"
+                android:paddingRight="28dp"
+                android:textColor="#2B2621"
+                android:textSize="22sp" />
 
             <LinearLayout
                 android:id="@+id/widget_bottom_content"

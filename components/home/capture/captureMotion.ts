@@ -1,4 +1,4 @@
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../../hooks/useHaptics';
 import { Easing } from 'react-native-reanimated';
 
 export const REDUCED_MOTION_SCALE = 0.55;
