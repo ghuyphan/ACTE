@@ -89,8 +89,12 @@ export default function MapScreenIOS() {
   const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
   const reduceMotionEnabled = useReducedMotion();
   const { user } = useAuth();
-  const { notes, loading } = useNotesStore();
+  const notesStore = useNotesStore();
+  const { notes, loading } = notesStore;
+  const hasLoadedAllNotes = notesStore.hasLoadedAllNotes ?? true;
+  const ensureAllNotesLoaded = notesStore.ensureAllNotesLoaded ?? (async () => notes);
   const { enabled: sharedEnabled, sharedPosts } = useSharedFeedStore();
+  const [isHydratingAllNotes, setIsHydratingAllNotes] = useState(false);
   const shouldDeferMapWarmup =
     isAndroid || notes.length + sharedPosts.length >= HEAVY_MAP_WARMUP_DATASET_SIZE;
   const { location, requestForegroundLocation, openAppSettings } = useGeofence();
@@ -106,6 +110,30 @@ export default function MapScreenIOS() {
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingProgrammaticRegionRef = useRef<Region | null>(null);
   const nearbyPreviewFocusGuardUntilRef = useRef(0);
+
+  useEffect(() => {
+    if (hasLoadedAllNotes) {
+      setIsHydratingAllNotes(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsHydratingAllNotes(true);
+
+    void ensureAllNotesLoaded()
+      .catch((error) => {
+        console.warn('Failed to hydrate full notes for map:', error);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsHydratingAllNotes(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ensureAllNotesLoaded, hasLoadedAllNotes]);
 
   useEffect(() => {
     if (!shouldDeferMapWarmup || mapUiReady) {
@@ -736,7 +764,7 @@ export default function MapScreenIOS() {
     return suffixes.length > 0 ? `${base} · ${suffixes.join(' · ')}` : base;
   }, [filteredCount, hasActiveFilters, t]);
 
-  if (loading) {
+  if (loading || isHydratingAllNotes) {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />

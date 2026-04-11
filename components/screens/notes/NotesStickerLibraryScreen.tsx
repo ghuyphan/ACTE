@@ -1,7 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   StyleSheet,
@@ -353,7 +353,20 @@ export function NotesStickerLibraryContent({
 }
 
 export default function NotesStickerLibraryScreen() {
-  const { notes } = useNotesStore();
+  const notesStore = useNotesStore();
+  const { notes } = notesStore;
+  const hasLoadedAllNotes = notesStore.hasLoadedAllNotes ?? true;
+  const ensureAllNotesLoaded = notesStore.ensureAllNotesLoaded ?? (async () => notes);
+
+  useEffect(() => {
+    if (hasLoadedAllNotes) {
+      return;
+    }
+
+    void ensureAllNotesLoaded().catch((error) => {
+      console.warn('Failed to hydrate full notes for sticker library:', error);
+    });
+  }, [ensureAllNotesLoaded, hasLoadedAllNotes]);
 
   return <NotesStickerLibraryContent notes={notes} />;
 }

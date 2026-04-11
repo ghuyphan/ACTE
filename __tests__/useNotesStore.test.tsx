@@ -11,6 +11,7 @@ const mockCleanupOrphanMediaFiles = jest.fn();
 const mockGetInfoAsync = jest.fn();
 const mockDeleteAsync = jest.fn();
 const mockGetAllNotesForScope = jest.fn();
+const mockGetNoteStatsForScope = jest.fn();
 const mockGetNotesPageForScope = jest.fn();
 const mockGetActiveNotesScope = jest.fn(() => '__local__');
 const mockUseAuth = jest.fn(() => ({
@@ -60,6 +61,7 @@ jest.mock('../services/database', () => ({
   getActiveNotesScope: () => mockGetActiveNotesScope(),
   getAllNotes: jest.fn(async () => [...mockNotesDb]),
   getAllNotesForScope: (scope: string) => mockGetAllNotesForScope(scope),
+  getNoteStatsForScope: (scope: string) => mockGetNoteStatsForScope(scope),
   getNotesPageForScope: (scope: string, options: { limit: number; offset?: number }) =>
     mockGetNotesPageForScope(scope, options),
   getNoteById: jest.fn(async (id: string) => mockNotesDb.find((note) => note.id === id) ?? null),
@@ -131,6 +133,10 @@ beforeEach(() => {
   mockSkipImmediateReminderForNewNote.mockResolvedValue(undefined);
   mockUpdateWidgetData.mockResolvedValue(undefined);
   mockGetAllNotesForScope.mockImplementation(async () => [...mockNotesDb]);
+  mockGetNoteStatsForScope.mockImplementation(async () => ({
+    totalCount: mockNotesDb.length,
+    photoCount: mockNotesDb.filter((note) => note.type === 'photo').length,
+  }));
   mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
     mockNotesDb.slice(0, options.limit)
   );
@@ -173,7 +179,7 @@ describe('useNotesStore', () => {
     });
   });
 
-  it('surfaces the newest notes first, then hydrates the full archive in the background', async () => {
+  it('surfaces the newest notes first and only hydrates the full archive on demand', async () => {
     mockNotesDb = Array.from({ length: 30 }, (_, index) => ({
       id: `note-${index + 1}`,
       type: 'text' as const,
@@ -187,12 +193,6 @@ describe('useNotesStore', () => {
       updatedAt: null,
     }));
 
-    const deferredAllNotes = createDeferred<Note[]>();
-    mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
-      mockNotesDb.slice(0, options.limit)
-    );
-    mockGetAllNotesForScope.mockImplementation(() => deferredAllNotes.promise);
-
     const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
 
     expect(result.current.initialLoadComplete).toBe(false);
@@ -201,14 +201,16 @@ describe('useNotesStore', () => {
       expect(result.current.loading).toBe(false);
       expect(result.current.initialLoadComplete).toBe(true);
       expect(result.current.notes).toHaveLength(24);
+      expect(result.current.hasLoadedAllNotes).toBe(false);
     });
 
     await act(async () => {
-      deferredAllNotes.resolve([...mockNotesDb]);
+      await result.current.ensureAllNotesLoaded();
     });
 
     await waitFor(() => {
       expect(result.current.notes).toHaveLength(30);
+      expect(result.current.hasLoadedAllNotes).toBe(true);
     });
   });
 
@@ -293,6 +295,13 @@ describe('useNotesStore', () => {
     mockGetAllNotesForScope.mockImplementation(async (scope: string) =>
       scope === 'user-2' ? [userTwoNote] : []
     );
+    mockGetNotesPageForScope.mockImplementation(async (scope: string, options: { limit: number }) =>
+      (scope === 'user-2' ? [userTwoNote] : []).slice(0, options.limit)
+    );
+    mockGetNoteStatsForScope.mockImplementation(async (scope: string) => ({
+      totalCount: scope === 'user-2' ? 1 : 0,
+      photoCount: 0,
+    }));
 
     const { result, rerender } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -349,7 +358,7 @@ describe('useNotesStore', () => {
 
     const { result, rerender } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
 
-    expect(mockGetAllNotesForScope).not.toHaveBeenCalled();
+    expect(mockGetNotesPageForScope).not.toHaveBeenCalled();
 
     mockUseAuth.mockReturnValue({
       user: { uid: 'user-42' } as any,
@@ -362,7 +371,7 @@ describe('useNotesStore', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-42');
+    expect(mockGetNotesPageForScope).toHaveBeenCalledWith('user-42', expect.any(Object));
   });
 
   it('loads the persisted active scope when auth is ready but the user session is unavailable', async () => {
@@ -374,7 +383,7 @@ describe('useNotesStore', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-42');
+    expect(mockGetNotesPageForScope).toHaveBeenCalledWith('user-42', expect.any(Object));
   });
 
   it('updates and favorites a note', async () => {

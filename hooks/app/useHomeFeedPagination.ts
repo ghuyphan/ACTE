@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getNotesPageForScope, type Note } from '../../services/database';
-import { getCachedSharedPostsPage } from '../../services/sharedFeedCache';
 import type { SharedPost } from '../../services/sharedFeedService';
 import {
   buildHomeFeedItems,
@@ -9,6 +8,8 @@ import {
 } from '../../components/home/feedItems';
 
 const HOME_FEED_PAGE_SIZE = 24;
+const EMPTY_NOTES: Note[] = [];
+const EMPTY_SHARED_POSTS: SharedPost[] = [];
 
 interface FeedWindow {
   notes: number;
@@ -25,6 +26,11 @@ interface HomeFeedSnapshot {
 interface UseHomeFeedPaginationOptions {
   notesScope: string;
   sharedCacheUserUid?: string | null;
+  seedNotes?: Note[];
+  seedNoteCount?: number;
+  notesLoading?: boolean;
+  seedSharedPosts?: SharedPost[];
+  sharedLoading?: boolean;
   notesSignal: unknown;
   sharedSignal: unknown;
 }
@@ -48,6 +54,11 @@ function buildInitialWindow(sharedCacheUserUid?: string | null): FeedWindow {
 export function useHomeFeedPagination({
   notesScope,
   sharedCacheUserUid,
+  seedNotes = EMPTY_NOTES,
+  seedNoteCount = 0,
+  notesLoading = false,
+  seedSharedPosts = EMPTY_SHARED_POSTS,
+  sharedLoading = false,
   notesSignal,
   sharedSignal,
 }: UseHomeFeedPaginationOptions): UseHomeFeedPaginationResult {
@@ -83,6 +94,13 @@ export function useHomeFeedPagination({
     () => buildHomeFeedItems(loadedNotes, loadedSharedPosts),
     [loadedNotes, loadedSharedPosts]
   );
+  const seededFriendSharedPosts = useMemo(
+    () =>
+      sharedCacheUserUid
+        ? seedSharedPosts.filter((post) => post.authorUid !== sharedCacheUserUid)
+        : [],
+    [seedSharedPosts, sharedCacheUserUid]
+  );
 
   useEffect(() => {
     itemsRef.current = items;
@@ -99,26 +117,64 @@ export function useHomeFeedPagination({
     isMountedRef.current = false;
   }, []);
 
+  const resolveSeededSnapshot = useCallback((window: FeedWindow): HomeFeedSnapshot | null => {
+    const canServeNotesFromSeed =
+      window.notes <= seedNotes.length || seedNoteCount <= seedNotes.length;
+    if (!canServeNotesFromSeed) {
+      return null;
+    }
+
+    const notes = seedNotes.slice(0, window.notes);
+    const sharedPosts = seededFriendSharedPosts.slice(0, window.sharedPosts);
+
+    return {
+      notes,
+      sharedPosts,
+      hasMoreNotes: seedNoteCount > notes.length,
+      hasMoreSharedPosts: seededFriendSharedPosts.length > sharedPosts.length,
+    };
+  }, [
+    seedNoteCount,
+    seedNotes,
+    seededFriendSharedPosts,
+  ]);
+
   const fetchWindow = useCallback(async (window: FeedWindow): Promise<HomeFeedSnapshot> => {
+    const seededSnapshot = resolveSeededSnapshot(window);
+    if (seededSnapshot) {
+      return seededSnapshot;
+    }
+
     const [notesRows, sharedRows] = await Promise.all([
-      getNotesPageForScope(notesScope, {
-        limit: window.notes + 1,
-      }),
+      window.notes <= seedNotes.length && seedNoteCount <= seedNotes.length
+        ? Promise.resolve(seedNotes.slice(0, window.notes))
+        : getNotesPageForScope(notesScope, {
+            limit: window.notes + 1,
+          }),
       sharedCacheUserUid
-        ? getCachedSharedPostsPage(sharedCacheUserUid, {
-            limit: window.sharedPosts + 1,
-            excludeAuthorUid: sharedCacheUserUid,
-          })
+        ? Promise.resolve(
+            seededFriendSharedPosts.slice(0, window.sharedPosts)
+          )
         : Promise.resolve<SharedPost[]>([]),
     ]);
+
+    const seededNotesSatisfied =
+      window.notes <= seedNotes.length && seedNoteCount <= seedNotes.length;
 
     return {
       notes: notesRows.slice(0, window.notes),
       sharedPosts: sharedRows.slice(0, window.sharedPosts),
-      hasMoreNotes: notesRows.length > window.notes,
-      hasMoreSharedPosts: sharedRows.length > window.sharedPosts,
+      hasMoreNotes: seededNotesSatisfied ? seedNoteCount > window.notes : notesRows.length > window.notes,
+      hasMoreSharedPosts: seededFriendSharedPosts.length > window.sharedPosts,
     };
-  }, [notesScope, sharedCacheUserUid]);
+  }, [
+    notesScope,
+    resolveSeededSnapshot,
+    seedNoteCount,
+    seedNotes,
+    seededFriendSharedPosts,
+    sharedCacheUserUid,
+  ]);
 
   const commitSnapshot = useCallback((snapshot: HomeFeedSnapshot) => {
     const nextItems = buildHomeFeedItems(snapshot.notes, snapshot.sharedPosts);
@@ -189,6 +245,14 @@ export function useHomeFeedPagination({
   }, [commitSnapshot, fetchWindow, sharedCacheUserUid]);
 
   useEffect(() => {
+    if (notesLoading && seedNotes.length === 0) {
+      return;
+    }
+
+    if (sharedCacheUserUid && sharedLoading && seedSharedPosts.length === 0) {
+      return;
+    }
+
     const sourceKey = `${notesScope}:${sharedCacheUserUid ?? 'none'}`;
     const sourceChanged = previousSourceKeyRef.current !== sourceKey;
     previousSourceKeyRef.current = sourceKey;
@@ -205,7 +269,17 @@ export function useHomeFeedPagination({
     void runLoad(nextWindow, {
       resetVisibleItems: sourceChanged,
     });
-  }, [notesScope, notesSignal, runLoad, sharedCacheUserUid, sharedSignal]);
+  }, [
+    notesLoading,
+    notesScope,
+    notesSignal,
+    runLoad,
+    seedNotes.length,
+    seedSharedPosts.length,
+    sharedCacheUserUid,
+    sharedLoading,
+    sharedSignal,
+  ]);
 
   const loadNextPage = useCallback(async () => {
     const currentWindow = requestedWindowRef.current;

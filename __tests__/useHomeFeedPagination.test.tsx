@@ -1,19 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useHomeFeedPagination } from '../hooks/app/useHomeFeedPagination';
+import type { Note } from '../services/database';
+import type { SharedPost } from '../services/sharedFeedService';
 
 const mockGetNotesPageForScope = jest.fn();
-const mockGetCachedSharedPostsPage = jest.fn();
 
 jest.mock('../services/database', () => ({
   getNotesPageForScope: (scope: string, options: { limit: number; offset?: number }) =>
     mockGetNotesPageForScope(scope, options),
-}));
-
-jest.mock('../services/sharedFeedCache', () => ({
-  getCachedSharedPostsPage: (
-    userUid: string,
-    options: { limit: number; offset?: number; excludeAuthorUid?: string | null }
-  ) => mockGetCachedSharedPostsPage(userUid, options),
 }));
 
 describe('useHomeFeedPagination', () => {
@@ -22,7 +16,7 @@ describe('useHomeFeedPagination', () => {
   });
 
   it('loads the first note and friend-post pages and merges them by recency', async () => {
-    const notes = [
+    const notes: Note[] = [
       {
         id: 'note-1',
         type: 'text',
@@ -32,6 +26,10 @@ describe('useHomeFeedPagination', () => {
         longitude: 106.6,
         radius: 150,
         isFavorite: false,
+        hasDoodle: false,
+        doodleStrokesJson: null,
+        hasStickers: false,
+        stickerPlacementsJson: null,
         createdAt: '2026-04-10T00:00:00.000Z',
         updatedAt: null,
       },
@@ -44,54 +42,99 @@ describe('useHomeFeedPagination', () => {
         longitude: 106.7,
         radius: 150,
         isFavorite: false,
+        hasDoodle: false,
+        doodleStrokesJson: null,
+        hasStickers: false,
+        stickerPlacementsJson: null,
         createdAt: '2026-04-08T00:00:00.000Z',
         updatedAt: null,
       },
     ];
-    const sharedPosts = [
+    const sharedPosts: SharedPost[] = [
       {
         id: 'shared-owned',
         authorUid: 'me',
         authorDisplayName: 'You',
+        authorPhotoURLSnapshot: null,
+        audienceUserIds: [],
         type: 'text',
         text: 'Owned shared note',
+        photoPath: null,
+        photoLocalUri: null,
+        isLivePhoto: false,
+        pairedVideoPath: null,
+        pairedVideoLocalUri: null,
+        doodleStrokesJson: null,
+        hasStickers: false,
+        stickerPlacementsJson: null,
+        noteColor: null,
         placeName: 'District 2',
+        sourceNoteId: null,
+        latitude: null,
+        longitude: null,
         createdAt: '2026-04-11T00:00:00.000Z',
+        updatedAt: null,
       },
       {
         id: 'shared-friend-1',
         authorUid: 'friend-1',
         authorDisplayName: 'Lan',
+        authorPhotoURLSnapshot: null,
+        audienceUserIds: [],
         type: 'text',
         text: 'Newest friend memory',
+        photoPath: null,
+        photoLocalUri: null,
+        isLivePhoto: false,
+        pairedVideoPath: null,
+        pairedVideoLocalUri: null,
+        doodleStrokesJson: null,
+        hasStickers: false,
+        stickerPlacementsJson: null,
+        noteColor: null,
         placeName: 'District 5',
+        sourceNoteId: null,
+        latitude: null,
+        longitude: null,
         createdAt: '2026-04-09T00:00:00.000Z',
+        updatedAt: null,
       },
       {
         id: 'shared-friend-2',
         authorUid: 'friend-2',
         authorDisplayName: 'Minh',
+        authorPhotoURLSnapshot: null,
+        audienceUserIds: [],
         type: 'text',
         text: 'Older friend memory',
+        photoPath: null,
+        photoLocalUri: null,
+        isLivePhoto: false,
+        pairedVideoPath: null,
+        pairedVideoLocalUri: null,
+        doodleStrokesJson: null,
+        hasStickers: false,
+        stickerPlacementsJson: null,
+        noteColor: null,
         placeName: 'District 7',
+        sourceNoteId: null,
+        latitude: null,
+        longitude: null,
         createdAt: '2026-04-07T00:00:00.000Z',
+        updatedAt: null,
       },
     ];
 
     mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
       notes.slice(0, options.limit)
     );
-    mockGetCachedSharedPostsPage.mockImplementation(
-      async (_userUid: string, options: { limit: number; excludeAuthorUid?: string | null }) =>
-        sharedPosts
-          .filter((post) => post.authorUid !== options.excludeAuthorUid)
-          .slice(0, options.limit)
-    );
-
     const { result } = renderHook(() =>
       useHomeFeedPagination({
         notesScope: '__local__',
         sharedCacheUserUid: 'me',
+        seedNotes: notes,
+        seedNoteCount: notes.length,
+        seedSharedPosts: sharedPosts,
         notesSignal: notes,
         sharedSignal: sharedPosts,
       })
@@ -107,13 +150,11 @@ describe('useHomeFeedPagination', () => {
       'note:note-2',
       'shared-post:shared-friend-2',
     ]);
-    expect(mockGetCachedSharedPostsPage).toHaveBeenCalledWith('me', expect.objectContaining({
-      excludeAuthorUid: 'me',
-    }));
+    expect(mockGetNotesPageForScope).not.toHaveBeenCalled();
   });
 
   it('loads additional note pages until a focused note is available', async () => {
-    const notes = Array.from({ length: 30 }, (_, index) => ({
+    const notes: Note[] = Array.from({ length: 30 }, (_, index) => ({
       id: `note-${index + 1}`,
       type: 'text' as const,
       content: `Note ${index + 1}`,
@@ -122,20 +163,25 @@ describe('useHomeFeedPagination', () => {
       longitude: 106 + index,
       radius: 150,
       isFavorite: false,
+      hasDoodle: false,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
       createdAt: new Date(Date.UTC(2026, 3, 30 - index)).toISOString(),
       updatedAt: null,
     }));
+    const seedNotes = notes.slice(0, 24);
     const sharedSignal: any[] = [];
 
     mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
       notes.slice(0, options.limit)
     );
-    mockGetCachedSharedPostsPage.mockResolvedValue([]);
-
     const { result } = renderHook(() =>
       useHomeFeedPagination({
         notesScope: '__local__',
         sharedCacheUserUid: null,
+        seedNotes,
+        seedNoteCount: notes.length,
         notesSignal: notes,
         sharedSignal,
       })
@@ -155,13 +201,8 @@ describe('useHomeFeedPagination', () => {
 
     expect(targetIndex).toBe(29);
     expect(result.current.items).toHaveLength(30);
-    expect(mockGetNotesPageForScope).toHaveBeenNthCalledWith(
-      1,
-      '__local__',
-      expect.objectContaining({ limit: 25 })
-    );
-    expect(mockGetNotesPageForScope).toHaveBeenNthCalledWith(
-      2,
+    expect(mockGetNotesPageForScope).toHaveBeenCalledTimes(1);
+    expect(mockGetNotesPageForScope).toHaveBeenCalledWith(
       '__local__',
       expect.objectContaining({ limit: 49 })
     );

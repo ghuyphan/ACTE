@@ -113,7 +113,10 @@ export default function HomeScreen() {
   const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
   const bottomTabVisualInset = useBottomTabVisualInset();
   const { setSavedNoteRevealActive } = useSavedNoteRevealUi();
-  const { notes, loading, refreshNotes, createNote } = useNotesStore();
+  const notesStore = useNotesStore();
+  const { notes, loading, refreshNotes, createNote } = notesStore;
+  const noteCount = notesStore.noteCount ?? notes.length;
+  const localPhotoNoteCount = notesStore.photoNoteCount ?? countPhotoNotes(notes);
   const { user, isAuthAvailable } = useAuth();
   const {
     enabled: sharedEnabled,
@@ -327,10 +330,14 @@ export default function HomeScreen() {
   } = useHomeFeedPagination({
     notesScope,
     sharedCacheUserUid: sharedEnabled ? user?.uid ?? null : null,
+    seedNotes: notes,
+    seedNoteCount: noteCount,
+    notesLoading: loading,
+    seedSharedPosts: sharedPosts,
+    sharedLoading,
     notesSignal: notes,
     sharedSignal: sharedPosts,
   });
-  const localPhotoNoteCount = useMemo(() => countPhotoNotes(notes), [notes]);
   const photoNoteCount = useMemo(
     () => Math.max(localPhotoNoteCount, remotePhotoNoteCount ?? 0),
     [localPhotoNoteCount, remotePhotoNoteCount]
@@ -407,17 +414,6 @@ export default function HomeScreen() {
     [isFriendsFilterEnabled]
   );
 
-  const displayedNotes = useMemo(() => {
-    if (isFriendsFilterActive) {
-      return [];
-    }
-
-    if (suppressedHomeNoteIdSet.size === 0) {
-      return notes;
-    }
-
-    return notes.filter((note) => !suppressedHomeNoteIdSet.has(note.id));
-  }, [isFriendsFilterActive, notes, suppressedHomeNoteIdSet]);
   const cameraPermissionRequiresSettings =
     captureMode === 'camera' &&
     permission?.granted === false &&
@@ -442,17 +438,19 @@ export default function HomeScreen() {
   );
   const visibleFeedItems = useMemo(
     () => {
-      const visibleNoteIds = new Set(displayedNotes.map((note) => note.id));
+      if (isFriendsFilterActive) {
+        return homeFeedItems.filter((item) => item.kind === 'shared-post');
+      }
 
       return homeFeedItems.filter((item) => {
         if (item.kind === 'note') {
-          return visibleNoteIds.has(item.id);
+          return !suppressedHomeNoteIdSet.has(item.id);
         }
 
         return true;
       });
     },
-    [displayedNotes, homeFeedItems]
+    [homeFeedItems, isFriendsFilterActive, suppressedHomeNoteIdSet]
   );
   const showHomeFeedBootstrapState =
     (loading || sharedLoading || isHomeFeedInitialLoading) && visibleFeedItems.length === 0;

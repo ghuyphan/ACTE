@@ -1758,6 +1758,29 @@ export async function getNotesCount(): Promise<number> {
     return result?.count ?? 0;
 }
 
+export async function getNoteStatsForScope(scope: string): Promise<{
+    totalCount: number;
+    photoCount: number;
+}> {
+    const database = await getDB();
+    const result = await database.getFirstAsync<{
+        total_count: number | null;
+        photo_count: number | null;
+    }>(
+        `SELECT
+            COUNT(*) as total_count,
+            SUM(CASE WHEN type = 'photo' THEN 1 ELSE 0 END) as photo_count
+         FROM notes
+         WHERE owner_uid = ?`,
+        scope
+    );
+
+    return {
+        totalCount: result?.total_count ?? 0,
+        photoCount: result?.photo_count ?? 0,
+    };
+}
+
 export async function getCachedMonthlyRecaps(
     monthKeys: string[],
     options: {
