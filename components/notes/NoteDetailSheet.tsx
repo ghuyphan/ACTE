@@ -7,7 +7,6 @@ import {
     Dimensions,
     type GestureResponderEvent,
     Keyboard,
-    type LayoutChangeEvent,
     Linking,
     Platform,
 } from 'react-native';
@@ -32,6 +31,7 @@ import { useActiveNote } from '../../hooks/useActiveNote';
 import { useNotes } from '../../hooks/useNotes';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { useAndroidKeyboardBlurOnHide } from '../../hooks/ui/useAndroidKeyboardBlurOnHide';
 import { useStampCutterFlow } from '../../hooks/ui/useStampCutterFlow';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
@@ -290,8 +290,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const contentInputRef = useRef<any>(null);
     const locationInputRef = useRef<any>(null);
     const scrollContainerRef = useRef<any>(null);
-    const infoSectionOffsetYRef = useRef(0);
-    const locationFieldOffsetYRef = useRef(0);
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingDeleteNoteIdRef = useRef<string | null>(null);
@@ -768,11 +766,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     }, [editModeAnim, isEditing, reduceMotionEnabled]);
 
     const scrollLocationFieldIntoView = useCallback((animated = true) => {
-        if (Platform.OS === 'android') {
-            scrollContainerRef.current?.scrollToEnd?.({ animated });
-            return;
-        }
-
         scrollContainerRef.current?.scrollToEnd?.({ animated });
     }, []);
 
@@ -795,6 +788,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         return () => clearTimeout(focusTimer);
     }, [isEditing, note?.type]);
+
+    useAndroidKeyboardBlurOnHide({
+        enabled: visible && isEditing,
+        refs: [contentInputRef, locationInputRef],
+    });
 
     useEffect(() => () => clearPastePromptTimeout(), [clearPastePromptTimeout]);
 
@@ -849,14 +847,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             setLocationSelection(undefined);
         }
     }, [locationSelection]);
-
-    const handleInfoSectionLayout = useCallback((event: LayoutChangeEvent) => {
-        infoSectionOffsetYRef.current = event.nativeEvent.layout.y;
-    }, []);
-
-    const handleLocationFieldLayout = useCallback((event: LayoutChangeEvent) => {
-        locationFieldOffsetYRef.current = event.nativeEvent.layout.y;
-    }, []);
 
     const handleLocationFocus = useCallback(() => {
         if (!isEditing) {
@@ -1857,8 +1847,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             onSaveEdit={handleSaveEdit}
             onDelete={handleDelete}
             onDownloadPolaroid={handleDownloadPolaroid}
-            onInfoSectionLayout={handleInfoSectionLayout}
-            onLocationFieldLayout={handleLocationFieldLayout}
             onPolaroidAnimationFinished={handlePolaroidAnimationFinished}
             polaroidAnimationSuccess={polaroidAnimationSuccess}
             polaroidAnimationUri={polaroidAnimationUri}
@@ -1881,6 +1869,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     androidScrollable
                     androidDynamicSizing={false}
                     androidKeyboardBehavior={isEditing ? 'fillParent' : 'interactive'}
+                    androidKeyboardInputMode="adjustPan"
                     androidSnapPoints={NOTE_DETAIL_ANDROID_SNAP_POINTS}
                 >
                     {renderBody()}

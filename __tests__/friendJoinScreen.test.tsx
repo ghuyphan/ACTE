@@ -40,6 +40,13 @@ jest.mock('../hooks/useAuth', () => ({
   }),
 }));
 
+jest.mock('../hooks/useSharedFeed', () => ({
+  useSharedFeedStore: () => ({
+    findFriendByUsername: jest.fn(),
+    addFriendByUsername: jest.fn(),
+  }),
+}));
+
 jest.mock('../hooks/useFriendInviteJoin', () => ({
   useFriendInviteJoin: () => ({
     joining: false,

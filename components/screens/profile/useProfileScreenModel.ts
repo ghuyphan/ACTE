@@ -56,6 +56,8 @@ export function useProfileScreenModel() {
     (displayUser?.username ? `@${displayUser.username}` : null) ||
     displayUser?.email ||
     t('settings.notSignedIn', 'Not signed in');
+  const profileSecondaryLabel =
+    displayUser?.username ? `@${displayUser.username}` : displayUser?.email || null;
   const avatarLabel = useMemo(() => {
     const base = displayUser?.displayName || displayUser?.username || displayUser?.email || 'C';
     return base.trim().charAt(0).toUpperCase();
@@ -269,6 +271,7 @@ export function useProfileScreenModel() {
     openSignIn,
     openUsernameEditor,
     profileName,
+    profileSecondaryLabel,
     t,
     tier,
     usernameDraft,

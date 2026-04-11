@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -11,38 +12,66 @@ import {
 } from 'react-native';
 import AppSheet from '../../sheets/AppSheet';
 import AppSheetScaffold from '../../sheets/AppSheetScaffold';
-import FriendInviteJoinBody from '../../friends/FriendInviteJoinBody';
+import FriendInviteJoinBody, { FriendJoinMode } from '../../friends/FriendInviteJoinBody';
 import { useAuth } from '../../../hooks/useAuth';
 import { useFriendInviteJoin } from '../../../hooks/useFriendInviteJoin';
+import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useTheme } from '../../../hooks/useTheme';
+import { normalizeUsernameInput } from '../../../services/publicProfileService';
+import { getSharedFeedErrorMessage } from '../../../services/sharedFeedService';
+import { showAppAlert } from '../../../utils/alert';
 
 function buildReturnToJoinHref(
   inviteId: string | undefined,
   invite: string | undefined,
-  fallbackInviteValue: string
+  fallbackInviteValue: string,
+  mode: FriendJoinMode,
+  usernameValue: string
 ) {
   const queryParams: string[] = [];
   const normalizedInviteId = inviteId?.trim();
   const normalizedInvite = invite?.trim() || fallbackInviteValue.trim();
+  const normalizedUsername = normalizeUsernameInput(usernameValue);
 
-  if (normalizedInviteId) {
-    queryParams.push(`inviteId=${encodeURIComponent(normalizedInviteId)}`);
-  }
+  if (mode === 'invite') {
+    if (normalizedInviteId) {
+      queryParams.push(`inviteId=${encodeURIComponent(normalizedInviteId)}`);
+    }
 
-  if (normalizedInvite) {
-    queryParams.push(`invite=${encodeURIComponent(normalizedInvite)}`);
+    if (normalizedInvite) {
+      queryParams.push(`invite=${encodeURIComponent(normalizedInvite)}`);
+    }
+  } else if (normalizedUsername) {
+    queryParams.push('mode=username');
+    queryParams.push(`username=${encodeURIComponent(normalizedUsername)}`);
   }
 
   return queryParams.length > 0 ? `/friends/join?${queryParams.join('&')}` : '/friends/join';
 }
 
 export default function FriendJoinScreen() {
-  const { inviteId, invite } = useLocalSearchParams<{ inviteId?: string; invite?: string }>();
+  const {
+    inviteId,
+    invite,
+    mode: modeParam,
+    username,
+  } = useLocalSearchParams<{
+    inviteId?: string;
+    invite?: string;
+    mode?: string;
+    username?: string;
+  }>();
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { user, isAuthAvailable } = useAuth();
+  const { findFriendByUsername, addFriendByUsername } = useSharedFeedStore();
   const router = useRouter();
   const [inviteValue, setInviteValue] = useState('');
+  const [usernameValue, setUsernameValue] = useState('');
+  const [joinMode, setJoinMode] = useState<FriendJoinMode>('username');
+  const [searching, setSearching] = useState(false);
+  const [addingFriend, setAddingFriend] = useState(false);
+  const [searchResult, setSearchResult] = useState<Awaited<ReturnType<typeof findFriendByUsername>> | null>(null);
   const [isPresented, setIsPresented] = useState(true);
   const dismissTargetRef = useRef<'tabs' | 'auth'>('tabs');
   const autoAttemptedRef = useRef(false);
@@ -50,22 +79,42 @@ export default function FriendJoinScreen() {
   const didFinishDismissRef = useRef(false);
 
   useEffect(() => {
-    if (typeof inviteId === 'string' && inviteId.trim() && typeof invite === 'string' && invite.trim()) {
+    const hasInviteId = typeof inviteId === 'string' && inviteId.trim();
+    const hasInvite = typeof invite === 'string' && invite.trim();
+    const hasUsername = typeof username === 'string' && normalizeUsernameInput(username).length > 0;
+
+    if (hasInviteId && hasInvite) {
       setInviteValue(
         Linking.createURL('/friends/join', {
           queryParams: {
-            inviteId: inviteId.trim(),
-            invite: invite.trim(),
+            inviteId: inviteId!.trim(),
+            invite: invite!.trim(),
           },
         })
       );
+      setJoinMode('invite');
       return;
     }
 
-    if (typeof invite === 'string' && invite.trim()) {
-      setInviteValue(invite.trim());
+    if (hasInvite) {
+      setInviteValue(invite!.trim());
+      setJoinMode('invite');
+      return;
     }
-  }, [invite, inviteId]);
+
+    if (hasUsername) {
+      setUsernameValue(normalizeUsernameInput(username!));
+      setJoinMode('username');
+      return;
+    }
+
+    if (modeParam === 'invite') {
+      setJoinMode('invite');
+      return;
+    }
+
+    setJoinMode('username');
+  }, [invite, inviteId, modeParam, username]);
 
   useEffect(() => {
     return () => {
@@ -92,7 +141,13 @@ export default function FriendJoinScreen() {
         {
           pathname: '/auth',
           params: {
-            returnTo: buildReturnToJoinHref(inviteId, invite, inviteValue),
+            returnTo: buildReturnToJoinHref(
+              inviteId,
+              invite,
+              inviteValue,
+              joinMode,
+              usernameValue
+            ),
           },
         } as any
       );
@@ -110,7 +165,7 @@ export default function FriendJoinScreen() {
     }
 
     router.replace('/' as any);
-  }, [invite, inviteId, inviteValue, router]);
+  }, [invite, inviteId, inviteValue, joinMode, router, usernameValue]);
 
   const scheduleDismiss = useCallback((delay: number) => {
     if (dismissTimerRef.current) {
@@ -147,13 +202,98 @@ export default function FriendJoinScreen() {
   });
 
   useEffect(() => {
-    if (!user || autoAttemptedRef.current || !inviteValue.trim()) {
+    if (!user || autoAttemptedRef.current || !inviteValue.trim() || joinMode !== 'invite') {
       return;
     }
 
     autoAttemptedRef.current = true;
     void joinInvite(inviteValue);
-  }, [inviteValue, joinInvite, user]);
+  }, [inviteValue, joinInvite, joinMode, user]);
+
+  const handleUsernameChange = useCallback((value: string) => {
+    setUsernameValue(value);
+    setSearchResult((current) => {
+      const normalizedValue = normalizeUsernameInput(value);
+      if (!current || current.username === normalizedValue) {
+        return current;
+      }
+      return null;
+    });
+  }, []);
+
+  const handleSearchByUsername = useCallback(async () => {
+    const normalizedUsername = normalizeUsernameInput(usernameValue);
+
+    if (!normalizedUsername) {
+      showAppAlert(
+        t('shared.searchByUsernameMissingTitle', 'Noto ID needed'),
+        t('shared.searchByUsernameMissingBody', 'Enter a Noto ID to search.')
+      );
+      return;
+    }
+
+    if (!user) {
+      dismissTo('auth');
+      return;
+    }
+
+    setSearching(true);
+    setSearchResult(null);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    try {
+      const result = await findFriendByUsername(normalizedUsername);
+      setSearchResult(result);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      showAppAlert(
+        t('shared.searchByUsernameFailedTitle', 'Could not find friend'),
+        getSharedFeedErrorMessage(error)
+      );
+    } finally {
+      setSearching(false);
+    }
+  }, [dismissTo, findFriendByUsername, t, user, usernameValue]);
+
+  const handleAddFriend = useCallback(async () => {
+    if (!searchResult) {
+      return;
+    }
+
+    if (!user) {
+      dismissTo('auth');
+      return;
+    }
+
+    if (searchResult.isSelf || searchResult.alreadyFriends) {
+      return;
+    }
+
+    setAddingFriend(true);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      await addFriendByUsername(searchResult.username);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showAppAlert(
+        t('shared.addFriendSuccessTitle', "You're connected"),
+        t('shared.addFriendSuccessBody', 'You can now share notes with this friend from Home.')
+      );
+      router.replace({
+        pathname: '/',
+        params: {
+          openSharedManageAt: String(Date.now()),
+        },
+      } as any);
+    } catch (error) {
+      showAppAlert(
+        t('shared.addFriendFailedTitle', 'Could not add friend'),
+        getSharedFeedErrorMessage(error)
+      );
+    } finally {
+      setAddingFriend(false);
+    }
+  }, [addFriendByUsername, dismissTo, router, searchResult, t, user]);
 
   return (
     <AppSheet
@@ -162,6 +302,7 @@ export default function FriendJoinScreen() {
         setIsPresented(false);
         scheduleDismiss(40);
       }}
+      androidKeyboardInputMode="adjustPan"
     >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <AppSheetScaffold
@@ -169,7 +310,12 @@ export default function FriendJoinScreen() {
           title={t('shared.joinTitle', 'Join a friend')}
           subtitle={
             user
-              ? t('shared.joinBody', 'Paste the invite link to connect and start sharing on Home.')
+              ? joinMode === 'username'
+                ? t(
+                    'shared.searchByUsernameBody',
+                    'Search a Noto ID to connect and start sharing on Home.'
+                  )
+                : t('shared.joinBody', 'Paste the invite link to connect and start sharing on Home.')
               : isAuthAvailable
                 ? t('shared.joinSignInBody', 'Sign in first so we can connect you to this friend.')
                 : t('shared.unavailableBody', 'This build does not have shared social enabled right now.')
@@ -177,7 +323,7 @@ export default function FriendJoinScreen() {
           headerTop={(
             <View style={[styles.badge, { backgroundColor: colors.primarySoft }]}>
               <Ionicons
-                name={user ? 'link-outline' : 'person-circle-outline'}
+                name={user ? (joinMode === 'username' ? 'search-outline' : 'link-outline') : 'person-circle-outline'}
                 size={20}
                 color={colors.primary}
               />
@@ -192,12 +338,27 @@ export default function FriendJoinScreen() {
           <FriendInviteJoinBody
             user={user}
             isAuthAvailable={isAuthAvailable}
+            mode={joinMode}
             inviteValue={inviteValue}
+            usernameValue={usernameValue}
             joining={joining}
+            searching={searching}
+            addingFriend={addingFriend}
+            searchResult={searchResult}
             bottomPadding={Platform.OS === 'ios' ? 0 : 4}
+            onChangeMode={(nextMode) => {
+              setJoinMode(nextMode);
+            }}
             onChangeInvite={setInviteValue}
-            onSubmit={() => {
+            onChangeUsername={handleUsernameChange}
+            onSubmitInvite={() => {
               void joinInvite();
+            }}
+            onSearchByUsername={() => {
+              void handleSearchByUsername();
+            }}
+            onAddFriend={() => {
+              void handleAddFriend();
             }}
             onGoToAuth={() => dismissTo('auth')}
           />

@@ -308,6 +308,7 @@ jest.mock('../services/remoteMedia', () => ({
 }));
 
 jest.mock('../services/publicProfileService', () => ({
+  normalizeUsernameInput: (value: string) => value.trim().replace(/^@+/, '').toLowerCase(),
   getPublicUserProfile: async (userUid: string) =>
     mockPublicProfiles.get(userUid) ?? {
       username: null,
@@ -383,6 +384,92 @@ jest.mock('../utils/supabase', () => ({
   getSupabase: () => ({
     from: (table: string) => mockCreateQueryBuilder(table),
     rpc: async (name: string, params: Record<string, unknown>) => {
+      if (name === 'find_user_by_username') {
+        const currentUserId = mockSessionUserId;
+        const normalizedUsername = String(params.search_username ?? '').trim().replace(/^@+/, '').toLowerCase();
+        const targetEntry = Array.from(mockPublicProfiles.entries()).find(
+          ([, profile]) => (profile.username ?? '').toLowerCase() === normalizedUsername
+        );
+
+        if (!targetEntry) {
+          return { data: null, error: new Error('User not found.') };
+        }
+
+        const [targetUserId, profile] = targetEntry;
+
+        return {
+          data: [
+            {
+              user_id: targetUserId,
+              username: profile.username,
+              display_name: profile.displayNameSnapshot,
+              photo_url: profile.photoURLSnapshot,
+              is_self: targetUserId === currentUserId,
+              already_friends: mockEnsureFriendMap(currentUserId).has(targetUserId),
+            },
+          ],
+          error: null,
+        };
+      }
+
+      if (name === 'add_friend_by_username') {
+        const currentUserId = mockSessionUserId;
+        const normalizedUsername = String(params.search_username ?? '').trim().replace(/^@+/, '').toLowerCase();
+        const targetEntry = Array.from(mockPublicProfiles.entries()).find(
+          ([, profile]) => (profile.username ?? '').toLowerCase() === normalizedUsername
+        );
+
+        if (!targetEntry) {
+          return { data: null, error: new Error('User not found.') };
+        }
+
+        const [targetUserId, targetProfile] = targetEntry;
+        if (targetUserId === currentUserId) {
+          return { data: null, error: new Error('You cannot add yourself.') };
+        }
+
+        if (mockEnsureFriendMap(currentUserId).has(targetUserId)) {
+          return { data: null, error: new Error('You are already friends.') };
+        }
+
+        const currentProfile = mockPublicProfiles.get(currentUserId) ?? {
+          username: null,
+          displayNameSnapshot: null,
+          photoURLSnapshot: null,
+        };
+        const friendedAt = '2026-04-11T00:00:00.000Z';
+
+        mockEnsureFriendMap(currentUserId).set(targetUserId, {
+          display_name_snapshot: targetProfile.displayNameSnapshot,
+          photo_url_snapshot: targetProfile.photoURLSnapshot,
+          friended_at: friendedAt,
+          last_shared_at: null,
+          created_by_invite_id: null,
+        });
+        mockEnsureFriendMap(targetUserId).set(currentUserId, {
+          display_name_snapshot: currentProfile.displayNameSnapshot,
+          photo_url_snapshot: currentProfile.photoURLSnapshot,
+          friended_at: friendedAt,
+          last_shared_at: null,
+          created_by_invite_id: null,
+        });
+
+        return {
+          data: [
+            {
+              user_id: currentUserId,
+              friend_user_id: targetUserId,
+              display_name_snapshot: targetProfile.displayNameSnapshot,
+              photo_url_snapshot: targetProfile.photoURLSnapshot,
+              friended_at: friendedAt,
+              last_shared_at: null,
+              created_by_invite_id: null,
+            },
+          ],
+          error: null,
+        };
+      }
+
       if (name === 'accept_friend_invite') {
         const inviteToken = String(params.invite_token ?? '').trim();
         const inviteTokenHash = mockHashInviteToken(inviteToken);
@@ -494,6 +581,92 @@ jest.mock('../utils/supabase', () => ({
   requireSupabase: () => ({
     from: (table: string) => mockCreateQueryBuilder(table),
     rpc: async (name: string, params: Record<string, unknown>) => {
+      if (name === 'find_user_by_username') {
+        const currentUserId = mockSessionUserId;
+        const normalizedUsername = String(params.search_username ?? '').trim().replace(/^@+/, '').toLowerCase();
+        const targetEntry = Array.from(mockPublicProfiles.entries()).find(
+          ([, profile]) => (profile.username ?? '').toLowerCase() === normalizedUsername
+        );
+
+        if (!targetEntry) {
+          return { data: null, error: new Error('User not found.') };
+        }
+
+        const [targetUserId, profile] = targetEntry;
+
+        return {
+          data: [
+            {
+              user_id: targetUserId,
+              username: profile.username,
+              display_name: profile.displayNameSnapshot,
+              photo_url: profile.photoURLSnapshot,
+              is_self: targetUserId === currentUserId,
+              already_friends: mockEnsureFriendMap(currentUserId).has(targetUserId),
+            },
+          ],
+          error: null,
+        };
+      }
+
+      if (name === 'add_friend_by_username') {
+        const currentUserId = mockSessionUserId;
+        const normalizedUsername = String(params.search_username ?? '').trim().replace(/^@+/, '').toLowerCase();
+        const targetEntry = Array.from(mockPublicProfiles.entries()).find(
+          ([, profile]) => (profile.username ?? '').toLowerCase() === normalizedUsername
+        );
+
+        if (!targetEntry) {
+          return { data: null, error: new Error('User not found.') };
+        }
+
+        const [targetUserId, targetProfile] = targetEntry;
+        if (targetUserId === currentUserId) {
+          return { data: null, error: new Error('You cannot add yourself.') };
+        }
+
+        if (mockEnsureFriendMap(currentUserId).has(targetUserId)) {
+          return { data: null, error: new Error('You are already friends.') };
+        }
+
+        const currentProfile = mockPublicProfiles.get(currentUserId) ?? {
+          username: null,
+          displayNameSnapshot: null,
+          photoURLSnapshot: null,
+        };
+        const friendedAt = '2026-04-11T00:00:00.000Z';
+
+        mockEnsureFriendMap(currentUserId).set(targetUserId, {
+          display_name_snapshot: targetProfile.displayNameSnapshot,
+          photo_url_snapshot: targetProfile.photoURLSnapshot,
+          friended_at: friendedAt,
+          last_shared_at: null,
+          created_by_invite_id: null,
+        });
+        mockEnsureFriendMap(targetUserId).set(currentUserId, {
+          display_name_snapshot: currentProfile.displayNameSnapshot,
+          photo_url_snapshot: currentProfile.photoURLSnapshot,
+          friended_at: friendedAt,
+          last_shared_at: null,
+          created_by_invite_id: null,
+        });
+
+        return {
+          data: [
+            {
+              user_id: currentUserId,
+              friend_user_id: targetUserId,
+              display_name_snapshot: targetProfile.displayNameSnapshot,
+              photo_url_snapshot: targetProfile.photoURLSnapshot,
+              friended_at: friendedAt,
+              last_shared_at: null,
+              created_by_invite_id: null,
+            },
+          ],
+          error: null,
+        };
+      }
+
       if (name === 'accept_friend_invite') {
         const inviteToken = String(params.invite_token ?? '').trim();
         const inviteTokenHash = mockHashInviteToken(inviteToken);
@@ -659,9 +832,11 @@ jest.mock('expo-linking', () => ({
 
 import {
   acceptFriendInvite,
+  addFriendByUsername,
   createFriendInvite,
   createSharedPost,
   deleteSharedPost,
+  findFriendByUsername,
   removeFriend,
   refreshSharedFeed,
 } from '../services/sharedFeedService';
@@ -756,6 +931,30 @@ describe('sharedFeedService', () => {
       type: 'friend_accepted',
       friendUserId: ownerUser.id,
     });
+  });
+
+  it('finds and adds a friend by exact username', async () => {
+    const result = await findFriendByUsername(ownerUser, '@friend');
+    expect(result).toEqual(
+      expect.objectContaining({
+        userId: friendUser.id,
+        username: friendUser.username,
+        alreadyFriends: false,
+      })
+    );
+
+    const connection = await addFriendByUsername(ownerUser, friendUser.username);
+    expect(connection.userId).toBe(friendUser.id);
+    expect(mockEnsureFriendMap(ownerUser.id).get(friendUser.id)).toEqual(
+      expect.objectContaining({
+        display_name_snapshot: friendUser.username,
+      })
+    );
+    expect(mockEnsureFriendMap(friendUser.id).get(ownerUser.id)).toEqual(
+      expect.objectContaining({
+        display_name_snapshot: ownerUser.username,
+      })
+    );
   });
 
   it('creates a shared photo post and returns it in the refreshed feed', async () => {

@@ -3,11 +3,14 @@ import { AppState } from 'react-native';
 import i18n from '../constants/i18n';
 import { Note } from '../services/database';
 import {
+  addFriendByUsername as addFriendByUsernameRemote,
   acceptFriendInvite as acceptInvite,
   createFriendInvite as createInvite,
   createSharedPost as createPost,
   deleteOwnedSharedPostsForNotes,
   deleteSharedPost as deletePost,
+  findFriendByUsername as findFriendByUsernameRemote,
+  FriendSearchResult,
   findOwnedSharedPostIdsForNote,
   FriendConnection,
   FriendInvite,
@@ -44,6 +47,8 @@ interface SharedFeedStoreValue {
   createFriendInvite: () => Promise<FriendInvite>;
   revokeFriendInvite: (inviteId: string) => Promise<void>;
   acceptFriendInvite: (inviteValue: string) => Promise<void>;
+  findFriendByUsername: (username: string) => Promise<FriendSearchResult>;
+  addFriendByUsername: (username: string) => Promise<void>;
   removeFriend: (friendUid: string) => Promise<void>;
   createSharedPost: (note: Note, audienceUserIds?: string[]) => Promise<SharedPost>;
   updateSharedNote: (note: Note) => Promise<void>;
@@ -440,6 +445,31 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         const activeUser = requireUser();
         const sessionId = sharedFeedSessionRef.current;
         const connection = await acceptInvite(activeUser, inviteValue);
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return;
+        }
+        const nextFriends = upsertFriendConnection(friendsRef.current, connection);
+        commitSnapshotAndPersist(
+          activeUser.uid,
+          {
+            friends: nextFriends,
+            sharedPosts: sharedPostsRef.current,
+            activeInvite: activeInviteRef.current,
+          },
+          new Date().toISOString()
+        );
+        void refreshAll().catch(() => undefined);
+      },
+      findFriendByUsername: async (username: string) => {
+        requireOnline();
+        const activeUser = requireUser();
+        return findFriendByUsernameRemote(activeUser, username);
+      },
+      addFriendByUsername: async (username: string) => {
+        requireOnline();
+        const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
+        const connection = await addFriendByUsernameRemote(activeUser, username);
         if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
           return;
         }

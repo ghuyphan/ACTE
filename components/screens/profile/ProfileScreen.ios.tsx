@@ -87,6 +87,7 @@ export default function ProfileScreenIOS() {
     openSignIn,
     openUsernameEditor,
     profileName,
+    profileSecondaryLabel,
     saveUsername,
     setUsernameDraft,
     t,
@@ -123,9 +124,9 @@ export default function ProfileScreenIOS() {
                     <SwiftUIText modifiers={[foregroundStyle(colors.text), font({ size: 20, weight: 'semibold' })]}>
                       {profileName}
                     </SwiftUIText>
-                    {user.email ? (
+                    {profileSecondaryLabel ? (
                       <SwiftUIText modifiers={[foregroundStyle(colors.secondaryText), font({ size: 14 })]}>
-                        {user.email}
+                        {profileSecondaryLabel}
                       </SwiftUIText>
                     ) : null}
                   </VStack>
@@ -150,7 +151,7 @@ export default function ProfileScreenIOS() {
                     </HStack>
                   </Button>
                 ) : null}
-                {user.email ? (
+                {!user.username && user.email ? (
                   <KeyValueRow colors={colors} label={t('profile.email', 'Email')} value={user.email} />
                 ) : null}
               </Section>

@@ -1947,6 +1947,10 @@ export default function HomeScreen() {
         onRevokeInvite={() => {
           void handleRevokeInvite();
         }}
+        onOpenFriendSearch={() => {
+          dismissSharedManageSheet();
+          router.push('/friends/join' as Href);
+        }}
         onRemoveFriend={handleRemoveFriend}
       />
 

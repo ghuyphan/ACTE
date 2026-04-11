@@ -18,6 +18,7 @@ export interface AppSheetProps {
   androidDynamicSizing?: boolean;
   androidInitialIndex?: number;
   androidKeyboardBehavior?: 'interactive' | 'extend' | 'fillParent';
+  androidKeyboardInputMode?: 'adjustPan' | 'adjustResize';
   androidMaxDynamicContentSize?: number;
   children: ReactNode;
   visible: boolean;
@@ -38,6 +39,7 @@ export default function AppSheet({
   androidDynamicSizing = true,
   androidInitialIndex = 0,
   androidKeyboardBehavior = 'interactive',
+  androidKeyboardInputMode = 'adjustResize',
   androidMaxDynamicContentSize,
   children,
   visible,
@@ -62,6 +64,7 @@ export default function AppSheet({
         androidDynamicSizing={androidDynamicSizing}
         androidInitialIndex={androidInitialIndex}
         androidKeyboardBehavior={androidKeyboardBehavior}
+        androidKeyboardInputMode={androidKeyboardInputMode}
         androidMaxDynamicContentSize={androidMaxDynamicContentSize}
         androidSnapPoints={androidSnapPoints}
         visible={visible}

@@ -11,6 +11,7 @@ export default function AppBottomSheet({
   androidDynamicSizing = true,
   androidInitialIndex = 0,
   androidKeyboardBehavior = 'interactive',
+  androidKeyboardInputMode = 'adjustResize',
   androidMaxDynamicContentSize,
   androidSnapPoints,
   children,
@@ -25,6 +26,7 @@ export default function AppBottomSheet({
   androidDynamicSizing?: boolean;
   androidInitialIndex?: number;
   androidKeyboardBehavior?: 'interactive' | 'extend' | 'fillParent';
+  androidKeyboardInputMode?: 'adjustPan' | 'adjustResize';
   androidMaxDynamicContentSize?: number;
   androidSnapPoints?: (number | string)[];
   children: React.ReactNode;
@@ -88,7 +90,7 @@ export default function AppBottomSheet({
       keyboardBehavior={androidKeyboardBehavior}
       keyboardBlurBehavior="restore"
       enableBlurKeyboardOnGesture
-      android_keyboardInputMode="adjustResize"
+      android_keyboardInputMode={androidKeyboardInputMode}
       backgroundStyle={[
         detached ? styles.detachedBackground : styles.edgeBackground,
         isDark ? styles.darkBackground : styles.lightBackground,

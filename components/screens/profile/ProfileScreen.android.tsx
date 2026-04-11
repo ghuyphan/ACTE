@@ -183,6 +183,7 @@ export default function ProfileScreenAndroid() {
     openSignIn,
     openUsernameEditor,
     profileName,
+    profileSecondaryLabel,
     saveUsername,
     setUsernameDraft,
     t,
@@ -252,9 +253,9 @@ export default function ProfileScreenAndroid() {
                     <Text style={[styles.heroName, { color: colors.text }]} numberOfLines={1}>
                       {profileName}
                     </Text>
-                    {user.email ? (
+                    {profileSecondaryLabel ? (
                       <Text style={[styles.heroEmail, { color: colors.secondaryText }]} numberOfLines={1}>
-                        {user.email}
+                        {profileSecondaryLabel}
                       </Text>
                     ) : null}
                   </View>
@@ -271,7 +272,7 @@ export default function ProfileScreenAndroid() {
                   title={t('profile.name', 'Name')}
                   value={user.displayName || t('profile.noName', 'Noto account')}
                 />
-                {user.username || user.email ? <CardDivider colors={colors} /> : null}
+                {user.username ? <CardDivider colors={colors} /> : null}
                 {user.username ? (
                   <>
                     <ProfileListItem
@@ -286,10 +287,9 @@ export default function ProfileScreenAndroid() {
                       }
                       onPress={canEditUsername ? openUsernameEditor : undefined}
                     />
-                    {user.email ? <CardDivider colors={colors} /> : null}
                   </>
                 ) : null}
-                {user.email ? (
+                {!user.username && user.email ? (
                   <ProfileListItem
                     colors={colors}
                     icon="mail-outline"

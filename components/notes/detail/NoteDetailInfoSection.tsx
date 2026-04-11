@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { type TFunction } from 'i18next';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Note } from '../../../services/database';
 import { NOTE_RADIUS_OPTIONS, formatRadiusLabel } from '../../../constants/noteRadius';
 import { Typography } from '../../../constants/theme';
@@ -27,7 +27,6 @@ type NoteDetailInfoSectionProps = {
     note: Note;
     onChangeLocationText: (value: string) => void;
     onFocusLocation: () => void;
-    onLocationFieldLayout?: (event: LayoutChangeEvent) => void;
     onLockedColorPress: () => void;
     onLocationSelectionChange: (event: any) => void;
     onSelectColor: (nextColor: string | null) => void;
@@ -51,7 +50,6 @@ export default function NoteDetailInfoSection({
     note,
     onChangeLocationText,
     onFocusLocation,
-    onLocationFieldLayout,
     onLockedColorPress,
     onLocationSelectionChange,
     onSelectColor,
@@ -63,7 +61,7 @@ export default function NoteDetailInfoSection({
         <View style={styles.infoSection}>
             {isEditing ? (
                 <>
-                    <View style={styles.editMetaSection} onLayout={onLocationFieldLayout}>
+                    <View style={styles.editMetaSection}>
                         <Text style={[styles.editFieldLabel, { color: colors.secondaryText }]}>
                             {t('noteDetail.locationField', 'Place')}
                         </Text>

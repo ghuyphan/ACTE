@@ -28,7 +28,11 @@ import {
   serializeStickerPlacementsForStorage,
 } from './noteStickers';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
-import { getPublicUserProfile, upsertPublicUserProfile } from './publicProfileService';
+import {
+  getPublicUserProfile,
+  normalizeUsernameInput,
+  upsertPublicUserProfile,
+} from './publicProfileService';
 import {
   cacheSharedFeedSnapshot,
   getCachedActiveInvite,
@@ -69,6 +73,15 @@ export interface FriendInvite {
   acceptedAt: string | null;
   expiresAt: string | null;
   url: string;
+}
+
+export interface FriendSearchResult {
+  userId: string;
+  username: string;
+  displayName: string | null;
+  photoURL: string | null;
+  isSelf: boolean;
+  alreadyFriends: boolean;
 }
 
 export interface SharedPost {
@@ -115,6 +128,15 @@ interface FriendshipRow {
   friended_at: string;
   last_shared_at: string | null;
   created_by_invite_id: string | null;
+}
+
+interface FriendSearchRow {
+  user_id: string;
+  username: string | null;
+  display_name: string | null;
+  photo_url: string | null;
+  is_self: boolean;
+  already_friends: boolean;
 }
 
 interface FriendInviteRow {
@@ -510,6 +532,17 @@ function mapFriend(row: FriendshipRow): FriendConnection {
   };
 }
 
+function mapFriendSearchResult(row: FriendSearchRow): FriendSearchResult {
+  return {
+    userId: row.user_id,
+    username: row.username?.trim().toLowerCase() || '',
+    displayName: row.display_name?.trim() || null,
+    photoURL: row.photo_url ?? null,
+    isSelf: Boolean(row.is_self),
+    alreadyFriends: Boolean(row.already_friends),
+  };
+}
+
 function normalizeCoordinate(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -898,6 +931,33 @@ export async function createFriendInvite(user: AppUser): Promise<FriendInvite> {
   return localInvite;
 }
 
+export async function findFriendByUsername(
+  user: AppUser,
+  username: string
+): Promise<FriendSearchResult> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
+  const normalizedUsername = normalizeUsernameInput(username);
+  if (!normalizedUsername) {
+    throw new Error('Username required.');
+  }
+
+  const { data, error } = await requireSupabase().rpc('find_user_by_username', {
+    search_username: normalizedUsername,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    throw new Error('User not found.');
+  }
+
+  return mapFriendSearchResult(row as FriendSearchRow);
+}
+
 export async function revokeFriendInvite(user: AppUser, inviteId: string): Promise<void> {
   const supabase = requireSupabase();
   const { error } = await supabase
@@ -978,6 +1038,48 @@ export async function removeFriend(user: AppUser, friendUid: string): Promise<vo
   if (error) {
     throw error;
   }
+}
+
+export async function addFriendByUsername(
+  user: AppUser,
+  username: string
+): Promise<FriendConnection> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
+  const normalizedUsername = normalizeUsernameInput(username);
+  if (!normalizedUsername) {
+    throw new Error('Username required.');
+  }
+
+  await upsertPublicUserProfile({
+    userUid: user.id,
+    displayName: getDisplayName(user),
+    username: user.username,
+    email: user.email,
+    photoURL: user.photoURL ?? null,
+  });
+
+  const { data, error } = await requireSupabase().rpc('add_friend_by_username', {
+    search_username: normalizedUsername,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    throw new Error('User not found.');
+  }
+
+  const connection = mapFriend(row as FriendshipRow);
+  const profile = await getUserProfileSnapshot(connection.userId);
+
+  return {
+    ...connection,
+    displayNameSnapshot: profile.displayNameSnapshot ?? connection.displayNameSnapshot,
+    photoURLSnapshot: profile.photoURLSnapshot ?? connection.photoURLSnapshot,
+  };
 }
 
 export async function createSharedPost(

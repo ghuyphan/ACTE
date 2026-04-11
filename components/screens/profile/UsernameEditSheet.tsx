@@ -1,10 +1,11 @@
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import React from 'react';
+import React, { useRef } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import AppSheet from '../../sheets/AppSheet';
 import AppSheetScaffold from '../../sheets/AppSheetScaffold';
 import PrimaryButton from '../../ui/PrimaryButton';
 import { Typography } from '../../../constants/theme';
+import { useAndroidKeyboardBlurOnHide } from '../../../hooks/ui/useAndroidKeyboardBlurOnHide';
 import { useTheme } from '../../../hooks/useTheme';
 
 const SheetTextInput = Platform.OS === 'android' ? BottomSheetTextInput : TextInput;
@@ -37,9 +38,19 @@ export default function UsernameEditSheet({
   saveLabel,
 }: UsernameEditSheetProps) {
   const { colors } = useTheme();
+  const inputRef = useRef<{ blur: () => void; isFocused?: () => boolean } | null>(null);
+
+  useAndroidKeyboardBlurOnHide({
+    enabled: visible,
+    refs: [inputRef],
+  });
 
   return (
-    <AppSheet visible={visible} onClose={onClose}>
+    <AppSheet
+      visible={visible}
+      onClose={onClose}
+      androidKeyboardInputMode="adjustPan"
+    >
       <AppSheetScaffold
         headerVariant="standard"
         title={title}
@@ -58,6 +69,9 @@ export default function UsernameEditSheet({
         <View style={styles.fieldGroup}>
           <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>@</Text>
           <SheetTextInput
+            ref={(node) => {
+              inputRef.current = node ?? null;
+            }}
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="username"

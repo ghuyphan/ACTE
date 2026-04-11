@@ -27,6 +27,7 @@ function ManageBody({
   onCreateInvite,
   onShareInvite,
   onRevokeInvite,
+  onOpenFriendSearch,
   onRemoveFriend,
   emptyLoadingBody,
   emptyBody,
@@ -40,6 +41,7 @@ function ManageBody({
   onCreateInvite: () => void;
   onShareInvite: () => void;
   onRevokeInvite: () => void;
+  onOpenFriendSearch: () => void;
   onRemoveFriend: (friendUid: string) => void;
   emptyLoadingBody: string;
   emptyBody: string;
@@ -138,6 +140,22 @@ function ManageBody({
             </Pressable>
           ) : null}
         </View>
+        <Pressable
+          onPress={onOpenFriendSearch}
+          style={({ pressed }) => [
+            styles.searchFriendAction,
+            {
+              backgroundColor: softFill,
+              borderColor: outlineColor,
+              opacity: pressed ? 0.92 : 1,
+            },
+          ]}
+        >
+          <Ionicons name="search-outline" size={16} color={colors.text} />
+          <Text style={[styles.searchFriendActionText, { color: colors.text }]}>
+            {t('shared.searchByUsernameButton', 'Find by Noto ID')}
+          </Text>
+        </Pressable>
       </View>
 
       <View style={styles.sectionHeaderRow}>
@@ -226,6 +244,7 @@ export default function SharedManageSheet(props: {
   onCreateInvite: () => void;
   onShareInvite: () => void;
   onRevokeInvite: () => void;
+  onOpenFriendSearch: () => void;
   onRemoveFriend: (friendUid: string) => void;
 }) {
   const { colors } = useTheme();
@@ -240,6 +259,7 @@ export default function SharedManageSheet(props: {
     onCreateInvite,
     onShareInvite,
     onRevokeInvite,
+    onOpenFriendSearch,
     onRemoveFriend,
   } = props;
   const contentOpacity = useSharedValue(1);
@@ -282,6 +302,7 @@ export default function SharedManageSheet(props: {
       onCreateInvite={onCreateInvite}
       onShareInvite={onShareInvite}
       onRevokeInvite={onRevokeInvite}
+      onOpenFriendSearch={onOpenFriendSearch}
       onRemoveFriend={onRemoveFriend}
       emptyLoadingBody={t('shared.refreshingFriends', 'Refreshing your shared circle...')}
       emptyBody={t(
@@ -415,6 +436,22 @@ const styles = StyleSheet.create({
     marginTop: 14,
     flexDirection: 'row',
     gap: 10,
+  },
+  searchFriendAction: {
+    marginTop: 12,
+    minHeight: 48,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  searchFriendActionText: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
   },
   primaryInviteAction: {
     flex: 1,

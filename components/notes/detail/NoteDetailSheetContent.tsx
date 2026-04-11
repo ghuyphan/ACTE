@@ -5,7 +5,6 @@ import { type TFunction } from 'i18next';
 import React, { useMemo } from 'react';
 import {
     Dimensions,
-    type LayoutChangeEvent,
     Platform,
     Pressable,
     ScrollView,
@@ -94,9 +93,7 @@ type NoteDetailSheetContentProps = {
     onConfirmPasteFromPrompt: () => void;
     onDelete: () => void;
     onDownloadPolaroid: () => void;
-    onInfoSectionLayout?: (event: LayoutChangeEvent) => void;
     onLocationChangeText: (value: string) => void;
-    onLocationFieldLayout?: (event: LayoutChangeEvent) => void;
     onLocationFocus: () => void;
     onLocationSelectionChange: (event: any) => void;
     onPolaroidCaptureReady: () => void;
@@ -188,9 +185,7 @@ export default function NoteDetailSheetContent({
     onClose,
     onConfirmPasteFromPrompt,
     onDelete,
-    onInfoSectionLayout,
     onLocationChangeText,
-    onLocationFieldLayout,
     onLocationFocus,
     onLocationSelectionChange,
     onPressStickerCanvas,
@@ -691,7 +686,7 @@ export default function NoteDetailSheetContent({
                 saveIconAnimatedStyle={saveIconAnimatedStyle}
             />
 
-            <Animated.View style={infoSectionAnimatedStyle} onLayout={onInfoSectionLayout}>
+            <Animated.View style={infoSectionAnimatedStyle}>
                 <NoteDetailInfoSection
                     colors={colors}
                     dateStr={dateStr}
@@ -701,7 +696,6 @@ export default function NoteDetailSheetContent({
                     inputComponent={SheetTextInput}
                     isDark={isDark}
                     isEditing={isEditing}
-                    onLocationFieldLayout={onLocationFieldLayout}
                     locationInputRef={locationInputRef}
                     locationSelection={locationSelection}
                     lockedPremiumNoteColorIds={lockedPremiumNoteColorIds}
