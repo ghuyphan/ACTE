@@ -31,6 +31,7 @@ import com.acte.app.R
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -97,7 +98,13 @@ private data class WidgetOverlayRenderSpec(
 
 private data class WidgetBodyTypography(
   val textSizeSp: Float,
-  val maxLines: Int
+  val maxLines: Int,
+  val horizontalPaddingPx: Int
+)
+
+private data class WidgetTextStageInsets(
+  val topPx: Int,
+  val bottomPx: Int
 )
 
 private data class WidgetStampMetrics(
@@ -132,6 +139,25 @@ private fun parseColorOrNull(value: String?): Int? {
   }
 
   return runCatching { Color.parseColor(safeValue) }.getOrNull()
+}
+
+private fun blendColors(startColor: Int, endColor: Int, amount: Float): Int {
+  val normalizedAmount = amount.coerceIn(0f, 1f)
+  val inverseAmount = 1f - normalizedAmount
+
+  return Color.argb(
+    (Color.alpha(startColor) * inverseAmount + Color.alpha(endColor) * normalizedAmount).toInt().coerceIn(0, 255),
+    (Color.red(startColor) * inverseAmount + Color.red(endColor) * normalizedAmount).toInt().coerceIn(0, 255),
+    (Color.green(startColor) * inverseAmount + Color.green(endColor) * normalizedAmount).toInt().coerceIn(0, 255),
+    (Color.blue(startColor) * inverseAmount + Color.blue(endColor) * normalizedAmount).toInt().coerceIn(0, 255)
+  )
+}
+
+private fun getPerceivedLuminance(color: Int): Float {
+  val red = Color.red(color) / 255f
+  val green = Color.green(color) / 255f
+  val blue = Color.blue(color) / 255f
+  return (red * 0.299f) + (green * 0.587f) + (blue * 0.114f)
 }
 
 private fun clampWidgetScalar(value: Float, minValue: Float, maxValue: Float): Float {
@@ -308,7 +334,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
     }
 
     private fun updateWidget(context: Context, manager: AppWidgetManager, appWidgetId: Int) {
-      val snapshot = parseSnapshot(NotoWidgetStorage.loadSnapshotJson(context))
+      val snapshot = parseSnapshotOrNull(NotoWidgetStorage.loadSnapshotJson(context)) ?: return
       val options = manager.getAppWidgetOptions(appWidgetId)
       val isMedium = isMediumWidget(options)
       val views = RemoteViews(
@@ -406,15 +432,42 @@ class NotoWidgetProvider : AppWidgetProvider() {
         isMedium &&
         snapshot.noteType == "photo" &&
         hasImage
-      val bodyTypography = resolveBodyTypography(
-        bodyText = bodyText,
+      val textStageInsets = resolveTextStageInsets(
+        context = context,
         geometry = geometry,
         isMedium = isMedium,
+        showIdle = showIdle,
         showLocationChip = showLocationChip,
-        showTrailingPhotoLocationChip = showTrailingPhotoLocationChip
+        showTrailingPhotoLocationChip = showTrailingPhotoLocationChip,
+        showAuthorChip = showAuthorChip,
+        showPhotoTitle = showPhotoTitle
+      )
+      views.setViewPadding(
+        R.id.widget_text_content,
+        0,
+        textStageInsets.topPx,
+        0,
+        textStageInsets.bottomPx
+      )
+      val bodyTypography = resolveBodyTypography(
+        context = context,
+        bodyText = bodyText,
+        geometry = geometry,
+        textStageInsets = textStageInsets,
+        isMedium = isMedium,
+        showLocationChip = showLocationChip,
+        showTrailingPhotoLocationChip = showTrailingPhotoLocationChip,
+        showAuthorChip = showAuthorChip
       )
       views.setInt(R.id.widget_body, "setMaxLines", bodyTypography.maxLines)
       views.setTextViewTextSize(R.id.widget_body, TypedValue.COMPLEX_UNIT_SP, bodyTypography.textSizeSp)
+      views.setViewPadding(
+        R.id.widget_body,
+        bodyTypography.horizontalPaddingPx,
+        0,
+        bodyTypography.horizontalPaddingPx,
+        0
+      )
       views.setTextColor(
         R.id.widget_body,
         if (usesTextSurface && textSurfaceGradient != null) Color.parseColor("#FFF7E8")
@@ -428,6 +481,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
         iconId = R.id.widget_location_icon,
         isVisible = showLocationChip && !showTrailingPhotoLocationChip,
         usesTextSurface = usesTextSurface,
+        noteColorId = snapshot.noteColorId,
+        textSurfaceGradient = textSurfaceGradient,
         locationText = locationBadgeText
       )
       if (isMedium) {
@@ -438,6 +493,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
           iconId = R.id.widget_location_icon_end,
           isVisible = showTrailingPhotoLocationChip,
           usesTextSurface = false,
+          noteColorId = null,
+          textSurfaceGradient = null,
           locationText = locationBadgeText
         )
       }
@@ -569,6 +626,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
       iconId: Int,
       isVisible: Boolean,
       usesTextSurface: Boolean,
+      noteColorId: String?,
+      textSurfaceGradient: WidgetGradientColors?,
       locationText: String
     ) {
       views.setViewVisibility(chipId, if (isVisible) View.VISIBLE else View.GONE)
@@ -576,19 +635,110 @@ class NotoWidgetProvider : AppWidgetProvider() {
         return
       }
 
-      val locationForegroundColor = if (usesTextSurface) {
-        Color.parseColor("#7A6A58")
-      } else {
-        Color.parseColor("#FFF7E8")
-      }
+      val locationForegroundColor = resolveLocationForegroundColor(usesTextSurface, noteColorId, textSurfaceGradient)
       views.setTextViewText(textId, locationText)
       views.setInt(
         chipId,
         "setBackgroundResource",
-        if (usesTextSurface) R.drawable.noto_widget_badge_light else R.drawable.noto_widget_overlay_chip_dark
+        resolveLocationChipBackgroundResource(usesTextSurface, noteColorId, textSurfaceGradient)
       )
       views.setTextColor(textId, locationForegroundColor)
       views.setInt(iconId, "setColorFilter", locationForegroundColor)
+    }
+
+    private fun resolveLocationChipBackgroundResource(
+      usesTextSurface: Boolean,
+      noteColorId: String?,
+      textSurfaceGradient: WidgetGradientColors?
+    ): Int {
+      if (!usesTextSurface) {
+        return R.drawable.noto_widget_overlay_chip_dark
+      }
+
+      when (noteColorId) {
+        "sky-blue", "holo-foil" -> return R.drawable.noto_widget_badge_light_blue
+        "jade-pop", "olive-lime" -> return R.drawable.noto_widget_badge_light_green
+        "pool-teal" -> return R.drawable.noto_widget_badge_light_teal
+        "violet-bloom", "periwinkle-ink", "chrome-rare", "aurora-rgb" -> return R.drawable.noto_widget_badge_light_lavender
+        "sunset-coral", "raspberry-dusk" -> return R.drawable.noto_widget_badge_light_pink
+        "marigold-glow", "tangerine-clay" -> return R.drawable.noto_widget_badge_light_warm
+      }
+
+      if (textSurfaceGradient == null) {
+        return R.drawable.noto_widget_badge_light_neutral
+      }
+
+      val averageGradientColor = blendColors(
+        textSurfaceGradient.startColor,
+        textSurfaceGradient.endColor,
+        0.5f
+      )
+      val hsv = FloatArray(3)
+      Color.colorToHSV(averageGradientColor, hsv)
+      val hue = hsv[0]
+      val saturation = hsv[1]
+
+      return when {
+        saturation >= 0.08f && hue in 185f..320f -> R.drawable.noto_widget_badge_light_cool
+        saturation >= 0.08f && hue in 8f..55f -> R.drawable.noto_widget_badge_light_warm
+        else -> R.drawable.noto_widget_badge_light_neutral
+      }
+    }
+
+    private fun resolveLocationForegroundColor(
+      usesTextSurface: Boolean,
+      noteColorId: String?,
+      textSurfaceGradient: WidgetGradientColors?
+    ): Int {
+      if (!usesTextSurface) {
+        return Color.parseColor("#FFF7E8")
+      }
+
+      when (noteColorId) {
+        "sky-blue", "holo-foil" -> return Color.parseColor("#546A86")
+        "jade-pop", "olive-lime" -> return Color.parseColor("#4E6954")
+        "pool-teal" -> return Color.parseColor("#476D73")
+        "violet-bloom", "periwinkle-ink", "chrome-rare", "aurora-rgb" -> return Color.parseColor("#655884")
+        "sunset-coral", "raspberry-dusk" -> return Color.parseColor("#7A5568")
+        "marigold-glow", "tangerine-clay" -> return Color.parseColor("#7A5A46")
+      }
+
+      return resolveGradientLocationForegroundColor(textSurfaceGradient)
+    }
+
+    private fun resolveGradientLocationForegroundColor(
+      textSurfaceGradient: WidgetGradientColors?
+    ): Int {
+      if (textSurfaceGradient == null) {
+        return Color.parseColor("#7A6A58")
+      }
+
+      val averageGradientColor = blendColors(
+        textSurfaceGradient.startColor,
+        textSurfaceGradient.endColor,
+        0.5f
+      )
+      val luminance = getPerceivedLuminance(averageGradientColor)
+      val hsv = FloatArray(3)
+      Color.colorToHSV(averageGradientColor, hsv)
+      val hue = hsv[0]
+      val saturation = hsv[1]
+      val anchorColor = when {
+        saturation >= 0.08f && hue in 185f..320f -> Color.parseColor("#58657E")
+        saturation >= 0.08f && hue in 8f..55f -> Color.parseColor("#70533F")
+        else -> Color.parseColor("#675B50")
+      }
+      val tintedColor = blendColors(
+        anchorColor,
+        averageGradientColor,
+        if (luminance > 0.68f) 0.2f else 0.14f
+      )
+
+      return if (getPerceivedLuminance(tintedColor) > 0.42f) {
+        blendColors(tintedColor, Color.parseColor("#3F352D"), 0.22f)
+      } else {
+        tintedColor
+      }
     }
 
     private fun bindStickerState(
@@ -758,38 +908,156 @@ class NotoWidgetProvider : AppWidgetProvider() {
       return WidgetGradientColors(startColor = startColor, endColor = endColor)
     }
 
-    private fun resolveBodyTypography(
-      bodyText: String,
+    private fun resolveTextStageInsets(
+      context: Context,
       geometry: WidgetRenderGeometry,
       isMedium: Boolean,
+      showIdle: Boolean,
       showLocationChip: Boolean,
-      showTrailingPhotoLocationChip: Boolean
-    ): WidgetBodyTypography {
-      var textSizeSp = if (isMedium) 22f else 17f
-      val textDensityScore =
-        bodyText.trim().length + (bodyText.count { it == '\n' } * 18)
-      val chipSharesVerticalSpace = showLocationChip && !showTrailingPhotoLocationChip
+      showTrailingPhotoLocationChip: Boolean,
+      showAuthorChip: Boolean,
+      showPhotoTitle: Boolean
+    ): WidgetTextStageInsets {
+      var topInsetDp = if (isMedium) 18f else 14f
+      var bottomInsetDp = if (isMedium) 18f else 14f
 
-      if (chipSharesVerticalSpace) {
-        textSizeSp -= if (isMedium) 1.5f else 1f
+      if (showLocationChip && !showTrailingPhotoLocationChip) {
+        topInsetDp += if (isMedium) 24f else 20f
       }
 
-      if (textDensityScore > if (isMedium) 120 else 70) {
-        textSizeSp -= if (isMedium) 2.5f else 1.5f
+      if (showAuthorChip) {
+        bottomInsetDp += if (isMedium) 34f else 28f
       }
 
-      if (textDensityScore > if (isMedium) 180 else 105) {
-        textSizeSp -= if (isMedium) 1.5f else 1f
+      if (showPhotoTitle) {
+        bottomInsetDp += if (isMedium) 58f else 46f
       }
 
-      if (!isMedium && geometry.contentHeightPx > geometry.contentWidthPx * 1.08f) {
-        textSizeSp += 0.5f
+      if (showIdle) {
+        topInsetDp += if (isMedium) 4f else 3f
       }
 
-      return WidgetBodyTypography(
-        textSizeSp = max(if (isMedium) 18f else 14f, textSizeSp),
-        maxLines = 4
+      return WidgetTextStageInsets(
+        topPx = min(context.dpToPx(topInsetDp), (geometry.contentHeightPx * 0.32f).toInt()),
+        bottomPx = min(context.dpToPx(bottomInsetDp), (geometry.contentHeightPx * 0.36f).toInt())
       )
+    }
+
+    private fun resolveBodyTypography(
+      context: Context,
+      bodyText: String,
+      geometry: WidgetRenderGeometry,
+      textStageInsets: WidgetTextStageInsets,
+      isMedium: Boolean,
+      showLocationChip: Boolean,
+      showTrailingPhotoLocationChip: Boolean,
+      showAuthorChip: Boolean
+    ): WidgetBodyTypography {
+      if (bodyText.isBlank()) {
+        return WidgetBodyTypography(
+          textSizeSp = if (isMedium) 22f else 17f,
+          maxLines = 4,
+          horizontalPaddingPx = context.dpToPx(if (isMedium) 28f else 20f)
+        )
+      }
+
+      val chipSharesVerticalSpace = showLocationChip && !showTrailingPhotoLocationChip
+      val verticalSafeHeightPx = max(
+        1f,
+        geometry.contentHeightPx.toFloat() - textStageInsets.topPx - textStageInsets.bottomPx
+      )
+      val maxLinesUpperBound = 4
+      val minLinesFloor = if (verticalSafeHeightPx > context.dpToPx(if (isMedium) 92f else 74f)) 3 else 2
+      val lineExtraPx = context.dpToPx(if (isMedium) 5f else 3f).toFloat()
+      val candidates = if (isMedium) {
+        listOf(
+          22f to 28f,
+          21f to 26f,
+          20f to 24f,
+          19f to 22f,
+          18f to 20f
+        )
+      } else {
+        listOf(
+          17f to 20f,
+          16f to 18f,
+          15f to 16f,
+          14f to 14f,
+          13f to 14f
+        )
+      }
+
+      var fallback: WidgetBodyTypography? = null
+
+      for ((textSizeSp, horizontalPaddingDp) in candidates) {
+        val horizontalPaddingPx = context.dpToPx(horizontalPaddingDp)
+        val availableWidthPx = max(1f, geometry.contentWidthPx.toFloat() - (horizontalPaddingPx * 2f))
+        val fontPx = context.spToPx(textSizeSp)
+        val estimatedCharsPerLine = max(
+          5f,
+          availableWidthPx / max(1f, fontPx * if (isMedium) 0.57f else 0.56f)
+        )
+        val estimatedLines = estimateWrappedLineCount(bodyText, estimatedCharsPerLine)
+        val estimatedLineHeightPx = (fontPx * 1.02f) + lineExtraPx
+        val maxLinesByHeight = (verticalSafeHeightPx / max(1f, estimatedLineHeightPx))
+          .toInt()
+          .coerceIn(minLinesFloor, maxLinesUpperBound)
+        val adjustedMaxLines = when {
+          chipSharesVerticalSpace && estimatedLines > maxLinesByHeight -> max(minLinesFloor, maxLinesByHeight - 1)
+          showAuthorChip && estimatedLines > maxLinesByHeight -> max(minLinesFloor, maxLinesByHeight - 1)
+          else -> maxLinesByHeight
+        }
+        val candidate = WidgetBodyTypography(
+          textSizeSp = textSizeSp,
+          maxLines = adjustedMaxLines,
+          horizontalPaddingPx = horizontalPaddingPx
+        )
+
+        if (fallback == null) {
+          fallback = candidate
+        }
+
+        if (estimatedLines <= adjustedMaxLines) {
+          return candidate
+        }
+      }
+
+      return fallback ?: WidgetBodyTypography(
+        textSizeSp = if (isMedium) 18f else 13f,
+        maxLines = if (isMedium) 3 else 2,
+        horizontalPaddingPx = context.dpToPx(if (isMedium) 20f else 14f)
+      )
+    }
+
+    private fun estimateWrappedLineCount(text: String, estimatedCharsPerLine: Float): Int {
+      val normalizedLineCapacity = max(1f, estimatedCharsPerLine)
+
+      return text
+        .trim()
+        .split('\n')
+        .filter { it.isNotEmpty() }
+        .sumOf { paragraph ->
+          max(1, ceil(estimateTextUnits(paragraph) / normalizedLineCapacity).toInt())
+        }
+        .coerceAtLeast(1)
+    }
+
+    private fun estimateTextUnits(text: String): Float {
+      var total = 0f
+
+      for (char in text) {
+        total += when {
+          char.isWhitespace() -> 0.34f
+          char in ",.;:'`|!" -> 0.3f
+          char in "-_/\\~" -> 0.42f
+          char.isDigit() -> 0.62f
+          Character.isUpperCase(char) -> 0.72f
+          char.code >= 0x2E80 -> 1.08f
+          else -> 0.56f
+        }
+      }
+
+      return total
     }
 
     private fun getCompactAuthorName(snapshot: NotoWidgetSnapshot): String {
@@ -832,14 +1100,19 @@ class NotoWidgetProvider : AppWidgetProvider() {
       views.setImageViewResource(R.id.widget_live_photo_icon, R.drawable.noto_widget_live_photo_icon)
     }
 
-    private fun parseSnapshot(snapshotJson: String?): NotoWidgetSnapshot {
-      val json = if (snapshotJson.isNullOrBlank()) JSONObject() else runCatching {
+    private fun parseSnapshotOrNull(snapshotJson: String?): NotoWidgetSnapshot? {
+      if (snapshotJson.isNullOrBlank()) {
+        return null
+      }
+
+      val json = runCatching {
         JSONObject(snapshotJson)
-      }.getOrDefault(JSONObject())
+      }.getOrNull() ?: return null
 
       return NotoWidgetSnapshot(
         noteType = json.optString("noteType", "text"),
         text = json.optString("text", ""),
+        noteColorId = json.optString("noteColorId", "").takeIf { it.isNotBlank() },
         locationName = json.optString("locationName", ""),
         date = json.optString("date", ""),
         noteCount = json.optInt("noteCount", 0),
@@ -1583,6 +1856,14 @@ class NotoWidgetProvider : AppWidgetProvider() {
         value,
         resources.displayMetrics
       ).toInt()
+    }
+
+    private fun Context.spToPx(value: Float): Float {
+      return TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_SP,
+        value,
+        resources.displayMetrics
+      )
     }
   }
 }

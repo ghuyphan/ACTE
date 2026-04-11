@@ -19,6 +19,7 @@ import { Radii, Typography } from '../../../constants/theme';
 import { useStickerPhysics, type StickerPhysicsState } from '../../../hooks/useStickerPhysics';
 import { useTheme } from '../../../hooks/useTheme';
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
+import { GlassView } from '../../ui/GlassView';
 import {
   getStickerOutlineOffsets,
   getStickerOutlineSize,
@@ -702,46 +703,91 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
   }, []);
 
   return (
-    <View
-      testID="notes-recap-sticker-pile"
-      style={[
-        styles.card,
-        {
-          backgroundColor: colors.card,
-          borderColor: colors.border,
-        },
-      ]}
-    >
-      <View style={styles.titleWrap}>
-        <Text style={[styles.title, { color: colors.secondaryText }]}>{title}</Text>
+    Platform.OS === 'android' ? (
+      <GlassView
+        testID="notes-recap-sticker-pile"
+        style={[
+          styles.card,
+          {
+            borderColor: colors.androidTabShellBorder,
+          },
+        ]}
+        fallbackColor={colors.androidTabShellBackground}
+        glassEffectStyle="regular"
+        colorScheme={colors.captureGlassColorScheme}
+      >
+        <View style={styles.titleWrap}>
+          <Text style={[styles.title, { color: colors.androidTabShellInactive }]}>{title}</Text>
+        </View>
+        <View style={styles.canvas} onLayout={handleLayout}>
+          {displayEntries.map(({ item, metrics }, index) => (
+            <RecapBubble
+              key={item.key}
+              item={item}
+              metrics={metrics}
+              anchorX={
+                (physicsEnabled ? placements[index]?.x : undefined) ??
+                staticAnchors[index]?.centerX ??
+                0
+              }
+              anchorY={
+                (physicsEnabled ? placements[index]?.y : undefined) ??
+                staticAnchors[index]?.centerY ??
+                0
+              }
+              rotation={
+                (physicsEnabled ? placements[index]?.rotation : undefined) ??
+                staticAnchors[index]?.rotation ??
+                0
+              }
+              physicsState={physicsEnabled ? physicsState : undefined}
+              physicsStateIndex={index}
+            />
+          ))}
+        </View>
+      </GlassView>
+    ) : (
+      <View
+        testID="notes-recap-sticker-pile"
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View style={styles.titleWrap}>
+          <Text style={[styles.title, { color: colors.secondaryText }]}>{title}</Text>
+        </View>
+        <View style={styles.canvas} onLayout={handleLayout}>
+          {displayEntries.map(({ item, metrics }, index) => (
+            <RecapBubble
+              key={item.key}
+              item={item}
+              metrics={metrics}
+              anchorX={
+                (physicsEnabled ? placements[index]?.x : undefined) ??
+                staticAnchors[index]?.centerX ??
+                0
+              }
+              anchorY={
+                (physicsEnabled ? placements[index]?.y : undefined) ??
+                staticAnchors[index]?.centerY ??
+                0
+              }
+              rotation={
+                (physicsEnabled ? placements[index]?.rotation : undefined) ??
+                staticAnchors[index]?.rotation ??
+                0
+              }
+              physicsState={physicsEnabled ? physicsState : undefined}
+              physicsStateIndex={index}
+            />
+          ))}
+        </View>
       </View>
-      <View style={styles.canvas} onLayout={handleLayout}>
-        {displayEntries.map(({ item, metrics }, index) => (
-          <RecapBubble
-            key={item.key}
-            item={item}
-            metrics={metrics}
-            anchorX={
-              (physicsEnabled ? placements[index]?.x : undefined) ??
-              staticAnchors[index]?.centerX ??
-              0
-            }
-            anchorY={
-              (physicsEnabled ? placements[index]?.y : undefined) ??
-              staticAnchors[index]?.centerY ??
-              0
-            }
-            rotation={
-              (physicsEnabled ? placements[index]?.rotation : undefined) ??
-              staticAnchors[index]?.rotation ??
-              0
-            }
-            physicsState={physicsEnabled ? physicsState : undefined}
-            physicsStateIndex={index}
-          />
-        ))}
-      </View>
-    </View>
+    )
   );
 });
 

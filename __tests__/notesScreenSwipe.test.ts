@@ -78,16 +78,12 @@ jest.mock('../services/remoteMedia', () => ({
 }));
 
 describe('resolveNotesModeFromSwipe', () => {
-  it('switches from all to collection on a left swipe when recap notes exist', () => {
-    expect(resolveNotesModeFromSwipe('all', -60, 0, true)).toBe('collection');
+  it('switches from all to recap on a left swipe when recap notes exist', () => {
+    expect(resolveNotesModeFromSwipe('all', -60, 0, true)).toBe('recap');
   });
 
-  it('switches from collection to recap on a left swipe when recap notes exist', () => {
-    expect(resolveNotesModeFromSwipe('collection', 0, -500, true)).toBe('recap');
-  });
-
-  it('switches from recap back to collection on a right swipe when recap notes exist', () => {
-    expect(resolveNotesModeFromSwipe('recap', 0, 500, true)).toBe('collection');
+  it('switches from recap back to all on a right swipe when recap notes exist', () => {
+    expect(resolveNotesModeFromSwipe('recap', 0, 500, true)).toBe('all');
   });
 
   it('keeps the current mode when there are no recap notes', () => {

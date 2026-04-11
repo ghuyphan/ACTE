@@ -10,6 +10,7 @@ const mockRequestFeedFocus = jest.fn();
 const mockDownloadPhotoFromStorage = jest.fn();
 const mockDynamicStickerCanvas = jest.fn();
 const mockScheduleOnIdle = jest.fn();
+const mockLoadNextArchivePage = jest.fn(async () => []);
 const originalConsoleError = console.error;
 
 const mockNotes: any[] = [
@@ -47,6 +48,25 @@ const mockSharedPosts: any[] = [
     createdAt: '2026-03-13T00:00:00.000Z',
   },
 ];
+
+function mockBuildArchiveItems() {
+  const friendPosts = mockSharedPosts.filter((post) => post.authorUid !== 'me');
+
+  return [
+    ...mockNotes.map((note) => ({
+      id: note.id,
+      kind: 'note' as const,
+      note,
+      createdAt: note.createdAt,
+    })),
+    ...friendPosts.map((post) => ({
+      id: post.id,
+      kind: 'shared-post' as const,
+      post,
+      createdAt: post.createdAt,
+    })),
+  ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+}
 
 jest.mock('@expo/vector-icons', () => {
   const React = require('react');
@@ -134,6 +154,14 @@ jest.mock('../components/notes/NoteDoodleCanvas', () => {
   };
 });
 
+jest.mock('../components/ui/StickerIcon', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return function MockStickerIcon() {
+    return <View testID="mock-sticker-icon" />;
+  };
+});
+
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),
   selectionAsync: jest.fn(),
@@ -189,6 +217,17 @@ jest.mock('../hooks/useTheme', () => ({
 jest.mock('../hooks/useFeedFocus', () => ({
   useFeedFocus: () => ({
     requestFeedFocus: (...args: unknown[]) => mockRequestFeedFocus(...args),
+  }),
+}));
+
+jest.mock('../hooks/app/useHomeFeedPagination', () => ({
+  useHomeFeedPagination: () => ({
+    items: mockBuildArchiveItems(),
+    hasMore: false,
+    isLoading: false,
+    isLoadingMore: false,
+    loadNextPage: () => mockLoadNextArchivePage(),
+    ensureTargetLoaded: jest.fn(async () => -1),
   }),
 }));
 
@@ -307,16 +346,6 @@ describe('NotesIndexScreen', () => {
     expect(queryByText('Shared memory')).toBeNull();
   });
 
-  it('shows the sticker collection as a first-class notes mode', () => {
-    const { getByTestId, getByText, queryByText } = render(<NotesIndexScreen />);
-
-    fireEvent.press(getByTestId('notes-mode-collection'));
-
-    expect(getByTestId('notes-collection-mode')).toBeTruthy();
-    expect(getByText('1x')).toBeTruthy();
-    expect(queryByText('Newest note')).toBeNull();
-  });
-
   it('shows an overflow badge for multi-photo days and a note tile for text-only days', () => {
     mockNotes.splice(
       0,
@@ -385,12 +414,12 @@ describe('NotesIndexScreen', () => {
 
     expect(getByText('Used this month')).toBeTruthy();
 
-    fireEvent.press(getByText('11'));
+    fireEvent.press(getByTestId('notes-recap-day-2026-03-11'));
 
     expect(getByText('Mar 11')).toBeTruthy();
     expect(queryByText('Used this month')).toBeNull();
 
-    fireEvent.press(getByText('11'));
+    fireEvent.press(getByTestId('notes-recap-day-2026-03-11'));
 
     expect(getByText('Used this month')).toBeTruthy();
     expect(queryByText('Mar 11')).toBeNull();
@@ -605,10 +634,8 @@ describe('NotesIndexScreen', () => {
   });
 
   it('resolves left and right swipes into the expected modes', () => {
-    expect(resolveNotesModeFromSwipe('all', -72, 0, true)).toBe('collection');
-    expect(resolveNotesModeFromSwipe('collection', 0, -520, true)).toBe('recap');
-    expect(resolveNotesModeFromSwipe('recap', 72, 0, true)).toBe('collection');
-    expect(resolveNotesModeFromSwipe('collection', 0, 520, true)).toBe('all');
+    expect(resolveNotesModeFromSwipe('all', -72, 0, true)).toBe('recap');
+    expect(resolveNotesModeFromSwipe('recap', 72, 0, true)).toBe('all');
     expect(resolveNotesModeFromSwipe('all', -72, 0, false)).toBe('all');
     expect(resolveNotesModeFromSwipe('recap', 12, 40, true)).toBe('recap');
   });

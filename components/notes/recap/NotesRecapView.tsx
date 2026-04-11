@@ -1,13 +1,14 @@
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Reanimated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
 import { useNotesRecapViewModel } from '../../../hooks/state/useNotesRecapViewModel';
 import type { Note } from '../../../services/database';
 import { scheduleOnIdle } from '../../../utils/scheduleOnIdle';
+import { GlassView } from '../../ui/GlassView';
 import RecapCalendarGrid from './RecapCalendarGrid';
 import RecapMonthPicker from './RecapMonthPicker';
 import RecapStickerPile from './RecapStickerPile';
@@ -26,8 +27,12 @@ const NotesRecapView = memo(function NotesRecapView({
   suspendPhysics?: boolean;
 }) {
   const { t } = useTranslation();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const reduceMotionEnabled = useReducedMotion();
+  const isAndroid = Platform.OS === 'android';
+  const shellBackgroundColor = isAndroid ? colors.androidTabShellBackground : colors.card;
+  const shellBorderColor = isAndroid ? colors.androidTabShellBorder : colors.border;
+  const shellMutedTextColor = isAndroid ? colors.androidTabShellInactive : colors.secondaryText;
   const {
     activeMonthLabel,
     activeRecap,
@@ -100,6 +105,7 @@ const NotesRecapView = memo(function NotesRecapView({
   }, [activeRecap, isPileReady, isVisible]);
 
   const shouldEnablePilePhysics = isVisible && hasCompletedFirstReveal && !suspendPhysics;
+  const glassColorScheme = isDark ? 'dark' : 'light';
 
   return (
     <View
@@ -135,21 +141,42 @@ const NotesRecapView = memo(function NotesRecapView({
       >
         <View style={styles.recapContent}>
           {!activeRecap ? (
-            <View
-              testID="notes-recap-empty-state"
-              style={[styles.recapEmptyState, { borderColor: colors.border, backgroundColor: colors.card }]}
-            >
-              <Ionicons name="calendar-clear-outline" size={30} color={colors.secondaryText} />
-              <Text style={[styles.recapEmptyTitle, { color: colors.text }]}>
-                {t('notes.recap.emptyTitle', 'No memories this month')}
-              </Text>
-              <Text style={[styles.recapEmptyBody, { color: colors.secondaryText }]}>
-                {t(
-                  'notes.recap.emptyBody',
-                  'Try another month or save a new note to start this recap.'
-                )}
-              </Text>
-            </View>
+            isAndroid ? (
+              <GlassView
+                testID="notes-recap-empty-state"
+                style={[styles.recapEmptyState, { borderColor: shellBorderColor }]}
+                fallbackColor={shellBackgroundColor}
+                glassEffectStyle="regular"
+                colorScheme={glassColorScheme}
+              >
+                <Ionicons name="calendar-clear-outline" size={30} color={shellMutedTextColor} />
+                <Text style={[styles.recapEmptyTitle, { color: colors.text }]}>
+                  {t('notes.recap.emptyTitle', 'No memories this month')}
+                </Text>
+                <Text style={[styles.recapEmptyBody, { color: shellMutedTextColor }]}>
+                  {t(
+                    'notes.recap.emptyBody',
+                    'Try another month or save a new note to start this recap.'
+                  )}
+                </Text>
+              </GlassView>
+            ) : (
+              <View
+                testID="notes-recap-empty-state"
+                style={[styles.recapEmptyState, { borderColor: shellBorderColor, backgroundColor: shellBackgroundColor }]}
+              >
+                <Ionicons name="calendar-clear-outline" size={30} color={shellMutedTextColor} />
+                <Text style={[styles.recapEmptyTitle, { color: colors.text }]}>
+                  {t('notes.recap.emptyTitle', 'No memories this month')}
+                </Text>
+                <Text style={[styles.recapEmptyBody, { color: shellMutedTextColor }]}>
+                  {t(
+                    'notes.recap.emptyBody',
+                    'Try another month or save a new note to start this recap.'
+                  )}
+                </Text>
+              </View>
+            )
           ) : (
             <Reanimated.View
               key={activeRecap.month.monthKey}
@@ -165,43 +192,88 @@ const NotesRecapView = memo(function NotesRecapView({
                     physicsEnabled={shouldEnablePilePhysics}
                   />
                 ) : (
-                  <View
-                    style={[
-                      styles.recapPilePlaceholder,
-                      {
-                        borderColor: colors.border,
-                        backgroundColor: colors.card,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.recapPilePlaceholderTitle, { color: colors.secondaryText }]}>
-                      {pileTitle ?? t('notes.recap.stickerTrayTitle', 'Used this month')}
-                    </Text>
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  </View>
+                  isAndroid ? (
+                    <GlassView
+                      style={[
+                        styles.recapPilePlaceholder,
+                        {
+                          borderColor: shellBorderColor,
+                        },
+                      ]}
+                      fallbackColor={shellBackgroundColor}
+                      glassEffectStyle="regular"
+                      colorScheme={glassColorScheme}
+                    >
+                      <Text style={[styles.recapPilePlaceholderTitle, { color: shellMutedTextColor }]}>
+                        {pileTitle ?? t('notes.recap.stickerTrayTitle', 'Used this month')}
+                      </Text>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </GlassView>
+                  ) : (
+                    <View
+                      style={[
+                        styles.recapPilePlaceholder,
+                        {
+                          borderColor: shellBorderColor,
+                          backgroundColor: shellBackgroundColor,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.recapPilePlaceholderTitle, { color: shellMutedTextColor }]}>
+                        {pileTitle ?? t('notes.recap.stickerTrayTitle', 'Used this month')}
+                      </Text>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </View>
+                  )
                 )}
               </Reanimated.View>
 
-              <Reanimated.View
-                entering={FadeInDown.delay(110).duration(220)}
-                style={[
-                  styles.recapCalendarShell,
-                  {
-                    borderColor: colors.border,
-                    backgroundColor: colors.card,
-                    paddingHorizontal: isCompactRecap ? 10 : 14,
-                    paddingTop: isCompactRecap ? 12 : 16,
-                    paddingBottom: isCompactRecap ? 8 : 10,
-                  },
-                ]}
-              >
-                <RecapCalendarGrid
-                  days={calendarDays}
-                  weekDayLabels={weekDayLabels}
-                  selectedDayKeys={selectedDayKeys}
-                  onSelectDay={selectDay}
-                  compact={isCompactRecap}
-                />
+              <Reanimated.View entering={FadeInDown.delay(110).duration(220)}>
+                {isAndroid ? (
+                  <GlassView
+                    style={[
+                      styles.recapCalendarShell,
+                      {
+                        borderColor: shellBorderColor,
+                        paddingHorizontal: isCompactRecap ? 10 : 14,
+                        paddingTop: isCompactRecap ? 12 : 16,
+                        paddingBottom: isCompactRecap ? 8 : 10,
+                      },
+                    ]}
+                    fallbackColor={shellBackgroundColor}
+                    glassEffectStyle="regular"
+                    colorScheme={glassColorScheme}
+                  >
+                    <RecapCalendarGrid
+                      days={calendarDays}
+                      weekDayLabels={weekDayLabels}
+                      selectedDayKeys={selectedDayKeys}
+                      onSelectDay={selectDay}
+                      compact={isCompactRecap}
+                    />
+                  </GlassView>
+                ) : (
+                  <View
+                    style={[
+                      styles.recapCalendarShell,
+                      {
+                        borderColor: shellBorderColor,
+                        backgroundColor: shellBackgroundColor,
+                        paddingHorizontal: isCompactRecap ? 10 : 14,
+                        paddingTop: isCompactRecap ? 12 : 16,
+                        paddingBottom: isCompactRecap ? 8 : 10,
+                      },
+                    ]}
+                  >
+                    <RecapCalendarGrid
+                      days={calendarDays}
+                      weekDayLabels={weekDayLabels}
+                      selectedDayKeys={selectedDayKeys}
+                      onSelectDay={selectDay}
+                      compact={isCompactRecap}
+                    />
+                  </View>
+                )}
               </Reanimated.View>
             </Reanimated.View>
           )}

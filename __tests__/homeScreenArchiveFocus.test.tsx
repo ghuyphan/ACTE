@@ -5,6 +5,8 @@ import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
 import HomeScreen from '../app/(tabs)/index';
 
 const mockConsumeFeedFocus = jest.fn();
+const mockEnsureTargetLoaded = jest.fn();
+const mockLoadNextHomeFeedPage = jest.fn<Promise<any[]>, []>(async () => []);
 const mockScrollToOffset = jest.fn();
 const mockPush = jest.fn();
 let mockNotesState = [
@@ -57,6 +59,25 @@ const mockSharedFeedState = {
 };
 let latestNotesFeedProps: any = null;
 let latestHomeHeaderSearchProps: any = null;
+
+function mockBuildHomeFeedItems() {
+  const friendPosts = mockSharedFeedState.sharedPosts.filter((post) => post.authorUid !== 'me');
+
+  return [
+    ...mockNotesState.map((note) => ({
+      id: note.id,
+      kind: 'note' as const,
+      note,
+      createdAt: note.createdAt,
+    })),
+    ...friendPosts.map((post) => ({
+      id: post.id,
+      kind: 'shared-post' as const,
+      post,
+      createdAt: post.createdAt,
+    })),
+  ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+}
 
 function renderHomeScreen() {
   return render(
@@ -166,6 +187,18 @@ jest.mock('../hooks/useAppSheetAlert', () => ({
 jest.mock('../hooks/useFeedFocus', () => ({
   useFeedFocus: () => ({
     consumeFeedFocus: (...args: unknown[]) => mockConsumeFeedFocus(...args),
+  }),
+}));
+
+jest.mock('../hooks/app/useHomeFeedPagination', () => ({
+  useHomeFeedPagination: () => ({
+    items: mockBuildHomeFeedItems(),
+    hasMore: false,
+    isLoading: false,
+    isLoadingMore: false,
+    loadNextPage: () => mockLoadNextHomeFeedPage(),
+    ensureTargetLoaded: (target: { kind: 'note' | 'shared-post'; id: string }) =>
+      mockEnsureTargetLoaded(target),
   }),
 }));
 
@@ -372,6 +405,10 @@ describe('HomeScreen archive focus', () => {
         createdAt: '2026-03-13T00:00:00.000Z',
       },
     ];
+    mockEnsureTargetLoaded.mockImplementation(async (target: { kind: 'note' | 'shared-post'; id: string }) =>
+      mockBuildHomeFeedItems().findIndex((item) => item.kind === target.kind && item.id === target.id)
+    );
+    mockLoadNextHomeFeedPage.mockResolvedValue(mockBuildHomeFeedItems());
     (global as any).requestIdleCallback = jest.fn((callback: any) => {
       callback({ didTimeout: false, timeRemaining: () => 50 });
       return 1;

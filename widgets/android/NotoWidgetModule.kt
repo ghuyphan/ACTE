@@ -8,6 +8,7 @@ import com.facebook.react.bridge.ReactMethod
 data class NotoWidgetSnapshot(
   val noteType: String,
   val text: String,
+  val noteColorId: String?,
   val locationName: String,
   val date: String,
   val noteCount: Int,
@@ -47,11 +48,11 @@ object NotoWidgetStorage {
   private const val PREFS_NAME = "noto_widget_storage"
   private const val SNAPSHOT_KEY = "latest_snapshot"
 
-  fun saveSnapshot(context: Context, snapshotJson: String) {
-    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+  fun saveSnapshot(context: Context, snapshotJson: String): Boolean {
+    return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
       .edit()
       .putString(SNAPSHOT_KEY, snapshotJson)
-      .apply()
+      .commit()
   }
 
   fun loadSnapshotJson(context: Context): String? {
@@ -68,7 +69,8 @@ class NotoWidgetModule(
 
   @ReactMethod
   fun updateSnapshot(snapshotJson: String) {
-    NotoWidgetStorage.saveSnapshot(reactApplicationContext, snapshotJson)
-    NotoWidgetProvider.updateAllWidgets(reactApplicationContext)
+    if (NotoWidgetStorage.saveSnapshot(reactApplicationContext, snapshotJson)) {
+      NotoWidgetProvider.updateAllWidgets(reactApplicationContext)
+    }
   }
 }

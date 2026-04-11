@@ -160,40 +160,47 @@
                     android:visibility="gone" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/widget_idle_body"
+            <FrameLayout
+                android:id="@+id/widget_text_content"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_centerInParent="true"
-                android:ellipsize="end"
-                android:fontFamily="sans-serif"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:lineSpacingExtra="3dp"
-                android:maxLines="4"
-                android:paddingLeft="26dp"
-                android:paddingRight="26dp"
-                android:textColor="#FFF7E8"
-                android:textSize="15sp"
-                android:textStyle="italic"
-                android:visibility="gone" />
+                android:layout_height="match_parent">
 
-            <TextView
-                android:id="@+id/widget_body"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_centerInParent="true"
-                android:ellipsize="end"
-                android:fontFamily="sans-serif-black"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:letterSpacing="-0.03"
-                android:lineSpacingExtra="3dp"
-                android:maxLines="4"
-                android:paddingLeft="20dp"
-                android:paddingRight="20dp"
-                android:textColor="#2B2621"
-                android:textSize="17sp" />
+                <TextView
+                    android:id="@+id/widget_idle_body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:lineSpacingExtra="3dp"
+                    android:maxLines="4"
+                    android:paddingLeft="26dp"
+                    android:paddingRight="26dp"
+                    android:textColor="#FFF7E8"
+                    android:textSize="15sp"
+                    android:textStyle="italic"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/widget_body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-black"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:letterSpacing="-0.03"
+                    android:lineSpacingExtra="3dp"
+                    android:maxLines="4"
+                    android:paddingLeft="20dp"
+                    android:paddingRight="20dp"
+                    android:textColor="#2B2621"
+                    android:textSize="17sp"
+                    android:visibility="gone" />
+            </FrameLayout>
 
             <LinearLayout
                 android:id="@+id/widget_bottom_content"

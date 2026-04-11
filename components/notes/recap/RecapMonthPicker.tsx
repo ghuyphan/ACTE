@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from '../../../hooks/useHaptics';
 import React, { memo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Typography } from '../../../constants/theme';
 import { useTheme } from '../../../hooks/useTheme';
+import { GlassView } from '../../ui/GlassView';
 
 interface RecapMonthPickerProps {
   label: string;
@@ -26,6 +27,11 @@ function RecapMonthPicker({
   nextAccessibilityLabel = 'Next month',
 }: RecapMonthPickerProps) {
   const { colors } = useTheme();
+  const isAndroid = Platform.OS === 'android';
+  const shellBackgroundColor = isAndroid ? colors.androidTabShellBackground : colors.card;
+  const shellBorderColor = isAndroid ? colors.androidTabShellBorder : `${colors.border}88`;
+  const controlForegroundColor = isAndroid ? colors.androidTabShellActive : colors.text;
+  const pressedBackgroundColor = isAndroid ? colors.androidTabShellSelectedBackground : `${colors.primary}12`;
   const handlePrevious = () => {
     if (previousDisabled) {
       return;
@@ -43,17 +49,8 @@ function RecapMonthPicker({
     onNext();
   };
 
-  return (
-    <Animated.View
-      entering={FadeIn.duration(220)}
-      style={[
-        styles.row,
-        {
-          borderColor: `${colors.border}88`,
-          backgroundColor: colors.card,
-        },
-      ]}
-    >
+  const content = (
+    <>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={previousAccessibilityLabel}
@@ -63,19 +60,19 @@ function RecapMonthPicker({
         style={({ pressed }) => [
           styles.arrowButton,
           {
-            backgroundColor: pressed && !previousDisabled ? `${colors.primary}12` : 'transparent',
+            backgroundColor: pressed && !previousDisabled ? pressedBackgroundColor : 'transparent',
             opacity: previousDisabled ? 0.45 : 1,
           },
         ]}
       >
-        <Ionicons name="chevron-back" size={18} color={colors.text} />
+        <Ionicons name="chevron-back" size={18} color={controlForegroundColor} />
       </Pressable>
 
       <View style={styles.labelWrap}>
         <Animated.Text
           key={label}
           entering={FadeInDown.duration(220)}
-          style={[styles.label, { color: colors.text }]}
+          style={[styles.label, { color: controlForegroundColor }]}
           numberOfLines={1}
         >
           {label}
@@ -91,13 +88,44 @@ function RecapMonthPicker({
         style={({ pressed }) => [
           styles.arrowButton,
           {
-            backgroundColor: pressed && !nextDisabled ? `${colors.primary}12` : 'transparent',
+            backgroundColor: pressed && !nextDisabled ? pressedBackgroundColor : 'transparent',
             opacity: nextDisabled ? 0.45 : 1,
           },
         ]}
       >
-        <Ionicons name="chevron-forward" size={18} color={colors.text} />
+        <Ionicons name="chevron-forward" size={18} color={controlForegroundColor} />
       </Pressable>
+    </>
+  );
+
+  return isAndroid ? (
+    <Animated.View entering={FadeIn.duration(220)}>
+      <GlassView
+        style={[
+          styles.row,
+          {
+            borderColor: shellBorderColor,
+          },
+        ]}
+        fallbackColor={shellBackgroundColor}
+        glassEffectStyle="regular"
+        colorScheme={colors.captureGlassColorScheme}
+      >
+        {content}
+      </GlassView>
+    </Animated.View>
+  ) : (
+    <Animated.View
+      entering={FadeIn.duration(220)}
+      style={[
+        styles.row,
+        {
+          borderColor: shellBorderColor,
+          backgroundColor: shellBackgroundColor,
+        },
+      ]}
+    >
+      {content}
     </Animated.View>
   );
 }

@@ -183,6 +183,55 @@ export async function getCachedSharedPosts(userUid: string): Promise<SharedPost[
   return rows.map(rowToSharedPost);
 }
 
+export async function getCachedSharedPostsPage(
+  userUid: string,
+  options: { limit: number; offset?: number; excludeAuthorUid?: string | null }
+): Promise<SharedPost[]> {
+  const db = await getDB();
+  const rows = options.excludeAuthorUid
+    ? await db.getAllAsync<SharedPostRow>(
+        `SELECT *
+         FROM shared_posts_cache
+         WHERE user_uid = ?
+           AND author_uid != ?
+         ORDER BY created_at DESC
+         LIMIT ? OFFSET ?`,
+        userUid,
+        options.excludeAuthorUid,
+        options.limit,
+        options.offset ?? 0
+      )
+    : await db.getAllAsync<SharedPostRow>(
+        `SELECT *
+         FROM shared_posts_cache
+         WHERE user_uid = ?
+         ORDER BY created_at DESC
+         LIMIT ? OFFSET ?`,
+        userUid,
+        options.limit,
+        options.offset ?? 0
+      );
+
+  return rows.map(rowToSharedPost);
+}
+
+export async function getCachedSharedPostById(
+  userUid: string,
+  postId: string
+): Promise<SharedPost | null> {
+  const db = await getDB();
+  const row = await db.getFirstAsync<SharedPostRow>(
+    `SELECT *
+     FROM shared_posts_cache
+     WHERE user_uid = ?
+       AND id = ?`,
+    userUid,
+    postId
+  );
+
+  return row ? rowToSharedPost(row) : null;
+}
+
 export async function replaceCachedSharedPosts(userUid: string, posts: SharedPost[]): Promise<void> {
   const cachedAt = new Date().toISOString();
   await withDatabaseTransaction(async (tx) => {

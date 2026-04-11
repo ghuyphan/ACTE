@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from '../../../hooks/useHaptics';
 import React, { memo, useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
 import { Layout, Typography } from '../../../constants/theme';
 import { useTheme } from '../../../hooks/useTheme';
 import StickerIcon from '../../ui/StickerIcon';
+import { GlassView } from '../../ui/GlassView';
 
 export type RecapMode = 'all' | 'collection' | 'recap';
 const TRACK_PADDING = 4;
@@ -14,6 +15,7 @@ const TRACK_GAP = 6;
 interface RecapModeSwitchProps {
   value: RecapMode;
   onChange: (mode: RecapMode) => void;
+  showCollection?: boolean;
   allLabel?: string;
   collectionLabel?: string;
   recapLabel?: string;
@@ -23,6 +25,7 @@ interface RecapModeSwitchProps {
 function RecapModeSwitch({
   value,
   onChange,
+  showCollection = true,
   allLabel = 'All',
   collectionLabel = 'Collection',
   recapLabel = 'Recap',
@@ -30,7 +33,16 @@ function RecapModeSwitch({
 }: RecapModeSwitchProps) {
   const { colors, isDark } = useTheme();
   const [measuredTrackWidth, setMeasuredTrackWidth] = useState(0);
-  const trackBackground = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.72)';
+  const isAndroid = Platform.OS === 'android';
+  const trackBackground = isAndroid
+    ? colors.androidTabShellBackground
+    : isDark
+      ? 'rgba(255,255,255,0.06)'
+      : 'rgba(255,255,255,0.72)';
+  const trackBorderColor = isAndroid ? colors.androidTabShellBorder : colors.border;
+  const activePillColor = isAndroid ? colors.androidTabShellSelectedBackground : colors.primarySoft;
+  const activeForegroundColor = isAndroid ? colors.androidTabShellActive : colors.primary;
+  const inactiveForegroundColor = isAndroid ? colors.androidTabShellInactive : colors.secondaryText;
   const segments = useMemo(
     () => [
       {
@@ -39,11 +51,15 @@ function RecapModeSwitch({
         label: allLabel,
         testID: 'notes-mode-all',
       },
-      {
-        mode: 'collection' as const,
-        label: collectionLabel,
-        testID: 'notes-mode-collection',
-      },
+      ...(showCollection
+        ? [
+            {
+              mode: 'collection' as const,
+              label: collectionLabel,
+              testID: 'notes-mode-collection',
+            },
+          ]
+        : []),
       {
         mode: 'recap' as const,
         iconName: 'calendar-outline' as const,
@@ -51,7 +67,7 @@ function RecapModeSwitch({
         testID: 'notes-mode-recap',
       },
     ],
-    [allLabel, collectionLabel, recapLabel]
+    [allLabel, collectionLabel, recapLabel, showCollection]
   );
   const resolvedTrackWidth = trackWidth ?? measuredTrackWidth;
   const segmentMetrics = useMemo(() => {
@@ -106,25 +122,15 @@ function RecapModeSwitch({
     setMeasuredTrackWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
   }, [trackWidth]);
 
-  return (
-    <View
-      onLayout={handleTrackLayout}
-      style={[
-        styles.track,
-        {
-          backgroundColor: trackBackground,
-          borderColor: colors.border,
-          width: trackWidth,
-        },
-      ]}
-    >
+  const trackContent = (
+    <>
       <Animated.View
         testID="notes-mode-pill"
         pointerEvents="none"
         style={[
           styles.activePill,
           {
-            backgroundColor: colors.primarySoft,
+            backgroundColor: activePillColor,
           },
           indicatorStyle,
         ]}
@@ -147,19 +153,19 @@ function RecapModeSwitch({
             {segment.mode === 'collection' ? (
               <StickerIcon
                 size={14}
-                color={isSelected ? colors.primary : colors.secondaryText}
+                color={isSelected ? activeForegroundColor : inactiveForegroundColor}
               />
             ) : (
               <Ionicons
                 name={segment.iconName}
                 size={14}
-                color={isSelected ? colors.primary : colors.secondaryText}
+                color={isSelected ? activeForegroundColor : inactiveForegroundColor}
               />
             )}
             <Text
               style={[
                 styles.label,
-                { color: isSelected ? colors.primary : colors.secondaryText },
+                { color: isSelected ? activeForegroundColor : inactiveForegroundColor },
               ]}
             >
               {segment.label}
@@ -167,6 +173,38 @@ function RecapModeSwitch({
           </Pressable>
         );
       })}
+    </>
+  );
+
+  return isAndroid ? (
+    <GlassView
+      onLayout={handleTrackLayout}
+      style={[
+        styles.track,
+        {
+          borderColor: trackBorderColor,
+          width: trackWidth,
+        },
+      ]}
+      fallbackColor={trackBackground}
+      glassEffectStyle="regular"
+      colorScheme={isDark ? 'dark' : 'light'}
+    >
+      {trackContent}
+    </GlassView>
+  ) : (
+    <View
+      onLayout={handleTrackLayout}
+      style={[
+        styles.track,
+        {
+          backgroundColor: trackBackground,
+          borderColor: trackBorderColor,
+          width: trackWidth,
+        },
+      ]}
+    >
+      {trackContent}
     </View>
   );
 }

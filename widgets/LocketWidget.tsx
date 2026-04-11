@@ -18,6 +18,7 @@ import i18n from '../constants/i18n';
 interface WidgetProps {
     noteType: 'text' | 'photo';
     text: string;
+    noteColorId?: string;
     locationName: string;
     date: string;
     noteCount: number;

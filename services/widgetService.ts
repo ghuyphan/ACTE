@@ -28,6 +28,7 @@ let widgetInstance: WidgetModule | null = null;
 export interface WidgetProps {
     noteType: 'text' | 'photo';
     text: string;
+    noteColorId?: string;
     locationName: string;
     date: string;
     noteCount: number;
@@ -1597,6 +1598,7 @@ async function buildWidgetPropsFromSelection(
             selectedNote.noteType === 'text'
                 ? formatNoteTextWithEmoji(selectedNote.text.trim(), selectedNote.moodEmoji)
                 : selectedNote.text.trim(),
+        noteColorId: selectedNote.noteColor ?? undefined,
         locationName: selection.selectedLocationName ?? selectedNote.locationName ?? i18n.t('capture.unknownPlace'),
         date: dateStr,
         noteCount,

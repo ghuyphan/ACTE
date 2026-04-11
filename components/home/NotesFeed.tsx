@@ -200,6 +200,7 @@ interface NotesFeedProps {
   ownedSharedNoteIds?: string[];
   refreshing: boolean;
   onRefresh: () => void;
+  onEndReached?: () => void;
   topInset: number;
   snapHeight: number;
   onOpenNote: (noteId: string) => void;
@@ -234,6 +235,7 @@ export default function NotesFeed({
   ownedSharedNoteIds = [],
   refreshing,
   onRefresh,
+  onEndReached,
   topInset,
   snapHeight,
   onOpenNote,
@@ -730,6 +732,8 @@ export default function NotesFeed({
         applySettledOffset(offsetY);
       }}
       contentContainerStyle={listContentContainerStyle}
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.35}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

@@ -4,6 +4,7 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import AppSheet from '../../sheets/AppSheet';
 import AppSheetAlert from '../../sheets/AppSheetAlert';
+import SettingsHapticsSheetAndroid from '../../settings/SettingsHapticsSheet.android';
 import SettingsLanguageSheetAndroid from '../../settings/SettingsLanguageSheet.android';
 import SettingsSyncSheetAndroid from '../../settings/SettingsSyncSheet.android';
 import SettingsThemeSheetAndroid from '../../settings/SettingsThemeSheet.android';
@@ -12,7 +13,7 @@ import type { ThemeColors } from '../../../hooks/useTheme';
 import { Layout } from '../../../constants/theme';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
 
-type SheetKey = 'language' | 'theme' | 'sync' | null;
+type SheetKey = 'language' | 'theme' | 'haptics' | 'sync' | null;
 
 function SectionTitle({
   colors,
@@ -128,9 +129,11 @@ export default function SettingsScreenAndroid() {
     plusHint,
     plusValue,
     promptClearAll,
+    setShowHaptics,
     setShowLanguage,
     setShowSync,
     setShowTheme,
+    showHaptics,
     showLanguage,
     showAccountDeletionLink,
     showSync,
@@ -141,7 +144,6 @@ export default function SettingsScreenAndroid() {
     syncValue,
     t,
     themeLabel,
-    toggleHapticsEnabled,
     user,
   } = useSettingsScreenModel();
   const languageCode = i18n.resolvedLanguage?.startsWith('vi') ? 'vi' : 'en';
@@ -168,7 +170,15 @@ export default function SettingsScreenAndroid() {
 
   let sheetContent: React.ReactNode = null;
   const sheetPresentation = 'edge';
-  const sheet: SheetKey = showTheme ? 'theme' : showLanguage ? 'language' : showSync ? 'sync' : null;
+  const sheet: SheetKey = showTheme
+    ? 'theme'
+    : showLanguage
+      ? 'language'
+      : showHaptics
+        ? 'haptics'
+        : showSync
+          ? 'sync'
+          : null;
 
   if (sheet === 'theme') {
     sheetContent = (
@@ -177,6 +187,10 @@ export default function SettingsScreenAndroid() {
   } else if (sheet === 'language') {
     sheetContent = (
       <SettingsLanguageSheetAndroid onClose={() => setShowLanguage(false)} />
+    );
+  } else if (sheet === 'haptics') {
+    sheetContent = (
+      <SettingsHapticsSheetAndroid onClose={() => setShowHaptics(false)} />
     );
   } else if (sheet === 'sync') {
     sheetContent = (
@@ -274,10 +288,8 @@ export default function SettingsScreenAndroid() {
               colors={colors}
               icon="phone-portrait-outline"
               title={t('settings.haptics', 'Haptics')}
-              subtitle={t('settings.hapticsHint', 'Turn vibration feedback on or off across the app.')}
               value={hapticsValue}
-              onPress={toggleHapticsEnabled}
-              showChevron={false}
+              onPress={() => setShowHaptics(true)}
             />
           </SettingsCard>
         </View>
@@ -361,6 +373,7 @@ export default function SettingsScreenAndroid() {
         visible={sheet !== null}
         onClose={() => {
           setShowTheme(false);
+          setShowHaptics(false);
           setShowLanguage(false);
           setShowSync(false);
         }}

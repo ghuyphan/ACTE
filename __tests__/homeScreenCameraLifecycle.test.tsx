@@ -131,6 +131,17 @@ jest.mock('../hooks/useFeedFocus', () => ({
   }),
 }));
 
+jest.mock('../hooks/app/useHomeFeedPagination', () => ({
+  useHomeFeedPagination: () => ({
+    items: [],
+    hasMore: false,
+    isLoading: false,
+    isLoadingMore: false,
+    loadNextPage: jest.fn(async () => []),
+    ensureTargetLoaded: jest.fn(async () => -1),
+  }),
+}));
+
 jest.mock('../hooks/useCaptureFlow', () => ({
   useCaptureFlow: (...args: any[]) => mockUseCaptureFlow(...args),
 }));

@@ -20,6 +20,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout } from '../../../constants/theme';
 import { DOODLE_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
+import { useHomeFeedPagination } from '../../../hooks/app/useHomeFeedPagination';
 import { useAuth } from '../../../hooks/useAuth';
 import { useFeedFocus } from '../../../hooks/useFeedFocus';
 import { useNotesStore } from '../../../hooks/useNotes';
@@ -31,6 +32,7 @@ import NotesRecapView from '../../notes/recap/NotesRecapView';
 import RecapModeSwitch, {
   type RecapMode,
 } from '../../notes/recap/RecapModeSwitch';
+import StickerIcon from '../../ui/StickerIcon';
 import {
   getGradientStickerMotionVariant,
   getNoteColorStickerMotion,
@@ -41,22 +43,22 @@ import { parseNoteDoodleStrokes } from '../../../services/noteDoodles';
 import { parseNoteStickerPlacements } from '../../../services/noteStickers';
 import { getNotePhotoUri } from '../../../services/photoStorage';
 import { SHARED_POST_MEDIA_BUCKET } from '../../../services/remoteMedia';
-import { Note } from '../../../services/database';
-import { SharedPost } from '../../../services/sharedFeedService';
+import { getHomeFeedItemKey, type HomeFeedItem } from '../../home/feedItems';
+import { getActiveNotesScope, LOCAL_NOTES_SCOPE, type Note } from '../../../services/database';
 import { scheduleOnIdle } from '../../../utils/scheduleOnIdle';
 import { useNotesGridSharedPhotoHydration } from './useNotesGridSharedPhotoHydration';
-import { NotesStickerLibraryContent } from './NotesStickerLibraryScreen';
-
-type NoteGridItem =
-  | { id: string; kind: 'note'; createdAt: string; note: Note }
-  | { id: string; kind: 'shared-post'; createdAt: string; post: SharedPost };
+import { GlassView } from '../../ui/GlassView';
 
 const GRID_DOODLE_STROKE_WIDTH = 4.5;
 const GRID_STICKER_MIN_SIZE = 0;
 const GRID_DECORATION_REVEAL_DELAY_MS = 180;
 const MODE_SWIPE_DISTANCE = 56;
 const MODE_SWIPE_VELOCITY = 460;
-const NOTES_BROWSE_MODE_ORDER: RecapMode[] = ['all', 'collection', 'recap'];
+const NOTES_BROWSE_MODE_ORDER: RecapMode[] = ['all', 'recap'];
+
+function resolveNotesArchiveScope(userUid: string | null | undefined) {
+  return userUid ?? getActiveNotesScope() ?? LOCAL_NOTES_SCOPE;
+}
 
 function triggerNotesHaptic(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
   void Haptics.impactAsync(style);
@@ -113,7 +115,7 @@ const GridTile = memo(function GridTile({
   showDecorations,
   sharedPhotoUri,
 }: {
-  item: NoteGridItem;
+  item: HomeFeedItem;
   size: number;
   gap: number;
   colors: {
@@ -261,7 +263,7 @@ const GridTile = memo(function GridTile({
               </View>
             ) : null}
             {tileText ? (
-              <Text style={styles.tileText} numberOfLines={4}>
+              <Text style={styles.tileText} numberOfLines={3}>
                 {tileText}
               </Text>
             ) : null}
@@ -290,7 +292,7 @@ const GridTile = memo(function GridTile({
 
 export default function NotesIndexScreen() {
   const { t } = useTranslation();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -304,43 +306,42 @@ export default function NotesIndexScreen() {
   const [isRecapPhysicsSuspended, setIsRecapPhysicsSuspended] = useState(false);
   const [visibleSharedPhotoIds, setVisibleSharedPhotoIds] = useState<string[]>([]);
 
-  const friendPosts = useMemo(
-    () => sharedPosts.filter((post) => post.authorUid !== user?.uid),
-    [sharedPosts, user?.uid]
+  const notesScope = useMemo(
+    () => resolveNotesArchiveScope(user?.uid),
+    [user?.uid]
   );
+  const {
+    items,
+    hasMore,
+    isLoading: isArchiveInitialLoading,
+    loadNextPage,
+  } = useHomeFeedPagination({
+    notesScope,
+    sharedCacheUserUid: user?.uid ?? null,
+    notesSignal: notes,
+    sharedSignal: sharedPosts,
+  });
   const sharedPhotoPosts = useMemo(
-    () => friendPosts.filter((post) => post.type === 'photo'),
-    [friendPosts]
+    () =>
+      items
+        .filter(
+          (item): item is Extract<HomeFeedItem, { kind: 'shared-post' }> =>
+            item.kind === 'shared-post' && item.post.type === 'photo'
+        )
+        .map((item) => item.post),
+    [items]
   );
   const sharedPhotoUrisById = useNotesGridSharedPhotoHydration(
     sharedPhotoPosts,
     visibleSharedPhotoIds
   );
-  const items = useMemo<NoteGridItem[]>(
-    () =>
-      [
-        ...notes.map((note) => ({
-          id: `note-${note.id}`,
-          kind: 'note' as const,
-          createdAt: note.createdAt,
-          note,
-        })),
-        ...friendPosts.map((post) => ({
-          id: `shared-${post.id}`,
-          kind: 'shared-post' as const,
-          createdAt: post.createdAt,
-          post,
-        })),
-      ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
-    [friendPosts, notes]
-  );
 
   const handleViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: { item: NoteGridItem }[] }) => {
+    ({ viewableItems }: { viewableItems: { item: HomeFeedItem }[] }) => {
       const nextVisibleSharedPhotoIds = viewableItems
         .map(({ item }) => item)
         .filter(
-          (item): item is Extract<NoteGridItem, { kind: 'shared-post' }> =>
+          (item): item is Extract<HomeFeedItem, { kind: 'shared-post' }> =>
             item.kind === 'shared-post' && item.post.type === 'photo'
         )
         .map((item) => item.post.id)
@@ -361,7 +362,8 @@ export default function NotesIndexScreen() {
 
   const gridGap = 10;
   const gridSize = Math.floor((width - Layout.screenPadding * 2 - gridGap * 2) / 3);
-  const isLoading = loading || (sharedLoading && items.length === 0);
+  const isLoading =
+    isArchiveInitialLoading || ((loading || sharedLoading) && items.length === 0);
   const hasRecapNotes = notes.length > 0;
   const shouldRenderRecap = hasRecapNotes && (hasPreparedRecap || mode === 'recap');
   useEffect(() => {
@@ -436,7 +438,7 @@ export default function NotesIndexScreen() {
   }, [mode]);
 
   const openItem = useCallback(
-    (item: NoteGridItem) => {
+    (item: HomeFeedItem) => {
       triggerNotesHaptic();
       if (item.kind === 'note') {
         requestFeedFocus({ kind: 'note', id: item.note.id });
@@ -449,6 +451,10 @@ export default function NotesIndexScreen() {
     },
     [requestFeedFocus, router]
   );
+  const openStickerLibrary = useCallback(() => {
+    triggerNotesHaptic();
+    router.push('/notes/stickers' as Href);
+  }, [router]);
   const handleModeChange = useCallback((nextMode: RecapMode) => {
     if (nextMode === mode) {
       return;
@@ -495,8 +501,8 @@ export default function NotesIndexScreen() {
       <RecapModeSwitch
         value={mode}
         onChange={handleModeChange}
+        showCollection={false}
         allLabel={t('notes.recap.allLabel', 'All')}
-        collectionLabel={t('notes.recap.collectionLabel', 'Collection')}
         recapLabel={t('notes.recap.recapLabel', 'Calendar')}
         trackWidth={width - Layout.screenPadding * 2}
       />
@@ -505,7 +511,45 @@ export default function NotesIndexScreen() {
 
   return (
     <>
-      <Stack.Screen />
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t(
+                'notes.stickerLibrary.buttonA11y',
+                'Open your sticker library'
+              )}
+              hitSlop={8}
+              onPress={openStickerLibrary}
+              style={({ pressed }) => [
+                styles.headerButton,
+                pressed ? styles.headerButtonPressed : null,
+              ]}
+              testID="notes-sticker-library-header-button"
+            >
+              <GlassView
+                style={[
+                  styles.headerButtonShell,
+                  Platform.OS === 'android'
+                    ? {
+                        borderColor: colors.androidTabShellMutedBorder,
+                      }
+                    : null,
+                ]}
+                fallbackColor={Platform.OS === 'android' ? colors.androidTabShellMutedBackground : undefined}
+                glassEffectStyle="regular"
+                colorScheme={Platform.OS === 'android' ? (isDark ? 'dark' : 'light') : undefined}
+              >
+                <StickerIcon
+                  size={18}
+                  color={Platform.OS === 'android' ? colors.androidTabShellActive : colors.text}
+                />
+              </GlassView>
+            </Pressable>
+          ),
+        }}
+      />
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {isLoading ? (
           <View style={styles.center}>
@@ -544,7 +588,7 @@ export default function NotesIndexScreen() {
                   ) : (
                     <FlashList
                       data={items}
-                      keyExtractor={(item) => item.id}
+                      keyExtractor={getHomeFeedItemKey}
                       getItemType={(item) => `${item.kind}:${item.kind === 'note' ? item.note.type : item.post.type}`}
                       drawDistance={gridSize * 2}
                       removeClippedSubviews={Platform.OS === 'android'}
@@ -568,6 +612,14 @@ export default function NotesIndexScreen() {
                       onViewableItemsChanged={handleViewableItemsChanged}
                       viewabilityConfig={gridViewabilityConfig}
                       numColumns={3}
+                      onEndReached={
+                        hasMore
+                          ? () => {
+                              void loadNextPage();
+                            }
+                          : undefined
+                      }
+                      onEndReachedThreshold={0.6}
                       showsVerticalScrollIndicator={false}
                       contentContainerStyle={{
                         paddingBottom: insets.bottom + 28,
@@ -576,10 +628,6 @@ export default function NotesIndexScreen() {
                       style={styles.modeContentFill}
                     />
                   )
-                ) : null}
-
-                {mode === 'collection' ? (
-                  <NotesStickerLibraryContent notes={notes} bottomInset={insets.bottom} />
                 ) : null}
 
                 {mode === 'recap' && shouldRenderRecap ? (
@@ -614,6 +662,25 @@ const styles = StyleSheet.create({
   modeSwitchWrap: {
     paddingTop: 4,
     paddingBottom: 16,
+  },
+  headerButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 2,
+  },
+  headerButtonShell: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
+    backgroundColor: 'transparent',
+  },
+  headerButtonPressed: {
+    opacity: 0.88,
   },
   modeContentStack: {
     flex: 1,

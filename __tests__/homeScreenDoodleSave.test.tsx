@@ -29,6 +29,8 @@ const mockScrollToOffset = jest.fn();
 const mockRequestForegroundLocation = jest.fn();
 const mockRequestReminderPermissions = jest.fn();
 const mockOpenAppSettings = jest.fn();
+const mockLoadNextHomeFeedPage = jest.fn();
+const mockEnsureTargetLoaded = jest.fn();
 let mockRemindersEnabled = false;
 let mockNoteText = 'A doodled note';
 let mockNotes: any[] = [];
@@ -48,6 +50,17 @@ let latestSavedNoteRevealProps: any = null;
 const originalRequestAnimationFrame = global.requestAnimationFrame;
 const originalRequestIdleCallback = (global as any).requestIdleCallback;
 const originalCancelIdleCallback = (global as any).cancelIdleCallback;
+
+function mockBuildHomeFeedItems() {
+  return [...mockNotes]
+    .map((note) => ({
+      id: note.id,
+      kind: 'note' as const,
+      note,
+      createdAt: note.createdAt,
+    }))
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+}
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -159,6 +172,18 @@ jest.mock('../hooks/useNoteDetailSheet', () => ({
 jest.mock('../hooks/useFeedFocus', () => ({
   useFeedFocus: () => ({
     consumeFeedFocus: jest.fn(() => null),
+  }),
+}));
+
+jest.mock('../hooks/app/useHomeFeedPagination', () => ({
+  useHomeFeedPagination: () => ({
+    items: mockBuildHomeFeedItems(),
+    hasMore: false,
+    isLoading: false,
+    isLoadingMore: false,
+    loadNextPage: () => mockLoadNextHomeFeedPage(),
+    ensureTargetLoaded: (target: { kind: 'note' | 'shared-post'; id: string }) =>
+      mockEnsureTargetLoaded(target),
   }),
 }));
 
@@ -291,14 +316,15 @@ jest.mock('../components/home/NotesFeed', () => {
   const { Text, View } = require('react-native');
   return function MockNotesFeed(props: any) {
     latestNotesFeedProps = props;
+    const visibleItems = props.items ?? props.notes ?? [];
     props.flatListRef.current = {
       scrollToOffset: (...args: unknown[]) => mockScrollToOffset(...args),
     };
     return (
       <View>
         {props.captureHeader}
-        {props.notes.map((note: { id: string }) => (
-          <Text key={note.id}>{note.id}</Text>
+        {visibleItems.map((item: { id: string; kind?: 'note' | 'shared-post'; note?: { id: string } }) => (
+          <Text key={`${item.kind ?? 'note'}:${item.id}`}>{item.note?.id ?? item.id}</Text>
         ))}
       </View>
     );
@@ -351,6 +377,10 @@ describe('HomeScreen doodle save flow', () => {
     mockRemindersEnabled = false;
     mockNoteText = 'A doodled note';
     mockNotes = [];
+    mockLoadNextHomeFeedPage.mockResolvedValue(mockBuildHomeFeedItems());
+    mockEnsureTargetLoaded.mockImplementation(async (target: { kind: 'note' | 'shared-post'; id: string }) =>
+      mockBuildHomeFeedItems().findIndex((item) => item.kind === target.kind && item.id === target.id)
+    );
     mockLocation = {
       coords: {
         latitude: 10.77,

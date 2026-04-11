@@ -20,15 +20,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../sheets/AppSheetAlert';
 import CaptureCard, { type CaptureCardHandle } from '../home/CaptureCard';
 import {
-  buildHomeFeedItems,
   findHomeFeedItemIndex,
   getHomeFeedItemKey,
-  type HomeFeedItem,
 } from '../home/feedItems';
 import HomeHeaderSearch from '../home/HomeHeaderSearch';
 import NotesFeed from '../home/NotesFeed';
 import SavedNotePolaroidReveal from '../home/SavedNotePolaroidReveal';
 import SharedManageSheet from '../home/SharedManageSheet';
+import { useHomeFeedPagination } from '../../hooks/app/useHomeFeedPagination';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
@@ -74,7 +73,7 @@ import {
   isPreviewablePremiumNoteColor,
   PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
 } from '../../services/premiumNoteFinish';
-import { generateNoteId, type Note } from '../../services/database';
+import { generateNoteId, getActiveNotesScope, LOCAL_NOTES_SCOPE, type Note } from '../../services/database';
 import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
 import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition';
@@ -98,6 +97,10 @@ function HomeFeedLoadingState({
       <ActivityIndicator color={colors.primary} />
     </View>
   );
+}
+
+function resolveHomeNotesScope(userUid: string | null | undefined) {
+  return userUid ?? getActiveNotesScope() ?? LOCAL_NOTES_SCOPE;
 }
 
 export default function HomeScreen() {
@@ -311,10 +314,22 @@ export default function HomeScreen() {
     () => sharedPosts.filter((post) => post.authorUid !== user?.uid),
     [sharedPosts, user?.uid]
   );
-  const archiveFeedItems = useMemo<HomeFeedItem[]>(
-    () => buildHomeFeedItems(notes, friendPosts),
-    [friendPosts, notes]
+  const notesScope = useMemo(
+    () => resolveHomeNotesScope(user?.uid),
+    [user?.uid]
   );
+  const {
+    items: homeFeedItems,
+    hasMore: homeFeedHasMore,
+    isLoading: isHomeFeedInitialLoading,
+    loadNextPage: loadNextHomeFeedPage,
+    ensureTargetLoaded,
+  } = useHomeFeedPagination({
+    notesScope,
+    sharedCacheUserUid: sharedEnabled ? user?.uid ?? null : null,
+    notesSignal: notes,
+    sharedSignal: sharedPosts,
+  });
   const localPhotoNoteCount = useMemo(() => countPhotoNotes(notes), [notes]);
   const photoNoteCount = useMemo(
     () => Math.max(localPhotoNoteCount, remotePhotoNoteCount ?? 0),
@@ -407,10 +422,6 @@ export default function HomeScreen() {
     captureMode === 'camera' &&
     permission?.granted === false &&
     permission.canAskAgain === false;
-  const visibleSharedPosts = useMemo(
-    () => friendPosts,
-    [friendPosts]
-  );
   const ownedSharedNoteIds = useMemo(
     () => (
       user
@@ -431,24 +442,20 @@ export default function HomeScreen() {
   );
   const visibleFeedItems = useMemo(
     () => {
-      if (displayedNotes === notes && visibleSharedPosts === friendPosts) {
-        return archiveFeedItems;
-      }
-
       const visibleNoteIds = new Set(displayedNotes.map((note) => note.id));
-      const visibleSharedPostIds = new Set(visibleSharedPosts.map((post) => post.id));
 
-      return archiveFeedItems.filter((item) => {
+      return homeFeedItems.filter((item) => {
         if (item.kind === 'note') {
           return visibleNoteIds.has(item.id);
         }
 
-        return visibleSharedPostIds.has(item.id);
+        return true;
       });
     },
-    [archiveFeedItems, displayedNotes, friendPosts, notes, visibleSharedPosts]
+    [displayedNotes, homeFeedItems]
   );
-  const showHomeFeedBootstrapState = (loading || sharedLoading) && visibleFeedItems.length === 0;
+  const showHomeFeedBootstrapState =
+    (loading || sharedLoading || isHomeFeedInitialLoading) && visibleFeedItems.length === 0;
   const homeFeedEmptyState = useMemo(
     () =>
       showHomeFeedBootstrapState ? (
@@ -623,27 +630,35 @@ export default function HomeScreen() {
       return;
     }
 
-    const targetIndex = findHomeFeedItemIndex(archiveFeedItems, {
-      id: pendingSavedNoteScrollTargetId,
-      kind: 'note',
-    });
-    if (targetIndex < 0) {
-      return;
-    }
-
+    let cancelled = false;
     const scheduledTargetId = pendingSavedNoteScrollTargetId;
-    requestAnimationFrame(() => {
-      if (pendingSavedNoteScrollTargetId !== scheduledTargetId) {
+
+    void (async () => {
+      const targetIndex = await ensureTargetLoaded({
+        id: scheduledTargetId,
+        kind: 'note',
+      });
+      if (cancelled || targetIndex < 0) {
         return;
       }
 
-      flatListRef.current?.scrollToOffset({
-        offset: (targetIndex + 1) * snapHeight,
-        animated: true,
+      requestAnimationFrame(() => {
+        if (cancelled || pendingSavedNoteScrollTargetId !== scheduledTargetId) {
+          return;
+        }
+
+        flatListRef.current?.scrollToOffset({
+          offset: (targetIndex + 1) * snapHeight,
+          animated: true,
+        });
+        setPendingSavedNoteScrollTargetId((current) => (current === scheduledTargetId ? null : current));
       });
-      setPendingSavedNoteScrollTargetId((current) => (current === scheduledTargetId ? null : current));
-    });
-  }, [archiveFeedItems, pendingSavedNoteScrollTargetId, snapHeight, suppressedHomeNoteIds]);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ensureTargetLoaded, pendingSavedNoteScrollTargetId, snapHeight, suppressedHomeNoteIds]);
 
   useEffect(() => {
     const nextVisibleFeedItemKeys = visibleFeedItems.map(getHomeFeedItemKey);
@@ -717,11 +732,11 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (loading || (sharedLoading && archiveFeedItems.length === 0)) {
+      if (loading || (sharedLoading && homeFeedItems.length === 0) || isHomeFeedInitialLoading) {
         return undefined;
       }
 
-      const target = (peekFeedFocus ?? consumeFeedFocus)?.() ?? null;
+      const target = consumeFeedFocus?.() ?? peekFeedFocus?.() ?? null;
       if (!target) {
         return undefined;
       }
@@ -732,32 +747,49 @@ export default function HomeScreen() {
         return undefined;
       }
 
-      const targetIndex = findHomeFeedItemIndex(archiveFeedItems, target);
-      if (targetIndex < 0) {
-        return undefined;
-      }
-
       let focusTimeout: ReturnType<typeof setTimeout> | null = null;
-      const idleHandle = scheduleOnIdle(() => {
-        focusTimeout = setTimeout(() => {
+      let idleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
+      let cancelled = false;
+
+      void (async () => {
+        const targetIndex = await ensureTargetLoaded(target);
+        if (cancelled) {
+          return;
+        }
+
+        if (targetIndex < 0) {
           clearFeedFocus?.();
-          flatListRef.current?.scrollToOffset({
-            offset: (targetIndex + 1) * snapHeight,
-            animated: true,
-          });
-        }, 0);
-      });
+          return;
+        }
+
+        idleHandle = scheduleOnIdle(() => {
+          focusTimeout = setTimeout(() => {
+            if (cancelled) {
+              return;
+            }
+
+            clearFeedFocus?.();
+            flatListRef.current?.scrollToOffset({
+              offset: (targetIndex + 1) * snapHeight,
+              animated: true,
+            });
+          }, 0);
+        });
+      })();
 
       return () => {
-        idleHandle.cancel();
+        cancelled = true;
+        idleHandle?.cancel();
         if (focusTimeout) {
           clearTimeout(focusTimeout);
         }
       };
     }, [
-      archiveFeedItems,
       clearFeedFocus,
       consumeFeedFocus,
+      ensureTargetLoaded,
+      homeFeedItems.length,
+      isHomeFeedInitialLoading,
       loading,
       peekFeedFocus,
       sharedLoading,
@@ -1871,13 +1903,18 @@ export default function HomeScreen() {
           captureMode={captureMode}
           screenActive={isScreenFocused}
           items={visibleFeedItems}
-          notes={displayedNotes}
-          sharedPosts={visibleSharedPosts}
           ownedSharedNoteIds={ownedSharedNoteIds}
           refreshing={refreshing}
           onRefresh={() => {
             void onRefresh();
           }}
+          onEndReached={
+            homeFeedHasMore
+              ? () => {
+                  void loadNextHomeFeedPage();
+                }
+              : undefined
+          }
           topInset={insets.top}
           snapHeight={snapHeight}
           onOpenNote={openNote}

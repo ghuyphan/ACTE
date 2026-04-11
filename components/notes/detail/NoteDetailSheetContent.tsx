@@ -18,7 +18,6 @@ import Animated from 'react-native-reanimated';
 import { STICKER_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
 import { ENABLE_PHOTO_STICKERS } from '../../../constants/experiments';
 import { Layout, Typography } from '../../../constants/theme';
-import { useRelativeTimeNow } from '../../../hooks/useRelativeTimeNow';
 import type { DoodleStroke } from '../NoteDoodleCanvas';
 import type { Note } from '../../../services/database';
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
@@ -31,7 +30,7 @@ import { parseNoteDoodleStrokes } from '../../../services/noteDoodles';
 import { getNotePairedVideoUri } from '../../../services/livePhotoStorage';
 import { getNotePhotoUri } from '../../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../../services/noteTextPresentation';
-import { formatNoteTimestamp } from '../../../utils/dateUtils';
+import { formatDate } from '../../../utils/dateUtils';
 import { parseNoteStickerPlacements } from '../../../services/noteStickers';
 import { POLAROID_EXPORT_HEIGHT, POLAROID_EXPORT_WIDTH } from '../../../services/polaroidExport';
 import DynamicStickerCanvas from '../DynamicStickerCanvas';
@@ -222,13 +221,12 @@ export default function NoteDetailSheetContent({
     onPolaroidCaptureReady,
     showPolaroidCapture,
 }: NoteDetailSheetContentProps) {
-    const now = useRelativeTimeNow();
     const showRichDecorations = Boolean(note) && (richDecorationsReady || isEditing);
     const displayedCardText = note ? (isEditing ? editContent : note.content) : '';
     const displayedNoteColor = note ? (isEditing ? editNoteColor : note.noteColor) : null;
     const dateStr = useMemo(
-        () => (note ? formatNoteTimestamp(note.createdAt, 'detail', now) : ''),
-        [note, now]
+        () => (note ? formatDate(note.createdAt, 'long') : ''),
+        [note]
     );
     const gradient = useMemo<readonly [string, string]>(
         () => (

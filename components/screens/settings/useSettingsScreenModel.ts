@@ -13,7 +13,7 @@ import { useSyncStatus } from '../../../hooks/useSyncStatus';
 import { useHaptics } from '../../../hooks/useHaptics';
 import { useTheme } from '../../../hooks/useTheme';
 import { createLegalLinkActions, getLegalLinkAvailability } from '../shared/legalLinkActions';
-import { getThemeLabel } from '../../settings/settingsSelectionOptions';
+import { getHapticsLabel, getThemeLabel } from '../../settings/settingsSelectionOptions';
 
 export function useSettingsScreenModel() {
   const { t, i18n } = useTranslation();
@@ -43,6 +43,7 @@ export function useSettingsScreenModel() {
 
   const [showTheme, setShowTheme] = useState(false);
   const [showLanguage, setShowLanguage] = useState(false);
+  const [showHaptics, setShowHaptics] = useState(false);
   const [showSync, setShowSync] = useState(false);
   const authProfileRoute = '/auth/profile' as Href;
 
@@ -82,14 +83,7 @@ export function useSettingsScreenModel() {
   }, [isAuthAvailable, openAccountScreen, user]);
 
   const themeLabel = getThemeLabel(theme, t);
-  const hapticsValue = hapticsEnabled
-    ? t('settings.autoSyncOnShort', 'On')
-    : t('settings.autoSyncOff', 'Off');
-
-  const toggleHapticsEnabled = useCallback(() => {
-    void setHapticsEnabled(!hapticsEnabled);
-  }, [hapticsEnabled, setHapticsEnabled]);
-
+  const hapticsValue = getHapticsLabel(hapticsEnabled ? 'on' : 'off', t);
   const accountValue = useMemo(() => {
     if (user) {
       return user.displayName || (user.username ? `@${user.username}` : null) || user.email || t('settings.signedIn', 'Signed in');
@@ -280,10 +274,12 @@ export function useSettingsScreenModel() {
     plusHint,
     plusValue,
     promptClearAll,
-    toggleHapticsEnabled,
+    setHapticsEnabled,
+    setShowHaptics,
     setShowLanguage,
     setShowSync,
     setShowTheme,
+    showHaptics,
     showLanguage,
     showSyncEntry: Boolean(user),
     showSync,

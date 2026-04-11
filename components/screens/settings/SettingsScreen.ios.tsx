@@ -1,14 +1,4 @@
-import {
-  Button,
-  Host,
-  HStack,
-  Image as SwiftUIImage,
-  List,
-  Section,
-  Spacer,
-  Text as SwiftUIText,
-  VStack,
-} from '@expo/ui/swift-ui';
+import { Button, Host, HStack, Image as SwiftUIImage, List, Section, Spacer, Text as SwiftUIText, VStack } from '@expo/ui/swift-ui';
 import {
   backgroundOverlay,
   cornerRadius,
@@ -23,6 +13,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import AppSheet from '../../sheets/AppSheet';
 import AppSheetAlert from '../../sheets/AppSheetAlert';
+import SettingsHapticsSheet from '../../settings/SettingsHapticsSheet';
 import SettingsLanguageSheet from '../../settings/SettingsLanguageSheet';
 import SettingsSyncSheet from '../../settings/SettingsSyncSheet';
 import SettingsThemeSheet from '../../settings/SettingsThemeSheet';
@@ -50,9 +41,11 @@ export default function SettingsScreenIOS() {
     openSupportLink,
     plusValue,
     promptClearAll,
+    setShowHaptics,
     setShowLanguage,
     setShowSync,
     setShowTheme,
+    showHaptics,
     showAccountDeletionLink,
     showLanguage,
     showPrivacyPolicyLink,
@@ -61,7 +54,6 @@ export default function SettingsScreenIOS() {
     showSync,
     showTheme,
     tier,
-    toggleHapticsEnabled,
     syncValue,
     t,
     themeLabel,
@@ -209,7 +201,7 @@ export default function SettingsScreenIOS() {
                 <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{themeLabel}</SwiftUIText>
               </HStack>
             </Button>
-            <Button onPress={toggleHapticsEnabled}>
+            <Button onPress={() => setShowHaptics(true)}>
               <HStack>
                 <HStack
                   modifiers={[
@@ -373,6 +365,14 @@ export default function SettingsScreenIOS() {
           iosContentType="swift-ui"
         >
           <SettingsThemeSheet onClose={() => setShowTheme(false)} />
+        </AppSheet>
+
+        <AppSheet
+          visible={showHaptics}
+          onClose={() => setShowHaptics(false)}
+          iosContentType="swift-ui"
+        >
+          <SettingsHapticsSheet />
         </AppSheet>
 
         <AppSheet
