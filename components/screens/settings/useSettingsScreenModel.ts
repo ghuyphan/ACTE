@@ -83,7 +83,7 @@ export function useSettingsScreenModel() {
 
   const accountValue = useMemo(() => {
     if (user) {
-      return user.displayName || user.email || t('settings.signedIn', 'Signed in');
+      return user.displayName || (user.username ? `@${user.username}` : null) || user.email || t('settings.signedIn', 'Signed in');
     }
     if (!isAuthAvailable) {
       return t('settings.unavailableShort', 'Unavailable');

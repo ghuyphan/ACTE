@@ -5,8 +5,9 @@ import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react
 import Animated, { useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
 import { Layout, Typography } from '../../../constants/theme';
 import { useTheme } from '../../../hooks/useTheme';
+import StickerIcon from '../../ui/StickerIcon';
 
-export type RecapMode = 'all' | 'recap';
+export type RecapMode = 'all' | 'collection' | 'recap';
 const TRACK_PADDING = 4;
 const TRACK_GAP = 6;
 
@@ -14,6 +15,7 @@ interface RecapModeSwitchProps {
   value: RecapMode;
   onChange: (mode: RecapMode) => void;
   allLabel?: string;
+  collectionLabel?: string;
   recapLabel?: string;
   trackWidth?: number;
 }
@@ -22,12 +24,35 @@ function RecapModeSwitch({
   value,
   onChange,
   allLabel = 'All',
+  collectionLabel = 'Collection',
   recapLabel = 'Recap',
   trackWidth,
 }: RecapModeSwitchProps) {
   const { colors, isDark } = useTheme();
   const [measuredTrackWidth, setMeasuredTrackWidth] = useState(0);
   const trackBackground = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.72)';
+  const segments = useMemo(
+    () => [
+      {
+        mode: 'all' as const,
+        iconName: 'grid-outline' as const,
+        label: allLabel,
+        testID: 'notes-mode-all',
+      },
+      {
+        mode: 'collection' as const,
+        label: collectionLabel,
+        testID: 'notes-mode-collection',
+      },
+      {
+        mode: 'recap' as const,
+        iconName: 'calendar-outline' as const,
+        label: recapLabel,
+        testID: 'notes-mode-recap',
+      },
+    ],
+    [allLabel, collectionLabel, recapLabel]
+  );
   const resolvedTrackWidth = trackWidth ?? measuredTrackWidth;
   const segmentMetrics = useMemo(() => {
     if (resolvedTrackWidth <= 0) {
@@ -38,19 +63,23 @@ function RecapModeSwitch({
     }
 
     const innerWidth = Math.max(resolvedTrackWidth - TRACK_PADDING * 2, 0);
-    const width = Math.max((innerWidth - TRACK_GAP) / 2, 0);
+    const width = Math.max((innerWidth - TRACK_GAP * (segments.length - 1)) / segments.length, 0);
     return {
       width,
       offset: width + TRACK_GAP,
     };
-  }, [resolvedTrackWidth]);
+  }, [resolvedTrackWidth, segments.length]);
+  const activeSegmentIndex = Math.max(
+    0,
+    segments.findIndex((segment) => segment.mode === value)
+  );
   const indicatorStyle = useAnimatedStyle(
     () => ({
       opacity: withTiming(segmentMetrics.width > 0 ? 1 : 0, { duration: 120 }),
       width: withTiming(segmentMetrics.width, { duration: 120 }),
       transform: [
         {
-          translateX: withSpring(value === 'all' ? 0 : segmentMetrics.offset, {
+          translateX: withSpring(activeSegmentIndex * segmentMetrics.offset, {
             damping: 20,
             mass: 0.7,
             stiffness: 220,
@@ -58,7 +87,7 @@ function RecapModeSwitch({
         },
       ],
     }),
-    [segmentMetrics.offset, segmentMetrics.width, value]
+    [activeSegmentIndex, segmentMetrics.offset, segmentMetrics.width]
   );
   const handleChange = (mode: RecapMode) => {
     if (mode === value) {
@@ -100,54 +129,44 @@ function RecapModeSwitch({
           indicatorStyle,
         ]}
       />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ selected: value === 'all' }}
-        onPress={() => handleChange('all')}
-        testID="notes-mode-all"
-        style={({ pressed }) => [
-          styles.segment,
-          pressed ? styles.segmentPressed : null,
-        ]}
-      >
-        <Ionicons
-          name="grid-outline"
-          size={14}
-          color={value === 'all' ? colors.primary : colors.secondaryText}
-        />
-        <Text
-          style={[
-            styles.label,
-            { color: value === 'all' ? colors.primary : colors.secondaryText },
-          ]}
-        >
-          {allLabel}
-        </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ selected: value === 'recap' }}
-        onPress={() => handleChange('recap')}
-        testID="notes-mode-recap"
-        style={({ pressed }) => [
-          styles.segment,
-          pressed ? styles.segmentPressed : null,
-        ]}
-      >
-        <Ionicons
-          name="calendar-outline"
-          size={14}
-          color={value === 'recap' ? colors.primary : colors.secondaryText}
-        />
-        <Text
-          style={[
-            styles.label,
-            { color: value === 'recap' ? colors.primary : colors.secondaryText },
-          ]}
-        >
-          {recapLabel}
-        </Text>
-      </Pressable>
+      {segments.map((segment) => {
+        const isSelected = value === segment.mode;
+
+        return (
+          <Pressable
+            key={segment.mode}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isSelected }}
+            onPress={() => handleChange(segment.mode)}
+            testID={segment.testID}
+            style={({ pressed }) => [
+              styles.segment,
+              pressed ? styles.segmentPressed : null,
+            ]}
+          >
+            {segment.mode === 'collection' ? (
+              <StickerIcon
+                size={14}
+                color={isSelected ? colors.primary : colors.secondaryText}
+              />
+            ) : (
+              <Ionicons
+                name={segment.iconName}
+                size={14}
+                color={isSelected ? colors.primary : colors.secondaryText}
+              />
+            )}
+            <Text
+              style={[
+                styles.label,
+                { color: isSelected ? colors.primary : colors.secondaryText },
+              ]}
+            >
+              {segment.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

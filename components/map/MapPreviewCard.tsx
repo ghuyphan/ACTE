@@ -30,6 +30,11 @@ import { getTextNoteCardGradient } from '../../services/noteAppearance';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
 import { isOlderIOS } from '../../utils/platform';
+import {
+  MapPreviewExpandButton,
+  MapPreviewPositionPill,
+  mapPreviewFooterStyles,
+} from './MapPreviewFooterControls';
 import MapPreviewSheet from './MapPreviewSheet';
 import {
   getOverlayBorderColor,
@@ -46,7 +51,6 @@ const EXPANDED_BODY_HEIGHT = EXPANDED_PREVIEW_HEIGHT - PREVIEW_HEIGHT;
 const COLLAPSED_TO_PREVIEW_GESTURE_RANGE = 92;
 const PREVIEW_MEDIA_SIZE = 56;
 const PREVIEW_ROW_GAP = 12;
-const PREVIEW_FOOTER_OFFSET = PREVIEW_MEDIA_SIZE + PREVIEW_ROW_GAP;
 const PREVIEW_MORPH_SPRING = {
   damping: 26,
   stiffness: 240,
@@ -370,9 +374,8 @@ export default function MapPreviewCard({
   const previewActionIcon = activeNoteReadyToOpen ? 'arrow-forward-circle' : 'locate';
   const showPreviewMode = mode === 'preview' && renderData;
   const showPreviewCount = showPreviewMode ? renderData.previewItems.length > 1 : false;
-  const previewCountLabel = showPreviewMode
-    ? `${Math.max(renderData.activeIndex, 0) + 1}/${renderData.previewItems.length}`
-    : '';
+  const previewPosition = showPreviewMode ? Math.max(renderData.activeIndex, 0) + 1 : 0;
+  const previewTotal = showPreviewMode ? renderData.previewItems.length : 0;
   const statusAction = cachedStatusAction;
   const canExpandStatusOverlay = mode === 'status' && typeof onStatusExpand === 'function';
   const shouldShowStatusLayer = mode === 'status' && (hasStatusCopy || Boolean(statusAction));
@@ -436,9 +439,9 @@ export default function MapPreviewCard({
       shellTestID="map-preview-shell"
       dismissTestID="map-preview-dismiss"
       bottomOffset={bottomOffset}
-      handleColor={isDark ? 'rgba(255,255,255,0.34)' : 'rgba(60,60,67,0.22)'}
       onDismiss={onDismiss}
       reduceMotionEnabled={reduceMotionEnabled}
+      allowDismiss={false}
       allowDragDismiss={mode === 'preview'}
       allowExpand={mode === 'preview' || canExpandStatusOverlay}
       handleVisible={mode === 'preview' || canExpandStatusOverlay}
@@ -465,6 +468,7 @@ export default function MapPreviewCard({
         onStatusExpand?.();
       }}
       onCollapse={() => setIsExpanded(false)}
+      onMinimize={mode === 'preview' ? onDismiss : undefined}
     >
       <View
         style={[styles.surfaceHost, { width: fullSurfaceWidth }]}
@@ -473,7 +477,6 @@ export default function MapPreviewCard({
         <Animated.View
           style={[
             styles.surfaceShadow,
-            isPassiveStatusPill ? styles.surfacePill : null,
             animatedShellStyle,
           ]}
           pointerEvents="auto"
@@ -771,7 +774,7 @@ export default function MapPreviewCard({
                       onMomentumScrollEnd={handlePreviewMomentumEnd}
                     />
 
-                    <View style={styles.footer}>
+                    <View style={mapPreviewFooterStyles.footer}>
                       <Pressable
                         testID="map-preview-primary-action"
                         accessibilityRole="button"
@@ -780,7 +783,10 @@ export default function MapPreviewCard({
                           onInteraction?.();
                           onPrimaryAction();
                         }}
-                        style={({ pressed }) => [styles.actionButton, { opacity: pressed ? 0.72 : 1 }]}
+                        style={({ pressed }) => [
+                          mapPreviewFooterStyles.actionButton,
+                          { opacity: pressed ? 0.72 : 1 },
+                        ]}
                         hitSlop={8}
                       >
                         <Ionicons
@@ -791,7 +797,7 @@ export default function MapPreviewCard({
                         <Text
                           testID="map-preview-action"
                           style={[
-                            styles.actionText,
+                            mapPreviewFooterStyles.actionText,
                             { color: activeNoteReadyToOpen ? colors.primary : colors.secondaryText },
                           ]}
                           numberOfLines={1}
@@ -799,52 +805,21 @@ export default function MapPreviewCard({
                           {previewActionLabel}
                         </Text>
                       </Pressable>
-                      <View style={styles.footerMetaRow}>
+                      <View style={mapPreviewFooterStyles.metaRow}>
                         {showPreviewCount ? (
-                          <View style={styles.indexLabelWrap}>
-                            <Text
-                              style={[styles.indexText, { color: colors.secondaryText }]}
-                              testID="map-preview-index"
-                            >
-                              {previewCountLabel}
-                            </Text>
-                          </View>
+                          <MapPreviewPositionPill
+                            current={previewPosition}
+                            total={previewTotal}
+                            testID="map-preview-index"
+                          />
                         ) : null}
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={
-                            isExpanded
-                              ? t('map.collapseNearby', 'Collapse')
-                              : t('map.expandNearby', 'Expand')
-                          }
+                        <MapPreviewExpandButton
+                          isExpanded={isExpanded}
                           onPress={() => {
                             onInteraction?.();
                             setIsExpanded((current) => !current);
                           }}
-                          style={({ pressed }) => [
-                            styles.expandButton,
-                            {
-                              opacity: pressed ? 0.72 : 1,
-                            },
-                          ]}
-                          hitSlop={8}
-                        >
-                          <Text
-                            style={[
-                              styles.expandButtonText,
-                              { color: isExpanded ? colors.primary : colors.secondaryText },
-                            ]}
-                          >
-                            {isExpanded
-                              ? t('map.collapseNearby', 'Collapse')
-                              : t('map.expandNearby', 'Expand')}
-                          </Text>
-                          <Ionicons
-                            name={isExpanded ? 'chevron-down' : 'chevron-up'}
-                            size={13}
-                            color={isExpanded ? colors.primary : colors.secondaryText}
-                          />
-                        </Pressable>
+                        />
                       </View>
                     </View>
 
@@ -950,7 +925,6 @@ const styles = StyleSheet.create({
     borderWidth: Platform.OS === 'android' ? 1 : StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
-  surfacePill: {},
   compactLayer: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
@@ -1134,51 +1108,6 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 12,
     fontWeight: '500',
-    fontFamily: 'Noto Sans',
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    justifyContent: 'space-between',
-    marginTop: 4,
-    paddingLeft: PREVIEW_FOOTER_OFFSET,
-  },
-  footerMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionButton: {
-    minHeight: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  actionText: {
-    fontSize: 13,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
-  },
-  indexLabelWrap: {
-    minWidth: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  indexText: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: 'Noto Sans',
-  },
-  expandButton: {
-    minHeight: 28,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  expandButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
     fontFamily: 'Noto Sans',
   },
   expandedBody: {

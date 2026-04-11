@@ -12,6 +12,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
+import { useTheme } from '../../hooks/useTheme';
 
 const PREVIEW_HORIZONTAL_INSET = 14;
 const DISMISS_DISTANCE = 36;
@@ -45,9 +46,9 @@ interface MapPreviewSheetProps {
   bottomOffset: number;
   shellTestID: string;
   dismissTestID: string;
-  handleColor: string;
   onDismiss: () => void;
   reduceMotionEnabled: boolean;
+  allowDismiss?: boolean;
   allowDragDismiss?: boolean;
   allowExpand?: boolean;
   handleVisible?: boolean;
@@ -59,6 +60,7 @@ interface MapPreviewSheetProps {
   onPeek?: () => void;
   onExpand?: () => void;
   onCollapse?: () => void;
+  onMinimize?: () => void;
   children: ReactNode;
 }
 
@@ -68,9 +70,9 @@ export default function MapPreviewSheet({
   bottomOffset,
   shellTestID,
   dismissTestID,
-  handleColor,
   onDismiss,
   reduceMotionEnabled,
+  allowDismiss = true,
   allowDragDismiss = true,
   allowExpand = false,
   handleVisible = true,
@@ -82,9 +84,11 @@ export default function MapPreviewSheet({
   onPeek,
   onExpand,
   onCollapse,
+  onMinimize,
   children,
 }: MapPreviewSheetProps) {
   const { t } = useTranslation();
+  const { isDark } = useTheme();
   const translateY = useSharedValue(400);
   const dismissing = useSharedValue(false);
   const handleVisibility = useSharedValue(handleVisible ? 1 : 0);
@@ -254,14 +258,71 @@ export default function MapPreviewSheet({
     [dismissing, finalizeCloseSequence, onDismiss, onFullyClosed, reduceMotionEnabled, scheduleCloseFallback, translateY]
   );
 
-  const handlePressDismiss = useCallback(() => {
-    finishDismiss();
-  }, [finishDismiss]);
+  const animateProgressValue = useCallback(
+    (progress: SharedValue<number> | undefined, value: number) => {
+      if (!progress) {
+        return;
+      }
+
+      progress.value = reduceMotionEnabled ? value : withSpring(value);
+    },
+    [reduceMotionEnabled]
+  );
+
+  const handlePress = useCallback(() => {
+    if (allowExpand) {
+      if (isExpanded) {
+        animateProgressValue(expansionProgress, 0);
+        onCollapse?.();
+        resetPosition(0);
+        return;
+      }
+
+      if (previewProgress) {
+        animateProgressValue(previewProgress, 1);
+        animateProgressValue(expansionProgress, 0);
+        onPeek?.();
+        resetPosition(0);
+        return;
+      }
+
+      animateProgressValue(expansionProgress, 1);
+      onExpand?.();
+      resetPosition(0);
+      return;
+    }
+
+    if (allowDismiss) {
+      finishDismiss();
+    }
+  }, [
+    allowDismiss,
+    allowExpand,
+    animateProgressValue,
+    expansionProgress,
+    finishDismiss,
+    isExpanded,
+    onCollapse,
+    onExpand,
+    onPeek,
+    previewProgress,
+    resetPosition,
+  ]);
+
+  const handleAccessibilityLabel = allowExpand
+    ? isExpanded
+      ? t('map.collapseNearby', 'Collapse')
+      : previewProgress
+        ? t('map.showPreview', 'Reopen preview')
+        : t('map.expandNearby', 'Expand')
+    : allowDismiss
+      ? t('map.dismissPreview', 'Dismiss map preview')
+      : t('map.dragPreview', 'Drag map preview');
 
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
-        .enabled(allowDragDismiss || allowExpand)
+        .enabled((allowDismiss && allowDragDismiss) || allowExpand)
         .maxPointers(1)
         .activeOffsetY([-4, 4])
         .failOffsetX([-24, 24])
@@ -393,11 +454,24 @@ export default function MapPreviewSheet({
               event.velocityY * 0.1;
             const shouldDismiss =
               allowDragDismiss &&
+              allowDismiss &&
               expansionProgress.value <= 0 &&
               projectedDismissDrag >= DISMISS_DISTANCE;
 
             if (shouldDismiss) {
               scheduleOnRN(finishDismiss, event.velocityY);
+              return;
+            }
+
+            const shouldMinimize =
+              !allowDismiss &&
+              expansionProgress.value <= 0 &&
+              projectedDismissDrag >= DISMISS_DISTANCE;
+
+            if (shouldMinimize) {
+              expansionProgress.value = withSpring(0);
+              scheduleOnRN(onMinimize ?? (() => {}));
+              scheduleOnRN(resetPosition, 0);
               return;
             }
 
@@ -429,6 +503,7 @@ export default function MapPreviewSheet({
           const projectedTranslation = event.translationY + event.velocityY * 0.1;
           const shouldDismiss =
             allowDragDismiss &&
+            allowDismiss &&
             !isExpanded &&
             (translateY.value >= DISMISS_DISTANCE || projectedTranslation >= DISMISS_DISTANCE);
 
@@ -484,6 +559,7 @@ export default function MapPreviewSheet({
         }),
     [
       allowDragDismiss,
+      allowDismiss,
       allowExpand,
       didHandleGestureEnd,
       dismissing,
@@ -494,6 +570,7 @@ export default function MapPreviewSheet({
       onPeek,
       onCollapse,
       onExpand,
+      onMinimize,
       panStartPreviewProgress,
       panStartExpansionProgress,
       previewGestureRange,
@@ -541,14 +618,14 @@ export default function MapPreviewSheet({
             <Pressable
               testID={dismissTestID}
               accessibilityRole="button"
-              accessibilityLabel={t('map.dismissPreview', 'Dismiss map preview')}
-              onPress={handlePressDismiss}
+              accessibilityLabel={handleAccessibilityLabel}
+              onPress={handlePress}
               style={styles.dismissHandlePressable}
             >
               <Animated.View
                 style={[
                   styles.dismissHandle,
-                  { backgroundColor: handleColor },
+                  { backgroundColor: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(60,60,67,0.22)' },
                   handleAnimatedStyle,
                 ]}
               />

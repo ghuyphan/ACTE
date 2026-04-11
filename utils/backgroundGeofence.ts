@@ -1,14 +1,18 @@
 import { LocationGeofencingEventType, LocationRegion } from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
-import i18n from '../constants/i18n';
+import i18n, { i18nReady } from '../constants/i18n';
 import {
     getAllNotesForScope,
     getNoteByIdForScope,
     getPersistedActiveNotesScope,
     LOCAL_NOTES_SCOPE,
 } from '../services/database';
-import { buildNearbyReminderCopy, buildReminderNotificationContent } from '../services/notificationService';
+import {
+    buildNearbyReminderCopy,
+    buildReminderNotificationContent,
+    configureNotificationChannels,
+} from '../services/notificationService';
 import { buildReminderTextExcerpt, findReminderPlaceGroupByNoteId } from '../services/reminderSelection';
 import { updateWidgetData } from '../services/widgetService';
 import { getGeofenceCooldownKey, getLocationCooldownId, getSkipNextEnterKey } from './geofenceKeys';
@@ -55,6 +59,43 @@ function getWidgetRefreshLocation(
 
 async function resolveBackgroundNotesScope() {
     return (await getPersistedActiveNotesScope()) ?? LOCAL_NOTES_SCOPE;
+}
+
+async function prepareReminderNotificationDelivery() {
+    try {
+        await i18nReady;
+    } catch (error) {
+        console.warn('Reminder notification i18n setup failed:', error);
+    }
+
+    try {
+        await configureNotificationChannels();
+    } catch (error) {
+        console.warn('Reminder notification channel setup failed:', error);
+    }
+}
+
+async function refreshWidgetForTriggeredNote(
+    note: {
+        id: string;
+        latitude?: number | null;
+        longitude?: number | null;
+    },
+    allNotes: Awaited<ReturnType<typeof getAllNotesForScope>>,
+    region: LocationRegion
+) {
+    const widgetRefreshLocation = getWidgetRefreshLocation(note, region);
+
+    try {
+        await updateWidgetData({
+            notes: allNotes,
+            includeLocationLookup: false,
+            currentLocation: widgetRefreshLocation,
+            preferredNoteId: note.id,
+        });
+    } catch (widgetError) {
+        console.warn('Widget geofence refresh failed:', widgetError);
+    }
 }
 
 // Configure how notifications appear when the app is in the foreground
@@ -114,15 +155,7 @@ if (
 
                     if (note) {
                         cooldownNoteId = note.id;
-                        const widgetRefreshLocation = getWidgetRefreshLocation(note, region);
-                        void updateWidgetData({
-                            notes: allNotes,
-                            includeLocationLookup: false,
-                            currentLocation: widgetRefreshLocation,
-                            preferredNoteId: note.id,
-                        }).catch((widgetError) => {
-                            console.warn('Widget geofence refresh failed:', widgetError);
-                        });
+                        const widgetRefreshPromise = refreshWidgetForTriggeredNote(note, allNotes, region);
 
                         const isNoteCoolingDown = await isOnCooldown(
                             'note',
@@ -130,6 +163,8 @@ if (
                             NOTE_NOTIFICATION_COOLDOWN_MS
                         );
                         if (isNoteCoolingDown) {
+                            console.info('Geofence reminder suppressed by note cooldown:', cooldownNoteId);
+                            await widgetRefreshPromise;
                             return;
                         }
 
@@ -146,7 +181,11 @@ if (
                         );
 
                         if (isLocationCoolingDown) {
-                            await setCooldown('note', cooldownNoteId);
+                            console.info('Geofence reminder suppressed by location cooldown:', locationCooldownId);
+                            await Promise.all([
+                                setCooldown('note', cooldownNoteId),
+                                widgetRefreshPromise,
+                            ]);
                             return;
                         }
 
@@ -167,6 +206,7 @@ if (
                             body = reminderCopy.body;
                         }
 
+                        await prepareReminderNotificationDelivery();
                         await Notifications.scheduleNotificationAsync({
                             content: buildReminderNotificationContent({
                                 title,
@@ -179,6 +219,7 @@ if (
                         await Promise.all([
                             setCooldown('note', cooldownNoteId),
                             setCooldown('location', locationCooldownId),
+                            widgetRefreshPromise,
                         ]);
                         return;
                     }
@@ -190,9 +231,11 @@ if (
                     ? await isOnCooldown('note', cooldownNoteId, NOTE_NOTIFICATION_COOLDOWN_MS)
                     : false;
                 if (isFallbackCoolingDown) {
+                    console.info('Geofence fallback reminder suppressed by note cooldown:', cooldownNoteId);
                     return;
                 }
 
+                await prepareReminderNotificationDelivery();
                 await Notifications.scheduleNotificationAsync({
                     content: buildReminderNotificationContent({
                         title,

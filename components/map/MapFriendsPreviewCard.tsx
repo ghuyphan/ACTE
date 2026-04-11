@@ -19,6 +19,11 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { useTheme } from '../../hooks/useTheme';
 import { SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
+import {
+  MapPreviewExpandButton,
+  MapPreviewPositionPill,
+  mapPreviewFooterStyles,
+} from './MapPreviewFooterControls';
 import MapPreviewSheet from './MapPreviewSheet';
 import {
   getOverlayBorderColor,
@@ -33,7 +38,6 @@ const EXPANDED_PREVIEW_HEIGHT = 332;
 const EXPANDED_BODY_HEIGHT = EXPANDED_PREVIEW_HEIGHT - PREVIEW_HEIGHT;
 const PREVIEW_MEDIA_SIZE = 56;
 const PREVIEW_ROW_GAP = 12;
-const PREVIEW_FOOTER_OFFSET = PREVIEW_MEDIA_SIZE + PREVIEW_ROW_GAP;
 const PREVIEW_MORPH_SPRING = {
   damping: 24,
   stiffness: 220,
@@ -178,21 +182,6 @@ export default function MapFriendsPreviewCard({
     [onFocusPost, pageWidth, posts]
   );
 
-  if (!isMounted && !visible) {
-    return null;
-  }
-
-  if (!renderData) {
-    return null;
-  }
-
-  const {
-    posts: renderPosts,
-    activeIndex: renderIndex,
-    activePost: renderPost,
-  } = renderData;
-
-  const previewCountLabel = `${Math.max(renderIndex, 0) + 1}/${renderPosts.length}`;
   const animatedShellStyle = useAnimatedStyle(
     () => ({
       height: PREVIEW_HEIGHT + EXPANDED_BODY_HEIGHT * sheetExpansionProgress.value,
@@ -209,6 +198,22 @@ export default function MapFriendsPreviewCard({
     [sheetExpansionProgress]
   );
 
+  if (!isMounted && !visible) {
+    return null;
+  }
+
+  if (!renderData) {
+    return null;
+  }
+
+  const {
+    posts: renderPosts,
+    activeIndex: renderIndex,
+    activePost: renderPost,
+  } = renderData;
+
+  const previewPosition = Math.max(renderIndex, 0) + 1;
+
   return (
     <MapPreviewSheet
       isVisible={visible}
@@ -216,9 +221,9 @@ export default function MapFriendsPreviewCard({
       shellTestID="map-friends-preview-shell"
       dismissTestID="map-friends-preview-dismiss"
       bottomOffset={bottomOffset}
-      handleColor={isDark ? 'rgba(255,255,255,0.34)' : 'rgba(60,60,67,0.22)'}
       onDismiss={onDismiss}
       reduceMotionEnabled={reduceMotionEnabled}
+      allowDismiss={false}
       allowExpand
       isExpanded={isExpanded}
       expansionProgress={sheetExpansionProgress}
@@ -339,55 +344,35 @@ export default function MapFriendsPreviewCard({
                 onMomentumScrollEnd={handleMomentumEnd}
               />
 
-              <View style={styles.footer}>
-                <View style={styles.footerMetaRow}>
-                  <View style={styles.indexWrap}>
-                    <Text testID="map-friends-preview-index" style={[styles.indexText, { color: colors.secondaryText }]}>
-                      {previewCountLabel}
-                    </Text>
-                  </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      isExpanded
-                        ? t('map.collapseNearby', 'Collapse')
-                        : t('map.expandNearby', 'Expand')
-                    }
+              <View style={mapPreviewFooterStyles.footer}>
+                <View style={mapPreviewFooterStyles.metaRow}>
+                  <MapPreviewPositionPill
+                    current={previewPosition}
+                    total={renderPosts.length}
+                    testID="map-friends-preview-index"
+                  />
+                  <MapPreviewExpandButton
+                    isExpanded={isExpanded}
                     onPress={() => {
                       onInteraction?.();
                       setIsExpanded((current) => !current);
                     }}
-                    style={({ pressed }) => [styles.expandButton, { opacity: pressed ? 0.72 : 1 }]}
-                    hitSlop={8}
-                  >
-                    <Text
-                      style={[
-                        styles.expandButtonText,
-                        { color: isExpanded ? colors.primary : colors.secondaryText },
-                      ]}
-                    >
-                      {isExpanded
-                        ? t('map.collapseNearby', 'Collapse')
-                        : t('map.expandNearby', 'Expand')}
-                    </Text>
-                    <Ionicons
-                      name={isExpanded ? 'chevron-down' : 'chevron-up'}
-                      size={13}
-                      color={isExpanded ? colors.primary : colors.secondaryText}
-                    />
-                  </Pressable>
+                  />
                 </View>
 
                 <Pressable
                   testID="map-friends-preview-open"
-                  style={({ pressed }) => [styles.actionButton, { opacity: pressed ? 0.72 : 1 }]}
+                  style={({ pressed }) => [
+                    mapPreviewFooterStyles.actionButton,
+                    { opacity: pressed ? 0.72 : 1 },
+                  ]}
                   onPress={() => {
                     onInteraction?.();
                     onOpen();
                   }}
                 >
                   <Ionicons name="arrow-forward-circle" size={14} color={colors.primary} />
-                  <Text style={[styles.actionText, { color: colors.primary }]}>
+                  <Text style={[mapPreviewFooterStyles.actionText, { color: colors.primary }]}>
                     {t('map.openShared', 'Open shared')}
                   </Text>
                 </Pressable>
@@ -556,51 +541,6 @@ const styles = StyleSheet.create({
   content: {
     fontSize: 13,
     lineHeight: 18,
-    fontFamily: 'Noto Sans',
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    justifyContent: 'space-between',
-    marginTop: 4,
-    paddingLeft: PREVIEW_FOOTER_OFFSET,
-  },
-  footerMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  indexWrap: {
-    minWidth: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  indexText: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: 'Noto Sans',
-  },
-  actionButton: {
-    minHeight: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  actionText: {
-    fontSize: 13,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
-  },
-  expandButton: {
-    minHeight: 28,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  expandButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
     fontFamily: 'Noto Sans',
   },
   expandedBody: {

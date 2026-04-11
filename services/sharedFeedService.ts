@@ -1,6 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
-import { AppUser, getUserDisplayName } from '../utils/appUser';
+import { AppUser, getUserSocialName } from '../utils/appUser';
 import {
   getCurrentSupabaseSession,
   getSupabase,
@@ -228,7 +228,7 @@ async function hydrateShareableNote(note: Note): Promise<Note> {
 }
 
 function getDisplayName(user: AppUser) {
-  return getUserDisplayName(user);
+  return getUserSocialName(user);
 }
 
 async function cleanupRemoteArtifacts(
@@ -860,6 +860,8 @@ export async function createFriendInvite(user: AppUser): Promise<FriendInvite> {
   await upsertPublicUserProfile({
     userUid: user.id,
     displayName: getDisplayName(user),
+    username: user.username,
+    email: user.email,
     photoURL: user.photoURL ?? null,
   });
 
@@ -930,6 +932,8 @@ export async function acceptFriendInvite(
   await upsertPublicUserProfile({
     userUid: user.id,
     displayName: getDisplayName(user),
+    username: user.username,
+    email: user.email,
     photoURL: user.photoURL ?? null,
   });
 

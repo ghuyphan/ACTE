@@ -23,6 +23,7 @@ import {
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import ProfileAvatar from './ProfileAvatar';
+import UsernameEditSheet from './UsernameEditSheet';
 import { useProfileScreenModel } from './useProfileScreenModel';
 
 function KeyValueRow({
@@ -73,16 +74,26 @@ export default function ProfileScreenIOS() {
   const {
     avatarLabel,
     avatarUrl,
+    canEditUsername,
+    closeUsernameEditor,
     colors,
     isAuthAvailable,
     isDark,
     isDeletingAccount,
     isSigningOut,
+    isSavingUsername,
+    isUsernameSheetVisible,
     membershipLabel,
     openSignIn,
+    openUsernameEditor,
     profileName,
+    saveUsername,
+    setUsernameDraft,
     t,
     tier,
+    usernameDraft,
+    usernameErrorMessage,
+    usernameHelperText,
     user,
     handleDeleteAccount,
     handleSignOut,
@@ -127,6 +138,18 @@ export default function ProfileScreenIOS() {
                 title={t('profile.accountTitle', 'Connected account')}
               >
                 <KeyValueRow colors={colors} label={t('profile.name', 'Name')} value={user.displayName || t('profile.noName', 'Noto account')} />
+                {user.username ? (
+                  <KeyValueRow colors={colors} label={t('profile.username', 'Username')} value={`@${user.username}`} />
+                ) : null}
+                {canEditUsername ? (
+                  <Button onPress={openUsernameEditor}>
+                    <HStack>
+                      <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
+                        {t('profile.usernameEditCta', 'Choose your permanent username')}
+                      </SwiftUIText>
+                    </HStack>
+                  </Button>
+                ) : null}
                 {user.email ? (
                   <KeyValueRow colors={colors} label={t('profile.email', 'Email')} value={user.email} />
                 ) : null}
@@ -214,6 +237,19 @@ export default function ProfileScreenIOS() {
           )}
         </List>
       </Host>
+      <UsernameEditSheet
+        visible={isUsernameSheetVisible}
+        value={usernameDraft}
+        errorMessage={usernameErrorMessage}
+        helperText={usernameHelperText}
+        isSaving={isSavingUsername}
+        onChangeValue={setUsernameDraft}
+        onClose={closeUsernameEditor}
+        onSave={saveUsername}
+        title={t('profile.usernameSheetTitle', 'Choose your username')}
+        subtitle={t('profile.usernameSheetSubtitle', 'This will be your short in-app name.')}
+        saveLabel={t('profile.usernameSave', 'Save username')}
+      />
     </View>
   );
 }

@@ -6,6 +6,8 @@ const mockGetPersistedActiveNotesScope = jest.fn();
 const mockUpdateWidgetData = jest.fn();
 const mockBuildNearbyReminderCopy = jest.fn();
 const mockBuildReminderNotificationContent = jest.fn();
+const mockConfigureNotificationChannels = jest.fn();
+const consoleInfoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
 
 (globalThis as any).__mockGeofenceTaskHandler = null;
 
@@ -52,10 +54,12 @@ jest.mock('../services/widgetService', () => ({
 jest.mock('../services/notificationService', () => ({
   buildNearbyReminderCopy: (...args: unknown[]) => mockBuildNearbyReminderCopy(...args),
   buildReminderNotificationContent: (...args: unknown[]) => mockBuildReminderNotificationContent(...args),
+  configureNotificationChannels: (...args: unknown[]) => mockConfigureNotificationChannels(...args),
 }));
 
 jest.mock('../constants/i18n', () => ({
   __esModule: true,
+  i18nReady: Promise.resolve(),
   default: {
     language: 'vi',
     t: (key: string, options?: { location?: string }) => {
@@ -112,6 +116,7 @@ beforeEach(() => {
   (globalThis as any).__mockGeofenceTaskHandler = null;
   mockGetPersistedActiveNotesScope.mockResolvedValue('user-1');
   mockUpdateWidgetData.mockResolvedValue(undefined);
+  mockConfigureNotificationChannels.mockResolvedValue(undefined);
   mockBuildNearbyReminderCopy.mockImplementation(
     async ({ locationName, noteBody, noteType }: { locationName?: string | null; noteBody?: string | null; noteType: 'text' | 'photo' }) => ({
       title: locationName?.trim() ? `Này, ${locationName.trim()} quen không?` : 'Nearby reminder',
@@ -129,6 +134,10 @@ beforeEach(() => {
   );
   setMockNotes([buildNote()]);
   require('../utils/backgroundGeofence');
+});
+
+afterAll(() => {
+  consoleInfoSpy.mockRestore();
 });
 
 async function runEnterEvent(noteId = 'note-1') {
@@ -181,6 +190,36 @@ describe('backgroundGeofence', () => {
     await runEnterEvent('note-1');
 
     expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it('waits for the widget refresh before finishing when a cooldown suppresses the notification', async () => {
+    mockStorage.set(getGeofenceCooldownKey('note', 'note-1'), String(Date.now()));
+    let resolveWidgetRefresh!: () => void;
+    let widgetRefreshStarted = false;
+    let taskFinished = false;
+    mockUpdateWidgetData.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          widgetRefreshStarted = true;
+          resolveWidgetRefresh = () => resolve();
+        })
+    );
+
+    const taskPromise = runEnterEvent('note-1').then(() => {
+      taskFinished = true;
+    });
+    for (let attempt = 0; attempt < 10 && !widgetRefreshStarted; attempt += 1) {
+      await Promise.resolve();
+    }
+
+    expect(widgetRefreshStarted).toBe(true);
+    expect(taskFinished).toBe(false);
+    expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
+
+    resolveWidgetRefresh();
+    await taskPromise;
+
+    expect(taskFinished).toBe(true);
   });
 
   it('suppresses duplicate location notifications and refreshes the selected note cooldown', async () => {
@@ -241,6 +280,7 @@ describe('backgroundGeofence', () => {
       },
       trigger: null,
     });
+    expect(mockConfigureNotificationChannels).toHaveBeenCalled();
     expect(
       mockStorage.has(
         getGeofenceCooldownKey('location', getLocationCooldownId('District 1', 10.77, 106.69))

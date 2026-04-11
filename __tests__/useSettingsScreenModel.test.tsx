@@ -36,6 +36,7 @@ const mockAuthState = {
     id: string;
     uid: string;
     displayName: string | null;
+    username?: string | null;
     email: string | null;
   },
   isAuthAvailable: true,
@@ -179,7 +180,12 @@ describe('useSettingsScreenModel', () => {
       result.current.openSyncScreen();
     });
 
-    expect(mockRouterPush).toHaveBeenCalledWith('/auth');
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/auth',
+      params: {
+        returnTo: '/auth/profile',
+      },
+    });
     expect(result.current.showSync).toBe(false);
   });
 
@@ -236,6 +242,20 @@ describe('useSettingsScreenModel', () => {
 
     expect(result.current.accountValue).toBe('huy@example.com');
     expect(result.current.showSyncEntry).toBe(true);
+  });
+
+  it('prefers the username over email when there is no display name', () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: null,
+      username: 'huyphan',
+      email: 'huy@example.com',
+    };
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    expect(result.current.accountValue).toBe('@huyphan');
   });
 
   it('shows pending sync while offline with queued changes', () => {

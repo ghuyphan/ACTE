@@ -15,10 +15,10 @@ import {
   setActiveNotesScope,
 } from '../services/database';
 import { purgeLocalAccountScope } from '../services/accountCleanup';
-import { upsertPublicUserProfile } from '../services/publicProfileService';
+import { updateOwnUsername, upsertPublicUserProfile } from '../services/publicProfileService';
 import { clearSharedFeedCache } from '../services/sharedFeedCache';
 import { unregisterCurrentSocialPushToken } from '../services/socialPushService';
-import { AppUser, mapSupabaseUser } from '../utils/appUser';
+import { AppUser, deriveUsernameCandidate, mapSupabaseUser } from '../utils/appUser';
 import { getSupabase, getSupabaseErrorMessage, hasSupabaseConfig } from '../utils/supabase';
 
 export interface AuthActionResult {
@@ -41,6 +41,7 @@ interface AuthContextValue {
   signInWithEmail: (email: string, password: string) => Promise<AuthActionResult>;
   registerWithEmail: (input: EmailRegistrationInput) => Promise<AuthActionResult>;
   sendPasswordReset: (email: string) => Promise<AuthActionResult>;
+  updateUsername: (username: string) => Promise<AuthActionResult>;
   deleteAccount: () => Promise<AuthActionResult>;
   signOut: () => Promise<void>;
 }
@@ -233,6 +234,36 @@ function mapAuthErrorMessage(error: unknown) {
   return i18n.t('auth.errorGeneric', 'Unable to sign in right now. Please try again later.');
 }
 
+function mapUsernameErrorMessage(error: unknown) {
+  const code = getAuthErrorCode(error);
+  const message = getSupabaseErrorMessage(error).toLowerCase();
+
+  if (code === '23505' || message.includes('duplicate key') || message.includes('already exists')) {
+    return i18n.t('profile.usernameTaken', 'That username is already taken.');
+  }
+
+  if (message.includes('only be changed once')) {
+    return i18n.t('profile.usernameLocked', 'You can only change your username once.');
+  }
+
+  if (message.includes('20 characters or fewer')) {
+    return i18n.t('profile.usernameTooLong', 'Use 20 characters or fewer.');
+  }
+
+  if (message.includes('lowercase letters, numbers, periods, or underscores')) {
+    return i18n.t(
+      'profile.usernameInvalid',
+      'Use only lowercase letters, numbers, periods, or underscores.'
+    );
+  }
+
+  if (message.includes('required')) {
+    return i18n.t('profile.usernameRequired', 'Enter a username.');
+  }
+
+  return i18n.t('profile.usernameSaveFailed', 'We could not update your username right now.');
+}
+
 async function syncUserProfile(session: Session | null) {
   const user = mapSupabaseUser(session?.user);
   if (!user) {
@@ -248,14 +279,22 @@ async function syncUserProfile(session: Session | null) {
 
   setActiveNotesScope(user.uid);
 
-  // Fire and forget profile sync to unblock the rest of the application
-  upsertPublicUserProfile({
-    userUid: user.id,
-    displayName: user.displayName,
-    photoURL: user.photoURL,
-  }).catch((err) => console.warn('[auth] Background profile sync failed:', err));
+  try {
+    const profile = await upsertPublicUserProfile({
+      userUid: user.id,
+      displayName: user.displayName,
+      username: user.username,
+      email: user.email,
+      photoURL: user.photoURL,
+    });
 
-  return user;
+    return profile?.username
+      ? { ...user, username: profile.username, usernameSetAt: profile.usernameSetAt }
+      : user;
+  } catch (error) {
+    console.warn('[auth] Background profile sync failed:', error);
+    return user;
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -492,6 +531,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         try {
           const trimmedName = displayName?.trim() || null;
+          const usernameCandidate = deriveUsernameCandidate(email);
           const { data, error } = await supabase.auth.signUp({
             email: email.trim(),
             password,
@@ -499,6 +539,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               data: {
                 display_name: trimmedName,
                 displayName: trimmedName,
+                username: usernameCandidate,
               },
             },
           });
@@ -541,6 +582,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return {
             status: 'error',
             message: mapAuthErrorMessage(error),
+          };
+        }
+      },
+      updateUsername: async (username: string) => {
+        if (!isSupabaseAuthAvailable()) {
+          return getUnavailableResult('auth');
+        }
+
+        if (!user) {
+          return {
+            status: 'unavailable',
+            message: i18n.t('profile.usernameUnavailable', 'Sign in to update your username.'),
+          };
+        }
+
+        try {
+          const profile = await updateOwnUsername({
+            userUid: user.id,
+            username,
+          });
+
+          setUser((currentUser) =>
+            currentUser
+              ? {
+                  ...currentUser,
+                  username: profile.username,
+                  usernameSetAt: profile.usernameSetAt,
+                }
+              : currentUser
+          );
+
+          return { status: 'success' };
+        } catch (error) {
+          return {
+            status: 'error',
+            message: mapUsernameErrorMessage(error),
           };
         }
       },

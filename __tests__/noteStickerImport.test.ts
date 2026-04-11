@@ -19,6 +19,7 @@ const mockIsSupabaseNetworkError = jest.fn((_: unknown) => false);
 const mockIsSupabasePolicyError = jest.fn((_: unknown) => false);
 const mockIsSupabaseSchemaMismatchError = jest.fn((_: unknown) => false);
 let mockRemoteStickerAssetInsertError: unknown = null;
+let mockCurrentSupabaseSessionUserId: string | null = 'owner-1';
 
 function bytesToHex(bytes: Uint8Array) {
   return Array.from(bytes)
@@ -71,6 +72,9 @@ jest.mock('../services/database', () => ({
 }));
 
 jest.mock('../utils/supabase', () => ({
+  getCurrentSupabaseSession: jest.fn(async () => ({
+    user: mockCurrentSupabaseSessionUserId ? { id: mockCurrentSupabaseSessionUserId } : null,
+  })),
   getSupabaseErrorMessage: jest.fn((error: Error) => error.message),
   isSupabaseNetworkError: (error: unknown) => mockIsSupabaseNetworkError(error),
   isSupabasePolicyError: (error: unknown) => mockIsSupabasePolicyError(error),
@@ -206,6 +210,7 @@ describe('importStickerAsset', () => {
     mockIsSupabasePolicyError.mockReturnValue(false);
     mockIsSupabaseSchemaMismatchError.mockReturnValue(false);
     mockRemoteStickerAssetInsertError = null;
+    mockCurrentSupabaseSessionUserId = 'owner-1';
     mockRemoteStickerAssets.clear();
   });
 
@@ -671,6 +676,75 @@ describe('importStickerAsset', () => {
     expect(firstUploadCount).toBe(2);
     expect(mockStorageUpload.mock.calls).toHaveLength(3);
     expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+  });
+
+  it('skips the remote sticker registry when the active session does not match the owner', async () => {
+    const { serializeStickerPlacementsForStorage } = loadNoteStickersModule();
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    mockCurrentSupabaseSessionUserId = null;
+    mockRemoteStickerAssetInsertError = {
+      code: '42501',
+      message: 'new row violates row-level security policy for table "sticker_assets"',
+    };
+    mockIsSupabasePolicyError.mockImplementation(
+      (error: unknown) =>
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        String((error as { code?: unknown }).code) === '42501'
+    );
+
+    const placements = [
+      {
+        id: 'placement-1',
+        assetId: 'asset-1',
+        x: 0.5,
+        y: 0.5,
+        scale: 1,
+        rotation: 0,
+        zIndex: 1,
+        opacity: 1,
+        asset: {
+          id: 'asset-1',
+          ownerUid: '__local__',
+          localUri: 'file:///documents/stickers/asset-1.png',
+          remotePath: null,
+          uploadFingerprint: null,
+          mimeType: 'image/png',
+          width: 320,
+          height: 240,
+          createdAt: '2026-03-10T00:00:00.000Z',
+          updatedAt: null,
+          source: 'import',
+        },
+      },
+    ];
+
+    const serialized = await serializeStickerPlacementsForStorage(
+      placements,
+      'shared-post-media',
+      'owner-1/shared-post-1',
+      {
+        persistAssets: false,
+        serverOwnerUid: 'owner-1',
+      }
+    );
+
+    expect(mockStorageUpload).toHaveBeenCalledWith(
+      'owner-1/shared-post-1/stickers/asset-1.png',
+      expect.any(ArrayBuffer),
+      expect.objectContaining({
+        contentType: 'image/png',
+        upsert: true,
+      })
+    );
+    expect(mockRemoteStickerAssets.size).toBe(0);
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(JSON.parse(serialized)[0]?.asset?.remotePath).toBe(
+      'owner-1/shared-post-1/stickers/asset-1.png'
+    );
     warnSpy.mockRestore();
   });
 

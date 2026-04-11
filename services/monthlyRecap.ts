@@ -1,5 +1,8 @@
 import type { Note } from './database';
-import { parseNoteStickerPlacements, type StickerRenderMode } from './noteStickers';
+import {
+  parseStoredStickerPlacements,
+  type StickerRenderMode,
+} from './stickerPlacementPayload';
 
 export type MonthlyRecapObjectKind = 'postcard' | 'polaroid' | 'stamp';
 
@@ -674,7 +677,7 @@ function getMonthStickerUsageFromScopedNotes(scopedNotes: Note[]): MonthlyRecapS
   >();
 
   for (const note of scopedNotes) {
-    for (const placement of parseNoteStickerPlacements(note.stickerPlacementsJson)) {
+    for (const placement of parseStoredStickerPlacements(note.stickerPlacementsJson)) {
       const previewUri = placement.asset.localUri;
       if (!previewUri) {
         continue;

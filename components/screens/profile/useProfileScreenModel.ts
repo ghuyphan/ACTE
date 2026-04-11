@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { normalizeUsernameInput, validateUsernameInput } from '../../../services/publicProfileService';
 import { showAppAlert } from '../../../utils/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../../hooks/useAuth';
@@ -13,7 +14,7 @@ import { createLegalLinkActions, getLegalLinkAvailability } from '../shared/lega
 export function useProfileScreenModel() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
-  const { user, isAuthAvailable, deleteAccount, signOut } = useAuth();
+  const { user, isAuthAvailable, deleteAccount, signOut, updateUsername } = useAuth();
   const { refreshNotes } = useNotes();
   const { tier } = useSubscription();
   const router = useRouter();
@@ -22,6 +23,10 @@ export function useProfileScreenModel() {
   const legalLinkActions = useMemo(createLegalLinkActions, []);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isUsernameSheetVisible, setIsUsernameSheetVisible] = useState(false);
+  const [isSavingUsername, setIsSavingUsername] = useState(false);
+  const [usernameDraft, setUsernameDraft] = useState('');
+  const [usernameErrorMessage, setUsernameErrorMessage] = useState<string | null>(null);
   const [transitionUser, setTransitionUser] = useState(user);
   const isTransitioningAccount = isSigningOut || isDeletingAccount;
 
@@ -37,16 +42,46 @@ export function useProfileScreenModel() {
   }, [isTransitioningAccount, user]);
 
   const displayUser = user ?? (isTransitioningAccount ? transitionUser : null);
+  const canEditUsername = Boolean(displayUser && !displayUser.usernameSetAt);
+
+  useEffect(() => {
+    if (!isUsernameSheetVisible) {
+      setUsernameDraft(displayUser?.username ?? '');
+      setUsernameErrorMessage(null);
+    }
+  }, [displayUser?.username, isUsernameSheetVisible]);
 
   const profileName =
-    displayUser?.displayName || displayUser?.email || t('settings.notSignedIn', 'Not signed in');
+    displayUser?.displayName ||
+    (displayUser?.username ? `@${displayUser.username}` : null) ||
+    displayUser?.email ||
+    t('settings.notSignedIn', 'Not signed in');
   const avatarLabel = useMemo(() => {
-    const base = displayUser?.displayName || displayUser?.email || 'C';
+    const base = displayUser?.displayName || displayUser?.username || displayUser?.email || 'C';
     return base.trim().charAt(0).toUpperCase();
-  }, [displayUser?.displayName, displayUser?.email]);
+  }, [displayUser?.displayName, displayUser?.email, displayUser?.username]);
 
   const membershipLabel =
     tier === 'plus' ? t('settings.plusTitle', 'Noto Plus') : t('settings.plusInactive', 'Standard');
+  const normalizedUsernameDraft = normalizeUsernameInput(usernameDraft);
+  const usernameValidationCode = validateUsernameInput(usernameDraft);
+  const inlineUsernameValidationMessage =
+    usernameValidationCode === 'required'
+      ? t('profile.usernameRequired', 'Enter a username.')
+      : usernameValidationCode === 'too_long'
+        ? t('profile.usernameTooLong', 'Use 20 characters or fewer.')
+        : usernameValidationCode === 'invalid'
+          ? t(
+              'profile.usernameInvalid',
+              'Use only lowercase letters, numbers, periods, or underscores.'
+            )
+          : null;
+  const canSubmitUsername =
+    Boolean(canEditUsername) &&
+    !isSavingUsername &&
+    !inlineUsernameValidationMessage &&
+    normalizedUsernameDraft.length > 0 &&
+    normalizedUsernameDraft !== (displayUser?.username ?? '');
 
   const openSignIn = () => {
     router.replace({
@@ -55,6 +90,53 @@ export function useProfileScreenModel() {
         returnTo: '/auth/profile',
       },
     });
+  };
+
+  const openUsernameEditor = () => {
+    if (!canEditUsername) {
+      return;
+    }
+
+    setUsernameDraft(displayUser?.username ?? '');
+    setUsernameErrorMessage(null);
+    setIsUsernameSheetVisible(true);
+  };
+
+  const closeUsernameEditor = () => {
+    if (isSavingUsername) {
+      return;
+    }
+
+    setIsUsernameSheetVisible(false);
+    setUsernameErrorMessage(null);
+    setUsernameDraft(displayUser?.username ?? '');
+  };
+
+  const saveUsername = async () => {
+    if (!canEditUsername || !canSubmitUsername) {
+      if (inlineUsernameValidationMessage) {
+        setUsernameErrorMessage(inlineUsernameValidationMessage);
+      }
+      return;
+    }
+
+    setIsSavingUsername(true);
+    setUsernameErrorMessage(null);
+
+    try {
+      const result = await updateUsername(normalizedUsernameDraft);
+      if (result.status !== 'success') {
+        setUsernameErrorMessage(
+          result.message ?? t('profile.usernameSaveFailed', 'We could not update your username right now.')
+        );
+        return;
+      }
+
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setIsUsernameSheetVisible(false);
+    } finally {
+      setIsSavingUsername(false);
+    }
   };
 
   const performSignOut = async () => {
@@ -173,17 +255,29 @@ export function useProfileScreenModel() {
   return {
     avatarUrl: displayUser?.photoURL ?? null,
     avatarLabel,
+    canEditUsername,
     colors,
+    closeUsernameEditor,
     insets,
     isAuthAvailable,
     isDark,
     isDeletingAccount,
     isSigningOut,
+    isSavingUsername,
+    isUsernameSheetVisible,
     membershipLabel,
     openSignIn,
+    openUsernameEditor,
     profileName,
     t,
     tier,
+    usernameDraft,
+    usernameErrorMessage: usernameErrorMessage ?? inlineUsernameValidationMessage,
+    usernameHelperText: canEditUsername
+      ? t('profile.usernameHint', 'Choose carefully. You can change your username once.')
+      : t('profile.usernameLockedHint', 'Your username has already been set.'),
+    setUsernameDraft,
+    saveUsername,
     user: displayUser,
     handleDeleteAccount,
     handleSignOut,

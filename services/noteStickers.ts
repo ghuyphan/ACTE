@@ -9,6 +9,11 @@ import {
   withDatabaseTransaction,
 } from './database';
 import {
+  parseStoredStickerPlacements,
+  type StickerRenderMode,
+} from './stickerPlacementPayload';
+import {
+  getCurrentSupabaseSession,
   getSupabaseErrorMessage,
   isSupabaseNetworkError,
   isSupabasePolicyError,
@@ -20,7 +25,7 @@ import { NOTE_MEDIA_BUCKET } from './remoteMedia';
 import { cleanupStickerTempUris } from './stickerTempFiles';
 
 export type StickerSource = 'import';
-export type StickerRenderMode = 'default' | 'stamp';
+export type { StickerRenderMode } from './stickerPlacementPayload';
 export type StickerImportErrorCode =
   | 'unsupported-format'
   | 'file-unavailable'
@@ -450,6 +455,21 @@ function mapRemoteStickerAsset(asset: StickerAsset, row: RemoteStickerAssetRow):
   };
 }
 
+async function canAccessRemoteStickerRegistry(ownerUserId: string) {
+  const normalizedOwnerUserId = typeof ownerUserId === 'string' ? ownerUserId.trim() : '';
+  if (!normalizedOwnerUserId) {
+    return false;
+  }
+
+  try {
+    const session = await getCurrentSupabaseSession();
+    const sessionUserId = session?.user?.id?.trim() ?? '';
+    return Boolean(sessionUserId && sessionUserId === normalizedOwnerUserId);
+  } catch {
+    return false;
+  }
+}
+
 async function getRemoteStickerAssetRowByContentHash(
   ownerUserId: string,
   contentHash: string
@@ -491,6 +511,10 @@ async function registerRemoteStickerAsset(
   asset: StickerAsset
 ): Promise<StickerAsset | null> {
   if (isRemoteStickerRegistryTemporarilyDisabled('assets')) {
+    return null;
+  }
+
+  if (!(await canAccessRemoteStickerRegistry(ownerUserId))) {
     return null;
   }
 
@@ -912,50 +936,7 @@ async function uploadStickerBytesWithRetry(
 export function parseNoteStickerPlacements(
   placementsJson: string | null | undefined
 ): NoteStickerPlacement[] {
-  if (!placementsJson) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(placementsJson);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed.filter((placement): placement is NoteStickerPlacement => {
-      if (!placement || typeof placement !== 'object') {
-        return false;
-      }
-
-      const maybePlacement = placement as Partial<NoteStickerPlacement>;
-      return (
-        typeof maybePlacement.id === 'string' &&
-        typeof maybePlacement.assetId === 'string' &&
-        typeof maybePlacement.x === 'number' &&
-        typeof maybePlacement.y === 'number' &&
-        typeof maybePlacement.scale === 'number' &&
-        typeof maybePlacement.rotation === 'number' &&
-        typeof maybePlacement.zIndex === 'number' &&
-        typeof maybePlacement.opacity === 'number' &&
-        (typeof maybePlacement.outlineEnabled === 'undefined' ||
-          typeof maybePlacement.outlineEnabled === 'boolean') &&
-        (typeof maybePlacement.motionLocked === 'undefined' ||
-          typeof maybePlacement.motionLocked === 'boolean') &&
-        (typeof maybePlacement.renderMode === 'undefined' ||
-          maybePlacement.renderMode === 'default' ||
-          maybePlacement.renderMode === 'stamp') &&
-        Boolean(
-          maybePlacement.asset &&
-            typeof maybePlacement.asset === 'object' &&
-            typeof maybePlacement.asset.id === 'string' &&
-            typeof maybePlacement.asset.localUri === 'string' &&
-            typeof maybePlacement.asset.mimeType === 'string'
-        )
-      );
-    });
-  } catch {
-    return [];
-  }
+  return parseStoredStickerPlacements(placementsJson) as NoteStickerPlacement[];
 }
 
 export function createStickerPlacement(
@@ -1558,6 +1539,10 @@ export async function reconcileRemoteStickerAssetRefs(
     return;
   }
 
+  if (!(await canAccessRemoteStickerRegistry(normalizedOwnerUserId))) {
+    return;
+  }
+
   try {
     const nextAssetIds = getRemoteStickerAssetIdsFromPlacementsJson(placementsJson);
     const { data, error } = await requireSupabase()
@@ -1638,6 +1623,10 @@ export async function clearRemoteStickerAssetRefs(
   const normalizedOwnerUserId = typeof ownerUserId === 'string' ? ownerUserId.trim() : '';
   const normalizedContainerId = typeof containerId === 'string' ? containerId.trim() : '';
   if (!normalizedOwnerUserId || !normalizedContainerId) {
+    return;
+  }
+
+  if (!(await canAccessRemoteStickerRegistry(normalizedOwnerUserId))) {
     return;
   }
 

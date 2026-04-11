@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout } from '../../../constants/theme';
 import { useNotesStore } from '../../../hooks/useNotes';
 import { useTheme } from '../../../hooks/useTheme';
+import type { Note } from '../../../services/database';
 import StampStickerArtwork from '../../notes/StampStickerArtwork';
 import {
   getStickerOutlineOffsets,
@@ -139,12 +140,18 @@ function StickerPreview({
   );
 }
 
-export default function NotesStickerLibraryScreen() {
+export function NotesStickerLibraryContent({
+  notes,
+  bottomInset,
+}: {
+  notes: readonly Note[];
+  bottomInset?: number;
+}) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { notes } = useNotesStore();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const resolvedBottomInset = bottomInset ?? insets.bottom;
   const items = useMemo(() => buildCreatedStickerLibrary(notes), [notes]);
   const sections = useMemo(() => groupCreatedStickerLibrary(items), [items]);
   const gridGap = 12;
@@ -243,6 +250,7 @@ export default function NotesStickerLibraryScreen() {
 
   return items.length > 0 ? (
     <FlashList
+      testID="notes-collection-mode"
       data={listData}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
@@ -253,20 +261,22 @@ export default function NotesStickerLibraryScreen() {
       contentContainerStyle={{
         paddingHorizontal: Layout.screenPadding,
         paddingTop: 12,
-        paddingBottom: insets.bottom + 28,
+        paddingBottom: resolvedBottomInset + 28,
       }}
       showsVerticalScrollIndicator={false}
     />
   ) : (
     <View
+      testID="notes-collection-mode"
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <View
+        testID="notes-collection-empty-state"
         style={[
           styles.emptyStateScreen,
           styles.emptyScreen,
           {
-            paddingBottom: insets.bottom + 28,
+            paddingBottom: resolvedBottomInset + 28,
           },
         ]}
       >
@@ -287,6 +297,12 @@ export default function NotesStickerLibraryScreen() {
       </View>
     </View>
   );
+}
+
+export default function NotesStickerLibraryScreen() {
+  const { notes } = useNotesStore();
+
+  return <NotesStickerLibraryContent notes={notes} />;
 }
 
 const styles = StyleSheet.create({

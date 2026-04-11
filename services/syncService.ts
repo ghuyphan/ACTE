@@ -117,7 +117,7 @@ export interface SyncService {
   recordChange: (change: SyncChange) => Promise<void>;
 }
 
-export interface SyncUser extends Pick<AppUser, 'uid' | 'displayName' | 'email' | 'photoURL'> {
+export interface SyncUser extends Pick<AppUser, 'uid' | 'displayName' | 'username' | 'email' | 'photoURL'> {
   id?: string;
 }
 
@@ -2184,6 +2184,8 @@ export async function syncNotes(
       upsertPublicUserProfile({
         userUid: userId,
         displayName: user.displayName,
+        username: user.username,
+        email: user.email,
         photoURL: user.photoURL,
       }),
       setLastRemoteSyncCursor(userId, nextCursor),

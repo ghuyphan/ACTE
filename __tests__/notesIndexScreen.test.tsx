@@ -62,16 +62,7 @@ jest.mock('expo-router', () => ({
     push: (...args: unknown[]) => mockRouterPush(...args),
   }),
   Stack: {
-    Screen: ({ options }: any) => {
-      const React = require('react');
-      const { View } = require('react-native');
-
-      if (options?.headerRight) {
-        return <View>{options.headerRight()}</View>;
-      }
-
-      return null;
-    },
+    Screen: () => null,
   },
 }));
 
@@ -316,6 +307,16 @@ describe('NotesIndexScreen', () => {
     expect(queryByText('Shared memory')).toBeNull();
   });
 
+  it('shows the sticker collection as a first-class notes mode', () => {
+    const { getByTestId, getByText, queryByText } = render(<NotesIndexScreen />);
+
+    fireEvent.press(getByTestId('notes-mode-collection'));
+
+    expect(getByTestId('notes-collection-mode')).toBeTruthy();
+    expect(getByText('1x')).toBeTruthy();
+    expect(queryByText('Newest note')).toBeNull();
+  });
+
   it('shows an overflow badge for multi-photo days and a note tile for text-only days', () => {
     mockNotes.splice(
       0,
@@ -534,14 +535,6 @@ describe('NotesIndexScreen', () => {
     });
   });
 
-  it('pushes to the sticker library screen from the header action', () => {
-    const { getByTestId } = render(<NotesIndexScreen />);
-
-    fireEvent.press(getByTestId('notes-sticker-library-button'));
-
-    expect(mockRouterPush).toHaveBeenCalledWith('/notes/stickers');
-  });
-
   it('re-renders tiles when grid decorations are revealed in all mode', async () => {
     const processEnv = process.env as NodeJS.ProcessEnv & { NODE_ENV?: string };
     const previousNodeEnv = processEnv.NODE_ENV;
@@ -612,10 +605,10 @@ describe('NotesIndexScreen', () => {
   });
 
   it('resolves left and right swipes into the expected modes', () => {
-    expect(resolveNotesModeFromSwipe('all', -72, 0, true)).toBe('recap');
-    expect(resolveNotesModeFromSwipe('all', 0, -520, true)).toBe('recap');
-    expect(resolveNotesModeFromSwipe('recap', 72, 0, true)).toBe('all');
-    expect(resolveNotesModeFromSwipe('recap', 0, 520, true)).toBe('all');
+    expect(resolveNotesModeFromSwipe('all', -72, 0, true)).toBe('collection');
+    expect(resolveNotesModeFromSwipe('collection', 0, -520, true)).toBe('recap');
+    expect(resolveNotesModeFromSwipe('recap', 72, 0, true)).toBe('collection');
+    expect(resolveNotesModeFromSwipe('collection', 0, 520, true)).toBe('all');
     expect(resolveNotesModeFromSwipe('all', -72, 0, false)).toBe('all');
     expect(resolveNotesModeFromSwipe('recap', 12, 40, true)).toBe('recap');
   });

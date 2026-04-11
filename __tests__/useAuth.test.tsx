@@ -38,7 +38,26 @@ function buildSession(overrides?: Partial<Session>): Session {
   };
 }
 
-const mockUpsertPublicUserProfile = jest.fn<Promise<void>, [unknown]>(async () => undefined);
+const mockUpsertPublicUserProfile = jest.fn<
+  Promise<{ displayName: string | null; username: string | null; usernameSetAt: string | null; photoURL: string | null; updatedAt: string }>,
+  [any]
+>(async (input) => ({
+  displayName: input?.displayName ?? null,
+  username: input?.username ?? null,
+  usernameSetAt: input?.usernameSetAt ?? null,
+  photoURL: input?.photoURL ?? null,
+  updatedAt: '2026-04-11T00:00:00.000Z',
+}));
+const mockUpdateOwnUsername = jest.fn<
+  Promise<{ displayName: string | null; username: string | null; usernameSetAt: string | null; photoURL: string | null; updatedAt: string }>,
+  [any]
+>(async (input) => ({
+  displayName: 'Huy',
+  username: input?.username ?? null,
+  usernameSetAt: '2026-04-11T08:00:00.000Z',
+  photoURL: 'https://example.com/avatar.jpg',
+  updatedAt: '2026-04-11T00:00:00.000Z',
+}));
 const mockClearSharedFeedCache = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
 const mockUnregisterCurrentSocialPushToken = jest.fn<Promise<void>, []>(async () => undefined);
 const mockPurgeLocalAccountScope = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
@@ -155,6 +174,7 @@ jest.mock('../constants/auth', () => ({
 
 jest.mock('../services/publicProfileService', () => ({
   upsertPublicUserProfile: (input: unknown) => mockUpsertPublicUserProfile(input),
+  updateOwnUsername: (input: unknown) => mockUpdateOwnUsername(input),
 }));
 
 jest.mock('../services/sharedFeedCache', () => ({
@@ -249,6 +269,7 @@ describe('useAuth', () => {
     mockAuthState.webClientId = 'client-id.apps.googleusercontent.com';
     mockAuthState.iosClientId = 'ios-client-id.apps.googleusercontent.com';
     mockInvokeFunction.mockResolvedValue({ data: { success: true }, error: null });
+    mockUpdateOwnUsername.mockClear();
     mockMigrateLocalNotesScopeToUser.mockClear();
     mockGetPersistedActiveNotesScopeSync.mockReturnValue(null);
     mockSetActiveNotesScope.mockClear();
@@ -317,7 +338,7 @@ describe('useAuth', () => {
     expect(mockUpsertPublicUserProfile).toHaveBeenCalled();
   });
 
-  it('creates an email account and stores the display name in Supabase metadata', async () => {
+  it('creates an email account and stores the display name and username metadata', async () => {
     const hook = renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => {
@@ -341,10 +362,43 @@ describe('useAuth', () => {
         data: {
           display_name: 'Huy',
           displayName: 'Huy',
+          username: 'new',
         },
       },
     });
     expect(mockUpsertPublicUserProfile).toHaveBeenCalled();
+  });
+
+  it('updates the username and reflects it in the current user state', async () => {
+    mockAuthState.initialSession = buildSession({
+      user: {
+        ...buildSession().user,
+        user_metadata: {
+          ...buildSession().user.user_metadata,
+          username: 'huy',
+        },
+      } as Session['user'],
+    });
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+
+    let result!: { status: string; message?: string };
+    await act(async () => {
+      result = await hook.result.current.updateUsername('huyphan');
+    });
+
+    expect(result).toEqual({ status: 'success' });
+    expect(mockUpdateOwnUsername).toHaveBeenCalledWith({
+      userUid: 'user-1',
+      username: 'huyphan',
+    });
+    expect(hook.result.current.user?.username).toBe('huyphan');
+    expect(hook.result.current.user?.usernameSetAt).toBe('2026-04-11T08:00:00.000Z');
   });
 
   it('sends reset-password emails through Supabase auth', async () => {

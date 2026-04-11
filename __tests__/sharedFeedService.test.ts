@@ -4,7 +4,10 @@ const mockSharedPostTombstones = new Map<string, any>();
 const mockStickerAssets = new Map<string, any>();
 const mockStickerAssetRefs = new Map<string, any>();
 const mockFriendships = new Map<string, Map<string, any>>();
-const mockPublicProfiles = new Map<string, { displayNameSnapshot: string | null; photoURLSnapshot: string | null }>();
+const mockPublicProfiles = new Map<
+  string,
+  { username: string | null; displayNameSnapshot: string | null; photoURLSnapshot: string | null }
+>();
 const mockCachedActiveInvites = new Map<string, any>();
 let mockUuidCounter = 0;
 let mockSessionUserId = 'owner-1';
@@ -307,12 +310,15 @@ jest.mock('../services/remoteMedia', () => ({
 jest.mock('../services/publicProfileService', () => ({
   getPublicUserProfile: async (userUid: string) =>
     mockPublicProfiles.get(userUid) ?? {
+      username: null,
       displayNameSnapshot: null,
       photoURLSnapshot: null,
     },
   upsertPublicUserProfile: jest.fn(async (input: { userUid: string; displayName: string | null; photoURL: string | null }) => {
+    const current = mockPublicProfiles.get(input.userUid);
     mockPublicProfiles.set(input.userUid, {
-      displayNameSnapshot: input.displayName,
+      username: current?.username ?? null,
+      displayNameSnapshot: current?.displayNameSnapshot ?? input.displayName,
       photoURLSnapshot: input.photoURL,
     });
   }),
@@ -397,10 +403,12 @@ jest.mock('../utils/supabase', () => ({
         invite.accepted_by_user_id = 'friend-1';
 
         const inviterProfile = mockPublicProfiles.get(invite.inviter_user_id) ?? {
+          username: null,
           displayNameSnapshot: null,
           photoURLSnapshot: null,
         };
         const receiverProfile = mockPublicProfiles.get('friend-1') ?? {
+          username: null,
           displayNameSnapshot: null,
           photoURLSnapshot: null,
         };
@@ -506,10 +514,12 @@ jest.mock('../utils/supabase', () => ({
         invite.accepted_by_user_id = 'friend-1';
 
         const inviterProfile = mockPublicProfiles.get(invite.inviter_user_id) ?? {
+          username: null,
           displayNameSnapshot: null,
           photoURLSnapshot: null,
         };
         const receiverProfile = mockPublicProfiles.get('friend-1') ?? {
+          username: null,
           displayNameSnapshot: null,
           photoURLSnapshot: null,
         };
@@ -660,6 +670,7 @@ const ownerUser = {
   id: 'owner-1',
   uid: 'owner-1',
   displayName: 'Owner',
+  username: 'owner',
   email: 'owner@example.com',
   photoURL: 'https://example.com/owner.jpg',
   providerData: [],
@@ -669,6 +680,7 @@ const friendUser = {
   id: 'friend-1',
   uid: 'friend-1',
   displayName: 'Friend',
+  username: 'friend',
   email: 'friend@example.com',
   photoURL: 'https://example.com/friend.jpg',
   providerData: [],
@@ -678,6 +690,7 @@ const secondFriendUser = {
   id: 'friend-2',
   uid: 'friend-2',
   displayName: 'Second Friend',
+  username: 'second.friend',
   email: 'friend-2@example.com',
   photoURL: 'https://example.com/friend-2.jpg',
   providerData: [],
@@ -705,15 +718,18 @@ const secondFriendUser = {
   mockSerializeStickerPlacementsForStorage.mockReset();
   mockSerializeStickerPlacementsForStorage.mockImplementation(async (placements) => JSON.stringify(placements));
   mockPublicProfiles.set(ownerUser.id, {
-    displayNameSnapshot: ownerUser.displayName,
+    username: ownerUser.username,
+    displayNameSnapshot: ownerUser.username,
     photoURLSnapshot: ownerUser.photoURL,
   });
   mockPublicProfiles.set(friendUser.id, {
-    displayNameSnapshot: friendUser.displayName,
+    username: friendUser.username,
+    displayNameSnapshot: friendUser.username,
     photoURLSnapshot: friendUser.photoURL,
   });
   mockPublicProfiles.set(secondFriendUser.id, {
-    displayNameSnapshot: secondFriendUser.displayName,
+    username: secondFriendUser.username,
+    displayNameSnapshot: secondFriendUser.username,
     photoURLSnapshot: secondFriendUser.photoURL,
   });
 });
@@ -733,7 +749,7 @@ describe('sharedFeedService', () => {
     );
     expect(mockEnsureFriendMap(ownerUser.id).get(friendUser.id)).toEqual(
       expect.objectContaining({
-        display_name_snapshot: friendUser.displayName,
+        display_name_snapshot: friendUser.username,
       })
     );
     expect(mockSendSocialNotificationEvent).toHaveBeenCalledWith({
@@ -744,14 +760,14 @@ describe('sharedFeedService', () => {
 
   it('creates a shared photo post and returns it in the refreshed feed', async () => {
     mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
-      display_name_snapshot: friendUser.displayName,
+      display_name_snapshot: friendUser.username,
       photo_url_snapshot: friendUser.photoURL,
       friended_at: '2026-03-20T00:00:00.000Z',
       last_shared_at: null,
       created_by_invite_id: 'invite-1',
     });
     mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
-      display_name_snapshot: ownerUser.displayName,
+      display_name_snapshot: ownerUser.username,
       photo_url_snapshot: ownerUser.photoURL,
       friended_at: '2026-03-20T00:00:00.000Z',
       last_shared_at: null,
@@ -801,14 +817,14 @@ describe('sharedFeedService', () => {
 
   it('preserves the paired motion clip extension when sharing a live photo note', async () => {
     mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
-      display_name_snapshot: friendUser.displayName,
+      display_name_snapshot: friendUser.username,
       photo_url_snapshot: friendUser.photoURL,
       friended_at: '2026-03-20T00:00:00.000Z',
       last_shared_at: null,
       created_by_invite_id: 'invite-1',
     });
     mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
-      display_name_snapshot: ownerUser.displayName,
+      display_name_snapshot: ownerUser.username,
       photo_url_snapshot: ownerUser.photoURL,
       friended_at: '2026-03-20T00:00:00.000Z',
       last_shared_at: null,
@@ -840,14 +856,14 @@ describe('sharedFeedService', () => {
 
   it('hydrates stored doodles and stickers before creating a shared post', async () => {
     mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
-      display_name_snapshot: friendUser.displayName,
+      display_name_snapshot: friendUser.username,
       photo_url_snapshot: friendUser.photoURL,
       friended_at: '2026-03-20T00:00:00.000Z',
       last_shared_at: null,
       created_by_invite_id: 'invite-1',
     });
     mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
-      display_name_snapshot: ownerUser.displayName,
+      display_name_snapshot: ownerUser.username,
       photo_url_snapshot: ownerUser.photoURL,
       friended_at: '2026-03-20T00:00:00.000Z',
       last_shared_at: null,
@@ -916,14 +932,14 @@ describe('sharedFeedService', () => {
 
   it('cleans up uploaded shared media when post creation fails', async () => {
     mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
-      display_name_snapshot: friendUser.displayName,
+      display_name_snapshot: friendUser.username,
       photo_url_snapshot: friendUser.photoURL,
       friended_at: '2026-03-20T00:00:00.000Z',
       last_shared_at: null,
       created_by_invite_id: 'invite-1',
     });
     mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
-      display_name_snapshot: ownerUser.displayName,
+      display_name_snapshot: ownerUser.username,
       photo_url_snapshot: ownerUser.photoURL,
       friended_at: '2026-03-20T00:00:00.000Z',
       last_shared_at: null,
@@ -955,7 +971,7 @@ describe('sharedFeedService', () => {
     mockSharedPosts.set('shared-sticker', {
       id: 'shared-sticker',
       author_user_id: ownerUser.id,
-      author_display_name: ownerUser.displayName,
+      author_display_name: ownerUser.username,
       author_photo_url_snapshot: ownerUser.photoURL,
       audience_user_ids: [ownerUser.id, friendUser.id],
       type: 'text',
@@ -1016,7 +1032,7 @@ describe('sharedFeedService', () => {
     mockSharedPosts.set('shared-stuck', {
       id: 'shared-stuck',
       author_user_id: ownerUser.id,
-      author_display_name: ownerUser.displayName,
+      author_display_name: ownerUser.username,
       author_photo_url_snapshot: ownerUser.photoURL,
       audience_user_ids: [ownerUser.id, friendUser.id],
       type: 'text',
@@ -1047,7 +1063,7 @@ describe('sharedFeedService', () => {
     mockSharedPosts.set('shared-hidden-delete', {
       id: 'shared-hidden-delete',
       author_user_id: ownerUser.id,
-      author_display_name: ownerUser.displayName,
+      author_display_name: ownerUser.username,
       author_photo_url_snapshot: ownerUser.photoURL,
       audience_user_ids: [ownerUser.id, friendUser.id],
       type: 'text',
@@ -1081,7 +1097,7 @@ describe('sharedFeedService', () => {
     mockSharedPosts.set('shared-photo-error', {
       id: 'shared-photo-error',
       author_user_id: ownerUser.id,
-      author_display_name: ownerUser.displayName,
+      author_display_name: ownerUser.username,
       author_photo_url_snapshot: ownerUser.photoURL,
       audience_user_ids: [ownerUser.id, friendUser.id],
       type: 'photo',
@@ -1113,28 +1129,28 @@ describe('sharedFeedService', () => {
 
   it('revokes old shared audiences and hides author-only leftovers after removing a friend', async () => {
     mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
-      display_name_snapshot: friendUser.displayName,
+      display_name_snapshot: friendUser.username,
       photo_url_snapshot: friendUser.photoURL,
       friended_at: '2026-03-20T00:00:00.000Z',
       last_shared_at: null,
       created_by_invite_id: 'invite-1',
     });
     mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
-      display_name_snapshot: ownerUser.displayName,
+      display_name_snapshot: ownerUser.username,
       photo_url_snapshot: ownerUser.photoURL,
       friended_at: '2026-03-20T00:00:00.000Z',
       last_shared_at: null,
       created_by_invite_id: 'invite-1',
     });
     mockEnsureFriendMap(ownerUser.id).set(secondFriendUser.id, {
-      display_name_snapshot: secondFriendUser.displayName,
+      display_name_snapshot: secondFriendUser.username,
       photo_url_snapshot: secondFriendUser.photoURL,
       friended_at: '2026-03-21T00:00:00.000Z',
       last_shared_at: null,
       created_by_invite_id: 'invite-2',
     });
     mockEnsureFriendMap(secondFriendUser.id).set(ownerUser.id, {
-      display_name_snapshot: ownerUser.displayName,
+      display_name_snapshot: ownerUser.username,
       photo_url_snapshot: ownerUser.photoURL,
       friended_at: '2026-03-21T00:00:00.000Z',
       last_shared_at: null,
@@ -1144,7 +1160,7 @@ describe('sharedFeedService', () => {
     mockSharedPosts.set('shared-owned-direct', {
       id: 'shared-owned-direct',
       author_user_id: ownerUser.id,
-      author_display_name: ownerUser.displayName,
+      author_display_name: ownerUser.username,
       author_photo_url_snapshot: ownerUser.photoURL,
       audience_user_ids: [ownerUser.id, friendUser.id],
       type: 'text',
@@ -1163,7 +1179,7 @@ describe('sharedFeedService', () => {
     mockSharedPosts.set('shared-owned-group', {
       id: 'shared-owned-group',
       author_user_id: ownerUser.id,
-      author_display_name: ownerUser.displayName,
+      author_display_name: ownerUser.username,
       author_photo_url_snapshot: ownerUser.photoURL,
       audience_user_ids: [ownerUser.id, friendUser.id, secondFriendUser.id],
       type: 'text',
@@ -1182,7 +1198,7 @@ describe('sharedFeedService', () => {
     mockSharedPosts.set('shared-friend-direct', {
       id: 'shared-friend-direct',
       author_user_id: friendUser.id,
-      author_display_name: friendUser.displayName,
+      author_display_name: friendUser.username,
       author_photo_url_snapshot: friendUser.photoURL,
       audience_user_ids: [friendUser.id, ownerUser.id],
       type: 'text',

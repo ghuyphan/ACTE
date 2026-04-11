@@ -12,6 +12,7 @@ import {
 import type { ThemeColors } from '../../../hooks/useTheme';
 import { Layout } from '../../../constants/theme';
 import ProfileAvatar from './ProfileAvatar';
+import UsernameEditSheet from './UsernameEditSheet';
 import { useProfileScreenModel } from './useProfileScreenModel';
 
 function SectionTitle({
@@ -170,15 +171,25 @@ export default function ProfileScreenAndroid() {
     avatarLabel,
     avatarUrl,
     colors,
+    canEditUsername,
+    closeUsernameEditor,
     insets,
     isAuthAvailable,
     isDeletingAccount,
     isSigningOut,
+    isSavingUsername,
+    isUsernameSheetVisible,
     membershipLabel,
     openSignIn,
+    openUsernameEditor,
     profileName,
+    saveUsername,
+    setUsernameDraft,
     t,
     tier,
+    usernameDraft,
+    usernameErrorMessage,
+    usernameHelperText,
     user,
     handleDeleteAccount,
     handleSignOut,
@@ -260,7 +271,24 @@ export default function ProfileScreenAndroid() {
                   title={t('profile.name', 'Name')}
                   value={user.displayName || t('profile.noName', 'Noto account')}
                 />
-                {user.email ? <CardDivider colors={colors} /> : null}
+                {user.username || user.email ? <CardDivider colors={colors} /> : null}
+                {user.username ? (
+                  <>
+                    <ProfileListItem
+                      colors={colors}
+                      icon="at-outline"
+                      title={t('profile.username', 'Username')}
+                      value={`@${user.username}`}
+                      subtitle={
+                        canEditUsername
+                          ? t('profile.usernameEditCta', 'Choose your permanent username')
+                          : undefined
+                      }
+                      onPress={canEditUsername ? openUsernameEditor : undefined}
+                    />
+                    {user.email ? <CardDivider colors={colors} /> : null}
+                  </>
+                ) : null}
                 {user.email ? (
                   <ProfileListItem
                     colors={colors}
@@ -328,6 +356,19 @@ export default function ProfileScreenAndroid() {
           </View>
         )}
       </ScrollView>
+      <UsernameEditSheet
+        visible={isUsernameSheetVisible}
+        value={usernameDraft}
+        errorMessage={usernameErrorMessage}
+        helperText={usernameHelperText}
+        isSaving={isSavingUsername}
+        onChangeValue={setUsernameDraft}
+        onClose={closeUsernameEditor}
+        onSave={saveUsername}
+        title={t('profile.usernameSheetTitle', 'Choose your username')}
+        subtitle={t('profile.usernameSheetSubtitle', 'This will be your short in-app name.')}
+        saveLabel={t('profile.usernameSave', 'Save username')}
+      />
     </View>
   );
 }

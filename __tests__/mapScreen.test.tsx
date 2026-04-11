@@ -770,7 +770,7 @@ describe('MapScreen', () => {
     nowSpy.mockRestore();
   });
 
-  it('lets you dismiss the note preview until you focus a marker again', async () => {
+  it('keeps the note preview visible when the sheet handle is pressed', async () => {
     const { getAllByTestId, getByTestId, queryByTestId } = render(<MapScreen />);
 
     await waitFor(() => {
@@ -779,17 +779,10 @@ describe('MapScreen', () => {
 
     fireEvent.press(getByTestId('map-preview-dismiss'));
 
-    expect(getByTestId('map-preview-shell')).toBeTruthy();
-
     await waitForPreviewCloseAnimation();
 
     await waitFor(() => {
-      expect(getByTestId('map-show-preview')).toBeTruthy();
-    });
-
-    fireEvent.press(getByTestId('map-show-preview'));
-
-    await waitFor(() => {
+      expect(queryByTestId('map-show-preview')).toBeNull();
       expect(getByTestId('map-preview-list')).toBeTruthy();
     });
 
@@ -864,8 +857,8 @@ describe('MapScreen', () => {
     });
   });
 
-  it('restores the photo marker after dismissing the preview for a selected photo note', async () => {
-    const { getByTestId } = render(<MapScreen />);
+  it('keeps the photo marker visible when pressing the preview handle for a selected photo note', async () => {
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
 
     act(() => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
@@ -891,7 +884,8 @@ describe('MapScreen', () => {
     await waitForPreviewCloseAnimation();
 
     await waitFor(() => {
-      expect(getByTestId('map-show-preview')).toBeTruthy();
+      expect(getByTestId('map-preview-list')).toBeTruthy();
+      expect(queryByTestId('map-show-preview')).toBeNull();
       expect(getByTestId('photo-marker-photo-1')).toBeTruthy();
     });
   });
