@@ -245,6 +245,37 @@ describe('useNotesStore', () => {
     });
   });
 
+  it('bootstraps notes before auth finishes resolving', async () => {
+    mockNotesDb = [
+      {
+        id: 'note-1',
+        type: 'text' as const,
+        content: 'Immediate local note',
+        locationName: 'Place 1',
+        latitude: 10,
+        longitude: 106,
+        radius: 150,
+        isFavorite: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: null,
+      },
+    ];
+
+    mockUseAuth.mockReturnValue({
+      user: null,
+      isReady: false,
+    });
+
+    const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.initialLoadComplete).toBe(true);
+      expect(result.current.notes).toHaveLength(1);
+      expect(result.current.notes[0]?.id).toBe('note-1');
+    });
+  });
+
   it('trusts an underfilled first page over a stale higher note count', async () => {
     mockNotesDb = [
       {
@@ -456,22 +487,13 @@ describe('useNotesStore', () => {
     expect(result.current.notes[0]?.id).toBe('note-user-2');
   });
 
-  it('waits for auth readiness before loading scoped notes for a signed-in user', async () => {
+  it('loads scoped notes immediately even before auth readiness settles', async () => {
     mockUseAuth.mockReturnValue({
       user: { uid: 'user-42' } as any,
       isReady: false,
     });
 
-    const { result, rerender } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
-
-    expect(mockGetNotesPageForScope).not.toHaveBeenCalled();
-
-    mockUseAuth.mockReturnValue({
-      user: { uid: 'user-42' } as any,
-      isReady: true,
-    });
-
-    rerender({});
+    const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);

@@ -10,6 +10,7 @@ import {
 import {
   getCachedStartupRoute,
   loadStartupRoute,
+  type StartupEntryRoute,
 } from '../../services/startupRouting';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
@@ -17,6 +18,7 @@ export function useAppStartupBootstrap() {
   const [startupError, setStartupError] = useState<string | null>(null);
   const [isRecovering, setIsRecovering] = useState(false);
   const [isDatabaseReady, setIsDatabaseReady] = useState(false);
+  const [startupRoute, setStartupRoute] = useState<StartupEntryRoute | null>(() => getCachedStartupRoute('entry'));
   const [isStartupRouteReady, setIsStartupRouteReady] = useState(() => Boolean(getCachedStartupRoute('entry')));
   const [databaseAttempt, setDatabaseAttempt] = useState(0);
 
@@ -47,8 +49,9 @@ export function useAppStartupBootstrap() {
 
     let cancelled = false;
 
-    void loadStartupRoute('entry').then(() => {
+    void loadStartupRoute('entry').then((nextRoute) => {
       if (!cancelled) {
+        setStartupRoute(nextRoute);
         setIsStartupRouteReady(true);
       }
     });
@@ -113,6 +116,7 @@ export function useAppStartupBootstrap() {
   return {
     isDatabaseReady,
     isRecovering,
+    startupRoute,
     isStartupRouteReady,
     resetStartupData,
     retryStartup,

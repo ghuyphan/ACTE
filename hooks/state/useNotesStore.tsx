@@ -353,10 +353,6 @@ function useNotesStoreValue(): NotesStoreValue {
   }, [refreshNotes]);
 
   useEffect(() => {
-    if (!authReady) {
-      return;
-    }
-
     let cancelled = false;
     let cleanupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
     let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -388,7 +384,7 @@ function useNotesStoreValue(): NotesStoreValue {
         clearTimeout(cleanupTimeout);
       }
     };
-  }, [applyActiveScope, authReady, refreshNotes, user?.uid]);
+  }, [applyActiveScope, refreshNotes, user?.uid]);
 
   useEffect(() => {
     if (!authReady) {

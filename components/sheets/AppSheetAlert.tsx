@@ -18,8 +18,9 @@ export interface AppSheetAlertProps {
   variant?: AppSheetAlertVariant;
   title: string;
   message: string;
-  primaryAction: AppSheetAlertAction;
+  primaryAction?: AppSheetAlertAction;
   secondaryAction?: AppSheetAlertAction;
+  actions?: AppSheetAlertAction[];
   dismissible?: boolean;
   onClose: () => void;
 }
@@ -41,6 +42,7 @@ function AlertSheetBody({
   variant = 'info',
   title,
   message,
+  actions,
   primaryAction,
   secondaryAction,
   onClose,
@@ -57,6 +59,10 @@ function AlertSheetBody({
       await action.onPress();
     }
   };
+  const resolvedActions =
+    actions && actions.length > 0
+      ? actions
+      : ([primaryAction, secondaryAction].filter(Boolean) as AppSheetAlertAction[]);
 
   return (
     <AppSheetScaffold
@@ -70,24 +76,17 @@ function AlertSheetBody({
       }
     >
       <View style={styles.actions}>
-        <PrimaryButton
-          label={primaryAction.label}
-          variant={primaryAction.variant ?? 'primary'}
-          onPress={() => {
-            void runAction(primaryAction);
-          }}
-          style={styles.actionButton}
-        />
-        {secondaryAction ? (
+        {resolvedActions.map((action, index) => (
           <PrimaryButton
-            label={secondaryAction.label}
-            variant={secondaryAction.variant ?? 'secondary'}
+            key={`${action.label}-${action.variant ?? 'primary'}-${index}`}
+            label={action.label}
+            variant={action.variant ?? 'primary'}
             onPress={() => {
-              void runAction(secondaryAction);
+              void runAction(action);
             }}
             style={styles.actionButton}
           />
-        ) : null}
+        ))}
       </View>
     </AppSheetScaffold>
   );
@@ -98,6 +97,7 @@ export default function AppSheetAlert({
   variant = 'info',
   title,
   message,
+  actions,
   primaryAction,
   secondaryAction,
   dismissible = true,
@@ -109,6 +109,7 @@ export default function AppSheetAlert({
         variant={variant}
         title={title}
         message={message}
+        actions={actions}
         primaryAction={primaryAction}
         secondaryAction={secondaryAction}
         onClose={onClose}

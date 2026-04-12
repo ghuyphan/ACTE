@@ -33,6 +33,7 @@ import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
 import { useAuth } from '../../hooks/useAuth';
 import { useCaptureFlow } from '../../hooks/useCaptureFlow';
 import { useFeedFocus } from '../../hooks/useFeedFocus';
+import { useHomeStartupReady } from '../../hooks/app/useHomeStartupReady';
 import {
   useGeofence,
   type ForegroundLocationRequestResult,
@@ -104,6 +105,7 @@ export default function HomeScreen() {
   const { setSavedNoteRevealActive } = useSavedNoteRevealUi();
   const notesStore = useNotesStore();
   const { notes, loading, loadNextNotesPage, refreshNotes, createNote } = notesStore;
+  const notesInitialLoadComplete = notesStore.initialLoadComplete ?? !loading;
   const noteCount = notesStore.noteCount ?? notes.length;
   const localPhotoNoteCount = notesStore.photoNoteCount ?? countPhotoNotes(notes);
   const { user, isAuthAvailable } = useAuth();
@@ -138,6 +140,7 @@ export default function HomeScreen() {
   } = useGeofence();
   const { alertProps, showAlert } = useAppSheetAlert();
   const { setActiveFeedTarget, clearActiveFeedTarget } = useActiveFeedTarget();
+  const { markHomeFeedReady, resetHomeFeedReady } = useHomeStartupReady();
   const {
     clearFeedFocus,
     peekFeedFocus,
@@ -456,6 +459,22 @@ export default function HomeScreen() {
     },
     [homeFeedItems, isFriendsFilterActive, suppressedHomeNoteIdSet]
   );
+  useEffect(() => {
+    if (!notesInitialLoadComplete) {
+      resetHomeFeedReady();
+      return;
+    }
+
+    if (visibleFeedItems.length === 0) {
+      markHomeFeedReady();
+    }
+  }, [
+    markHomeFeedReady,
+    notesInitialLoadComplete,
+    resetHomeFeedReady,
+    visibleFeedItems.length,
+  ]);
+
   useEffect(() => {
     logHomeFeedDebug('state', {
       userUid: user?.uid ?? null,
@@ -1901,7 +1920,6 @@ export default function HomeScreen() {
       takePicture,
     ]
   );
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.blurTarget}>
@@ -1941,6 +1959,7 @@ export default function HomeScreen() {
           onSettledArchiveItemChange={handleSettledArchiveItemChange}
           onCaptureVisibilityChange={setIsCaptureVisible}
           onCaptureScrollSettledChange={setIsCaptureScrollSettled}
+          onInitialContentDraw={markHomeFeedReady}
           scrollEnabled={
             !captureInteractionScrollLocked &&
             !isCaptureTextEntryFocused

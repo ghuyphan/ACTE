@@ -165,6 +165,14 @@ jest.mock('../hooks/useTheme', () => ({
   }),
 }));
 
+jest.mock('../hooks/app/useHomeStartupReady', () => ({
+  useHomeStartupReady: () => ({
+    homeFeedReady: false,
+    markHomeFeedReady: jest.fn(),
+    resetHomeFeedReady: jest.fn(),
+  }),
+}));
+
 jest.mock('../hooks/useGeofence', () => ({
   useGeofence: () => ({
     location: null,

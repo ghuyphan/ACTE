@@ -4,11 +4,12 @@ import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import AppProviders from '../components/app/AppProviders';
 import PrimaryButton from '../components/ui/PrimaryButton';
+import { useHomeStartupReady } from '../hooks/app/useHomeStartupReady';
 import { useNotesStore } from '../hooks/useNotes';
 import { useTheme } from '../hooks/useTheme';
 import { useAppSplashGate } from '../hooks/app/useAppSplashGate';
@@ -16,6 +17,7 @@ import { useAppNotificationRouting } from '../hooks/app/useAppNotificationRoutin
 import { useAppStartupBootstrap } from '../hooks/app/useAppStartupBootstrap';
 import { useAppWidgetRefresh } from '../hooks/app/useAppWidgetRefresh';
 import { useSocialPushRegistration } from '../hooks/app/useSocialPushRegistration';
+import { showAppAlert } from '../utils/alert';
 import '../utils/backgroundGeofence';
 
 export { ErrorBoundary } from 'expo-router';
@@ -26,10 +28,12 @@ SplashScreen.preventAutoHideAsync();
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
   const { initialLoadComplete } = useNotesStore();
+  const { homeFeedReady } = useHomeStartupReady();
   const { t } = useTranslation();
   const {
     isDatabaseReady,
     isRecovering,
+    startupRoute,
     isStartupRouteReady,
     resetStartupData,
     retryStartup,
@@ -42,6 +46,8 @@ function AppContent() {
     isDatabaseReady,
     isStartupRouteReady,
     notesReady: initialLoadComplete,
+    requiresHomeFeedReady: startupRoute === '/',
+    homeFeedReady,
     startupError,
     themeReady,
   });
@@ -70,7 +76,7 @@ function AppContent() {
       return;
     }
 
-    Alert.alert(
+    showAppAlert(
       t('startup.resetLocalDataTitle', 'Reset local data?'),
       t(
         'startup.resetLocalDataBody',

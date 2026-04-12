@@ -1,19 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { Platform, processColor, type ColorValue } from 'react-native';
-import { AlertDialog, Host } from '@expo/ui/jetpack-compose';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Platform } from 'react-native';
 import { appAlertManager, AppAlertOptions } from '../../utils/alert';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from '../../hooks/useTheme';
+import AppSheetAlert, { type AppSheetAlertAction } from '../sheets/AppSheetAlert';
 
 type AppAlertButton = NonNullable<AppAlertOptions['buttons']>[number];
 
-function toComposeColor(color: string): ColorValue {
-  return (processColor(color) ?? color) as unknown as ColorValue;
-}
-
 export function AppAlertProvider() {
   const { t } = useTranslation();
-  const { colors, isDark } = useTheme();
   const [alertState, setAlertState] = useState<AppAlertOptions | null>(null);
 
   useEffect(() => {
@@ -38,10 +32,9 @@ export function AppAlertProvider() {
   const buttons =
     alertState.buttons && alertState.buttons.length > 0 ? alertState.buttons : [{ text: defaultOkText }];
 
-  const dismissButton = buttons.find((button) => button.style === 'cancel');
+  const dismissButton = buttons.find((button) => button.style === 'cancel') ?? null;
   const nonCancelButtons = buttons.filter((button) => button.style !== 'cancel');
-  const confirmButton = nonCancelButtons[nonCancelButtons.length - 1] ?? buttons[buttons.length - 1];
-  const secondaryButton = dismissButton && dismissButton !== confirmButton ? dismissButton : undefined;
+  const hasDestructiveAction = buttons.some((button) => button.style === 'destructive');
 
   const handlePress = (button?: AppAlertButton) => {
     setAlertState(null);
@@ -49,38 +42,52 @@ export function AppAlertProvider() {
   };
 
   const handleDismiss = () => {
-    if (secondaryButton) {
-      handlePress(secondaryButton);
-      return;
-    }
-
     setAlertState(null);
   };
 
-  const dismissButtonColors = {
-    containerColor: toComposeColor(colors.primarySoft),
-    contentColor: toComposeColor(colors.primary),
-  };
-  const confirmButtonTextColor = isDark ? colors.background : '#2B2621';
-  const confirmButtonBackgroundColor = confirmButton?.style === 'destructive' ? colors.danger : colors.primary;
-  const confirmButtonColors = {
-    containerColor: toComposeColor(confirmButtonBackgroundColor),
-    contentColor: toComposeColor(confirmButtonTextColor),
-  };
+  const actions = useMemo<AppSheetAlertAction[]>(() => {
+    const mappedNonCancelActions: AppSheetAlertAction[] = nonCancelButtons.map((button, index) => {
+      const variant: AppSheetAlertAction['variant'] =
+        button.style === 'destructive'
+          ? 'destructive'
+          : index === nonCancelButtons.length - 1
+            ? 'primary'
+            : 'secondary';
+
+      return {
+        label: button.text || defaultOkText,
+        variant,
+        onPress: () => {
+          handlePress(button);
+        },
+      };
+    });
+
+    if (!dismissButton) {
+      return mappedNonCancelActions;
+    }
+
+    return [
+      ...mappedNonCancelActions,
+      {
+        label: dismissButton.text || t('common.cancel', 'Cancel'),
+        variant: 'secondary',
+        onPress: () => {
+          handlePress(dismissButton);
+        },
+      },
+    ];
+  }, [defaultOkText, dismissButton, nonCancelButtons, t]);
 
   return (
-    <Host colorScheme={isDark ? 'dark' : 'light'} matchContents>
-      <AlertDialog
-        visible
-        title={alertState.title || ''}
-        text={alertState.message}
-        confirmButtonText={confirmButton?.text || defaultOkText}
-        dismissButtonText={secondaryButton?.text}
-        confirmButtonColors={confirmButtonColors}
-        dismissButtonColors={secondaryButton ? dismissButtonColors : undefined}
-        onConfirmPressed={() => handlePress(confirmButton)}
-        onDismissPressed={handleDismiss}
-      />
-    </Host>
+    <AppSheetAlert
+      visible
+      variant={hasDestructiveAction ? 'error' : 'info'}
+      title={alertState.title || ''}
+      message={alertState.message || ''}
+      actions={actions}
+      dismissible={Boolean(dismissButton) || buttons.length <= 1}
+      onClose={handleDismiss}
+    />
   );
 }

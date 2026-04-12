@@ -29,7 +29,7 @@ describe('useAppSplashGate', () => {
     global.requestAnimationFrame = originalRequestAnimationFrame;
   });
 
-  it('waits for route, database, notes, theme, and i18n readiness before hiding the splash', async () => {
+  it('waits for route, database, theme, and i18n readiness before hiding the splash', async () => {
     const { rerender } = renderHook(
       (props: Parameters<typeof useAppSplashGate>[0]) => useAppSplashGate(props),
       {
@@ -37,6 +37,8 @@ describe('useAppSplashGate', () => {
           isDatabaseReady: false,
           isStartupRouteReady: false,
           notesReady: false,
+          requiresHomeFeedReady: true,
+          homeFeedReady: false,
           startupError: null,
           themeReady: false,
         },
@@ -50,6 +52,8 @@ describe('useAppSplashGate', () => {
       isDatabaseReady: true,
       isStartupRouteReady: true,
       notesReady: true,
+      requiresHomeFeedReady: true,
+      homeFeedReady: true,
       startupError: null,
       themeReady: true,
     });
@@ -59,12 +63,14 @@ describe('useAppSplashGate', () => {
     });
   });
 
-  it('allows the startup error screen to replace the splash without waiting for notes', async () => {
+  it('allows the startup error screen to replace the splash without waiting for note hydration', async () => {
     renderHook(() =>
       useAppSplashGate({
         isDatabaseReady: false,
         isStartupRouteReady: true,
         notesReady: false,
+        requiresHomeFeedReady: true,
+        homeFeedReady: false,
         startupError: 'database-init-failed',
         themeReady: true,
       })

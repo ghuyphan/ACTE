@@ -222,6 +222,7 @@ interface NotesFeedProps {
   onSettledArchiveItemChange?: (item: { id: string; kind: 'note' | 'shared-post' } | null) => void;
   onScrollOffsetChange?: (offsetY: number) => void;
   bottomOverlayInset?: number;
+  onInitialContentDraw?: () => void;
 }
 
 export default function NotesFeed({
@@ -250,6 +251,7 @@ export default function NotesFeed({
   onSettledArchiveItemChange,
   onScrollOffsetChange,
   bottomOverlayInset = 0,
+  onInitialContentDraw,
 }: NotesFeedProps) {
   const { height } = useWindowDimensions();
   const captureVisibilityRef = useRef(true);
@@ -649,6 +651,11 @@ export default function NotesFeed({
           </View>
         ) : null
       }
+      onLoad={() => {
+        if (listData.length > 0) {
+          onInitialContentDraw?.();
+        }
+      }}
       onScroll={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
         const previousSettledOffsetY = lastOffsetYRef.current;

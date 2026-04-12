@@ -8,6 +8,7 @@ import { AuthProvider } from '../../hooks/useAuth';
 import { ConnectivityProvider } from '../../hooks/useConnectivity';
 import { FeedFocusProvider } from '../../hooks/useFeedFocus';
 import { HapticsProvider } from '../../hooks/useHaptics';
+import { HomeStartupReadyProvider } from '../../hooks/app/useHomeStartupReady';
 import { NotesProvider } from '../../hooks/useNotes';
 import { NoteDetailSheetProvider } from '../../hooks/useNoteDetailSheet';
 import { SharedFeedProvider } from '../../hooks/useSharedFeed';
@@ -42,13 +43,15 @@ function FeatureProviders({ children }: AppProvidersProps) {
     <ActiveNoteProvider>
       <ActiveFeedTargetProvider>
         <FeedFocusProvider>
-          <NotesProvider>
-            <SyncStatusProvider>
-              <SharedFeedProvider>
-                <NoteDetailSheetProvider>{children}</NoteDetailSheetProvider>
-              </SharedFeedProvider>
-            </SyncStatusProvider>
-          </NotesProvider>
+          <HomeStartupReadyProvider>
+            <NotesProvider>
+              <SyncStatusProvider>
+                <SharedFeedProvider>
+                  <NoteDetailSheetProvider>{children}</NoteDetailSheetProvider>
+                </SharedFeedProvider>
+              </SyncStatusProvider>
+            </NotesProvider>
+          </HomeStartupReadyProvider>
         </FeedFocusProvider>
       </ActiveFeedTargetProvider>
     </ActiveNoteProvider>
