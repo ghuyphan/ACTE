@@ -62,6 +62,14 @@ interface NotesStoreValue {
 const NotesStoreContext = createContext<NotesStoreValue | undefined>(undefined);
 const INITIAL_NOTES_BOOTSTRAP_LIMIT = 24;
 
+function logNotesStoreDebug(event: string, payload: Record<string, unknown>) {
+  if (!__DEV__) {
+    return;
+  }
+
+  console.log(`[notes-store] ${event}`, payload);
+}
+
 interface NoteStats {
   totalCount: number;
   photoCount: number;
@@ -205,11 +213,23 @@ function useNotesStoreValue(): NotesStoreValue {
       }),
       getNoteStatsForScope(scope),
     ]);
+    const inferredHasLoadedAllNotes =
+      pagedNotes.length < limit || stats.totalCount <= pagedNotes.length;
+    const effectiveStats = inferredHasLoadedAllNotes ? buildNoteStats(pagedNotes) : stats;
+    logNotesStoreDebug('fetchNotesSnapshot', {
+      scope,
+      limit,
+      returnedCount: pagedNotes.length,
+      reportedTotalCount: stats.totalCount,
+      effectiveTotalCount: effectiveStats.totalCount,
+      inferredHasLoadedAllNotes,
+      loadFull: shouldLoadFull,
+    });
 
     return {
       notes: pagedNotes,
-      stats,
-      hasLoadedAllNotes: stats.totalCount <= pagedNotes.length,
+      stats: effectiveStats,
+      hasLoadedAllNotes: inferredHasLoadedAllNotes,
     };
   }, []);
 
@@ -237,6 +257,13 @@ function useNotesStoreValue(): NotesStoreValue {
       setNotes(nextNotes);
       commitNoteStats(snapshot.stats, snapshot.hasLoadedAllNotes);
       setInitialLoadComplete(true);
+      logNotesStoreDebug('refreshNotes:committed', {
+        scope,
+        showLoading,
+        returnedCount: nextNotes.length,
+        totalCount: snapshot.stats.totalCount,
+        hasLoadedAllNotes: snapshot.hasLoadedAllNotes,
+      });
 
       if (options?.updateWidget) {
         scheduleWidgetUpdate(snapshot.hasLoadedAllNotes ? nextNotes : undefined);
@@ -263,6 +290,13 @@ function useNotesStoreValue(): NotesStoreValue {
   }, [commitNoteStats, fetchNotesSnapshot, scheduleWidgetUpdate, syncGeofencesForNotes]);
 
   const loadNextNotesPage = useCallback(async () => {
+    logNotesStoreDebug('loadNextNotesPage:requested', {
+      scope: activeScopeRef.current,
+      currentLoadedCount: notesRef.current.length,
+      currentTotalCount: noteStatsRef.current.totalCount,
+      hasLoadedAllNotes: hasLoadedAllNotesRef.current,
+    });
+
     if (hasLoadedAllNotesRef.current) {
       return notesRef.current;
     }
@@ -288,6 +322,12 @@ function useNotesStoreValue(): NotesStoreValue {
         notesRef.current = snapshot.notes;
         setNotes(snapshot.notes);
         commitNoteStats(snapshot.stats, snapshot.hasLoadedAllNotes);
+        logNotesStoreDebug('loadNextNotesPage:committed', {
+          scope,
+          returnedCount: snapshot.notes.length,
+          totalCount: snapshot.stats.totalCount,
+          hasLoadedAllNotes: snapshot.hasLoadedAllNotes,
+        });
         return snapshot.notes;
       })
       .catch((error) => {

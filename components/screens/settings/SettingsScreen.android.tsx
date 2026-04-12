@@ -245,7 +245,6 @@ export default function SettingsScreenAndroid() {
                   colors={colors}
                   icon="sync-outline"
                   title={t('settings.autoSync', 'Auto sync')}
-                  subtitle={accountHint ?? t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.')}
                   value={syncValue}
                   onPress={() => setShowSync(true)}
                 />

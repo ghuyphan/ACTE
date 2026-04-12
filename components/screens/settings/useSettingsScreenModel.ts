@@ -1,5 +1,5 @@
 import Constants from 'expo-constants';
-import { Href, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,7 +45,6 @@ export function useSettingsScreenModel() {
   const [showLanguage, setShowLanguage] = useState(false);
   const [showHaptics, setShowHaptics] = useState(false);
   const [showSync, setShowSync] = useState(false);
-  const authProfileRoute = '/auth/profile' as Href;
 
   const openAccountScreen = useCallback(() => {
     if (!isAuthAvailable) {
@@ -53,17 +52,12 @@ export function useSettingsScreenModel() {
     }
 
     if (user) {
-      router.push(authProfileRoute);
+      router.push('/auth/profile');
       return;
     }
 
-    router.push({
-      pathname: '/auth',
-      params: {
-        returnTo: authProfileRoute,
-      },
-    } as Href);
-  }, [authProfileRoute, isAuthAvailable, router, user]);
+    router.push('/auth');
+  }, [isAuthAvailable, router, user]);
 
   const openPlusScreen = () => {
     router.push('/plus');

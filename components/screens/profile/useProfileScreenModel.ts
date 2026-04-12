@@ -86,12 +86,7 @@ export function useProfileScreenModel() {
     normalizedUsernameDraft !== (displayUser?.username ?? '');
 
   const openSignIn = () => {
-    router.replace({
-      pathname: '/auth',
-      params: {
-        returnTo: '/auth/profile',
-      },
-    });
+    router.replace('/auth');
   };
 
   const openUsernameEditor = () => {

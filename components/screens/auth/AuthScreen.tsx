@@ -1,5 +1,5 @@
 import { environment, presentationDetents, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
-import { Checkbox, Host as ComposeHost } from '@expo/ui/jetpack-compose';
+import { Host as ComposeHost, Switch as ComposeSwitch } from '@expo/ui/jetpack-compose';
 import { Toggle } from '@expo/ui/swift-ui';
 import { Ionicons } from '@expo/vector-icons';
 import { usePreventRemove } from '@react-navigation/native';
@@ -134,13 +134,17 @@ function NativeConsentControl({
 
   if (Platform.OS === 'android') {
     return (
-      <View testID={testID}>
+      <View testID={testID} pointerEvents={disabled ? 'none' : 'auto'} style={disabled ? { opacity: 0.5 } : undefined}>
         <ComposeHost matchContents>
-          <Checkbox
+          <ComposeSwitch
             value={value}
-            enabled={!disabled}
-            onCheckedChange={onChange}
-            colors={{
+            variant="checkbox"
+            onValueChange={(nextValue) => {
+              if (!disabled) {
+                onChange(nextValue);
+              }
+            }}
+            elementColors={{
               checkedColor: colors.primary,
               uncheckedColor: colors.secondaryText,
               checkmarkColor: colors.background,

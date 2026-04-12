@@ -245,6 +245,36 @@ describe('useNotesStore', () => {
     });
   });
 
+  it('trusts an underfilled first page over a stale higher note count', async () => {
+    mockNotesDb = [
+      {
+        id: 'note-1',
+        type: 'text' as const,
+        content: 'Only note',
+        locationName: 'Place 1',
+        latitude: 10,
+        longitude: 106,
+        radius: 150,
+        isFavorite: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: null,
+      },
+    ];
+    mockGetNoteStatsForScope.mockImplementation(async () => ({
+      totalCount: 2,
+      photoCount: 0,
+    }));
+
+    const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.notes).toHaveLength(1);
+      expect(result.current.noteCount).toBe(1);
+      expect(result.current.hasLoadedAllNotes).toBe(true);
+    });
+  });
+
   it('marks all notes loaded once hidden pages are deleted away', async () => {
     mockNotesDb = Array.from({ length: 26 }, (_, index) => ({
       id: `note-${index + 1}`,

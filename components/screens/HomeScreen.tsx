@@ -6,7 +6,6 @@ import { Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  ActivityIndicator,
   AppState,
   Keyboard,
   Platform,
@@ -85,18 +84,12 @@ import { isIOS26OrNewer } from '../../utils/platform';
 const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
 type SaveButtonState = 'idle' | 'saving' | 'success';
 
-function HomeFeedLoadingState({
-  colors,
-}: {
-  colors: {
-    primary: string;
-  };
-}) {
-  return (
-    <View style={styles.feedBootstrapIndicator}>
-      <ActivityIndicator color={colors.primary} />
-    </View>
-  );
+function logHomeFeedDebug(event: string, payload: Record<string, unknown>) {
+  if (!__DEV__) {
+    return;
+  }
+
+  console.log(`[home-feed] ${event}`, payload);
 }
 
 export default function HomeScreen() {
@@ -463,15 +456,27 @@ export default function HomeScreen() {
     },
     [homeFeedItems, isFriendsFilterActive, suppressedHomeNoteIdSet]
   );
-  const showHomeFeedBootstrapState =
-    (loading || sharedLoading) && visibleFeedItems.length === 0;
-  const homeFeedEmptyState = useMemo(
-    () =>
-      showHomeFeedBootstrapState ? (
-        <HomeFeedLoadingState colors={colors} />
-      ) : null,
-    [colors, showHomeFeedBootstrapState]
-  );
+  useEffect(() => {
+    logHomeFeedDebug('state', {
+      userUid: user?.uid ?? null,
+      noteCount,
+      loadedNotesCount: notes.length,
+      loading,
+      sharedLoading,
+      homeFeedHasMore,
+      homeFeedItemsCount: homeFeedItems.length,
+      visibleFeedItemsCount: visibleFeedItems.length,
+    });
+  }, [
+    homeFeedHasMore,
+    homeFeedItems.length,
+    loading,
+    noteCount,
+    notes.length,
+    sharedLoading,
+    user?.uid,
+    visibleFeedItems.length,
+  ]);
   useEffect(() => {
     if (friendPosts.length === 0 && isFriendsFilterEnabled) {
       setIsFriendsFilterEnabled(false);
@@ -741,10 +746,6 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (loading || (sharedLoading && homeFeedItems.length === 0)) {
-        return undefined;
-      }
-
       const target = consumeFeedFocus?.() ?? peekFeedFocus?.() ?? null;
       if (!target) {
         return undefined;
@@ -1907,7 +1908,6 @@ export default function HomeScreen() {
         <NotesFeed
           flatListRef={flatListRef}
           captureHeader={captureHeader}
-          emptyState={homeFeedEmptyState}
           captureMode={captureMode}
           screenActive={isScreenFocused}
           items={visibleFeedItems}
@@ -1917,8 +1917,17 @@ export default function HomeScreen() {
             void onRefresh();
           }}
           onEndReached={
-            !loading && homeFeedHasMore
+            homeFeedHasMore
               ? () => {
+                  logHomeFeedDebug('onEndReached', {
+                    userUid: user?.uid ?? null,
+                    noteCount,
+                    loadedNotesCount: notes.length,
+                    loading,
+                    sharedLoading,
+                    homeFeedHasMore,
+                    visibleFeedItemsCount: visibleFeedItems.length,
+                  });
                   void loadNextNotesPage();
                 }
               : undefined
@@ -2019,10 +2028,5 @@ const styles = StyleSheet.create({
   },
   captureItemWrapper: {
     width: '100%',
-  },
-  feedBootstrapIndicator: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

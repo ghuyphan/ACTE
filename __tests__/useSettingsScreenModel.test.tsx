@@ -60,6 +60,12 @@ const mockSubscriptionState = {
   photoNoteLimit: 10 as number | null,
 };
 
+const mockHapticsState = {
+  isEnabled: true,
+  setIsEnabled: jest.fn(async () => undefined),
+  preferenceReady: true,
+};
+
 jest.mock('expo-constants', () => ({
   expoConfig: {
     version: '1.0.0',
@@ -142,6 +148,10 @@ jest.mock('../hooks/useSubscription', () => ({
   useSubscription: () => mockSubscriptionState,
 }));
 
+jest.mock('../hooks/useHaptics', () => ({
+  useHaptics: () => mockHapticsState,
+}));
+
 jest.mock('../services/legalLinks', () => ({
   hasAccountDeletionLink: () => false,
   hasPrivacyPolicyLink: () => false,
@@ -164,6 +174,7 @@ describe('useSettingsScreenModel', () => {
     mockSyncState.failedCount = 0;
     mockSyncState.blockedCount = 0;
     mockSyncState.isEnabled = true;
+    mockHapticsState.isEnabled = true;
   });
 
   it('shows not signed in for cloud sync when there is no signed-in user', () => {
@@ -180,12 +191,7 @@ describe('useSettingsScreenModel', () => {
       result.current.openSyncScreen();
     });
 
-    expect(mockRouterPush).toHaveBeenCalledWith({
-      pathname: '/auth',
-      params: {
-        returnTo: '/auth/profile',
-      },
-    });
+    expect(mockRouterPush).toHaveBeenCalledWith('/auth');
     expect(result.current.showSync).toBe(false);
   });
 

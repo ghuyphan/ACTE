@@ -217,6 +217,7 @@ const config = {
       },
     ],
     './plugins/withCustomWidgetSwift.js',
+    './plugins/withExpoWidgetsProjectDedup.js',
     [
       'react-native-vision-camera',
       {

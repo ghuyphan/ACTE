@@ -618,7 +618,7 @@ private func renderWidgetStampImage(_ image: UIImage, width: CGFloat, height: CG
         cgContext?.saveGState()
         cgContext?.clip(to: stampRect)
         cgContext?.addPath(stampPath.cgPath)
-        cgContext?.eoClip()
+        cgContext?.clip(using: .evenOdd)
         cgContext?.setAlpha(normalizedOpacity)
         image.draw(in: drawRect)
         cgContext?.restoreGState()
@@ -626,7 +626,7 @@ private func renderWidgetStampImage(_ image: UIImage, width: CGFloat, height: CG
         cgContext?.saveGState()
         cgContext?.clip(to: stampRect)
         cgContext?.addPath(stampPath.cgPath)
-        cgContext?.eoClip()
+        cgContext?.clip(using: .evenOdd)
         cgContext?.addPath(stampPath.cgPath)
         cgContext?.setStrokeColor(outlineColor.cgColor)
         cgContext?.setLineWidth(outlineWidth)
@@ -638,7 +638,7 @@ private func renderWidgetStampImage(_ image: UIImage, width: CGFloat, height: CG
         cgContext?.saveGState()
         cgContext?.clip(to: stampRect)
         cgContext?.addPath(stampPath.cgPath)
-        cgContext?.eoClip()
+        cgContext?.clip(using: .evenOdd)
         cgContext?.addPath(stampPath.cgPath)
         cgContext?.setStrokeColor(borderColor.cgColor)
         cgContext?.setLineWidth(borderWidth)
@@ -1741,56 +1741,61 @@ private struct LocketWidgetEntryView: View {
         return .custom("Noto Sans Medium", size: baseSize).italic()
     }
 
-    @ViewBuilder
-    private var cardInnerBackground: some View {
+    private var cardInnerBackground: AnyView {
         if let image = resolvedImage, hasPhotoBackground {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .scaleEffect(1.01)
-                .clipped()
-                .overlay(
-                    LinearGradient(
-                        colors: [
-                            Color.black.opacity(0.00),
-                            Color.black.opacity(0.12),
-                            Color.black.opacity(0.62),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
+            return AnyView(
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .scaleEffect(1.01)
+                    .clipped()
+                    .overlay(
+                        LinearGradient(
+                            colors: [
+                                Color.black.opacity(0.00),
+                                Color.black.opacity(0.12),
+                                Color.black.opacity(0.62),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
-                )
-        } else if payload.isIdleState {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.110, green: 0.100, blue: 0.118),
-                    Color(red: 0.071, green: 0.063, blue: 0.078),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
             )
-            .overlay(
-                RadialGradient(
+        } else if payload.isIdleState {
+            return AnyView(
+                LinearGradient(
                     colors: [
-                        Color(red: 0.878, green: 0.694, blue: 0.357).opacity(0.18),
-                        Color.clear
+                        Color(red: 0.110, green: 0.100, blue: 0.118),
+                        Color(red: 0.071, green: 0.063, blue: 0.078),
                     ],
-                    center: .init(x: 0.5, y: 0.42),
-                    startRadius: 0,
-                    endRadius: 96
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .overlay(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.878, green: 0.694, blue: 0.357).opacity(0.18),
+                            Color.clear
+                        ],
+                        center: .init(x: 0.5, y: 0.42),
+                        startRadius: 0,
+                        endRadius: 96
+                    )
                 )
             )
         } else {
-            LinearGradient(
-                colors: [
-                    Color(red: 1.0, green: 0.992, blue: 0.974),
-                    paperSurfaceColor
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+            return AnyView(
+                LinearGradient(
+                    colors: [
+                        Color(red: 1.0, green: 0.992, blue: 0.974),
+                        paperSurfaceColor
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .overlay(textTintOverlayColor)
             )
-            .overlay(textTintOverlayColor)
         }
     }
 

@@ -411,6 +411,13 @@ export default function AndroidFloatingTabBar({
   const searchPlaceholder = responsiveMetrics.isCompact
     ? t('tabs.search', 'Search')
     : t('home.searchPlaceholder', 'Search your journal...');
+  const focusedSearchBackgroundColor = searchSelected ? colors.card : colors.androidTabShellBackground;
+  const focusedSearchBorderColor = searchSelected ? colors.border : colors.androidTabShellBorder;
+  const searchShellGradientColors: [string, string] = searchSelected
+    ? [colors.card, colors.surface]
+    : isDark
+      ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.01)']
+      : ['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.03)'];
 
   const tabWidth = useMemo(() => {
     if (primaryBarExpandedWidth <= 0 || primaryRoutes.length === 0) {
@@ -716,12 +723,8 @@ export default function AndroidFloatingTabBar({
               style={({ pressed }) => [
                 styles.searchButton,
                 {
-                  backgroundColor: searchSelected
-                    ? colors.androidTabShellSelectedBackground
-                    : colors.androidTabShellBackground,
-                  borderColor: searchSelected
-                    ? colors.androidTabShellSelectedBorder
-                    : colors.androidTabShellBorder,
+                  backgroundColor: focusedSearchBackgroundColor,
+                  borderColor: focusedSearchBorderColor,
                   height: responsiveMetrics.searchButtonSize,
                   paddingHorizontal: responsiveMetrics.searchHorizontalPadding,
                   shadowColor: colors.androidTabShellShadow,
@@ -731,24 +734,11 @@ export default function AndroidFloatingTabBar({
             >
               <LinearGradient
                 pointerEvents="none"
-                colors={
-                  isDark
-                    ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.01)']
-                    : ['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.03)']
-                }
+                colors={searchShellGradientColors}
                 start={{ x: 0.15, y: 0 }}
                 end={{ x: 0.85, y: 1 }}
                 style={StyleSheet.absoluteFill}
               />
-
-              {searchSelected ? (
-                <LinearGradient
-                  colors={colors.androidTabShellSelectedGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-              ) : null}
 
               <Animated.View
                 style={[
