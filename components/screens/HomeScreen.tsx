@@ -45,7 +45,6 @@ import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
-import { useAndroidBottomTabOverlayInset } from '../../hooks/useAndroidBottomTabOverlayInset';
 import { useBottomTabVisualInset } from '../../hooks/useBottomTabVisualInset';
 import { useSavedNoteRevealUi } from '../../hooks/ui/useSavedNoteRevealUi';
 import {
@@ -104,7 +103,6 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const reduceMotionEnabled = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
   const bottomTabVisualInset = useBottomTabVisualInset();
   const { setSavedNoteRevealActive } = useSavedNoteRevealUi();
   const { notes, loading, refreshNotes, createNote, initialLoadComplete: notesInitialLoadComplete } = useNotesStore();
@@ -301,7 +299,7 @@ export default function HomeScreen() {
     appState === 'active' &&
     Boolean(permission?.granted);
 
-  const liveSnapHeight = windowHeight - insets.top - 90;
+  const liveSnapHeight = windowHeight;
   const shouldLockCapturePage = Platform.OS === 'android' && isCaptureTextEntryFocused;
   const snapHeight =
     shouldLockCapturePage && lockedCaptureSnapHeight != null ? lockedCaptureSnapHeight : liveSnapHeight;
@@ -1939,7 +1937,6 @@ export default function HomeScreen() {
             !isCaptureTextEntryFocused
           }
           capturePageLocked={shouldLockCapturePage}
-          bottomOverlayInset={bottomTabOverlayInset}
         />
       </View>
 

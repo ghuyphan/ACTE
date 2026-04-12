@@ -102,6 +102,7 @@ const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Drop a small memory here...',
 ];
 const LIGHT_CAPTURE_ACTIVE_ICON_COLOR = '#FFFFFF';
+const HOME_PAGE_VISUAL_BOTTOM_INSET = 90;
 
 interface WindowRect {
   x: number;
@@ -346,6 +347,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   });
 
   const isCaptureTextEntryFocused = isTextEntryFocused || isPhotoCaptionFocused;
+  const pageBottomInset = topInset + HOME_PAGE_VISUAL_BOTTOM_INSET;
   const animateIosKeyboardLift = useCallback(
     (nextLift: number, duration?: number) => {
       const nextDuration = reduceMotionEnabled ? 0 : Math.max(120, Math.round(duration ?? 240));
@@ -1089,7 +1091,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           {
             height: snapHeight,
             paddingTop: topInset + Layout.headerHeight - DOCKED_HEADER_CONTENT_OVERLAP,
-            paddingBottom: androidTextEntryBottomInset,
+            paddingBottom: pageBottomInset + androidTextEntryBottomInset,
           },
         ]}
       >

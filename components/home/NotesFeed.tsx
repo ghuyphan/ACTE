@@ -24,9 +24,9 @@ import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
 const DOCKED_HEADER_CONTENT_OVERLAP = 22;
 const CAPTURE_PAGE_STICKY_THRESHOLD = 0.62;
 const CAPTURE_PAGE_STICKY_VELOCITY_THRESHOLD = 0.9;
-const DRAG_END_SNAP_SETTLE_VELOCITY_THRESHOLD = 0.12;
 const SCROLL_SNAP_EPSILON = 2;
 const REFRESH_PULL_THRESHOLD = -6;
+const HOME_PAGE_VISUAL_BOTTOM_INSET = 90;
 const INACTIVE_CARD_SCALE = 0.968;
 const INACTIVE_CARD_OPACITY = 0.78;
 const INACTIVE_CARD_TRANSLATE_Y = 24;
@@ -221,7 +221,6 @@ interface NotesFeedProps {
   scrollEnabled?: boolean;
   onSettledArchiveItemChange?: (item: { id: string; kind: 'note' | 'shared-post' } | null) => void;
   onScrollOffsetChange?: (offsetY: number) => void;
-  bottomOverlayInset?: number;
   onInitialContentDraw?: () => void;
 }
 
@@ -250,15 +249,16 @@ export default function NotesFeed({
   scrollEnabled = true,
   onSettledArchiveItemChange,
   onScrollOffsetChange,
-  bottomOverlayInset = 0,
   onInitialContentDraw,
 }: NotesFeedProps) {
   const { height } = useWindowDimensions();
   const captureVisibilityRef = useRef(true);
   const captureScrollSettledRef = useRef(true);
   const refreshGestureActiveRef = useRef(false);
-  const lastOffsetYRef = useRef(0);
-  const currentOffsetYRef = useRef(0);
+  const settledOffsetYRef = useRef(0);
+  const liveOffsetYRef = useRef(0);
+  const settledPageIndexRef = useRef(0);
+  const dragStartPageIndexRef = useRef(0);
   const previousItemKeysRef = useRef<string[] | null>(null);
   const scrollOffsetY = useSharedValue(0);
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null);
@@ -278,6 +278,7 @@ export default function NotesFeed({
     [listData]
   );
   const refreshSpinnerOffset = topInset + Layout.headerHeight + Layout.floatingGap;
+  const pageBottomInset = topInset + HOME_PAGE_VISUAL_BOTTOM_INSET;
   const snapSuspended = refreshGestureActive;
   const drawDistance = Math.max(snapHeight * 2, height * 1.15);
   const listHeaderStyle = useMemo(
@@ -285,17 +286,6 @@ export default function NotesFeed({
       height: snapHeight,
     }),
     [snapHeight]
-  );
-  const listContentContainerStyle = useMemo(
-    () => ({
-      paddingBottom: height - snapHeight + bottomOverlayInset,
-    }),
-    [bottomOverlayInset, height, snapHeight]
-  );
-  const maxSnapOffset = snapPageCount * snapHeight;
-  const snapOffsets = useMemo(
-    () => Array.from({ length: snapPageCount + 1 }, (_, index) => index * snapHeight),
-    [snapHeight, snapPageCount]
   );
   const nativeSnapEnabled = !snapSuspended;
   const getItemType = useCallback(
@@ -354,31 +344,42 @@ export default function NotesFeed({
   }, [onCaptureScrollSettledChange, onCaptureVisibilityChange]);
 
   useEffect(() => {
-    if (lastOffsetYRef.current >= 0) {
+    if (settledOffsetYRef.current >= 0) {
       updateRefreshGestureActive(false);
     }
   }, [refreshing, updateRefreshGestureActive]);
 
-  const getNearestSnapOffset = useCallback(
+  const getNearestSnapPageIndex = useCallback(
     (offsetY: number) => {
+      if (snapHeight <= 0) {
+        return 0;
+      }
+
       return Math.min(
-        maxSnapOffset,
-        Math.max(0, Math.round(offsetY / snapHeight) * snapHeight)
+        snapPageCount,
+        Math.max(0, Math.round(offsetY / snapHeight))
       );
     },
-    [maxSnapOffset, snapHeight]
+    [snapHeight, snapPageCount]
+  );
+
+  const getNearestSnapOffset = useCallback(
+    (offsetY: number) => {
+      return getNearestSnapPageIndex(offsetY) * snapHeight;
+    },
+    [getNearestSnapPageIndex, snapHeight]
   );
 
   const getSettledItemFromOffset = useCallback(
     (offsetY: number) => {
-      const settledOffset =
+      const settledPageIndex =
         Platform.OS === 'android'
-          ? getNearestSnapOffset(offsetY)
-          : Math.max(0, offsetY);
-      const rawIndex = Math.round(settledOffset / snapHeight) - 1;
+          ? getNearestSnapPageIndex(offsetY)
+          : Math.max(0, Math.round(Math.max(0, offsetY) / snapHeight));
+      const rawIndex = settledPageIndex - 1;
       return rawIndex >= 0 ? listData[rawIndex] ?? null : null;
     },
-    [getNearestSnapOffset, listData, snapHeight]
+    [getNearestSnapPageIndex, listData, snapHeight]
   );
 
   const reportActiveCard = useCallback(
@@ -408,8 +409,11 @@ export default function NotesFeed({
   const applySettledOffset = useCallback(
     (offsetY: number) => {
       const normalizedOffset = Math.max(0, offsetY);
-      currentOffsetYRef.current = normalizedOffset;
-      lastOffsetYRef.current = normalizedOffset;
+      const settledPageIndex = getNearestSnapPageIndex(normalizedOffset);
+      liveOffsetYRef.current = normalizedOffset;
+      settledOffsetYRef.current = normalizedOffset;
+      settledPageIndexRef.current = settledPageIndex;
+      dragStartPageIndexRef.current = settledPageIndex;
       scrollOffsetY.value = normalizedOffset;
       reportCaptureVisibility(normalizedOffset);
       reportCaptureScrollSettled(true);
@@ -426,6 +430,7 @@ export default function NotesFeed({
       reportCaptureVisibility,
       reportCaptureScrollSettled,
       reportSettledArchiveItem,
+      getNearestSnapPageIndex,
       scrollOffsetY,
       updateRefreshGestureActive,
     ]
@@ -463,6 +468,10 @@ export default function NotesFeed({
 
   const maybeStickToCapturePage = useCallback(
     (offsetY: number, velocityY: number) => {
+      if (dragStartPageIndexRef.current !== 0) {
+        return false;
+      }
+
       if (offsetY <= 0 || offsetY >= snapHeight) {
         return false;
       }
@@ -510,7 +519,7 @@ export default function NotesFeed({
       return;
     }
 
-    maybeCorrectSnapOffset(currentOffsetYRef.current, { animated: false });
+    maybeCorrectSnapOffset(liveOffsetYRef.current, { animated: false });
   }, [
     itemKeys,
     capturePageLocked,
@@ -526,7 +535,7 @@ export default function NotesFeed({
       return;
     }
 
-    maybeCorrectSnapOffset(currentOffsetYRef.current, { animated: false });
+    maybeCorrectSnapOffset(liveOffsetYRef.current, { animated: false });
   }, [
     capturePageLocked,
     maybeCorrectSnapOffset,
@@ -552,6 +561,7 @@ export default function NotesFeed({
               {
                 height: snapHeight,
                 paddingTop: topInset + Layout.headerHeight - DOCKED_HEADER_CONTENT_OVERLAP,
+                paddingBottom: pageBottomInset,
               },
             ]}
           >
@@ -579,6 +589,7 @@ export default function NotesFeed({
             {
               height: snapHeight,
               paddingTop: topInset + Layout.headerHeight - DOCKED_HEADER_CONTENT_OVERLAP,
+              paddingBottom: pageBottomInset,
             },
           ]}
         >
@@ -607,6 +618,7 @@ export default function NotesFeed({
       scrollOffsetY,
       t,
       topInset,
+      pageBottomInset,
     ]
   );
 
@@ -621,10 +633,7 @@ export default function NotesFeed({
       overrideItemLayout={overrideItemLayout as any}
       drawDistance={drawDistance}
       removeClippedSubviews={Platform.OS === 'android' && captureMode !== 'camera'}
-      snapToOffsets={nativeSnapEnabled ? snapOffsets : undefined}
-      snapToEnd={false}
-      disableIntervalMomentum={nativeSnapEnabled && Platform.OS === 'android'}
-      snapToAlignment="start"
+      pagingEnabled={nativeSnapEnabled}
       decelerationRate={snapSuspended ? 'normal' : 'fast'}
       // This feed already manages its own anchor + snap corrections. Letting
       // FlashList auto-maintain visible content position can cause double-adjusts.
@@ -644,6 +653,7 @@ export default function NotesFeed({
               {
                 height: snapHeight,
                 paddingTop: topInset + Layout.headerHeight - DOCKED_HEADER_CONTENT_OVERLAP,
+                paddingBottom: pageBottomInset,
               },
             ]}
           >
@@ -658,8 +668,8 @@ export default function NotesFeed({
       }}
       onScroll={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
-        const previousSettledOffsetY = lastOffsetYRef.current;
-        currentOffsetYRef.current = Math.max(0, offsetY);
+        const previousSettledOffsetY = settledOffsetYRef.current;
+        liveOffsetYRef.current = Math.max(0, offsetY);
         scrollOffsetY.value = offsetY;
         updateRefreshGestureActive(offsetY < REFRESH_PULL_THRESHOLD);
         if (Math.abs(offsetY - previousSettledOffsetY) > SCROLL_SNAP_EPSILON) {
@@ -670,6 +680,7 @@ export default function NotesFeed({
       }}
       scrollEventThrottle={16}
       onScrollBeginDrag={() => {
+        dragStartPageIndexRef.current = settledPageIndexRef.current;
         setActiveCardKey(null);
       }}
       onScrollEndDrag={(event) => {
@@ -689,13 +700,7 @@ export default function NotesFeed({
           return;
         }
 
-        if (
-          Math.abs(velocityY) <= DRAG_END_SNAP_SETTLE_VELOCITY_THRESHOLD &&
-          offsetY > maxSnapOffset + SCROLL_SNAP_EPSILON &&
-          maybeCorrectSnapOffset(offsetY, { animated: true })
-        ) {
-          return;
-        } else if (!nativeSnapEnabled) {
+        if (!nativeSnapEnabled) {
           applySettledOffset(offsetY);
         }
       }}
@@ -715,13 +720,8 @@ export default function NotesFeed({
           return;
         }
 
-        if (maybeCorrectSnapOffset(offsetY, { animated: false })) {
-          return;
-        }
-
         applySettledOffset(offsetY);
       }}
-      contentContainerStyle={listContentContainerStyle}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.35}
       refreshControl={

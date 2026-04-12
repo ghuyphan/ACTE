@@ -798,7 +798,7 @@ describe('NotesFeed capture visibility', () => {
 
     const getList = () => UNSAFE_getByType(FlatList);
 
-    expect(getList().props.snapToOffsets).toEqual([0]);
+    expect(getList().props.pagingEnabled).toBe(true);
 
     act(() => {
       getList().props.onScroll({
@@ -808,7 +808,7 @@ describe('NotesFeed capture visibility', () => {
       });
     });
 
-    expect(getList().props.snapToOffsets).toBeUndefined();
+    expect(getList().props.pagingEnabled).toBe(false);
     expect(getList().props.decelerationRate).toBe('normal');
 
     act(() => {
@@ -819,7 +819,7 @@ describe('NotesFeed capture visibility', () => {
       });
     });
 
-    expect(getList().props.snapToOffsets).toEqual([0]);
+    expect(getList().props.pagingEnabled).toBe(true);
     expect(getList().props.decelerationRate).toBe('fast');
   });
 
@@ -858,7 +858,7 @@ describe('NotesFeed capture visibility', () => {
       });
     });
 
-    expect(getList().props.snapToOffsets).toBeUndefined();
+    expect(getList().props.pagingEnabled).toBe(false);
 
     act(() => {
       getList().props.onScrollEndDrag({
@@ -869,7 +869,7 @@ describe('NotesFeed capture visibility', () => {
       });
     });
 
-    expect(getList().props.snapToOffsets).toEqual([0]);
+    expect(getList().props.pagingEnabled).toBe(true);
     expect(getList().props.decelerationRate).toBe('fast');
   });
 
@@ -924,20 +924,18 @@ describe('NotesFeed capture visibility', () => {
 
     const list = UNSAFE_getByType(FlatList);
 
-    expect(list.props.snapToOffsets).toEqual([0]);
+    expect(list.props.pagingEnabled).toBe(true);
     expect(list.props.decelerationRate).toBe('fast');
   });
 
-  it('re-snaps android momentum end to the nearest page when needed', () => {
+  it('uses native paging without extra trailing feed padding', () => {
     const originalPlatform = Platform.OS;
     Platform.OS = 'android';
-    const scrollToOffset = jest.fn();
-    const flatListRef = { current: null as any };
 
     try {
       const { UNSAFE_getByType } = render(
         <NotesFeed
-          flatListRef={flatListRef}
+          flatListRef={{ current: null }}
           captureHeader={<View testID="capture-header" />}
           captureMode="text"
           notes={[
@@ -973,21 +971,9 @@ describe('NotesFeed capture visibility', () => {
       );
 
       const list = UNSAFE_getByType(FlatList);
-      flatListRef.current = { scrollToOffset };
 
-      expect(list.props.snapToOffsets).toEqual([0, 700]);
-      expect(list.props.snapToEnd).toBe(false);
-      expect(list.props.disableIntervalMomentum).toBe(true);
-
-      act(() => {
-        list.props.onMomentumScrollEnd({
-          nativeEvent: {
-            contentOffset: { y: 350 },
-          },
-        });
-      });
-
-      expect(scrollToOffset).toHaveBeenCalledWith({ offset: 700, animated: false });
+      expect(list.props.pagingEnabled).toBe(true);
+      expect(list.props.contentContainerStyle).toBeUndefined();
     } finally {
       Platform.OS = originalPlatform;
     }
@@ -1039,6 +1025,10 @@ describe('NotesFeed capture visibility', () => {
 
       const list = UNSAFE_getByType(FlatList);
       flatListRef.current = { scrollToOffset };
+
+      act(() => {
+        list.props.onScrollBeginDrag();
+      });
 
       act(() => {
         list.props.onScrollEndDrag({
@@ -1103,9 +1093,89 @@ describe('NotesFeed capture visibility', () => {
       flatListRef.current = { scrollToOffset };
 
       act(() => {
+        list.props.onScrollBeginDrag();
+      });
+
+      act(() => {
         list.props.onScrollEndDrag({
           nativeEvent: {
             contentOffset: { y: 520 },
+            velocity: { y: 0.01 },
+          },
+        });
+      });
+
+      expect(scrollToOffset).not.toHaveBeenCalled();
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+  });
+
+  it('does not force the first note back to capture on a gentle downward drag', () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+    const scrollToOffset = jest.fn();
+    const flatListRef = { current: null as any };
+
+    try {
+      const { UNSAFE_getByType } = render(
+        <NotesFeed
+          flatListRef={flatListRef}
+          captureHeader={<View testID="capture-header" />}
+          captureMode="text"
+          notes={[
+            {
+              id: 'note-1',
+              type: 'text',
+              content: 'hello',
+              locationName: 'Cafe',
+              latitude: 0,
+              longitude: 0,
+              radius: 150,
+              isFavorite: false,
+              createdAt: '2026-03-19T00:00:00.000Z',
+              updatedAt: null,
+            },
+          ] as any}
+          sharedPosts={[]}
+          refreshing={false}
+          onRefresh={jest.fn()}
+          topInset={0}
+          snapHeight={700}
+          onOpenNote={jest.fn()}
+          onOpenSharedPost={jest.fn()}
+          colors={{
+            primary: '#FFC107',
+            text: '#1C1C1E',
+            secondaryText: '#8E8E93',
+            danger: '#FF3B30',
+            card: '#FFFFFF',
+          }}
+          t={((key: string, fallback?: string) => fallback ?? key) as any}
+        />
+      );
+
+      const list = UNSAFE_getByType(FlatList);
+      flatListRef.current = { scrollToOffset };
+
+      act(() => {
+        list.props.onMomentumScrollEnd({
+          nativeEvent: {
+            contentOffset: { y: 700 },
+          },
+        });
+      });
+
+      scrollToOffset.mockClear();
+
+      act(() => {
+        list.props.onScrollBeginDrag();
+      });
+
+      act(() => {
+        list.props.onScrollEndDrag({
+          nativeEvent: {
+            contentOffset: { y: 350 },
             velocity: { y: 0.01 },
           },
         });
@@ -1220,7 +1290,7 @@ describe('NotesFeed capture visibility', () => {
     }
   });
 
-  it('clamps android back to the final real snap point past the last item', () => {
+  it('does not add a manual last-page correction during drag end', () => {
     const originalPlatform = Platform.OS;
     Platform.OS = 'android';
     const scrollToOffset = jest.fn();
@@ -1251,7 +1321,6 @@ describe('NotesFeed capture visibility', () => {
           onRefresh={jest.fn()}
           topInset={0}
           snapHeight={700}
-          bottomOverlayInset={80}
           onOpenNote={jest.fn()}
           onOpenSharedPost={jest.fn()}
           colors={{
@@ -1277,82 +1346,10 @@ describe('NotesFeed capture visibility', () => {
         });
       });
 
-      expect(scrollToOffset).toHaveBeenCalledWith({ offset: 700, animated: true });
-    } finally {
-      Platform.OS = originalPlatform;
-    }
-  });
-
-  it('waits for momentum end before clamping a fast fling past the last item', () => {
-    const originalPlatform = Platform.OS;
-    Platform.OS = 'android';
-    const scrollToOffset = jest.fn();
-    const flatListRef = { current: null as any };
-
-    try {
-      const { UNSAFE_getByType } = render(
-        <NotesFeed
-          flatListRef={flatListRef}
-          captureHeader={<View testID="capture-header" />}
-          captureMode="text"
-          notes={[
-            {
-              id: 'note-1',
-              type: 'text',
-              content: 'hello',
-              locationName: 'Cafe',
-              latitude: 0,
-              longitude: 0,
-              radius: 150,
-              isFavorite: false,
-              createdAt: '2026-03-19T00:00:00.000Z',
-              updatedAt: null,
-            },
-          ] as any}
-          sharedPosts={[]}
-          refreshing={false}
-          onRefresh={jest.fn()}
-          topInset={0}
-          snapHeight={700}
-          bottomOverlayInset={80}
-          onOpenNote={jest.fn()}
-          onOpenSharedPost={jest.fn()}
-          colors={{
-            primary: '#FFC107',
-            text: '#1C1C1E',
-            secondaryText: '#8E8E93',
-            danger: '#FF3B30',
-            card: '#FFFFFF',
-          }}
-          t={((key: string, fallback?: string) => fallback ?? key) as any}
-        />
-      );
-
-      const list = UNSAFE_getByType(FlatList);
-      flatListRef.current = { scrollToOffset };
-
-      act(() => {
-        list.props.onScrollEndDrag({
-          nativeEvent: {
-            contentOffset: { y: 760 },
-            velocity: { y: 1.1 },
-          },
-        });
-      });
-
       expect(scrollToOffset).not.toHaveBeenCalled();
-
-      act(() => {
-        list.props.onMomentumScrollEnd({
-          nativeEvent: {
-            contentOffset: { y: 760 },
-          },
-        });
-      });
-
-      expect(scrollToOffset).toHaveBeenCalledWith({ offset: 700, animated: false });
     } finally {
       Platform.OS = originalPlatform;
     }
   });
+
 });

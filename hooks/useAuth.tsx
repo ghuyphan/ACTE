@@ -279,22 +279,7 @@ async function syncUserProfile(session: Session | null) {
 
   setActiveNotesScope(user.uid);
 
-  try {
-    const profile = await upsertPublicUserProfile({
-      userUid: user.id,
-      displayName: user.displayName,
-      username: user.username,
-      email: user.email,
-      photoURL: user.photoURL,
-    });
-
-    return profile?.username
-      ? { ...user, username: profile.username, usernameSetAt: profile.usernameSetAt }
-      : user;
-  } catch (error) {
-    console.warn('[auth] Background profile sync failed:', error);
-    return user;
-  }
+  return user;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -306,6 +291,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authSyncRequestIdRef.current += 1;
     return authSyncRequestIdRef.current;
   }, []);
+
+  const syncProfileInBackground = useCallback(
+    async (nextUser: AppUser | null, requestId: number) => {
+      if (!nextUser) {
+        return;
+      }
+
+      try {
+        const profile = await upsertPublicUserProfile({
+          userUid: nextUser.id,
+          displayName: nextUser.displayName,
+          username: nextUser.username,
+          email: nextUser.email,
+          photoURL: nextUser.photoURL,
+        });
+
+        if (!profile || authSyncRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setUser((currentUser) => {
+          if (!currentUser || currentUser.uid !== nextUser.uid) {
+            return currentUser;
+          }
+
+          if (
+            currentUser.username === profile.username &&
+            currentUser.usernameSetAt === profile.usernameSetAt
+          ) {
+            return currentUser;
+          }
+
+          return {
+            ...currentUser,
+            username: profile.username,
+            usernameSetAt: profile.usernameSetAt,
+          };
+        });
+      } catch (error) {
+        console.warn('[auth] Background profile sync failed:', error);
+      }
+    },
+    []
+  );
 
   const syncAuthSession = useCallback(
     async (
@@ -333,6 +362,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setUser(nextUser);
         setIsReady(true);
+        void syncProfileInBackground(nextUser, requestId);
         return nextUser;
       } catch (error) {
         console.warn(`[auth] Failed to ${errorContext}:`, error);
@@ -344,10 +374,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setActiveNotesScope(fallbackUser?.uid ?? getStoredNotesScope());
         setUser(fallbackUser);
         setIsReady(true);
+        void syncProfileInBackground(fallbackUser, requestId);
         return fallbackUser;
       }
     },
-    [invalidateAuthSyncRequests]
+    [invalidateAuthSyncRequests, syncProfileInBackground]
   );
 
   useEffect(() => {

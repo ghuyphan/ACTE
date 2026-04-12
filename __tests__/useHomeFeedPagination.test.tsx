@@ -1,29 +1,10 @@
-import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { renderHook } from '@testing-library/react-native';
 import { useHomeFeedPagination } from '../hooks/app/useHomeFeedPagination';
 import type { Note } from '../services/database';
 import type { SharedPost } from '../services/sharedFeedService';
 
-const mockGetNotesPageForScope = jest.fn();
-const mockGetCachedSharedPostsPage = jest.fn();
-
-jest.mock('../services/database', () => ({
-  getNotesPageForScope: (scope: string, options: { limit: number; offset?: number }) =>
-    mockGetNotesPageForScope(scope, options),
-}));
-
-jest.mock('../services/sharedFeedCache', () => ({
-  getCachedSharedPostsPage: (
-    userUid: string,
-    options: { limit: number; offset?: number; excludeAuthorUid?: string | null }
-  ) => mockGetCachedSharedPostsPage(userUid, options),
-}));
-
 describe('useHomeFeedPagination', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('loads the first note and friend-post pages and merges them by recency', async () => {
+  it('builds the feed synchronously from loaded notes and friend posts', async () => {
     const notes: Note[] = [
       {
         id: 'note-1',
@@ -133,16 +114,6 @@ describe('useHomeFeedPagination', () => {
       },
     ];
 
-    mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
-      notes.slice(0, options.limit)
-    );
-    mockGetCachedSharedPostsPage.mockImplementation(
-      async (_userUid: string, options: { limit: number; excludeAuthorUid?: string | null }) =>
-        sharedPosts
-          .filter((post) => post.authorUid !== options.excludeAuthorUid)
-          .slice(0, options.limit)
-    );
-
     const { result } = renderHook(() =>
       useHomeFeedPagination({
         notesScope: '__local__',
@@ -152,25 +123,17 @@ describe('useHomeFeedPagination', () => {
       })
     );
 
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.hasMore).toBe(false);
     expect(result.current.items.map((item) => `${item.kind}:${item.id}`)).toEqual([
       'note:note-1',
       'shared-post:shared-friend-1',
       'note:note-2',
       'shared-post:shared-friend-2',
     ]);
-    expect(mockGetCachedSharedPostsPage).toHaveBeenCalledWith(
-      'me',
-      expect.objectContaining({
-        excludeAuthorUid: 'me',
-      })
-    );
   });
 
-  it('loads additional note pages until a focused note is available', async () => {
+  it('returns the target index immediately when the full note set is already loaded', async () => {
     const notes: Note[] = Array.from({ length: 30 }, (_, index) => ({
       id: `note-${index + 1}`,
       type: 'text' as const,
@@ -187,45 +150,23 @@ describe('useHomeFeedPagination', () => {
       createdAt: new Date(Date.UTC(2026, 3, 30 - index)).toISOString(),
       updatedAt: null,
     }));
-    const sharedSignal: SharedPost[] = [];
-
-    mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
-      notes.slice(0, options.limit)
-    );
-    mockGetCachedSharedPostsPage.mockResolvedValue([]);
 
     const { result } = renderHook(() =>
       useHomeFeedPagination({
         notesScope: '__local__',
         sharedCacheUserUid: null,
         notesSignal: notes,
-        sharedSignal,
+        sharedSignal: [],
       })
     );
 
-    await waitFor(() => {
-      expect(result.current.items).toHaveLength(24);
-    });
-
-    let targetIndex = -1;
-    await act(async () => {
-      targetIndex = await result.current.ensureTargetLoaded({
+    await expect(
+      result.current.ensureTargetLoaded({
         kind: 'note',
         id: 'note-30',
-      });
-    });
+      })
+    ).resolves.toBe(29);
 
-    expect(targetIndex).toBe(29);
-    expect(result.current.items).toHaveLength(30);
-    expect(mockGetNotesPageForScope).toHaveBeenNthCalledWith(
-      1,
-      '__local__',
-      expect.objectContaining({ limit: 25 })
-    );
-    expect(mockGetNotesPageForScope).toHaveBeenNthCalledWith(
-      2,
-      '__local__',
-      expect.objectContaining({ limit: 49 })
-    );
+    await expect(result.current.loadNextPage()).resolves.toEqual(result.current.items);
   });
 });

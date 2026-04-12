@@ -361,7 +361,7 @@ jest.mock('../utils/platform', () => ({
 }));
 
 describe('HomeScreen archive focus', () => {
-  const snapHeight = Dimensions.get('window').height - 90;
+  const snapHeight = Dimensions.get('window').height;
   const originalRequestIdleCallback = (global as any).requestIdleCallback;
   const originalCancelIdleCallback = (global as any).cancelIdleCallback;
 
