@@ -42,7 +42,7 @@ describe('useAppWidgetRefresh', () => {
     appStateListener = null;
   });
 
-  it('refreshes widgets on mount and again when the app becomes active', async () => {
+  it('does a lightweight startup refresh and a richer refresh on foreground', async () => {
     const { rerender } = renderHook(() => useAppWidgetRefresh(), { initialProps: {} });
 
     await act(async () => {
@@ -52,10 +52,14 @@ describe('useAppWidgetRefresh', () => {
     await waitFor(() => {
       expect(mockUpdateWidgetData).toHaveBeenCalledTimes(1);
       expect(mockUpdateWidgetData).toHaveBeenLastCalledWith({
-        includeLocationLookup: true,
+        includeLocationLookup: false,
         includeSharedRefresh: false,
       });
     });
+
+    mockUseAuth.mockReturnValue({ user: { uid: 'user-1' } });
+    mockUseConnectivity.mockReturnValue({ isOnline: true });
+    rerender({});
 
     await act(async () => {
       appStateListener?.('active');
@@ -64,21 +68,27 @@ describe('useAppWidgetRefresh', () => {
 
     await waitFor(() => {
       expect(mockUpdateWidgetData).toHaveBeenCalledTimes(2);
+      expect(mockUpdateWidgetData).toHaveBeenLastCalledWith({
+        includeLocationLookup: true,
+        includeSharedRefresh: true,
+      });
     });
+  });
 
-    mockUseAuth.mockReturnValue({ user: { uid: 'user-1' } });
-    mockUseConnectivity.mockReturnValue({ isOnline: true });
-    rerender({});
+  it('throttles repeated foreground refreshes', async () => {
+    renderHook(() => useAppWidgetRefresh(), { initialProps: {} });
 
     await act(async () => {
       jest.advanceTimersByTime(120);
     });
 
-    await waitFor(() => {
-      expect(mockUpdateWidgetData).toHaveBeenCalledWith({
-        includeLocationLookup: true,
-        includeSharedRefresh: true,
-      });
+    await act(async () => {
+      appStateListener?.('active');
+      jest.advanceTimersByTime(120);
+      appStateListener?.('active');
+      jest.advanceTimersByTime(120);
     });
+
+    expect(mockUpdateWidgetData).toHaveBeenCalledTimes(2);
   });
 });

@@ -153,6 +153,120 @@ describe('useHomeFeedPagination', () => {
     expect(mockGetNotesPageForScope).not.toHaveBeenCalled();
   });
 
+  it('does not try to load more when the seeded window already contains every note', async () => {
+    const notes: Note[] = Array.from({ length: 5 }, (_, index) => ({
+      id: `note-${index + 1}`,
+      type: 'text',
+      content: `Note ${index + 1}`,
+      locationName: `District ${index + 1}`,
+      latitude: 10.7 + index,
+      longitude: 106.6 + index,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: false,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      createdAt: new Date(Date.UTC(2026, 3, 10 - index)).toISOString(),
+      updatedAt: null,
+    }));
+    const sharedSignal: SharedPost[] = [];
+
+    const { result } = renderHook(() =>
+      useHomeFeedPagination({
+        notesScope: '__local__',
+        sharedCacheUserUid: null,
+        seedNotes: notes,
+        seedNoteCount: notes.length,
+        notesSignal: notes,
+        sharedSignal,
+      })
+    );
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.hasMore).toBe(false);
+      expect(result.current.items).toHaveLength(5);
+    });
+
+    await act(async () => {
+      await result.current.loadNextPage();
+    });
+
+    expect(mockGetNotesPageForScope).not.toHaveBeenCalled();
+  });
+
+  it('keeps seeded notes visible while shared feed loading finishes', async () => {
+    const notes: Note[] = Array.from({ length: 5 }, (_, index) => ({
+      id: `note-${index + 1}`,
+      type: 'text',
+      content: `Note ${index + 1}`,
+      locationName: `District ${index + 1}`,
+      latitude: 10.7 + index,
+      longitude: 106.6 + index,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: false,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      createdAt: new Date(Date.UTC(2026, 3, 10 - index)).toISOString(),
+      updatedAt: null,
+    }));
+    const sharedSignal: SharedPost[] = [];
+    const baseProps = {
+      notesScope: '__local__',
+      sharedCacheUserUid: 'me',
+      seedNotes: notes,
+      seedNoteCount: notes.length,
+      seedSharedPosts: sharedSignal,
+      notesSignal: notes,
+      sharedSignal,
+    } as const;
+
+    const { result, rerender } = renderHook(
+      (props: {
+        notesScope: string;
+        sharedCacheUserUid: string | null;
+        seedNotes: Note[];
+        seedNoteCount: number;
+        seedSharedPosts: SharedPost[];
+        sharedLoading: boolean;
+        notesSignal: Note[];
+        sharedSignal: SharedPost[];
+      }) =>
+        useHomeFeedPagination({
+          ...props,
+          notesLoading: false,
+        }),
+      {
+        initialProps: {
+          ...baseProps,
+          sharedLoading: true,
+        },
+      }
+    );
+
+    expect(result.current.items).toHaveLength(5);
+    expect(result.current.hasMore).toBe(false);
+
+    act(() => {
+      rerender({
+        ...baseProps,
+        sharedLoading: false,
+      });
+    });
+
+    expect(result.current.items).toHaveLength(5);
+    expect(result.current.hasMore).toBe(false);
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(mockGetNotesPageForScope).not.toHaveBeenCalled();
+  });
+
   it('loads additional note pages until a focused note is available', async () => {
     const notes: Note[] = Array.from({ length: 30 }, (_, index) => ({
       id: `note-${index + 1}`,

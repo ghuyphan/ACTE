@@ -647,7 +647,7 @@ export default function NotesIndexScreen() {
                       viewabilityConfig={gridViewabilityConfig}
                       numColumns={3}
                       onEndReached={
-                        hasMore
+                        !isArchiveInitialLoading && hasMore
                           ? () => {
                               void loadNextPage();
                             }

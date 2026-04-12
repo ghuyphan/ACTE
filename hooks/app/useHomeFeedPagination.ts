@@ -51,6 +51,75 @@ function buildInitialWindow(sharedCacheUserUid?: string | null): FeedWindow {
   };
 }
 
+function buildSeededSnapshot(
+  window: FeedWindow,
+  options: {
+    seedNotes: Note[];
+    seedNoteCount: number;
+    seededFriendSharedPosts: SharedPost[];
+  }
+): HomeFeedSnapshot {
+  const notes = options.seedNotes.slice(0, window.notes);
+  const sharedPosts = options.seededFriendSharedPosts.slice(0, window.sharedPosts);
+
+  return {
+    notes,
+    sharedPosts,
+    hasMoreNotes: options.seedNoteCount > notes.length,
+    hasMoreSharedPosts: options.seededFriendSharedPosts.length > sharedPosts.length,
+  };
+}
+
+function snapshotsEqual(left: HomeFeedSnapshot, right: HomeFeedSnapshot) {
+  if (
+    left.hasMoreNotes !== right.hasMoreNotes ||
+    left.hasMoreSharedPosts !== right.hasMoreSharedPosts ||
+    left.notes.length !== right.notes.length ||
+    left.sharedPosts.length !== right.sharedPosts.length
+  ) {
+    return false;
+  }
+
+  for (let index = 0; index < left.notes.length; index += 1) {
+    const leftNote = left.notes[index];
+    const rightNote = right.notes[index];
+    if (!rightNote) {
+      return false;
+    }
+
+    if (
+      leftNote.id !== rightNote.id ||
+      leftNote.updatedAt !== rightNote.updatedAt ||
+      leftNote.createdAt !== rightNote.createdAt ||
+      leftNote.content !== rightNote.content ||
+      leftNote.caption !== rightNote.caption ||
+      leftNote.isFavorite !== rightNote.isFavorite
+    ) {
+      return false;
+    }
+  }
+
+  for (let index = 0; index < left.sharedPosts.length; index += 1) {
+    const leftPost = left.sharedPosts[index];
+    const rightPost = right.sharedPosts[index];
+    if (!rightPost) {
+      return false;
+    }
+
+    if (
+      leftPost.id !== rightPost.id ||
+      leftPost.updatedAt !== rightPost.updatedAt ||
+      leftPost.createdAt !== rightPost.createdAt ||
+      leftPost.text !== rightPost.text ||
+      leftPost.placeName !== rightPost.placeName
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function useHomeFeedPagination({
   notesScope,
   sharedCacheUserUid,
@@ -62,44 +131,48 @@ export function useHomeFeedPagination({
   notesSignal,
   sharedSignal,
 }: UseHomeFeedPaginationOptions): UseHomeFeedPaginationResult {
-  const isMountedRef = useRef(true);
-  const previousSourceKeyRef = useRef<string | null>(null);
-  const requestedWindowRef = useRef<FeedWindow>(buildInitialWindow(sharedCacheUserUid));
-  const loadSequenceRef = useRef(0);
-  const snapshotRef = useRef<HomeFeedSnapshot>({
-    notes: [],
-    sharedPosts: [],
-    hasMoreNotes: true,
-    hasMoreSharedPosts: Boolean(sharedCacheUserUid),
-  });
-  const loadChainRef = useRef<Promise<HomeFeedSnapshot>>(Promise.resolve({
-    notes: [],
-    sharedPosts: [],
-    hasMoreNotes: true,
-    hasMoreSharedPosts: Boolean(sharedCacheUserUid),
-  }));
-  const itemsRef = useRef<HomeFeedItem[]>([]);
-  const hasMoreRef = useRef({
-    notes: true,
-    sharedPosts: Boolean(sharedCacheUserUid),
-  });
-  const [loadedNotes, setLoadedNotes] = useState<Note[]>([]);
-  const [loadedSharedPosts, setLoadedSharedPosts] = useState<SharedPost[]>([]);
-  const [hasMoreNotes, setHasMoreNotes] = useState(true);
-  const [hasMoreSharedPosts, setHasMoreSharedPosts] = useState(Boolean(sharedCacheUserUid));
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasResolvedInitialWindow, setHasResolvedInitialWindow] = useState(false);
-
-  const items = useMemo(
-    () => buildHomeFeedItems(loadedNotes, loadedSharedPosts),
-    [loadedNotes, loadedSharedPosts]
-  );
+  const sourceKey = `${notesScope}:${sharedCacheUserUid ?? 'none'}`;
+  const initialWindow = buildInitialWindow(sharedCacheUserUid);
   const seededFriendSharedPosts = useMemo(
     () =>
       sharedCacheUserUid
         ? seedSharedPosts.filter((post) => post.authorUid !== sharedCacheUserUid)
         : [],
     [seedSharedPosts, sharedCacheUserUid]
+  );
+  const initialSeededSnapshot = useMemo(
+    () =>
+      buildSeededSnapshot(initialWindow, {
+        seedNotes,
+        seedNoteCount,
+        seededFriendSharedPosts,
+      }),
+    [initialWindow.notes, initialWindow.sharedPosts, seedNoteCount, seedNotes, seededFriendSharedPosts]
+  );
+  const isWaitingForInitialData =
+    (notesLoading && seedNotes.length === 0) ||
+    Boolean(sharedCacheUserUid && sharedLoading && seedSharedPosts.length === 0);
+  const isMountedRef = useRef(true);
+  const previousSourceKeyRef = useRef<string | null>(sourceKey);
+  const requestedWindowRef = useRef<FeedWindow>(initialWindow);
+  const loadSequenceRef = useRef(0);
+  const snapshotRef = useRef<HomeFeedSnapshot>(initialSeededSnapshot);
+  const loadChainRef = useRef<Promise<HomeFeedSnapshot>>(Promise.resolve(initialSeededSnapshot));
+  const itemsRef = useRef<HomeFeedItem[]>([]);
+  const hasMoreRef = useRef({
+    notes: initialSeededSnapshot.hasMoreNotes,
+    sharedPosts: initialSeededSnapshot.hasMoreSharedPosts,
+  });
+  const [loadedNotes, setLoadedNotes] = useState<Note[]>(initialSeededSnapshot.notes);
+  const [loadedSharedPosts, setLoadedSharedPosts] = useState<SharedPost[]>(initialSeededSnapshot.sharedPosts);
+  const [hasMoreNotes, setHasMoreNotes] = useState(initialSeededSnapshot.hasMoreNotes);
+  const [hasMoreSharedPosts, setHasMoreSharedPosts] = useState(initialSeededSnapshot.hasMoreSharedPosts);
+  const [isLoading, setIsLoading] = useState(isWaitingForInitialData);
+  const [hasResolvedInitialWindow, setHasResolvedInitialWindow] = useState(!isWaitingForInitialData);
+
+  const items = useMemo(
+    () => buildHomeFeedItems(loadedNotes, loadedSharedPosts),
+    [loadedNotes, loadedSharedPosts]
   );
 
   useEffect(() => {
@@ -124,15 +197,11 @@ export function useHomeFeedPagination({
       return null;
     }
 
-    const notes = seedNotes.slice(0, window.notes);
-    const sharedPosts = seededFriendSharedPosts.slice(0, window.sharedPosts);
-
-    return {
-      notes,
-      sharedPosts,
-      hasMoreNotes: seedNoteCount > notes.length,
-      hasMoreSharedPosts: seededFriendSharedPosts.length > sharedPosts.length,
-    };
+    return buildSeededSnapshot(window, {
+      seedNotes,
+      seedNoteCount,
+      seededFriendSharedPosts,
+    });
   }, [
     seedNoteCount,
     seedNotes,
@@ -198,22 +267,39 @@ export function useHomeFeedPagination({
   ) => {
     requestedWindowRef.current = nextWindow;
     const loadId = ++loadSequenceRef.current;
+    const resetSnapshot =
+      options?.resetVisibleItems ? resolveSeededSnapshot(nextWindow) : null;
 
     if (isMountedRef.current) {
       setIsLoading(true);
       if (options?.resetVisibleItems) {
-        itemsRef.current = [];
-        snapshotRef.current = {
-          notes: [],
-          sharedPosts: [],
-          hasMoreNotes: true,
-          hasMoreSharedPosts: Boolean(sharedCacheUserUid),
-        };
-        setLoadedNotes([]);
-        setLoadedSharedPosts([]);
-        setHasMoreNotes(true);
-        setHasMoreSharedPosts(Boolean(sharedCacheUserUid));
-        setHasResolvedInitialWindow(false);
+        if (resetSnapshot) {
+          const nextItems = buildHomeFeedItems(resetSnapshot.notes, resetSnapshot.sharedPosts);
+          itemsRef.current = nextItems;
+          snapshotRef.current = resetSnapshot;
+          hasMoreRef.current = {
+            notes: resetSnapshot.hasMoreNotes,
+            sharedPosts: resetSnapshot.hasMoreSharedPosts,
+          };
+          setLoadedNotes(resetSnapshot.notes);
+          setLoadedSharedPosts(resetSnapshot.sharedPosts);
+          setHasMoreNotes(resetSnapshot.hasMoreNotes);
+          setHasMoreSharedPosts(resetSnapshot.hasMoreSharedPosts);
+          setHasResolvedInitialWindow(true);
+        } else {
+          itemsRef.current = [];
+          snapshotRef.current = {
+            notes: [],
+            sharedPosts: [],
+            hasMoreNotes: true,
+            hasMoreSharedPosts: Boolean(sharedCacheUserUid),
+          };
+          setLoadedNotes([]);
+          setLoadedSharedPosts([]);
+          setHasMoreNotes(true);
+          setHasMoreSharedPosts(Boolean(sharedCacheUserUid));
+          setHasResolvedInitialWindow(false);
+        }
       }
     }
 
@@ -253,7 +339,6 @@ export function useHomeFeedPagination({
       return;
     }
 
-    const sourceKey = `${notesScope}:${sharedCacheUserUid ?? 'none'}`;
     const sourceChanged = previousSourceKeyRef.current !== sourceKey;
     previousSourceKeyRef.current = sourceKey;
 
@@ -266,6 +351,21 @@ export function useHomeFeedPagination({
             : 0,
         };
 
+    const seededSnapshot = resolveSeededSnapshot(nextWindow);
+    if (seededSnapshot) {
+      requestedWindowRef.current = nextWindow;
+      loadChainRef.current = Promise.resolve(seededSnapshot);
+
+      if (!snapshotsEqual(snapshotRef.current, seededSnapshot)) {
+        commitSnapshot(seededSnapshot);
+      } else if (isMountedRef.current) {
+        setIsLoading(false);
+        setHasResolvedInitialWindow(true);
+      }
+
+      return;
+    }
+
     void runLoad(nextWindow, {
       resetVisibleItems: sourceChanged,
     });
@@ -273,6 +373,9 @@ export function useHomeFeedPagination({
     notesLoading,
     notesScope,
     notesSignal,
+    commitSnapshot,
+    resolveSeededSnapshot,
+    sourceKey,
     runLoad,
     seedNotes.length,
     seedSharedPosts.length,

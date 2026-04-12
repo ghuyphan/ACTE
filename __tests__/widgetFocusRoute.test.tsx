@@ -6,6 +6,13 @@ const mockFocusFeedTargetFromExternalEntry = jest.fn();
 const mockResetToHome = jest.fn();
 const mockResolveFeedTarget = jest.fn();
 let mockParams: { kind?: string; id?: string } = {};
+let mockAuthState: {
+  user: { uid: string } | null;
+  isReady: boolean;
+} = {
+  user: { uid: 'me' },
+  isReady: true,
+};
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
@@ -23,9 +30,7 @@ jest.mock('../hooks/app/useExternalEntryNavigation', () => ({
 }));
 
 jest.mock('../hooks/useAuth', () => ({
-  useAuth: () => ({
-    user: { uid: 'me' },
-  }),
+  useAuth: () => mockAuthState,
 }));
 
 jest.mock('../services/feedTargetLookup', () => ({
@@ -36,6 +41,10 @@ describe('WidgetFocusRoute', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockParams = {};
+    mockAuthState = {
+      user: { uid: 'me' },
+      isReady: true,
+    };
   });
 
   it('focuses the resolved note target from a widget deep link', async () => {
@@ -69,5 +78,37 @@ describe('WidgetFocusRoute', () => {
     });
 
     expect(mockFocusFeedTargetFromExternalEntry).not.toHaveBeenCalled();
+  });
+
+  it('waits for auth readiness before resolving a widget target', async () => {
+    mockParams = { kind: 'note', id: 'note-42' };
+    mockAuthState = {
+      user: null,
+      isReady: false,
+    };
+
+    const view = render(<WidgetFocusRoute />);
+
+    expect(mockResolveFeedTarget).not.toHaveBeenCalled();
+    expect(mockResetToHome).not.toHaveBeenCalled();
+
+    mockAuthState = {
+      user: { uid: 'me' },
+      isReady: true,
+    };
+    mockResolveFeedTarget.mockResolvedValue({ kind: 'note', id: 'note-42' });
+
+    view.rerender(<WidgetFocusRoute />);
+
+    await waitFor(() => {
+      expect(mockResolveFeedTarget).toHaveBeenCalledWith(
+        { kind: 'note', id: 'note-42' },
+        { sharedCacheUserUid: 'me' }
+      );
+      expect(mockFocusFeedTargetFromExternalEntry).toHaveBeenCalledWith({
+        kind: 'note',
+        id: 'note-42',
+      });
+    });
   });
 });

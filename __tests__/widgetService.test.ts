@@ -44,20 +44,10 @@ jest.mock('../constants/i18n', () => {
         ? 'Ky niem gan ban nhat luc nay.'
         : 'Closest memory right now.';
     }
-    if (key === 'widget.modeFavorite') {
-      return currentLanguage === 'vi'
-        ? 'Mot noi ban tung yeu thich.'
-        : 'A favorite to revisit.';
-    }
     if (key === 'widget.modePhoto') {
       return currentLanguage === 'vi'
         ? 'Mot ky uc hinh anh de nho lai.'
         : 'A photo memory to revisit.';
-    }
-    if (key === 'widget.modeResurfaced') {
-      return currentLanguage === 'vi'
-        ? 'Mot dieu dang de nho lai lan nua.'
-        : 'Something worth remembering again.';
     }
     if (key === 'widget.modeShared') {
       return currentLanguage === 'vi'
@@ -227,16 +217,6 @@ function getLastTimelineEntries() {
   return (call?.[0] ?? []) as Array<{ date: Date; props: { props: Record<string, unknown> } }>;
 }
 
-function createDeferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((nextResolve, nextReject) => {
-    resolve = nextResolve;
-    reject = nextReject;
-  });
-  return { promise, resolve, reject };
-}
-
 beforeEach(async () => {
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
   jest.clearAllMocks();
@@ -297,32 +277,99 @@ afterEach(() => {
 });
 
 describe('widgetService', () => {
-  it('uses the nearest-memory mode when a note is inside its radius', () => {
+  it('uses the preferred note when provided', () => {
     const result = selectWidgetNote({
       notes: [
         buildNote({
-          id: 'near-note',
-          content: 'She likes the iced tea here',
+          id: 'older-note',
+          content: 'Older note',
+          createdAt: '2026-03-09T10:00:00.000Z',
+        }),
+        buildNote({
+          id: 'preferred-note',
+          content: 'Show this one',
+          createdAt: '2026-03-10T10:00:00.000Z',
+        }),
+      ] as any,
+      preferredNoteId: 'preferred-note',
+    });
+
+    expect(result.selectedNote?.id).toBe('preferred-note');
+    expect(result.selectionMode).toBe('latest_memory');
+  });
+
+  it('uses the newest nearby personal note before older nearby notes', () => {
+    const result = selectWidgetNote({
+      notes: [
+        buildNote({
+          id: 'older-nearby',
+          content: 'Older nearby memory',
           locationName: 'Cafe A',
           latitude: 10.0,
           longitude: 106.0,
+          createdAt: '2026-03-09T08:00:00.000Z',
         }),
         buildNote({
-          id: 'favorite-photo',
-          type: 'photo',
-          content: 'file:///mock-documents/photos/latest.jpg',
-          isFavorite: true,
-          locationName: 'Photo Place',
-          latitude: 20.0,
-          longitude: 116.0,
+          id: 'newer-nearby',
+          content: 'Newer nearby memory',
+          locationName: 'Cafe B',
+          latitude: 10.0003,
+          longitude: 106.0,
+          createdAt: '2026-03-10T10:00:00.000Z',
         }),
-      ],
+        buildNote({
+          id: 'far-note',
+          content: 'Far away memory',
+          locationName: 'Cafe C',
+          latitude: 11.0,
+          longitude: 107.0,
+        }),
+      ] as any,
       currentLocation: { latitude: 10.0, longitude: 106.0 },
-      referenceDate: new Date('2026-03-10T00:00:00'),
     });
 
-    expect(result.selectedNote?.id).toBe('near-note');
+    expect(result.selectedNote?.id).toBe('newer-nearby');
     expect(result.selectionMode).toBe('nearest_memory');
+    expect(result.nearbyPlacesCount).toBe(1);
+  });
+
+  it('uses the latest personal note when nothing is nearby', () => {
+    const result = selectWidgetNote({
+      notes: [
+        buildNote({
+          id: 'older-note',
+          content: 'Older memory',
+          locationName: 'Old Place',
+          createdAt: '2026-03-09T10:00:00.000Z',
+        }),
+        buildNote({
+          id: 'newest-note',
+          content: 'Newest memory',
+          locationName: 'Newest Place',
+          createdAt: '2026-03-10T12:00:00.000Z',
+        }),
+      ] as any,
+      currentLocation: { latitude: 0.0, longitude: 0.0 },
+    });
+
+    expect(result.selectedNote?.id).toBe('newest-note');
+    expect(result.selectionMode).toBe('latest_memory');
+  });
+
+  it('uses shared content only when there are no eligible personal notes', () => {
+    const result = selectWidgetNote({
+      notes: [],
+      sharedPosts: [
+        buildSharedPost({
+          id: 'shared-latest',
+          text: 'Shared latest memory',
+          createdAt: '2026-03-10T12:00:00.000Z',
+        }),
+      ] as any,
+    });
+
+    expect(result.selectedNote?.id).toBe('shared-latest');
+    expect(result.selectionMode).toBe('shared_memory');
   });
 
   it('uses an explicit current location override when updating the widget timeline', async () => {
@@ -333,13 +380,15 @@ describe('widgetService', () => {
         locationName: 'Cafe A',
         latitude: 10.0,
         longitude: 106.0,
+        createdAt: '2026-03-10T10:00:00.000Z',
       }),
       buildNote({
-        id: 'far-note',
-        content: 'Far away memory',
+        id: 'also-near',
+        content: 'Another nearby memory',
         locationName: 'Cafe B',
-        latitude: 11.0,
-        longitude: 107.0,
+        latitude: 10.0002,
+        longitude: 106.0,
+        createdAt: '2026-03-09T10:00:00.000Z',
       }),
     ]);
 
@@ -366,328 +415,6 @@ describe('widgetService', () => {
 
     expect(mockGetPersistedActiveNotesScope).toHaveBeenCalledTimes(1);
     expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-1');
-  });
-
-  it('can anchor the current slot to the place that triggered a geofence refresh', () => {
-    const result = selectWidgetNote({
-      notes: [
-        buildNote({
-          id: 'closer-photo',
-          type: 'photo',
-          content: 'file:///mock-documents/photos/latest.jpg',
-          locationName: 'Cafe A',
-          latitude: 10.0,
-          longitude: 106.0,
-          radius: 250,
-          createdAt: '2026-03-10T11:00:00.000Z',
-        }),
-        buildNote({
-          id: 'triggered-note',
-          content: 'Get the iced tea again',
-          locationName: 'Cafe B',
-          latitude: 10.0008,
-          longitude: 106.0,
-          radius: 250,
-          createdAt: '2026-03-10T09:00:00.000Z',
-        }),
-      ],
-      currentLocation: { latitude: 10.0, longitude: 106.0 },
-      preferredNoteId: 'triggered-note',
-      referenceDate: new Date('2026-03-10T00:00:00.000Z'),
-    });
-
-    expect(result.selectedNote?.id).toBe('triggered-note');
-    expect(result.selectedLocationName).toBe('Cafe B');
-    expect(result.selectionMode).toBe('nearest_memory');
-  });
-
-  it('prefers nearby visual notes over plain text notes when they share the same place', () => {
-    const result = selectWidgetNote({
-      notes: [
-        buildNote({
-          id: 'recent-plain',
-          content: 'Newest plain memory',
-          latitude: 10.0,
-          longitude: 106.0,
-          createdAt: '2026-03-10T11:00:00.000Z',
-        }),
-        buildNote({
-          id: 'sticker-memory',
-          content: '',
-          hasStickers: true,
-          stickerPlacementsJson: JSON.stringify([
-            {
-              id: 'placement-1',
-              x: 0.5,
-              y: 0.5,
-              scale: 1,
-              rotation: 0,
-              zIndex: 1,
-              opacity: 1,
-              asset: {
-                id: 'asset-1',
-                localUri: 'file:///mock-documents/stickers/asset-1.png',
-                mimeType: 'image/png',
-                width: 120,
-                height: 120,
-              },
-            },
-          ]),
-          latitude: 10.0,
-          longitude: 106.0,
-          createdAt: '2026-03-10T10:00:00.000Z',
-        }),
-      ],
-      currentLocation: { latitude: 10.0, longitude: 106.0 },
-      referenceDate: new Date('2026-03-10T12:00:00'),
-    });
-
-    expect(result.selectedNote?.id).toBe('sticker-memory');
-    expect(result.selectionMode).toBe('nearest_memory');
-  });
-
-  it('keeps personal content ahead of friend posts when personal notes are eligible', () => {
-    const result = selectWidgetNote({
-      notes: [
-        buildNote({
-          id: 'personal-favorite',
-          content: 'Keep coming back here',
-          isFavorite: true,
-          createdAt: '2026-03-09T10:00:00.000Z',
-        }),
-      ],
-      sharedPosts: [
-        buildSharedPost({
-          id: 'shared-photo',
-          type: 'photo',
-          text: '',
-          photoPath: 'friend-1/shared-photo',
-          photoLocalUri: 'file:///mock-documents/photos/shared.jpg',
-          createdAt: '2026-03-10T11:00:00.000Z',
-        }),
-      ],
-      currentLocation: { latitude: 0.0, longitude: 0.0 },
-      referenceDate: new Date('2026-03-10T12:00:00'),
-    });
-
-    expect(result.selectedNote?.id).toBe('personal-favorite');
-    expect(result.selectedNote?.source).toBe('personal');
-    expect(result.selectionMode).toBe('favorite_memory');
-  });
-
-  it('prefers favorite photos over non-favorite text when nothing is nearby', () => {
-    const result = selectWidgetNote({
-      notes: [
-        buildNote({
-          id: 'photo-favorite',
-          type: 'photo',
-          content: 'file:///mock-documents/photos/latest.jpg',
-          isFavorite: true,
-          locationName: 'Photo Place',
-          latitude: 20.0,
-          longitude: 116.0,
-        }),
-        buildNote({
-          id: 'plain-text',
-          content: 'Just a regular note',
-          locationName: 'Far away',
-          latitude: 30.0,
-          longitude: 126.0,
-        }),
-      ],
-      currentLocation: { latitude: 10.0, longitude: 106.0 },
-      referenceDate: new Date('2026-03-10T06:00:00'),
-    });
-
-    expect(result.selectedNote?.id).toBe('photo-favorite');
-    expect(result.selectionMode).toBe('favorite_photo');
-  });
-
-  it('prefers favorite text over plain recent text when no photos are available', () => {
-    const result = selectWidgetNote({
-      notes: [
-        buildNote({
-          id: 'favorite-text',
-          content: 'Keep the corner table',
-          isFavorite: true,
-          createdAt: '2026-03-08T10:00:00.000Z',
-        }),
-        buildNote({
-          id: 'recent-text',
-          content: 'Newest plain memory',
-          createdAt: '2026-03-10T10:00:00.000Z',
-        }),
-      ],
-      currentLocation: { latitude: 0.0, longitude: 0.0 },
-      referenceDate: new Date('2026-03-10T12:00:00'),
-    });
-
-    expect(result.selectedNote?.id).toBe('favorite-text');
-    expect(result.selectionMode).toBe('favorite_memory');
-  });
-
-  it('uses resurfaced memories before latest when older text is eligible', () => {
-    const result = selectWidgetNote({
-      notes: [
-        buildNote({
-          id: 'old-memory',
-          content: 'An old but meaningful memory',
-          createdAt: '2026-02-10T10:00:00.000Z',
-        }),
-        buildNote({
-          id: 'new-memory',
-          content: 'A newer memory',
-          createdAt: '2026-03-09T10:00:00.000Z',
-        }),
-      ],
-      currentLocation: { latitude: 0.0, longitude: 0.0 },
-      referenceDate: new Date('2026-03-10T18:00:00'),
-    });
-
-    expect(result.selectedNote?.id).toBe('old-memory');
-    expect(result.selectionMode).toBe('resurfaced_memory');
-  });
-
-  it('falls back to latest memory when no earlier bucket is available', () => {
-    const result = selectWidgetNote({
-      notes: [
-        buildNote({
-          id: 'newer-note',
-          locationName: 'Far away',
-          latitude: 11.0,
-          longitude: 107.0,
-          createdAt: '2026-03-11T10:00:00.000Z',
-        }),
-        buildNote({
-          id: 'older-note',
-          locationName: 'Older place',
-          latitude: 12.0,
-          longitude: 108.0,
-          createdAt: '2026-03-09T10:00:00.000Z',
-        }),
-      ],
-      currentLocation: { latitude: 0.0, longitude: 0.0 },
-      referenceDate: new Date('2026-03-10T06:00:00'),
-    });
-
-    expect(result.selectedNote?.id).toBe('newer-note');
-    expect(result.selectionMode).toBe('latest_memory');
-  });
-
-  it('pins a preferred note for the current slot when the refresh is not location-driven', () => {
-    const result = selectWidgetNote({
-      notes: [
-        buildNote({
-          id: 'favorite-photo',
-          type: 'photo',
-          content: 'file:///mock-documents/photos/latest.jpg',
-          isFavorite: true,
-          createdAt: '2026-03-10T11:00:00.000Z',
-        }),
-        buildNote({
-          id: 'new-note',
-          content: 'The newest note should win right after save',
-          createdAt: '2026-03-10T12:00:00.000Z',
-        }),
-      ],
-      preferredNoteId: 'new-note',
-      referenceDate: new Date('2026-03-10T12:05:00.000Z'),
-    });
-
-    expect(result.selectedNote?.id).toBe('new-note');
-    expect(result.selectionMode).toBe('latest_memory');
-  });
-
-  it('uses shared friend content only when there are no eligible personal notes', async () => {
-    mockCurrentUser = { id: 'me', uid: 'me' };
-    mockGetAllNotes.mockResolvedValue([]);
-    mockGetCachedSharedFeedSnapshot.mockResolvedValue({
-      friends: [],
-      sharedPosts: [
-        buildSharedPost({
-          id: 'shared-photo-1',
-          authorDisplayName: 'Annie Case',
-          authorPhotoURLSnapshot: 'https://example.com/annie.jpg',
-          type: 'photo',
-          text: '',
-          photoPath: 'friend-1/shared-photo-1',
-          photoLocalUri: null,
-          placeName: 'Shared Place',
-        }),
-      ],
-      activeInvite: null,
-      lastUpdatedAt: '2026-03-10T11:05:00.000Z',
-    });
-    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
-      exists: uri !== 'https://example.com/annie.jpg',
-      isDirectory: false,
-      uri,
-      size: 1024,
-      modificationTime: 0,
-    }));
-
-    await updateWidgetData({ referenceDate: new Date('2026-03-10T12:00:00.000Z') });
-
-    const entries = getLastTimelineEntries();
-
-    expect(entries[0]?.props.props).toEqual(
-      expect.objectContaining({
-        isSharedContent: true,
-        authorDisplayName: 'Annie Case',
-        authorInitials: 'AC',
-        locationName: 'Shared Place',
-        primaryActionUrl: 'noto:///widget/shared-post/shared-photo-1',
-      })
-    );
-    expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
-      'shared-post-media',
-      'friend-1/shared-photo-1',
-      'shared-post-shared-photo-1'
-    );
-  });
-
-  it('never uses nearby-memory mode for friend-only widget content', () => {
-    const result = selectWidgetNote({
-      notes: [],
-      sharedPosts: [
-        buildSharedPost({
-          id: 'shared-text-1',
-          text: 'Shared hello',
-        }),
-      ],
-      currentLocation: { latitude: 10.0, longitude: 106.0 },
-      referenceDate: new Date('2026-03-10T12:00:00'),
-    });
-
-    expect(result.selectedNote?.id).toBe('shared-text-1');
-    expect(result.selectedNote?.source).toBe('shared');
-    expect(result.selectionMode).toBe('shared_memory');
-  });
-
-  it('prefers the newest friend memory when there are no personal notes', () => {
-    const result = selectWidgetNote({
-      notes: [],
-      sharedPosts: [
-        buildSharedPost({
-          id: 'older-photo',
-          type: 'photo',
-          text: '',
-          photoPath: 'friend-1/older-photo',
-          photoLocalUri: 'file:///mock-documents/older-photo.jpg',
-          createdAt: '2026-03-09T10:00:00.000Z',
-        }),
-        buildSharedPost({
-          id: 'newer-text',
-          text: 'Most recent friend note',
-          createdAt: '2026-03-10T12:00:00.000Z',
-        }),
-      ],
-      referenceDate: new Date('2026-03-10T18:00:00'),
-    });
-
-    expect(result.selectedNote?.id).toBe('newer-text');
-    expect(result.selectedNote?.source).toBe('shared');
-    expect(result.selectionMode).toBe('shared_memory');
   });
 
   it('refreshes shared widget content from the network when asked', async () => {
@@ -724,243 +451,23 @@ describe('widgetService', () => {
     );
   });
 
-  it('reuses a recent shared widget refresh result instead of hitting the network twice', async () => {
-    mockCurrentUser = { id: 'me-cache', uid: 'me-cache' };
-    mockGetAllNotes.mockResolvedValue([]);
-    mockRefreshSharedFeed.mockResolvedValue({
-      friends: [],
-      sharedPosts: [
-        buildSharedPost({
-          id: 'shared-text-cache',
-          authorUid: 'friend-3',
-          authorDisplayName: 'Linh',
-          text: 'Cached shared hello',
-          placeName: 'Friend Corner',
-          createdAt: '2026-03-10T12:00:00.000Z',
-        }),
-      ],
-      activeInvite: null,
-    });
-
-    await updateWidgetData({
-      referenceDate: new Date('2026-03-10T12:00:00.000Z'),
-      includeSharedRefresh: true,
-    });
-    await updateWidgetData({
-      referenceDate: new Date('2026-03-10T18:00:00.000Z'),
-      includeSharedRefresh: true,
-    });
-
-    expect(mockRefreshSharedFeed).toHaveBeenCalledTimes(1);
-  });
-
-  it('lets a newer queued refresh replace stale in-flight widget options', async () => {
-    const refreshDeferred = createDeferred<{
-      friends: [];
-      sharedPosts: [];
-      activeInvite: null;
-    }>();
-    mockRefreshSharedFeed.mockImplementationOnce(() => refreshDeferred.promise);
-    mockCurrentUser = { id: 'me-queued', uid: 'me-queued' };
-
-    const staleNote = buildNote({
-      id: 'stale-note',
-      content: 'Stale note',
-      locationName: 'Stale Place',
-    });
-    const freshNote = buildNote({
-      id: 'fresh-note',
-      content: 'Fresh note',
-      locationName: 'Fresh Place',
-    });
-
-    const firstUpdate = updateWidgetData({
-      notes: [staleNote],
-      includeSharedRefresh: true,
-      referenceDate: new Date('2026-03-10T12:00:00.000Z'),
-    });
-
-    mockGetAllNotes.mockResolvedValueOnce([freshNote]);
-
-    const secondUpdate = updateWidgetData({
-      referenceDate: new Date('2026-03-10T18:00:00.000Z'),
-    });
-
-    refreshDeferred.resolve({
-      friends: [],
-      sharedPosts: [],
-      activeInvite: null,
-    });
-
-    await Promise.all([firstUpdate, secondUpdate]);
-
-    const entries = getLastTimelineEntries();
-
-    expect(entries[0]?.props.props).toEqual(
-      expect.objectContaining({
-        text: 'Fresh note',
-        locationName: 'Fresh Place',
-      })
-    );
-  });
-
-  it('falls back to a friend post when personal photos are unreadable and no other personal memory is eligible', async () => {
-    mockCurrentUser = { id: 'me', uid: 'me' };
-    mockGetAllNotes.mockResolvedValue([
-      buildNote({
-        id: 'broken-photo',
-        type: 'photo',
-        content: 'file:///mock-documents/photos/missing.jpg',
-        locationName: 'Broken Photo',
-      }),
-    ]);
-    mockGetCachedSharedFeedSnapshot.mockResolvedValue({
-      friends: [],
-      sharedPosts: [
-        buildSharedPost({
-          id: 'shared-text-fallback',
-          authorDisplayName: 'Minh',
-          text: 'Friend fallback memory',
-          placeName: 'Shared Cafe',
-        }),
-      ],
-      activeInvite: null,
-      lastUpdatedAt: '2026-03-10T11:05:00.000Z',
-    });
-    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
-      exists: uri !== 'file:///mock-documents/photos/missing.jpg',
-      isDirectory: false,
-      uri,
-      size: 1024,
-      modificationTime: 0,
-    }));
-
-    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
-
-    const entries = getLastTimelineEntries();
-
-    expect(entries[0]?.props.props).toEqual(
-      expect.objectContaining({
-        isSharedContent: true,
-        authorDisplayName: 'Minh',
-        text: 'Friend fallback memory',
-        locationName: 'Shared Cafe',
-      })
-    );
-  });
-
-  it('stays idle when neither personal nor friend content is eligible', async () => {
-    mockCurrentUser = { id: 'me', uid: 'me' };
-    mockGetAllNotes.mockResolvedValue([
-      buildNote({
-        id: 'broken-photo',
-        type: 'photo',
-        content: 'file:///mock-documents/photos/missing.jpg',
-      }),
-    ]);
-    mockGetCachedSharedFeedSnapshot.mockResolvedValue({
-      friends: [],
-      sharedPosts: [
-        buildSharedPost({
-          id: 'shared-broken-photo',
-          type: 'photo',
-          text: '',
-          photoPath: 'friend-1/missing-shared-photo',
-          photoLocalUri: null,
-        }),
-      ],
-      activeInvite: null,
-      lastUpdatedAt: '2026-03-10T11:05:00.000Z',
-    });
-    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
-      exists: false,
-      isDirectory: false,
-      uri,
-      size: 0,
-      modificationTime: 0,
-    }));
-    mockDownloadPhotoFromStorage.mockResolvedValue(null);
-
-    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
-
-    const entries = getLastTimelineEntries();
-
-    expect(entries[0]?.props.props).toEqual(
-      expect.objectContaining({
-        isIdleState: true,
-        noteCount: 1,
-        primaryActionUrl: 'noto:///notes',
-        badgeActionUrl: 'noto:///notes',
-      })
-    );
-  });
-
-  it('creates four six-hour timeline entries aligned to slot boundaries', async () => {
-    const referenceDate = new Date('2026-03-10T07:30:00.000Z');
-    await updateWidgetData({ referenceDate });
+  it('creates a stable repeated timeline for the same payload across slots', async () => {
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T07:30:00.000Z') });
 
     const entries = getLastTimelineEntries();
 
     expect(entries).toHaveLength(4);
-    expect(entries[0]?.date.getTime()).toBeLessThanOrEqual(referenceDate.getTime());
-    expect(referenceDate.getTime() - (entries[0]?.date.getTime() ?? 0)).toBeLessThan(6 * 60 * 60 * 1000);
-    expect(entries.every((entry) => entry.date.getMinutes() === 0)).toBe(true);
-    expect(entries.every((entry) => entry.date.getSeconds() === 0)).toBe(true);
-    expect(entries[1]?.date.getTime()).toBe((entries[0]?.date.getTime() ?? 0) + 6 * 60 * 60 * 1000);
-    expect(entries[2]?.date.getTime()).toBe((entries[1]?.date.getTime() ?? 0) + 6 * 60 * 60 * 1000);
-    expect(entries[3]?.date.getTime()).toBe((entries[2]?.date.getTime() ?? 0) + 6 * 60 * 60 * 1000);
+    expect(entries.every((entry) => entry.props.props.text === 'Latest note')).toBe(true);
   });
 
-  it('avoids repeating the same note in consecutive slots when alternatives exist', async () => {
+  it('uses a photo caption as widget text when the photo file is unreadable', async () => {
     mockGetAllNotes.mockResolvedValue([
       buildNote({
-        id: 'favorite-photo-a',
-        type: 'photo',
-        content: 'file:///mock-documents/photos/latest.jpg',
-        isFavorite: true,
-        locationName: 'Photo A',
-        createdAt: '2026-03-10T10:00:00.000Z',
-      }),
-      buildNote({
-        id: 'favorite-photo-b',
-        type: 'photo',
-        content: 'file:///mock-documents/photos/second.jpg',
-        isFavorite: true,
-        locationName: 'Photo B',
-        createdAt: '2026-03-09T10:00:00.000Z',
-      }),
-    ]);
-    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
-      exists: uri === 'file:///mock-documents/photos/latest.jpg' || uri === 'file:///mock-documents/photos/second.jpg',
-      isDirectory: false,
-      uri,
-      size: 1024,
-      modificationTime: 0,
-    }));
-
-    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
-
-    const entries = getLastTimelineEntries();
-    const locationNames = entries.map((entry) => entry.props.props.locationName);
-
-    expect(locationNames[0]).toBe('Photo A');
-    expect(locationNames[1]).toBe('Photo B');
-    expect(locationNames[2]).toBe('Photo A');
-    expect(locationNames[3]).toBe('Photo B');
-  });
-
-  it('skips unreadable photo notes and uses the next eligible local memory', async () => {
-    mockGetAllNotes.mockResolvedValue([
-      buildNote({
-        id: 'broken-photo',
+        id: 'caption-only-photo',
         type: 'photo',
         content: 'file:///mock-documents/photos/missing.jpg',
-        locationName: 'Broken Photo',
-      }),
-      buildNote({
-        id: 'text-fallback',
-        content: 'Readable text fallback',
-        locationName: 'Fallback Place',
+        caption: 'Caption fallback memory',
+        locationName: 'Caption Place',
       }),
     ]);
     mockGetInfoAsync.mockImplementation(async (uri: string) => ({
@@ -970,34 +477,6 @@ describe('widgetService', () => {
       size: 1024,
       modificationTime: 0,
     }));
-
-    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
-
-    const entries = getLastTimelineEntries();
-
-    expect(entries[0]?.props.props.noteType).toBe('text');
-    expect(entries[0]?.props.props.locationName).toBe('Fallback Place');
-  });
-
-  it('falls back to the next eligible note when a selected photo cannot be rendered for the widget', async () => {
-    mockGetAllNotes.mockResolvedValue([
-      buildNote({
-        id: 'favorite-photo',
-        type: 'photo',
-        content: 'file:///mock-documents/photos/latest.jpg',
-        isFavorite: true,
-        locationName: 'Photo Place',
-        createdAt: '2026-03-10T10:00:00.000Z',
-      }),
-      buildNote({
-        id: 'text-fallback',
-        content: 'Readable text fallback',
-        locationName: 'Fallback Place',
-        createdAt: '2026-03-09T10:00:00.000Z',
-      }),
-    ]);
-    mockCopyAsync.mockRejectedValue(new Error('copy failed'));
-    mockReadAsStringAsync.mockRejectedValue(new Error('read failed'));
 
     await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
 
@@ -1006,11 +485,95 @@ describe('widgetService', () => {
     expect(entries[0]?.props.props).toEqual(
       expect.objectContaining({
         noteType: 'text',
-        text: 'Readable text fallback',
-        locationName: 'Fallback Place',
-        primaryActionUrl: 'noto:///widget/note/text-fallback',
+        text: 'Caption fallback memory',
+        locationName: 'Caption Place',
+        isIdleState: false,
+        primaryActionUrl: 'noto:///widget/note/caption-only-photo',
       })
     );
+  });
+
+  it('uses the synced local photo path when the primary photo path is missing', async () => {
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'synced-photo',
+        type: 'photo',
+        content: '',
+        photoLocalUri: null,
+        photoSyncedLocalUri: 'file:///mock-documents/photos/synced.jpg',
+        locationName: 'Synced Place',
+      }),
+    ]);
+    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
+      exists: uri === 'file:///mock-documents/photos/synced.jpg',
+      isDirectory: false,
+      uri,
+      size: 1024,
+      modificationTime: 0,
+    }));
+
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
+
+    const entries = getLastTimelineEntries();
+
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        noteType: 'photo',
+        locationName: 'Synced Place',
+        isIdleState: false,
+      })
+    );
+    expect(
+      String(entries[0]?.props.props.backgroundImageUrl ?? entries[0]?.props.props.backgroundImageBase64 ?? '')
+    ).toBeTruthy();
+  });
+
+  it('reuses the last delivered widget payload instead of overwriting it with idle content', async () => {
+    mockGetAllNotes.mockResolvedValueOnce([
+      buildNote({
+        id: 'stable-note',
+        content: 'Keep showing this',
+        locationName: 'Stable Place',
+      }),
+    ]);
+
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
+
+    mockGetAllNotes.mockResolvedValueOnce([
+      buildNote({
+        id: 'broken-photo',
+        type: 'photo',
+        content: 'file:///mock-documents/photos/missing.jpg',
+        locationName: 'Broken Place',
+      }),
+    ]);
+    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
+      exists: uri !== 'file:///mock-documents/photos/missing.jpg',
+      isDirectory: false,
+      uri,
+      size: 1024,
+      modificationTime: 0,
+    }));
+
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T06:00:00.000Z') });
+
+    const entries = getLastTimelineEntries();
+
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        noteType: 'text',
+        text: 'Keep showing this',
+        locationName: 'Stable Place',
+        isIdleState: false,
+      })
+    );
+  });
+
+  it('does not push the widget again when the resolved payload is unchanged', async () => {
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T06:00:00.000Z') });
+
+    expect(mockUpdateTimeline).toHaveBeenCalledTimes(1);
   });
 
   it('includes doodle metadata for selected text notes', async () => {
@@ -1019,7 +582,6 @@ describe('widgetService', () => {
         id: 'favorite-text',
         content: 'Morning coffee again',
         moodEmoji: '☕️',
-        isFavorite: true,
         hasDoodle: true,
         doodleStrokesJson: JSON.stringify([
           {
@@ -1068,7 +630,6 @@ describe('widgetService', () => {
       buildNote({
         id: 'sticker-text',
         content: 'Sticker memory',
-        isFavorite: true,
         hasStickers: true,
         stickerPlacementsJson: JSON.stringify([
           {
@@ -1117,13 +678,12 @@ describe('widgetService', () => {
     expect(String(stickerPayload[0]?.asset?.localUri ?? '')).toContain('file:///mock-group/widget-stickers/');
   });
 
-  it('creates unique widget image files for photo timeline entries', async () => {
+  it('creates usable widget image payloads for photo notes', async () => {
     mockGetAllNotes.mockResolvedValue([
       buildNote({
-        id: 'favorite-photo',
+        id: 'latest-photo',
         type: 'photo',
         content: 'file:///mock-documents/photos/latest.jpg',
-        isFavorite: true,
         isLivePhoto: true,
         pairedVideoLocalUri: 'file:///mock-documents/photos/latest.motion.mov',
         locationName: 'Photo Place',
@@ -1134,14 +694,10 @@ describe('widgetService', () => {
 
     const entries = getLastTimelineEntries();
     const firstImageUrl = String(entries[0]?.props.props.backgroundImageUrl ?? '');
-    const secondImageUrl = String(entries[1]?.props.props.backgroundImageUrl ?? '');
     const firstImageBase64 = String(entries[0]?.props.props.backgroundImageBase64 ?? '');
-    const secondImageBase64 = String(entries[1]?.props.props.backgroundImageBase64 ?? '');
 
-    if (firstImageUrl && secondImageUrl) {
-      expect(firstImageUrl).toContain('favorite-photo');
-      expect(secondImageUrl).toContain('favorite-photo');
-      expect(firstImageUrl).not.toBe(secondImageUrl);
+    if (firstImageUrl) {
+      expect(firstImageUrl).toContain('latest-photo');
       expect(entries[0]?.props.props).toEqual(
         expect.objectContaining({
           isLivePhoto: true,
@@ -1152,7 +708,6 @@ describe('widgetService', () => {
     }
 
     expect(firstImageBase64).toBe('base64-image-data');
-    expect(secondImageBase64).toBe('base64-image-data');
     expect(entries[0]?.props.props).toEqual(
       expect.objectContaining({
         isLivePhoto: true,
@@ -1161,7 +716,7 @@ describe('widgetService', () => {
     );
   });
 
-  it('formats localized widget strings inside the timeline entry payload', async () => {
+  it('formats localized widget strings inside the payload', async () => {
     i18n.language = 'vi';
 
     await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });

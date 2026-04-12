@@ -24,13 +24,13 @@ export function resolveStoredPhotoUri(photoUri: string | null | undefined): stri
 }
 
 export function getNotePhotoUri(
-  note: Pick<Note, 'type' | 'content' | 'photoLocalUri'> | null | undefined
+  note: Pick<Note, 'type' | 'content' | 'photoLocalUri' | 'photoSyncedLocalUri'> | null | undefined
 ) {
   if (!note || note.type !== 'photo') {
     return '';
   }
 
-  return resolveStoredPhotoUri(note.photoLocalUri ?? note.content);
+  return resolveStoredPhotoUri(note.photoLocalUri ?? note.photoSyncedLocalUri ?? note.content);
 }
 
 export async function ensurePhotoDirectory() {

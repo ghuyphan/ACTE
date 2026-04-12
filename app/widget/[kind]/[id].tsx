@@ -7,13 +7,17 @@ import { resolveFeedTarget } from '../../../services/feedTargetLookup';
 export default function WidgetFocusRoute() {
   const { kind, id } = useLocalSearchParams<{ kind?: string; id?: string }>();
   const { focusFeedTargetFromExternalEntry, resetToHome } = useExternalEntryNavigation();
-  const { user } = useAuth();
+  const { user, isReady: authReady } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
       if (!id || typeof id !== 'string') {
         resetToHome();
         return;
+      }
+
+      if (!authReady) {
+        return undefined;
       }
 
       let cancelled = false;
@@ -50,7 +54,7 @@ export default function WidgetFocusRoute() {
       return () => {
         cancelled = true;
       };
-    }, [focusFeedTargetFromExternalEntry, id, kind, resetToHome, user?.uid])
+    }, [authReady, focusFeedTargetFromExternalEntry, id, kind, resetToHome, user?.uid])
   );
 
   return null;

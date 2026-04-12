@@ -1,4 +1,4 @@
-import { Href, useRouter } from 'expo-router';
+import { Href, usePathname, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { Keyboard } from 'react-native';
 import { useActiveFeedTarget } from '../useActiveFeedTarget';
@@ -7,12 +7,15 @@ import { useNoteDetailSheet } from '../useNoteDetailSheet';
 import type { FeedFocusTarget } from '../state/useFeedFocus';
 
 const HOME_ROUTE = '/(tabs)' as Href;
+const HOME_PATHNAMES = new Set(['/', '/(tabs)']);
 
 export function useExternalEntryNavigation() {
   const router = useRouter();
+  const pathname = usePathname();
   const { peekActiveFeedTarget } = useActiveFeedTarget();
   const { requestFeedFocus } = useFeedFocus();
   const { closeNoteDetail } = useNoteDetailSheet();
+  const isHomeVisible = HOME_PATHNAMES.has(pathname);
 
   const prepareForExternalNavigation = useCallback(() => {
     Keyboard.dismiss();
@@ -29,17 +32,17 @@ export function useExternalEntryNavigation() {
       prepareForExternalNavigation();
       const activeTarget = peekActiveFeedTarget();
 
-      if (activeTarget?.kind === target.kind && activeTarget.id === target.id) {
+      if (isHomeVisible && activeTarget?.kind === target.kind && activeTarget.id === target.id) {
         return;
       }
 
       requestFeedFocus(target);
 
-      if (!activeTarget) {
+      if (!isHomeVisible) {
         router.dismissTo(HOME_ROUTE);
       }
     },
-    [peekActiveFeedTarget, prepareForExternalNavigation, requestFeedFocus, router]
+    [isHomeVisible, peekActiveFeedTarget, prepareForExternalNavigation, requestFeedFocus, router]
   );
 
   return {

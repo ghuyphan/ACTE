@@ -1729,9 +1729,9 @@ class NotoWidgetProvider : AppWidgetProvider() {
         )
       } else {
         WidgetOverlayRenderSpec(
-          doodleInsetDp = 6f,
-          stickerInsetDp = 6f,
-          stickerMinimumBaseSizeDp = 52f,
+          doodleInsetDp = 0f,
+          stickerInsetDp = 0f,
+          stickerMinimumBaseSizeDp = 48f,
           stickerBaseSizeRatio = 0.24f
         )
       }

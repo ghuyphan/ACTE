@@ -8,6 +8,7 @@ const mockDismissTo = jest.fn();
 const mockRequestFeedFocus = jest.fn();
 const mockCloseNoteDetail = jest.fn();
 const mockPeekActiveFeedTarget = jest.fn();
+let mockPathname = '/shared';
 const mockGetLastNotificationResponseAsync = jest.fn<
   Promise<Notifications.NotificationResponse | null>,
   []
@@ -28,6 +29,7 @@ jest.mock('expo-router', () => ({
     replace: (...args: unknown[]) => mockReplace(...args),
     push: (...args: unknown[]) => mockPush(...args),
   }),
+  usePathname: () => mockPathname,
   useRootNavigationState: () => mockRootNavigationState,
 }));
 
@@ -60,6 +62,7 @@ describe('useAppNotificationRouting', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRootNavigationState = null;
+    mockPathname = '/shared';
     mockGetLastNotificationResponseAsync.mockResolvedValue(null);
     mockPeekActiveFeedTarget.mockReturnValue(null);
   });

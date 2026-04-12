@@ -1907,7 +1907,7 @@ export default function HomeScreen() {
             void onRefresh();
           }}
           onEndReached={
-            homeFeedHasMore
+            !isHomeFeedInitialLoading && homeFeedHasMore
               ? () => {
                   void loadNextHomeFeedPage();
                 }

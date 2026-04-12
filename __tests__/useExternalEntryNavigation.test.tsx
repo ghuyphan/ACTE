@@ -5,11 +5,13 @@ const mockDismissTo = jest.fn();
 const mockRequestFeedFocus = jest.fn();
 const mockCloseNoteDetail = jest.fn();
 const mockPeekActiveFeedTarget = jest.fn();
+let mockPathname = '/widget/note/note-42';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     dismissTo: (...args: unknown[]) => mockDismissTo(...args),
   }),
+  usePathname: () => mockPathname,
 }));
 
 jest.mock('../hooks/useActiveFeedTarget', () => ({
@@ -34,6 +36,7 @@ describe('useExternalEntryNavigation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPeekActiveFeedTarget.mockReturnValue(null);
+    mockPathname = '/widget/note/note-42';
   });
 
   it('returns to the tabs route when the user is not already on Home', () => {
@@ -49,6 +52,7 @@ describe('useExternalEntryNavigation', () => {
   });
 
   it('stays on Home when the widget target is already the active card', () => {
+    mockPathname = '/';
     mockPeekActiveFeedTarget.mockReturnValue({ kind: 'note', id: 'note-42' });
 
     const { result } = renderHook(() => useExternalEntryNavigation());
@@ -63,6 +67,7 @@ describe('useExternalEntryNavigation', () => {
   });
 
   it('stays on Home and only updates feed focus when another card is active', () => {
+    mockPathname = '/';
     mockPeekActiveFeedTarget.mockReturnValue({ kind: 'note', id: 'note-7' });
 
     const { result } = renderHook(() => useExternalEntryNavigation());
@@ -74,5 +79,20 @@ describe('useExternalEntryNavigation', () => {
     expect(mockCloseNoteDetail).toHaveBeenCalledTimes(1);
     expect(mockRequestFeedFocus).toHaveBeenCalledWith({ kind: 'shared-post', id: 'shared-9' });
     expect(mockDismissTo).not.toHaveBeenCalled();
+  });
+
+  it('returns to Home from a widget route even when another card was previously active', () => {
+    mockPathname = '/widget/note/note-42';
+    mockPeekActiveFeedTarget.mockReturnValue({ kind: 'note', id: 'note-7' });
+
+    const { result } = renderHook(() => useExternalEntryNavigation());
+
+    act(() => {
+      result.current.focusFeedTargetFromExternalEntry({ kind: 'note', id: 'note-42' });
+    });
+
+    expect(mockCloseNoteDetail).toHaveBeenCalledTimes(1);
+    expect(mockRequestFeedFocus).toHaveBeenCalledWith({ kind: 'note', id: 'note-42' });
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
   });
 });
