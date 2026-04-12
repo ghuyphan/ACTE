@@ -3,12 +3,7 @@ import { useHomeFeedPagination } from '../hooks/app/useHomeFeedPagination';
 import type { Note } from '../services/database';
 import type { SharedPost } from '../services/sharedFeedService';
 
-const mockGetNotesPageForScope = jest.fn();
-
-jest.mock('../services/database', () => ({
-  getNotesPageForScope: (scope: string, options: { limit: number; offset?: number }) =>
-    mockGetNotesPageForScope(scope, options),
-}));
+const mockLoadNextNotesPage = jest.fn();
 
 describe('useHomeFeedPagination', () => {
   beforeEach(() => {
@@ -125,15 +120,13 @@ describe('useHomeFeedPagination', () => {
       },
     ];
 
-    mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
-      notes.slice(0, options.limit)
-    );
     const { result } = renderHook(() =>
       useHomeFeedPagination({
         notesScope: '__local__',
         sharedCacheUserUid: 'me',
         seedNotes: notes,
         seedNoteCount: notes.length,
+        loadNextNotesPage: mockLoadNextNotesPage,
         seedSharedPosts: sharedPosts,
         notesSignal: notes,
         sharedSignal: sharedPosts,
@@ -150,7 +143,7 @@ describe('useHomeFeedPagination', () => {
       'note:note-2',
       'shared-post:shared-friend-2',
     ]);
-    expect(mockGetNotesPageForScope).not.toHaveBeenCalled();
+    expect(mockLoadNextNotesPage).not.toHaveBeenCalled();
   });
 
   it('does not try to load more when the seeded window already contains every note', async () => {
@@ -170,7 +163,6 @@ describe('useHomeFeedPagination', () => {
       createdAt: new Date(Date.UTC(2026, 3, 10 - index)).toISOString(),
       updatedAt: null,
     }));
-    const sharedSignal: SharedPost[] = [];
 
     const { result } = renderHook(() =>
       useHomeFeedPagination({
@@ -178,8 +170,9 @@ describe('useHomeFeedPagination', () => {
         sharedCacheUserUid: null,
         seedNotes: notes,
         seedNoteCount: notes.length,
+        loadNextNotesPage: mockLoadNextNotesPage,
         notesSignal: notes,
-        sharedSignal,
+        sharedSignal: [],
       })
     );
 
@@ -193,7 +186,7 @@ describe('useHomeFeedPagination', () => {
       await result.current.loadNextPage();
     });
 
-    expect(mockGetNotesPageForScope).not.toHaveBeenCalled();
+    expect(mockLoadNextNotesPage).not.toHaveBeenCalled();
   });
 
   it('keeps seeded notes visible while shared feed loading finishes', async () => {
@@ -219,6 +212,7 @@ describe('useHomeFeedPagination', () => {
       sharedCacheUserUid: 'me',
       seedNotes: notes,
       seedNoteCount: notes.length,
+      loadNextNotesPage: mockLoadNextNotesPage,
       seedSharedPosts: sharedSignal,
       notesSignal: notes,
       sharedSignal,
@@ -230,6 +224,7 @@ describe('useHomeFeedPagination', () => {
         sharedCacheUserUid: string | null;
         seedNotes: Note[];
         seedNoteCount: number;
+        loadNextNotesPage: () => Promise<Note[]>;
         seedSharedPosts: SharedPost[];
         sharedLoading: boolean;
         notesSignal: Note[];
@@ -259,12 +254,50 @@ describe('useHomeFeedPagination', () => {
 
     expect(result.current.items).toHaveLength(5);
     expect(result.current.hasMore).toBe(false);
+    expect(mockLoadNextNotesPage).not.toHaveBeenCalled();
+  });
+
+  it('asks the notes store for the next page when the visible window grows past seeded notes', async () => {
+    const notes: Note[] = Array.from({ length: 30 }, (_, index) => ({
+      id: `note-${index + 1}`,
+      type: 'text' as const,
+      content: `Note ${index + 1}`,
+      locationName: `Place ${index + 1}`,
+      latitude: 10 + index,
+      longitude: 106 + index,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: false,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      createdAt: new Date(Date.UTC(2026, 3, 30 - index)).toISOString(),
+      updatedAt: null,
+    }));
+    const seedNotes = notes.slice(0, 24);
+    mockLoadNextNotesPage.mockImplementation(async () => notes);
+
+    const { result } = renderHook(() =>
+      useHomeFeedPagination({
+        notesScope: '__local__',
+        sharedCacheUserUid: null,
+        seedNotes,
+        seedNoteCount: notes.length,
+        loadNextNotesPage: mockLoadNextNotesPage,
+        notesSignal: seedNotes,
+        sharedSignal: [],
+      })
+    );
 
     await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
+      expect(result.current.items).toHaveLength(24);
     });
 
-    expect(mockGetNotesPageForScope).not.toHaveBeenCalled();
+    await act(async () => {
+      await result.current.loadNextPage();
+    });
+
+    expect(mockLoadNextNotesPage).toHaveBeenCalledTimes(1);
   });
 
   it('loads additional note pages until a focused note is available', async () => {
@@ -285,19 +318,17 @@ describe('useHomeFeedPagination', () => {
       updatedAt: null,
     }));
     const seedNotes = notes.slice(0, 24);
-    const sharedSignal: any[] = [];
+    mockLoadNextNotesPage.mockImplementation(async () => notes);
 
-    mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
-      notes.slice(0, options.limit)
-    );
     const { result } = renderHook(() =>
       useHomeFeedPagination({
         notesScope: '__local__',
         sharedCacheUserUid: null,
         seedNotes,
         seedNoteCount: notes.length,
-        notesSignal: notes,
-        sharedSignal,
+        loadNextNotesPage: mockLoadNextNotesPage,
+        notesSignal: seedNotes,
+        sharedSignal: [],
       })
     );
 
@@ -314,11 +345,6 @@ describe('useHomeFeedPagination', () => {
     });
 
     expect(targetIndex).toBe(29);
-    expect(result.current.items).toHaveLength(30);
-    expect(mockGetNotesPageForScope).toHaveBeenCalledTimes(1);
-    expect(mockGetNotesPageForScope).toHaveBeenCalledWith(
-      '__local__',
-      expect.objectContaining({ limit: 49 })
-    );
+    expect(mockLoadNextNotesPage).toHaveBeenCalledTimes(1);
   });
 });

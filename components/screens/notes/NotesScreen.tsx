@@ -299,7 +299,7 @@ export default function NotesIndexScreen() {
   const { user } = useAuth();
   const { requestFeedFocus } = useFeedFocus();
   const notesStore = useNotesStore();
-  const { notes, loading } = notesStore;
+  const { notes, loading, loadNextNotesPage } = notesStore;
   const hasLoadedAllNotes = notesStore.hasLoadedAllNotes ?? true;
   const noteCount = notesStore.noteCount ?? notes.length;
   const ensureAllNotesLoaded = notesStore.ensureAllNotesLoaded ?? (async () => notes);
@@ -326,6 +326,7 @@ export default function NotesIndexScreen() {
     seedNotes: notes,
     seedNoteCount: noteCount,
     notesLoading: loading,
+    loadNextNotesPage,
     seedSharedPosts: sharedPosts,
     sharedLoading,
     notesSignal: notes,

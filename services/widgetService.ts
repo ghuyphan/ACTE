@@ -72,6 +72,12 @@ export interface UpdateWidgetDataOptions {
     preferredNoteId?: string | null;
 }
 
+export interface ScheduleWidgetDataUpdateOptions {
+    debounceMs?: number;
+    throttleKey?: string;
+    throttleMs?: number;
+}
+
 interface LocationCoords {
     latitude: number;
     longitude: number;
@@ -152,10 +158,20 @@ const WIDGET_STICKER_DIRECTORY_NAME = 'widget-stickers';
 const WIDGET_SHARED_REFRESH_TTL_MS = 2 * 60 * 1000;
 const WIDGET_LOCATION_CACHE_TTL_MS = 60 * 1000;
 const WIDGET_REQUEST_DEDUPE_WINDOW_MS = 3 * 1000;
+const WIDGET_DEFAULT_REFRESH_DEBOUNCE_MS = 120;
 let widgetUpdateInFlight: Promise<void> | null = null;
 let pendingWidgetUpdateOptions: UpdateWidgetDataOptions | null = null;
 let lastWidgetRequestKey: string | null = null;
 let lastWidgetRequestAt = 0;
+let scheduledWidgetUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
+let scheduledWidgetUpdateRequest:
+    | {
+        options: UpdateWidgetDataOptions;
+        debounceMs: number;
+        throttleKey: string | null;
+        throttleMs: number;
+    }
+    | null = null;
 let sharedWidgetFeedCache:
     | {
         userUid: string;
@@ -169,6 +185,7 @@ let widgetLocationCache:
         currentLocation: LocationCoords | null;
     }
     | null = null;
+const widgetRefreshThrottleTimestamps = new Map<string, number>();
 
 function buildWidgetUrl(path: string) {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -280,6 +297,70 @@ function buildWidgetRequestKey(options: UpdateWidgetDataOptions) {
                     ]
                     : null,
     });
+}
+
+function mergeWidgetUpdateOptions(
+    current: UpdateWidgetDataOptions | null,
+    incoming: UpdateWidgetDataOptions
+): UpdateWidgetDataOptions {
+    if (!current) {
+        return { ...incoming };
+    }
+
+    return {
+        ...current,
+        ...incoming,
+        notes: incoming.notes ?? current.notes,
+        includeLocationLookup:
+            current.includeLocationLookup === true || incoming.includeLocationLookup === true
+                ? true
+                : incoming.includeLocationLookup ?? current.includeLocationLookup,
+        includeSharedRefresh:
+            current.includeSharedRefresh === true || incoming.includeSharedRefresh === true
+                ? true
+                : incoming.includeSharedRefresh ?? current.includeSharedRefresh,
+        referenceDate: incoming.referenceDate ?? current.referenceDate,
+        currentLocation:
+            incoming.currentLocation !== undefined
+                ? incoming.currentLocation
+                : current.currentLocation,
+        preferredNoteId: incoming.preferredNoteId ?? current.preferredNoteId,
+    };
+}
+
+function clearScheduledWidgetUpdateTimeout() {
+    if (!scheduledWidgetUpdateTimeout) {
+        return;
+    }
+
+    clearTimeout(scheduledWidgetUpdateTimeout);
+    scheduledWidgetUpdateTimeout = null;
+}
+
+function schedulePendingWidgetUpdate() {
+    if (!scheduledWidgetUpdateRequest) {
+        return;
+    }
+
+    clearScheduledWidgetUpdateTimeout();
+
+    scheduledWidgetUpdateTimeout = setTimeout(() => {
+        const nextRequest = scheduledWidgetUpdateRequest;
+        scheduledWidgetUpdateRequest = null;
+        scheduledWidgetUpdateTimeout = null;
+
+        if (!nextRequest) {
+            return;
+        }
+
+        if (nextRequest.throttleKey && nextRequest.throttleMs > 0) {
+            widgetRefreshThrottleTimestamps.set(nextRequest.throttleKey, Date.now());
+        }
+
+        void updateWidgetData(nextRequest.options).catch((error) => {
+            console.warn('[widgetService] Failed scheduled widget update:', getWidgetWarningMessage(error));
+        });
+    }, scheduledWidgetUpdateRequest.debounceMs);
 }
 
 function updatePlatformWidgetTimeline(entries: WidgetTimelineEntry[]) {
@@ -1589,4 +1670,49 @@ export async function updateWidgetData(options: UpdateWidgetDataOptions = {}): P
         });
 
     await widgetUpdateInFlight;
+}
+
+export function scheduleWidgetDataUpdate(
+    options: UpdateWidgetDataOptions = {},
+    scheduleOptions: ScheduleWidgetDataUpdateOptions = {}
+) {
+    const debounceMs = scheduleOptions.debounceMs ?? WIDGET_DEFAULT_REFRESH_DEBOUNCE_MS;
+    const throttleKey = scheduleOptions.throttleKey?.trim() || null;
+    const throttleMs = scheduleOptions.throttleMs ?? 0;
+    const now = Date.now();
+    const lastThrottleAt = throttleKey ? (widgetRefreshThrottleTimestamps.get(throttleKey) ?? 0) : 0;
+    const isThrottled = Boolean(throttleKey && throttleMs > 0 && now - lastThrottleAt < throttleMs);
+
+    if (!scheduledWidgetUpdateRequest && isThrottled) {
+        return;
+    }
+
+    scheduledWidgetUpdateRequest = {
+        options: mergeWidgetUpdateOptions(scheduledWidgetUpdateRequest?.options ?? null, options),
+        debounceMs: isThrottled && scheduledWidgetUpdateRequest ? scheduledWidgetUpdateRequest.debounceMs : debounceMs,
+        throttleKey: isThrottled && scheduledWidgetUpdateRequest
+            ? scheduledWidgetUpdateRequest.throttleKey
+            : throttleKey,
+        throttleMs: isThrottled && scheduledWidgetUpdateRequest
+            ? scheduledWidgetUpdateRequest.throttleMs
+            : throttleMs,
+    };
+
+    if (isThrottled && scheduledWidgetUpdateTimeout) {
+        return;
+    }
+
+    schedulePendingWidgetUpdate();
+}
+
+export function __resetWidgetServiceForTests() {
+    clearScheduledWidgetUpdateTimeout();
+    scheduledWidgetUpdateRequest = null;
+    widgetRefreshThrottleTimestamps.clear();
+    widgetUpdateInFlight = null;
+    pendingWidgetUpdateOptions = null;
+    lastWidgetRequestKey = null;
+    lastWidgetRequestAt = 0;
+    sharedWidgetFeedCache = null;
+    widgetLocationCache = null;
 }

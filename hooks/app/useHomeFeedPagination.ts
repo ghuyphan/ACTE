@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getNotesPageForScope, type Note } from '../../services/database';
+import type { Note } from '../../services/database';
 import type { SharedPost } from '../../services/sharedFeedService';
 import {
   buildHomeFeedItems,
@@ -29,6 +29,7 @@ interface UseHomeFeedPaginationOptions {
   seedNotes?: Note[];
   seedNoteCount?: number;
   notesLoading?: boolean;
+  loadNextNotesPage?: () => Promise<Note[]>;
   seedSharedPosts?: SharedPost[];
   sharedLoading?: boolean;
   notesSignal: unknown;
@@ -51,73 +52,23 @@ function buildInitialWindow(sharedCacheUserUid?: string | null): FeedWindow {
   };
 }
 
-function buildSeededSnapshot(
+function buildSnapshot(
   window: FeedWindow,
   options: {
-    seedNotes: Note[];
-    seedNoteCount: number;
-    seededFriendSharedPosts: SharedPost[];
+    notes: Note[];
+    noteCount: number;
+    friendSharedPosts: SharedPost[];
   }
 ): HomeFeedSnapshot {
-  const notes = options.seedNotes.slice(0, window.notes);
-  const sharedPosts = options.seededFriendSharedPosts.slice(0, window.sharedPosts);
+  const visibleNotes = options.notes.slice(0, window.notes);
+  const visibleSharedPosts = options.friendSharedPosts.slice(0, window.sharedPosts);
 
   return {
-    notes,
-    sharedPosts,
-    hasMoreNotes: options.seedNoteCount > notes.length,
-    hasMoreSharedPosts: options.seededFriendSharedPosts.length > sharedPosts.length,
+    notes: visibleNotes,
+    sharedPosts: visibleSharedPosts,
+    hasMoreNotes: options.noteCount > visibleNotes.length,
+    hasMoreSharedPosts: options.friendSharedPosts.length > visibleSharedPosts.length,
   };
-}
-
-function snapshotsEqual(left: HomeFeedSnapshot, right: HomeFeedSnapshot) {
-  if (
-    left.hasMoreNotes !== right.hasMoreNotes ||
-    left.hasMoreSharedPosts !== right.hasMoreSharedPosts ||
-    left.notes.length !== right.notes.length ||
-    left.sharedPosts.length !== right.sharedPosts.length
-  ) {
-    return false;
-  }
-
-  for (let index = 0; index < left.notes.length; index += 1) {
-    const leftNote = left.notes[index];
-    const rightNote = right.notes[index];
-    if (!rightNote) {
-      return false;
-    }
-
-    if (
-      leftNote.id !== rightNote.id ||
-      leftNote.updatedAt !== rightNote.updatedAt ||
-      leftNote.createdAt !== rightNote.createdAt ||
-      leftNote.content !== rightNote.content ||
-      leftNote.caption !== rightNote.caption ||
-      leftNote.isFavorite !== rightNote.isFavorite
-    ) {
-      return false;
-    }
-  }
-
-  for (let index = 0; index < left.sharedPosts.length; index += 1) {
-    const leftPost = left.sharedPosts[index];
-    const rightPost = right.sharedPosts[index];
-    if (!rightPost) {
-      return false;
-    }
-
-    if (
-      leftPost.id !== rightPost.id ||
-      leftPost.updatedAt !== rightPost.updatedAt ||
-      leftPost.createdAt !== rightPost.createdAt ||
-      leftPost.text !== rightPost.text ||
-      leftPost.placeName !== rightPost.placeName
-    ) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 export function useHomeFeedPagination({
@@ -126,269 +77,112 @@ export function useHomeFeedPagination({
   seedNotes = EMPTY_NOTES,
   seedNoteCount = 0,
   notesLoading = false,
+  loadNextNotesPage,
   seedSharedPosts = EMPTY_SHARED_POSTS,
   sharedLoading = false,
-  notesSignal,
-  sharedSignal,
+  notesSignal: _notesSignal,
+  sharedSignal: _sharedSignal,
 }: UseHomeFeedPaginationOptions): UseHomeFeedPaginationResult {
   const sourceKey = `${notesScope}:${sharedCacheUserUid ?? 'none'}`;
-  const initialWindow = buildInitialWindow(sharedCacheUserUid);
-  const seededFriendSharedPosts = useMemo(
+  const initialWindow = useMemo(
+    () => buildInitialWindow(sharedCacheUserUid),
+    [sharedCacheUserUid]
+  );
+  const friendSharedPosts = useMemo(
     () =>
       sharedCacheUserUid
         ? seedSharedPosts.filter((post) => post.authorUid !== sharedCacheUserUid)
         : [],
     [seedSharedPosts, sharedCacheUserUid]
   );
-  const initialSeededSnapshot = useMemo(
-    () =>
-      buildSeededSnapshot(initialWindow, {
-        seedNotes,
-        seedNoteCount,
-        seededFriendSharedPosts,
-      }),
-    [initialWindow.notes, initialWindow.sharedPosts, seedNoteCount, seedNotes, seededFriendSharedPosts]
-  );
-  const isWaitingForInitialData =
-    (notesLoading && seedNotes.length === 0) ||
-    Boolean(sharedCacheUserUid && sharedLoading && seedSharedPosts.length === 0);
+  const [requestedWindow, setRequestedWindow] = useState<FeedWindow>(initialWindow);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const isMountedRef = useRef(true);
-  const previousSourceKeyRef = useRef<string | null>(sourceKey);
-  const requestedWindowRef = useRef<FeedWindow>(initialWindow);
-  const loadSequenceRef = useRef(0);
-  const snapshotRef = useRef<HomeFeedSnapshot>(initialSeededSnapshot);
-  const loadChainRef = useRef<Promise<HomeFeedSnapshot>>(Promise.resolve(initialSeededSnapshot));
-  const itemsRef = useRef<HomeFeedItem[]>([]);
-  const hasMoreRef = useRef({
-    notes: initialSeededSnapshot.hasMoreNotes,
-    sharedPosts: initialSeededSnapshot.hasMoreSharedPosts,
-  });
-  const [loadedNotes, setLoadedNotes] = useState<Note[]>(initialSeededSnapshot.notes);
-  const [loadedSharedPosts, setLoadedSharedPosts] = useState<SharedPost[]>(initialSeededSnapshot.sharedPosts);
-  const [hasMoreNotes, setHasMoreNotes] = useState(initialSeededSnapshot.hasMoreNotes);
-  const [hasMoreSharedPosts, setHasMoreSharedPosts] = useState(initialSeededSnapshot.hasMoreSharedPosts);
-  const [isLoading, setIsLoading] = useState(isWaitingForInitialData);
-  const [hasResolvedInitialWindow, setHasResolvedInitialWindow] = useState(!isWaitingForInitialData);
-
-  const items = useMemo(
-    () => buildHomeFeedItems(loadedNotes, loadedSharedPosts),
-    [loadedNotes, loadedSharedPosts]
-  );
+  const previousSourceKeyRef = useRef(sourceKey);
+  const requestedWindowRef = useRef(requestedWindow);
 
   useEffect(() => {
-    itemsRef.current = items;
-  }, [items]);
-
-  useEffect(() => {
-    hasMoreRef.current = {
-      notes: hasMoreNotes,
-      sharedPosts: hasMoreSharedPosts,
-    };
-  }, [hasMoreNotes, hasMoreSharedPosts]);
+    requestedWindowRef.current = requestedWindow;
+  }, [requestedWindow]);
 
   useEffect(() => () => {
     isMountedRef.current = false;
   }, []);
 
-  const resolveSeededSnapshot = useCallback((window: FeedWindow): HomeFeedSnapshot | null => {
-    const canServeNotesFromSeed =
-      window.notes <= seedNotes.length || seedNoteCount <= seedNotes.length;
-    if (!canServeNotesFromSeed) {
-      return null;
+  useEffect(() => {
+    if (previousSourceKeyRef.current === sourceKey) {
+      return;
     }
 
-    return buildSeededSnapshot(window, {
-      seedNotes,
-      seedNoteCount,
-      seededFriendSharedPosts,
-    });
-  }, [
-    seedNoteCount,
-    seedNotes,
-    seededFriendSharedPosts,
-  ]);
+    previousSourceKeyRef.current = sourceKey;
+    setRequestedWindow(buildInitialWindow(sharedCacheUserUid));
+    setIsLoadingMore(false);
+  }, [sharedCacheUserUid, sourceKey]);
 
-  const fetchWindow = useCallback(async (window: FeedWindow): Promise<HomeFeedSnapshot> => {
-    const seededSnapshot = resolveSeededSnapshot(window);
-    if (seededSnapshot) {
-      return seededSnapshot;
-    }
+  const buildSnapshotForWindow = useCallback((
+    window: FeedWindow,
+    notesOverride?: Note[]
+  ) => buildSnapshot(window, {
+    notes: notesOverride ?? seedNotes,
+    noteCount: seedNoteCount,
+    friendSharedPosts,
+  }), [friendSharedPosts, seedNoteCount, seedNotes]);
 
-    const [notesRows, sharedRows] = await Promise.all([
-      window.notes <= seedNotes.length && seedNoteCount <= seedNotes.length
-        ? Promise.resolve(seedNotes.slice(0, window.notes))
-        : getNotesPageForScope(notesScope, {
-            limit: window.notes + 1,
-          }),
-      sharedCacheUserUid
-        ? Promise.resolve(
-            seededFriendSharedPosts.slice(0, window.sharedPosts)
-          )
-        : Promise.resolve<SharedPost[]>([]),
-    ]);
-
-    const seededNotesSatisfied =
-      window.notes <= seedNotes.length && seedNoteCount <= seedNotes.length;
-
-    return {
-      notes: notesRows.slice(0, window.notes),
-      sharedPosts: sharedRows.slice(0, window.sharedPosts),
-      hasMoreNotes: seededNotesSatisfied ? seedNoteCount > window.notes : notesRows.length > window.notes,
-      hasMoreSharedPosts: seededFriendSharedPosts.length > window.sharedPosts,
-    };
-  }, [
-    notesScope,
-    resolveSeededSnapshot,
-    seedNoteCount,
-    seedNotes,
-    seededFriendSharedPosts,
-    sharedCacheUserUid,
-  ]);
-
-  const commitSnapshot = useCallback((snapshot: HomeFeedSnapshot) => {
-    const nextItems = buildHomeFeedItems(snapshot.notes, snapshot.sharedPosts);
-    snapshotRef.current = snapshot;
-    itemsRef.current = nextItems;
-    hasMoreRef.current = {
-      notes: snapshot.hasMoreNotes,
-      sharedPosts: snapshot.hasMoreSharedPosts,
-    };
-    setLoadedNotes(snapshot.notes);
-    setLoadedSharedPosts(snapshot.sharedPosts);
-    setHasMoreNotes(snapshot.hasMoreNotes);
-    setHasMoreSharedPosts(snapshot.hasMoreSharedPosts);
-    setIsLoading(false);
-    setHasResolvedInitialWindow(true);
-  }, []);
-
-  const runLoad = useCallback((
-    nextWindow: FeedWindow,
-    options?: { resetVisibleItems?: boolean }
-  ) => {
-    requestedWindowRef.current = nextWindow;
-    const loadId = ++loadSequenceRef.current;
-    const resetSnapshot =
-      options?.resetVisibleItems ? resolveSeededSnapshot(nextWindow) : null;
-
-    if (isMountedRef.current) {
-      setIsLoading(true);
-      if (options?.resetVisibleItems) {
-        if (resetSnapshot) {
-          const nextItems = buildHomeFeedItems(resetSnapshot.notes, resetSnapshot.sharedPosts);
-          itemsRef.current = nextItems;
-          snapshotRef.current = resetSnapshot;
-          hasMoreRef.current = {
-            notes: resetSnapshot.hasMoreNotes,
-            sharedPosts: resetSnapshot.hasMoreSharedPosts,
-          };
-          setLoadedNotes(resetSnapshot.notes);
-          setLoadedSharedPosts(resetSnapshot.sharedPosts);
-          setHasMoreNotes(resetSnapshot.hasMoreNotes);
-          setHasMoreSharedPosts(resetSnapshot.hasMoreSharedPosts);
-          setHasResolvedInitialWindow(true);
-        } else {
-          itemsRef.current = [];
-          snapshotRef.current = {
-            notes: [],
-            sharedPosts: [],
-            hasMoreNotes: true,
-            hasMoreSharedPosts: Boolean(sharedCacheUserUid),
-          };
-          setLoadedNotes([]);
-          setLoadedSharedPosts([]);
-          setHasMoreNotes(true);
-          setHasMoreSharedPosts(Boolean(sharedCacheUserUid));
-          setHasResolvedInitialWindow(false);
-        }
-      }
-    }
-
-    const nextLoad = loadChainRef.current
-      .catch(() => snapshotRef.current)
-      .then(async () => {
-        const snapshot = await fetchWindow(nextWindow);
-        if (!isMountedRef.current || loadId !== loadSequenceRef.current) {
-          return snapshot;
-        }
-
-        commitSnapshot(snapshot);
-        return snapshot;
-      })
-      .catch((error) => {
-        if (loadId === loadSequenceRef.current && isMountedRef.current) {
-          console.warn('Failed to load Home feed page:', error);
-          setIsLoading(false);
-          setHasResolvedInitialWindow(true);
-        }
-
-        return {
-          ...snapshotRef.current,
-        };
-      });
-
-    loadChainRef.current = nextLoad;
-    return nextLoad.then((snapshot) => buildHomeFeedItems(snapshot.notes, snapshot.sharedPosts));
-  }, [commitSnapshot, fetchWindow, sharedCacheUserUid]);
+  const snapshot = useMemo(
+    () => buildSnapshotForWindow(requestedWindow),
+    [buildSnapshotForWindow, requestedWindow]
+  );
+  const items = useMemo(
+    () => buildHomeFeedItems(snapshot.notes, snapshot.sharedPosts),
+    [snapshot.notes, snapshot.sharedPosts]
+  );
+  const itemsRef = useRef(items);
 
   useEffect(() => {
-    if (notesLoading && seedNotes.length === 0) {
-      return;
-    }
+    itemsRef.current = items;
+  }, [items]);
 
-    if (sharedCacheUserUid && sharedLoading && seedSharedPosts.length === 0) {
-      return;
-    }
+  const isWaitingForInitialData =
+    (notesLoading && seedNotes.length === 0) ||
+    Boolean(sharedCacheUserUid && sharedLoading && seedSharedPosts.length === 0);
 
-    const sourceChanged = previousSourceKeyRef.current !== sourceKey;
-    previousSourceKeyRef.current = sourceKey;
+  const expandWindow = useCallback(async (nextWindow: FeedWindow): Promise<HomeFeedSnapshot> => {
+    requestedWindowRef.current = nextWindow;
+    setRequestedWindow((current) => (
+      current.notes === nextWindow.notes && current.sharedPosts === nextWindow.sharedPosts
+        ? current
+        : nextWindow
+    ));
 
-    const nextWindow = sourceChanged
-      ? buildInitialWindow(sharedCacheUserUid)
-      : {
-          notes: Math.max(requestedWindowRef.current.notes, HOME_FEED_PAGE_SIZE),
-          sharedPosts: sharedCacheUserUid
-            ? Math.max(requestedWindowRef.current.sharedPosts, HOME_FEED_PAGE_SIZE)
-            : 0,
-        };
-
-    const seededSnapshot = resolveSeededSnapshot(nextWindow);
-    if (seededSnapshot) {
-      requestedWindowRef.current = nextWindow;
-      loadChainRef.current = Promise.resolve(seededSnapshot);
-
-      if (!snapshotsEqual(snapshotRef.current, seededSnapshot)) {
-        commitSnapshot(seededSnapshot);
-      } else if (isMountedRef.current) {
-        setIsLoading(false);
-        setHasResolvedInitialWindow(true);
+    let nextNotes = seedNotes;
+    if (nextWindow.notes > nextNotes.length && seedNoteCount > nextNotes.length && loadNextNotesPage) {
+      setIsLoadingMore(true);
+      try {
+        while (nextWindow.notes > nextNotes.length && seedNoteCount > nextNotes.length) {
+          const previousLength = nextNotes.length;
+          nextNotes = await loadNextNotesPage();
+          if (nextNotes.length <= previousLength) {
+            break;
+          }
+        }
+      } finally {
+        if (isMountedRef.current) {
+          setIsLoadingMore(false);
+        }
       }
-
-      return;
     }
 
-    void runLoad(nextWindow, {
-      resetVisibleItems: sourceChanged,
-    });
-  }, [
-    notesLoading,
-    notesScope,
-    notesSignal,
-    commitSnapshot,
-    resolveSeededSnapshot,
-    sourceKey,
-    runLoad,
-    seedNotes.length,
-    seedSharedPosts.length,
-    sharedCacheUserUid,
-    sharedLoading,
-    sharedSignal,
-  ]);
+    return buildSnapshotForWindow(nextWindow, nextNotes);
+  }, [buildSnapshotForWindow, loadNextNotesPage, seedNoteCount, seedNotes]);
 
   const loadNextPage = useCallback(async () => {
     const currentWindow = requestedWindowRef.current;
+    const currentSnapshot = buildSnapshotForWindow(currentWindow);
     const nextWindow: FeedWindow = {
-      notes: hasMoreRef.current.notes ? currentWindow.notes + HOME_FEED_PAGE_SIZE : currentWindow.notes,
-      sharedPosts: hasMoreRef.current.sharedPosts
+      notes: currentSnapshot.hasMoreNotes && loadNextNotesPage
+        ? currentWindow.notes + HOME_FEED_PAGE_SIZE
+        : currentWindow.notes,
+      sharedPosts: currentSnapshot.hasMoreSharedPosts
         ? currentWindow.sharedPosts + HOME_FEED_PAGE_SIZE
         : currentWindow.sharedPosts,
     };
@@ -400,24 +194,27 @@ export function useHomeFeedPagination({
       return itemsRef.current;
     }
 
-    return runLoad(nextWindow);
-  }, [runLoad]);
+    const nextSnapshot = await expandWindow(nextWindow);
+    return buildHomeFeedItems(nextSnapshot.notes, nextSnapshot.sharedPosts);
+  }, [buildSnapshotForWindow, expandWindow, loadNextNotesPage]);
 
   const ensureTargetLoaded = useCallback(async (target: Pick<HomeFeedItem, 'id' | 'kind'>) => {
-    let targetIndex = findHomeFeedItemIndex(itemsRef.current, target);
+    let currentWindow = requestedWindowRef.current;
+    let currentSnapshot = buildSnapshotForWindow(currentWindow);
+    let currentItems = buildHomeFeedItems(currentSnapshot.notes, currentSnapshot.sharedPosts);
+    let targetIndex = findHomeFeedItemIndex(currentItems, target);
     if (targetIndex >= 0) {
       return targetIndex;
     }
 
-    while (target.kind === 'note' ? hasMoreRef.current.notes : hasMoreRef.current.sharedPosts) {
-      const currentWindow = requestedWindowRef.current;
+    while (target.kind === 'note' ? currentSnapshot.hasMoreNotes : currentSnapshot.hasMoreSharedPosts) {
       const nextWindow: FeedWindow = {
         notes:
-          target.kind === 'note' && hasMoreRef.current.notes
+          target.kind === 'note' && currentSnapshot.hasMoreNotes && loadNextNotesPage
             ? currentWindow.notes + HOME_FEED_PAGE_SIZE
             : currentWindow.notes,
         sharedPosts:
-          target.kind === 'shared-post' && hasMoreRef.current.sharedPosts
+          target.kind === 'shared-post' && currentSnapshot.hasMoreSharedPosts
             ? currentWindow.sharedPosts + HOME_FEED_PAGE_SIZE
             : currentWindow.sharedPosts,
       };
@@ -429,21 +226,23 @@ export function useHomeFeedPagination({
         break;
       }
 
-      const nextItems = await runLoad(nextWindow);
-      targetIndex = findHomeFeedItemIndex(nextItems, target);
+      currentSnapshot = await expandWindow(nextWindow);
+      currentWindow = nextWindow;
+      currentItems = buildHomeFeedItems(currentSnapshot.notes, currentSnapshot.sharedPosts);
+      targetIndex = findHomeFeedItemIndex(currentItems, target);
       if (targetIndex >= 0) {
         return targetIndex;
       }
     }
 
     return -1;
-  }, [runLoad]);
+  }, [buildSnapshotForWindow, expandWindow, loadNextNotesPage]);
 
   return {
     items,
-    hasMore: hasMoreNotes || hasMoreSharedPosts,
-    isLoading: isLoading && !hasResolvedInitialWindow,
-    isLoadingMore: isLoading && hasResolvedInitialWindow,
+    hasMore: snapshot.hasMoreNotes || snapshot.hasMoreSharedPosts,
+    isLoading: isWaitingForInitialData,
+    isLoadingMore,
     loadNextPage,
     ensureTargetLoaded,
   };

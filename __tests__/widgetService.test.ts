@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { act, waitFor } from '@testing-library/react-native';
 
 const mockUpdateTimeline = jest.fn();
 const mockGetAllNotes = jest.fn();
@@ -171,7 +172,12 @@ jest.mock('../utils/fileSystem', () => ({
 
 import type { Note } from '../services/database';
 import type { SharedPost } from '../services/sharedFeedService';
-import { selectWidgetNote, updateWidgetData } from '../services/widgetService';
+import {
+  __resetWidgetServiceForTests,
+  scheduleWidgetDataUpdate,
+  selectWidgetNote,
+  updateWidgetData,
+} from '../services/widgetService';
 import i18n from '../constants/i18n';
 
 let warnSpy: jest.SpyInstance;
@@ -218,8 +224,10 @@ function getLastTimelineEntries() {
 }
 
 beforeEach(async () => {
+  jest.useRealTimers();
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
   jest.clearAllMocks();
+  __resetWidgetServiceForTests();
   await AsyncStorage.clear();
   mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'denied' });
   mockGetLastKnownPositionAsync.mockResolvedValue(null);
@@ -272,6 +280,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  __resetWidgetServiceForTests();
+  jest.useRealTimers();
   i18n.language = 'en';
   warnSpy.mockRestore();
 });
@@ -458,6 +468,121 @@ describe('widgetService', () => {
 
     expect(entries).toHaveLength(4);
     expect(entries.every((entry) => entry.props.props.text === 'Latest note')).toBe(true);
+  });
+
+  it('coalesces scheduled widget refreshes into the latest payload', async () => {
+    jest.useFakeTimers();
+
+    scheduleWidgetDataUpdate(
+      {
+        notes: [
+          buildNote({
+            id: 'older-note',
+            content: 'Older note',
+          }),
+        ],
+        includeLocationLookup: false,
+      },
+      {
+        debounceMs: 120,
+      }
+    );
+    scheduleWidgetDataUpdate(
+      {
+        notes: [
+          buildNote({
+            id: 'newest-note',
+            content: 'Newest note wins',
+          }),
+        ],
+        includeLocationLookup: false,
+        preferredNoteId: 'newest-note',
+      },
+      {
+        debounceMs: 120,
+      }
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(120);
+    });
+
+    await waitFor(() => {
+      expect(mockUpdateTimeline).toHaveBeenCalledTimes(1);
+    });
+
+    const entries = getLastTimelineEntries();
+
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        text: 'Newest note wins',
+        primaryActionUrl: 'noto:///widget/note/newest-note',
+      })
+    );
+  });
+
+  it('throttles scheduled foreground refreshes while still enriching a pending request', async () => {
+    jest.useFakeTimers();
+
+    scheduleWidgetDataUpdate(
+      {
+        notes: [
+          buildNote({
+            id: 'foreground-note',
+            content: 'Foreground note',
+            locationName: 'Cafe A',
+            latitude: 10.0,
+            longitude: 106.0,
+          }),
+        ],
+        includeLocationLookup: false,
+      },
+      {
+        debounceMs: 120,
+      }
+    );
+    scheduleWidgetDataUpdate(
+      {
+        includeLocationLookup: true,
+        currentLocation: { latitude: 10.0, longitude: 106.0 },
+      },
+      {
+        debounceMs: 120,
+        throttleKey: 'foreground',
+        throttleMs: 60_000,
+      }
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(120);
+    });
+
+    await waitFor(() => {
+      expect(mockUpdateTimeline).toHaveBeenCalledTimes(1);
+    });
+    expect(getLastTimelineEntries()[0]?.props.props).toEqual(
+      expect.objectContaining({
+        locationName: 'Cafe A',
+        nearbyPlacesCount: 1,
+      })
+    );
+
+    scheduleWidgetDataUpdate(
+      {
+        includeLocationLookup: true,
+      },
+      {
+        debounceMs: 120,
+        throttleKey: 'foreground',
+        throttleMs: 60_000,
+      }
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(120);
+    });
+
+    expect(mockUpdateTimeline).toHaveBeenCalledTimes(1);
   });
 
   it('uses a photo caption as widget text when the photo file is unreadable', async () => {

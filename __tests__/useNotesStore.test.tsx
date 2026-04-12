@@ -6,7 +6,7 @@ import { Note } from '../services/database';
 const mockSyncGeofenceRegions = jest.fn();
 const mockClearGeofenceRegions = jest.fn();
 const mockSkipImmediateReminderForNewNote = jest.fn();
-const mockUpdateWidgetData = jest.fn();
+const mockScheduleWidgetDataUpdate = jest.fn();
 const mockCleanupOrphanMediaFiles = jest.fn();
 const mockGetInfoAsync = jest.fn();
 const mockDeleteAsync = jest.fn();
@@ -50,7 +50,7 @@ jest.mock('../services/geofenceService', () => ({
 }));
 
 jest.mock('../services/widgetService', () => ({
-  updateWidgetData: (...args: unknown[]) => mockUpdateWidgetData(...args),
+  scheduleWidgetDataUpdate: (...args: unknown[]) => mockScheduleWidgetDataUpdate(...args),
 }));
 
 jest.mock('../services/mediaIntegrity', () => ({
@@ -131,7 +131,6 @@ beforeEach(() => {
   mockSyncGeofenceRegions.mockResolvedValue(true);
   mockClearGeofenceRegions.mockResolvedValue(undefined);
   mockSkipImmediateReminderForNewNote.mockResolvedValue(undefined);
-  mockUpdateWidgetData.mockResolvedValue(undefined);
   mockGetAllNotesForScope.mockImplementation(async () => [...mockNotesDb]);
   mockGetNoteStatsForScope.mockImplementation(async () => ({
     totalCount: mockNotesDb.length,
@@ -175,7 +174,7 @@ describe('useNotesStore', () => {
 
     expect(result.current.notes).toHaveLength(2);
     await waitFor(() => {
-      expect(mockUpdateWidgetData).toHaveBeenCalled();
+      expect(mockScheduleWidgetDataUpdate).toHaveBeenCalled();
     });
   });
 
@@ -206,6 +205,38 @@ describe('useNotesStore', () => {
 
     await act(async () => {
       await result.current.ensureAllNotesLoaded();
+    });
+
+    await waitFor(() => {
+      expect(result.current.notes).toHaveLength(30);
+      expect(result.current.hasLoadedAllNotes).toBe(true);
+    });
+  });
+
+  it('loads the next notes page from the store without hydrating the full archive', async () => {
+    mockNotesDb = Array.from({ length: 30 }, (_, index) => ({
+      id: `note-${index + 1}`,
+      type: 'text' as const,
+      content: `Note ${index + 1}`,
+      locationName: `Place ${index + 1}`,
+      latitude: 10 + index,
+      longitude: 106 + index,
+      radius: 150,
+      isFavorite: false,
+      createdAt: new Date(Date.now() - index * 1000).toISOString(),
+      updatedAt: null,
+    }));
+
+    const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.notes).toHaveLength(24);
+      expect(result.current.hasLoadedAllNotes).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.loadNextNotesPage();
     });
 
     await waitFor(() => {
@@ -245,7 +276,7 @@ describe('useNotesStore', () => {
   it('prioritizes a newly created note in the next widget refresh', async () => {
     const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
-    mockUpdateWidgetData.mockClear();
+    mockScheduleWidgetDataUpdate.mockClear();
 
     await act(async () => {
       await result.current.createNote({
@@ -258,16 +289,21 @@ describe('useNotesStore', () => {
     });
 
     await waitFor(() => {
-      expect(mockUpdateWidgetData).toHaveBeenCalledWith({
-        notes: [
-          expect.objectContaining({
-            id: 'note-1',
-            content: 'Freshly created memory',
-          }),
-        ],
-        includeLocationLookup: false,
-        preferredNoteId: 'note-1',
-      });
+      expect(mockScheduleWidgetDataUpdate).toHaveBeenCalledWith(
+        {
+          notes: [
+            expect.objectContaining({
+              id: 'note-1',
+              content: 'Freshly created memory',
+            }),
+          ],
+          includeLocationLookup: false,
+          preferredNoteId: 'note-1',
+        },
+        {
+          debounceMs: 120,
+        }
+      );
     });
   });
 

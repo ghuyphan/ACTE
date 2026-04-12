@@ -114,7 +114,7 @@ export default function HomeScreen() {
   const bottomTabVisualInset = useBottomTabVisualInset();
   const { setSavedNoteRevealActive } = useSavedNoteRevealUi();
   const notesStore = useNotesStore();
-  const { notes, loading, refreshNotes, createNote } = notesStore;
+  const { notes, loading, loadNextNotesPage, refreshNotes, createNote } = notesStore;
   const noteCount = notesStore.noteCount ?? notes.length;
   const localPhotoNoteCount = notesStore.photoNoteCount ?? countPhotoNotes(notes);
   const { user, isAuthAvailable } = useAuth();
@@ -333,6 +333,7 @@ export default function HomeScreen() {
     seedNotes: notes,
     seedNoteCount: noteCount,
     notesLoading: loading,
+    loadNextNotesPage,
     seedSharedPosts: sharedPosts,
     sharedLoading,
     notesSignal: notes,
