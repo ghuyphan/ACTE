@@ -420,6 +420,54 @@ describe('widgetService', () => {
     );
   });
 
+  it('falls back to a balanced current location lookup when no last-known location is available', async () => {
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mockGetLastKnownPositionAsync.mockResolvedValue(null);
+    mockGetCurrentPositionAsync.mockResolvedValue({
+      coords: {
+        latitude: 10.0,
+        longitude: 106.0,
+      },
+    });
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'fallback-near-note',
+        content: 'Fresh location fallback',
+        locationName: 'Fallback Cafe',
+        latitude: 10.0,
+        longitude: 106.0,
+        createdAt: '2026-03-10T10:00:00.000Z',
+      }),
+      buildNote({
+        id: 'fallback-far-note',
+        content: 'Far memory',
+        locationName: 'Far Cafe',
+        latitude: 11.0,
+        longitude: 107.0,
+        createdAt: '2026-03-09T10:00:00.000Z',
+      }),
+    ]);
+
+    const result = await updateWidgetData({
+      includeLocationLookup: true,
+      referenceDate: new Date('2026-03-10T00:00:00.000Z'),
+    });
+
+    const entries = getLastTimelineEntries();
+
+    expect(mockGetCurrentPositionAsync).toHaveBeenCalledWith({
+      accuracy: 'balanced',
+    });
+    expect(result.status).toBe('updated');
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        locationName: 'Fallback Cafe',
+        nearbyPlacesCount: 1,
+        primaryActionUrl: 'noto:///widget/note/fallback-near-note',
+      })
+    );
+  });
+
   it('loads widget notes from the persisted active scope when no notes are provided', async () => {
     await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
 
@@ -461,13 +509,16 @@ describe('widgetService', () => {
     );
   });
 
-  it('creates a stable repeated timeline for the same payload across slots', async () => {
+  it('rotates distinct memories across future timeline slots before repeating the last candidate', async () => {
     await updateWidgetData({ referenceDate: new Date('2026-03-10T07:30:00.000Z') });
 
     const entries = getLastTimelineEntries();
 
     expect(entries).toHaveLength(4);
-    expect(entries.every((entry) => entry.props.props.text === 'Latest note')).toBe(true);
+    expect(entries[0]?.props.props.text).toBe('Latest note');
+    expect(entries[1]?.props.props.text).toBe('Older note');
+    expect(entries[2]?.props.props.text).toBe('Older note');
+    expect(entries[3]?.props.props.text).toBe('Older note');
   });
 
   it('coalesces scheduled widget refreshes into the latest payload', async () => {
@@ -694,11 +745,41 @@ describe('widgetService', () => {
     );
   });
 
-  it('does not push the widget again when the resolved payload is unchanged', async () => {
-    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
-    await updateWidgetData({ referenceDate: new Date('2026-03-10T06:00:00.000Z') });
+  it('does not push the widget again when the resolved timeline signature is unchanged inside the same slot', async () => {
+    const firstResult = await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
+    const secondResult = await updateWidgetData({ referenceDate: new Date('2026-03-10T00:30:00.000Z') });
 
+    expect(firstResult.status).toBe('updated');
+    expect(secondResult.status).toBe('skipped_unchanged');
     expect(mockUpdateTimeline).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses staged photo asset paths across slot refreshes for the same note', async () => {
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'stable-photo',
+        type: 'photo',
+        content: 'file:///mock-documents/photos/latest.jpg',
+        locationName: 'Photo Place',
+      }),
+    ]);
+
+    const firstResult = await updateWidgetData({
+      referenceDate: new Date('2026-03-10T00:00:00.000Z'),
+    });
+    const firstEntries = getLastTimelineEntries();
+    const firstImageUrl = String(firstEntries[0]?.props.props.backgroundImageUrl ?? '');
+
+    const secondResult = await updateWidgetData({
+      referenceDate: new Date('2026-03-10T06:00:00.000Z'),
+    });
+    const secondEntries = getLastTimelineEntries();
+    const secondImageUrl = String(secondEntries[0]?.props.props.backgroundImageUrl ?? '');
+
+    expect(firstResult.status).toBe('updated');
+    expect(secondResult.status).toBe('updated');
+    expect(firstImageUrl).toBeTruthy();
+    expect(secondImageUrl).toBe(firstImageUrl);
   });
 
   it('includes doodle metadata for selected text notes', async () => {

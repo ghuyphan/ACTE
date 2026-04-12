@@ -1,176 +1,206 @@
 # Widget Maintenance Guide
 
-This is the shortest path back into the widget code.
+This is the fastest way back into the current widget system.
 
 ## Read These Files First
 
 1. `services/widgetService.ts`
-2. `widgets/LocketWidget.tsx`
-3. `widgets/ios/LocketWidget.swift`
-4. `widgets/android/NotoWidgetProvider.kt`
-5. `hooks/app/useAppWidgetRefresh.ts`
-6. `plugins/withCustomAndroidWidget.js`
-7. `plugins/withAndroidWidgetTypography.js`
-8. `__tests__/widgetService.test.ts`
+2. `services/widget/contract.ts`
+3. `services/widget/selection.ts`
+4. `services/widget/media.ts`
+5. `services/widget/platform.ts`
+6. `services/widget/history.ts`
+7. `hooks/app/useAppWidgetRefresh.ts`
+8. `hooks/useSharedFeedStore.tsx`
+9. `widgets/LocketWidget.tsx`
+10. `widgets/ios/LocketWidget.swift`
+11. `widgets/android/NotoWidgetProvider.kt`
+12. `__tests__/widgetService.test.ts`
+13. `__tests__/widgetContractParity.test.ts`
 
 ## What Each File Owns
 
 ### `services/widgetService.ts`
 
-This is the widget data pipeline.
+This is now the orchestrator, not the entire widget system.
 
 It owns:
 
-- loading local notes and optional shared-feed candidates
-- choosing timeline entries
-- deduping repeats across recent slots
-- preparing shared-container image assets for iOS
-- pushing the iOS timeline or Android snapshot bridge update
+- request dedupe, debounce, and in-flight coalescing
+- loading notes from the active scope
+- optional shared-feed refresh lookup
+- optional location lookup and caching
+- building the final timeline from ordered selections
+- reusing the last delivered payload when a refresh collapses to idle
+- returning explicit refresh outcomes such as `updated`, `skipped_unchanged`, or `failed`
 
-Current behavior at a glance:
+### `services/widget/contract.ts`
 
-- iOS receives a `4` entry timeline
-- entries advance in `6` hour slots
-- Android receives the first resolved entry as a JSON snapshot
-- candidates can come from nearby notes, favorites, photos, resurfaced older notes, shared posts, or latest notes
-- the service keeps short history to avoid showing the same item too often
-
-### `widgets/LocketWidget.tsx`
-
-This is the Expo widget registration file and JS fallback view.
+This is the shared widget payload contract.
 
 It owns:
 
-- the widget registration name and prop contract
-- the JS-side preview/fallback rendering
-- the default sample payload used for development
+- the `WidgetProps` and `WidgetTimelineEntry` types
+- the canonical payload field list
+- bridge sanitization and payload signatures
+- contract helpers used by storage and native delivery
 
-### `widgets/ios/LocketWidget.swift`
+### `services/widget/selection.ts`
 
-This is the source of truth for the actual iOS widget runtime.
-
-It owns:
-
-- parsing the stored timeline payload
-- loading shared-container images
-- rendering the real Home Screen and Lock Screen widget layouts
-- iOS-specific background and family behavior
-
-Persistent iOS visual changes belong here, not in the generated native copy.
-
-### `widgets/android/NotoWidgetProvider.kt`
-
-This is the source of truth for the Android widget runtime.
+This is the metadata-first selection layer.
 
 It owns:
 
-- parsing the bridged JSON snapshot
-- binding snapshot data into Android `RemoteViews`
-- image, gradient, doodle, sticker, and badge rendering for the Android widget
-- per-size layout behavior and click intents back into the app
+- converting notes and shared posts into widget candidates
+- ranking nearby, photo, shared, and latest candidates
+- fallback conversion from photo candidates to text candidates
+- ordered selections before any photo or avatar staging work happens
 
-Persistent Android visual and binding changes belong here, not only in the generated `android/` copy.
+### `services/widget/media.ts`
 
-### `plugins/withCustomAndroidWidget.js`
-
-This plugin re-applies the checked-in Android widget source and layout patches during prebuild.
+This is the asset staging layer.
 
 It owns:
 
-- copying the checked-in provider source into the generated Android project
-- patching widget layouts and drawable resources
-- keeping prebuild output aligned with the checked-in Android widget implementation
+- preparing only the selected candidate's photo, sticker, and avatar assets
+- copying assets into extension-safe locations when needed
+- versioned widget asset filenames
+- cleanup of stale sibling staged files after an asset changes
 
-### `plugins/withAndroidWidgetTypography.js`
+### `services/widget/platform.ts`
 
-This plugin normalizes Android widget typography to the app's Noto Sans font setup after prebuild.
+This is the platform bridge layer.
 
-### `__tests__/widgetService.test.ts`
+It owns:
 
-This is the safety net for selection logic, media fallbacks, and timeline/snapshot output.
+- iOS timeline delivery
+- Android snapshot delivery
+- platform-specific delivery signatures
+- bridge warning normalization
 
-Update these tests when changing:
+### `services/widget/history.ts`
 
-- candidate prioritization
-- repeat-avoidance rules
-- shared-content behavior
-- image copy and fallback logic
-- iOS timeline or Android snapshot bridge payload shape
+This is the recent-history cache.
+
+It owns:
+
+- loading and saving recently delivered candidate keys
+- helping the service avoid repeating the same candidate too aggressively across refreshes
+
+### `hooks/app/useAppWidgetRefresh.ts`
+
+This is the app-level refresh wiring.
+
+It owns:
+
+- startup refresh
+- foreground refresh
+- auth and connectivity regain refreshes
+- language-driven content refreshes
+- gating widget refresh until app startup is ready
+
+### `hooks/useSharedFeedStore.tsx`
+
+This is the shared-content widget trigger inside the feed pipeline.
+
+It owns:
+
+- scheduling a widget refresh after shared-feed snapshots are committed and persisted
+
+### Native widget files
+
+`widgets/ios/LocketWidget.swift` is still the durable source of truth for actual iOS rendering and payload parsing.
+
+`widgets/android/NotoWidgetProvider.kt` is still the durable source of truth for actual Android rendering and snapshot parsing.
+
+`widgets/LocketWidget.tsx` is the Expo registration file plus JS fallback/dev preview.
+
+## Current Behavior At A Glance
+
+- Selection is metadata-first. The service ranks candidates before it touches the filesystem or downloads shared media.
+- iOS receives a `4` entry timeline in `6` hour slots.
+- Android receives the first resolved entry as a snapshot.
+- Timeline slots try to show distinct candidates first, then repeat the last renderable candidate only when needed.
+- Recent candidate history is persisted and used to deprioritize recently shown items on later slots.
+- Photo, sticker, and avatar staging happens on demand for the chosen candidate and fallback candidate only.
+- Refreshes report explicit outcomes instead of silently pretending success.
 
 ## Data Flow
 
-1. `app/_layout.tsx` wires startup through `hooks/app/useAppStartupBootstrap.ts`, `hooks/app/useAppWidgetRefresh.ts`, and the shared provider shell.
-2. `useAppWidgetRefresh` refreshes widget data on launch, foreground, and auth/connectivity changes.
-3. Note mutations in `hooks/state/useNotesStore.tsx` also refresh widget data. Import the public notes API from `hooks/useNotes.ts`; the state folder is the implementation detail.
-4. `updateWidgetData()` builds widget props from local notes and optional shared-feed content.
-5. iOS receives a timeline through `updateTimeline(...)`.
-6. Android receives the first resolved entry through `NotoWidgetModule.updateSnapshot(...)`.
-7. `widgets/ios/LocketWidget.swift` renders the iOS timeline and `widgets/android/NotoWidgetProvider.kt` renders the Android snapshot.
+1. `app/_layout.tsx` enables widget refresh only after startup bootstrap has prepared the app.
+2. `useAppWidgetRefresh` schedules lightweight startup refreshes and richer foreground/session/content refreshes.
+3. Note mutations in `hooks/state/useNotesStore.tsx` still schedule widget updates.
+4. Shared-feed writes in `hooks/useSharedFeedStore.tsx` also schedule widget updates.
+5. `updateWidgetData()` loads notes, optional shared content, and optional location.
+6. `selection.ts` ranks candidates using note and shared-post metadata.
+7. `media.ts` stages only the selected candidate's assets.
+8. `platform.ts` pushes the iOS timeline or Android snapshot.
+9. Native widget files parse and render the delivered payload.
 
 ## Common Change Map
 
-Change widget selection or rotation rules:
+Change selection or rotation rules:
 
-- edit `services/widgetService.ts`
+- edit `services/widget/selection.ts`
 - update `__tests__/widgetService.test.ts`
 
-Change iOS widget visuals:
+Change payload fields:
+
+- edit `services/widget/contract.ts`
+- update native parsers if needed
+- run `__tests__/widgetContractParity.test.ts`
+
+Change photo, sticker, or avatar staging:
+
+- edit `services/widget/media.ts`
+- update `__tests__/widgetService.test.ts`
+
+Change refresh scheduling:
+
+- edit `hooks/app/useAppWidgetRefresh.ts`
+- edit `hooks/useSharedFeedStore.tsx` if shared-feed behavior changes
+- update `__tests__/useAppWidgetRefresh.test.tsx` and store tests
+
+Change iOS visuals:
 
 - edit `widgets/ios/LocketWidget.swift`
-- keep `widgets/LocketWidget.tsx` roughly aligned for fallback/dev previews
+- keep `widgets/LocketWidget.tsx` roughly aligned for preview/fallback behavior
 
-Change Android widget visuals or binding:
+Change Android visuals or snapshot binding:
 
 - edit `widgets/android/NotoWidgetProvider.kt`
-- update `plugins/withCustomAndroidWidget.js` or `plugins/withAndroidWidgetTypography.js` if the generated layout/resources also need to change
-
-Fix image problems:
-
-1. Check `services/widgetService.ts`
-2. Check `widgets/ios/LocketWidget.swift`
-3. Check `widgets/android/NotoWidgetProvider.kt`
-4. Verify the file was copied into the iOS app-group container when applicable
-
-Fix deep-link behavior:
-
-1. Check `services/widgetService.ts`
-2. Check `app/widget/[kind]/[id].tsx`
+- update `plugins/withCustomAndroidWidget.js` or `plugins/withAndroidWidgetTypography.js` if generated resources also need to change
 
 ## Known Gotchas
 
 ### Generated native copies are disposable
 
-The checked-in sources under `widgets/` are durable. Generated files under `ios/` or `android/` can be replaced by prebuild.
+The durable widget source lives under `widgets/` and the supporting plugins. Generated `ios/` and `android/` copies can be replaced by prebuild.
 
-### Payload shape can be nested
+### The iOS bridge payload can still be nested
 
-The iOS payload path still needs to tolerate the nested bridge structure used by Expo Widgets.
+The Swift parser still needs to tolerate the Expo Widgets nested `props.props` bridge shape.
 
-### Shared media must be made extension-safe
+### Android is still snapshot-based
 
-The iOS widget cannot rely on arbitrary app-sandbox file paths. Shared photos and avatar assets must be copied into the app-group container first.
+Android renders the first resolved entry, not the full iOS timeline.
 
-### Android is snapshot-based
+### Versioned staged filenames are intentional
 
-Android currently renders a single resolved entry rather than the full iOS-style timeline.
+Stable filenames now key off the asset identity and version instead of a rotating slot token. If staging changes, preserve cleanup of stale sibling files or the app-group folder will grow forever.
 
-### Plugins are part of the Android widget surface
+### A refresh may intentionally skip delivery
 
-If you change Android widget layouts, drawables, or provider wiring, update the supporting plugins so those changes survive prebuild.
+`skipped_duplicate_request`, `queued`, `skipped_unchanged`, and `skipped_platform` are normal outcomes and should not be treated as silent failures.
 
-### Native caches can mislead you
+### The service may reuse the last delivered payload
 
-After changing native widget layout or parsing:
-
-- rebuild the app
-- remove the widget
-- add it again
+If source content exists but the current refresh cannot build a renderable widget entry, the service reuses the last non-idle payload instead of replacing it with empty idle content.
 
 ## Recommended Checks
 
 ```bash
-npm test -- --runInBand __tests__/widgetService.test.ts
-npm run lint
+npm test -- widgetService.test.ts useAppWidgetRefresh.test.ts useSharedFeedStore.test.ts widgetContractParity.test.ts
 npm run typecheck
 npm run ios
 npm run android

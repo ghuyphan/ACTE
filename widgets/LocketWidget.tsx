@@ -14,44 +14,9 @@ import {
 } from '@expo/ui/swift-ui/modifiers';
 import { Platform } from 'react-native';
 import i18n from '../constants/i18n';
+import type { WidgetProps } from '../services/widget/contract';
 
-interface WidgetProps {
-    noteType: 'text' | 'photo';
-    text: string;
-    noteColorId?: string;
-    locationName: string;
-    date: string;
-    noteCount: number;
-    nearbyPlacesCount: number;
-    isLivePhoto: boolean;
-    backgroundImageUrl?: string; // Currently not supported natively by expo-widgets JS side
-    backgroundImageBase64?: string;
-    backgroundGradientStartColor?: string;
-    backgroundGradientEndColor?: string;
-    hasDoodle: boolean;
-    doodleStrokesJson?: string | null;
-    hasStickers: boolean;
-    stickerPlacementsJson?: string | null;
-    isIdleState: boolean;
-    idleText: string;
-    savedCountText: string;
-    nearbyPlacesLabelText: string;
-    memoryReminderText: string;
-    accessorySaveMemoryText: string;
-    accessoryAddFirstPlaceText: string;
-    accessoryMemoryNearbyText: string;
-    accessoryOpenAppText: string;
-    accessoryAddLabelText: string;
-    accessorySavedLabelText: string;
-    accessoryNearLabelText: string;
-    livePhotoBadgeText: string;
-    isSharedContent: boolean;
-    authorDisplayName: string;
-    authorInitials: string;
-    authorAvatarImageUrl?: string;
-    authorAvatarImageBase64?: string;
-    primaryActionUrl: string;
-    badgeActionUrl?: string;
+interface WidgetViewProps extends WidgetProps {
     family?: string;
 }
 
@@ -89,7 +54,7 @@ function getFallbackCountLabel(noteCount: number): string {
     return i18n.t('widget.savedCount', { count: noteCount, defaultValue: `${noteCount} notes saved` });
 }
 
-const LocketWidget = (props: { props: WidgetProps }) => {
+const LocketWidget = (props: { props: WidgetViewProps }) => {
     'widget';
 
     const asString = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
@@ -563,8 +528,8 @@ const LocketWidget = (props: { props: WidgetProps }) => {
 };
 
 type WidgetModule = {
-    updateTimeline: (entries: Array<{ date: Date; props: { props: WidgetProps } }>) => void;
-    updateSnapshot: (snapshot: { props: WidgetProps }) => void;
+    updateTimeline: (entries: Array<{ date: Date; props: { props: WidgetViewProps } }>) => void;
+    updateSnapshot: (snapshot: { props: WidgetViewProps }) => void;
 };
 
 function createFallbackWidget(): WidgetModule {

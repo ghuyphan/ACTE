@@ -68,13 +68,34 @@ describe('useAppWidgetRefresh', () => {
     rerender({});
 
     await act(async () => {
-      appStateListener?.('active');
       jest.runOnlyPendingTimers();
     });
 
     await waitFor(() => {
       expect(mockScheduleWidgetDataUpdate).toHaveBeenCalledTimes(2);
-      expect(mockScheduleWidgetDataUpdate).toHaveBeenLastCalledWith(
+      expect(mockScheduleWidgetDataUpdate).toHaveBeenNthCalledWith(
+        2,
+        {
+          includeLocationLookup: false,
+          includeSharedRefresh: true,
+        },
+        {
+          debounceMs: 120,
+          throttleKey: undefined,
+          throttleMs: undefined,
+        }
+      );
+    });
+
+    await act(async () => {
+      appStateListener?.('active');
+      jest.runOnlyPendingTimers();
+    });
+
+    await waitFor(() => {
+      expect(mockScheduleWidgetDataUpdate).toHaveBeenCalledTimes(3);
+      expect(mockScheduleWidgetDataUpdate).toHaveBeenNthCalledWith(
+        3,
         {
           includeLocationLookup: true,
           includeSharedRefresh: true,
@@ -83,6 +104,40 @@ describe('useAppWidgetRefresh', () => {
           debounceMs: 120,
           throttleKey: 'foreground',
           throttleMs: 60_000,
+        }
+      );
+    });
+  });
+
+  it('waits until enabled before triggering the startup refresh', async () => {
+    const { rerender } = renderHook(
+      (props) => useAppWidgetRefresh({ enabled: (props as { enabled: boolean }).enabled }),
+      { initialProps: { enabled: false } }
+    );
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+    });
+
+    expect(mockScheduleWidgetDataUpdate).not.toHaveBeenCalled();
+
+    rerender({ enabled: true });
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+    });
+
+    await waitFor(() => {
+      expect(mockScheduleWidgetDataUpdate).toHaveBeenCalledTimes(1);
+      expect(mockScheduleWidgetDataUpdate).toHaveBeenLastCalledWith(
+        {
+          includeLocationLookup: false,
+          includeSharedRefresh: false,
+        },
+        {
+          debounceMs: 120,
+          throttleKey: undefined,
+          throttleMs: undefined,
         }
       );
     });

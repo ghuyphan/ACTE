@@ -31,6 +31,7 @@ import { getNotePairedVideoUri } from '../services/livePhotoStorage';
 import { normalizeSavedTextNoteColor } from '../services/noteAppearance';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import { getNotePhotoUri } from '../services/photoStorage';
+import { scheduleWidgetDataUpdate } from '../services/widgetService';
 import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
 
@@ -166,6 +167,20 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     []
   );
 
+  const scheduleSharedFeedWidgetRefresh = useCallback(() => {
+    scheduleWidgetDataUpdate(
+      {
+        includeLocationLookup: false,
+        includeSharedRefresh: false,
+      },
+      {
+        debounceMs: 120,
+        throttleKey: 'shared-feed',
+        throttleMs: 1_000,
+      }
+    );
+  }, []);
+
   const commitSnapshotAndPersist = useCallback(
     (
       userUid: string,
@@ -178,9 +193,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       source: 'live' | 'cache' = 'live'
     ) => {
       applySnapshot(snapshot, source, updatedAt);
-      void persistSnapshot(userUid, snapshot);
+      void persistSnapshot(userUid, snapshot).finally(() => {
+        scheduleSharedFeedWidgetRefresh();
+      });
     },
-    [applySnapshot, persistSnapshot]
+    [applySnapshot, persistSnapshot, scheduleSharedFeedWidgetRefresh]
   );
 
   const hydrateFromCache = useCallback(async (userUid: string, sessionId: number) => {

@@ -56,6 +56,7 @@ const mockGetCachedSharedFeedSnapshot = jest.fn();
 const mockCacheSharedFeedSnapshot = jest.fn();
 const mockClearSharedFeedCache = jest.fn();
 const mockReplaceCachedActiveInvite = jest.fn();
+const mockScheduleWidgetDataUpdate = jest.fn();
 let latestSharedFeedSubscriptionHandlers:
   | {
       onSnapshot: (snapshot: { friends: any[]; sharedPosts: any[]; activeInvite: any }) => void;
@@ -93,6 +94,10 @@ jest.mock('../services/sharedFeedService', () => ({
   revokeFriendInvite: (...args: unknown[]) => mockRevokeFriendInvite(...args),
   subscribeToSharedFeed: (...args: unknown[]) => mockSubscribeToSharedFeed(...args),
   updateSharedPost: (...args: unknown[]) => mockUpdateSharedPost(...args),
+}));
+
+jest.mock('../services/widgetService', () => ({
+  scheduleWidgetDataUpdate: (...args: unknown[]) => mockScheduleWidgetDataUpdate(...args),
 }));
 
 import { SharedFeedProvider, useSharedFeedStore } from '../hooks/useSharedFeed';

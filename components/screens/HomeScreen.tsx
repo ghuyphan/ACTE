@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../sheets/AppSheetAlert';
 import CaptureCard, { type CaptureCardHandle } from '../home/CaptureCard';
 import {
+  buildHomeFeedItems,
   findHomeFeedItemIndex,
   getHomeFeedItemKey,
 } from '../home/feedItems';
@@ -27,7 +28,6 @@ import HomeHeaderSearch from '../home/HomeHeaderSearch';
 import NotesFeed from '../home/NotesFeed';
 import SavedNotePolaroidReveal from '../home/SavedNotePolaroidReveal';
 import SharedManageSheet from '../home/SharedManageSheet';
-import { useHomeFeedPagination } from '../../hooks/app/useHomeFeedPagination';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
@@ -73,7 +73,7 @@ import {
   isPreviewablePremiumNoteColor,
   PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
 } from '../../services/premiumNoteFinish';
-import { generateNoteId, getActiveNotesScope, LOCAL_NOTES_SCOPE, type Note } from '../../services/database';
+import { generateNoteId, type Note } from '../../services/database';
 import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
 import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition';
@@ -97,10 +97,6 @@ function HomeFeedLoadingState({
       <ActivityIndicator color={colors.primary} />
     </View>
   );
-}
-
-function resolveHomeNotesScope(userUid: string | null | undefined) {
-  return userUid ?? getActiveNotesScope() ?? LOCAL_NOTES_SCOPE;
 }
 
 export default function HomeScreen() {
@@ -317,28 +313,42 @@ export default function HomeScreen() {
     () => sharedPosts.filter((post) => post.authorUid !== user?.uid),
     [sharedPosts, user?.uid]
   );
-  const notesScope = useMemo(
-    () => resolveHomeNotesScope(user?.uid),
-    [user?.uid]
+  const homeFeedItems = useMemo(
+    () => buildHomeFeedItems(notes, friendPosts),
+    [friendPosts, notes]
   );
-  const {
-    items: homeFeedItems,
-    hasMore: homeFeedHasMore,
-    isLoading: isHomeFeedInitialLoading,
-    loadNextPage: loadNextHomeFeedPage,
-    ensureTargetLoaded,
-  } = useHomeFeedPagination({
-    notesScope,
-    sharedCacheUserUid: sharedEnabled ? user?.uid ?? null : null,
-    seedNotes: notes,
-    seedNoteCount: noteCount,
-    notesLoading: loading,
-    loadNextNotesPage,
-    seedSharedPosts: sharedPosts,
-    sharedLoading,
-    notesSignal: notes,
-    sharedSignal: sharedPosts,
-  });
+  const homeFeedHasMore = noteCount > notes.length;
+  const ensureTargetLoaded = useCallback(async (
+    target: { id: string; kind: 'note' | 'shared-post' }
+  ) => {
+    let currentNotes = notes;
+    let currentItems = buildHomeFeedItems(currentNotes, friendPosts);
+    let targetIndex = findHomeFeedItemIndex(currentItems, target);
+    if (targetIndex >= 0) {
+      return targetIndex;
+    }
+
+    if (target.kind !== 'note') {
+      return -1;
+    }
+
+    while (currentNotes.length < noteCount) {
+      const previousCount = currentNotes.length;
+      const nextNotes = await loadNextNotesPage();
+      if (nextNotes.length <= previousCount) {
+        break;
+      }
+
+      currentNotes = nextNotes;
+      currentItems = buildHomeFeedItems(currentNotes, friendPosts);
+      targetIndex = findHomeFeedItemIndex(currentItems, target);
+      if (targetIndex >= 0) {
+        return targetIndex;
+      }
+    }
+
+    return -1;
+  }, [friendPosts, loadNextNotesPage, noteCount, notes]);
   const photoNoteCount = useMemo(
     () => Math.max(localPhotoNoteCount, remotePhotoNoteCount ?? 0),
     [localPhotoNoteCount, remotePhotoNoteCount]
@@ -454,7 +464,7 @@ export default function HomeScreen() {
     [homeFeedItems, isFriendsFilterActive, suppressedHomeNoteIdSet]
   );
   const showHomeFeedBootstrapState =
-    (loading || sharedLoading || isHomeFeedInitialLoading) && visibleFeedItems.length === 0;
+    (loading || sharedLoading) && visibleFeedItems.length === 0;
   const homeFeedEmptyState = useMemo(
     () =>
       showHomeFeedBootstrapState ? (
@@ -731,7 +741,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (loading || (sharedLoading && homeFeedItems.length === 0) || isHomeFeedInitialLoading) {
+      if (loading || (sharedLoading && homeFeedItems.length === 0)) {
         return undefined;
       }
 
@@ -788,7 +798,6 @@ export default function HomeScreen() {
       consumeFeedFocus,
       ensureTargetLoaded,
       homeFeedItems.length,
-      isHomeFeedInitialLoading,
       loading,
       peekFeedFocus,
       sharedLoading,
@@ -1908,9 +1917,9 @@ export default function HomeScreen() {
             void onRefresh();
           }}
           onEndReached={
-            !isHomeFeedInitialLoading && homeFeedHasMore
+            !loading && homeFeedHasMore
               ? () => {
-                  void loadNextHomeFeedPage();
+                  void loadNextNotesPage();
                 }
               : undefined
           }

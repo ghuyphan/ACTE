@@ -29,11 +29,11 @@ const mockScrollToOffset = jest.fn();
 const mockRequestForegroundLocation = jest.fn();
 const mockRequestReminderPermissions = jest.fn();
 const mockOpenAppSettings = jest.fn();
-const mockLoadNextHomeFeedPage = jest.fn();
-const mockEnsureTargetLoaded = jest.fn();
 let mockRemindersEnabled = false;
 let mockNoteText = 'A doodled note';
 let mockNotes: any[] = [];
+let mockHasLoadedAllNotes = true;
+let mockNoteCount: number | null = null;
 let mockLocation: any = {
   coords: {
     latitude: 10.77,
@@ -175,18 +175,6 @@ jest.mock('../hooks/useFeedFocus', () => ({
   }),
 }));
 
-jest.mock('../hooks/app/useHomeFeedPagination', () => ({
-  useHomeFeedPagination: () => ({
-    items: mockBuildHomeFeedItems(),
-    hasMore: false,
-    isLoading: false,
-    isLoadingMore: false,
-    loadNextPage: () => mockLoadNextHomeFeedPage(),
-    ensureTargetLoaded: (target: { kind: 'note' | 'shared-post'; id: string }) =>
-      mockEnsureTargetLoaded(target),
-  }),
-}));
-
 jest.mock('../hooks/useCaptureFlow', () => ({
   useCaptureFlow: () => ({
     ...(() => {
@@ -224,7 +212,10 @@ jest.mock('../hooks/useCaptureFlow', () => ({
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
+    hasLoadedAllNotes: mockHasLoadedAllNotes,
+    noteCount: mockNoteCount ?? mockNotes.length,
     notes: mockNotes,
+    loadNextNotesPage: jest.fn(async () => mockNotes),
     refreshNotes: mockRefreshNotes,
     createNote: mockCreateNote,
   }),
@@ -377,10 +368,8 @@ describe('HomeScreen doodle save flow', () => {
     mockRemindersEnabled = false;
     mockNoteText = 'A doodled note';
     mockNotes = [];
-    mockLoadNextHomeFeedPage.mockResolvedValue(mockBuildHomeFeedItems());
-    mockEnsureTargetLoaded.mockImplementation(async (target: { kind: 'note' | 'shared-post'; id: string }) =>
-      mockBuildHomeFeedItems().findIndex((item) => item.kind === target.kind && item.id === target.id)
-    );
+    mockHasLoadedAllNotes = true;
+    mockNoteCount = null;
     mockLocation = {
       coords: {
         latitude: 10.77,
@@ -411,6 +400,50 @@ describe('HomeScreen doodle save flow', () => {
     global.requestAnimationFrame = originalRequestAnimationFrame;
     (global as any).requestIdleCallback = originalRequestIdleCallback;
     (global as any).cancelIdleCallback = originalCancelIdleCallback;
+  });
+
+  it('does not wire load-more when the full note set already fits in store data', () => {
+    mockNotes = Array.from({ length: 5 }, (_, index) => ({
+      id: `note-${index + 1}`,
+      type: 'text',
+      content: `Note ${index + 1}`,
+      locationName: `Place ${index + 1}`,
+      latitude: 10.7 + index,
+      longitude: 106.6 + index,
+      radius: 150,
+      isFavorite: false,
+      createdAt: new Date(Date.UTC(2026, 2, 20 - index)).toISOString(),
+      updatedAt: null,
+    }));
+
+    renderHomeScreen();
+
+    expect(latestNotesFeedProps?.items).toHaveLength(5);
+    expect(latestNotesFeedProps?.onEndReached).toBeUndefined();
+  });
+
+  it('does not wire load-more when noteCount already matches the loaded notes', () => {
+    mockHasLoadedAllNotes = false;
+    mockNotes = [
+      {
+        id: 'note-1',
+        type: 'text',
+        content: 'Only visible note',
+        locationName: 'Place 1',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: new Date(Date.UTC(2026, 2, 20)).toISOString(),
+        updatedAt: null,
+      },
+    ];
+    mockNoteCount = mockNotes.length;
+
+    renderHomeScreen();
+
+    expect(latestNotesFeedProps?.items).toHaveLength(1);
+    expect(latestNotesFeedProps?.onEndReached).toBeUndefined();
   });
 
   it('keeps Home anchored on the capture card while the local save sheet is open', async () => {

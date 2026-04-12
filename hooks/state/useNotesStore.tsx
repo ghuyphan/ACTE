@@ -198,7 +198,7 @@ function useNotesStoreValue(): NotesStoreValue {
       };
     }
 
-    const limit = options?.limit ?? INITIAL_NOTES_BOOTSTRAP_LIMIT;
+    const limit = options?.limit ?? Math.max(INITIAL_NOTES_BOOTSTRAP_LIMIT, notesRef.current.length);
     const [pagedNotes, stats] = await Promise.all([
       getNotesPageForScope(scope, {
         limit,
@@ -511,15 +511,17 @@ function useNotesStoreValue(): NotesStoreValue {
       }
       const nextNotes = removeNoteFromCollection(notesRef.current, id);
       commitNotes(nextNotes);
+      const nextTotalCount = Math.max(0, noteStatsRef.current.totalCount - (note ? 1 : 0));
+      const nextPhotoCount = Math.max(
+        0,
+        noteStatsRef.current.photoCount - (note?.type === 'photo' ? 1 : 0)
+      );
       commitNoteStats(
         {
-          totalCount: Math.max(0, noteStatsRef.current.totalCount - (note ? 1 : 0)),
-          photoCount: Math.max(
-            0,
-            noteStatsRef.current.photoCount - (note?.type === 'photo' ? 1 : 0)
-          ),
+          totalCount: nextTotalCount,
+          photoCount: nextPhotoCount,
         },
-        hasLoadedAllNotesRef.current
+        hasLoadedAllNotesRef.current || nextNotes.length >= nextTotalCount
       );
 
       await deletePhotoFileIfPresent(note);

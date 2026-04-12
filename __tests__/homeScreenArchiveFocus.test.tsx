@@ -5,8 +5,6 @@ import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
 import HomeScreen from '../app/(tabs)/index';
 
 const mockConsumeFeedFocus = jest.fn();
-const mockEnsureTargetLoaded = jest.fn();
-const mockLoadNextHomeFeedPage = jest.fn<Promise<any[]>, []>(async () => []);
 const mockScrollToOffset = jest.fn();
 const mockPush = jest.fn();
 let mockNotesState = [
@@ -190,18 +188,6 @@ jest.mock('../hooks/useFeedFocus', () => ({
   }),
 }));
 
-jest.mock('../hooks/app/useHomeFeedPagination', () => ({
-  useHomeFeedPagination: () => ({
-    items: mockBuildHomeFeedItems(),
-    hasMore: false,
-    isLoading: false,
-    isLoadingMore: false,
-    loadNextPage: () => mockLoadNextHomeFeedPage(),
-    ensureTargetLoaded: (target: { kind: 'note' | 'shared-post'; id: string }) =>
-      mockEnsureTargetLoaded(target),
-  }),
-}));
-
 jest.mock('../hooks/useNoteDetailSheet', () => ({
   useNoteDetailSheet: () => ({
     openNoteDetail: jest.fn(),
@@ -244,7 +230,9 @@ jest.mock('../hooks/useCaptureFlow', () => ({
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
+    hasLoadedAllNotes: true,
     notes: mockNotesState,
+    loadNextNotesPage: jest.fn(async () => mockNotesState),
     refreshNotes: jest.fn(async () => undefined),
     createNote: jest.fn(async () => undefined),
   }),
@@ -405,10 +393,6 @@ describe('HomeScreen archive focus', () => {
         createdAt: '2026-03-13T00:00:00.000Z',
       },
     ];
-    mockEnsureTargetLoaded.mockImplementation(async (target: { kind: 'note' | 'shared-post'; id: string }) =>
-      mockBuildHomeFeedItems().findIndex((item) => item.kind === target.kind && item.id === target.id)
-    );
-    mockLoadNextHomeFeedPage.mockResolvedValue(mockBuildHomeFeedItems());
     (global as any).requestIdleCallback = jest.fn((callback: any) => {
       callback({ didTimeout: false, timeRemaining: () => 50 });
       return 1;

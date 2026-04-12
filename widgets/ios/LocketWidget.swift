@@ -17,6 +17,7 @@ private func widgetLocalizedCount(_ singularKey: String, pluralKey: String, coun
 private struct LocketWidgetPayload {
     let noteType: String
     let text: String
+    let noteColorId: String?
     let locationName: String
     let date: String
     let noteCount: Int
@@ -54,6 +55,7 @@ private struct LocketWidgetPayload {
     static let placeholder = LocketWidgetPayload(
         noteType: "text",
         text: "",
+        noteColorId: nil,
         locationName: "",
         date: "",
         noteCount: 0,
@@ -92,6 +94,7 @@ private struct LocketWidgetPayload {
     init(
         noteType: String,
         text: String,
+        noteColorId: String?,
         locationName: String,
         date: String,
         noteCount: Int,
@@ -128,6 +131,7 @@ private struct LocketWidgetPayload {
     ) {
         self.noteType = noteType
         self.text = text
+        self.noteColorId = noteColorId
         self.locationName = locationName
         self.date = date
         self.noteCount = noteCount
@@ -168,6 +172,7 @@ private struct LocketWidgetPayload {
 
         noteType = LocketWidgetPayload.stringValue(payload["noteType"])
         text = LocketWidgetPayload.stringValue(payload["text"])
+        noteColorId = LocketWidgetPayload.optionalStringValue(payload["noteColorId"])
         locationName = LocketWidgetPayload.stringValue(payload["locationName"])
         date = LocketWidgetPayload.stringValue(payload["date"])
         noteCount = LocketWidgetPayload.intValue(payload["noteCount"])

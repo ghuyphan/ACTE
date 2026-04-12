@@ -24,6 +24,7 @@ import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
 const DOCKED_HEADER_CONTENT_OVERLAP = 22;
 const CAPTURE_PAGE_STICKY_THRESHOLD = 0.62;
 const CAPTURE_PAGE_STICKY_VELOCITY_THRESHOLD = 0.9;
+const DRAG_END_SNAP_SETTLE_VELOCITY_THRESHOLD = 0.12;
 const SCROLL_SNAP_EPSILON = 2;
 const REFRESH_PULL_THRESHOLD = -6;
 const INACTIVE_CARD_SCALE = 0.968;
@@ -289,6 +290,7 @@ export default function NotesFeed({
     }),
     [bottomOverlayInset, height, snapHeight]
   );
+  const maxSnapOffset = snapPageCount * snapHeight;
   const snapOffsets = useMemo(
     () => Array.from({ length: snapPageCount + 1 }, (_, index) => index * snapHeight),
     [snapHeight, snapPageCount]
@@ -357,13 +359,12 @@ export default function NotesFeed({
 
   const getNearestSnapOffset = useCallback(
     (offsetY: number) => {
-      const maxSnapOffset = snapPageCount * snapHeight;
       return Math.min(
         maxSnapOffset,
         Math.max(0, Math.round(offsetY / snapHeight) * snapHeight)
       );
     },
-    [snapHeight, snapPageCount]
+    [maxSnapOffset, snapHeight]
   );
 
   const getSettledItemFromOffset = useCallback(
@@ -477,24 +478,6 @@ export default function NotesFeed({
       return true;
     },
     [applySettledOffset, flatListRef, snapHeight]
-  );
-
-  const maybeClampToLastSnapOffset = useCallback(
-    (offsetY: number, animated: boolean) => {
-      if (Platform.OS !== 'android' || snapOffsets.length === 0) {
-        return false;
-      }
-
-      const lastSnapOffset = snapOffsets[snapOffsets.length - 1] ?? 0;
-      if (offsetY <= lastSnapOffset + SCROLL_SNAP_EPSILON) {
-        return false;
-      }
-
-      flatListRef.current?.scrollToOffset({ offset: lastSnapOffset, animated });
-      applySettledOffset(lastSnapOffset);
-      return true;
-    },
-    [applySettledOffset, flatListRef, snapOffsets]
   );
 
   useLayoutEffect(() => {
@@ -694,12 +677,16 @@ export default function NotesFeed({
           return;
         }
 
-        if (maybeClampToLastSnapOffset(offsetY, true)) {
+        const velocityY = event.nativeEvent.velocity?.y ?? 0;
+        if (maybeStickToCapturePage(offsetY, velocityY)) {
           return;
         }
 
-        const velocityY = event.nativeEvent.velocity?.y ?? 0;
-        if (maybeStickToCapturePage(offsetY, velocityY)) {
+        if (
+          Math.abs(velocityY) <= DRAG_END_SNAP_SETTLE_VELOCITY_THRESHOLD &&
+          offsetY > maxSnapOffset + SCROLL_SNAP_EPSILON &&
+          maybeCorrectSnapOffset(offsetY, { animated: true })
+        ) {
           return;
         } else if (!nativeSnapEnabled) {
           applySettledOffset(offsetY);
@@ -718,10 +705,6 @@ export default function NotesFeed({
         const offsetY = event.nativeEvent.contentOffset.y;
         if (offsetY <= 0) {
           applySettledOffset(0);
-          return;
-        }
-
-        if (maybeClampToLastSnapOffset(offsetY, true)) {
           return;
         }
 

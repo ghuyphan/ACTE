@@ -35,7 +35,7 @@ function AppContent() {
     retryStartup,
     startupError,
   } = useAppStartupBootstrap();
-  useAppWidgetRefresh();
+  useAppWidgetRefresh({ enabled: isDatabaseReady });
   useAppNotificationRouting();
   useSocialPushRegistration();
   useAppSplashGate({
