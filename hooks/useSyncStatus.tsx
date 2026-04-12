@@ -36,10 +36,7 @@ const SyncStatusContext = createContext<SyncStatusContextValue | undefined>(unde
 
 export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const { user, isReady, isAuthAvailable } = useAuth();
-  const notesStore = useNotes();
-  const { notes, refreshNotes, loading } = notesStore;
-  const hasLoadedAllNotes = notesStore.hasLoadedAllNotes ?? true;
-  const ensureAllNotesLoaded = notesStore.ensureAllNotesLoaded ?? (async () => notes);
+  const { notes, refreshNotes, loading } = useNotes();
   const { isOnline, status: connectivityStatus } = useConnectivity();
   const [status, setStatus] = useState<SyncState>('idle');
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
@@ -168,8 +165,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       setStatus('syncing');
       setLastMessage(null);
 
-      const notesForSync = hasLoadedAllNotes ? notes : await ensureAllNotesLoaded();
-      const result = await syncNotes(currentUser, notesForSync, { mode });
+      const result = await syncNotes(currentUser, notes, { mode });
       const queueStats = await refreshQueueStats();
       if (!isCurrentSyncRequest(requestId, requestUserUid)) {
         return;

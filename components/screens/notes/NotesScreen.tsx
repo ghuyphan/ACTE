@@ -44,7 +44,7 @@ import { parseNoteStickerPlacements } from '../../../services/noteStickers';
 import { getNotePhotoUri } from '../../../services/photoStorage';
 import { SHARED_POST_MEDIA_BUCKET } from '../../../services/remoteMedia';
 import { getHomeFeedItemKey, type HomeFeedItem } from '../../home/feedItems';
-import { getActiveNotesScope, LOCAL_NOTES_SCOPE, type Note } from '../../../services/database';
+import { getActiveNotesScope, LOCAL_NOTES_SCOPE } from '../../../services/database';
 import { scheduleOnIdle } from '../../../utils/scheduleOnIdle';
 import { useNotesGridSharedPhotoHydration } from './useNotesGridSharedPhotoHydration';
 import { GlassView } from '../../ui/GlassView';
@@ -298,17 +298,12 @@ export default function NotesIndexScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { requestFeedFocus } = useFeedFocus();
-  const notesStore = useNotesStore();
-  const { notes, loading, loadNextNotesPage } = notesStore;
-  const hasLoadedAllNotes = notesStore.hasLoadedAllNotes ?? true;
-  const noteCount = notesStore.noteCount ?? notes.length;
-  const ensureAllNotesLoaded = notesStore.ensureAllNotesLoaded ?? (async () => notes);
+  const { notes, loading } = useNotesStore();
   const { sharedPosts, loading: sharedLoading } = useSharedFeedStore();
   const [mode, setMode] = useState<RecapMode>('all');
   const [hasPreparedRecap, setHasPreparedRecap] = useState(process.env.NODE_ENV === 'test');
   const [showGridDecorations, setShowGridDecorations] = useState(process.env.NODE_ENV === 'test');
   const [isRecapPhysicsSuspended, setIsRecapPhysicsSuspended] = useState(false);
-  const [isLoadingRecapNotes, setIsLoadingRecapNotes] = useState(false);
   const [visibleSharedPhotoIds, setVisibleSharedPhotoIds] = useState<string[]>([]);
 
   const notesScope = useMemo(
@@ -323,12 +318,6 @@ export default function NotesIndexScreen() {
   } = useHomeFeedPagination({
     notesScope,
     sharedCacheUserUid: user?.uid ?? null,
-    seedNotes: notes,
-    seedNoteCount: noteCount,
-    notesLoading: loading,
-    loadNextNotesPage,
-    seedSharedPosts: sharedPosts,
-    sharedLoading,
     notesSignal: notes,
     sharedSignal: sharedPosts,
   });
@@ -375,7 +364,7 @@ export default function NotesIndexScreen() {
   const gridSize = Math.floor((width - Layout.screenPadding * 2 - gridGap * 2) / 3);
   const isLoading =
     isArchiveInitialLoading || ((loading || sharedLoading) && items.length === 0);
-  const hasRecapNotes = noteCount > 0;
+  const hasRecapNotes = notes.length > 0;
   const shouldRenderRecap = hasRecapNotes && (hasPreparedRecap || mode === 'recap');
   useEffect(() => {
     if (!hasRecapNotes && mode !== 'all') {
@@ -407,30 +396,6 @@ export default function NotesIndexScreen() {
       idleHandle.cancel();
     };
   }, [hasPreparedRecap, hasRecapNotes, mode]);
-
-  useEffect(() => {
-    if (mode !== 'recap' || hasLoadedAllNotes) {
-      setIsLoadingRecapNotes(false);
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoadingRecapNotes(true);
-
-    void ensureAllNotesLoaded()
-      .catch((error) => {
-        console.warn('Failed to hydrate full notes archive for recap:', error);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingRecapNotes(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [ensureAllNotesLoaded, hasLoadedAllNotes, mode]);
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'test') {
@@ -666,18 +631,12 @@ export default function NotesIndexScreen() {
                 ) : null}
 
                 {mode === 'recap' && shouldRenderRecap ? (
-                  isLoadingRecapNotes || !hasLoadedAllNotes ? (
-                    <View style={[styles.center, styles.modeContentFill]}>
-                      <ActivityIndicator size="large" color={colors.primary} />
-                    </View>
-                  ) : (
                   <NotesRecapView
                     notes={notes}
                     bottomInset={insets.bottom}
                     isVisible
                     suspendPhysics={isRecapPhysicsSuspended}
                   />
-                  )
                 ) : null}
               </View>
             </GestureDetector>

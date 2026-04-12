@@ -158,11 +158,21 @@ jest.mock('../hooks/useCaptureFlow', () => ({
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
-    hasLoadedAllNotes: true,
     notes: [],
-    loadNextNotesPage: jest.fn(async () => []),
     refreshNotes: jest.fn(async () => undefined),
     createNote: jest.fn(async () => undefined),
+    initialLoadComplete: true,
+  }),
+}));
+
+jest.mock('../hooks/app/useHomeFeedPagination', () => ({
+  useHomeFeedPagination: () => ({
+    items: [],
+    hasMore: false,
+    isLoading: false,
+    isLoadingMore: false,
+    loadNextPage: jest.fn(async () => []),
+    ensureTargetLoaded: jest.fn(async () => -1),
   }),
 }));
 

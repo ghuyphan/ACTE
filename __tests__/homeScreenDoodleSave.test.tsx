@@ -220,13 +220,28 @@ jest.mock('../hooks/useCaptureFlow', () => ({
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,
-    hasLoadedAllNotes: mockHasLoadedAllNotes,
-    noteCount: mockNoteCount ?? mockNotes.length,
     notes: mockNotes,
-    loadNextNotesPage: jest.fn(async () => mockNotes),
     refreshNotes: mockRefreshNotes,
     createNote: mockCreateNote,
+    initialLoadComplete: true,
   }),
+}));
+
+jest.mock('../hooks/app/useHomeFeedPagination', () => ({
+  useHomeFeedPagination: () => {
+    const items = mockBuildHomeFeedItems();
+    const hasMore = (mockNoteCount ?? mockNotes.length) > mockNotes.length;
+    return {
+      items,
+      hasMore,
+      isLoading: false,
+      isLoadingMore: false,
+      loadNextPage: jest.fn(async () => items),
+      ensureTargetLoaded: jest.fn(async (target: { id: string; kind: 'note' | 'shared-post' }) =>
+        items.findIndex((item) => item.kind === target.kind && item.id === target.id)
+      ),
+    };
+  },
 }));
 
 jest.mock('../hooks/useSubscription', () => ({

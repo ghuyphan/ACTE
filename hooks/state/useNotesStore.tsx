@@ -8,9 +8,8 @@ import {
   createNote as dbCreate,
   deleteAllNotes as dbDeleteAll,
   deleteNote as dbDelete,
-  getNotesPageForScope,
   getAllNotesForScope,
-  getNoteStatsForScope,
+  getNotesPageForScope,
   getNoteById as dbGetById,
   Note,
   NoteUpdates,
@@ -41,15 +40,10 @@ interface NotesStoreValue {
   notes: Note[];
   loading: boolean;
   initialLoadComplete: boolean;
-  hasLoadedAllNotes: boolean;
-  noteCount: number;
-  photoNoteCount: number;
-  loadNextNotesPage: () => Promise<Note[]>;
   refreshNotes: (
     showLoading?: boolean,
-    options?: { updateWidget?: boolean; syncGeofences?: boolean; loadFull?: boolean }
-  ) => Promise<Note[]>;
-  ensureAllNotesLoaded: () => Promise<Note[]>;
+    options?: { updateWidget?: boolean; syncGeofences?: boolean }
+  ) => Promise<void>;
   createNote: (input: CreateNoteInput) => Promise<Note>;
   updateNote: (id: string, updates: NoteUpdates) => Promise<void>;
   toggleFavorite: (id: string) => Promise<boolean>;
@@ -62,35 +56,8 @@ interface NotesStoreValue {
 const NotesStoreContext = createContext<NotesStoreValue | undefined>(undefined);
 const INITIAL_NOTES_BOOTSTRAP_LIMIT = 24;
 
-function logNotesStoreDebug(event: string, payload: Record<string, unknown>) {
-  if (!__DEV__) {
-    return;
-  }
-
-  console.log(`[notes-store] ${event}`, payload);
-}
-
-interface NoteStats {
-  totalCount: number;
-  photoCount: number;
-}
-
 function resolveNotesScope(userUid: string | null | undefined) {
   return userUid ?? getActiveNotesScope() ?? LOCAL_NOTES_SCOPE;
-}
-
-function buildNoteStats(notes: Note[]): NoteStats {
-  let photoCount = 0;
-  for (const note of notes) {
-    if (note.type === 'photo') {
-      photoCount += 1;
-    }
-  }
-
-  return {
-    totalCount: notes.length,
-    photoCount,
-  };
 }
 
 function useNotesStoreValue(): NotesStoreValue {
@@ -98,54 +65,40 @@ function useNotesStoreValue(): NotesStoreValue {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-  const [hasLoadedAllNotes, setHasLoadedAllNotes] = useState(false);
-  const [noteCount, setNoteCount] = useState(0);
-  const [photoNoteCount, setPhotoNoteCount] = useState(0);
   const notesRef = useRef<Note[]>([]);
-  const hasLoadedAllNotesRef = useRef(false);
-  const noteStatsRef = useRef<NoteStats>({ totalCount: 0, photoCount: 0 });
   const activeScopeRef = useRef<string>(resolveNotesScope(user?.uid));
   const activeScopeRevisionRef = useRef(0);
   const refreshRequestIdRef = useRef(0);
-  const loadMorePromiseRef = useRef<Promise<Note[]> | null>(null);
 
   useEffect(() => {
     notesRef.current = notes;
   }, [notes]);
 
-  const scheduleWidgetUpdate = useCallback((
-    nextNotes?: Note[],
-    delay = 120,
-    options?: Pick<UpdateWidgetDataOptions, 'preferredNoteId'>
-  ) => {
-    scheduleWidgetDataUpdate(
-      {
-        notes: nextNotes,
-        includeLocationLookup: false,
-        preferredNoteId: options?.preferredNoteId ?? null,
-      },
-      {
-        debounceMs: delay,
-      }
-    );
-  }, []);
-
-  const commitNoteStats = useCallback((nextStats: NoteStats, nextHasLoadedAllNotes: boolean) => {
-    noteStatsRef.current = nextStats;
-    hasLoadedAllNotesRef.current = nextHasLoadedAllNotes;
-    setNoteCount(nextStats.totalCount);
-    setPhotoNoteCount(nextStats.photoCount);
-    setHasLoadedAllNotes(nextHasLoadedAllNotes);
-  }, []);
-
-  const commitNotes = useCallback(
+  const scheduleWidgetUpdate = useCallback(
     (
-      nextNotes: Note[],
+      nextNotes?: Note[],
+      delay = 120,
       options?: Pick<UpdateWidgetDataOptions, 'preferredNoteId'>
     ) => {
+      scheduleWidgetDataUpdate(
+        {
+          notes: nextNotes,
+          includeLocationLookup: false,
+          preferredNoteId: options?.preferredNoteId ?? null,
+        },
+        {
+          debounceMs: delay,
+        }
+      );
+    },
+    []
+  );
+
+  const commitNotes = useCallback(
+    (nextNotes: Note[], options?: Pick<UpdateWidgetDataOptions, 'preferredNoteId'>) => {
       notesRef.current = nextNotes;
       setNotes(nextNotes);
-      scheduleWidgetUpdate(hasLoadedAllNotesRef.current ? nextNotes : undefined, 120, options);
+      scheduleWidgetUpdate(nextNotes, 120, options);
     },
     [scheduleWidgetUpdate]
   );
@@ -191,172 +144,70 @@ function useNotesStoreValue(): NotesStoreValue {
     []
   );
 
-  const fetchNotesSnapshot = useCallback(async (
-    scope: string,
-    options?: { loadFull?: boolean; limit?: number }
-  ) => {
-    const shouldLoadFull = options?.loadFull ?? false;
+  const refreshNotes = useCallback(
+    async (
+      showLoading = true,
+      options?: { updateWidget?: boolean; scope?: string; syncGeofences?: boolean }
+    ) => {
+      const scope = options?.scope ?? activeScopeRef.current;
+      const requestId = ++refreshRequestIdRef.current;
 
-    if (shouldLoadFull) {
-      const nextNotes = await getAllNotesForScope(scope);
-      return {
-        notes: nextNotes,
-        stats: buildNoteStats(nextNotes),
-        hasLoadedAllNotes: true,
-      };
-    }
-
-    const limit = options?.limit ?? Math.max(INITIAL_NOTES_BOOTSTRAP_LIMIT, notesRef.current.length);
-    const [pagedNotes, stats] = await Promise.all([
-      getNotesPageForScope(scope, {
-        limit,
-      }),
-      getNoteStatsForScope(scope),
-    ]);
-    const inferredHasLoadedAllNotes =
-      pagedNotes.length < limit || stats.totalCount <= pagedNotes.length;
-    const effectiveStats = inferredHasLoadedAllNotes ? buildNoteStats(pagedNotes) : stats;
-    logNotesStoreDebug('fetchNotesSnapshot', {
-      scope,
-      limit,
-      returnedCount: pagedNotes.length,
-      reportedTotalCount: stats.totalCount,
-      effectiveTotalCount: effectiveStats.totalCount,
-      inferredHasLoadedAllNotes,
-      loadFull: shouldLoadFull,
-    });
-
-    return {
-      notes: pagedNotes,
-      stats: effectiveStats,
-      hasLoadedAllNotes: inferredHasLoadedAllNotes,
-    };
-  }, []);
-
-  const refreshNotes = useCallback(async (
-    showLoading = true,
-    options?: { updateWidget?: boolean; scope?: string; syncGeofences?: boolean; loadFull?: boolean }
-  ) => {
-    const scope = options?.scope ?? activeScopeRef.current;
-    const requestId = ++refreshRequestIdRef.current;
-    try {
-      if (showLoading) {
-        setLoading(true);
-      }
-
-      const snapshot = await fetchNotesSnapshot(scope, {
-        loadFull: options?.loadFull,
-      });
-      const nextNotes = snapshot.notes;
-
-      if (refreshRequestIdRef.current !== requestId || activeScopeRef.current !== scope) {
-        return nextNotes;
-      }
-
-      notesRef.current = nextNotes;
-      setNotes(nextNotes);
-      commitNoteStats(snapshot.stats, snapshot.hasLoadedAllNotes);
-      setInitialLoadComplete(true);
-      logNotesStoreDebug('refreshNotes:committed', {
-        scope,
-        showLoading,
-        returnedCount: nextNotes.length,
-        totalCount: snapshot.stats.totalCount,
-        hasLoadedAllNotes: snapshot.hasLoadedAllNotes,
-      });
-
-      if (options?.updateWidget) {
-        scheduleWidgetUpdate(snapshot.hasLoadedAllNotes ? nextNotes : undefined);
-      }
-      if (options?.syncGeofences) {
-        syncGeofencesForNotes(
-          'note refresh',
-          snapshot.hasLoadedAllNotes ? nextNotes : undefined
-        );
-      }
-
-      return nextNotes;
-    } catch (error) {
-      console.error('Failed to load notes:', error);
-      if (showLoading && refreshRequestIdRef.current === requestId) {
-        setInitialLoadComplete(true);
-      }
-    } finally {
-      if (showLoading && refreshRequestIdRef.current === requestId) {
-        setLoading(false);
-      }
-    }
-    return notesRef.current;
-  }, [commitNoteStats, fetchNotesSnapshot, scheduleWidgetUpdate, syncGeofencesForNotes]);
-
-  const loadNextNotesPage = useCallback(async () => {
-    logNotesStoreDebug('loadNextNotesPage:requested', {
-      scope: activeScopeRef.current,
-      currentLoadedCount: notesRef.current.length,
-      currentTotalCount: noteStatsRef.current.totalCount,
-      hasLoadedAllNotes: hasLoadedAllNotesRef.current,
-    });
-
-    if (hasLoadedAllNotesRef.current) {
-      return notesRef.current;
-    }
-
-    if (loadMorePromiseRef.current) {
-      return loadMorePromiseRef.current;
-    }
-
-    const scope = activeScopeRef.current;
-    const scopeRevision = activeScopeRevisionRef.current;
-    const requestId = ++refreshRequestIdRef.current;
-    const nextLimit = notesRef.current.length + INITIAL_NOTES_BOOTSTRAP_LIMIT;
-
-    const loadPromise = fetchNotesSnapshot(scope, { limit: nextLimit })
-      .then((snapshot) => {
-        if (
-          refreshRequestIdRef.current !== requestId ||
-          !isCurrentScope(scope, scopeRevision)
-        ) {
-          return notesRef.current;
+      try {
+        if (showLoading) {
+          setLoading(true);
         }
 
-        notesRef.current = snapshot.notes;
-        setNotes(snapshot.notes);
-        commitNoteStats(snapshot.stats, snapshot.hasLoadedAllNotes);
-        logNotesStoreDebug('loadNextNotesPage:committed', {
-          scope,
-          returnedCount: snapshot.notes.length,
-          totalCount: snapshot.stats.totalCount,
-          hasLoadedAllNotes: snapshot.hasLoadedAllNotes,
-        });
-        return snapshot.notes;
-      })
-      .catch((error) => {
-        console.warn('Failed to load next notes page:', error);
-        return notesRef.current;
-      })
-      .finally(() => {
-        if (loadMorePromiseRef.current === loadPromise) {
-          loadMorePromiseRef.current = null;
+        if (showLoading) {
+          const stagedNotes = await getNotesPageForScope(scope, {
+            limit: INITIAL_NOTES_BOOTSTRAP_LIMIT,
+          });
+          if (refreshRequestIdRef.current !== requestId || activeScopeRef.current !== scope) {
+            return;
+          }
+
+          notesRef.current = stagedNotes;
+          setNotes(stagedNotes);
+          setInitialLoadComplete(true);
+          setLoading(false);
         }
-      });
 
-    loadMorePromiseRef.current = loadPromise;
-    return loadPromise;
-  }, [commitNoteStats, fetchNotesSnapshot, isCurrentScope]);
+        const allNotes = await getAllNotesForScope(scope);
+        if (refreshRequestIdRef.current !== requestId || activeScopeRef.current !== scope) {
+          return;
+        }
 
-  const ensureAllNotesLoaded = useCallback(async () => {
-    if (hasLoadedAllNotesRef.current) {
-      return notesRef.current;
-    }
-
-    return refreshNotes(false, { loadFull: true });
-  }, [refreshNotes]);
+        notesRef.current = allNotes;
+        setNotes(allNotes);
+        if (options?.updateWidget) {
+          scheduleWidgetUpdate(allNotes);
+        }
+        if (options?.syncGeofences) {
+          syncGeofencesForNotes('note refresh', allNotes);
+        }
+      } catch (error) {
+        console.error('Failed to load notes:', error);
+        if (showLoading && refreshRequestIdRef.current === requestId) {
+          setInitialLoadComplete(true);
+        }
+      } finally {
+        if (showLoading && refreshRequestIdRef.current === requestId) {
+          setLoading(false);
+        }
+      }
+    },
+    [scheduleWidgetUpdate, syncGeofencesForNotes]
+  );
 
   useEffect(() => {
+    if (!authReady) {
+      return;
+    }
+
     let cancelled = false;
     let cleanupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
     let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
-    (async () => {
+
+    void (async () => {
       const nextScope = resolveNotesScope(user?.uid);
       applyActiveScope(nextScope);
       await refreshNotes(true, {
@@ -384,7 +235,7 @@ function useNotesStoreValue(): NotesStoreValue {
         clearTimeout(cleanupTimeout);
       }
     };
-  }, [applyActiveScope, refreshNotes, user?.uid]);
+  }, [applyActiveScope, authReady, refreshNotes, user?.uid]);
 
   useEffect(() => {
     if (!authReady) {
@@ -399,7 +250,6 @@ function useNotesStoreValue(): NotesStoreValue {
     applyActiveScope(nextScope);
     notesRef.current = [];
     setNotes([]);
-    commitNoteStats({ totalCount: 0, photoCount: 0 }, false);
     setLoading(true);
     void refreshNotes(true, {
       scope: nextScope,
@@ -424,17 +274,9 @@ function useNotesStoreValue(): NotesStoreValue {
       if (!isCurrentScope(scope, scopeRevision)) {
         return note;
       }
-      const nextNotes = hasLoadedAllNotesRef.current
-        ? prependNote(notesRef.current, note)
-        : prependNote(notesRef.current, note).slice(0, INITIAL_NOTES_BOOTSTRAP_LIMIT);
+
+      const nextNotes = prependNote(notesRef.current, note);
       commitNotes(nextNotes, { preferredNoteId: note.id });
-      commitNoteStats(
-        {
-          totalCount: noteStatsRef.current.totalCount + 1,
-          photoCount: noteStatsRef.current.photoCount + (note.type === 'photo' ? 1 : 0),
-        },
-        hasLoadedAllNotesRef.current
-      );
 
       void skipImmediateReminderForNewNote(note.id).catch((error) => {
         console.warn('Failed to suppress immediate reminder for new note:', error);
@@ -462,6 +304,7 @@ function useNotesStoreValue(): NotesStoreValue {
       if (!isCurrentScope(scope, scopeRevision)) {
         return;
       }
+
       const nextNotes = updateNoteInCollection(notesRef.current, id, updates);
       commitNotes(nextNotes);
       syncGeofencesForNotes('note update', nextNotes);
@@ -488,6 +331,7 @@ function useNotesStoreValue(): NotesStoreValue {
       if (!isCurrentScope(scope, scopeRevision)) {
         return newValue;
       }
+
       const nextNotes = replaceNoteInCollection(notesRef.current, id, (note) => ({
         ...note,
         isFavorite: newValue,
@@ -545,20 +389,9 @@ function useNotesStoreValue(): NotesStoreValue {
       if (!isCurrentScope(scope, scopeRevision)) {
         return;
       }
+
       const nextNotes = removeNoteFromCollection(notesRef.current, id);
       commitNotes(nextNotes);
-      const nextTotalCount = Math.max(0, noteStatsRef.current.totalCount - (note ? 1 : 0));
-      const nextPhotoCount = Math.max(
-        0,
-        noteStatsRef.current.photoCount - (note?.type === 'photo' ? 1 : 0)
-      );
-      commitNoteStats(
-        {
-          totalCount: nextTotalCount,
-          photoCount: nextPhotoCount,
-        },
-        hasLoadedAllNotesRef.current || nextNotes.length >= nextTotalCount
-      );
 
       await deletePhotoFileIfPresent(note);
       syncGeofencesForNotes('note deletion', nextNotes);
@@ -581,8 +414,8 @@ function useNotesStoreValue(): NotesStoreValue {
     if (!isCurrentScope(scope, scopeRevision)) {
       return;
     }
+
     commitNotes([]);
-    commitNoteStats({ totalCount: 0, photoCount: 0 }, true);
 
     for (const note of allNotes) {
       await deletePhotoFileIfPresent(note);
@@ -603,12 +436,7 @@ function useNotesStoreValue(): NotesStoreValue {
     notes,
     loading,
     initialLoadComplete,
-    hasLoadedAllNotes,
-    noteCount,
-    photoNoteCount,
-    loadNextNotesPage,
     refreshNotes,
-    ensureAllNotesLoaded,
     createNote,
     updateNote,
     toggleFavorite,

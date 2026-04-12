@@ -1,6 +1,4 @@
 import { environment, presentationDetents, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
-import { Host as ComposeHost, Switch as ComposeSwitch } from '@expo/ui/jetpack-compose';
-import { Toggle } from '@expo/ui/swift-ui';
 import { Ionicons } from '@expo/vector-icons';
 import { usePreventRemove } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -119,45 +117,31 @@ function isValidEmail(value: string) {
   return EMAIL_REGEX.test(value);
 }
 
-function NativeConsentControl({
+function ConsentCheckbox({
   value,
-  onChange,
   disabled,
   testID,
 }: {
   value: boolean;
-  onChange: (nextValue: boolean) => void;
   disabled?: boolean;
   testID: string;
 }) {
   const { colors } = useTheme();
 
-  if (Platform.OS === 'android') {
-    return (
-      <View testID={testID} pointerEvents={disabled ? 'none' : 'auto'} style={disabled ? { opacity: 0.5 } : undefined}>
-        <ComposeHost matchContents>
-          <ComposeSwitch
-            value={value}
-            variant="checkbox"
-            onValueChange={(nextValue) => {
-              if (!disabled) {
-                onChange(nextValue);
-              }
-            }}
-            elementColors={{
-              checkedColor: colors.primary,
-              uncheckedColor: colors.secondaryText,
-              checkmarkColor: colors.background,
-            }}
-          />
-        </ComposeHost>
-      </View>
-    );
-  }
-
   return (
-    <View testID={testID}>
-      <Toggle isOn={value} onIsOnChange={onChange} />
+    <View
+      pointerEvents="none"
+      style={[
+        styles.checkboxBase,
+        {
+          backgroundColor: value ? colors.primary : colors.surface,
+          borderColor: value ? colors.primary : colors.border,
+          opacity: disabled ? 0.55 : 1,
+        },
+      ]}
+      testID={testID}
+    >
+      {value ? <Ionicons color={colors.background} name="checkmark" size={14} /> : null}
     </View>
   );
 }
@@ -668,9 +652,8 @@ export default function LoginScreen() {
             testID="auth-privacy-consent"
           >
             <View style={styles.legalConsentControl}>
-              <NativeConsentControl
+              <ConsentCheckbox
                 value={hasAcceptedPrivacyPolicy}
-                onChange={setHasAcceptedPrivacyPolicy}
                 disabled={activeAction === 'register'}
                 testID="auth-privacy-checkbox"
               />
@@ -950,9 +933,8 @@ export default function LoginScreen() {
             testID="auth-landing-policy-consent"
           >
             <View style={styles.landingConsentControlSlot}>
-              <NativeConsentControl
+              <ConsentCheckbox
                 value={hasAcceptedLandingPolicy}
-                onChange={setHasAcceptedLandingPolicy}
                 testID="auth-landing-policy-checkbox"
               />
             </View>
@@ -1205,6 +1187,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  checkboxBase: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   landingConsentText: {
     ...Typography.body,
     fontSize: 13,
@@ -1223,6 +1213,8 @@ const styles = StyleSheet.create({
   },
   legalConsentControl: {
     paddingTop: 2,
+    minWidth: 22,
+    alignItems: 'center',
   },
   legalConsentText: {
     ...Typography.body,
