@@ -143,7 +143,20 @@ const mockResetPasswordForEmail = jest.fn(async (_email?: string, _options?: unk
 });
 const mockSupabaseSignOut = jest.fn(async () => ({ error: null }));
 const mockInvokeFunction = jest.fn<
-  Promise<{ data: { success: boolean } | null; error: { message: string } | null }>,
+  Promise<{
+    data: { success: boolean } | null;
+    error:
+      | {
+          message: string;
+          context?: {
+            clone?: () => {
+              json?: () => Promise<unknown>;
+              text?: () => Promise<string>;
+            };
+          };
+        }
+      | null;
+  }>,
   [string, unknown]
 >(async () => ({
   data: { success: true },
@@ -582,5 +595,67 @@ describe('useAuth', () => {
       message: 'For your security, sign out and sign back in before deleting this account.',
     });
     expect(mockPurgeLocalAccountScope).not.toHaveBeenCalled();
+  });
+
+  it('maps generic edge function transport errors to a retry message', async () => {
+    mockAuthState.initialSession = buildSession();
+    mockInvokeFunction.mockResolvedValue({
+      data: null,
+      error: {
+        message: 'Edge Function returned a non-2xx status code',
+      },
+    });
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+
+    let result!: { status: string; message?: string; shouldOpenHelpLink?: boolean };
+    await act(async () => {
+      result = await hook.result.current.deleteAccount();
+    });
+
+    expect(result).toEqual({
+      status: 'error',
+      message: 'We could not delete your account right now. Please try again in a moment.',
+    });
+  });
+
+  it('reads the edge function response body before mapping delete account errors', async () => {
+    mockAuthState.initialSession = buildSession();
+    mockInvokeFunction.mockResolvedValue({
+      data: null,
+      error: {
+        message: 'Edge Function returned a non-2xx status code',
+        context: {
+          clone: () => ({
+            json: async () => ({
+              error: 'Delete account function is not configured on the server.',
+            }),
+          }),
+        },
+      },
+    });
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+
+    let result!: { status: string; message?: string; shouldOpenHelpLink?: boolean };
+    await act(async () => {
+      result = await hook.result.current.deleteAccount();
+    });
+
+    expect(result).toEqual({
+      status: 'error',
+      message: 'Account deletion is currently unavailable. Please contact support.',
+      shouldOpenHelpLink: true,
+    });
   });
 });

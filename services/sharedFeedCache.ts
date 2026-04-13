@@ -2,6 +2,7 @@ import * as Linking from 'expo-linking';
 import type { FriendConnection, FriendInvite, SharedFeedSnapshot, SharedPost } from './sharedFeedService';
 import { getDB, withDatabaseTransaction } from './database';
 import { clearStoredInviteToken, getStoredInviteToken } from './inviteTokenStorage';
+import { hasStoredStickerPayload } from './noteStickers';
 
 interface FriendRow {
   friend_uid: string;
@@ -91,7 +92,7 @@ function rowToSharedPost(row: SharedPostRow): SharedPost {
     pairedVideoPath: row.paired_video_path,
     pairedVideoLocalUri: row.paired_video_local_uri,
     doodleStrokesJson: row.doodle_strokes_json,
-    hasStickers: Boolean(row.sticker_placements_json),
+    hasStickers: hasStoredStickerPayload(row.sticker_placements_json),
     stickerPlacementsJson: row.sticker_placements_json,
     noteColor: row.note_color,
     placeName: row.place_name,

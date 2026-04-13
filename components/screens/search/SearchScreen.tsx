@@ -24,20 +24,14 @@ import { useNotesStore } from '../../../hooks/useNotes';
 import { Note } from '../../../services/database';
 import { getTextNoteCardGradient } from '../../../services/noteAppearance';
 import { getNotePhotoUri } from '../../../services/photoStorage';
-import { formatNoteTextWithEmoji } from '../../../services/noteTextPresentation';
+import { getNotePreviewText } from '../../../services/noteTextPresentation';
 import { formatDate } from '../../../utils/dateUtils';
 
 function getPreviewText(note: Note, photoLabel: string, emptyLabel: string) {
-  if (note.type === 'photo') {
-    const caption = note.caption?.trim();
-    return caption?.length ? caption : photoLabel;
-  }
-
-  const normalized = note.content.trim();
-  if (!normalized) {
-    return emptyLabel;
-  }
-  return formatNoteTextWithEmoji(normalized, note.moodEmoji);
+  return getNotePreviewText(note, {
+    photoLabel,
+    emptyLabel,
+  });
 }
 
 function sortNotesByCreatedAt(left: Note, right: Note) {

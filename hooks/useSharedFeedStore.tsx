@@ -31,6 +31,11 @@ import { getNotePairedVideoUri } from '../services/livePhotoStorage';
 import { normalizeSavedTextNoteColor } from '../services/noteAppearance';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import { getNotePhotoUri } from '../services/photoStorage';
+import {
+  downloadPairedVideoFromStorage,
+  downloadPhotoFromStorage,
+  SHARED_POST_MEDIA_BUCKET,
+} from '../services/remoteMedia';
 import { scheduleWidgetDataUpdate } from '../services/widgetService';
 import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
@@ -181,6 +186,113 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     );
   }, []);
 
+  const hydrateSharedPostMedia = useCallback(
+    async (
+      userUid: string,
+      sessionId: number,
+      source: 'live' | 'cache',
+      updatedAt: string | null,
+      posts: SharedPost[]
+    ) => {
+      if (!isCurrentSharedFeedSession(sessionId, userUid) || posts.length === 0) {
+        return;
+      }
+
+      const hydratedPosts = await Promise.all(
+        posts.map(async (post) => {
+          if (post.type !== 'photo') {
+            return post;
+          }
+
+          const nextPhotoLocalUri =
+            post.photoLocalUri ??
+            (post.photoPath
+              ? await downloadPhotoFromStorage(
+                  SHARED_POST_MEDIA_BUCKET,
+                  post.photoPath,
+                  post.id
+                ).catch(() => null)
+              : null);
+
+          const nextPairedVideoLocalUri =
+            post.pairedVideoLocalUri ??
+            (post.isLivePhoto && post.pairedVideoPath
+              ? await downloadPairedVideoFromStorage(
+                  SHARED_POST_MEDIA_BUCKET,
+                  post.pairedVideoPath,
+                  `${post.id}-motion`
+                ).catch(() => null)
+              : null);
+
+          if (
+            nextPhotoLocalUri === post.photoLocalUri &&
+            nextPairedVideoLocalUri === (post.pairedVideoLocalUri ?? null)
+          ) {
+            return post;
+          }
+
+          return {
+            ...post,
+            photoLocalUri: nextPhotoLocalUri,
+            pairedVideoLocalUri: nextPairedVideoLocalUri,
+          };
+        })
+      );
+
+      if (!isCurrentSharedFeedSession(sessionId, userUid)) {
+        return;
+      }
+
+      const hydratedPostMap = new Map(hydratedPosts.map((post) => [post.id, post]));
+      let didChange = false;
+
+      const mergedSharedPosts = sharedPostsRef.current.map((post) => {
+        const hydratedPost = hydratedPostMap.get(post.id);
+        if (!hydratedPost) {
+          return post;
+        }
+
+        const nextPhotoLocalUri = hydratedPost.photoLocalUri ?? post.photoLocalUri ?? null;
+        const nextPairedVideoLocalUri =
+          hydratedPost.pairedVideoLocalUri ?? post.pairedVideoLocalUri ?? null;
+
+        if (
+          nextPhotoLocalUri === post.photoLocalUri &&
+          nextPairedVideoLocalUri === (post.pairedVideoLocalUri ?? null)
+        ) {
+          return post;
+        }
+
+        didChange = true;
+        return {
+          ...post,
+          photoLocalUri: nextPhotoLocalUri,
+          pairedVideoLocalUri: nextPairedVideoLocalUri,
+        };
+      });
+
+      if (!didChange) {
+        return;
+      }
+
+      const nextSnapshot = {
+        friends: friendsRef.current,
+        sharedPosts: mergedSharedPosts,
+        activeInvite: activeInviteRef.current,
+      };
+
+      commitSnapshot(nextSnapshot, source, updatedAt);
+      await persistSnapshot(userUid, nextSnapshot);
+      scheduleSharedFeedWidgetRefresh();
+    },
+    [
+      commitSnapshot,
+      isCurrentSharedFeedSession,
+      persistSnapshot,
+      scheduleSharedFeedWidgetRefresh,
+    ]
+  );
+
   const commitSnapshotAndPersist = useCallback(
     (
       userUid: string,
@@ -207,8 +319,15 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     }
     applySnapshot(snapshot, 'cache', snapshot.lastUpdatedAt);
     setReady(true);
+    void hydrateSharedPostMedia(
+      userUid,
+      sessionId,
+      'cache',
+      snapshot.lastUpdatedAt,
+      snapshot.sharedPosts
+    );
     return true;
-  }, [applySnapshot, isCurrentSharedFeedSession]);
+  }, [applySnapshot, hydrateSharedPostMedia, isCurrentSharedFeedSession]);
 
   const refreshAll = useCallback(async () => {
     if (!enabled || !user) {
@@ -242,14 +361,23 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       if (!isCurrentSharedFeedSession(sessionId, userUid)) {
         return;
       }
-      commitSnapshotAndPersist(userUid, snapshot, new Date().toISOString());
+      const updatedAt = new Date().toISOString();
+      commitSnapshotAndPersist(userUid, snapshot, updatedAt);
+      void hydrateSharedPostMedia(userUid, sessionId, 'live', updatedAt, snapshot.sharedPosts);
     } finally {
       if (isCurrentSharedFeedSession(sessionId, userUid)) {
         setLoading(false);
         setReady(true);
       }
     }
-  }, [commitSnapshotAndPersist, enabled, isCurrentSharedFeedSession, isOnline, user]);
+  }, [
+    commitSnapshotAndPersist,
+    enabled,
+    hydrateSharedPostMedia,
+    isCurrentSharedFeedSession,
+    isOnline,
+    user,
+  ]);
 
   const resolveOwnedPostIdsForNote = useCallback(
     async (activeUser: typeof user, noteId: string) => {
@@ -336,7 +464,15 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== user.uid) {
           return;
         }
-        commitSnapshotAndPersist(user.uid, snapshot, new Date().toISOString());
+        const updatedAt = new Date().toISOString();
+        commitSnapshotAndPersist(user.uid, snapshot, updatedAt);
+        void hydrateSharedPostMedia(
+          user.uid,
+          sessionId,
+          'live',
+          updatedAt,
+          snapshot.sharedPosts
+        );
         setLoading(false);
         setReady(true);
       },

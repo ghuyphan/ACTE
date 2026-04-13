@@ -1,8 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useMemo, useRef } from 'react';
+import type { FeedTarget } from './feedTargets';
 
-export type FeedFocusTarget =
-  | { kind: 'note'; id: string }
-  | { kind: 'shared-post'; id: string };
+export type FeedFocusTarget = FeedTarget;
 
 interface FeedFocusContextValue {
   requestFeedFocus: (target: FeedFocusTarget) => void;

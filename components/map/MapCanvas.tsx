@@ -111,6 +111,11 @@ interface MarkerContentProps {
   onImageLoadEnd?: (key: string) => void;
 }
 
+const ANDROID_MARKER_REFRESH_MS = {
+  reducedMotion: 120,
+  standard: 320,
+} as const;
+
 function getClusterSize(pointCount: number) {
   if (pointCount < 10) {
     return 34;
@@ -742,13 +747,14 @@ function MapCanvas({
     androidMarkerRefreshTimerRef.current = setTimeout(() => {
       setAndroidShouldTrackMarkerViews(false);
       androidMarkerRefreshTimerRef.current = null;
-    }, reduceMotionEnabled ? 120 : 320);
+    }, reduceMotionEnabled ? ANDROID_MARKER_REFRESH_MS.reducedMotion : ANDROID_MARKER_REFRESH_MS.standard);
   }, [
     currentZoom,
     friendMarkers,
     isAndroid,
     isDark,
     markerNodes,
+    selectedNote?.id,
     preferLiteMarkers,
     reduceMotionEnabled,
     selectedFriendPostId,
@@ -801,11 +807,21 @@ function MapCanvas({
           node.groupId === selectedGroup!.id;
         const markerZIndex = showSelectedCallout ? 30 : isSelected ? 20 : node.isCluster ? 5 : 10;
         const imageTrackingKey = photoUri ? `${key}::${photoUri}` : null;
+        const markerRenderKey =
+          isAndroid
+            ? `${key}-${
+                showSelectedCallout
+                  ? `callout-${selectedNote?.id ?? 'none'}`
+                  : isSelected
+                    ? `selected-${noteId ?? node.groupId ?? key}`
+                    : 'idle'
+              }`
+            : key;
 
         return (
           preferLiteMarkers && !node.isCluster ? (
             <Marker
-              key={key}
+              key={markerRenderKey}
               testID={testID}
               coordinate={coordinate}
               pinColor={isSelected ? palette.focus : markerColor}
@@ -820,16 +836,15 @@ function MapCanvas({
             />
           ) : (
             <Marker
-              key={key}
+              key={markerRenderKey}
               testID={testID}
               coordinate={coordinate}
               anchor={showSelectedCallout ? selectedCalloutAnchor : { x: 0.5, y: 0.5 }}
               zIndex={markerZIndex}
               tracksViewChanges={
-                showSelectedCallout ||
-                isSelected ||
                 pulseActive ||
                 reduceMotionEnabled ||
+                (!isAndroid && (showSelectedCallout || isSelected)) ||
                 (isAndroid &&
                   (androidShouldTrackMarkerViews ||
                     (imageTrackingKey ? pendingMarkerImageKeys.has(imageTrackingKey) : false)))
@@ -906,11 +921,14 @@ function MapCanvas({
         const friendImageTrackingKey = post.authorPhotoURLSnapshot?.trim()
           ? `friend-${post.id}::${post.authorPhotoURLSnapshot.trim()}`
           : null;
+        const friendMarkerKey = isAndroid
+          ? `friend-${post.id}-${isSelected ? 'selected' : 'idle'}`
+          : `friend-${post.id}`;
 
         return (
           preferLiteMarkers ? (
             <Marker
-              key={`friend-${post.id}`}
+              key={friendMarkerKey}
               testID={`friend-marker-${post.id}`}
               coordinate={{ latitude: post.latitude, longitude: post.longitude }}
               pinColor={isSelected ? palette.friend : palette.focus}
@@ -921,13 +939,13 @@ function MapCanvas({
             />
           ) : (
             <Marker
-              key={`friend-${post.id}`}
+              key={friendMarkerKey}
               testID={`friend-marker-${post.id}`}
               coordinate={{ latitude: post.latitude, longitude: post.longitude }}
               anchor={{ x: 0.5, y: 0.5 }}
               tracksViewChanges={
-                isSelected ||
                 reduceMotionEnabled ||
+                (!isAndroid && isSelected) ||
                 (isAndroid &&
                   (androidShouldTrackMarkerViews ||
                     (friendImageTrackingKey

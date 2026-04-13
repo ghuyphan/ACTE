@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
+import type { ReactNode } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, useWindowDimensions, View, ViewStyle } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { Layout, Radii, Typography } from '../../constants/theme';
@@ -52,6 +53,52 @@ interface SharedPostMemoryCardProps {
   showSharedBadge?: boolean;
 }
 
+function MetadataContainer({
+  accessibilityLabel,
+  children,
+  onPress,
+}: {
+  accessibilityLabel?: string;
+  children: ReactNode;
+  onPress?: () => void;
+}) {
+  const pill = <InfoPill style={styles.metadataPill}>{children}</InfoPill>;
+
+  if (!onPress) {
+    return pill;
+  }
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.metadataPressable,
+        pressed ? styles.metadataPressablePressed : null,
+      ]}
+    >
+      {pill}
+    </Pressable>
+  );
+}
+
+function MetadataAction({
+  color,
+  label,
+}: {
+  color: string;
+  label: string;
+}) {
+  return (
+    <View style={styles.metadataPillAction}>
+      <Text style={[styles.metadataActionText, { color }]}>{label}</Text>
+      <Ionicons name="chevron-forward" size={14} color={color} />
+    </View>
+  );
+}
+
 export function NoteMemoryCard({
   note,
   colors,
@@ -68,6 +115,32 @@ export function NoteMemoryCard({
   const dateStr = formatNoteTimestamp(note.createdAt, 'card', now);
   const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
   const locationLabel = note.locationName ?? t('home.unknownLocation', 'Unknown location');
+  const noteMetadata = (
+    <View style={styles.metadataPillContent}>
+      <View style={styles.metadataPillMain}>
+        <View style={styles.metadataLocationGroup}>
+          <Ionicons name="location" size={14} color={colors.secondaryText} />
+          <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
+            {locationLabel}
+          </Text>
+        </View>
+        <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
+        <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
+        {note.hasDoodle ? (
+          <>
+            <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
+            <Ionicons name="brush-outline" size={14} color={colors.secondaryText} />
+          </>
+        ) : null}
+      </View>
+      {onPress ? (
+        <MetadataAction
+          color={colors.primary}
+          label={t('home.openDetails', 'Details')}
+        />
+      ) : null}
+    </View>
+  );
 
   const content = (
     <View style={[styles.cardRoot, containerStyle, { width: resolvedCardSize }]}>
@@ -125,69 +198,19 @@ export function NoteMemoryCard({
       </View>
 
       <View style={[styles.metaContainer, { width: resolvedCardSize }]}>
-        {onPress ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('home.openNoteDetailsA11y', {
-              defaultValue: 'Open note details for {{location}}',
-              location: locationLabel,
-            })}
-            hitSlop={8}
-            onPress={onPress}
-            style={({ pressed }) => [
-              styles.metadataPressable,
-              pressed ? styles.metadataPressablePressed : null,
-            ]}
-          >
-            <InfoPill style={styles.metadataPill}>
-              <View style={styles.metadataPillContent}>
-                <View style={styles.metadataPillMain}>
-                  <View style={styles.metadataLocationGroup}>
-                    <Ionicons name="location" size={14} color={colors.secondaryText} />
-                    <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
-                      {locationLabel}
-                    </Text>
-                  </View>
-                  <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-                  <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
-                  {note.hasDoodle ? (
-                    <>
-                      <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-                      <Ionicons name="brush-outline" size={14} color={colors.secondaryText} />
-                    </>
-                  ) : null}
-                </View>
-                <View style={styles.metadataPillAction}>
-                  <Text style={[styles.metadataActionText, { color: colors.primary }]}>
-                    {t('home.openDetails', 'Details')}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.primary} />
-                </View>
-              </View>
-            </InfoPill>
-          </Pressable>
-        ) : (
-            <InfoPill style={styles.metadataPill}>
-              <View style={styles.metadataPillContent}>
-                <View style={styles.metadataPillMain}>
-                <View style={styles.metadataLocationGroup}>
-                  <Ionicons name="location" size={14} color={colors.secondaryText} />
-                  <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
-                    {locationLabel}
-                  </Text>
-                </View>
-                <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-                <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
-                {note.hasDoodle ? (
-                  <>
-                    <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-                    <Ionicons name="brush-outline" size={14} color={colors.secondaryText} />
-                  </>
-                ) : null}
-              </View>
-            </View>
-          </InfoPill>
-        )}
+        <MetadataContainer
+          accessibilityLabel={
+            onPress
+              ? t('home.openNoteDetailsA11y', {
+                  defaultValue: 'Open note details for {{location}}',
+                  location: locationLabel,
+                })
+              : undefined
+          }
+          onPress={onPress}
+        >
+          {noteMetadata}
+        </MetadataContainer>
       </View>
     </View>
   );
@@ -211,6 +234,41 @@ export function SharedPostMemoryCard({
   const dateStr = formatNoteTimestamp(post.createdAt, 'card', now);
   const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
   const placeLabel = post.placeName ?? t('shared.sharedNow', 'Shared now');
+  const authorAvatar = post.authorPhotoURLSnapshot ? (
+    <Image
+      source={{ uri: post.authorPhotoURLSnapshot }}
+      style={styles.sharedAvatarImage}
+      contentFit="cover"
+    />
+  ) : (
+    <View style={[styles.sharedAvatarFallback, { backgroundColor: colors.card }]}>
+      <Text style={[styles.sharedAvatarLabel, { color: colors.primary }]}>
+        {authorLabel.trim().charAt(0).toUpperCase()}
+      </Text>
+    </View>
+  );
+  const sharedMetadata = (
+    <View style={styles.metadataPillContent}>
+      <View style={styles.metadataPillMain}>
+        {authorAvatar}
+        <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
+        <View style={styles.metadataLocationGroup}>
+          <Ionicons name="location" size={14} color={colors.secondaryText} />
+          <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
+            {placeLabel}
+          </Text>
+        </View>
+        <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
+        <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
+      </View>
+      {onPress ? (
+        <MetadataAction
+          color={colors.primary}
+          label={t('home.openDetails', 'Details')}
+        />
+      ) : null}
+    </View>
+  );
 
   const content = (
     <View style={[styles.cardRoot, containerStyle, { width: resolvedCardSize }]}>
@@ -244,88 +302,19 @@ export function SharedPostMemoryCard({
         </View>
 
         <View style={[styles.metaContainer, { width: resolvedCardSize }]}>
-          {onPress ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('shared.openSharedDetailsA11y', {
-                defaultValue: 'Open shared post details for {{location}}',
-                location: placeLabel,
-              })}
-              hitSlop={8}
-              onPress={onPress}
-              style={({ pressed }) => [
-                styles.metadataPressable,
-                pressed ? styles.metadataPressablePressed : null,
-              ]}
-            >
-              <InfoPill style={styles.metadataPill}>
-                <View style={styles.metadataPillContent}>
-                  <View style={styles.metadataPillMain}>
-                    {post.authorPhotoURLSnapshot ? (
-                      <Image
-                        source={{ uri: post.authorPhotoURLSnapshot }}
-                        style={styles.sharedAvatarImage}
-                        contentFit="cover"
-                      />
-                    ) : (
-                      <View style={[styles.sharedAvatarFallback, { backgroundColor: colors.card }]}>
-                        <Text style={[styles.sharedAvatarLabel, { color: colors.primary }]}>
-                          {authorLabel.trim().charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-                    <View style={styles.metadataLocationGroup}>
-                      <Ionicons name="location" size={14} color={colors.secondaryText} />
-                      <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
-                        {placeLabel}
-                      </Text>
-                    </View>
-                    <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-                    <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
-                  </View>
-                  <View style={styles.metadataPillAction}>
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.metadataActionText, { color: colors.primary }]}
-                    >
-                      {t('home.openDetails', 'Details')}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={14} color={colors.primary} />
-                  </View>
-                </View>
-              </InfoPill>
-            </Pressable>
-          ) : (
-            <InfoPill style={styles.metadataPill}>
-              <View style={styles.metadataPillContent}>
-                <View style={styles.metadataPillMain}>
-                  {post.authorPhotoURLSnapshot ? (
-                    <Image
-                      source={{ uri: post.authorPhotoURLSnapshot }}
-                      style={styles.sharedAvatarImage}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <View style={[styles.sharedAvatarFallback, { backgroundColor: colors.card }]}>
-                      <Text style={[styles.sharedAvatarLabel, { color: colors.primary }]}>
-                        {authorLabel.trim().charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-                  <View style={styles.metadataLocationGroup}>
-                    <Ionicons name="location" size={14} color={colors.secondaryText} />
-                    <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
-                      {placeLabel}
-                    </Text>
-                  </View>
-                  <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-                  <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
-                </View>
-              </View>
-            </InfoPill>
-          )}
+          <MetadataContainer
+            accessibilityLabel={
+              onPress
+                ? t('shared.openSharedDetailsA11y', {
+                    defaultValue: 'Open shared post details for {{location}}',
+                    location: placeLabel,
+                  })
+                : undefined
+            }
+            onPress={onPress}
+          >
+            {sharedMetadata}
+          </MetadataContainer>
         </View>
       </View>
     </View>

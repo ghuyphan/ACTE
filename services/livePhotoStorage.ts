@@ -1,8 +1,8 @@
 import * as FileSystem from '../utils/fileSystem';
 import type { Note } from './database';
+import { getFileExtension } from './mediaTypeUtils';
 import {
   ensureStoredMediaDirectory,
-  extractStoredFilename,
   readStoredMediaFile,
   resolveStoredMediaUri,
 } from './storedMediaFiles';
@@ -21,17 +21,7 @@ export function getPairedVideoFileExtension(
   fileUri: string | null | undefined,
   fallbackExtension = '.mp4'
 ) {
-  const filename = extractStoredFilename(fileUri);
-  if (!filename) {
-    return fallbackExtension;
-  }
-
-  const extensionIndex = filename.lastIndexOf('.');
-  if (extensionIndex <= 0 || extensionIndex === filename.length - 1) {
-    return fallbackExtension;
-  }
-
-  const extension = filename.slice(extensionIndex).toLowerCase();
+  const extension = getFileExtension(fileUri, fallbackExtension);
   switch (extension) {
     case '.mov':
     case '.mp4':

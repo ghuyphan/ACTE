@@ -210,21 +210,24 @@ export default function ProfileScreenIOS() {
                   <SwiftUIText modifiers={[foregroundStyle(colors.text), font({ size: 20, weight: 'semibold' }), padding({ top: 12 })]}>
                     {t('profile.signedOutTitle', 'No account connected')}
                   </SwiftUIText>
-                  {!isAuthAvailable ? (
-                    <SwiftUIText
-                      modifiers={[
-                        foregroundStyle(colors.secondaryText),
-                        font({ size: 14 }),
-                        multilineTextAlignment('leading'),
-                        padding({ top: 8 }),
-                      ]}
-                    >
-                      {t(
-                        'profile.unavailableMsg',
-                        'Account sign-in is unavailable right now, but your notes stay safely on this device.'
-                      )}
-                    </SwiftUIText>
-                  ) : null}
+                  <SwiftUIText
+                    modifiers={[
+                      foregroundStyle(colors.secondaryText),
+                      font({ size: 14 }),
+                      multilineTextAlignment('leading'),
+                      padding({ top: 8 }),
+                    ]}
+                  >
+                    {isAuthAvailable
+                      ? t(
+                          'profile.signedOutMsg',
+                          'Sign in to back up your notes and keep them synced across your devices.'
+                        )
+                      : t(
+                          'profile.unavailableMsg',
+                          'Account sign-in is unavailable right now, but your notes stay safely on this device.'
+                        )}
+                  </SwiftUIText>
                 </VStack>
               </Section>
 

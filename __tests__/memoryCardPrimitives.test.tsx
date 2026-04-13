@@ -1,8 +1,18 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { NoteMemoryCard, SharedPostMemoryCard } from '../components/home/MemoryCardPrimitives';
 
-const mockT = ((key: string, fallback?: string) => fallback ?? key) as any;
+const mockT = ((key: string, fallbackOrOptions?: string | { defaultValue?: string; location?: string }) => {
+  if (typeof fallbackOrOptions === 'string') {
+    return fallbackOrOptions;
+  }
+
+  if (fallbackOrOptions?.defaultValue) {
+    return fallbackOrOptions.defaultValue.replace('{{location}}', fallbackOrOptions.location ?? '');
+  }
+
+  return key;
+}) as any;
 
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: ({ name }: { name: string }) => {
@@ -66,6 +76,14 @@ jest.mock('../components/ui/InfoPill', () => {
   };
 });
 
+const colors = {
+  primary: '#FFC107',
+  text: '#1C1C1E',
+  secondaryText: '#8E8E93',
+  danger: '#FF3B30',
+  card: '#FFFFFF',
+};
+
 describe('SharedPostMemoryCard', () => {
   it('formats timestamps the same way as note cards', () => {
     const post = {
@@ -115,14 +133,6 @@ describe('SharedPostMemoryCard', () => {
 });
 
 describe('NoteMemoryCard', () => {
-  const colors = {
-    primary: '#FFC107',
-    text: '#1C1C1E',
-    secondaryText: '#8E8E93',
-    danger: '#FF3B30',
-    card: '#FFFFFF',
-  };
-
   it('shows the shared badge for a text note shared by me', () => {
     const note = {
       id: 'note-1',
@@ -209,5 +219,142 @@ describe('NoteMemoryCard', () => {
 
     expect(getByTestId('note-memory-shared-badge')).toBeTruthy();
     expect(getByTestId('note-memory-live-badge')).toBeTruthy();
+  });
+
+  it('renders the text card branch and exposes the metadata press action', () => {
+    const onPress = jest.fn();
+    const note = {
+      id: 'note-text-1',
+      type: 'text',
+      content: 'Shared memory',
+      caption: null,
+      photoLocalUri: null,
+      photoSyncedLocalUri: null,
+      photoRemoteBase64: null,
+      isLivePhoto: false,
+      pairedVideoLocalUri: null,
+      pairedVideoSyncedLocalUri: null,
+      pairedVideoRemotePath: null,
+      locationName: 'District 5',
+      promptId: null,
+      promptTextSnapshot: null,
+      promptAnswer: null,
+      moodEmoji: null,
+      noteColor: null,
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: true,
+      doodleStrokesJson: '[]',
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      createdAt: '2026-04-10T02:00:00.000Z',
+      updatedAt: null,
+    } as any;
+
+    const { getByLabelText, getByTestId, getByText } = render(
+      <NoteMemoryCard
+        note={note}
+        colors={colors}
+        t={mockT}
+        onPress={onPress}
+      />
+    );
+
+    expect(getByTestId('text-memory-card')).toBeTruthy();
+    expect(getByText('District 5')).toBeTruthy();
+
+    fireEvent.press(getByLabelText('Open note details for District 5'));
+
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the photo card branch when a note has photo media', () => {
+    const note = {
+      id: 'note-photo-2',
+      type: 'photo',
+      content: '',
+      caption: 'Sunset',
+      photoLocalUri: 'file:///photo-2.jpg',
+      photoSyncedLocalUri: null,
+      photoRemoteBase64: null,
+      isLivePhoto: false,
+      pairedVideoLocalUri: null,
+      pairedVideoSyncedLocalUri: null,
+      pairedVideoRemotePath: null,
+      locationName: 'District 7',
+      promptId: null,
+      promptTextSnapshot: null,
+      promptAnswer: null,
+      moodEmoji: null,
+      noteColor: null,
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: false,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      createdAt: '2026-04-10T02:00:00.000Z',
+      updatedAt: null,
+    } as any;
+
+    const { getByTestId } = render(
+      <NoteMemoryCard
+        note={note}
+        colors={colors}
+        t={mockT}
+      />
+    );
+
+    expect(getByTestId('image-memory-card')).toBeTruthy();
+  });
+});
+
+describe('SharedPostMemoryCard interactions', () => {
+  it('renders metadata and forwards presses through the details CTA shell', () => {
+    const onPress = jest.fn();
+    const post = {
+      id: 'shared-2',
+      authorUid: 'friend-1',
+      authorDisplayName: 'Lan',
+      authorPhotoURLSnapshot: null,
+      audienceUserIds: ['me'],
+      type: 'text',
+      text: 'Shared memory',
+      photoPath: null,
+      photoLocalUri: null,
+      isLivePhoto: false,
+      pairedVideoPath: null,
+      pairedVideoLocalUri: null,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      noteColor: null,
+      placeName: 'District 3',
+      sourceNoteId: 'note-1',
+      latitude: null,
+      longitude: null,
+      createdAt: '2026-04-10T02:00:00.000Z',
+      updatedAt: null,
+    } as any;
+
+    const { getByLabelText, getByText, getByTestId } = render(
+      <SharedPostMemoryCard
+        post={post}
+        colors={colors}
+        t={mockT}
+        onPress={onPress}
+      />
+    );
+
+    expect(getByTestId('shared-post-card-visual')).toBeTruthy();
+    expect(getByText('District 3')).toBeTruthy();
+
+    fireEvent.press(getByLabelText('Open shared post details for District 3'));
+
+    expect(onPress).toHaveBeenCalledTimes(1);
   });
 });

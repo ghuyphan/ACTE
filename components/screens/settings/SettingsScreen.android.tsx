@@ -117,10 +117,10 @@ export default function SettingsScreenAndroid() {
     alertProps,
     colors,
     hapticsValue,
-    i18n,
     insets,
     isAuthAvailable,
     isPurchaseAvailable,
+    languageLabel,
     notes,
     openAccountScreen,
     openAccountDeletionHelpLink,
@@ -147,8 +147,6 @@ export default function SettingsScreenAndroid() {
     themeLabel,
     user,
   } = useSettingsScreenModel();
-  const languageCode = i18n.resolvedLanguage?.startsWith('vi') ? 'vi' : 'en';
-  const languageLabel = languageCode === 'vi' ? 'Tiếng Việt' : 'English';
   const contentTopInset = 16;
   const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
   const accountSubtitle = !isAuthAvailable

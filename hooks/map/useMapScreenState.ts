@@ -18,6 +18,8 @@ interface UseMapScreenStateParams {
   enableHeavyCalculations?: boolean;
 }
 
+const SYNTHETIC_MAP_PRESS_GUARD_MS = 120;
+
 function areRegionsEquivalent(left: Region | null, right: Region) {
   if (!left) {
     return false;
@@ -44,8 +46,7 @@ export function useMapScreenState({
   const [selectedNoteIndex, setSelectedNoteIndex] = useState(0);
   const [visibleRegion, setVisibleRegion] = useState<Region | null>(null);
   const [nearbyBrowseRegion, setNearbyBrowseRegion] = useState<Region | null>(null);
-  const lastMarkerTapAtRef = useRef(0);
-  const ignoreNextMapPressUntilRef = useRef(0);
+  const suppressMapPressAfterMarkerTapAtRef = useRef(0);
   const visibleRegionRef = useRef<Region | null>(null);
   const selectedNoteIntentIdRef = useRef<string | null>(null);
 
@@ -176,46 +177,40 @@ export function useMapScreenState({
     setVisibleRegion(region);
   }, []);
 
+  const clearSelectedGroup = useCallback(() => {
+    selectedNoteIntentIdRef.current = null;
+    setSelectedGroupId(null);
+    setSelectedNoteIndex(0);
+  }, []);
+
   const handleLeafMarkerPress = useCallback((groupId: string) => {
-    const now = Date.now();
     const group = pointGroupMap.get(groupId) ?? null;
-    lastMarkerTapAtRef.current = now;
-    ignoreNextMapPressUntilRef.current = now + 320;
+    suppressMapPressAfterMarkerTapAtRef.current = Date.now();
     selectedNoteIntentIdRef.current = group?.notes[0]?.id ?? null;
     setSelectedGroupId(groupId);
     setSelectedNoteIndex(0);
   }, [pointGroupMap]);
 
   const handleClusterMarkerPress = useCallback(() => {
-    const now = Date.now();
-    lastMarkerTapAtRef.current = now;
-    ignoreNextMapPressUntilRef.current = now + 320;
-    selectedNoteIntentIdRef.current = null;
-    setSelectedGroupId(null);
-    setSelectedNoteIndex(0);
-  }, []);
+    suppressMapPressAfterMarkerTapAtRef.current = Date.now();
+    clearSelectedGroup();
+  }, [clearSelectedGroup]);
 
   const handleMapPress = useCallback(() => {
-    const now = Date.now();
-
-    if (now <= ignoreNextMapPressUntilRef.current) {
-      ignoreNextMapPressUntilRef.current = 0;
+    const elapsedSinceMarkerTap = Date.now() - suppressMapPressAfterMarkerTapAtRef.current;
+    if (elapsedSinceMarkerTap >= 0 && elapsedSinceMarkerTap <= SYNTHETIC_MAP_PRESS_GUARD_MS) {
+      suppressMapPressAfterMarkerTapAtRef.current = 0;
       return;
     }
 
-    if (now - lastMarkerTapAtRef.current < 250) {
-      return;
-    }
-    selectedNoteIntentIdRef.current = null;
-    setSelectedGroupId(null);
-    setSelectedNoteIndex(0);
-  }, []);
+    suppressMapPressAfterMarkerTapAtRef.current = 0;
+    clearSelectedGroup();
+  }, [clearSelectedGroup]);
 
   const clearSelection = useCallback(() => {
-    selectedNoteIntentIdRef.current = null;
-    setSelectedGroupId(null);
-    setSelectedNoteIndex(0);
-  }, []);
+    suppressMapPressAfterMarkerTapAtRef.current = 0;
+    clearSelectedGroup();
+  }, [clearSelectedGroup]);
 
   const openPrevInGroup = useCallback(() => {
     if (!selectedGroup) {
@@ -247,7 +242,6 @@ export function useMapScreenState({
       }
 
       const index = group.notes.findIndex((note) => note.id === noteId);
-      lastMarkerTapAtRef.current = Date.now();
       selectedNoteIntentIdRef.current = noteId;
       setSelectedGroupId(group.id);
       setSelectedNoteIndex(index === -1 ? 0 : index);

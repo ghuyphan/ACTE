@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { AppSheetAlertAction, AppSheetAlertProps, AppSheetAlertVariant } from '../../components/sheets/AppSheetAlert';
 
 export interface ShowSheetAlertInput {
@@ -25,20 +25,21 @@ const DEFAULT_STATE: AlertState = {
 
 export function useAppSheetAlert() {
   const [alertState, setAlertState] = useState<AlertState>(DEFAULT_STATE);
+  const onCloseRef = useRef<ShowSheetAlertInput['onClose']>(undefined);
 
   const hideAlert = useCallback(() => {
-    setAlertState((current) => {
-      current.onClose?.();
-
-      return {
-        ...current,
-        visible: false,
-        onClose: undefined,
-      };
-    });
+    const onClose = onCloseRef.current;
+    onCloseRef.current = undefined;
+    setAlertState((current) => ({
+      ...current,
+      visible: false,
+      onClose: undefined,
+    }));
+    onClose?.();
   }, []);
 
   const showAlert = useCallback((nextAlert: ShowSheetAlertInput) => {
+    onCloseRef.current = nextAlert.onClose;
     setAlertState({
       visible: true,
       dismissible: true,

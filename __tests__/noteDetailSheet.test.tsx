@@ -1254,23 +1254,23 @@ describe('NoteDetailSheet', () => {
     });
 
     fireEvent.press(getByTestId('note-detail-delete'));
-    expect(Alert.alert).toHaveBeenCalled();
-
-    const alertArgs = (Alert.alert as jest.Mock).mock.calls[0];
-    const buttons = alertArgs[2] as { text?: string; onPress?: () => void }[];
-    const destructiveButton = buttons.find((button) => button.text === 'Delete');
-    expect(destructiveButton?.onPress).toBeTruthy();
+    expect(getByTestId('note-detail-delete-confirm')).toBeTruthy();
+    expect(mockDeleteNote).not.toHaveBeenCalled();
 
     await act(async () => {
-      destructiveButton?.onPress?.();
+      fireEvent.press(getByTestId('note-detail-delete-confirm-action'));
     });
 
     expect(onClose).toHaveBeenCalled();
-    expect(onClosed).toHaveBeenCalled();
+    expect(onClosed).not.toHaveBeenCalled();
 
     rerender(
       <NoteDetailSheet noteId="note-1" visible={false} onClose={onClose} onClosed={onClosed} />
     );
+
+    await waitFor(() => {
+      expect(onClosed).toHaveBeenCalled();
+    });
 
     await waitFor(() => {
       expect(mockDeleteNote).toHaveBeenCalledWith('note-1');

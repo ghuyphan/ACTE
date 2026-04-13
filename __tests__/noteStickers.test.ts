@@ -10,6 +10,8 @@ import {
   bringStickerPlacementToFront,
   createStickerPlacement,
   duplicateStickerPlacement,
+  getStickerFileExtension,
+  hasStoredStickerPayload,
   normalizeStickerPlacements,
   parseNoteStickerPlacements,
   setStickerPlacementMotionLocked,
@@ -38,6 +40,17 @@ describe('noteStickers helpers', () => {
     expect(parseNoteStickerPlacements(JSON.stringify([validPlacement]))).toHaveLength(1);
     expect(parseNoteStickerPlacements('{"bad":true}')).toEqual([]);
     expect(parseNoteStickerPlacements(null)).toEqual([]);
+  });
+
+  it('shares sticker payload detection and file extension normalization helpers', () => {
+    const validPlacement = createStickerPlacement(baseAsset);
+
+    expect(hasStoredStickerPayload(JSON.stringify([validPlacement]))).toBe(true);
+    expect(hasStoredStickerPayload('[]')).toBe(false);
+    expect(hasStoredStickerPayload('{"bad":true}')).toBe(false);
+    expect(getStickerFileExtension(' image/jpeg ')).toBe('jpg');
+    expect(getStickerFileExtension('image/heic')).toBe('heic');
+    expect(getStickerFileExtension('image/heif')).toBe('heif');
   });
 
   it('duplicates and normalizes placements', () => {

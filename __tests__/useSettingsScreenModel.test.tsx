@@ -65,6 +65,10 @@ const mockHapticsState = {
   setIsEnabled: jest.fn(async () => undefined),
   preferenceReady: true,
 };
+const mockI18nState = {
+  language: 'en',
+  resolvedLanguage: 'en',
+};
 
 jest.mock('expo-constants', () => ({
   expoConfig: {
@@ -95,10 +99,7 @@ jest.mock('react-i18next', () => ({
 
       return _key;
     },
-    i18n: {
-      language: 'en',
-      resolvedLanguage: 'en',
-    },
+    i18n: mockI18nState,
   }),
 }));
 
@@ -175,6 +176,8 @@ describe('useSettingsScreenModel', () => {
     mockSyncState.blockedCount = 0;
     mockSyncState.isEnabled = true;
     mockHapticsState.isEnabled = true;
+    mockI18nState.language = 'en';
+    mockI18nState.resolvedLanguage = 'en';
   });
 
   it('shows not signed in for cloud sync when there is no signed-in user', () => {
@@ -336,5 +339,14 @@ describe('useSettingsScreenModel', () => {
     expect(cappedResult.result.current.plusHint).toBe(
       'Free plan includes 5 photo memories per day. Upgrade to Noto Plus for unlimited photo saves, premium photo filters, interactive hologram cards, and premium finishes.'
     );
+  });
+
+  it('normalizes the language label from regional locale variants', () => {
+    mockI18nState.language = 'vi-VN';
+    mockI18nState.resolvedLanguage = 'vi-VN';
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    expect(result.current.languageLabel).toBe('Tiếng Việt');
   });
 });

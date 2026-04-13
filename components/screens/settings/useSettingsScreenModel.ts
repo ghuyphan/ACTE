@@ -13,12 +13,17 @@ import { useSyncStatus } from '../../../hooks/useSyncStatus';
 import { useHaptics } from '../../../hooks/useHaptics';
 import { useTheme } from '../../../hooks/useTheme';
 import { createLegalLinkActions, getLegalLinkAvailability } from '../shared/legalLinkActions';
-import { getHapticsLabel, getThemeLabel } from '../../settings/settingsSelectionOptions';
+import {
+  getHapticsLabel,
+  getLanguageLabel,
+  getThemeLabel,
+  resolveAppLanguageKey,
+} from '../../settings/settingsSelectionOptions';
 
 export function useSettingsScreenModel() {
   const { t, i18n } = useTranslation();
-  const { theme, setTheme, colors, isDark } = useTheme();
-  const { isEnabled: hapticsEnabled, setIsEnabled: setHapticsEnabled } = useHaptics();
+  const { theme, colors, isDark } = useTheme();
+  const { isEnabled: hapticsEnabled } = useHaptics();
   const { isOnline } = useConnectivity();
   const { notes, deleteAllNotes } = useNotes();
   const { deleteSharedNotes } = useSharedFeedStore();
@@ -31,7 +36,6 @@ export function useSettingsScreenModel() {
     failedCount,
     blockedCount,
     isEnabled: syncEnabled,
-    setSyncEnabled,
   } = useSyncStatus();
   const { tier, isPurchaseAvailable, plusPriceLabel, photoNoteLimit } = useSubscription();
   const router = useRouter();
@@ -78,6 +82,9 @@ export function useSettingsScreenModel() {
 
   const themeLabel = getThemeLabel(theme, t);
   const hapticsValue = getHapticsLabel(hapticsEnabled ? 'on' : 'off', t);
+  const languageLabel = getLanguageLabel(
+    resolveAppLanguageKey(i18n.resolvedLanguage ?? i18n.language)
+  );
   const accountValue = useMemo(() => {
     if (user) {
       return user.displayName || (user.username ? `@${user.username}` : null) || user.email || t('settings.signedIn', 'Signed in');
@@ -254,13 +261,12 @@ export function useSettingsScreenModel() {
     appVersion,
     alertProps,
     colors,
-    hapticsEnabled,
     hapticsValue,
-    i18n,
     insets,
     isAuthAvailable,
     isDark,
     isPurchaseAvailable,
+    languageLabel,
     notes,
     openAccountScreen,
     openPlusScreen,
@@ -268,7 +274,6 @@ export function useSettingsScreenModel() {
     plusHint,
     plusValue,
     promptClearAll,
-    setHapticsEnabled,
     setShowHaptics,
     setShowLanguage,
     setShowSync,
@@ -278,16 +283,9 @@ export function useSettingsScreenModel() {
     showSyncEntry: Boolean(user),
     showSync,
     showTheme,
-    syncEnabled,
-    pendingCount,
-    failedCount,
-    blockedCount,
-    setSyncEnabled,
     syncValue,
     t,
-    theme,
     themeLabel,
-    setTheme,
     tier,
     user,
   };

@@ -1,5 +1,9 @@
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { Image } from 'react-native';
+import {
+  inferImageMimeTypeFromName,
+  normalizeImageMimeType,
+} from './mediaTypeUtils';
 import type { StickerImportSource } from './noteStickers';
 
 function clamp(value: number, minValue: number, maxValue: number) {
@@ -12,40 +16,6 @@ function normalizeZero(value: number) {
   'worklet';
 
   return Object.is(value, -0) ? 0 : value;
-}
-
-function normalizeMimeType(value: string | null | undefined) {
-  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (normalized === 'image/jpg') {
-    return 'image/jpeg';
-  }
-
-  return normalized;
-}
-
-function getMimeTypeFromName(name: string | null | undefined) {
-  const normalizedName = typeof name === 'string' ? name.trim().toLowerCase() : '';
-  if (normalizedName.endsWith('.jpg') || normalizedName.endsWith('.jpeg')) {
-    return 'image/jpeg';
-  }
-
-  if (normalizedName.endsWith('.heic')) {
-    return 'image/heic';
-  }
-
-  if (normalizedName.endsWith('.heif')) {
-    return 'image/heif';
-  }
-
-  if (normalizedName.endsWith('.png')) {
-    return 'image/png';
-  }
-
-  if (normalizedName.endsWith('.webp')) {
-    return 'image/webp';
-  }
-
-  return '';
 }
 
 export interface StampCutterSize {
@@ -385,7 +355,8 @@ export async function prepareStampCutterDraft(
       : await getImageSize(source.uri);
   const longestEdge = Math.max(sourceSize.width, sourceSize.height);
   const needsResize = longestEdge > STAMP_CUTTER_MAX_SOURCE_DIMENSION;
-  const sourceMimeType = normalizeMimeType(source.mimeType) || getMimeTypeFromName(source.name);
+  const sourceMimeType =
+    normalizeImageMimeType(source.mimeType) || inferImageMimeTypeFromName(source.name);
   const needsFormatNormalization = sourceMimeType !== 'image/jpeg';
 
   if (!needsResize && !needsFormatNormalization) {

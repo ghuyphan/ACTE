@@ -20,6 +20,7 @@ import {
   isSupabaseStorageObjectMissingError,
   requireSupabase,
 } from '../utils/supabase';
+import { getFileExtension } from './mediaTypeUtils';
 
 export const NOTE_MEDIA_BUCKET = 'note-media';
 export const SHARED_POST_MEDIA_BUCKET = 'shared-post-media';
@@ -65,21 +66,6 @@ function hashPathFingerprint(value: string) {
   }
 
   return hash.toString(36);
-}
-
-function getFileExtension(path: string | null | undefined, fallbackExtension: string) {
-  const normalizedPath = typeof path === 'string' ? path.trim() : '';
-  if (!normalizedPath) {
-    return fallbackExtension;
-  }
-
-  const filename = normalizedPath.split('/').pop() ?? normalizedPath;
-  const extensionIndex = filename.lastIndexOf('.');
-  if (extensionIndex <= 0 || extensionIndex === filename.length - 1) {
-    return fallbackExtension;
-  }
-
-  return filename.slice(extensionIndex).toLowerCase();
 }
 
 function getVideoContentType(path: string | null | undefined) {

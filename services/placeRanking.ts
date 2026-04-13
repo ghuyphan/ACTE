@@ -1,3 +1,5 @@
+import { normalizeForMatching, normalizePlaceName } from './textNormalization';
+
 type PlaceRankingNoteType = 'text' | 'photo';
 
 export interface PlaceRankingCandidate {
@@ -52,21 +54,6 @@ const MEDIUM_PREFERENCE_SIGNAL_PATTERNS = [
   /\bthich\b/i,
   /\bghet\b/i,
 ];
-
-function normalizeForMatching(value: string | null | undefined) {
-  return (value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[’]/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
-
-function normalizePlaceName(value: string | null | undefined) {
-  const normalized = normalizeForMatching(value);
-  return normalized || null;
-}
 
 function getRoundedCoordinate(value: number) {
   return Number.isFinite(value) ? value.toFixed(PLACE_COORDINATE_PRECISION) : '0.0000';

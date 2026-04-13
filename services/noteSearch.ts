@@ -1,3 +1,5 @@
+import { normalizeForMatching } from './textNormalization';
+
 interface SearchableNote {
   type: 'text' | 'photo';
   content: string;
@@ -8,12 +10,7 @@ interface SearchableNote {
 }
 
 function normalizeSegment(value: string | null | undefined) {
-  return typeof value === 'string'
-    ? value
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-    : '';
+  return normalizeForMatching(value);
 }
 
 export function buildNoteSearchText(note: SearchableNote) {

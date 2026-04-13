@@ -1,8 +1,5 @@
 import React from 'react';
-import { act, render, waitFor } from '@testing-library/react-native';
-
-const mockDownloadPhotoFromStorage = jest.fn();
-const mockDownloadVideoFromStorage = jest.fn();
+import { render } from '@testing-library/react-native';
 
 jest.mock('../hooks/useTheme', () => ({
   useTheme: () => ({
@@ -17,8 +14,6 @@ jest.mock('../hooks/useTheme', () => ({
 
 jest.mock('../services/remoteMedia', () => ({
   SHARED_POST_MEDIA_BUCKET: 'shared-posts',
-  downloadPhotoFromStorage: (...args: unknown[]) => mockDownloadPhotoFromStorage(...args),
-  downloadPairedVideoFromStorage: (...args: unknown[]) => mockDownloadVideoFromStorage(...args),
 }));
 
 jest.mock('../components/notes/ImageMemoryCard', () => {
@@ -48,12 +43,7 @@ describe('SharedPostCardVisual', () => {
     jest.clearAllMocks();
   });
 
-  it('keeps photo posts on a photo placeholder until the image hydrates', async () => {
-    let resolvePhoto: ((value: string | null) => void) | null = null;
-    mockDownloadPhotoFromStorage.mockImplementation(() => new Promise((resolve) => {
-      resolvePhoto = resolve;
-    }));
-
+  it('shows a placeholder while a photo post has no hydrated local media uri', () => {
     const { queryByText, getByTestId, queryByTestId } = render(
       <SharedPostCardVisual
         post={{
@@ -79,20 +69,10 @@ describe('SharedPostCardVisual', () => {
     expect(getByTestId('shared-post-photo-placeholder')).toBeTruthy();
     expect(queryByText('This should not flash')).toBeNull();
     expect(queryByText('Photo memory')).toBeNull();
-
-    await act(async () => {
-      resolvePhoto?.('file:///shared-photo-1.jpg');
-    });
-
-    await waitFor(() => {
-      expect(queryByTestId('shared-post-photo-placeholder')).toBeNull();
-      expect(getByTestId('shared-post-image-card')).toBeTruthy();
-    });
+    expect(queryByTestId('shared-post-image-card')).toBeNull();
   });
 
-  it('forwards active state into the rendered shared card', async () => {
-    mockDownloadPhotoFromStorage.mockResolvedValue('file:///shared-photo-1.jpg');
-
+  it('renders the shared image card when the post already has a local media uri', () => {
     const { getByTestId } = render(
       <SharedPostCardVisual
         post={{
@@ -104,7 +84,7 @@ describe('SharedPostCardVisual', () => {
           type: 'photo',
           text: '',
           photoPath: 'friend-1/shared-photo-1.jpg',
-          photoLocalUri: null,
+          photoLocalUri: 'file:///shared-photo-1.jpg',
           doodleStrokesJson: null,
           placeName: 'District 1',
           sourceNoteId: null,
@@ -116,10 +96,46 @@ describe('SharedPostCardVisual', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(getByTestId('shared-post-image-card')).toBeTruthy();
-      expect(getByTestId('shared-post-image-card-active')).toHaveTextContent('true');
-    });
+    expect(getByTestId('shared-post-image-card')).toBeTruthy();
+    expect(getByTestId('shared-post-image-card-active')).toHaveTextContent('true');
+  });
+
+  it('renders the image once the parent rerenders with a hydrated local media uri', () => {
+    const post = {
+      id: 'shared-photo-1',
+      authorUid: 'friend-1',
+      authorDisplayName: 'Lan',
+      authorPhotoURLSnapshot: null,
+      audienceUserIds: [],
+      type: 'photo' as const,
+      text: 'Shared memory',
+      photoPath: 'friend-1/shared-photo-1.jpg',
+      photoLocalUri: null,
+      doodleStrokesJson: null,
+      placeName: 'District 1',
+      sourceNoteId: null,
+      createdAt: '2026-03-22T00:00:00.000Z',
+      updatedAt: null,
+    };
+
+    const { getByTestId, queryByTestId, rerender } = render(
+      <SharedPostCardVisual post={post} fallbackText="Photo memory" />
+    );
+
+    expect(getByTestId('shared-post-photo-placeholder')).toBeTruthy();
+
+    rerender(
+      <SharedPostCardVisual
+        post={{
+          ...post,
+          photoLocalUri: 'file:///shared-photo-1.jpg',
+        }}
+        fallbackText="Photo memory"
+      />
+    );
+
+    expect(getByTestId('shared-post-image-card')).toBeTruthy();
+    expect(queryByTestId('shared-post-photo-placeholder')).toBeNull();
   });
 
   it('does not inject the photo fallback label into sticker-only text posts', () => {

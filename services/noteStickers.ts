@@ -21,6 +21,10 @@ import {
   isSupabaseStorageObjectMissingError,
   requireSupabase,
 } from '../utils/supabase';
+import {
+  inferImageMimeTypeFromName,
+  normalizeImageMimeType,
+} from './mediaTypeUtils';
 import { NOTE_MEDIA_BUCKET } from './remoteMedia';
 import { cleanupStickerTempUris } from './stickerTempFiles';
 
@@ -160,58 +164,30 @@ const REMOTE_STICKER_REGISTRY_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
 let remoteStickerAssetRegistryUnavailableUntil = 0;
 let remoteStickerAssetRefsUnavailableUntil = 0;
 
-function normalizeMimeType(value: string | null | undefined) {
-  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (normalized === 'image/jpg') {
-    return 'image/jpeg';
-  }
+export function getStickerFileExtension(mimeType: string | null | undefined) {
+  const normalizedMimeType = normalizeImageMimeType(mimeType);
 
-  return normalized;
-}
-
-function getMimeTypeFromName(name: string | null | undefined) {
-  const normalizedName = typeof name === 'string' ? name.trim().toLowerCase() : '';
-  if (normalizedName.endsWith('.png')) {
-    return 'image/png';
-  }
-
-  if (normalizedName.endsWith('.webp')) {
-    return 'image/webp';
-  }
-
-  if (normalizedName.endsWith('.jpg') || normalizedName.endsWith('.jpeg')) {
-    return 'image/jpeg';
-  }
-
-  if (normalizedName.endsWith('.heic')) {
-    return 'image/heic';
-  }
-
-  if (normalizedName.endsWith('.heif')) {
-    return 'image/heif';
-  }
-
-  return '';
-}
-
-function getStickerFileExtension(mimeType: string) {
-  if (mimeType === 'image/webp') {
+  if (normalizedMimeType === 'image/webp') {
     return 'webp';
   }
 
-  if (mimeType === 'image/jpeg') {
+  if (normalizedMimeType === 'image/jpeg') {
     return 'jpg';
   }
 
-  if (mimeType === 'image/heic') {
+  if (normalizedMimeType === 'image/heic') {
     return 'heic';
   }
 
-  if (mimeType === 'image/heif') {
+  if (normalizedMimeType === 'image/heif') {
     return 'heif';
   }
 
   return 'png';
+}
+
+export function hasStoredStickerPayload(placementsJson: string | null | undefined) {
+  return parseNoteStickerPlacements(placementsJson).length > 0;
 }
 
 function parsePngHasTransparency(bytes: Uint8Array) {
@@ -849,7 +825,7 @@ export async function shouldImportSourceDirectlyAsSticker(
     return false;
   }
 
-  const mimeType = normalizeMimeType(source.mimeType) || getMimeTypeFromName(source.name);
+  const mimeType = normalizeImageMimeType(source.mimeType) || inferImageMimeTypeFromName(source.name);
   if (!mimeTypeSupportsTransparencyDetection(mimeType)) {
     return false;
   }
@@ -1185,7 +1161,7 @@ export async function importStickerAsset(
     throw new Error('Pick a sticker file to continue.');
   }
 
-  const mimeType = normalizeMimeType(source.mimeType) || getMimeTypeFromName(source.name);
+  const mimeType = normalizeImageMimeType(source.mimeType) || inferImageMimeTypeFromName(source.name);
   const validation = await validateStickerFile(sourceUri, mimeType, options);
   const preparedSticker = await optimizeStickerForImport(
     sourceUri,

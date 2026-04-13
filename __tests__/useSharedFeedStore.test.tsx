@@ -57,6 +57,8 @@ const mockCacheSharedFeedSnapshot = jest.fn();
 const mockClearSharedFeedCache = jest.fn();
 const mockReplaceCachedActiveInvite = jest.fn();
 const mockScheduleWidgetDataUpdate = jest.fn();
+const mockDownloadPhotoFromStorage = jest.fn();
+const mockDownloadPairedVideoFromStorage = jest.fn();
 let latestSharedFeedSubscriptionHandlers:
   | {
       onSnapshot: (snapshot: { friends: any[]; sharedPosts: any[]; activeInvite: any }) => void;
@@ -98,6 +100,13 @@ jest.mock('../services/sharedFeedService', () => ({
 
 jest.mock('../services/widgetService', () => ({
   scheduleWidgetDataUpdate: (...args: unknown[]) => mockScheduleWidgetDataUpdate(...args),
+}));
+
+jest.mock('../services/remoteMedia', () => ({
+  SHARED_POST_MEDIA_BUCKET: 'shared-post-media',
+  downloadPhotoFromStorage: (...args: unknown[]) => mockDownloadPhotoFromStorage(...args),
+  downloadPairedVideoFromStorage: (...args: unknown[]) =>
+    mockDownloadPairedVideoFromStorage(...args),
 }));
 
 import { SharedFeedProvider, useSharedFeedStore } from '../hooks/useSharedFeed';
@@ -199,6 +208,8 @@ describe('useSharedFeedStore', () => {
     };
     mockGetCachedSharedFeedSnapshot.mockImplementation(async () => mockCachedSnapshot);
     mockRefreshSharedFeed.mockImplementation(async () => mockRefreshSnapshot);
+    mockDownloadPhotoFromStorage.mockResolvedValue(null);
+    mockDownloadPairedVideoFromStorage.mockResolvedValue(null);
     latestSharedFeedSubscriptionHandlers = null;
     mockSubscribeToSharedFeed.mockImplementation((_user: unknown, handlers: any) => {
       latestSharedFeedSubscriptionHandlers = handlers;
@@ -353,6 +364,68 @@ describe('useSharedFeedStore', () => {
         expect.objectContaining({ id: 'fresh-post', authorUid: 'other-user' }),
       ]);
     });
+  });
+
+  it('hydrates shared photo media into local state and persists the enriched snapshot', async () => {
+    mockCachedSnapshot = {
+      friends: [],
+      sharedPosts: [
+        createSharedPost({
+          id: 'friend-photo-1',
+          authorUid: 'friend-1',
+          type: 'photo',
+          text: '',
+          photoPath: 'friend-1/friend-photo-1.jpg',
+          photoLocalUri: null,
+          isLivePhoto: true,
+          pairedVideoPath: 'friend-1/friend-photo-1.mov',
+          pairedVideoLocalUri: null,
+        }),
+      ],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-24T00:00:00.000Z',
+    };
+    mockDownloadPhotoFromStorage.mockResolvedValue('file:///shared/friend-photo-1.jpg');
+    mockDownloadPairedVideoFromStorage.mockResolvedValue('file:///shared/friend-photo-1.mov');
+
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect(result.current.sharedPosts).toEqual([
+        expect.objectContaining({
+          id: 'friend-photo-1',
+          photoLocalUri: 'file:///shared/friend-photo-1.jpg',
+          pairedVideoLocalUri: 'file:///shared/friend-photo-1.mov',
+        }),
+      ]);
+    });
+
+    expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'friend-1/friend-photo-1.jpg',
+      'friend-photo-1'
+    );
+    expect(mockDownloadPairedVideoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'friend-1/friend-photo-1.mov',
+      'friend-photo-1-motion'
+    );
+    expect(mockCacheSharedFeedSnapshot).toHaveBeenCalledWith(
+      'me',
+      expect.objectContaining({
+        sharedPosts: [
+          expect.objectContaining({
+            id: 'friend-photo-1',
+            photoLocalUri: 'file:///shared/friend-photo-1.jpg',
+            pairedVideoLocalUri: 'file:///shared/friend-photo-1.mov',
+          }),
+        ],
+      })
+    );
   });
 
   it('persists invite cache updates when creating and revoking an invite', async () => {

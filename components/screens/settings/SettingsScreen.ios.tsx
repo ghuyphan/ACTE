@@ -30,10 +30,10 @@ export default function SettingsScreenIOS() {
     alertProps,
     colors,
     hapticsValue,
-    i18n,
     isAuthAvailable,
     isDark,
     isPurchaseAvailable,
+    languageLabel,
     notes,
     openAccountScreen,
     openAccountDeletionHelpLink,
@@ -175,9 +175,7 @@ export default function SettingsScreenIOS() {
                   {t('settings.language', 'Language')}
                 </SwiftUIText>
                 <Spacer />
-                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>
-                  {i18n.language === 'en' ? 'English' : 'Tiếng Việt'}
-                </SwiftUIText>
+                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{languageLabel}</SwiftUIText>
               </HStack>
             </Button>
             <Button onPress={() => setShowTheme(true)}>
@@ -376,7 +374,7 @@ export default function SettingsScreenIOS() {
           onClose={() => setShowTheme(false)}
           iosContentType="swift-ui"
         >
-          <SettingsThemeSheet onClose={() => setShowTheme(false)} />
+          <SettingsThemeSheet />
         </AppSheet>
 
         <AppSheet
@@ -392,7 +390,7 @@ export default function SettingsScreenIOS() {
           onClose={() => setShowLanguage(false)}
           iosContentType="swift-ui"
         >
-          <SettingsLanguageSheet onClose={() => setShowLanguage(false)} />
+          <SettingsLanguageSheet />
         </AppSheet>
 
         <AppSheet

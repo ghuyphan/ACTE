@@ -24,6 +24,7 @@ import { getSupabase, getSupabaseErrorMessage, hasSupabaseConfig } from '../util
 export interface AuthActionResult {
   status: 'success' | 'cancelled' | 'unavailable' | 'error';
   message?: string;
+  shouldOpenHelpLink?: boolean;
 }
 
 export interface EmailRegistrationInput {
@@ -263,6 +264,120 @@ function mapUsernameErrorMessage(error: unknown) {
   }
 
   return i18n.t('profile.usernameSaveFailed', 'We could not update your username right now.');
+}
+
+async function getErrorMessageFromResponseContext(error: unknown) {
+  if (typeof error !== 'object' || !error || !('context' in error)) {
+    return null;
+  }
+
+  const response = (error as {
+    context?: {
+      clone?: () => { json?: () => Promise<unknown>; text?: () => Promise<string> };
+      json?: () => Promise<unknown>;
+      text?: () => Promise<string>;
+    };
+  }).context;
+
+  if (!response || typeof response !== 'object') {
+    return null;
+  }
+
+  const readableResponse =
+    typeof response.clone === 'function' ? response.clone() : response;
+
+  try {
+    if (typeof readableResponse.json === 'function') {
+      const payload = await readableResponse.json();
+      if (typeof payload === 'string' && payload.trim()) {
+        return payload.trim();
+      }
+
+      if (
+        typeof payload === 'object' &&
+        payload &&
+        'error' in payload &&
+        typeof (payload as { error?: unknown }).error === 'string' &&
+        (payload as { error: string }).error.trim()
+      ) {
+        return (payload as { error: string }).error.trim();
+      }
+    }
+  } catch {
+    // Fall back to text when the response body is not JSON.
+  }
+
+  try {
+    if (typeof readableResponse.text === 'function') {
+      const payload = await readableResponse.text();
+      if (payload.trim()) {
+        return payload.trim();
+      }
+    }
+  } catch {
+    // Ignore unreadable response bodies and fall back to the error message.
+  }
+
+  return null;
+}
+
+async function mapDeleteAccountErrorResult(error: unknown): Promise<AuthActionResult> {
+  const responseMessage = await getErrorMessageFromResponseContext(error);
+  const message = (responseMessage ?? getSupabaseErrorMessage(error)).trim();
+  const normalizedMessage = message.toLowerCase();
+
+  if (
+    normalizedMessage.includes('recent sign-in required') ||
+    normalizedMessage.includes('sign in again before deleting')
+  ) {
+    return {
+      status: 'error',
+      message: i18n.t(
+        'profile.deleteAccountRecentSignIn',
+        'For your security, sign out and sign back in before deleting this account.'
+      ),
+    };
+  }
+
+  if (
+    normalizedMessage.includes('delete account function is not configured') ||
+    normalizedMessage.includes('account deletion is not configured') ||
+    normalizedMessage.includes('function not found') ||
+    normalizedMessage.includes('not found')
+  ) {
+    return {
+      status: 'error',
+      message: i18n.t(
+        'profile.deleteAccountNotReady',
+        'Account deletion is not configured for this build yet. Please contact support.'
+      ),
+      shouldOpenHelpLink: true,
+    };
+  }
+
+  if (
+    normalizedMessage.includes('edge function returned a non-2xx status code') ||
+    normalizedMessage.includes('failed to send a request to the edge function') ||
+    normalizedMessage.includes('relay error invoking the edge function')
+  ) {
+    return {
+      status: 'error',
+      message: i18n.t(
+        'profile.deleteAccountFailed',
+        'We could not delete your account right now. Please try again in a moment.'
+      ),
+    };
+  }
+
+  return {
+    status: 'error',
+    message:
+      message ||
+      i18n.t(
+        'profile.deleteAccountFailed',
+        'We could not delete your account right now. Please try again in a moment.'
+      ),
+  };
 }
 
 async function syncUserProfile(session: Session | null) {
@@ -743,37 +858,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await purgeAuthenticatedUserState(user.uid);
           return { status: 'success' };
         } catch (error) {
-          const message = getSupabaseErrorMessage(error);
-
-          if (message.toLowerCase().includes('not found')) {
-            return {
-              status: 'error',
-              message: i18n.t(
-                'profile.deleteAccountNotReady',
-                'Account deletion is not configured for this build yet. Please contact support.'
-              ),
-            };
-          }
-
-          if (message.toLowerCase().includes('recent sign-in required')) {
-            return {
-              status: 'error',
-              message: i18n.t(
-                'profile.deleteAccountRecentSignIn',
-                'For your security, sign out and sign back in before deleting this account.'
-              ),
-            };
-          }
-
-          return {
-            status: 'error',
-            message:
-              message ||
-              i18n.t(
-                'profile.deleteAccountFailed',
-                'We could not delete your account right now. Please try again in a moment.'
-              ),
-          };
+          return mapDeleteAccountErrorResult(error);
         }
       },
       signOut: async () => {

@@ -192,7 +192,7 @@ export function useProfileScreenModel() {
       await signOut();
       await refreshNotes(false).catch(() => undefined);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace('/settings');
+      router.replace('/(tabs)/settings');
     } catch (error) {
       console.warn('Sign out failed:', error);
       showAppAlert(
@@ -224,9 +224,80 @@ export function useProfileScreenModel() {
   };
 
   const handleDeleteAccount = () => {
-    if (!user) {
+    if (!user || isDeletingAccount) {
       return;
     }
+
+    const performDeleteAccount = async () => {
+      try {
+        setIsDeletingAccount(true);
+        setTransitionUser(user);
+        const result = await deleteAccount();
+
+        if (result.status !== 'success') {
+          if (result.shouldOpenHelpLink && legalLinkAvailability.showAccountDeletionLink) {
+            showAppAlert(
+              t('profile.deleteAccountNeedsSupportTitle', 'Need help deleting your account?'),
+              result.message ??
+                t(
+                  'profile.deleteAccountNeedsSupportMsg',
+                  'This build could not finish the deletion automatically. You can continue from our deletion page or contact support.'
+                ),
+              [
+                { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+                {
+                  text: t('profile.deleteAccountHelp', 'Open deletion help'),
+                  onPress: legalLinkActions.openAccountDeletionHelpLink,
+                },
+              ]
+            );
+          } else {
+            showAppAlert(
+              t('profile.deleteAccountFailedTitle', 'Could not delete account'),
+              result.message ??
+                t(
+                  'profile.deleteAccountFailed',
+                  'We could not delete your account right now. Please try again in a moment.'
+                )
+            );
+          }
+          return;
+        }
+
+        await refreshNotes(false).catch(() => undefined);
+        router.replace('/(tabs)/settings');
+        showAppAlert(
+          t('profile.deleteAccountSuccessTitle', 'Account deleted'),
+          t(
+            'profile.deleteAccountSuccessMsg',
+            'Your Noto account and synced data have been deleted from this device and the cloud.'
+          )
+        );
+      } finally {
+        setIsDeletingAccount(false);
+      }
+    };
+
+    const showFinalDeleteAccountConfirmation = () => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      showAppAlert(
+        t('profile.deleteAccountFinalConfirmTitle', 'Final confirmation'),
+        t(
+          'profile.deleteAccountFinalConfirmMsg',
+          'This permanently deletes your Noto account and all synced data. This cannot be undone.'
+        ),
+        [
+          { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+          {
+            text: t('profile.deleteAccountFinalConfirmCta', 'Delete forever'),
+            style: 'destructive',
+            onPress: () => {
+              void performDeleteAccount();
+            },
+          },
+        ]
+      );
+    };
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     showAppAlert(
@@ -238,57 +309,8 @@ export function useProfileScreenModel() {
       [
         { text: t('common.cancel', 'Cancel'), style: 'cancel' },
         {
-          text: t('profile.deleteAccount', 'Delete account'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsDeletingAccount(true);
-              setTransitionUser(user);
-              const result = await deleteAccount();
-
-              if (result.status !== 'success') {
-                if (legalLinkAvailability.showAccountDeletionLink) {
-                  showAppAlert(
-                    t('profile.deleteAccountNeedsSupportTitle', 'Need help deleting your account?'),
-                    result.message ??
-                      t(
-                        'profile.deleteAccountNeedsSupportMsg',
-                        'This build could not finish the deletion automatically. You can continue from our deletion page or contact support.'
-                      ),
-                    [
-                      { text: t('common.cancel', 'Cancel'), style: 'cancel' },
-                      {
-                        text: t('profile.deleteAccountHelp', 'Open deletion help'),
-                        onPress: legalLinkActions.openAccountDeletionHelpLink,
-                      },
-                    ]
-                  );
-                } else {
-                  showAppAlert(
-                    t('profile.deleteAccountFailedTitle', 'Could not delete account'),
-                    result.message ??
-                      t(
-                        'profile.deleteAccountFailed',
-                        'We could not delete your account right now. Please try again in a moment.'
-                      )
-                  );
-                }
-                return;
-              }
-
-              await refreshNotes(false).catch(() => undefined);
-              router.replace('/settings');
-              showAppAlert(
-                t('profile.deleteAccountSuccessTitle', 'Account deleted'),
-                t(
-                  'profile.deleteAccountSuccessMsg',
-                  'Your Noto account and synced data have been deleted from this device and the cloud.'
-                )
-              );
-            } finally {
-              setIsDeletingAccount(false);
-            }
-          },
+          text: t('profile.deleteAccountConfirmContinue', 'Continue'),
+          onPress: showFinalDeleteAccountConfirmation,
         },
       ]
     );

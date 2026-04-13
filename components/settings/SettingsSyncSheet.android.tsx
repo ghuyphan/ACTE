@@ -5,6 +5,7 @@ import { Sheet } from '../../constants/theme';
 import { useSyncSheetDetails } from '../../hooks/useSyncSheetDetails';
 import { useTheme } from '../../hooks/useTheme';
 import AppSheetScaffold from '../sheets/AppSheetScaffold';
+import { getSyncItemStatusLabel, getSyncOperationLabel } from './settingsSyncLabels';
 
 export default function SettingsSyncSheetAndroid({
   accountHint,
@@ -27,34 +28,6 @@ export default function SettingsSyncSheetAndroid({
     status,
     statusLabel,
   } = useSyncSheetDetails(accountHint);
-
-  const getOperationLabel = (operation: 'create' | 'update' | 'delete' | 'deleteAll') => {
-    switch (operation) {
-      case 'create':
-        return t('settings.syncOpCreate', 'Create');
-      case 'update':
-        return t('settings.syncOpUpdate', 'Update');
-      case 'delete':
-        return t('settings.syncOpDelete', 'Delete');
-      case 'deleteAll':
-        return t('settings.syncOpDeleteAll', 'Delete all');
-      default:
-        return operation;
-    }
-  };
-
-  const getStatusLabel = (nextStatus: 'pending' | 'processing' | 'failed') => {
-    switch (nextStatus) {
-      case 'pending':
-        return t('settings.syncItemStatusPending', 'Pending');
-      case 'processing':
-        return t('settings.syncItemStatusProcessing', 'Processing');
-      case 'failed':
-        return t('settings.syncItemStatusFailed', 'Failed');
-      default:
-        return nextStatus;
-    }
-  };
 
   return (
     <AppSheetScaffold
@@ -118,11 +91,11 @@ export default function SettingsSyncSheetAndroid({
                 <View key={`${item.id}-${item.createdAt}`} style={[styles.queueItem, { borderColor: colors.border }]}>
                   <View style={styles.queueItemHeader}>
                     <Text style={[styles.queueItemTitle, { color: colors.text }]}>
-                      {getOperationLabel(item.operation)}
+                      {getSyncOperationLabel(t, item.operation)}
                       {item.entityId ? ` · ${item.entityId}` : ''}
                     </Text>
                     <Text style={[styles.queueItemStatus, { color: colors.secondaryText }]}>
-                      {getStatusLabel(item.status)}
+                      {getSyncItemStatusLabel(t, item.status)}
                     </Text>
                   </View>
                   <Text style={[styles.queueItemMeta, { color: colors.secondaryText }]}>

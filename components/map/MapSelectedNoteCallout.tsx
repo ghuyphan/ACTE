@@ -105,25 +105,40 @@ function MapSelectedNoteCallout({
           )}
         </View>
       ) : null}
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-            shadowColor: colors.border,
-          },
-        ]}
-      >
-        {title ? (
-          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-            {title}
-          </Text>
-        ) : null}
-        {previewText ? (
-          <Text style={[styles.text, { color: colors.secondaryText }]} numberOfLines={2}>
-            {previewText}
-          </Text>
+      <View style={styles.cardStack}>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              shadowColor: colors.border,
+            },
+          ]}
+        >
+          {title ? (
+            <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+              {title}
+            </Text>
+          ) : null}
+          {previewText ? (
+            <Text style={[styles.text, { color: colors.secondaryText }]} numberOfLines={2}>
+              {previewText}
+            </Text>
+          ) : null}
+        </View>
+        {!showOrb ? (
+          <View style={styles.pointerWrap}>
+            <View
+              style={[
+                styles.pointer,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                },
+              ]}
+            />
+          </View>
         ) : null}
       </View>
     </Animated.View>
@@ -141,6 +156,10 @@ const styles = StyleSheet.create({
   cardOnlyContainer: {
     width: 168,
     gap: 0,
+  },
+  cardStack: {
+    width: 168,
+    alignItems: 'center',
   },
   orb: {
     width: 60,
@@ -179,6 +198,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 4,
+  },
+  pointerWrap: {
+    marginTop: -6,
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pointer: {
+    width: 14,
+    height: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    transform: [{ rotate: '45deg' }],
   },
   title: {
     fontSize: 13,

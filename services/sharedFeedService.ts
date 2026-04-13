@@ -23,6 +23,7 @@ import {
 import {
   getNoteStickers,
   clearRemoteStickerAssetRefs,
+  hasStoredStickerPayload,
   parseNoteStickerPlacements,
   reconcileRemoteStickerAssetRefs,
   serializeStickerPlacementsForStorage,
@@ -216,10 +217,6 @@ function getNowIso() {
 
 function hasStoredDoodlePayload(strokesJson: string | null | undefined) {
   return parseNoteDoodleStrokes(strokesJson).length > 0;
-}
-
-function hasStoredStickerPayload(placementsJson: string | null | undefined) {
-  return parseNoteStickerPlacements(placementsJson).length > 0;
 }
 
 async function hydrateShareableNote(note: Note): Promise<Note> {
@@ -631,7 +628,7 @@ function mapSharedPost(record: SharedPostRow): SharedPost {
     pairedVideoPath: record.paired_video_path ?? null,
     pairedVideoLocalUri: null,
     doodleStrokesJson: record.doodle_strokes_json ?? null,
-    hasStickers: Boolean(record.sticker_placements_json),
+    hasStickers: hasStoredStickerPayload(record.sticker_placements_json),
     stickerPlacementsJson: record.sticker_placements_json ?? null,
     noteColor: record.note_color ?? null,
     placeName: record.place_name ?? null,

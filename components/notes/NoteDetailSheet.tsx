@@ -1494,28 +1494,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     const handleDelete = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        showAppAlert(
-            t('noteDetail.deleteTitle', 'Delete Note'),
-            t('noteDetail.deleteMsg', 'This note and its geofence will be permanently removed.'),
-            [
-                { text: t('common.cancel', 'Cancel'), style: 'cancel' },
-                {
-                    text: t('common.delete', 'Delete'),
-                    style: 'destructive',
-                    onPress: () => {
-                        if (!note || isDeleting) {
-                            return;
-                        }
+        if (!note || isDeleting) {
+            return;
+        }
 
-                        const targetNoteId = note.id;
-                        setIsDeleting(true);
-                        onClose();
-                        completeClose();
-                        void performDelete(targetNoteId);
-                    },
-                },
-            ]
-        );
+        const targetNoteId = note.id;
+        setIsDeleting(true);
+        onClose();
+        void performDelete(targetNoteId);
     };
 
     const handleToggleFavorite = async () => {

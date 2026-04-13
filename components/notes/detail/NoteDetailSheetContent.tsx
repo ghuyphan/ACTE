@@ -2,7 +2,7 @@ import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-shee
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { type TFunction } from 'i18next';
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     Dimensions,
     Platform,
@@ -14,7 +14,14 @@ import {
     View,
     type GestureResponderEvent,
 } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, {
+    Easing,
+    FadeInDown,
+    FadeInUp,
+    FadeOutDown,
+    FadeOutUp,
+    LinearTransition,
+} from 'react-native-reanimated';
 import { STICKER_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
 import { ENABLE_PHOTO_STICKERS } from '../../../constants/experiments';
 import { Layout, Typography } from '../../../constants/theme';
@@ -56,6 +63,34 @@ const { width } = Dimensions.get('window');
 const CARD_SIZE = width - Layout.screenPadding * 2;
 const SheetTextInput = Platform.OS === 'android' ? BottomSheetTextInput : TextInput;
 const FALLBACK_TEXT_GRADIENT = ['#6E5960', '#8E767E'] as const;
+const DELETE_LAYOUT_TRANSITION = LinearTransition.springify()
+    .damping(22)
+    .stiffness(220)
+    .mass(0.9);
+const DELETE_CONFIRM_ENTERING = FadeInDown.duration(220)
+    .easing(Easing.out(Easing.cubic))
+    .withInitialValues({
+        opacity: 0,
+        transform: [{ translateY: 10 }, { scale: 0.985 }],
+    });
+const DELETE_CONFIRM_EXITING = FadeOutUp.duration(140)
+    .easing(Easing.inOut(Easing.quad))
+    .withInitialValues({
+        opacity: 1,
+        transform: [{ translateY: 0 }, { scale: 1 }],
+    });
+const DELETE_BUTTON_ENTERING = FadeInUp.duration(210)
+    .easing(Easing.out(Easing.cubic))
+    .withInitialValues({
+        opacity: 0,
+        transform: [{ translateY: -8 }, { scale: 0.985 }],
+    });
+const DELETE_BUTTON_EXITING = FadeOutDown.duration(140)
+    .easing(Easing.inOut(Easing.quad))
+    .withInitialValues({
+        opacity: 1,
+        transform: [{ translateY: 0 }, { scale: 1 }],
+    });
 
 type InteractionFeedbackType = 'favorited' | 'unfavorited' | 'deleted';
 
@@ -221,6 +256,7 @@ export default function NoteDetailSheetContent({
     onPolaroidCaptureReady,
     showPolaroidCapture,
 }: NoteDetailSheetContentProps) {
+    const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
     const showRichDecorations = Boolean(note) && (richDecorationsReady || isEditing);
     const displayedCardText = note ? (isEditing ? editContent : note.content) : '';
     const displayedNoteColor = note ? (isEditing ? editNoteColor : note.noteColor) : null;
@@ -291,6 +327,12 @@ export default function NoteDetailSheetContent({
     );
     const notePhotoUri = useMemo(() => (note ? getNotePhotoUri(note) : ''), [note]);
     const notePairedVideoUri = useMemo(() => (note ? getNotePairedVideoUri(note) : null), [note]);
+
+    useEffect(() => {
+        if (isEditing || isDeleting || loading || !note) {
+            setDeleteConfirmVisible(false);
+        }
+    }, [isDeleting, isEditing, loading, note]);
 
     if (loading) {
         return (
@@ -707,26 +749,106 @@ export default function NoteDetailSheetContent({
             </Animated.View>
 
             {!isEditing ? (
-                <Pressable
-                    testID="note-detail-delete"
-                    accessibilityRole="button"
-                    accessibilityLabel={t('noteDetail.deleteTitle', 'Delete Note')}
-                    onPress={onDelete}
-                    disabled={isDeleting}
-                    style={[
-                        styles.deleteButton,
-                        {
-                            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
-                            borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(43,38,33,0.12)',
-                        },
-                        isDeleting ? styles.deleteButtonDisabled : null,
-                    ]}
-                >
-                    <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                    <Text style={[styles.deleteButtonLabel, { color: colors.danger }]}>
-                        {t('noteDetail.deleteTitle', 'Delete Note')}
-                    </Text>
-                </Pressable>
+                <Animated.View layout={DELETE_LAYOUT_TRANSITION} style={styles.deleteArea}>
+                    {deleteConfirmVisible ? (
+                        <Animated.View
+                            testID="note-detail-delete-confirm"
+                            entering={DELETE_CONFIRM_ENTERING}
+                            exiting={DELETE_CONFIRM_EXITING}
+                            layout={DELETE_LAYOUT_TRANSITION}
+                            style={[
+                                styles.deleteConfirmBox,
+                                {
+                                    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+                                    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(43,38,33,0.12)',
+                                },
+                            ]}
+                        >
+                            <Text style={[styles.deleteConfirmTitle, { color: colors.text }]}>
+                                {t('noteDetail.deleteTitle', 'Delete Note')}
+                            </Text>
+                            <Text style={[styles.deleteConfirmMessage, { color: colors.secondaryText }]}>
+                                {t('noteDetail.deleteMsg', 'This note and its geofence will be permanently removed.')}
+                            </Text>
+                            <Animated.View layout={DELETE_LAYOUT_TRANSITION} style={styles.deleteConfirmActions}>
+                                <Animated.View
+                                    entering={FadeInDown.duration(220).delay(40).easing(Easing.out(Easing.cubic))}
+                                    exiting={FadeOutDown.duration(100)}
+                                    style={styles.deleteConfirmActionWrap}
+                                >
+                                    <Pressable
+                                        testID="note-detail-delete-cancel"
+                                        accessibilityRole="button"
+                                        onPress={() => setDeleteConfirmVisible(false)}
+                                        style={[
+                                            styles.deleteConfirmAction,
+                                            {
+                                                backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+                                                borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(43,38,33,0.12)',
+                                            },
+                                        ]}
+                                    >
+                                        <Text style={[styles.deleteConfirmActionLabel, { color: colors.secondaryText }]}>
+                                            {t('common.cancel', 'Cancel')}
+                                        </Text>
+                                    </Pressable>
+                                </Animated.View>
+                                <Animated.View
+                                    entering={FadeInDown.duration(220).delay(90).easing(Easing.out(Easing.cubic))}
+                                    exiting={FadeOutDown.duration(100)}
+                                    style={styles.deleteConfirmActionWrap}
+                                >
+                                    <Pressable
+                                        testID="note-detail-delete-confirm-action"
+                                        accessibilityRole="button"
+                                        onPress={onDelete}
+                                        disabled={isDeleting}
+                                        style={[
+                                            styles.deleteConfirmAction,
+                                            styles.deleteConfirmDestructiveAction,
+                                            {
+                                                backgroundColor: isDark ? 'rgba(255,69,58,0.16)' : 'rgba(255,59,48,0.1)',
+                                                borderColor: colors.danger,
+                                            },
+                                            isDeleting ? styles.deleteButtonDisabled : null,
+                                        ]}
+                                    >
+                                        <Text style={[styles.deleteConfirmActionLabel, { color: colors.danger }]}>
+                                            {t('common.delete', 'Delete')}
+                                        </Text>
+                                    </Pressable>
+                                </Animated.View>
+                            </Animated.View>
+                        </Animated.View>
+                    ) : (
+                        <Animated.View
+                            entering={DELETE_BUTTON_ENTERING}
+                            exiting={DELETE_BUTTON_EXITING}
+                            layout={DELETE_LAYOUT_TRANSITION}
+                        >
+                            <Pressable
+                                testID="note-detail-delete"
+                                accessibilityRole="button"
+                                accessibilityLabel={t('noteDetail.deleteTitle', 'Delete Note')}
+                                onPress={() => setDeleteConfirmVisible(true)}
+                                disabled={isDeleting}
+                                style={[
+                                    styles.deleteButton,
+                                    {
+                                        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+                                        borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(43,38,33,0.12)',
+                                    },
+                                    isDeleting ? styles.deleteButtonDisabled : null,
+                                ]}
+                            >
+                                <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                                <Text style={[styles.deleteButtonLabel, { color: colors.danger }]}>
+                                    {t('noteDetail.deleteTitle', 'Delete Note')}
+                                </Text>
+                            </Pressable>
+                        </Animated.View>
+                    )}
+                </Animated.View>
             ) : null}
         </>
     );
@@ -809,8 +931,10 @@ const styles = StyleSheet.create({
         paddingTop: 16,
         paddingBottom: 60,
     },
-    deleteButton: {
+    deleteArea: {
         marginTop: 20,
+    },
+    deleteButton: {
         minHeight: 60,
         borderRadius: 22,
         borderWidth: StyleSheet.hairlineWidth,
@@ -826,6 +950,44 @@ const styles = StyleSheet.create({
     deleteButtonLabel: {
         fontSize: 15,
         fontWeight: '700',
+    },
+    deleteConfirmBox: {
+        borderRadius: 22,
+        borderWidth: StyleSheet.hairlineWidth,
+        padding: 16,
+        gap: 12,
+    },
+    deleteConfirmTitle: {
+        fontSize: 16,
+        fontWeight: '800',
+        textAlign: 'center',
+    },
+    deleteConfirmMessage: {
+        fontSize: 14,
+        lineHeight: 20,
+        textAlign: 'center',
+    },
+    deleteConfirmActions: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+    deleteConfirmAction: {
+        minHeight: 48,
+        borderRadius: 16,
+        borderWidth: StyleSheet.hairlineWidth,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 12,
+    },
+    deleteConfirmActionWrap: {
+        flex: 1,
+    },
+    deleteConfirmDestructiveAction: {
+        borderWidth: StyleSheet.hairlineWidth,
+    },
+    deleteConfirmActionLabel: {
+        fontSize: 15,
+        fontWeight: '800',
     },
     feedbackOverlay: {
         position: 'absolute',

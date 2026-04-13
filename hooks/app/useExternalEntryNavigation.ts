@@ -5,6 +5,7 @@ import { useActiveFeedTarget } from '../useActiveFeedTarget';
 import { useFeedFocus } from '../useFeedFocus';
 import { useNoteDetailSheet } from '../useNoteDetailSheet';
 import type { FeedFocusTarget } from '../state/useFeedFocus';
+import { areFeedTargetsEqual } from '../state/feedTargets';
 
 const HOME_ROUTE = '/(tabs)' as Href;
 const HOME_PATHNAMES = new Set(['/', '/(tabs)']);
@@ -32,7 +33,7 @@ export function useExternalEntryNavigation() {
       prepareForExternalNavigation();
       const activeTarget = peekActiveFeedTarget();
 
-      if (isHomeVisible && activeTarget?.kind === target.kind && activeTarget.id === target.id) {
+      if (isHomeVisible && areFeedTargetsEqual(activeTarget, target)) {
         return;
       }
 

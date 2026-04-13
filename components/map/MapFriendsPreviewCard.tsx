@@ -15,8 +15,14 @@ import {
   View,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, {
+  type SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
+import { getSharedPostPreviewText } from '../../services/noteTextPresentation';
 import { SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
 import {
@@ -45,16 +51,11 @@ const PREVIEW_MORPH_SPRING = {
 } as const;
 
 function getPreviewText(post: SharedPost, photoLabel: string, noContentLabel: string) {
-  if (post.type === 'photo') {
-    return photoLabel;
-  }
-
-  const normalized = post.text.trim();
-  if (!normalized) {
-    return noContentLabel;
-  }
-
-  return normalized.substring(0, 120) + (normalized.length > 120 ? '…' : '');
+  return getSharedPostPreviewText(post, {
+    photoLabel,
+    emptyLabel: noContentLabel,
+    maxLength: 120,
+  });
 }
 
 interface MapFriendsPreviewCardProps {
@@ -67,6 +68,7 @@ interface MapFriendsPreviewCardProps {
   onFocusPost: (postId: string) => void;
   onInteraction?: () => void;
   reduceMotionEnabled: boolean;
+  externalExpansionProgress?: SharedValue<number>;
 }
 
 export default function MapFriendsPreviewCard({
@@ -79,6 +81,7 @@ export default function MapFriendsPreviewCard({
   onFocusPost,
   onInteraction,
   reduceMotionEnabled,
+  externalExpansionProgress,
 }: MapFriendsPreviewCardProps) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -93,7 +96,8 @@ export default function MapFriendsPreviewCard({
 
   const [isMounted, setIsMounted] = useState(visible);
   const [isExpanded, setIsExpanded] = useState(false);
-  const sheetExpansionProgress = useSharedValue(0);
+  const internalExpansionProgress = useSharedValue(0);
+  const sheetExpansionProgress = externalExpansionProgress ?? internalExpansionProgress;
 
   useEffect(() => {
     if (visible && !isMounted) {

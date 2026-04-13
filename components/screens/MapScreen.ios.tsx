@@ -12,6 +12,12 @@ import {
   Text,
   View,
 } from 'react-native';
+import Reanimated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import type MapView from 'react-native-maps';
 import type { Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -47,6 +53,15 @@ const MIN_ZOOM_DELTA = 0.002;
 const PROGRAMMATIC_REGION_TOLERANCE = 0.0005;
 const PREVIEW_FOCUS_REGION_GUARD_MS = 900;
 const HEAVY_MAP_WARMUP_DATASET_SIZE = 24;
+const NOTE_PREVIEW_REST_HEIGHT = 168;
+const NOTE_PREVIEW_EXPANDED_HEIGHT = 344;
+const FRIEND_PREVIEW_REST_HEIGHT = 152;
+const FRIEND_PREVIEW_EXPANDED_HEIGHT = 332;
+const STATUS_PREVIEW_FILTERED_HEIGHT = 116;
+const STATUS_PREVIEW_COLLAPSED_HEIGHT = 62;
+const STATUS_PREVIEW_EMPTY_HEIGHT = 48;
+const RECENTER_FAB_PREVIEW_GAP = 12;
+const RECENTER_FAB_BOTTOM_DEFAULT = 86;
 
 type MapRegionChangeDetails = {
   isGesture?: boolean;
@@ -79,6 +94,18 @@ function isCoordinateCenteredInRegion(region: Region | null, latitude: number, l
     Math.abs(region.latitude - latitude) <= latitudeTolerance &&
     Math.abs(region.longitude - longitude) <= longitudeTolerance
   );
+}
+
+function getStatusPreviewHeight(kind: 'collapsed' | 'filtered-empty' | 'no-notes') {
+  if (kind === 'filtered-empty') {
+    return STATUS_PREVIEW_FILTERED_HEIGHT;
+  }
+
+  if (kind === 'collapsed') {
+    return STATUS_PREVIEW_COLLAPSED_HEIGHT;
+  }
+
+  return STATUS_PREVIEW_EMPTY_HEIGHT;
 }
 
 export default function MapScreenIOS() {
@@ -210,47 +237,6 @@ export default function MapScreenIOS() {
 
     return nearbyPreviewItems[0]?.note ?? null;
   }, [activeNearbyNoteId, nearbyItemById, nearbyPreviewItems, selectedGroup, selectedNote]);
-  const distanceAnchor = useMemo(() => {
-    if (activePreviewNote) {
-      return {
-        latitude: activePreviewNote.latitude,
-        longitude: activePreviewNote.longitude,
-      };
-    }
-
-    if (settledRegion) {
-      return {
-        latitude: settledRegion.latitude,
-        longitude: settledRegion.longitude,
-      };
-    }
-
-    if (visibleRegion) {
-      return {
-        latitude: visibleRegion.latitude,
-        longitude: visibleRegion.longitude,
-      };
-    }
-
-    if (location) {
-      return {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      };
-    }
-
-    return {
-      latitude: initialRegion.latitude,
-      longitude: initialRegion.longitude,
-    };
-  }, [
-    activePreviewNote,
-    initialRegion.latitude,
-    initialRegion.longitude,
-    location,
-    settledRegion,
-    visibleRegion,
-  ]);
   const activeNoteReadyToOpen = useMemo(
     () =>
       activePreviewNote != null &&
@@ -296,6 +282,72 @@ export default function MapScreenIOS() {
     bottomOverlayKind === 'filtered-empty' ||
     bottomOverlayKind === 'no-notes';
   const notesPreviewVisible = bottomOverlayKind === 'preview';
+  const recenterPreviewRestingOffset =
+    notesPreviewVisible
+      ? NOTE_PREVIEW_REST_HEIGHT + RECENTER_FAB_PREVIEW_GAP
+      : friendsPreviewVisible
+        ? FRIEND_PREVIEW_REST_HEIGHT + RECENTER_FAB_PREVIEW_GAP
+        : isStatusOverlay
+          ? getStatusPreviewHeight(bottomOverlayKind) + RECENTER_FAB_PREVIEW_GAP
+          : RECENTER_FAB_BOTTOM_DEFAULT;
+  const recenterPreviewExpansionRange =
+    notesPreviewVisible
+      ? NOTE_PREVIEW_EXPANDED_HEIGHT - NOTE_PREVIEW_REST_HEIGHT
+      : friendsPreviewVisible
+        ? FRIEND_PREVIEW_EXPANDED_HEIGHT - FRIEND_PREVIEW_REST_HEIGHT
+      : 0;
+  const recenterAnchorsToPreview = notesPreviewVisible || friendsPreviewVisible || isStatusOverlay;
+  const recenterPreviewProgress = useSharedValue(recenterAnchorsToPreview ? 1 : 0);
+  const previewExpansionProgress = useSharedValue(0);
+  const recenterRestingOffset = useSharedValue(recenterPreviewRestingOffset);
+  const recenterExpansionRange = useSharedValue(recenterPreviewExpansionRange);
+
+  useEffect(() => {
+    recenterRestingOffset.value = reduceMotionEnabled
+      ? recenterPreviewRestingOffset
+      : withSpring(recenterPreviewRestingOffset, {
+          damping: 24,
+          stiffness: 220,
+          mass: 0.86,
+        });
+
+    recenterExpansionRange.value = recenterPreviewExpansionRange;
+    recenterPreviewProgress.value = reduceMotionEnabled
+      ? (recenterAnchorsToPreview ? 1 : 0)
+      : withSpring(recenterAnchorsToPreview ? 1 : 0, {
+          damping: 24,
+          stiffness: 220,
+          mass: 0.86,
+        });
+
+    if (!notesPreviewVisible && !friendsPreviewVisible) {
+      previewExpansionProgress.value = reduceMotionEnabled
+        ? 0
+        : withTiming(0, { duration: 140 });
+    }
+  }, [
+    friendsPreviewVisible,
+    notesPreviewVisible,
+    previewExpansionProgress,
+    recenterAnchorsToPreview,
+    recenterExpansionRange,
+    recenterPreviewExpansionRange,
+    recenterPreviewProgress,
+    recenterPreviewRestingOffset,
+    recenterRestingOffset,
+    reduceMotionEnabled,
+  ]);
+
+  const recenterFabAnimatedStyle = useAnimatedStyle(() => {
+    const previewOffset =
+      RECENTER_FAB_BOTTOM_DEFAULT +
+      (recenterRestingOffset.value - RECENTER_FAB_BOTTOM_DEFAULT) * recenterPreviewProgress.value +
+      previewExpansionProgress.value * recenterExpansionRange.value * recenterPreviewProgress.value;
+
+    return {
+      bottom: previewBottomOffset + previewOffset,
+    };
+  }, [previewBottomOffset]);
 
   useEffect(() => {
     if (overlayState !== 'content' && !notesPreviewPersistsWhenAreaEmpty) {
@@ -797,7 +849,10 @@ export default function MapScreenIOS() {
         />
       </View>
 
-      <View testID="map-recenter-wrapper" style={[styles.fabContainer, { top: insets.top + 20 }]}>
+      <Reanimated.View
+        testID="map-recenter-wrapper"
+        style={[styles.fabContainer, recenterFabAnimatedStyle]}
+      >
         <Pressable
           testID="map-recenter"
           onPress={goToMyLocation}
@@ -850,7 +905,7 @@ export default function MapScreenIOS() {
             <Ionicons name="location" size={20} color={colors.primary} />
           </View>
         </Pressable>
-      </View>
+      </Reanimated.View>
 
       {mapUiReady && notesPreviewVisible && !friendsPreviewVisible ? (
         <MapPreviewCard
@@ -861,7 +916,6 @@ export default function MapScreenIOS() {
           nearbyItems={nearbyPreviewItems}
           activeNearbyNoteId={activeNearbyNoteId}
           activeNoteReadyToOpen={activeNoteReadyToOpen}
-          distanceAnchor={distanceAnchor}
           bottomOffset={previewBottomOffset}
           onFocusPreviewNote={focusPreviewNote}
           onActivatePreviewNote={handleActivatePreviewNote}
@@ -869,6 +923,7 @@ export default function MapScreenIOS() {
           onDismiss={handleDismissNotesPreview}
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
+          externalExpansionProgress={previewExpansionProgress}
         />
       ) : null}
 
@@ -939,6 +994,7 @@ export default function MapScreenIOS() {
           onFocusPost={(postId) => focusFriendPost(postId)}
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
+          externalExpansionProgress={previewExpansionProgress}
         />
       ) : null}
 
@@ -988,7 +1044,7 @@ const styles = StyleSheet.create({
   topHeader: {
     position: 'absolute',
     left: 14,
-    right: 72,
+    right: 14,
     zIndex: 12,
   },
   emptyOverlay: {

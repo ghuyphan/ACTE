@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
-import { Platform } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import MapScreen from '../app/(tabs)/map';
 
 const mockOpenNoteDetail = jest.fn();
@@ -354,6 +354,13 @@ describe('MapScreen', () => {
   it('keeps recenter control operable', async () => {
     const { getByTestId } = render(<MapScreen />);
 
+    await waitFor(() => {
+      expect(getByTestId('map-preview-shell')).toBeTruthy();
+      const recenterWrapperStyle = StyleSheet.flatten(getByTestId('map-recenter-wrapper').props.style);
+      expect(recenterWrapperStyle.bottom).toBeGreaterThan(170);
+      expect(recenterWrapperStyle.top).toBeUndefined();
+    });
+
     fireEvent.press(getByTestId('map-recenter'));
 
     await waitFor(() => {
@@ -503,6 +510,115 @@ describe('MapScreen', () => {
     });
 
     expect(getByTestId('note-marker-text-1')).toBeTruthy();
+  });
+
+  it('stops tracking selected marker view changes after the Android refresh window closes', async () => {
+    jest.useFakeTimers();
+    setPlatformOS('android');
+
+    const { getByTestId } = render(<MapScreen />);
+
+    await waitFor(() => {
+      expect(getByTestId('leaf-marker-10.76000:106.66000')).toBeTruthy();
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('leaf-marker-10.76000:106.66000').props.tracksViewChanges).toBe(true);
+    });
+
+    act(() => {
+      jest.advanceTimersByTime(400);
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('leaf-marker-10.76000:106.66000').props.tracksViewChanges).toBe(false);
+    });
+
+    jest.useRealTimers();
+  });
+
+  it('replaces the old Android selected callout when another marker is tapped', async () => {
+    setPlatformOS('android');
+    replaceMockNotes([
+      {
+        id: 'marker-a',
+        type: 'text',
+        content: 'Alpha note',
+        locationName: 'Alpha',
+        latitude: 10.76,
+        longitude: 106.66,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-12T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'marker-b',
+        type: 'text',
+        content: 'Beta note',
+        locationName: 'Beta',
+        latitude: 10.7615,
+        longitude: 106.6615,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'marker-c',
+        type: 'text',
+        content: 'Gamma note',
+        locationName: 'Gamma',
+        latitude: 10.763,
+        longitude: 106.663,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-10T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ]);
+
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.7615,
+        longitude: 106.6615,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('leaf-marker-10.76000:106.66000')).toBeTruthy();
+      expect(getByTestId('leaf-marker-10.76300:106.66300')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-marker-a')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.76300:106.66300'));
+
+    await waitFor(() => {
+      expect(queryByTestId('note-marker-marker-a')).toBeNull();
+      expect(getByTestId('note-marker-marker-c')).toBeTruthy();
+    });
   });
 
   it('renders nearby mode in preview and opens the centered preview card on tap', async () => {
@@ -738,7 +854,7 @@ describe('MapScreen', () => {
     let now = 1000;
     nowSpy.mockImplementation(() => now);
 
-    const { getAllByTestId, getByTestId, getAllByText, queryByTestId } = render(<MapScreen />);
+    const { getAllByTestId, getByTestId, queryByTestId } = render(<MapScreen />);
 
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
@@ -751,7 +867,7 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(getByTestId('map-preview-list')).toBeTruthy();
-      expect(getAllByText(/^\d+(?:\.\d)?(?:m|km)$/).length).toBeGreaterThan(0);
+      expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
       expect(queryByTestId('map-preview-index')).toBeNull();
       expect(queryByTestId('map-preview-group-count')).toBeNull();
     });
@@ -920,7 +1036,7 @@ describe('MapScreen', () => {
     let now = 1000;
     nowSpy.mockImplementation(() => now);
 
-    const { getByTestId, getAllByText } = render(<MapScreen />);
+    const { getByTestId } = render(<MapScreen />);
 
     act(() => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
@@ -935,14 +1051,14 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByTestId('note-marker-text-1')).toBeTruthy();
-      expect(getAllByText(/^\d+(?:\.\d)?(?:m|km)$/).length).toBeGreaterThan(0);
+      expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
     });
 
     now = 1100;
     fireEvent.press(getByTestId('mock-map-press'));
 
     expect(getByTestId('note-marker-text-1')).toBeTruthy();
-    expect(getAllByText(/^\d+(?:\.\d)?(?:m|km)$/).length).toBeGreaterThan(0);
+    expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
 
     nowSpy.mockRestore();
   });
@@ -1059,7 +1175,7 @@ describe('MapScreen', () => {
     let now = 1000;
     nowSpy.mockImplementation(() => now);
 
-    const { getByTestId, getAllByText } = render(<MapScreen />);
+    const { getByTestId } = render(<MapScreen />);
 
     act(() => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
@@ -1074,14 +1190,14 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByTestId('note-marker-text-1')).toBeTruthy();
-      expect(getAllByText(/^\d+(?:\.\d)?(?:m|km)$/).length).toBeGreaterThan(0);
+      expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
     });
 
     now = 1400;
     fireEvent.press(getByTestId('mock-map-press'));
 
     expect(getByTestId('leaf-marker-10.76000:106.66000')).toBeTruthy();
-    expect(getAllByText(/^\d+(?:\.\d)?(?:m|km)$/).length).toBeGreaterThan(0);
+    expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
 
     nowSpy.mockRestore();
   });
@@ -1391,6 +1507,44 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(mockRouterPush).toHaveBeenCalledWith('/shared/shared-friend-1');
     });
+  });
+
+  it('uses shared photo captions in the friends preview instead of the generic photo fallback', async () => {
+    mockSharedPosts.splice(0, mockSharedPosts.length, {
+      id: 'shared-photo-1',
+      authorUid: 'friend-1',
+      authorDisplayName: 'Lan',
+      authorPhotoURLSnapshot: null,
+      audienceUserIds: ['me'],
+      type: 'photo',
+      text: 'Shared sunset caption',
+      photoPath: 'shared/photo-1.jpg',
+      photoLocalUri: 'file:///shared/photo-1.jpg',
+      isLivePhoto: false,
+      pairedVideoPath: null,
+      pairedVideoLocalUri: null,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      noteColor: null,
+      placeName: 'District 2',
+      sourceNoteId: null,
+      latitude: 10.78,
+      longitude: 106.72,
+      createdAt: '2026-03-12T00:00:00.000Z',
+      updatedAt: null,
+    } as any);
+
+    const { getAllByText, getByTestId, queryByText } = render(<MapScreen />);
+
+    fireEvent.press(getByTestId('map-friends-chip'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-friends-preview-shell')).toBeTruthy();
+      expect(getAllByText('Shared sunset caption').length).toBeGreaterThan(0);
+    });
+
+    expect(queryByText('Photo memory')).toBeNull();
   });
 
   it('renders friend markers on the map and opens the friend preview when pressed', async () => {

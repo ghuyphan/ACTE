@@ -1,7 +1,7 @@
 import { Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 import * as FileSystem from '../../utils/fileSystem';
-import { parseNoteStickerPlacements } from '../noteStickers';
+import { getStickerFileExtension, parseNoteStickerPlacements } from '../noteStickers';
 import { resolveStoredPhotoUri } from '../photoStorage';
 import { downloadPhotoFromStorage, SHARED_POST_MEDIA_BUCKET } from '../remoteMedia';
 import type { WidgetProps } from './contract';
@@ -35,17 +35,6 @@ function getWidgetFileExtensionFromUri(uri: string) {
   const normalizedUri = uri.split(/[?#]/, 1)[0] ?? '';
   const match = normalizedUri.match(/\.([a-zA-Z0-9]{1,5})$/);
   return sanitizeWidgetFileExtension(match?.[1] ?? null);
-}
-
-function getStickerFileExtension(mimeType: string | null | undefined) {
-  switch ((mimeType ?? '').trim().toLowerCase()) {
-    case 'image/webp':
-      return 'webp';
-    case 'image/png':
-      return 'png';
-    default:
-      return null;
-  }
 }
 
 function sanitizeStorageTokenSegment(value: string) {

@@ -3,6 +3,7 @@ import {
   parseStoredStickerPlacements,
   type StickerRenderMode,
 } from './stickerPlacementPayload';
+import { normalizePlaceName } from './textNormalization';
 
 export type MonthlyRecapObjectKind = 'postcard' | 'polaroid' | 'stamp';
 
@@ -132,21 +133,6 @@ const WEEKDAY_INDEX_BY_LABEL: Record<string, number> = {
   Fri: 5,
   Sat: 6,
 };
-
-function normalizeForMatching(value: string | null | undefined) {
-  return (value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[’]/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
-
-function normalizePlaceName(value: string | null | undefined) {
-  const normalized = normalizeForMatching(value);
-  return normalized || null;
-}
 
 function getRoundedCoordinate(value: number) {
   return Number.isFinite(value) ? value.toFixed(4) : '0.0000';

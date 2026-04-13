@@ -1,14 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Layout } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { SharedPost } from '../../services/sharedFeedService';
-import {
-  downloadPairedVideoFromStorage,
-  downloadPhotoFromStorage,
-  SHARED_POST_MEDIA_BUCKET,
-} from '../../services/remoteMedia';
+import { SHARED_POST_MEDIA_BUCKET } from '../../services/remoteMedia';
 import ImageMemoryCard from '../notes/ImageMemoryCard';
 import type { DebugTiltState } from '../notes/StickerPhysicsDebugControls';
 import TextMemoryCard from '../notes/TextMemoryCard';
@@ -32,75 +27,8 @@ export default function SharedPostCardVisual({
     !post.doodleStrokesJson &&
     !post.stickerPlacementsJson &&
     !post.hasStickers;
-  
-  const [photoUri, setPhotoUri] = useState<string | null>(
-    post.type === 'photo' ? post.photoLocalUri ?? null : null
-  );
-  const [pairedVideoUri, setPairedVideoUri] = useState<string | null>(
-    post.type === 'photo' ? post.pairedVideoLocalUri ?? null : null
-  );
-
-  useEffect(() => {
-    if (post.type !== 'photo') {
-      setPhotoUri(null);
-      setPairedVideoUri(null);
-      return;
-    }
-
-    setPhotoUri(post.photoLocalUri ?? null);
-    setPairedVideoUri(post.pairedVideoLocalUri ?? null);
-  }, [post]);
-
-  useEffect(() => {
-    let active = true;
-
-    if (post.type !== 'photo' || photoUri || !post.photoPath) {
-      return;
-    }
-
-    downloadPhotoFromStorage(SHARED_POST_MEDIA_BUCKET, post.photoPath, post.id)
-      .then((downloadedUri) => {
-        if (active && downloadedUri) {
-          setPhotoUri(downloadedUri);
-        }
-      })
-      .catch(() => {
-        // Fallback or ignore for now, activity indicator remains
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [post.id, post.type, post.photoPath, photoUri]);
-
-  useEffect(() => {
-    let active = true;
-
-    if (
-      post.type !== 'photo' ||
-      !post.isLivePhoto ||
-      pairedVideoUri ||
-      !post.pairedVideoPath
-    ) {
-      return;
-    }
-
-    downloadPairedVideoFromStorage(
-      SHARED_POST_MEDIA_BUCKET,
-      post.pairedVideoPath,
-      `${post.id}-motion`
-    )
-      .then((downloadedUri) => {
-        if (active && downloadedUri) {
-          setPairedVideoUri(downloadedUri);
-        }
-      })
-      .catch(() => undefined);
-
-    return () => {
-      active = false;
-    };
-  }, [pairedVideoUri, post.id, post.isLivePhoto, post.pairedVideoPath, post.type]);
+  const photoUri = post.type === 'photo' ? post.photoLocalUri ?? null : null;
+  const pairedVideoUri = post.type === 'photo' ? post.pairedVideoLocalUri ?? null : null;
 
   if (post.type === 'photo') {
     if (photoUri) {

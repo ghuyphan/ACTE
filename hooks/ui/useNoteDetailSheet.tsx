@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
+import { createContext, ReactNode, useContext, useMemo, useRef, useState } from 'react';
 import NoteDetailSheet from '../../components/notes/NoteDetailSheet';
 
 interface NoteDetailSheetContextValue {
@@ -6,16 +6,29 @@ interface NoteDetailSheetContextValue {
   closeNoteDetail: () => void;
 }
 
+interface NoteDetailSelection {
+  noteId: string;
+  requestId: number;
+}
+
 const NoteDetailSheetContext = createContext<NoteDetailSheetContextValue | undefined>(undefined);
 
 export function NoteDetailSheetProvider({ children }: { children: ReactNode }) {
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<NoteDetailSelection | null>(null);
   const [visible, setVisible] = useState(false);
+  const activeRequestIdRef = useRef<number | null>(null);
 
   const value = useMemo<NoteDetailSheetContextValue>(
     () => ({
       openNoteDetail: (noteId: string) => {
-        setSelectedNoteId(noteId);
+        setSelection((current) => {
+          const nextSelection = {
+          noteId,
+          requestId: (current?.requestId ?? 0) + 1,
+          };
+          activeRequestIdRef.current = nextSelection.requestId;
+          return nextSelection;
+        });
         setVisible(true);
       },
       closeNoteDetail: () => {
@@ -28,17 +41,22 @@ export function NoteDetailSheetProvider({ children }: { children: ReactNode }) {
   return (
     <NoteDetailSheetContext.Provider value={value}>
       {children}
-      {selectedNoteId ? (
+      {selection ? (
         <NoteDetailSheet
-          key={selectedNoteId}
-          noteId={selectedNoteId}
+          key={selection.noteId}
+          noteId={selection.noteId}
           visible={visible}
           onClose={() => {
             setVisible(false);
           }}
           onClosed={() => {
+            if (activeRequestIdRef.current !== selection.requestId) {
+              return;
+            }
+
+            activeRequestIdRef.current = null;
             setVisible(false);
-            setSelectedNoteId(null);
+            setSelection(null);
           }}
         />
       ) : null}

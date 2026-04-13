@@ -17,18 +17,18 @@ import {
 } from 'react-native';
 import Animated, {
   interpolate,
+  type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
 import { GlassView } from '../ui/GlassView';
 import type { MapPointGroup, NearbyNoteItem } from '../../hooks/map/mapDomain';
-import { getDistanceMeters } from '../../hooks/map/mapDomain';
 import { useTheme } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
 import { getTextNoteCardGradient } from '../../services/noteAppearance';
 import { getNotePhotoUri } from '../../services/photoStorage';
-import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
+import { getNotePreviewText } from '../../services/noteTextPresentation';
 import { isOlderIOS } from '../../utils/platform';
 import {
   MapPreviewExpandButton,
@@ -65,7 +65,6 @@ interface MapPreviewCardProps {
   nearbyItems: NearbyNoteItem[];
   activeNearbyNoteId: string | null;
   activeNoteReadyToOpen: boolean;
-  distanceAnchor?: { latitude: number; longitude: number } | null;
   bottomOffset: number;
   onFocusPreviewNote: (noteId: string) => void;
   onActivatePreviewNote: (noteId: string) => void;
@@ -73,39 +72,19 @@ interface MapPreviewCardProps {
   onDismiss: () => void;
   onInteraction?: () => void;
   reduceMotionEnabled: boolean;
+  externalExpansionProgress?: SharedValue<number>;
 }
 
 interface PreviewRailItem {
   note: Note;
-  distanceMeters: number | null;
-}
-
-function formatDistanceLabel(distanceMeters: number) {
-  if (distanceMeters < 1000) {
-    return `${Math.round(distanceMeters)}m`;
-  }
-
-  const km = distanceMeters / 1000;
-  return `${km.toFixed(km >= 10 ? 0 : 1)}km`;
 }
 
 function getPreviewText(note: Note, photoLabel: string, noContentLabel: string) {
-  if (note.type === 'photo') {
-    const caption = note.caption?.trim();
-    if (!caption) {
-      return photoLabel;
-    }
-
-    return caption.substring(0, 120) + (caption.length > 120 ? '…' : '');
-  }
-
-  const normalized = note.content.trim();
-  if (!normalized) {
-    return noContentLabel;
-  }
-
-  const displayText = formatNoteTextWithEmoji(normalized, note.moodEmoji);
-  return displayText.substring(0, 120) + (displayText.length > 120 ? '…' : '');
+  return getNotePreviewText(note, {
+    photoLabel,
+    emptyLabel: noContentLabel,
+    maxLength: 120,
+  });
 }
 
 export default function MapPreviewCard({
@@ -116,7 +95,6 @@ export default function MapPreviewCard({
   nearbyItems,
   activeNearbyNoteId,
   activeNoteReadyToOpen,
-  distanceAnchor = null,
   bottomOffset,
   onFocusPreviewNote,
   onActivatePreviewNote,
@@ -124,6 +102,7 @@ export default function MapPreviewCard({
   onDismiss,
   onInteraction,
   reduceMotionEnabled,
+  externalExpansionProgress,
 }: MapPreviewCardProps) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -145,7 +124,8 @@ export default function MapPreviewCard({
   const [isMounted, setIsMounted] = useState(visible);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const sheetExpansionProgress = useSharedValue(0);
+  const internalExpansionProgress = useSharedValue(0);
+  const sheetExpansionProgress = externalExpansionProgress ?? internalExpansionProgress;
   const fullSurfaceWidth = Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2);
   const nearbyPageWidth = Math.max(0, fullSurfaceWidth - mapOverlayTokens.overlayPadding * 2);
 
@@ -202,21 +182,11 @@ export default function MapPreviewCard({
   const previewItems = useMemo<PreviewRailItem[]>(
     () =>
       isGroupMode && renderSelectedGroup
-        ? renderSelectedGroup.notes.map((note) => ({
-            note,
-            distanceMeters:
-              distanceAnchor
-                ? getDistanceMeters(distanceAnchor, {
-                    latitude: note.latitude,
-                    longitude: note.longitude,
-                  })
-                : nearbyItems.find((item) => item.note.id === note.id)?.distanceMeters ?? null,
-          }))
+        ? renderSelectedGroup.notes.map((note) => ({ note }))
         : nearbyItems.map((item) => ({
             note: item.note,
-            distanceMeters: item.distanceMeters,
           })),
-    [distanceAnchor, isGroupMode, nearbyItems, renderSelectedGroup]
+    [isGroupMode, nearbyItems, renderSelectedGroup]
   );
 
   const activeNearbyIndex = useMemo(
@@ -316,7 +286,6 @@ export default function MapPreviewCard({
   const showPreviewCount = Boolean(renderData && renderData.previewItems.length > 1);
   const previewPosition = renderData ? Math.max(renderData.activeIndex, 0) + 1 : 0;
   const previewTotal = renderData?.previewItems.length ?? 0;
-  const showPlaceMeta = isGroupMode && renderData ? renderData.previewItems.length > 1 : false;
 
   const animatedShellStyle = useAnimatedStyle(
     () => ({
@@ -422,10 +391,6 @@ export default function MapPreviewCard({
                     emoji: item.note.moodEmoji,
                     noteColor: item.note.noteColor,
                   });
-                  const metaLabel =
-                    showPlaceMeta || item.distanceMeters == null
-                      ? t('map.noteAtPlace', 'Saved here')
-                      : formatDistanceLabel(item.distanceMeters);
                   const isActive = item.note.id === renderData.activePreviewItem.note.id;
 
                   return (
@@ -524,16 +489,6 @@ export default function MapPreviewCard({
                           >
                             {cardPreview}
                           </Text>
-                          <View style={styles.metaRow}>
-                            <Ionicons
-                              name={showPlaceMeta || item.distanceMeters == null ? 'pin' : 'navigate'}
-                              size={12}
-                              color={colors.secondaryText}
-                            />
-                            <Text style={[styles.metaText, { color: colors.secondaryText }]}>
-                              {metaLabel}
-                            </Text>
-                          </View>
                         </View>
                       </View>
                     </Pressable>
@@ -669,24 +624,6 @@ export default function MapPreviewCard({
                           >
                             {detailPreview}
                           </Text>
-                          <View style={styles.expandedRowMeta}>
-                            <Ionicons
-                              name={showPlaceMeta || item.distanceMeters == null ? 'pin' : 'navigate'}
-                              size={11}
-                              color={isExpandedItemActive ? colors.primary : colors.secondaryText}
-                            />
-                            <Text
-                              style={[
-                                styles.expandedMetaText,
-                                { color: isExpandedItemActive ? colors.primary : colors.secondaryText },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {showPlaceMeta || item.distanceMeters == null
-                                ? t('map.noteAtPlace', 'Saved here')
-                                : formatDistanceLabel(item.distanceMeters)}
-                            </Text>
-                          </View>
                         </View>
                       </Pressable>
                     );
@@ -791,17 +728,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontFamily: 'Noto Sans',
   },
-  metaRow: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  metaText: {
-    fontSize: 12,
-    fontWeight: '500',
-    fontFamily: 'Noto Sans',
-  },
   expandedBody: {
     overflow: 'hidden',
   },
@@ -841,17 +767,6 @@ const styles = StyleSheet.create({
   expandedRowText: {
     fontSize: 12,
     lineHeight: 17,
-    fontFamily: 'Noto Sans',
-    marginBottom: 6,
-  },
-  expandedRowMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  expandedMetaText: {
-    fontSize: 11,
-    fontWeight: '600',
     fontFamily: 'Noto Sans',
   },
 });

@@ -1,45 +1,23 @@
-import { Group, HStack, Picker, Text as SwiftUIText, VStack } from '@expo/ui/swift-ui';
-import { backgroundOverlay, cornerRadius, font, foregroundStyle, padding, pickerStyle, tag } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useHaptics } from '../../hooks/useHaptics';
-import { useTheme } from '../../hooks/useTheme';
-import { isOlderIOS } from '../../utils/platform';
 import { getHapticsOptions, type HapticsSettingValue } from './settingsSelectionOptions';
+import SettingsSelectionSheetIOS from './SettingsSelectionSheetIOS';
 
 export default function SettingsHapticsSheet() {
   const { t } = useTranslation();
   const { isEnabled, setIsEnabled } = useHaptics();
-  const { colors } = useTheme();
   const hapticsOptions = getHapticsOptions(t);
-  const containerModifiers = [
-    padding({ top: 24, leading: 24, trailing: 24, bottom: 40 }),
-    ...(isOlderIOS ? [backgroundOverlay({ color: colors.card }), cornerRadius(10)] : []),
-  ];
 
   return (
-    <Group>
-      <VStack modifiers={containerModifiers}>
-        <HStack modifiers={[padding({ bottom: 16 })]}>
-          <SwiftUIText modifiers={[font({ size: 22, weight: 'bold' }), foregroundStyle(colors.text)]}>
-            {t('settings.haptics', 'Haptics')}
-          </SwiftUIText>
-        </HStack>
-
-        <Picker
-          selection={isEnabled ? 'on' : 'off'}
-          onSelectionChange={(selection) => {
-            void setIsEnabled((selection as HapticsSettingValue) === 'on');
-          }}
-          modifiers={[pickerStyle('segmented'), padding({ bottom: 24 })]}
-        >
-          {hapticsOptions.map((option) => (
-            <SwiftUIText key={option.key} modifiers={[tag(option.key)]}>
-              {option.label}
-            </SwiftUIText>
-          ))}
-        </Picker>
-      </VStack>
-    </Group>
+    <SettingsSelectionSheetIOS
+      title={t('settings.haptics', 'Haptics')}
+      options={hapticsOptions}
+      selectedKey={isEnabled ? 'on' : 'off'}
+      onSelect={(selection) => {
+        void setIsEnabled((selection as HapticsSettingValue) === 'on');
+      }}
+      pickerVariant="segmented"
+    />
   );
 }
