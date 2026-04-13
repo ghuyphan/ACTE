@@ -74,14 +74,17 @@ export default function ProfileScreenIOS() {
   const {
     avatarLabel,
     avatarUrl,
+    canEditAvatar,
     canEditUsername,
     closeUsernameEditor,
     colors,
+    handleChangeAvatar,
     isAuthAvailable,
     isDark,
     isDeletingAccount,
     isSigningOut,
     isSavingUsername,
+    isUpdatingAvatar,
     isUsernameSheetVisible,
     membershipLabel,
     openSignIn,
@@ -114,9 +117,13 @@ export default function ProfileScreenIOS() {
                       <ProfileAvatar
                         avatarLabel={avatarLabel}
                         avatarUrl={avatarUrl}
+                        accessibilityLabel={t('profile.avatarChangeA11y', 'Change avatar')}
                         colors={colors}
+                        disabled={!canEditAvatar}
+                        isLoading={isUpdatingAvatar}
                         size={48}
                         labelFontSize={20}
+                        onPress={handleChangeAvatar}
                       />
                     </View>
                   </RNHostView>

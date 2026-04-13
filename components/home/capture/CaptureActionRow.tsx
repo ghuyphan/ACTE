@@ -113,6 +113,10 @@ export function CaptureActionRow({
     typeof remainingPhotoSlots === 'number' && remainingPhotoSlots > 0
       ? t('capture.photoSlotsRemainingCompact', '{{count}} left', { count: remainingPhotoSlots })
       : null;
+  const remainingPhotoSlotsCaption =
+    typeof remainingPhotoSlots === 'number' && remainingPhotoSlots > 0
+      ? t('capture.photoSlotsRemainingCompactSuffix', 'left today')
+      : null;
 
   if (cameraUiStage === 'live' || cameraUiStage === 'capturing') {
     return (
@@ -164,14 +168,26 @@ export function CaptureActionRow({
                 {isLivePhotoCaptureInProgress ? (
                   <Text style={styles.shutterInnerCountText}>{livePhotoCountdownSeconds}s</Text>
                 ) : remainingPhotoSlotsLabel ? (
-                  <Text
-                    style={styles.shutterInnerCompactText}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.75}
-                  >
-                    {remainingPhotoSlotsLabel}
-                  </Text>
+                  <View style={styles.shutterInnerQuotaWrap}>
+                    <Text
+                      style={styles.shutterInnerQuotaCountText}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                    >
+                      {remainingPhotoSlots}
+                    </Text>
+                    {remainingPhotoSlotsCaption ? (
+                      <Text
+                        style={styles.shutterInnerQuotaCaptionText}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.75}
+                      >
+                        {remainingPhotoSlotsCaption}
+                      </Text>
+                    ) : null}
+                  </View>
                 ) : null}
               </Reanimated.View>
             </CaptureAnimatedPressable>

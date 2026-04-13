@@ -52,6 +52,11 @@ function mapPublicUserProfile(row: ProfileRow): PublicUserProfile {
   };
 }
 
+function isInlineProfilePhotoURL(value: string | null | undefined) {
+  const normalizedValue = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return normalizedValue.startsWith('data:image/');
+}
+
 export function normalizeUsernameInput(value: string) {
   return value.trim().replace(/^@+/, '').toLowerCase();
 }
@@ -79,7 +84,7 @@ export async function upsertPublicUserProfile(input: {
   displayName: string | null | undefined;
   username?: string | null | undefined;
   email?: string | null | undefined;
-  photoURL: string | null | undefined;
+  photoURL?: string | null | undefined;
 }): Promise<PublicUserProfile | null> {
   const supabase = getSupabase();
   if (!supabase) {
@@ -102,11 +107,18 @@ export async function upsertPublicUserProfile(input: {
   }
 
   if (existingProfile) {
+    const hasExplicitPhotoUrl = Object.prototype.hasOwnProperty.call(input, 'photoURL');
+    const nextPhotoURL = !hasExplicitPhotoUrl
+      ? undefined
+      : isInlineProfilePhotoURL(existingProfile.photo_url) &&
+          existingProfile.photo_url !== (input.photoURL ?? null)
+        ? existingProfile.photo_url
+        : (input.photoURL ?? null);
     const { data, error } = await supabase
       .from('profiles')
       .update({
         display_name: normalizedDisplayName,
-        photo_url: input.photoURL ?? null,
+        ...(hasExplicitPhotoUrl ? { photo_url: nextPhotoURL } : {}),
         updated_at: now,
       })
       .eq('id', input.userUid)
@@ -200,6 +212,32 @@ export async function updateOwnUsername(input: {
     .from('profiles')
     .update({
       username: normalizedUsername,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', input.userUid)
+    .select('id, display_name, username, username_set_at, photo_url, updated_at')
+    .single<ProfileRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapPublicUserProfile(data);
+}
+
+export async function updateOwnPhotoURL(input: {
+  userUid: string;
+  photoURL: string | null;
+}): Promise<PublicUserProfile> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Shared feed is unavailable in this build.');
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      photo_url: input.photoURL ?? null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', input.userUid)

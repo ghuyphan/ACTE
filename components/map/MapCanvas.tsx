@@ -799,7 +799,6 @@ function MapCanvas({
           selectedGroup!.notes.length === 1 &&
           Boolean(selectedNote) &&
           node.groupId === selectedGroup!.id;
-        const markerKey = showSelectedCallout ? `${key}-selected-${selectedNote!.id}` : key;
         const markerZIndex = showSelectedCallout ? 30 : isSelected ? 20 : node.isCluster ? 5 : 10;
         const imageTrackingKey = photoUri ? `${key}::${photoUri}` : null;
 
@@ -821,7 +820,7 @@ function MapCanvas({
             />
           ) : (
             <Marker
-              key={markerKey}
+              key={key}
               testID={testID}
               coordinate={coordinate}
               anchor={showSelectedCallout ? selectedCalloutAnchor : { x: 0.5, y: 0.5 }}

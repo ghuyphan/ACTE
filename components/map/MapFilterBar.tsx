@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../ui/GlassView';
-import { ReactNode, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Reanimated, {
@@ -33,7 +33,12 @@ interface MapFilterBarProps {
   top?: number;
   countLabel: string;
   reduceMotionEnabled: boolean;
-  headerAccessory?: ReactNode;
+  friendsChip?: {
+    active: boolean;
+    label: string;
+    onPress: () => void;
+    testID: string;
+  } | null;
 }
 
 interface FilterChipProps {
@@ -134,7 +139,7 @@ export default function MapFilterBar({
   top = 0,
   countLabel,
   reduceMotionEnabled,
-  headerAccessory,
+  friendsChip,
 }: MapFilterBarProps) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -183,8 +188,31 @@ export default function MapFilterBar({
         },
         testID: 'map-filter-favorites',
       },
+      ...(friendsChip
+        ? [
+            {
+              id: 'friends',
+              label: friendsChip.label,
+              icon: 'sparkles-outline' as const,
+              active: friendsChip.active,
+              onPress: () => {
+                onInteraction?.();
+                friendsChip.onPress();
+              },
+              testID: friendsChip.testID,
+            },
+          ]
+        : []),
     ],
-    [filterState.favoritesOnly, filterState.type, onChangeType, onInteraction, onToggleFavorites, t]
+    [
+      filterState.favoritesOnly,
+      filterState.type,
+      friendsChip,
+      onChangeType,
+      onInteraction,
+      onToggleFavorites,
+      t,
+    ]
   );
 
   return (
@@ -242,12 +270,6 @@ export default function MapFilterBar({
                 </Text>
               </View>
             </View>
-
-            {headerAccessory ? (
-              <View style={styles.headerAccessoryWrap}>
-                {headerAccessory}
-              </View>
-            ) : null}
           </View>
 
           <ScrollView
@@ -306,9 +328,6 @@ const styles = StyleSheet.create({
     gap: 8,
     flex: 1,
     minWidth: 0,
-  },
-  headerAccessoryWrap: {
-    flexShrink: 0,
   },
   countDot: {
     width: 8,

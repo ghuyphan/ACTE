@@ -20,6 +20,8 @@ import SettingsThemeSheet from '../../settings/SettingsThemeSheet';
 import { Layout } from '../../../constants/theme';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
 
+const SETTINGS_BRAND_NAME = 'ノート';
+
 export default function SettingsScreenIOS() {
   const {
     accountHint,
@@ -303,6 +305,16 @@ export default function SettingsScreenIOS() {
               <HStack>
                 <Spacer />
                 <VStack alignment="center" modifiers={[padding({ top: 20, bottom: 20 })]}>
+                  <SwiftUIText
+                    modifiers={[
+                      foregroundStyle(colors.text),
+                      font({ size: 14, weight: 'medium' }),
+                      multilineTextAlignment('center'),
+                      padding({ bottom: 10 }),
+                    ]}
+                  >
+                    {SETTINGS_BRAND_NAME}
+                  </SwiftUIText>
                   <SwiftUIText
                     modifiers={[
                       foregroundStyle(colors.text),

@@ -1,401 +1,277 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { GlassView } from '../ui/GlassView';
-import {
-  getMapCardEnter,
-  getMapCardExit,
-  getMapLayoutTransition,
-  mapMotionDurations,
-  mapMotionEasing,
-  mapMotionPressTiming,
-} from './mapMotion';
+import { useTheme } from '../../hooks/useTheme';
+import { isOlderIOS } from '../../utils/platform';
+import MapPreviewSheet from './MapPreviewSheet';
 import {
   getOverlayBorderColor,
   getOverlayFallbackColor,
-  getOverlayMutedFillColor,
   getOverlayScrimColor,
   mapOverlayTokens,
 } from './overlayTokens';
 
-type OverlayState = 'no-filter-results' | 'no-notes' | 'no-area-results';
-type MapStatusCardVariant = 'card' | 'pill';
-
 interface MapStatusCardProps {
-  overlayState: OverlayState;
-  variant?: MapStatusCardVariant;
-  isDark: boolean;
-  primaryColor: string;
-  textColor: string;
-  secondaryTextColor: string;
-  reduceMotionEnabled: boolean;
-  title: string;
-  subtitle: string;
+  visible: boolean;
+  bottomOffset: number;
+  title?: string;
+  subtitle?: string;
+  icon?: keyof typeof Ionicons.glyphMap;
   actionLabel?: string;
   actionTestID?: string;
   onAction?: () => void;
+  onInteraction?: () => void;
+  reduceMotionEnabled: boolean;
 }
 
+const PREVIEW_HORIZONTAL_INSET = 14;
+
 export default function MapStatusCard({
-  overlayState,
-  variant = 'card',
-  isDark,
-  primaryColor,
-  textColor,
-  secondaryTextColor,
-  reduceMotionEnabled,
+  visible,
+  bottomOffset,
   title,
   subtitle,
+  icon = 'albums-outline',
   actionLabel,
   actionTestID,
   onAction,
+  onInteraction,
+  reduceMotionEnabled,
 }: MapStatusCardProps) {
-  const isFiltered = overlayState === 'no-filter-results';
-  const isIOS = Platform.OS === 'ios';
-  const shouldUseGlass = isIOS;
-  const fallbackFill = getOverlayFallbackColor(isDark);
-  const statusScrimColor = getOverlayScrimColor(isDark);
-  const iconColor = isIOS ? secondaryTextColor : primaryColor;
-  const isPill = variant === 'pill';
-  const pillEnterProgress = useSharedValue(reduceMotionEnabled ? 1 : 0);
-  const pressScale = useSharedValue(1);
-  const animatedPillEntranceStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(pillEnterProgress.value, [0, 1], [10, 0]) },
-      { scale: interpolate(pillEnterProgress.value, [0, 1], [0.985, 1]) },
-    ],
-  }));
-  const animatedPressStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pressScale.value }],
-  }));
+  const { colors, isDark } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+  const [isMounted, setIsMounted] = useState(visible);
 
   useEffect(() => {
-    if (!isPill) {
-      return;
+    if (visible && !isMounted) {
+      setIsMounted(true);
     }
+  }, [visible, isMounted]);
 
-    if (reduceMotionEnabled) {
-      pillEnterProgress.value = 1;
-      return;
-    }
+  const isPassivePill = Boolean(title) && !subtitle && !actionLabel;
+  const isActionOnly = !title && !subtitle && Boolean(actionLabel);
+  const fullSurfaceWidth = Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2);
+  const compactWidth = Math.min(fullSurfaceWidth, 168);
+  const shellWidth = isPassivePill
+    ? compactWidth
+    : isActionOnly
+      ? Math.min(fullSurfaceWidth, 196)
+      : fullSurfaceWidth;
 
-    pillEnterProgress.value = 0;
-    pillEnterProgress.value = withTiming(1, {
-      duration: mapMotionDurations.standard,
-      easing: mapMotionEasing.standard,
-    });
-  }, [isPill, pillEnterProgress, reduceMotionEnabled]);
-
-  const handlePressState = useCallback(
-    (pressed: boolean) => {
-      if (reduceMotionEnabled) {
-        pressScale.value = 1;
-        return;
-      }
-
-      pressScale.value = withTiming(pressed ? 0.975 : 1, mapMotionPressTiming);
-    },
-    [pressScale, reduceMotionEnabled]
+  const shellStyle = useMemo(
+    () => [
+      styles.surface,
+      {
+        width: shellWidth,
+        borderColor: getOverlayBorderColor(isDark),
+        backgroundColor: getOverlayFallbackColor(isDark),
+      },
+    ],
+    [isDark, shellWidth]
   );
 
-  if (isPill && actionLabel && onAction) {
-    return (
-      <Animated.View
-        testID="map-status-card"
-        style={styles.wrap}
-        layout={getMapLayoutTransition(reduceMotionEnabled)}
-      >
-        <Animated.View style={animatedPillEntranceStyle}>
-          <Animated.View style={animatedPressStyle}>
-          <Pressable
-            testID={actionTestID}
-            style={({ pressed }) => [
-              styles.pill,
-              isIOS ? styles.pillIOS : styles.pillAndroid,
-              {
-                opacity: pressed ? 0.74 : 1,
-                borderColor: getOverlayBorderColor(isDark),
-                backgroundColor: shouldUseGlass ? 'transparent' : getOverlayMutedFillColor(isDark),
-              },
-            ]}
-            onPress={onAction}
-            onPressIn={() => {
-              handlePressState(true);
-            }}
-            onPressOut={() => {
-              handlePressState(false);
-            }}
-            >
-            {shouldUseGlass ? (
-              <GlassView
-                pointerEvents="none"
-                style={StyleSheet.absoluteFill}
-                glassEffectStyle="regular"
-                colorScheme={isDark ? 'dark' : 'light'}
-              />
-            ) : null}
-            <View
-              pointerEvents="none"
-              style={[
-                StyleSheet.absoluteFill,
-                styles.pillScrim,
-                {
-                  backgroundColor: shouldUseGlass ? statusScrimColor : getOverlayScrimColor(isDark),
-                },
-              ]}
-            />
-            <View style={[styles.pillIconWrap, { backgroundColor: `${primaryColor}16` }]}>
-              <Ionicons name="add-circle-outline" size={16} color={primaryColor} />
-            </View>
-            <Text
-              style={[
-                styles.pillLabel,
-                isIOS ? styles.pillLabelIOS : styles.pillLabelAndroid,
-                { color: primaryColor },
-              ]}
-            >
-              {actionLabel}
-            </Text>
-          </Pressable>
-          </Animated.View>
-        </Animated.View>
-      </Animated.View>
-    );
+  if ((!isMounted && !visible) || (!title && !actionLabel)) {
+    return null;
   }
 
   return (
-    <Animated.View
-      testID="map-status-card"
-      style={styles.wrap}
-      entering={getMapCardEnter(reduceMotionEnabled)}
-      exiting={getMapCardExit(reduceMotionEnabled)}
-      layout={getMapLayoutTransition(reduceMotionEnabled)}
+    <MapPreviewSheet
+      isVisible={visible}
+      onFullyClosed={() => setIsMounted(false)}
+      shellTestID="map-preview-shell"
+      dismissTestID="map-status-dismiss"
+      bottomOffset={bottomOffset}
+      onDismiss={() => {}}
+      reduceMotionEnabled={reduceMotionEnabled}
+      allowDismiss={false}
+      allowDragDismiss={false}
+      allowExpand={false}
+      handleVisible={false}
     >
-      <View
-        style={[
-          styles.card,
-          isIOS ? styles.cardIOS : styles.cardAndroid,
-          {
-            borderColor: getOverlayBorderColor(isDark),
-            backgroundColor: shouldUseGlass ? 'transparent' : fallbackFill,
-          },
-        ]}
-      >
-        {shouldUseGlass ? (
+      <View style={styles.surfaceHost} pointerEvents="box-none">
+        <View style={shellStyle}>
           <GlassView
             pointerEvents="none"
-            style={StyleSheet.absoluteFill}
             glassEffectStyle="regular"
             colorScheme={isDark ? 'dark' : 'light'}
+            fallbackColor="transparent"
+            style={StyleSheet.absoluteFill}
           />
-        ) : null}
-        <View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFill,
-            styles.scrim,
-            isIOS ? styles.scrimIOS : styles.scrimAndroid,
-            {
-              backgroundColor: shouldUseGlass ? statusScrimColor : getOverlayScrimColor(isDark),
-            },
-          ]}
-        />
-        <View style={[styles.content, isIOS ? styles.contentIOS : styles.contentAndroid]}>
-          <View style={[styles.iconWrap, { backgroundColor: `${primaryColor}14` }]}>
-            <Ionicons
-              name={isFiltered ? 'filter-outline' : 'map-outline'}
-              size={isIOS ? (isFiltered ? 22 : 24) : isFiltered ? 26 : 28}
-              color={iconColor}
-            />
-          </View>
-          <View style={styles.copyBlock}>
-            <Text style={[styles.title, isIOS ? styles.titleIOS : styles.titleAndroid, { color: textColor }]}>
-              {title}
-            </Text>
-            <Text
+          <View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                backgroundColor: getOverlayScrimColor(isDark),
+              },
+            ]}
+          />
+          {isOlderIOS ? (
+            <View
               style={[
-                styles.subtitle,
-                isIOS ? styles.subtitleIOS : styles.subtitleAndroid,
-                { color: secondaryTextColor },
+                StyleSheet.absoluteFill,
+                {
+                  backgroundColor: getOverlayFallbackColor(isDark),
+                },
+              ]}
+            />
+          ) : null}
+
+          {isPassivePill && title ? (
+            <View style={styles.pillContent}>
+              <View style={[styles.pillDot, { backgroundColor: colors.primary }]} />
+              <Text style={[styles.pillLabel, { color: colors.text }]} numberOfLines={1}>
+                {title}
+              </Text>
+            </View>
+          ) : isActionOnly && actionLabel ? (
+            <Pressable
+              testID={actionTestID}
+              accessibilityRole="button"
+              onPress={() => {
+                onInteraction?.();
+                onAction?.();
+              }}
+              style={({ pressed }) => [
+                styles.actionOnlyPill,
+                {
+                  opacity: pressed ? 0.72 : 1,
+                },
               ]}
             >
-              {subtitle}
-            </Text>
-            {actionLabel && onAction ? (
-              <Pressable
-                testID={actionTestID}
-                style={[
-                  styles.clearFiltersBtn,
-                  isIOS ? styles.clearFiltersBtnIOS : styles.clearFiltersBtnAndroid,
-                  isIOS ? null : { backgroundColor: `${primaryColor}14` },
-                ]}
-                onPress={onAction}
-              >
-                <Text
-                  style={[
-                    styles.clearFiltersText,
-                    isIOS ? styles.clearFiltersTextIOS : styles.clearFiltersTextAndroid,
-                    { color: primaryColor },
+              <Ionicons name={icon} size={14} color={colors.primary} />
+              <Text style={[styles.pillLabel, { color: colors.primary }]} numberOfLines={1}>
+                {actionLabel}
+              </Text>
+              <Ionicons name="chevron-up" size={13} color={colors.primary} />
+            </Pressable>
+          ) : (
+            <View style={styles.content}>
+              <View style={styles.headerRow}>
+                <View style={[styles.iconWrap, { backgroundColor: `${colors.primary}18` }]}>
+                  <Ionicons name={icon} size={15} color={colors.primary} />
+                </View>
+                <View style={styles.copyWrap}>
+                  {title ? (
+                    <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
+                      {title}
+                    </Text>
+                  ) : null}
+                  {subtitle ? (
+                    <Text style={[styles.subtitle, { color: colors.secondaryText }]} numberOfLines={2}>
+                      {subtitle}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+
+              {actionLabel ? (
+                <Pressable
+                  testID={actionTestID}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    onInteraction?.();
+                    onAction?.();
+                  }}
+                  style={({ pressed }) => [
+                    styles.actionButton,
+                    {
+                      opacity: pressed ? 0.72 : 1,
+                    },
                   ]}
                 >
-                  {actionLabel}
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
+                  <Text style={[styles.actionText, { color: colors.primary }]} numberOfLines={1}>
+                    {actionLabel}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={13} color={colors.primary} />
+                </Pressable>
+              ) : null}
+            </View>
+          )}
         </View>
       </View>
-    </Animated.View>
+    </MapPreviewSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    width: '100%',
+  surfaceHost: {
     alignItems: 'center',
   },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    overflow: 'hidden',
-  },
-  pillIOS: {
-    minHeight: 42,
-    borderRadius: 21,
+  surface: {
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  pillAndroid: {
-    minHeight: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    ...mapOverlayTokens.overlayShadow,
-  },
-  pillScrim: {
-    borderRadius: 21,
-  },
-  pillIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pillLabel: {
-    fontFamily: 'Noto Sans',
-  },
-  pillLabelIOS: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  pillLabelAndroid: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  card: {
-    width: '100%',
+    borderRadius: mapOverlayTokens.overlayRadius,
     overflow: 'hidden',
-  },
-  cardIOS: {
-    maxWidth: 360,
-    borderRadius: mapOverlayTokens.overlayRadius,
-    borderWidth: StyleSheet.hairlineWidth,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    borderCurve: 'continuous',
-  },
-  cardAndroid: {
-    maxWidth: 368,
-    borderRadius: mapOverlayTokens.overlayRadius,
-    borderWidth: 1,
+    paddingHorizontal: mapOverlayTokens.overlayPadding,
+    paddingVertical: 16,
     ...mapOverlayTokens.overlayShadow,
   },
   content: {
+    gap: 10,
+  },
+  headerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  contentIOS: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  contentAndroid: {
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-  },
-  copyBlock: {
-    flex: 1,
-  },
-  scrim: {
-    borderRadius: mapOverlayTokens.overlayRadius,
-  },
-  scrimIOS: {
-    borderRadius: mapOverlayTokens.overlayRadius,
-  },
-  scrimAndroid: {
-    borderRadius: mapOverlayTokens.overlayRadius,
+    alignItems: 'flex-start',
+    gap: 10,
   },
   iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
+  },
+  copyWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   title: {
-    fontFamily: 'Noto Sans',
-  },
-  titleIOS: {
     fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 3,
-  },
-  titleAndroid: {
-    fontSize: 16,
+    lineHeight: 19,
     fontWeight: '700',
-    marginBottom: 4,
+    fontFamily: 'Noto Sans',
+    marginBottom: 2,
   },
   subtitle: {
-    fontFamily: 'Noto Sans',
-  },
-  subtitleIOS: {
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  subtitleAndroid: {
     fontSize: 13,
     lineHeight: 18,
-  },
-  clearFiltersBtn: {
-    alignSelf: 'flex-start',
-    marginTop: 10,
-    borderRadius: 999,
-  },
-  clearFiltersBtnIOS: {
-    paddingHorizontal: 2,
-    paddingVertical: 2,
-  },
-  clearFiltersBtnAndroid: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  clearFiltersText: {
     fontFamily: 'Noto Sans',
   },
-  clearFiltersTextIOS: {
-    fontSize: 15,
-    fontWeight: '600',
+  actionButton: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
   },
-  clearFiltersTextAndroid: {
+  actionOnlyPill: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  actionText: {
     fontSize: 13,
     fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  pillContent: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  pillDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+  },
+  pillLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: 'Noto Sans',
   },
 });

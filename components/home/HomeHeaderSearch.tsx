@@ -129,13 +129,17 @@ export default function HomeHeaderSearch({
   const useDockedHeader =
     Platform.OS === "android" || (Platform.OS === "ios" && !isIOS26OrNewer);
   const useNativeLiquidGlassControls = Platform.OS === "ios" && isIOS26OrNewer;
+  const neutralHeaderControlForegroundColor = isDark
+    ? "#FFF7E8"
+    : colors.secondaryText;
   const androidHeaderControlBackgroundColor = isDark
     ? "rgba(24,20,18,0.68)"
     : "rgba(255,251,246,0.88)";
   const androidHeaderControlBorderColor =
     colors.border ??
     (isDark ? "rgba(255,255,255,0.12)" : "rgba(113,86,26,0.18)");
-  const androidHeaderControlForegroundColor = colors.secondaryText;
+  const androidHeaderControlForegroundColor =
+    neutralHeaderControlForegroundColor;
   const androidHeaderSearchBackgroundColor = isDark
     ? "rgba(255,247,232,0.22)"
     : "rgba(255,255,255,0.88)";
@@ -222,7 +226,7 @@ export default function HomeHeaderSearch({
   const headerControlBackgroundColor = isDark
     ? "rgba(255,255,255,0.94)"
     : "rgba(255,255,255,0.88)";
-  const headerControlForegroundColor = "#1C1C1E";
+  const headerControlForegroundColor = neutralHeaderControlForegroundColor;
   const searchFieldBackgroundColor = isAndroid
     ? androidHeaderSearchBackgroundColor
     : headerControlBackgroundColor;

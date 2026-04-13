@@ -170,14 +170,17 @@ export default function ProfileScreenAndroid() {
   const {
     avatarLabel,
     avatarUrl,
+    canEditAvatar,
     colors,
     canEditUsername,
     closeUsernameEditor,
+    handleChangeAvatar,
     insets,
     isAuthAvailable,
     isDeletingAccount,
     isSigningOut,
     isSavingUsername,
+    isUpdatingAvatar,
     isUsernameSheetVisible,
     membershipLabel,
     openSignIn,
@@ -243,9 +246,13 @@ export default function ProfileScreenAndroid() {
                     <ProfileAvatar
                       avatarLabel={avatarLabel}
                       avatarUrl={avatarUrl}
+                      accessibilityLabel={t('profile.avatarChangeA11y', 'Change avatar')}
                       colors={colors}
+                      disabled={!canEditAvatar}
+                      isLoading={isUpdatingAvatar}
                       size={56}
                       labelFontSize={22}
+                      onPress={handleChangeAvatar}
                     />
                   </View>
 

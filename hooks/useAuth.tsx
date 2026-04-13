@@ -15,7 +15,7 @@ import {
   setActiveNotesScope,
 } from '../services/database';
 import { purgeLocalAccountScope } from '../services/accountCleanup';
-import { updateOwnUsername, upsertPublicUserProfile } from '../services/publicProfileService';
+import { updateOwnUsername, updateOwnPhotoURL, upsertPublicUserProfile } from '../services/publicProfileService';
 import { clearSharedFeedCache } from '../services/sharedFeedCache';
 import { unregisterCurrentSocialPushToken } from '../services/socialPushService';
 import { AppUser, deriveUsernameCandidate, mapSupabaseUser } from '../utils/appUser';
@@ -42,6 +42,7 @@ interface AuthContextValue {
   registerWithEmail: (input: EmailRegistrationInput) => Promise<AuthActionResult>;
   sendPasswordReset: (email: string) => Promise<AuthActionResult>;
   updateUsername: (username: string) => Promise<AuthActionResult>;
+  updateAvatar: (photoURL: string | null) => Promise<AuthActionResult>;
   deleteAccount: () => Promise<AuthActionResult>;
   signOut: () => Promise<void>;
 }
@@ -304,7 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           displayName: nextUser.displayName,
           username: nextUser.username,
           email: nextUser.email,
-          photoURL: nextUser.photoURL,
+          photoURL: nextUser.photoURL ?? undefined,
         });
 
         if (!profile || authSyncRequestIdRef.current !== requestId) {
@@ -318,7 +319,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (
             currentUser.username === profile.username &&
-            currentUser.usernameSetAt === profile.usernameSetAt
+            currentUser.usernameSetAt === profile.usernameSetAt &&
+            currentUser.photoURL === profile.photoURL
           ) {
             return currentUser;
           }
@@ -327,6 +329,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ...currentUser,
             username: profile.username,
             usernameSetAt: profile.usernameSetAt,
+            photoURL: profile.photoURL,
           };
         });
       } catch (error) {
@@ -649,6 +652,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return {
             status: 'error',
             message: mapUsernameErrorMessage(error),
+          };
+        }
+      },
+      updateAvatar: async (photoURL: string | null) => {
+        if (!isSupabaseAuthAvailable()) {
+          return getUnavailableResult('auth');
+        }
+
+        if (!user) {
+          return {
+            status: 'unavailable',
+            message: i18n.t('profile.avatarUnavailable', 'Sign in to update your avatar.'),
+          };
+        }
+
+        try {
+          const profile = await updateOwnPhotoURL({
+            userUid: user.id,
+            photoURL,
+          });
+
+          setUser((currentUser) =>
+            currentUser
+              ? {
+                  ...currentUser,
+                  photoURL: profile.photoURL,
+                }
+              : currentUser
+          );
+
+          return { status: 'success' };
+        } catch (error) {
+          return {
+            status: 'error',
+            message: i18n.t(
+              'profile.avatarSaveFailed',
+              'We could not update your avatar right now.'
+            ),
           };
         }
       },

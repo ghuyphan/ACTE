@@ -7,14 +7,12 @@ interface MapPreviewPositionPillProps {
   current: number;
   total: number;
   testID: string;
-  showHint?: boolean;
 }
 
 export function MapPreviewPositionPill({
   current,
   total,
   testID,
-  showHint = total > 1,
 }: MapPreviewPositionPillProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -39,14 +37,6 @@ export function MapPreviewPositionPill({
         },
       ]}
     >
-      {showHint ? (
-        <>
-          <Ionicons name="swap-horizontal" size={13} color={colors.primary} />
-          <Text style={[mapPreviewFooterStyles.positionHintText, { color: colors.primary }]}>
-            {t('map.swipePreviewHint', 'Swipe')}
-          </Text>
-        </>
-      ) : null}
       <Text testID={testID} style={[mapPreviewFooterStyles.positionText, { color: colors.primary }]}>
         {label}
       </Text>
@@ -118,24 +108,18 @@ export const mapPreviewFooterStyles = StyleSheet.create({
     flexShrink: 1,
   },
   positionPill: {
-    minHeight: 30,
-    minWidth: 78,
-    paddingHorizontal: 9,
+    minHeight: 28,
+    minWidth: 52,
+    paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-  },
-  positionHintText: {
-    fontSize: 11,
-    fontWeight: '800',
-    fontFamily: 'Noto Sans',
   },
   positionText: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '700',
     fontFamily: 'Noto Sans',
   },
   expandButton: {

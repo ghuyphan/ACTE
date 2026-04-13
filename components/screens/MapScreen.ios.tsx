@@ -19,10 +19,10 @@ import MapCanvas from '../map/MapCanvas';
 import MapFilterBar from '../map/MapFilterBar';
 import MapFriendsPreviewCard from '../map/MapFriendsPreviewCard';
 import MapPreviewCard from '../map/MapPreviewCard';
+import MapStatusCard from '../map/MapStatusCard';
 import {
   getOverlayBorderColor,
   getOverlayFallbackColor,
-  getOverlayMutedFillColor,
   getOverlayScrimColor,
   mapOverlayTokens,
 } from '../map/overlayTokens';
@@ -295,6 +295,7 @@ export default function MapScreenIOS() {
     bottomOverlayKind === 'collapsed' ||
     bottomOverlayKind === 'filtered-empty' ||
     bottomOverlayKind === 'no-notes';
+  const notesPreviewVisible = bottomOverlayKind === 'preview';
 
   useEffect(() => {
     if (overlayState !== 'content' && !notesPreviewPersistsWhenAreaEmpty) {
@@ -783,99 +784,15 @@ export default function MapScreenIOS() {
           onToggleFavorites={handleToggleFavorites}
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
-          headerAccessory={
-            hasFriendLayer ? (
-              <Pressable
-                testID="map-friends-chip"
-                onPress={handleOpenFriendsLayer}
-                style={({ pressed }) => [
-                  styles.friendsChipPressable,
-                  {
-                    opacity: pressed ? 0.94 : 1,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.friendsChip,
-                    {
-                      borderColor:
-                        Platform.OS === 'android'
-                          ? friendsPreviewVisible
-                            ? colors.androidTabShellSelectedBorder
-                            : colors.androidTabShellMutedBorder
-                          : friendsPreviewVisible
-                            ? `${colors.primary}55`
-                            : getOverlayBorderColor(isDark),
-                      backgroundColor: friendsPreviewVisible
-                        ? Platform.OS === 'android'
-                          ? colors.androidTabShellSelectedBackground
-                          : isDark
-                            ? 'rgba(255,193,7,0.16)'
-                            : 'rgba(255,193,7,0.14)'
-                        : Platform.OS === 'android'
-                          ? colors.androidTabShellMutedBackground
-                          : getOverlayMutedFillColor(isDark),
-                      shadowColor: Platform.OS === 'android' ? colors.androidTabShellShadow : undefined,
-                    },
-                  ]}
-                >
-                  <GlassView
-                    pointerEvents="none"
-                    style={StyleSheet.absoluteFill}
-                    glassEffectStyle="regular"
-                    colorScheme={isDark ? 'dark' : 'light'}
-                    fallbackColor="transparent"
-                  />
-                  {isOlderIOS ? (
-                    <View
-                      style={[
-                        StyleSheet.absoluteFill,
-                        {
-                          borderRadius: 16,
-                          backgroundColor: friendsPreviewVisible
-                            ? (isDark ? 'rgba(48,38,12,0.72)' : 'rgba(255,247,214,0.92)')
-                            : getOverlayFallbackColor(isDark),
-                        },
-                      ]}
-                    />
-                  ) : null}
-
-                  <View style={styles.friendsChipInner}>
-                    <Ionicons
-                      name={friendsPreviewVisible ? 'sparkles' : 'sparkles-outline'}
-                      size={13}
-                      color={Platform.OS === 'android' && !friendsPreviewVisible ? colors.androidTabShellActive : colors.primary}
-                    />
-                    <Text
-                      style={[
-                        styles.friendsChipLabel,
-                        {
-                          color:
-                            Platform.OS === 'android'
-                              ? friendsPreviewVisible
-                                ? colors.primary
-                                : colors.androidTabShellActive
-                              : friendsPreviewVisible
-                                ? colors.primary
-                                : colors.text,
-                        },
-                      ]}
-                    >
-                      {t('map.friendsChip', 'Friends')}
-                    </Text>
-                    {friendsPreviewVisible ? (
-                      <View
-                        style={[
-                          styles.friendsChipActiveDot,
-                          { backgroundColor: colors.primary },
-                        ]}
-                      />
-                    ) : null}
-                  </View>
-                </View>
-              </Pressable>
-            ) : null
+          friendsChip={
+            hasFriendLayer
+              ? {
+                  active: friendsPreviewVisible,
+                  label: t('map.friendsChip', 'Friends'),
+                  onPress: handleOpenFriendsLayer,
+                  testID: 'map-friends-chip',
+                }
+              : null
           }
         />
       </View>
@@ -935,11 +852,8 @@ export default function MapScreenIOS() {
         </Pressable>
       </View>
 
-      {mapUiReady &&
-      (notes.length > 0 || bottomOverlayKind === 'no-notes') &&
-      !friendsPreviewVisible ? (
+      {mapUiReady && notesPreviewVisible && !friendsPreviewVisible ? (
         <MapPreviewCard
-          mode={isStatusOverlay ? 'status' : 'preview'}
           previewMode={previewMode}
           visible={bottomOverlayVisible}
           selectedGroup={selectedGroup}
@@ -949,53 +863,56 @@ export default function MapScreenIOS() {
           activeNoteReadyToOpen={activeNoteReadyToOpen}
           distanceAnchor={distanceAnchor}
           bottomOffset={previewBottomOffset}
-          statusTitle={
+          onFocusPreviewNote={focusPreviewNote}
+          onActivatePreviewNote={handleActivatePreviewNote}
+          onPrimaryAction={handlePreviewPrimaryAction}
+          onDismiss={handleDismissNotesPreview}
+          onInteraction={emitLightHaptic}
+          reduceMotionEnabled={reduceMotionEnabled}
+        />
+      ) : null}
+
+      {mapUiReady && isStatusOverlay && !friendsPreviewVisible ? (
+        <MapStatusCard
+          visible={bottomOverlayVisible}
+          bottomOffset={previewBottomOffset}
+          title={
             bottomOverlayKind === 'no-notes'
               ? t('map.emptyTitleShort', 'No notes')
               : bottomOverlayKind === 'filtered-empty'
-              ? t('map.filteredEmptyTitle', 'No notes match these filters')
-              : undefined
+                ? t('map.filteredEmptyTitle', 'No notes match these filters')
+                : undefined
           }
-          statusSubtitle={
-            bottomOverlayKind === 'no-notes'
-              ? undefined
-              : bottomOverlayKind === 'filtered-empty'
+          subtitle={
+            bottomOverlayKind === 'filtered-empty'
               ? t(
                   'map.filteredEmptySubtitle',
                   'Try another filter combination or reset to view all notes'
                 )
               : undefined
           }
-          statusIcon={
+          icon={
             bottomOverlayKind === 'no-notes'
               ? 'pin-outline'
               : bottomOverlayKind === 'filtered-empty'
                 ? 'filter-outline'
                 : 'albums-outline'
           }
-          statusActionLabel={
-            bottomOverlayKind === 'no-notes'
-              ? undefined
-              : bottomOverlayKind === 'filtered-empty'
+          actionLabel={
+            bottomOverlayKind === 'filtered-empty'
               ? t('map.clearFilters', 'Clear filters')
               : bottomOverlayKind === 'collapsed'
-              ? t('map.showPreview', 'Show preview')
-              : undefined
+                ? t('map.showPreview', 'Show preview')
+                : undefined
           }
-          statusActionTestID={
-            bottomOverlayKind === 'no-notes'
-              ? undefined
-              : bottomOverlayKind === 'filtered-empty'
+          actionTestID={
+            bottomOverlayKind === 'filtered-empty'
               ? 'map-clear-filters'
               : bottomOverlayKind === 'collapsed'
                 ? 'map-show-preview'
                 : undefined
           }
-          onStatusAction={() => {
-            if (bottomOverlayKind === 'no-notes') {
-              return;
-            }
-
+          onAction={() => {
             if (bottomOverlayKind === 'filtered-empty') {
               revealNotesPreview({ resetToNearby: true });
               clearFilters();
@@ -1006,17 +923,6 @@ export default function MapScreenIOS() {
               revealNotesPreview();
             }
           }}
-          onStatusExpand={
-            bottomOverlayKind === 'collapsed'
-              ? () => {
-                  revealNotesPreview();
-                }
-              : undefined
-          }
-          onFocusPreviewNote={focusPreviewNote}
-          onActivatePreviewNote={handleActivatePreviewNote}
-          onPrimaryAction={handlePreviewPrimaryAction}
-          onDismiss={handleDismissNotesPreview}
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
         />
@@ -1084,32 +990,6 @@ const styles = StyleSheet.create({
     left: 14,
     right: 72,
     zIndex: 12,
-  },
-  friendsChipPressable: {
-    alignSelf: 'flex-start',
-  },
-  friendsChip: {
-    minHeight: mapOverlayTokens.controlHeight,
-    borderRadius: mapOverlayTokens.overlayCompactRadius,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  friendsChipInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  friendsChipLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
-  },
-  friendsChipActiveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 999,
   },
   emptyOverlay: {
     ...StyleSheet.absoluteFill,

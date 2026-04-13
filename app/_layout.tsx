@@ -220,6 +220,7 @@ function AppContent() {
               headerShown: true,
               headerTransparent: false,
               headerShadowVisible: false,
+              animation: 'slide_from_left',
               title: t('notes.viewAllTitle', 'All notes'),
               headerBackTitle: t('tabs.home', 'Home'),
               headerTintColor: colors.text,

@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from '../../../hooks/useHaptics';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { pickCompressedProfileAvatarDataUri } from '../../../services/profileAvatar';
 import { normalizeUsernameInput, validateUsernameInput } from '../../../services/publicProfileService';
 import { showAppAlert } from '../../../utils/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,7 +15,7 @@ import { createLegalLinkActions, getLegalLinkAvailability } from '../shared/lega
 export function useProfileScreenModel() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
-  const { user, isAuthAvailable, deleteAccount, signOut, updateUsername } = useAuth();
+  const { user, isAuthAvailable, deleteAccount, signOut, updateAvatar, updateUsername } = useAuth();
   const { refreshNotes } = useNotes();
   const { tier } = useSubscription();
   const router = useRouter();
@@ -25,6 +26,7 @@ export function useProfileScreenModel() {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isUsernameSheetVisible, setIsUsernameSheetVisible] = useState(false);
   const [isSavingUsername, setIsSavingUsername] = useState(false);
+  const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState('');
   const [usernameErrorMessage, setUsernameErrorMessage] = useState<string | null>(null);
   const [transitionUser, setTransitionUser] = useState(user);
@@ -84,6 +86,7 @@ export function useProfileScreenModel() {
     !inlineUsernameValidationMessage &&
     normalizedUsernameDraft.length > 0 &&
     normalizedUsernameDraft !== (displayUser?.username ?? '');
+  const canEditAvatar = Boolean(displayUser) && !isTransitioningAccount && !isUpdatingAvatar;
 
   const openSignIn = () => {
     router.replace('/auth');
@@ -133,6 +136,48 @@ export function useProfileScreenModel() {
       setIsUsernameSheetVisible(false);
     } finally {
       setIsSavingUsername(false);
+    }
+  };
+
+  const handleChangeAvatar = async () => {
+    if (!displayUser || isTransitioningAccount || isUpdatingAvatar) {
+      return;
+    }
+
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsUpdatingAvatar(true);
+
+    try {
+      const nextAvatarDataUri = await pickCompressedProfileAvatarDataUri(t);
+      if (!nextAvatarDataUri) {
+        return;
+      }
+
+      const result = await updateAvatar(nextAvatarDataUri);
+      if (result.status !== 'success') {
+        showAppAlert(
+          t('profile.avatarSaveFailedTitle', 'Could not update avatar'),
+          result.message ??
+            t(
+              'profile.avatarSaveFailed',
+              'We could not update your avatar right now. Please try again in a moment.'
+            )
+        );
+        return;
+      }
+
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.warn('Avatar update failed:', error);
+      showAppAlert(
+        t('profile.avatarSaveFailedTitle', 'Could not update avatar'),
+        t(
+          'profile.avatarSaveFailed',
+          'We could not update your avatar right now. Please try again in a moment.'
+        )
+      );
+    } finally {
+      setIsUpdatingAvatar(false);
     }
   };
 
@@ -255,12 +300,15 @@ export function useProfileScreenModel() {
     canEditUsername,
     colors,
     closeUsernameEditor,
+    canEditAvatar,
+    handleChangeAvatar,
     insets,
     isAuthAvailable,
     isDark,
     isDeletingAccount,
     isSigningOut,
     isSavingUsername,
+    isUpdatingAvatar,
     isUsernameSheetVisible,
     membershipLabel,
     openSignIn,

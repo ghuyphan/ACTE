@@ -970,11 +970,14 @@ describe('CaptureCard doodle handle', () => {
     expect(queryByTestId('capture-radius-toggle')).toBeNull();
   });
 
-  it('shows the remaining photo count as a compact shutter label', () => {
+  it('shows the remaining photo count as a two-line label inside the shutter', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const t = ((key: string, fallback?: string, options?: { count?: number }) => {
       if (key === 'capture.photoSlotsRemainingCompact') {
         return `${options?.count ?? 0} left`;
+      }
+      if (key === 'capture.photoSlotsRemainingCompactSuffix') {
+        return 'today';
       }
 
       return fallback ?? key;
@@ -985,7 +988,8 @@ describe('CaptureCard doodle handle', () => {
       t,
     });
 
-    expect(getByText('10 left')).toBeTruthy();
+    expect(getByText('10')).toBeTruthy();
+    expect(getByText('today')).toBeTruthy();
     expect(queryByText('10 free photo saves left today. Imports count when saved.')).toBeNull();
   });
 

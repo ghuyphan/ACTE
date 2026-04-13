@@ -14,6 +14,7 @@ import { Layout } from '../../../constants/theme';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
 
 type SheetKey = 'language' | 'theme' | 'haptics' | 'sync' | null;
+const SETTINGS_BRAND_NAME = 'ノート';
 
 function SectionTitle({
   colors,
@@ -358,7 +359,7 @@ export default function SettingsScreenAndroid() {
 
         <View style={styles.footerInfo}>
           <View style={[styles.footerDivider, { backgroundColor: colors.border }]} />
-          <Text style={[styles.footerAppName, { color: colors.text }]}>Noto</Text>
+          <Text style={[styles.footerAppName, { color: colors.text }]}>{SETTINGS_BRAND_NAME}</Text>
           <Text style={[styles.footerTagline, { color: colors.secondaryText }]}>
             {t('settings.about', 'So you never forget what she likes 💛')}
           </Text>
