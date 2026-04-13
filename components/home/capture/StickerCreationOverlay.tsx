@@ -33,6 +33,8 @@ import type {
 } from './stickerCreationTypes';
 
 const SCREEN_HORIZONTAL_PADDING = 18;
+const ENTER_DURATION_MS = 240;
+const ENTER_DURATION_REDUCED_MS = 140;
 const EXIT_DURATION_MS = 140;
 const EXIT_DURATION_REDUCED_MS = 80;
 
@@ -98,6 +100,7 @@ function StickerCreationOverlay({
   const backdropOpacity = useSharedValue(1);
   const contentOpacity = useSharedValue(1);
   const contentScale = useSharedValue(1);
+  const contentTranslateY = useSharedValue(0);
   const focusOpacity = useSharedValue(1);
   const headerOpacity = useSharedValue(1);
   const headerTranslateY = useSharedValue(0);
@@ -107,26 +110,57 @@ function StickerCreationOverlay({
   const exitDuration = reduceMotionEnabled
     ? EXIT_DURATION_REDUCED_MS
     : EXIT_DURATION_MS;
+  const enterDuration = reduceMotionEnabled
+    ? ENTER_DURATION_REDUCED_MS
+    : ENTER_DURATION_MS;
 
   useEffect(() => {
-    backdropOpacity.value = 1;
-    contentOpacity.value = 1;
-    contentScale.value = 1;
-    focusOpacity.value = 1;
-    headerOpacity.value = 1;
-    headerTranslateY.value = 0;
-    controlsOpacity.value = 1;
-    controlsTranslateY.value = 0;
+    if (!visible) {
+      setAnimating(false);
+      return;
+    }
+
+    backdropOpacity.value = 0;
+    contentOpacity.value = 0;
+    contentScale.value = reduceMotionEnabled ? 0.994 : 0.96;
+    contentTranslateY.value = reduceMotionEnabled ? 4 : 18;
+    focusOpacity.value = 0;
+    headerOpacity.value = 0;
+    headerTranslateY.value = reduceMotionEnabled ? -4 : -12;
+    controlsOpacity.value = 0;
+    controlsTranslateY.value = reduceMotionEnabled ? 6 : 18;
     setAnimating(false);
+
+    const primaryAnimationConfig = {
+      duration: enterDuration,
+      easing: Easing.out(Easing.cubic),
+    };
+    const secondaryAnimationConfig = {
+      duration: reduceMotionEnabled ? enterDuration : enterDuration + 40,
+      easing: Easing.out(Easing.cubic),
+    };
+
+    backdropOpacity.value = withTiming(1, primaryAnimationConfig);
+    contentOpacity.value = withTiming(1, secondaryAnimationConfig);
+    contentScale.value = withTiming(1, secondaryAnimationConfig);
+    contentTranslateY.value = withTiming(0, secondaryAnimationConfig);
+    focusOpacity.value = withTiming(1, secondaryAnimationConfig);
+    headerOpacity.value = withTiming(1, primaryAnimationConfig);
+    headerTranslateY.value = withTiming(0, primaryAnimationConfig);
+    controlsOpacity.value = withTiming(1, secondaryAnimationConfig);
+    controlsTranslateY.value = withTiming(0, secondaryAnimationConfig);
   }, [
     backdropOpacity,
     contentOpacity,
     contentScale,
+    contentTranslateY,
     controlsOpacity,
     controlsTranslateY,
+    enterDuration,
     focusOpacity,
     headerOpacity,
     headerTranslateY,
+    reduceMotionEnabled,
     resetKey,
     visible,
   ]);
@@ -140,6 +174,7 @@ function StickerCreationOverlay({
     backdropOpacity.value = withTiming(0, animationConfig);
     contentOpacity.value = withTiming(0, animationConfig);
     contentScale.value = withTiming(reduceMotionEnabled ? 0.995 : 0.985, animationConfig);
+    contentTranslateY.value = withTiming(reduceMotionEnabled ? 4 : 14, animationConfig);
     focusOpacity.value = withTiming(0, animationConfig);
     headerOpacity.value = withTiming(0, animationConfig);
     headerTranslateY.value = withTiming(reduceMotionEnabled ? 4 : 10, animationConfig);
@@ -151,6 +186,7 @@ function StickerCreationOverlay({
     backdropOpacity,
     contentOpacity,
     contentScale,
+    contentTranslateY,
     controlsOpacity,
     controlsTranslateY,
     exitDuration,
@@ -170,6 +206,7 @@ function StickerCreationOverlay({
     backdropOpacity.value = withTiming(1, animationConfig);
     contentOpacity.value = withTiming(1, animationConfig);
     contentScale.value = withTiming(1, animationConfig);
+    contentTranslateY.value = withTiming(0, animationConfig);
     focusOpacity.value = withTiming(1, animationConfig);
     headerOpacity.value = withTiming(1, animationConfig);
     headerTranslateY.value = withTiming(0, animationConfig);
@@ -181,6 +218,7 @@ function StickerCreationOverlay({
     backdropOpacity,
     contentOpacity,
     contentScale,
+    contentTranslateY,
     controlsOpacity,
     controlsTranslateY,
     focusOpacity,
@@ -237,7 +275,10 @@ function StickerCreationOverlay({
 
   const contentAnimatedStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
-    transform: [{ scale: contentScale.value }],
+    transform: [
+      { translateY: contentTranslateY.value },
+      { scale: contentScale.value },
+    ],
   }));
 
   const focusAnimatedStyle = useAnimatedStyle(() => ({
