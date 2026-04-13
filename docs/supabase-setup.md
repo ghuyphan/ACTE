@@ -40,7 +40,7 @@ Apply every migration under `supabase/migrations/` in order.
 
 The migration history currently covers:
 
-- base auth-linked profiles, `user_usage`, and notes sync primitives
+- base auth-linked profiles, `user_usage` including daily photo usage, and notes sync primitives
 - friendships, friend invites, shared posts, and shared-post coordinates
 - note length constraints, note colors, live photo columns, and sync tombstones
 - sticker sync columns, sticker asset GC indexes, and the sticker asset registry

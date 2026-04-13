@@ -49,7 +49,7 @@ import { useBottomTabVisualInset } from '../../hooks/useBottomTabVisualInset';
 import { useSavedNoteRevealUi } from '../../hooks/ui/useSavedNoteRevealUi';
 import {
   canCreatePhotoNote,
-  countPhotoNotes,
+  countPhotoNotesCreatedToday,
   getRemainingPhotoSlots,
 } from '../../constants/subscription';
 import { DEFAULT_NOTE_COLOR_ID, PREMIUM_NOTE_COLOR_IDS } from '../../services/noteAppearance';
@@ -106,7 +106,7 @@ export default function HomeScreen() {
   const bottomTabVisualInset = useBottomTabVisualInset();
   const { setSavedNoteRevealActive } = useSavedNoteRevealUi();
   const { notes, loading, refreshNotes, createNote, initialLoadComplete: notesInitialLoadComplete } = useNotesStore();
-  const localPhotoNoteCount = useMemo(() => countPhotoNotes(notes), [notes]);
+  const localDailyPhotoNoteCount = useMemo(() => countPhotoNotesCreatedToday(notes), [notes]);
   const { user, isAuthAvailable } = useAuth();
   const {
     enabled: sharedEnabled,
@@ -316,7 +316,6 @@ export default function HomeScreen() {
     items: homeFeedItems,
     hasMore: homeFeedHasMore,
     loadNextPage: loadNextHomeFeedPage,
-    ensureTargetLoaded,
   } = useHomeFeedPagination({
     notesScope,
     sharedCacheUserUid: sharedEnabled ? user?.uid ?? null : null,
@@ -324,8 +323,8 @@ export default function HomeScreen() {
     sharedSignal: sharedPosts,
   });
   const photoNoteCount = useMemo(
-    () => Math.max(localPhotoNoteCount, remotePhotoNoteCount ?? 0),
-    [localPhotoNoteCount, remotePhotoNoteCount]
+    () => Math.max(localDailyPhotoNoteCount, remotePhotoNoteCount ?? 0),
+    [localDailyPhotoNoteCount, remotePhotoNoteCount]
   );
   const isPhotoNoteQuotaReady = useMemo(
     () => tier === 'plus' || !user || !isAuthAvailable || isRemotePhotoNoteCountReady,
@@ -638,36 +637,32 @@ export default function HomeScreen() {
     if (!pendingSavedNoteScrollTargetId || suppressedHomeNoteIds.includes(pendingSavedNoteScrollTargetId)) {
       return;
     }
+    const scheduledTargetId = pendingSavedNoteScrollTargetId;
+    const targetIndex = findHomeFeedItemIndex(visibleFeedItems, {
+      id: scheduledTargetId,
+      kind: 'note',
+    });
+    if (targetIndex < 0) {
+      return;
+    }
 
     let cancelled = false;
-    const scheduledTargetId = pendingSavedNoteScrollTargetId;
-
-    void (async () => {
-      const targetIndex = await ensureTargetLoaded({
-        id: scheduledTargetId,
-        kind: 'note',
-      });
-      if (cancelled || targetIndex < 0) {
+    requestAnimationFrame(() => {
+      if (cancelled || pendingSavedNoteScrollTargetId !== scheduledTargetId) {
         return;
       }
 
-      requestAnimationFrame(() => {
-        if (cancelled || pendingSavedNoteScrollTargetId !== scheduledTargetId) {
-          return;
-        }
-
-        flatListRef.current?.scrollToOffset({
-          offset: (targetIndex + 1) * snapHeight,
-          animated: true,
-        });
-        setPendingSavedNoteScrollTargetId((current) => (current === scheduledTargetId ? null : current));
+      flatListRef.current?.scrollToOffset({
+        offset: (targetIndex + 1) * snapHeight,
+        animated: true,
       });
-    })();
+      setPendingSavedNoteScrollTargetId((current) => (current === scheduledTargetId ? null : current));
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [ensureTargetLoaded, pendingSavedNoteScrollTargetId, snapHeight, suppressedHomeNoteIds]);
+  }, [pendingSavedNoteScrollTargetId, snapHeight, suppressedHomeNoteIds, visibleFeedItems]);
 
   useEffect(() => {
     const nextVisibleFeedItemKeys = visibleFeedItems.map(getHomeFeedItemKey);
@@ -741,8 +736,15 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const target = consumeFeedFocus?.() ?? peekFeedFocus?.() ?? null;
+      const target = peekFeedFocus?.() ?? null;
       if (!target) {
+        return undefined;
+      }
+
+      const isTargetDataReady =
+        notesInitialLoadComplete &&
+        (target.kind !== 'shared-post' || !sharedLoading);
+      if (!isTargetDataReady) {
         return undefined;
       }
 
@@ -752,35 +754,28 @@ export default function HomeScreen() {
         return undefined;
       }
 
+      const targetIndex = findHomeFeedItemIndex(visibleFeedItems, target);
+      if (targetIndex < 0) {
+        clearFeedFocus?.();
+        return undefined;
+      }
+
       let focusTimeout: ReturnType<typeof setTimeout> | null = null;
       let idleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
       let cancelled = false;
+      idleHandle = scheduleOnIdle(() => {
+        focusTimeout = setTimeout(() => {
+          if (cancelled) {
+            return;
+          }
 
-      void (async () => {
-        const targetIndex = await ensureTargetLoaded(target);
-        if (cancelled) {
-          return;
-        }
-
-        if (targetIndex < 0) {
           clearFeedFocus?.();
-          return;
-        }
-
-        idleHandle = scheduleOnIdle(() => {
-          focusTimeout = setTimeout(() => {
-            if (cancelled) {
-              return;
-            }
-
-            clearFeedFocus?.();
-            flatListRef.current?.scrollToOffset({
-              offset: (targetIndex + 1) * snapHeight,
-              animated: true,
-            });
-          }, 0);
-        });
-      })();
+          flatListRef.current?.scrollToOffset({
+            offset: (targetIndex + 1) * snapHeight,
+            animated: true,
+          });
+        }, 0);
+      });
 
       return () => {
         cancelled = true;
@@ -791,10 +786,11 @@ export default function HomeScreen() {
       };
     }, [
       clearFeedFocus,
-      consumeFeedFocus,
-      ensureTargetLoaded,
+      notesInitialLoadComplete,
       peekFeedFocus,
+      sharedLoading,
       snapHeight,
+      visibleFeedItems,
     ])
   );
 
@@ -1086,7 +1082,7 @@ export default function HomeScreen() {
               )
             : t(
               'plus.limitMessage',
-              'Free plan includes up to 10 photo notes. Upgrade to Noto Plus for unlimited photo notes, premium filters, and premium finishes.'
+              'Free plan includes 5 photo memories per day. Upgrade to Noto Plus for unlimited photo saves, premium filters, and premium finishes.'
             );
 
       showAlert({
@@ -1354,10 +1350,10 @@ export default function HomeScreen() {
       if (captureMode === 'camera' && !isPhotoNoteQuotaReady) {
         showDoneSheet(
           'warning',
-          t('capture.photoLimitCheckingTitle', 'Checking photo limit'),
+          t('capture.photoLimitCheckingTitle', 'Checking today\'s photo limit'),
           t(
             'capture.photoLimitCheckingMessage',
-            'We are still loading your account photo usage. Try again in a moment.'
+            'We are still loading your photo usage for today. Try again in a moment.'
           )
         );
         return;

@@ -22,6 +22,7 @@ export interface AppSheetAlertProps {
   secondaryAction?: AppSheetAlertAction;
   actions?: AppSheetAlertAction[];
   dismissible?: boolean;
+  closeOnAction?: boolean;
   onClose: () => void;
 }
 
@@ -45,6 +46,7 @@ function AlertSheetBody({
   actions,
   primaryAction,
   secondaryAction,
+  closeOnAction = true,
   onClose,
 }: Omit<AppSheetAlertProps, 'visible'>) {
   const { colors } = useTheme();
@@ -54,7 +56,10 @@ function AlertSheetBody({
   );
 
   const runAction = async (action?: AppSheetAlertAction) => {
-    onClose();
+    if (closeOnAction) {
+      onClose();
+    }
+
     if (action?.onPress) {
       await action.onPress();
     }
@@ -101,6 +106,7 @@ export default function AppSheetAlert({
   primaryAction,
   secondaryAction,
   dismissible = true,
+  closeOnAction = true,
   onClose,
 }: AppSheetAlertProps) {
   return (
@@ -112,6 +118,7 @@ export default function AppSheetAlert({
         actions={actions}
         primaryAction={primaryAction}
         secondaryAction={secondaryAction}
+        closeOnAction={closeOnAction}
         onClose={onClose}
       />
     </AppSheet>

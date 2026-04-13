@@ -77,7 +77,7 @@ export interface StampCutterRect {
 const STAMP_CUTTER_OVERLAY_SOURCE_WIDTH = 1024;
 const STAMP_CUTTER_OVERLAY_SOURCE_HEIGHT = 1536;
 const STAMP_CUTTER_MAX_SOURCE_DIMENSION = 2048;
-const STAMP_CUTTER_NORMALIZED_SOURCE_QUALITY = 0.94;
+const STAMP_CUTTER_NORMALIZED_SOURCE_QUALITY = 0.9;
 
 export const STAMP_CUTTER_MAX_ZOOM = 16;
 export const STAMP_CUTTER_ROTATION_SNAP_DEGREES = 2.5;
@@ -485,7 +485,7 @@ export async function exportStampCutoutImageSource(
     workingUri,
     [{ crop: roundedCropRect }],
     {
-      compress: 0.94,
+      compress: STAMP_CUTTER_NORMALIZED_SOURCE_QUALITY,
       format: SaveFormat.JPEG,
     }
   );

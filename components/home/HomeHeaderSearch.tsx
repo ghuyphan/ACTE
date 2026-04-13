@@ -1,35 +1,41 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from "@expo/vector-icons";
 import {
   Button,
-  Circle,
   HStack,
   Host,
   Image as SwiftUIImage,
   Menu,
   Text as SwiftUIText,
-  ZStack,
-} from '@expo/ui/swift-ui';
+} from "@expo/ui/swift-ui";
 import {
   accessibilityLabel,
   backgroundOverlay,
   buttonStyle,
-  controlSize,
   cornerRadius,
-  frame,
   font,
   foregroundStyle,
   glassEffect,
-  labelStyle,
-  offset,
   padding,
   tint,
-} from '@expo/ui/swift-ui/modifiers';
-import AppSheet from '../sheets/AppSheet';
-import AppSheetScaffold from '../sheets/AppSheetScaffold';
-import { GlassView } from '../ui/GlassView';
-import { TFunction } from 'i18next';
-import { ComponentProps, useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+} from "@expo/ui/swift-ui/modifiers";
+import AppSheet from "../sheets/AppSheet";
+import AppSheetScaffold from "../sheets/AppSheetScaffold";
+import { TFunction } from "i18next";
+import {
+  ComponentProps,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import Animated, {
   Easing,
   interpolate,
@@ -37,20 +43,24 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
-} from 'react-native-reanimated';
-import { Sheet } from '../../constants/theme';
-import { isIOS26OrNewer } from '../../utils/platform';
-import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
-import GlassHeader from '../ui/GlassHeader';
+} from "react-native-reanimated";
+import { Sheet } from "../../constants/theme";
+import { isIOS26OrNewer } from "../../utils/platform";
+import type { NotesRouteTransitionRect } from "../../utils/notesRouteTransition";
+import GlassHeader from "../ui/GlassHeader";
 
-const HEADER_BUTTON_HIT_SLOP = { top: 8, right: 8, bottom: 8, left: 8 } as const;
-const HEADER_BUTTON_PRESS_RETENTION_OFFSET = { top: 14, right: 14, bottom: 14, left: 14 } as const;
-const BRAND_ICON_SOURCE = require('../../assets/images/icon/icon-default.png');
-type SharedFilterBadgeVariant = 'all' | 'friends' | 'mine';
-type SharedFilterBadgeSymbols = {
-  ios: ComponentProps<typeof SwiftUIImage>['systemName'];
-  android: ComponentProps<typeof Ionicons>['name'];
-};
+const HEADER_BUTTON_HIT_SLOP = {
+  top: 8,
+  right: 8,
+  bottom: 8,
+  left: 8,
+} as const;
+const HEADER_BUTTON_PRESS_RETENTION_OFFSET = {
+  top: 14,
+  right: 14,
+  bottom: 14,
+  left: 14,
+} as const;
 
 interface HomeHeaderSearchProps {
   topInset: number;
@@ -65,13 +75,13 @@ interface HomeHeaderSearchProps {
   showNotesButton?: boolean;
   onOpenShared?: () => void;
   onOpenNotes?: (origin?: NotesRouteTransitionRect) => void;
-  sharedButtonMode?: 'manage' | 'filter';
+  sharedButtonMode?: "manage" | "filter";
   sharedButtonActive?: boolean;
-  sharedFilterValue?: 'all' | 'friends';
-  onChangeSharedFilter?: (nextFilter: 'all' | 'friends') => void;
+  sharedFilterValue?: "all" | "friends";
+  onChangeSharedFilter?: (nextFilter: "all" | "friends") => void;
   hasFriendsForFilter?: boolean;
   onToggleCaptureMode: () => void;
-  captureMode: 'text' | 'camera';
+  captureMode: "text" | "camera";
   colors: {
     text: string;
     primary: string;
@@ -97,9 +107,9 @@ export default function HomeHeaderSearch({
   showNotesButton = false,
   onOpenShared,
   onOpenNotes,
-  sharedButtonMode = 'manage',
+  sharedButtonMode = "manage",
   sharedButtonActive = false,
-  sharedFilterValue = 'all',
+  sharedFilterValue = "all",
   onChangeSharedFilter,
   hasFriendsForFilter = true,
   onToggleCaptureMode,
@@ -113,23 +123,25 @@ export default function HomeHeaderSearch({
   const sharedControlAnim = useSharedValue(1);
   const didMountRef = useRef(false);
   const didMountSharedControlRef = useRef(false);
-  const [showAndroidSharedMenuSheet, setShowAndroidSharedMenuSheet] = useState(false);
-  const isAndroid = Platform.OS === 'android';
-  const useDetachedWordmark = isIOS26OrNewer;
-  const useDetachedControls = isIOS26OrNewer && !showSearchButton;
-  const useDockedHeader = Platform.OS === 'android' || (Platform.OS === 'ios' && !isIOS26OrNewer);
-  const useNativeLiquidGlassControls = Platform.OS === 'ios' && isIOS26OrNewer;
-  const useIconOnlyHeaderControls = Platform.OS === 'ios';
-  const androidHeaderControlBackgroundColor = isDark ? 'rgba(24,20,18,0.68)' : 'rgba(255,251,246,0.88)';
-  const androidHeaderControlBorderColor = colors.border ?? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(113,86,26,0.18)');
-  const androidHeaderStandaloneBackgroundColor = isDark ? 'rgba(24,20,18,0.68)' : 'rgba(255,251,246,0.88)';
-  const androidHeaderStandaloneBorderColor = colors.border ?? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(113,86,26,0.18)');
-  const androidHeaderControlForegroundColor = isDark ? '#FFF7E8' : '#6D530F';
-  const androidHeaderSearchBackgroundColor = isDark ? 'rgba(255,247,232,0.22)' : 'rgba(255,255,255,0.88)';
-  const sharedFilterBaseSystemImage = 'line.3.horizontal.decrease';
-  const sharedFilterBaseAndroidIcon = sharedButtonActive ? 'funnel' : 'funnel-outline';
-  const sharedFilterBadgeBackgroundColor = colors.primary;
-  const sharedFilterBadgeForegroundColor = isDark ? '#1C1C1E' : '#FFFDF8';
+  const [showAndroidSharedMenuSheet, setShowAndroidSharedMenuSheet] =
+    useState(false);
+  const isAndroid = Platform.OS === "android";
+  const useDockedHeader =
+    Platform.OS === "android" || (Platform.OS === "ios" && !isIOS26OrNewer);
+  const useNativeLiquidGlassControls = Platform.OS === "ios" && isIOS26OrNewer;
+  const androidHeaderControlBackgroundColor = isDark
+    ? "rgba(24,20,18,0.68)"
+    : "rgba(255,251,246,0.88)";
+  const androidHeaderControlBorderColor =
+    colors.border ??
+    (isDark ? "rgba(255,255,255,0.12)" : "rgba(113,86,26,0.18)");
+  const androidHeaderControlForegroundColor = colors.secondaryText;
+  const androidHeaderSearchBackgroundColor = isDark
+    ? "rgba(255,247,232,0.22)"
+    : "rgba(255,255,255,0.88)";
+  const activeHeaderControlBackgroundColor = isDark
+    ? "rgba(255,247,232,0.14)"
+    : "rgba(109,95,74,0.10)";
   const notesButtonRef = useRef<View>(null);
 
   useEffect(() => {
@@ -170,7 +182,9 @@ export default function HomeHeaderSearch({
   }));
   const defaultHeaderAnimatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(searchAnim.value, [0, 1], [1, 0]),
-    transform: [{ translateY: interpolate(searchAnim.value, [0, 1], [0, -10]) }],
+    transform: [
+      { translateY: interpolate(searchAnim.value, [0, 1], [0, -10]) },
+    ],
   }));
   const searchHeaderAnimatedStyle = useAnimatedStyle(() => ({
     opacity: searchAnim.value,
@@ -197,132 +211,58 @@ export default function HomeHeaderSearch({
     });
   }, [onOpenNotes]);
 
-  const getHeaderControlMetrics = (size: 'regular' | 'large' = 'regular') => ({
-    verticalPadding: size === 'large' ? 11 : 9,
-    horizontalPadding: size === 'large' ? 12 : 10,
-    iconOnlyPadding: size === 'large' ? 14 : 11,
-    iconSize: size === 'large' ? 18 : 16,
-    textSize: size === 'large' ? 13 : 12,
+  const getHeaderControlMetrics = (size: "regular" | "large" = "regular") => ({
+    verticalPadding: size === "large" ? 11 : 9,
+    horizontalPadding: size === "large" ? 12 : 10,
+    iconOnlyPadding: size === "large" ? 14 : 11,
+    iconSize: size === "large" ? 18 : 16,
+    textSize: size === "large" ? 13 : 12,
   });
 
   const headerControlBackgroundColor = isDark
-    ? 'rgba(255,255,255,0.94)'
-    : 'rgba(255,255,255,0.88)';
-  const headerControlForegroundColor = '#1C1C1E';
-  const searchFieldBackgroundColor = isAndroid ? androidHeaderSearchBackgroundColor : headerControlBackgroundColor;
+    ? "rgba(255,255,255,0.94)"
+    : "rgba(255,255,255,0.88)";
+  const headerControlForegroundColor = "#1C1C1E";
+  const searchFieldBackgroundColor = isAndroid
+    ? androidHeaderSearchBackgroundColor
+    : headerControlBackgroundColor;
   const searchFieldBorderColor = isAndroid
     ? androidHeaderControlBorderColor
-    : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(113,86,26,0.10)');
+    : isDark
+    ? "rgba(255,255,255,0.08)"
+    : "rgba(113,86,26,0.10)";
+
+  const getControlColors = (emphasized = false) => ({
+    backgroundColor: emphasized
+      ? activeHeaderControlBackgroundColor
+      : headerControlBackgroundColor,
+    foregroundColor: headerControlForegroundColor,
+  });
 
   const getHeaderControlModifiers = (label: string) => {
-    const modifiers = [buttonStyle('plain'), accessibilityLabel(label)];
+    const modifiers = [buttonStyle("plain"), accessibilityLabel(label)];
 
     if (!useNativeLiquidGlassControls) {
-      modifiers.push(tint(colors.primary));
+      modifiers.push(tint(headerControlForegroundColor));
     }
 
     return modifiers;
   };
 
-  const getSharedFilterBadgeVariant = (): SharedFilterBadgeVariant => {
-    if (sharedFilterValue === 'friends') {
-      return 'friends';
-    }
-
-    return 'all';
-  };
-
-  const getSharedFilterBadgeSymbols = (variant: SharedFilterBadgeVariant): SharedFilterBadgeSymbols => {
-    switch (variant) {
-      case 'friends':
-        return {
-          ios: 'person.2.fill',
-          android: 'people',
-        };
-      case 'mine':
-        return {
-          ios: 'person.fill',
-          android: 'person',
-        };
-      case 'all':
-      default:
-        return {
-          ios: 'square.grid.2x2.fill',
-          android: 'grid',
-        };
-    }
-  };
-
-  const renderSharedFilterSwiftIcon = (size: 'regular' | 'large' = 'regular') => {
-    const metrics = getHeaderControlMetrics(size);
-    const badgeVariant = getSharedFilterBadgeVariant();
-    const badgeSymbols = getSharedFilterBadgeSymbols(badgeVariant);
-    const baseColor = useNativeLiquidGlassControls ? undefined : headerControlForegroundColor;
-    const badgeDiameter = size === 'large' ? 14 : 12;
-    const badgeIconSize = size === 'large' ? 8 : 7;
-    const badgeOffset = size === 'large' ? { x: 5, y: 4 } : { x: 4, y: 3 };
-
-    return (
-      <ZStack alignment="bottomTrailing">
-        <SwiftUIImage
-          systemName={sharedFilterBaseSystemImage}
-          color={baseColor}
-          size={metrics.iconSize + (size === 'large' ? 1 : 0)}
-        />
-        <ZStack alignment="center" modifiers={[offset(badgeOffset)]}>
-          <Circle
-            modifiers={[
-              frame({ width: badgeDiameter, height: badgeDiameter }),
-              foregroundStyle(sharedFilterBadgeBackgroundColor),
-            ]}
-          />
-          <SwiftUIImage
-            systemName={badgeSymbols.ios}
-            color={sharedFilterBadgeForegroundColor}
-            size={badgeIconSize}
-          />
-        </ZStack>
-      </ZStack>
-    );
-  };
-
-  const renderSharedFilterAndroidIcon = (size: number, color: string) => {
-    const badgeVariant = getSharedFilterBadgeVariant();
-    const badgeSymbols = getSharedFilterBadgeSymbols(badgeVariant);
-    const badgeDiameter = size >= 20 ? 14 : 12;
-    const badgeIconSize = size >= 20 ? 8 : 7;
-
-    return (
-      <View style={[styles.sharedFilterIconWrap, { width: size + 8, height: size + 6 }]}>
-        <Ionicons name={sharedFilterBaseAndroidIcon} size={size} color={color} />
-        <View
-          style={[
-            styles.sharedFilterBadge,
-            {
-              width: badgeDiameter,
-              height: badgeDiameter,
-              borderRadius: badgeDiameter / 2,
-              backgroundColor: sharedFilterBadgeBackgroundColor,
-            },
-          ]}
-        >
-          <Ionicons
-            name={badgeSymbols.android}
-            size={badgeIconSize}
-            color={sharedFilterBadgeForegroundColor}
-          />
-        </View>
-      </View>
-    );
-  };
-
   const renderHeaderControlLabel = (
-    systemName: ComponentProps<typeof SwiftUIImage>['systemName'],
+    systemName: ComponentProps<typeof SwiftUIImage>["systemName"],
     label: string,
-    size: 'regular' | 'large' = 'regular'
+    size: "regular" | "large" = "regular",
+    options?: {
+      iconOnly?: boolean;
+      emphasized?: boolean;
+    }
   ) => {
     const metrics = getHeaderControlMetrics(size);
-    const isIconOnly = useIconOnlyHeaderControls;
+    const isIconOnly = options?.iconOnly ?? false;
+    const { backgroundColor, foregroundColor } = getControlColors(
+      options?.emphasized
+    );
 
     return (
       <HStack
@@ -336,28 +276,36 @@ export default function HomeHeaderSearch({
                 trailing: metrics.horizontalPadding,
               }),
           ...(useNativeLiquidGlassControls
-            ? [
-                glassEffect({
-                  glass: {
-                    variant: 'regular',
-                    interactive: true,
-                  },
-                  shape: isIconOnly ? 'circle' : 'capsule',
-                }),
-              ]
-            : [backgroundOverlay({ color: headerControlBackgroundColor }), cornerRadius(999)]),
+            ? !options?.emphasized
+              ? [
+                  glassEffect({
+                    glass: {
+                      variant: "regular",
+                      interactive: true,
+                    },
+                    shape: isIconOnly ? "circle" : "capsule",
+                  }),
+                ]
+              : [
+                  backgroundOverlay({ color: backgroundColor }),
+                  cornerRadius(999),
+                ]
+            : [
+                backgroundOverlay({ color: backgroundColor }),
+                cornerRadius(999),
+              ]),
         ]}
       >
         <SwiftUIImage
           systemName={systemName}
-          color={useNativeLiquidGlassControls ? undefined : headerControlForegroundColor}
+          color={foregroundColor}
           size={metrics.iconSize}
         />
         {!isIconOnly ? (
           <SwiftUIText
             modifiers={[
-              font({ size: metrics.textSize, weight: 'semibold' }),
-              ...(!useNativeLiquidGlassControls ? [foregroundStyle(headerControlForegroundColor)] : []),
+              font({ size: metrics.textSize, weight: "semibold" }),
+              foregroundStyle(foregroundColor),
             ]}
           >
             {label}
@@ -367,78 +315,78 @@ export default function HomeHeaderSearch({
     );
   };
 
-  const renderSharedControlLabel = (label: string, size: 'regular' | 'large' = 'regular') => {
+  const renderTextControlLabel = (
+    label: string,
+    size: "regular" | "large" = "regular",
+    options?: {
+      systemName?: ComponentProps<typeof SwiftUIImage>["systemName"];
+      emphasized?: boolean;
+    }
+  ) => {
     const metrics = getHeaderControlMetrics(size);
-    const isIconOnly = useIconOnlyHeaderControls;
+    const { backgroundColor, foregroundColor } = getControlColors(
+      options?.emphasized
+    );
 
     return (
       <HStack
-        spacing={isIconOnly ? 0 : 6}
+        spacing={6}
         alignment="center"
         modifiers={[
-          isIconOnly
-            ? padding({ all: metrics.iconOnlyPadding })
-            : padding({
-                top: metrics.verticalPadding,
-                bottom: metrics.verticalPadding,
-                leading: metrics.horizontalPadding,
-                trailing: metrics.horizontalPadding,
-              }),
+          padding({
+            top: metrics.verticalPadding,
+            bottom: metrics.verticalPadding,
+            leading: metrics.horizontalPadding + 2,
+            trailing: metrics.horizontalPadding + 2,
+          }),
           ...(useNativeLiquidGlassControls
-            ? [
-                glassEffect({
-                  glass: {
-                    variant: 'regular',
-                    interactive: true,
-                  },
-                  shape: isIconOnly ? 'circle' : 'capsule',
-                }),
-              ]
-            : [backgroundOverlay({ color: headerControlBackgroundColor }), cornerRadius(999)]),
+            ? !options?.emphasized
+              ? [
+                  glassEffect({
+                    glass: {
+                      variant: "regular",
+                      interactive: true,
+                    },
+                    shape: "capsule",
+                  }),
+                ]
+              : [
+                  backgroundOverlay({ color: backgroundColor }),
+                  cornerRadius(999),
+                ]
+            : [
+                backgroundOverlay({ color: backgroundColor }),
+                cornerRadius(999),
+              ]),
         ]}
       >
-        {renderSharedFilterSwiftIcon(size)}
-        {!isIconOnly ? (
-          <SwiftUIText
-            modifiers={[
-              font({ size: metrics.textSize, weight: 'semibold' }),
-              ...(!useNativeLiquidGlassControls ? [foregroundStyle(headerControlForegroundColor)] : []),
-            ]}
-          >
-            {label}
-          </SwiftUIText>
+        {options?.systemName ? (
+          <SwiftUIImage
+            systemName={options.systemName}
+            color={foregroundColor}
+            size={metrics.iconSize - 1}
+          />
         ) : null}
+        <SwiftUIText
+          modifiers={[
+            font({ size: metrics.textSize, weight: "semibold" }),
+            foregroundStyle(foregroundColor),
+          ]}
+        >
+          {label}
+        </SwiftUIText>
       </HStack>
     );
   };
-
-  const renderDetachedGlassIconButton = ({
-    label,
-    systemImage,
-    onPress,
-  }: {
-    label: string;
-    systemImage: ComponentProps<typeof SwiftUIImage>['systemName'];
-    onPress: () => void;
-  }) => (
-    <Button
-      label={label}
-      systemImage={systemImage}
-      onPress={onPress}
-      modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
-    >
-      {renderHeaderControlLabel(systemImage, label, 'large')}
-    </Button>
-  );
 
   const renderSearchButton = () => {
     if (!showSearchButton) {
       return null;
     }
 
-    const searchLabel = t('home.searchPlaceholder', 'Search notes...');
+    const searchLabel = t("home.searchPlaceholder", "Search notes...");
 
-    if (Platform.OS === 'android') {
+    if (Platform.OS === "android") {
       return (
         <Pressable
           accessibilityRole="button"
@@ -447,16 +395,20 @@ export default function HomeHeaderSearch({
           onPress={onOpenSearch}
           pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
           style={({ pressed }) => [
-            styles.androidSearchButton,
-            styles.androidHeaderStandaloneButton,
+            styles.iconButton,
+            styles.androidHeaderActionButton,
             {
-              backgroundColor: androidHeaderStandaloneBackgroundColor,
-              borderColor: androidHeaderStandaloneBorderColor,
+              backgroundColor: androidHeaderControlBackgroundColor,
+              borderColor: androidHeaderControlBorderColor,
             },
-            pressed ? styles.androidGroupedActionPressed : null,
+            pressed ? styles.headerButtonPressed : null,
           ]}
         >
-          <Ionicons name="search" size={20} color={androidHeaderControlForegroundColor} />
+          <Ionicons
+            name="search"
+            size={20}
+            color={androidHeaderControlForegroundColor}
+          />
         </Pressable>
       );
     }
@@ -464,51 +416,42 @@ export default function HomeHeaderSearch({
     return (
       <Host
         matchContents
-        colorScheme={isDark ? 'dark' : 'light'}
+        colorScheme={isDark ? "dark" : "light"}
         style={styles.swiftHeaderControlHost}
       >
-        <Button onPress={onOpenSearch} modifiers={getHeaderControlModifiers(searchLabel)}>
-          {renderHeaderControlLabel('magnifyingglass', searchLabel)}
+        <Button
+          onPress={onOpenSearch}
+          modifiers={getHeaderControlModifiers(searchLabel)}
+        >
+          {renderHeaderControlLabel("magnifyingglass", searchLabel, "regular", {
+            iconOnly: true,
+          })}
         </Button>
       </Host>
     );
   };
 
-  const renderAndroidGroupedSearchButton = () => {
-    if (!showSearchButton || Platform.OS !== 'android') {
-      return null;
-    }
-
-    return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('home.searchPlaceholder', 'Search notes...')}
-        hitSlop={HEADER_BUTTON_HIT_SLOP}
-        onPress={onOpenSearch}
-        pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
-        style={({ pressed }) => [styles.androidGroupedAction, pressed ? styles.androidGroupedActionPressed : null]}
-      >
-        <Ionicons name="search" size={18} color={androidHeaderControlForegroundColor} />
-      </Pressable>
-    );
-  };
-
-  const renderModeToggle = (size: 'regular' | 'large' = 'regular') => {
+  const renderModeToggle = (size: "regular" | "large" = "regular") => {
     const modeLabel =
-      captureMode === 'text'
-        ? t('capture.switchCamera', 'Camera')
-        : t('capture.switchText', 'Text');
-    const systemName = captureMode === 'text' ? 'camera' : 'square.and.pencil';
+      captureMode === "text"
+        ? t("capture.switchCamera", "Camera")
+        : t("capture.switchText", "Text");
+    const systemName = captureMode === "text" ? "camera" : "square.and.pencil";
 
-    if (Platform.OS === 'ios') {
+    if (Platform.OS === "ios") {
       return (
         <Host
           matchContents
-          colorScheme={isDark ? 'dark' : 'light'}
-          style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
+          colorScheme={isDark ? "dark" : "light"}
+          style={styles.swiftHeaderControlHost}
         >
-          <Button onPress={onToggleCaptureMode} modifiers={getHeaderControlModifiers(modeLabel)}>
-            {renderHeaderControlLabel(systemName, modeLabel, size)}
+          <Button
+            onPress={onToggleCaptureMode}
+            modifiers={getHeaderControlModifiers(modeLabel)}
+          >
+            {renderHeaderControlLabel(systemName, modeLabel, size, {
+              iconOnly: true,
+            })}
           </Button>
         </Host>
       );
@@ -521,50 +464,55 @@ export default function HomeHeaderSearch({
         hitSlop={HEADER_BUTTON_HIT_SLOP}
         onPress={onToggleCaptureMode}
         pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
-        style={[
-          styles.androidSearchButton,
-          styles.androidHeaderStandaloneButton,
+        style={({ pressed }) => [
+          styles.iconButton,
+          styles.androidHeaderActionButton,
           {
-            backgroundColor: androidHeaderStandaloneBackgroundColor,
-            borderColor: androidHeaderStandaloneBorderColor,
+            backgroundColor: androidHeaderControlBackgroundColor,
+            borderColor: androidHeaderControlBorderColor,
           },
+          pressed ? styles.headerButtonPressed : null,
         ]}
       >
         <Animated.View style={modeIconAnimatedStyle}>
           <Ionicons
-            name={captureMode === 'text' ? 'camera-outline' : 'create-outline'}
+            name={captureMode === "text" ? "camera-outline" : "create-outline"}
             size={20}
-            color={colors.primary}
+            color={androidHeaderControlForegroundColor}
           />
         </Animated.View>
       </Pressable>
     );
   };
 
-  const renderSharedButton = (size: 'regular' | 'large' = 'regular') => {
+  const renderSharedButton = (size: "regular" | "large" = "regular") => {
     if (!showSharedButton || !onOpenShared) {
       return null;
     }
 
-    const sharedLabel = t('shared.manageTitle', 'Friends');
-    const isSharedFilterControl = sharedButtonMode === 'filter' && hasFriendsForFilter;
-    const sharedA11yLabel =
-      isSharedFilterControl
-        ? sharedButtonActive
-          ? t('home.friendsFilterActive', 'Friends filter on')
-          : t('home.friendsFilterInactive', 'Filter by friends')
-        : sharedLabel;
+    const sharedLabel = t("shared.manageTitle", "Friends");
+    const isSharedFilterControl =
+      sharedButtonMode === "filter" && hasFriendsForFilter;
+    const sharedA11yLabel = isSharedFilterControl
+      ? sharedButtonActive
+        ? t("home.friendsFilterActive", "Friends filter on")
+        : t("home.friendsFilterInactive", "Filter by friends")
+      : sharedLabel;
     const canShowFilterMenu =
       isSharedFilterControl && Boolean(onChangeSharedFilter);
-    const sharedSystemName =
-      isSharedFilterControl
-        ? sharedFilterBaseSystemImage
-        : 'person.2';
-    if (Platform.OS === 'ios') {
-      const controlLabel =
-        isSharedFilterControl
-          ? renderSharedControlLabel(sharedLabel, size)
-          : renderHeaderControlLabel(sharedSystemName, sharedLabel, size);
+    const isEmphasized = sharedButtonActive && isSharedFilterControl;
+    const sharedSystemName = isSharedFilterControl
+      ? "line.3.horizontal.decrease"
+      : "person.2";
+    const sharedAndroidIconName = isSharedFilterControl
+      ? "funnel-outline"
+      : "people-outline";
+
+    if (Platform.OS === "ios") {
+      const controlLabel = renderTextControlLabel(sharedLabel, size, {
+        systemName: sharedSystemName,
+        emphasized: isEmphasized,
+      });
 
       if (canShowFilterMenu) {
         return (
@@ -572,25 +520,29 @@ export default function HomeHeaderSearch({
             <Animated.View style={sharedControlAnimatedStyle}>
               <Host
                 matchContents
-                colorScheme={isDark ? 'dark' : 'light'}
-                style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
+                colorScheme={isDark ? "dark" : "light"}
+                style={styles.swiftHeaderControlHost}
               >
                 <Menu
                   label={controlLabel}
                   modifiers={getHeaderControlModifiers(sharedA11yLabel)}
                 >
                   <Button
-                    label={t('home.feedFilterAll', 'All posts')}
-                    systemImage={sharedFilterValue === 'all' ? 'checkmark' : undefined}
-                    onPress={() => onChangeSharedFilter?.('all')}
+                    label={t("home.feedFilterAll", "All posts")}
+                    systemImage={
+                      sharedFilterValue === "all" ? "checkmark" : undefined
+                    }
+                    onPress={() => onChangeSharedFilter?.("all")}
                   />
                   <Button
-                    label={t('home.feedFilterFriends', 'Friends only')}
-                    systemImage={sharedFilterValue === 'friends' ? 'checkmark' : undefined}
-                    onPress={() => onChangeSharedFilter?.('friends')}
+                    label={t("home.feedFilterFriends", "Friends only")}
+                    systemImage={
+                      sharedFilterValue === "friends" ? "checkmark" : undefined
+                    }
+                    onPress={() => onChangeSharedFilter?.("friends")}
                   />
                   <Button
-                    label={t('shared.manageTitle', 'Friends')}
+                    label={t("shared.manageTitle", "Friends")}
                     systemImage="person.crop.circle"
                     onPress={onOpenShared}
                   />
@@ -606,10 +558,13 @@ export default function HomeHeaderSearch({
           <Animated.View style={sharedControlAnimatedStyle}>
             <Host
               matchContents
-              colorScheme={isDark ? 'dark' : 'light'}
-              style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
+              colorScheme={isDark ? "dark" : "light"}
+              style={styles.swiftHeaderControlHost}
             >
-              <Button onPress={onOpenShared} modifiers={getHeaderControlModifiers(sharedA11yLabel)}>
+              <Button
+                onPress={onOpenShared}
+                modifiers={getHeaderControlModifiers(sharedA11yLabel)}
+              >
                 {controlLabel}
               </Button>
             </Host>
@@ -635,18 +590,36 @@ export default function HomeHeaderSearch({
                 onOpenShared();
               }}
               pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
-              style={[
-                styles.modeToggleBtn,
+              style={({ pressed }) => [
+                styles.textButton,
                 styles.androidHeaderActionButton,
-                {
-                  backgroundColor: androidHeaderControlBackgroundColor,
-                  borderColor: androidHeaderControlBorderColor,
-                },
+                isEmphasized
+                  ? {
+                      backgroundColor: activeHeaderControlBackgroundColor,
+                      borderColor: androidHeaderControlBorderColor,
+                    }
+                  : {
+                      backgroundColor: androidHeaderControlBackgroundColor,
+                      borderColor: androidHeaderControlBorderColor,
+                    },
+                pressed ? styles.headerButtonPressed : null,
               ]}
             >
-              {isSharedFilterControl
-                ? renderSharedFilterAndroidIcon(20, colors.primary)
-                : <Ionicons name="people-outline" size={20} color={colors.primary} />}
+              <View style={styles.textButtonContent}>
+                <Ionicons
+                  name={sharedAndroidIconName}
+                  size={16}
+                  color={androidHeaderControlForegroundColor}
+                />
+                <Text
+                  style={[
+                    styles.textButtonLabel,
+                    { color: androidHeaderControlForegroundColor },
+                  ]}
+                >
+                  {sharedLabel}
+                </Text>
+              </View>
             </Pressable>
           </Animated.View>
         </View>
@@ -662,41 +635,65 @@ export default function HomeHeaderSearch({
             hitSlop={HEADER_BUTTON_HIT_SLOP}
             onPress={onOpenShared}
             pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
-            style={[
-              styles.modeToggleBtn,
+            style={({ pressed }) => [
+              styles.textButton,
               styles.androidHeaderActionButton,
-              {
-                backgroundColor: androidHeaderControlBackgroundColor,
-                borderColor: androidHeaderControlBorderColor,
-              },
-              ]}
-            >
-              {isSharedFilterControl
-                ? renderSharedFilterAndroidIcon(20, colors.primary)
-                : <Ionicons name="people-outline" size={20} color={colors.primary} />}
-            </Pressable>
+              isEmphasized
+                ? {
+                    backgroundColor: activeHeaderControlBackgroundColor,
+                    borderColor: androidHeaderControlBorderColor,
+                  }
+                : {
+                    backgroundColor: androidHeaderControlBackgroundColor,
+                    borderColor: androidHeaderControlBorderColor,
+                  },
+              pressed ? styles.headerButtonPressed : null,
+            ]}
+          >
+            <View style={styles.textButtonContent}>
+              <Ionicons
+                name={sharedAndroidIconName}
+                size={16}
+                color={androidHeaderControlForegroundColor}
+              />
+              <Text
+                style={[
+                  styles.textButtonLabel,
+                  { color: androidHeaderControlForegroundColor },
+                ]}
+              >
+                {sharedLabel}
+              </Text>
+            </View>
+          </Pressable>
         </Animated.View>
       </View>
     );
   };
 
-  const renderNotesButton = (size: 'regular' | 'large' = 'regular') => {
+  const renderNotesButton = (size: "regular" | "large" = "regular") => {
     if (!showNotesButton || !onOpenNotes) {
       return null;
     }
 
-    const notesLabel = t('notes.viewAllButton', 'View all notes');
+    const notesLabel = t("notes.recap.allLabel", "All");
+    const notesA11yLabel = t("notes.viewAllButton", "View all notes");
 
-    if (Platform.OS === 'ios') {
+    if (Platform.OS === "ios") {
       return (
         <View ref={notesButtonRef} collapsable={false}>
           <Host
             matchContents
-            colorScheme={isDark ? 'dark' : 'light'}
-            style={size === 'large' ? styles.detachedSwiftHeaderControlHost : styles.swiftHeaderControlHost}
+            colorScheme={isDark ? "dark" : "light"}
+            style={styles.swiftHeaderControlHost}
           >
-            <Button onPress={handleOpenNotesPress} modifiers={getHeaderControlModifiers(notesLabel)}>
-              {renderHeaderControlLabel('square.grid.2x2', notesLabel, size)}
+            <Button
+              onPress={handleOpenNotesPress}
+              modifiers={getHeaderControlModifiers(notesA11yLabel)}
+            >
+              {renderHeaderControlLabel("square.grid.2x2", notesLabel, size, {
+                iconOnly: true,
+              })}
             </Button>
           </Host>
         </View>
@@ -707,285 +704,109 @@ export default function HomeHeaderSearch({
       <View ref={notesButtonRef} collapsable={false}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={notesLabel}
+          accessibilityLabel={notesA11yLabel}
           hitSlop={HEADER_BUTTON_HIT_SLOP}
           onPress={handleOpenNotesPress}
           pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
-          style={[
-            styles.modeToggleBtn,
+          style={({ pressed }) => [
+            styles.iconButton,
             styles.androidHeaderActionButton,
             {
               backgroundColor: androidHeaderControlBackgroundColor,
               borderColor: androidHeaderControlBorderColor,
             },
+            pressed ? styles.headerButtonPressed : null,
           ]}
         >
-          <Ionicons name="grid-outline" size={20} color={colors.primary} />
+          <Ionicons
+            name="grid-outline"
+            size={20}
+            color={androidHeaderControlForegroundColor}
+          />
         </Pressable>
       </View>
     );
   };
 
-  const renderDetachedNativeControls = () => {
-    return (
-      <Host matchContents colorScheme={isDark ? 'dark' : 'light'} style={styles.detachedSwiftControlsHost}>
-        <HStack spacing={10} alignment="center">
-          {showSharedButton && onOpenShared ? (
-            sharedButtonMode === 'filter' && onChangeSharedFilter && hasFriendsForFilter ? (
-              <Animated.View style={sharedControlAnimatedStyle}>
-                <Menu
-                  label={renderSharedControlLabel(
-                    sharedButtonActive
-                      ? t('home.friendsFilterActive', 'Friends filter on')
-                      : t('home.friendsFilterInactive', 'Filter by friends'),
-                    'large'
-                  )}
-                  modifiers={[labelStyle('iconOnly'), buttonStyle('glass'), controlSize('large')]}
-                >
-                  <Button
-                    label={t('home.feedFilterAll', 'All posts')}
-                    systemImage={sharedFilterValue === 'all' ? 'checkmark' : undefined}
-                    onPress={() => onChangeSharedFilter?.('all')}
-                  />
-                  <Button
-                    label={t('home.feedFilterFriends', 'Friends only')}
-                    systemImage={sharedFilterValue === 'friends' ? 'checkmark' : undefined}
-                    onPress={() => onChangeSharedFilter?.('friends')}
-                  />
-                  <Button
-                    label={t('shared.manageTitle', 'Friends')}
-                    systemImage="person.crop.circle"
-                    onPress={onOpenShared}
-                  />
-                </Menu>
-              </Animated.View>
-            ) : (
-              renderDetachedGlassIconButton({
-                label: t('shared.manageTitle', 'Friends'),
-                systemImage: 'person.2',
-                onPress: onOpenShared,
-              })
-            )
-          ) : null}
-          {showNotesButton && onOpenNotes ? (
-            <View ref={notesButtonRef} collapsable={false}>
-              {renderDetachedGlassIconButton({
-                label: t('notes.viewAllButton', 'View all notes'),
-                systemImage: 'square.grid.2x2',
-                onPress: handleOpenNotesPress,
-              })}
-            </View>
-          ) : null}
-          {renderDetachedGlassIconButton({
-            label:
-              captureMode === 'text'
-                ? t('capture.switchCamera', 'Camera')
-                : t('capture.switchText', 'Text'),
-            systemImage: captureMode === 'text' ? 'camera' : 'square.and.pencil',
-            onPress: onToggleCaptureMode,
-          })}
-        </HStack>
-      </Host>
-    );
-  };
-
-  const renderAndroidGroupedControls = () => (
-    <GlassView
-      style={[
-        styles.androidHeaderActionGroup,
-        {
-          borderColor: androidHeaderControlBorderColor,
-        },
-      ]}
-      fallbackColor={androidHeaderControlBackgroundColor}
-      glassEffectStyle="regular"
-      colorScheme={isDark ? 'dark' : 'light'}
-    >
-      <View style={styles.androidHeaderActionRow}>
-        {showNotesButton && onOpenNotes ? (
-          <>
-            <View ref={notesButtonRef} collapsable={false}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('notes.viewAllButton', 'View all notes')}
-                hitSlop={HEADER_BUTTON_HIT_SLOP}
-                onPress={handleOpenNotesPress}
-                pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
-                style={({ pressed }) => [styles.androidGroupedAction, pressed ? styles.androidGroupedActionPressed : null]}
-              >
-                <Ionicons name="grid-outline" size={18} color={androidHeaderControlForegroundColor} />
-              </Pressable>
-            </View>
-          </>
-        ) : null}
-
-        {showSharedButton && onOpenShared ? (
-          <>
-            <View style={styles.sharedButtonContainer}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={
-                  sharedButtonMode === 'filter'
-                    && hasFriendsForFilter
-                    ? sharedButtonActive
-                      ? t('home.friendsFilterActive', 'Friends filter on')
-                      : t('home.friendsFilterInactive', 'Filter by friends')
-                    : t('shared.manageTitle', 'Friends')
-                }
-                hitSlop={HEADER_BUTTON_HIT_SLOP}
-                onPress={() => {
-                  if (sharedButtonMode === 'filter' && onChangeSharedFilter && hasFriendsForFilter) {
-                    setShowAndroidSharedMenuSheet(true);
-                    return;
-                  }
-
-                  onOpenShared();
-            }}
-            pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
-            style={({ pressed }) => [styles.androidGroupedAction, pressed ? styles.androidGroupedActionPressed : null]}
-              >
-                <Animated.View style={sharedControlAnimatedStyle}>
-                  {sharedButtonMode === 'filter' && hasFriendsForFilter
-                    ? renderSharedFilterAndroidIcon(18, androidHeaderControlForegroundColor)
-                    : <Ionicons
-                        name="people-outline"
-                        size={18}
-                        color={androidHeaderControlForegroundColor}
-                      />}
-                </Animated.View>
-              </Pressable>
-            </View>
-          </>
-        ) : null}
-
-        {showSearchButton ? (
-          <>
-            {renderAndroidGroupedSearchButton()}
-          </>
-        ) : null}
-      </View>
-    </GlassView>
-  );
-
-  const renderBrandMark = (variant: 'inline' | 'detached' = 'inline') => {
-    const isDetached = variant === 'detached';
-
-    return (
-      <View style={isDetached ? styles.detachedBrandLockup : styles.brandLockup}>
-        <View style={isDetached ? styles.detachedBrandBadge : styles.brandBadge}>
-          <Image
-            source={BRAND_ICON_SOURCE}
-            resizeMode="contain"
-            style={isDetached ? styles.detachedBrandIcon : styles.brandIcon}
-          />
-        </View>
-        <Text
-          style={[
-            isDetached ? styles.detachedBrandLabel : styles.brandLabel,
-            { color: colors.text },
-          ]}
-        >
-          ノート
-        </Text>
-      </View>
-    );
-  };
-
-  if (useDetachedControls) {
-    return (
-      <>
-        <View pointerEvents="box-none" style={[styles.detachedTopRow, { top: topInset + 6 }]}>
-          {renderBrandMark('detached')}
-          {renderDetachedNativeControls()}
-        </View>
-      </>
-    );
-  }
-
   return (
     <>
-      {useDetachedWordmark ? (
-        <View pointerEvents="none" style={[styles.detachedBrandWrap, { top: topInset + 6 }]}>
-          {renderBrandMark('detached')}
-        </View>
-      ) : null}
-
       <GlassHeader
         topInset={topInset}
         docked={useDockedHeader}
         dockedBlurred={showDockedBlur}
-        style={useDetachedWordmark ? styles.detachedHeaderOffset : undefined}
       >
-      <Animated.View
-        pointerEvents={isSearching ? 'none' : 'auto'}
-        style={[
-          StyleSheet.absoluteFill,
-          styles.defaultHeader,
-          useDetachedWordmark ? styles.defaultHeaderDetached : null,
-          defaultHeaderAnimatedStyle,
-        ]}
-      >
-        {!useDetachedWordmark ? (
-          renderBrandMark()
-        ) : null}
-        {isAndroid ? (
-          <View style={styles.androidHeaderControls}>
-            {renderAndroidGroupedControls()}
-            {renderModeToggle()}
-          </View>
-        ) : (
-          <View style={styles.headerActions}>
-            {renderNotesButton()}
-            {renderSharedButton()}
-            {renderModeToggle()}
-            {renderSearchButton()}
-          </View>
-        )}
-      </Animated.View>
-
-      <Animated.View
-        pointerEvents={isSearching ? 'auto' : 'none'}
-        style={[
-          StyleSheet.absoluteFill,
-          styles.searchHeader,
-          searchHeaderAnimatedStyle,
-        ]}
-      >
-        <View
+        <Animated.View
+          pointerEvents={isSearching ? "none" : "auto"}
           style={[
-            styles.searchContainer,
-            {
-              backgroundColor: searchFieldBackgroundColor,
-              borderColor: searchFieldBorderColor,
-            },
+            StyleSheet.absoluteFill,
+            styles.defaultHeader,
+            defaultHeaderAnimatedStyle,
           ]}
         >
-          <Ionicons name="search" size={16} color={colors.secondaryText} />
-          <View style={styles.searchInputWrap}>
-            <TextInput
-              style={[styles.searchInput, { color: colors.text }]}
-              placeholder={t('home.searchPlaceholder', 'Search notes...')}
-              placeholderTextColor={colors.secondaryText}
-              value={searchQuery}
-              onChangeText={onSearchChange}
-              autoFocus={isSearching}
-              returnKeyType="search"
-            />
+          <View style={[styles.headerSlot, styles.headerSlotLeft]}>
+            <View style={styles.headerSlotGroup}>
+              {renderNotesButton()}
+              {showSearchButton ? renderSearchButton() : null}
+            </View>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('common.close', 'Close')}
-            hitSlop={HEADER_BUTTON_HIT_SLOP}
-            onPress={onCloseSearch}
-            pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
+          <View style={[styles.headerSlot, styles.headerSlotCenter]}>
+            {renderSharedButton()}
+          </View>
+          <View style={[styles.headerSlot, styles.headerSlotRight]}>
+            {renderModeToggle()}
+          </View>
+        </Animated.View>
+
+        <Animated.View
+          pointerEvents={isSearching ? "auto" : "none"}
+          style={[
+            StyleSheet.absoluteFill,
+            styles.searchHeader,
+            searchHeaderAnimatedStyle,
+          ]}
+        >
+          <View
+            style={[
+              styles.searchContainer,
+              {
+                backgroundColor: searchFieldBackgroundColor,
+                borderColor: searchFieldBorderColor,
+              },
+            ]}
           >
-            <Ionicons name="close-circle" size={20} color={colors.secondaryText} />
-          </Pressable>
-        </View>
-      </Animated.View>
+            <Ionicons name="search" size={16} color={colors.secondaryText} />
+            <View style={styles.searchInputWrap}>
+              <TextInput
+                style={[styles.searchInput, { color: colors.text }]}
+                placeholder={t("home.searchPlaceholder", "Search notes...")}
+                placeholderTextColor={colors.secondaryText}
+                value={searchQuery}
+                onChangeText={onSearchChange}
+                autoFocus={isSearching}
+                returnKeyType="search"
+              />
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("common.close", "Close")}
+              hitSlop={HEADER_BUTTON_HIT_SLOP}
+              onPress={onCloseSearch}
+              pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
+            >
+              <Ionicons
+                name="close-circle"
+                size={20}
+                color={colors.secondaryText}
+              />
+            </Pressable>
+          </View>
+        </Animated.View>
       </GlassHeader>
 
-      {Platform.OS === 'android' && sharedButtonMode === 'filter' && onChangeSharedFilter && hasFriendsForFilter ? (
+      {Platform.OS === "android" &&
+      sharedButtonMode === "filter" &&
+      onChangeSharedFilter &&
+      hasFriendsForFilter ? (
         <AppSheet
           visible={showAndroidSharedMenuSheet}
           onClose={() => setShowAndroidSharedMenuSheet(false)}
@@ -993,18 +814,21 @@ export default function HomeHeaderSearch({
         >
           <AppSheetScaffold
             headerVariant="standard"
-            title={t('shared.manageTitle', 'Friends')}
-            subtitle={t('home.feedFilterHint', 'Choose what kind of posts you want to see in Home.')}
+            title={t("shared.manageTitle", "Friends")}
+            subtitle={t(
+              "home.feedFilterHint",
+              "Choose what kind of posts you want to see in Home."
+            )}
             contentContainerStyle={styles.sharedFilterSheet}
             useHorizontalPadding={false}
           >
             <View>
-              {(['all', 'friends'] as const).map((option, index) => {
+              {(["all", "friends"] as const).map((option, index) => {
                 const isSelected = sharedFilterValue === option;
                 const label =
-                  option === 'all'
-                    ? t('home.feedFilterAll', 'All posts')
-                    : t('home.feedFilterFriends', 'Friends only');
+                  option === "all"
+                    ? t("home.feedFilterAll", "All posts")
+                    : t("home.feedFilterFriends", "Friends only");
 
                 return (
                   <View key={option}>
@@ -1017,20 +841,45 @@ export default function HomeHeaderSearch({
                       }}
                       style={({ pressed }) => [
                         styles.sharedFilterRow,
-                        isSelected ? { backgroundColor: `${colors.primary}12` } : null,
+                        isSelected
+                          ? { backgroundColor: `${colors.primary}12` }
+                          : null,
                         pressed ? styles.sharedFilterRowPressed : null,
                       ]}
                     >
-                      <Text style={[styles.sharedFilterLabel, { color: colors.text }]}>{label}</Text>
-                      {isSelected ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
+                      <Text
+                        style={[
+                          styles.sharedFilterLabel,
+                          { color: colors.text },
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                      {isSelected ? (
+                        <Ionicons
+                          name="checkmark"
+                          size={18}
+                          color={colors.primary}
+                        />
+                      ) : null}
                     </Pressable>
                     {index === 0 ? (
-                      <View style={[styles.sharedFilterDivider, { backgroundColor: colors.border }]} />
+                      <View
+                        style={[
+                          styles.sharedFilterDivider,
+                          { backgroundColor: colors.border },
+                        ]}
+                      />
                     ) : null}
                   </View>
                 );
               })}
-              <View style={[styles.sharedFilterDivider, { backgroundColor: colors.border }]} />
+              <View
+                style={[
+                  styles.sharedFilterDivider,
+                  { backgroundColor: colors.border },
+                ]}
+              />
             </View>
             <Pressable
               accessibilityRole="button"
@@ -1038,17 +887,25 @@ export default function HomeHeaderSearch({
                 setShowAndroidSharedMenuSheet(false);
                 onOpenShared?.();
               }}
-              style={({ pressed }) => [styles.sharedManageRow, pressed ? styles.sharedManageRowPressed : null]}
+              style={({ pressed }) => [
+                styles.sharedManageRow,
+                pressed ? styles.sharedManageRowPressed : null,
+              ]}
             >
-              <Ionicons name="people-outline" size={16} color={colors.primary} />
-              <Text style={[styles.sharedManageLabel, { color: colors.primary }]}>
-                {t('shared.manageTitle', 'Friends')}
+              <Ionicons
+                name="people-outline"
+                size={16}
+                color={colors.primary}
+              />
+              <Text
+                style={[styles.sharedManageLabel, { color: colors.primary }]}
+              >
+                {t("shared.manageTitle", "Friends")}
               </Text>
             </Pressable>
           </AppSheetScaffold>
         </AppSheet>
       ) : null}
-
     </>
   );
 }
@@ -1056,111 +913,49 @@ export default function HomeHeaderSearch({
 const styles = StyleSheet.create({
   defaultHeader: {
     paddingHorizontal: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
-  defaultHeaderDetached: {
-    justifyContent: 'flex-end',
+  headerSlot: {
+    flex: 1,
+    alignItems: "center",
   },
-  brandLockup: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  headerSlotLeft: {
+    alignItems: "flex-start",
+  },
+  headerSlotCenter: {
+    justifyContent: "center",
+  },
+  headerSlotRight: {
+    alignItems: "flex-end",
+  },
+  headerSlotGroup: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
-  brandBadge: {
-    width: 30,
-    height: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  brandIcon: {
-    width: 30,
-    height: 30,
-  },
-  brandLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 1.6,
-    fontFamily: 'Noto Sans',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  androidHeaderControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  androidHeaderActionGroup: {
-    minHeight: 42,
-    paddingHorizontal: 6,
-    borderRadius: 21,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  androidHeaderActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  androidGroupedAction: {
-    minWidth: 42,
-    height: 42,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  androidGroupedActionPressed: {
-    opacity: 0.8,
-  },
-  androidSearchButton: {
+  iconButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modeToggleBtn: {
-    minWidth: 40,
-    height: 40,
-    paddingHorizontal: 10,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
   androidHeaderActionButton: {
     borderWidth: StyleSheet.hairlineWidth,
   },
-  androidHeaderStandaloneButton: {
-    borderWidth: 1,
-  },
   swiftHeaderControlHost: {
     minHeight: 38,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   sharedButtonContainer: {
-    position: 'relative',
-  },
-  sharedFilterIconWrap: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sharedFilterBadge: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
+    position: "relative",
   },
   searchHeader: {
     paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   searchContainer: {
     flex: 1,
@@ -1168,89 +963,62 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 21,
     borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   searchInputWrap: {
     flex: 1,
-    height: '100%',
-    justifyContent: 'center',
+    height: "100%",
+    justifyContent: "center",
   },
   searchInput: {
-    height: '100%',
+    height: "100%",
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
     paddingVertical: 0,
-    width: '100%',
-    fontFamily: 'Noto Sans',
+    width: "100%",
+    fontFamily: "Noto Sans",
   },
-  detachedBrandWrap: {
-    position: 'absolute',
-    left: 20,
-    zIndex: 140,
+  textButton: {
+    minHeight: 40,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  detachedBrandLockup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  textButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
-  detachedTopRow: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
-    zIndex: 140,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  headerButtonPressed: {
+    opacity: 0.82,
   },
-  detachedBrandBadge: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  detachedBrandIcon: {
-    width: 36,
-    height: 36,
-  },
-  detachedBrandLabel: {
+  textButtonLabel: {
     fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 1.8,
-    fontFamily: 'Noto Sans',
-  },
-  detachedSwiftHeaderControlHost: {
-    minHeight: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  detachedSwiftControlsHost: {
-    minHeight: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  detachedHeaderOffset: {
-    marginTop: 28,
+    fontWeight: "700",
+    fontFamily: "Noto Sans",
   },
   sharedFilterSheet: {
     gap: 12,
-    paddingBottom: Sheet.android.bottomPadding + Sheet.android.comfortBottomPadding,
+    paddingBottom:
+      Sheet.android.bottomPadding + Sheet.android.comfortBottomPadding,
   },
   sharedFilterRow: {
     minHeight: 60,
     paddingHorizontal: Sheet.android.horizontalPadding,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   sharedFilterRowPressed: {
     opacity: 0.9,
   },
   sharedFilterLabel: {
     fontSize: 16,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
+    fontWeight: "700",
+    fontFamily: "Noto Sans",
   },
   sharedFilterDivider: {
     height: StyleSheet.hairlineWidth,
@@ -1259,9 +1027,9 @@ const styles = StyleSheet.create({
   sharedManageRow: {
     minHeight: 60,
     paddingHorizontal: Sheet.android.horizontalPadding,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
     gap: 8,
   },
   sharedManageRowPressed: {
@@ -1269,7 +1037,7 @@ const styles = StyleSheet.create({
   },
   sharedManageLabel: {
     fontSize: 14,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
+    fontWeight: "700",
+    fontFamily: "Noto Sans",
   },
 });

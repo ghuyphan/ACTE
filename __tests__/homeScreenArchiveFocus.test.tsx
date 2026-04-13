@@ -5,8 +5,11 @@ import { ActiveFeedTargetProvider } from '../hooks/useActiveFeedTarget';
 import HomeScreen from '../app/(tabs)/index';
 
 const mockConsumeFeedFocus = jest.fn();
+const mockPeekFeedFocus = jest.fn();
+const mockClearFeedFocus = jest.fn();
 const mockScrollToOffset = jest.fn();
 const mockPush = jest.fn();
+let mockInitialLoadComplete = true;
 let mockNotesState = [
   {
     id: 'note-new',
@@ -192,7 +195,9 @@ jest.mock('../hooks/useAppSheetAlert', () => ({
 
 jest.mock('../hooks/useFeedFocus', () => ({
   useFeedFocus: () => ({
+    clearFeedFocus: (...args: unknown[]) => mockClearFeedFocus(...args),
     consumeFeedFocus: (...args: unknown[]) => mockConsumeFeedFocus(...args),
+    peekFeedFocus: (...args: unknown[]) => mockPeekFeedFocus(...args),
   }),
 }));
 
@@ -241,7 +246,7 @@ jest.mock('../hooks/useNotes', () => ({
     notes: mockNotesState,
     refreshNotes: jest.fn(async () => undefined),
     createNote: jest.fn(async () => undefined),
-    initialLoadComplete: true,
+    initialLoadComplete: mockInitialLoadComplete,
   }),
 }));
 
@@ -270,6 +275,7 @@ jest.mock('../hooks/useSubscription', () => ({
     plusPriceLabel: null,
     canImportFromLibrary: false,
     remotePhotoNoteCount: null,
+    isRemotePhotoNoteCountReady: true,
     presentPaywallIfNeeded: jest.fn(async () => 'not_presented'),
     restorePurchases: jest.fn(async () => ({ status: 'unavailable' })),
   }),
@@ -370,6 +376,7 @@ describe('HomeScreen archive focus', () => {
     jest.useFakeTimers();
     latestNotesFeedProps = null;
     latestHomeHeaderSearchProps = null;
+    mockInitialLoadComplete = true;
     mockNotesState = [
       {
         id: 'note-new',
@@ -431,7 +438,7 @@ describe('HomeScreen archive focus', () => {
   });
 
   it('scrolls to the matching note card when a pending note focus exists', async () => {
-    mockConsumeFeedFocus.mockReturnValueOnce({ kind: 'note', id: 'note-old' });
+    mockPeekFeedFocus.mockReturnValue({ kind: 'note', id: 'note-old' });
 
     renderHomeScreen();
 
@@ -448,7 +455,7 @@ describe('HomeScreen archive focus', () => {
   });
 
   it('scrolls to the matching shared post card when a pending shared focus exists', async () => {
-    mockConsumeFeedFocus.mockReturnValueOnce({ kind: 'shared-post', id: 'shared-friend' });
+    mockPeekFeedFocus.mockReturnValue({ kind: 'shared-post', id: 'shared-friend' });
 
     renderHomeScreen();
 
@@ -465,7 +472,7 @@ describe('HomeScreen archive focus', () => {
   });
 
   it('clears a missing focus target without opening a fallback scroll', async () => {
-    mockConsumeFeedFocus.mockReturnValueOnce({ kind: 'note', id: 'missing-note' });
+    mockPeekFeedFocus.mockReturnValue({ kind: 'note', id: 'missing-note' });
 
     renderHomeScreen();
 
@@ -474,9 +481,41 @@ describe('HomeScreen archive focus', () => {
     });
 
     await waitFor(() => {
-      expect(mockConsumeFeedFocus).toHaveBeenCalled();
+      expect(mockClearFeedFocus).toHaveBeenCalled();
     });
     expect(mockScrollToOffset).not.toHaveBeenCalled();
+  });
+
+  it('waits for the initial notes load before scrolling to a pending note focus', async () => {
+    mockInitialLoadComplete = false;
+    mockPeekFeedFocus.mockReturnValue({ kind: 'note', id: 'note-old' });
+
+    const view = renderHomeScreen();
+
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    expect(mockScrollToOffset).not.toHaveBeenCalled();
+    expect(mockClearFeedFocus).not.toHaveBeenCalled();
+
+    mockInitialLoadComplete = true;
+    view.rerender(
+      <ActiveFeedTargetProvider>
+        <HomeScreen />
+      </ActiveFeedTargetProvider>
+    );
+
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    await waitFor(() => {
+      expect(mockScrollToOffset).toHaveBeenCalledWith({
+        offset: snapHeight * 3,
+        animated: true,
+      });
+    });
   });
 
   it('keeps the currently viewed card anchored when a friend shared post is inserted above it', async () => {

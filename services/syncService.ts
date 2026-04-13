@@ -1,4 +1,8 @@
-import { countPhotoNotes } from '../constants/subscription';
+import {
+  countPhotoNotes,
+  countPhotoNotesCreatedToday,
+  getLocalPhotoUsageDateKey,
+} from '../constants/subscription';
 import i18n from '../constants/i18n';
 import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 import { AppUser } from '../utils/appUser';
@@ -2106,6 +2110,8 @@ export async function syncNotes(
     };
     let finalNoteCount = notes.length;
     let finalPhotoNoteCount = countPhotoNotes(notes);
+    let finalDailyPhotoNoteCount = countPhotoNotesCreatedToday(notes);
+    let finalDailyPhotoNoteDate = getLocalPhotoUsageDateKey();
 
     if (mode === 'full') {
       const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, ownerScope, notes, { since: null });
@@ -2164,6 +2170,8 @@ export async function syncNotes(
         const latestLocalNotes = await getAllNotesForScope(ownerScope);
         finalNoteCount = latestLocalNotes.length;
         finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
+        finalDailyPhotoNoteCount = countPhotoNotesCreatedToday(latestLocalNotes);
+        finalDailyPhotoNoteDate = getLocalPhotoUsageDateKey();
       }
     }
 
@@ -2172,6 +2180,8 @@ export async function syncNotes(
         user_id: userId,
         note_count: finalNoteCount,
         photo_note_count: finalPhotoNoteCount,
+        photo_note_daily_count: finalDailyPhotoNoteCount,
+        photo_note_daily_date: finalDailyPhotoNoteDate,
         last_synced_at: syncMarker,
       },
       { onConflict: 'user_id' }

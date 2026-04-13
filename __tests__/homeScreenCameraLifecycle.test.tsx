@@ -178,6 +178,8 @@ jest.mock('../hooks/useSubscription', () => ({
     isPurchaseInFlight: false,
     plusPriceLabel: null,
     canImportFromLibrary: false,
+    remotePhotoNoteCount: 0,
+    isRemotePhotoNoteCountReady: true,
     purchasePlus: jest.fn(async () => ({ status: 'unavailable' })),
     restorePurchases: jest.fn(async () => ({ status: 'unavailable' })),
   }),

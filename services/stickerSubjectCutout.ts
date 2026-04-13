@@ -82,7 +82,7 @@ const SUBJECT_CUTOUT_TEMP_DIRECTORY = FileSystem.cacheDirectory
   : null;
 const SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION = 2048;
 const ANDROID_SUBJECT_CUTOUT_MAX_SOURCE_DIMENSION = 1280;
-const SUBJECT_CUTOUT_NORMALIZED_SOURCE_QUALITY = 0.92;
+const SUBJECT_CUTOUT_NORMALIZED_SOURCE_QUALITY = 0.9;
 
 function normalizeNativeCutoutError(error: unknown) {
   if (error instanceof SubjectCutoutError) {

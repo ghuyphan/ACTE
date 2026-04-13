@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 
 export type PlanTier = 'free' | 'plus';
 
-export const FREE_PHOTO_NOTE_LIMIT = 10;
+export const FREE_PHOTO_NOTE_LIMIT = 5;
 export const PLUS_PHOTO_NOTE_LIMIT = null;
 
 export const REVENUECAT_IOS_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ?? '';
@@ -47,6 +47,46 @@ export function getPhotoNoteLimitForTier(tier: PlanTier) {
 
 export function countPhotoNotes<T extends { type: string }>(notes: T[]) {
   return notes.filter((note) => note.type === 'photo').length;
+}
+
+export function getLocalPhotoUsageDateKey(now = new Date()) {
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, '0');
+  const day = `${now.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function isSameLocalCalendarDay(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+export function countPhotoNotesCreatedOnDay<T extends { type: string; createdAt?: string | null }>(
+  notes: T[],
+  day = new Date()
+) {
+  return notes.filter((note) => {
+    if (note.type !== 'photo' || !note.createdAt) {
+      return false;
+    }
+
+    const createdAt = new Date(note.createdAt);
+    if (Number.isNaN(createdAt.getTime())) {
+      return false;
+    }
+
+    return isSameLocalCalendarDay(createdAt, day);
+  }).length;
+}
+
+export function countPhotoNotesCreatedToday<T extends { type: string; createdAt?: string | null }>(
+  notes: T[],
+  now = new Date()
+) {
+  return countPhotoNotesCreatedOnDay(notes, now);
 }
 
 export function canCreatePhotoNote(tier: PlanTier, photoNoteCount: number) {

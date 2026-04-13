@@ -80,7 +80,7 @@ describe('stickerSubjectCutout', () => {
       'file:///photo.heic',
       [{ resize: { width: 1280 } }],
       expect.objectContaining({
-        compress: 0.92,
+        compress: 0.9,
         format: 'jpeg',
       })
     );

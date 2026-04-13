@@ -148,12 +148,12 @@ const SUPPORTED_STICKER_MIME_TYPES = new Set([
   'image/heic',
   'image/heif',
 ]);
-const MAX_STICKER_FILE_SIZE_BYTES = 450 * 1024;
+const MAX_STICKER_FILE_SIZE_BYTES = 360 * 1024;
 const MAX_STICKER_DIMENSION_PX = 1024;
 const STICKER_IMPORT_OPTIMIZATION_PRESETS = [
-  { maxDimension: 1024, compress: 0.9 },
-  { maxDimension: 768, compress: 0.82 },
-  { maxDimension: 512, compress: 0.72 },
+  { maxDimension: 1024, compress: 0.86 },
+  { maxDimension: 768, compress: 0.78 },
+  { maxDimension: 512, compress: 0.68 },
 ];
 const REMOTE_STICKER_REGISTRY_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
 
@@ -748,7 +748,7 @@ async function optimizeStickerForImport(
     }
 
     const normalizedStamp = await manipulateAsync(uri, [], {
-      compress: 0.94,
+      compress: 0.9,
       format: getStickerOptimizationSaveFormat(targetMimeType),
     });
     return {

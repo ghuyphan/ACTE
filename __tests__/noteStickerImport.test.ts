@@ -289,7 +289,7 @@ describe('importStickerAsset', () => {
       'file:///imports/large-sticker.png',
       [{ resize: { width: 1024 } }],
       expect.objectContaining({
-        compress: 0.9,
+        compress: 0.86,
         format: 'webp',
       })
     );
@@ -384,7 +384,7 @@ describe('importStickerAsset', () => {
       'file:///imports/photo.heic',
       [],
       expect.objectContaining({
-        compress: 0.94,
+        compress: 0.9,
         format: 'jpeg',
       })
     );

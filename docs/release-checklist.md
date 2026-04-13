@@ -41,7 +41,7 @@
 ## Plus / Billing
 
 - [ ] RevenueCat is configured for the target build or purchase UI is intentionally unavailable.
-- [ ] Free plan enforces the 10 photo-note limit.
+- [ ] Free plan enforces the 5 photo-per-day limit.
 - [ ] Plus unlocks unlimited photo notes and photo-library import.
 - [ ] Purchase succeeds on a real native test build.
 - [ ] Restore purchases reactivates the expected entitlement.

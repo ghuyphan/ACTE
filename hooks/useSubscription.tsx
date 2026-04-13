@@ -13,6 +13,7 @@ import {
   REVENUECAT_OFFERING_ID,
   REVENUECAT_PRO_ENTITLEMENT_ID,
   getRevenueCatApiKey,
+  getLocalPhotoUsageDateKey,
   getPhotoNoteLimitForTier,
   isRevenueCatConfigured,
 } from '../constants/subscription';
@@ -61,10 +62,17 @@ const SUBSCRIPTION_SNAPSHOT_KEY_PREFIX = 'subscription.snapshot.';
 interface SubscriptionSnapshot {
   tier: PlanTier;
   remotePhotoNoteCount: number | null;
+  remotePhotoNoteUsageDate: string | null;
   plusPriceLabel: string | null;
   plusPackageTitle: string | null;
   cachedAt: string;
 }
+
+type UserUsageRow = {
+  photo_note_count?: number | null;
+  photo_note_daily_count?: number | null;
+  photo_note_daily_date?: string | null;
+};
 
 function hasActiveProEntitlement(customerInfo: CustomerInfo | null) {
   return Boolean(customerInfo?.entitlements.active?.[REVENUECAT_PRO_ENTITLEMENT_ID]);
@@ -137,6 +145,32 @@ function isPurchaseCancelled(error: unknown) {
   );
 }
 
+function normalizeRemoteDailyPhotoNoteCount(
+  row: UserUsageRow | null | undefined,
+  todayKey = getLocalPhotoUsageDateKey()
+) {
+  if (!row) {
+    return null;
+  }
+
+  const usageDate =
+    typeof row.photo_note_daily_date === 'string' && row.photo_note_daily_date.trim().length > 0
+      ? row.photo_note_daily_date.trim()
+      : null;
+
+  if (!usageDate) {
+    return null;
+  }
+
+  if (usageDate !== todayKey) {
+    return 0;
+  }
+
+  return typeof row.photo_note_daily_count === 'number' && Number.isFinite(row.photo_note_daily_count)
+    ? row.photo_note_daily_count
+    : null;
+}
+
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const { isReady: authReady, user } = useAuth();
   const { isOnline } = useConnectivity();
@@ -165,7 +199,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     () => currentOffering?.availablePackages ?? [],
     [currentOffering]
   );
-  const cachedRemotePhotoNoteCount = cachedSnapshot?.remotePhotoNoteCount ?? null;
+  const cachedRemotePhotoNoteCount = normalizeRemoteDailyPhotoNoteCount({
+    photo_note_daily_count: cachedSnapshot?.remotePhotoNoteCount ?? null,
+    photo_note_daily_date: cachedSnapshot?.remotePhotoNoteUsageDate ?? null,
+  });
   const cachedPlusPriceLabel = cachedSnapshot?.plusPriceLabel ?? null;
   const cachedPlusPackageTitle = cachedSnapshot?.plusPackageTitle ?? null;
 
@@ -230,8 +267,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         setCachedSnapshot(parsed);
 
         if (!receivedLiveRemotePhotoNoteCountRef.current) {
-          setRemotePhotoNoteCount(parsed.remotePhotoNoteCount ?? null);
-          setIsRemotePhotoNoteCountReady(parsed.remotePhotoNoteCount !== null);
+          const normalizedCachedRemoteCount = normalizeRemoteDailyPhotoNoteCount({
+            photo_note_daily_count: parsed.remotePhotoNoteCount ?? null,
+            photo_note_daily_date: parsed.remotePhotoNoteUsageDate ?? null,
+          });
+          setRemotePhotoNoteCount(normalizedCachedRemoteCount);
+          setIsRemotePhotoNoteCountReady(
+            normalizedCachedRemoteCount !== null || parsed.remotePhotoNoteUsageDate !== null
+          );
         }
       })
       .catch((error) => {
@@ -336,8 +379,12 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     }
 
     const supabase = getSupabase();
-    const cachedRemotePhotoNoteCount = cachedSnapshotRef.current?.remotePhotoNoteCount ?? null;
-    const hasCachedRemotePhotoNoteCount = cachedRemotePhotoNoteCount !== null;
+    const cachedRemotePhotoNoteCount = normalizeRemoteDailyPhotoNoteCount({
+      photo_note_daily_count: cachedSnapshotRef.current?.remotePhotoNoteCount ?? null,
+      photo_note_daily_date: cachedSnapshotRef.current?.remotePhotoNoteUsageDate ?? null,
+    });
+    const hasCachedRemotePhotoNoteCount =
+      cachedRemotePhotoNoteCount !== null || cachedSnapshotRef.current?.remotePhotoNoteUsageDate != null;
 
     if (!userId || !supabase) {
       if (!receivedLiveRemotePhotoNoteCountRef.current) {
@@ -372,14 +419,12 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           }
 
           const nextCount =
-            typeof payload.new === 'object' && payload.new && 'photo_note_count' in payload.new
-              ? (payload.new as { photo_note_count?: unknown }).photo_note_count
+            typeof payload.new === 'object' && payload.new
+              ? normalizeRemoteDailyPhotoNoteCount(payload.new as UserUsageRow)
               : null;
           receivedLiveRemotePhotoNoteCountRef.current = true;
           setIsRemotePhotoNoteCountReady(true);
-          setRemotePhotoNoteCount(
-            typeof nextCount === 'number' && Number.isFinite(nextCount) ? nextCount : null
-          );
+          setRemotePhotoNoteCount(nextCount);
         }
       )
       .subscribe();
@@ -388,7 +433,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       try {
         const { data, error } = await supabase
           .from('user_usage')
-          .select('photo_note_count')
+          .select('photo_note_count, photo_note_daily_count, photo_note_daily_date')
           .eq('user_id', userId)
           .maybeSingle();
 
@@ -400,12 +445,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           throw error;
         }
 
-        const nextCount = data?.photo_note_count;
+        const nextCount = normalizeRemoteDailyPhotoNoteCount(data as UserUsageRow | null);
         receivedLiveRemotePhotoNoteCountRef.current = true;
         setIsRemotePhotoNoteCountReady(true);
-        setRemotePhotoNoteCount(
-          typeof nextCount === 'number' && Number.isFinite(nextCount) ? nextCount : null
-        );
+        setRemotePhotoNoteCount(nextCount);
       } catch (error: unknown) {
         console.warn('[subscription] Failed to load remote usage:', error);
         if (active && !receivedLiveRemotePhotoNoteCountRef.current) {
@@ -480,6 +523,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     const nextSnapshot: SubscriptionSnapshot = {
       tier,
       remotePhotoNoteCount,
+      remotePhotoNoteUsageDate:
+        remotePhotoNoteCount === null ? null : getLocalPhotoUsageDateKey(),
       plusPriceLabel: selectedPackage?.product.priceString ?? cachedPlusPriceLabel,
       plusPackageTitle: getPlusOfferingLabel(selectedPackage) ?? cachedPlusPackageTitle,
       cachedAt: new Date().toISOString(),

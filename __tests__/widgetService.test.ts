@@ -382,6 +382,57 @@ describe('widgetService', () => {
     expect(result.selectionMode).toBe('shared_memory');
   });
 
+  it('prefers a pushed shared post when nothing is nearby', () => {
+    const result = selectWidgetNote({
+      notes: [
+        buildNote({
+          id: 'latest-personal',
+          content: 'Latest personal memory',
+          locationName: 'Personal Place',
+          createdAt: '2026-03-10T11:00:00.000Z',
+        }),
+      ] as any,
+      sharedPosts: [
+        buildSharedPost({
+          id: 'shared-priority',
+          text: 'Fresh friend memory',
+          createdAt: '2026-03-10T12:00:00.000Z',
+        }),
+      ] as any,
+      preferredNoteId: 'shared-priority',
+    });
+
+    expect(result.selectedNote?.id).toBe('shared-priority');
+    expect(result.selectionMode).toBe('shared_memory');
+  });
+
+  it('keeps a nearby personal note ahead of a pushed shared post', () => {
+    const result = selectWidgetNote({
+      notes: [
+        buildNote({
+          id: 'nearby-personal',
+          content: 'Nearby personal memory',
+          locationName: 'Cafe Nearby',
+          latitude: 10.0,
+          longitude: 106.0,
+          createdAt: '2026-03-10T11:00:00.000Z',
+        }),
+      ] as any,
+      sharedPosts: [
+        buildSharedPost({
+          id: 'shared-priority',
+          text: 'Fresh friend memory',
+          createdAt: '2026-03-10T12:00:00.000Z',
+        }),
+      ] as any,
+      currentLocation: { latitude: 10.0, longitude: 106.0 },
+      preferredNoteId: 'shared-priority',
+    });
+
+    expect(result.selectedNote?.id).toBe('nearby-personal');
+    expect(result.selectionMode).toBe('nearest_memory');
+  });
+
   it('uses an explicit current location override when updating the widget timeline', async () => {
     mockGetAllNotes.mockResolvedValue([
       buildNote({

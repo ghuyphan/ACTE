@@ -19,6 +19,7 @@ import { useAppWidgetRefresh } from '../hooks/app/useAppWidgetRefresh';
 import { useSocialPushRegistration } from '../hooks/app/useSocialPushRegistration';
 import { showAppAlert } from '../utils/alert';
 import '../utils/backgroundGeofence';
+import '../utils/backgroundSocialPush';
 
 export { ErrorBoundary } from 'expo-router';
 

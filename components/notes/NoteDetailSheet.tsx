@@ -292,8 +292,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const scrollContainerRef = useRef<any>(null);
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const pendingDeleteNoteIdRef = useRef<string | null>(null);
     const closeCompletionHandledRef = useRef(false);
+    const missingNoteCloseRequestedRef = useRef(false);
+    const isMountedRef = useRef(true);
     const activeNoteKeyRef = useRef(`note-detail-${Math.random().toString(36).slice(2)}`);
     const lastFreeEditNoteColorRef = useRef('marigold-glow');
     const subjectCutoutPrewarmRequestedRef = useRef(false);
@@ -626,6 +627,15 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         return undefined;
     }, [clearActiveNote, noteId, setActiveNote, visible]);
 
+    const completeClose = useCallback(() => {
+        if (closeCompletionHandledRef.current) {
+            return;
+        }
+
+        closeCompletionHandledRef.current = true;
+        onClosed?.();
+    }, [onClosed]);
+
     useEffect(() => {
         if (!visible || !noteId) {
             return;
@@ -637,7 +647,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setNote(null);
         setIsEditing(false);
         setIsDeleting(false);
-        pendingDeleteNoteIdRef.current = null;
         setEditContent('');
         setEditLocation('');
         setEditRadius(150);
@@ -725,6 +734,30 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         resetPolaroidCaptureState,
         visible,
     ]);
+
+    useEffect(() => {
+        if (!visible) {
+            missingNoteCloseRequestedRef.current = false;
+            return;
+        }
+
+        if (loading) {
+            return;
+        }
+
+        if (note) {
+            missingNoteCloseRequestedRef.current = false;
+            return;
+        }
+
+        if (missingNoteCloseRequestedRef.current) {
+            return;
+        }
+
+        missingNoteCloseRequestedRef.current = true;
+        onClose();
+        completeClose();
+    }, [completeClose, loading, note, onClose, visible]);
 
     useEffect(() => {
         if (!isEditing || !note || importingSticker) {
@@ -1388,6 +1421,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     }, []);
 
     useEffect(() => {
+        isMountedRef.current = true;
+
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
+    useEffect(() => {
         if (!visible) {
             resetPolaroidCaptureState();
         }
@@ -1426,7 +1467,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 t('noteDetail.deleteErrorMsg', 'Unable to delete this note right now. Please try again.')
             );
         } finally {
-            setIsDeleting(false);
+            if (isMountedRef.current) {
+                setIsDeleting(false);
+            }
         }
     }, [deleteNote, deleteSharedNote, isSharedByMe, t, user]);
 
@@ -1438,26 +1481,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         const closeDelay = reduceMotionEnabled ? 40 : 220;
         const timer = setTimeout(() => {
-            if (closeCompletionHandledRef.current) {
-                return;
-            }
-
-            closeCompletionHandledRef.current = true;
-            const pendingDeleteNoteId = pendingDeleteNoteIdRef.current;
-            pendingDeleteNoteIdRef.current = null;
-
-            if (pendingDeleteNoteId) {
-                void performDelete(pendingDeleteNoteId).finally(() => {
-                    onClosed?.();
-                });
-                return;
-            }
-
-            onClosed?.();
+            completeClose();
         }, closeDelay);
 
         return () => clearTimeout(timer);
-    }, [onClosed, performDelete, reduceMotionEnabled, visible]);
+    }, [completeClose, reduceMotionEnabled, visible]);
 
     const handleSheetDismiss = useCallback(() => {
         dismissEditorKeyboard();
@@ -1479,9 +1507,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                             return;
                         }
 
-                        pendingDeleteNoteIdRef.current = note.id;
+                        const targetNoteId = note.id;
                         setIsDeleting(true);
                         onClose();
+                        completeClose();
+                        void performDelete(targetNoteId);
                     },
                 },
             ]

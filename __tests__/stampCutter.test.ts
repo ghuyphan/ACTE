@@ -132,7 +132,7 @@ describe('stampCutter', () => {
         },
       ],
       expect.objectContaining({
-        compress: 0.94,
+        compress: 0.9,
         format: 'jpeg',
       })
     );
@@ -192,7 +192,7 @@ describe('stampCutter', () => {
       'file:///photo.heic',
       [],
       expect.objectContaining({
-        compress: 0.94,
+        compress: 0.9,
         format: 'jpeg',
       })
     );
@@ -231,7 +231,7 @@ describe('stampCutter', () => {
       'file:///large-photo.jpg',
       [{ resize: { width: 2048 } }],
       expect.objectContaining({
-        compress: 0.94,
+        compress: 0.9,
         format: 'jpeg',
       })
     );
@@ -298,7 +298,7 @@ describe('stampCutter', () => {
         },
       ],
       expect.objectContaining({
-        compress: 0.94,
+        compress: 0.9,
         format: 'jpeg',
       })
     );

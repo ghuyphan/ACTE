@@ -12,6 +12,7 @@ const mockRunMediaCacheEviction = jest.fn();
 const mockScheduleOnIdle = jest.fn();
 const mockGetCachedStartupRoute = jest.fn();
 const mockLoadStartupRoute = jest.fn();
+const mockRegisterSocialPushBackgroundTaskAsync = jest.fn();
 
 jest.mock('../services/database', () => ({
   getDB: () => mockGetDB(),
@@ -40,6 +41,11 @@ jest.mock('../constants/i18n', () => ({
 jest.mock('../services/startupRouting', () => ({
   getCachedStartupRoute: (...args: unknown[]) => mockGetCachedStartupRoute(...args),
   loadStartupRoute: (...args: unknown[]) => mockLoadStartupRoute(...args),
+}));
+
+jest.mock('../utils/backgroundSocialPush', () => ({
+  registerSocialPushBackgroundTaskAsync: (...args: unknown[]) =>
+    mockRegisterSocialPushBackgroundTaskAsync(...args),
 }));
 
 jest.mock('../utils/scheduleOnIdle', () => ({
@@ -74,6 +80,7 @@ beforeEach(() => {
   mockGetDB.mockResolvedValue({});
   mockConfigureForegroundNotificationPresentation.mockImplementation(() => undefined);
   mockConfigureNotificationChannels.mockResolvedValue(undefined);
+  mockRegisterSocialPushBackgroundTaskAsync.mockResolvedValue(undefined);
   mockArePlaceRemindersEnabled.mockReturnValue(true);
   mockSyncGeofenceRegions.mockResolvedValue(undefined);
   mockRunMediaCacheEviction.mockResolvedValue(undefined);
@@ -95,6 +102,7 @@ describe('useAppStartupBootstrap', () => {
       expect(mockConfigureNotificationChannels).toHaveBeenCalledTimes(1);
     });
 
+    expect(mockRegisterSocialPushBackgroundTaskAsync).toHaveBeenCalledTimes(1);
     expect(mockConfigureNotificationChannels).toHaveBeenCalledTimes(1);
     expect(mockSyncGeofenceRegions).not.toHaveBeenCalled();
     expect(mockRunMediaCacheEviction).not.toHaveBeenCalled();

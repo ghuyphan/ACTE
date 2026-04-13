@@ -156,7 +156,7 @@ export default function PlusScreen() {
             title={t('plus.features.unlimitedTitle', 'Unlimited photo memories')}
             description={t(
               'plus.features.unlimitedDesc',
-              'Free includes 10 photo notes. Plus removes the cap so your visual journal can keep growing.'
+              'Free includes 5 photo memories per day. Plus removes the cap so your visual journal can keep growing.'
             )}
           />
           <FeatureRow

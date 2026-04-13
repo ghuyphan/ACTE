@@ -144,7 +144,12 @@ const config = {
   },
   plugins: [
     'expo-router',
-    'expo-notifications',
+    [
+      'expo-notifications',
+      {
+        enableBackgroundRemoteNotifications: true,
+      },
+    ],
     'expo-video',
     [
       'expo-location',

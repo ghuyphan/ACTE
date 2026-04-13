@@ -1107,6 +1107,8 @@ describe('syncService', () => {
       expect.objectContaining({
         note_count: 2,
         photo_note_count: 1,
+        photo_note_daily_count: expect.any(Number),
+        photo_note_daily_date: expect.any(String),
       })
     );
     expect(mockRemoteNoteTombstones.has('note-1')).toBe(false);

@@ -292,19 +292,28 @@ export function buildOrderedWidgetSelections(options: {
     sharedCandidates,
     preferredNoteId
   );
-  if (preferredCandidate) {
+  const preferredPersonalCandidate =
+    preferredCandidate?.source === 'personal' ? preferredCandidate : null;
+  const preferredSharedCandidate =
+    preferredCandidate?.source === 'shared' ? preferredCandidate : null;
+
+  if (preferredPersonalCandidate) {
     const preferredIsNearby = nearbyCandidates.some(
-      (candidate) => candidate.candidateKey === preferredCandidate.candidateKey
+      (candidate) => candidate.candidateKey === preferredPersonalCandidate.candidateKey
     );
     addCandidate(
-      preferredCandidate,
-      preferredIsNearby ? 'nearest_memory' : getSelectionModeForCandidate(preferredCandidate),
+      preferredPersonalCandidate,
+      preferredIsNearby ? 'nearest_memory' : getSelectionModeForCandidate(preferredPersonalCandidate),
       preferredIsNearby ? nearbyPlacesCount : 0
     );
   }
 
   for (const candidate of nearbyCandidates) {
     addCandidate(candidate, 'nearest_memory', nearbyPlacesCount);
+  }
+
+  if (preferredSharedCandidate) {
+    addCandidate(preferredSharedCandidate, 'shared_memory');
   }
 
   for (const candidate of [...personalCandidates].sort(compareCandidatesByNewest)) {

@@ -986,7 +986,7 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(getByText('10 left')).toBeTruthy();
-    expect(queryByText('10 free photo notes left. Imports count when saved.')).toBeNull();
+    expect(queryByText('10 free photo saves left today. Imports count when saved.')).toBeNull();
   });
 
   it('lets you change the text-card doodle color', () => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import { appAlertManager, AppAlertOptions } from '../../utils/alert';
 import { useTranslation } from 'react-i18next';
@@ -37,47 +37,43 @@ export function AppAlertProvider() {
   const hasDestructiveAction = buttons.some((button) => button.style === 'destructive');
 
   const handlePress = (button?: AppAlertButton) => {
-    setAlertState(null);
     button?.onPress?.();
+    setAlertState((current) => (current === alertState ? null : current));
   };
 
   const handleDismiss = () => {
     setAlertState(null);
   };
 
-  const actions = useMemo<AppSheetAlertAction[]>(() => {
-    const mappedNonCancelActions: AppSheetAlertAction[] = nonCancelButtons.map((button, index) => {
-      const variant: AppSheetAlertAction['variant'] =
-        button.style === 'destructive'
-          ? 'destructive'
-          : index === nonCancelButtons.length - 1
-            ? 'primary'
-            : 'secondary';
+  const mappedNonCancelActions: AppSheetAlertAction[] = nonCancelButtons.map((button, index) => {
+    const variant: AppSheetAlertAction['variant'] =
+      button.style === 'destructive'
+        ? 'destructive'
+        : index === nonCancelButtons.length - 1
+          ? 'primary'
+          : 'secondary';
 
-      return {
-        label: button.text || defaultOkText,
-        variant,
-        onPress: () => {
-          handlePress(button);
-        },
-      };
-    });
-
-    if (!dismissButton) {
-      return mappedNonCancelActions;
-    }
-
-    return [
-      ...mappedNonCancelActions,
-      {
-        label: dismissButton.text || t('common.cancel', 'Cancel'),
-        variant: 'secondary',
-        onPress: () => {
-          handlePress(dismissButton);
-        },
+    return {
+      label: button.text || defaultOkText,
+      variant,
+      onPress: () => {
+        handlePress(button);
       },
-    ];
-  }, [defaultOkText, dismissButton, nonCancelButtons, t]);
+    };
+  });
+
+  const actions = dismissButton
+    ? [
+        ...mappedNonCancelActions,
+        {
+          label: dismissButton.text || t('common.cancel', 'Cancel'),
+          variant: 'secondary' as const,
+          onPress: () => {
+            handlePress(dismissButton);
+          },
+        },
+      ]
+    : mappedNonCancelActions;
 
   return (
     <AppSheetAlert
@@ -87,6 +83,7 @@ export function AppAlertProvider() {
       message={alertState.message || ''}
       actions={actions}
       dismissible={Boolean(dismissButton) || buttons.length <= 1}
+      closeOnAction={false}
       onClose={handleDismiss}
     />
   );

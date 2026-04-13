@@ -330,11 +330,11 @@ describe('useSettingsScreenModel', () => {
     );
 
     unlimitedResult.unmount();
-    mockSubscriptionState.photoNoteLimit = 10;
+    mockSubscriptionState.photoNoteLimit = 5;
 
     const cappedResult = renderHook(() => useSettingsScreenModel());
     expect(cappedResult.result.current.plusHint).toBe(
-      'Free plan includes up to 10 photo notes. Upgrade to Noto Plus for unlimited photo notes, premium photo filters, interactive hologram cards, and premium finishes.'
+      'Free plan includes 5 photo memories per day. Upgrade to Noto Plus for unlimited photo saves, premium photo filters, interactive hologram cards, and premium finishes.'
     );
   });
 });

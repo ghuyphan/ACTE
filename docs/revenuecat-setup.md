@@ -7,7 +7,7 @@ The client-side subscription flow is already wired. Most remaining work is Reven
 - `hooks/useSubscription.tsx` configures RevenueCat and exposes purchase, restore, paywall, and customer-center actions.
 - `constants/subscription.ts` reads the env vars and applies the free-vs-plus limits.
 - If RevenueCat is not configured, the app stays in free mode and purchase actions resolve as unavailable.
-- Free users are limited to `10` photo notes.
+- Free users are limited to `5` photo memories per day.
 - Plus users get unlimited photo notes and photo-library import.
 
 ## Default Values In Code

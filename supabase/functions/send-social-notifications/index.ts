@@ -23,14 +23,16 @@ type SocialNotificationResponse =
 
 type PushTargetRow = {
   expo_push_token: string;
+  platform: string | null;
 };
 
 type PushMessage = {
   to: string;
-  sound: 'default';
-  title: string;
-  body: string;
-  channelId: string;
+  sound?: 'default';
+  title?: string;
+  body?: string;
+  channelId?: string;
+  _contentAvailable?: boolean;
   data: Record<string, unknown>;
 };
 
@@ -50,7 +52,7 @@ type SharedPostRow = {
   place_name: string | null;
 };
 
-const ANDROID_SOCIAL_CHANNEL_ID = 'social-v1';
+const ANDROID_SOCIAL_CHANNEL_ID = 'social-v2';
 const EXPO_PUSH_API_URL = 'https://exp.host/--/api/v2/push/send';
 
 const corsHeaders = {
@@ -211,7 +213,7 @@ async function loadSharedPostPayload(
   };
 }
 
-async function loadPushTokens(
+async function loadPushTargets(
   adminClient: ReturnType<typeof createClient>,
   userIds: string[]
 ) {
@@ -221,7 +223,7 @@ async function loadPushTokens(
 
   const { data, error } = await adminClient
     .from('device_push_tokens')
-    .select('expo_push_token')
+    .select('expo_push_token, platform')
     .in('user_id', userIds);
 
   if (error) {
@@ -229,11 +231,20 @@ async function loadPushTokens(
   }
 
   return Array.from(
-    new Set(
+    new Map(
       ((data ?? []) as PushTargetRow[])
-        .map((row) => row.expo_push_token?.trim() ?? '')
-        .filter(Boolean)
-    )
+        .map((row) => {
+          const token = row.expo_push_token?.trim() ?? '';
+          return [
+            token,
+            {
+              token,
+              platform: row.platform?.trim()?.toLowerCase() ?? '',
+            },
+          ] as const;
+        })
+        .filter(([token]) => Boolean(token))
+    ).values()
   );
 }
 
@@ -370,8 +381,8 @@ Deno.serve(async (request) => {
       );
     }
 
-    const pushTokens = await loadPushTokens(adminClient, payload.recipientUserIds);
-    if (pushTokens.length === 0) {
+    const pushTargets = await loadPushTargets(adminClient, payload.recipientUserIds);
+    if (pushTargets.length === 0) {
       return jsonResponse({
         success: true,
         recipients: payload.recipientUserIds.length,
@@ -379,14 +390,29 @@ Deno.serve(async (request) => {
       });
     }
 
-    const messages: PushMessage[] = pushTokens.map((to) => ({
-      to,
-      sound: 'default' as const,
-      title: payload.title,
-      body: payload.body,
-      channelId: ANDROID_SOCIAL_CHANNEL_ID,
-      data: payload.data,
-    }));
+    const messages: PushMessage[] = pushTargets.map(({ token, platform }) => {
+      if (platform === 'android' && payload.data.notificationType === 'shared-post') {
+        return {
+          to: token,
+          data: {
+            ...payload.data,
+            notificationTitle: payload.title,
+            notificationBody: payload.body,
+            notificationChannelId: ANDROID_SOCIAL_CHANNEL_ID,
+          },
+        };
+      }
+
+      return {
+        to: token,
+        sound: 'default' as const,
+        title: payload.title,
+        body: payload.body,
+        channelId: ANDROID_SOCIAL_CHANNEL_ID,
+        _contentAvailable: payload.data.notificationType === 'shared-post',
+        data: payload.data,
+      };
+    });
 
     const delivery = await sendExpoPushMessages(messages, expoAccessToken);
 

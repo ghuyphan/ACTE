@@ -12,6 +12,7 @@ import {
   loadStartupRoute,
   type StartupEntryRoute,
 } from '../../services/startupRouting';
+import { registerSocialPushBackgroundTaskAsync } from '../../utils/backgroundSocialPush';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
 export function useAppStartupBootstrap() {
@@ -71,6 +72,9 @@ export function useAppStartupBootstrap() {
     }
 
     configureForegroundNotificationPresentation();
+    void registerSocialPushBackgroundTaskAsync().catch((error) => {
+      console.warn('Background social push registration failed:', error);
+    });
     void i18nReady
       .then(() => configureNotificationChannels())
       .catch((error) => {

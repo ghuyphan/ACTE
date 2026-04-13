@@ -137,7 +137,7 @@ export function useSettingsScreenModel() {
 
     return t(
       'settings.plusHintWithLimit',
-      'Free plan includes up to {{count}} photo notes. Upgrade to Noto Plus for unlimited photo notes, premium photo filters, interactive hologram cards, and premium finishes.',
+      'Free plan includes {{count}} photo memories per day. Upgrade to Noto Plus for unlimited photo saves, premium photo filters, interactive hologram cards, and premium finishes.',
       { count: photoNoteLimit }
     );
   }, [photoNoteLimit, t, tier]);

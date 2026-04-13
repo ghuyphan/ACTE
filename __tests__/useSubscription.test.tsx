@@ -22,6 +22,8 @@ const mockSubscriptionConfig = {
 };
 const mockRemoteUsage = {
   photoNoteCount: null as number | null,
+  photoNoteDailyCount: null as number | null,
+  photoNoteDailyDate: null as string | null,
 };
 const originalConsoleError = console.error;
 const mockRemoveChannel = jest.fn<Promise<string>, [unknown]>(async () => 'ok');
@@ -30,7 +32,15 @@ type MockSupabaseChannel = {
     (
       type: string,
       filter: unknown,
-      callback: (payload: { new: { photo_note_count: number | null } }) => void
+      callback: (
+        payload: {
+          new: {
+            photo_note_count: number | null;
+            photo_note_daily_count: number | null;
+            photo_note_daily_date: string | null;
+          };
+        }
+      ) => void
     ) => MockSupabaseChannel
   >;
   subscribe: jest.MockedFunction<() => MockSupabaseChannel>;
@@ -39,7 +49,14 @@ type MockUserUsageQuery = {
   select: jest.MockedFunction<() => MockUserUsageQuery>;
   eq: jest.MockedFunction<(field: string, value: unknown) => MockUserUsageQuery>;
   maybeSingle: jest.MockedFunction<
-    () => Promise<{ data: { photo_note_count: number | null }; error: null }>
+    () => Promise<{
+      data: {
+        photo_note_count: number | null;
+        photo_note_daily_count: number | null;
+        photo_note_daily_date: string | null;
+      };
+      error: null;
+    }>
   >;
 };
 
@@ -52,7 +69,22 @@ jest.mock('../hooks/useConnectivity', () => ({
 }));
 
 const mockSupabaseChannel = {} as MockSupabaseChannel;
-mockSupabaseChannel.on = jest.fn<MockSupabaseChannel, [string, unknown, (payload: { new: { photo_note_count: number | null } }) => void]>(
+mockSupabaseChannel.on = jest.fn<
+  MockSupabaseChannel,
+  [
+    string,
+    unknown,
+    (
+      payload: {
+        new: {
+          photo_note_count: number | null;
+          photo_note_daily_count: number | null;
+          photo_note_daily_date: string | null;
+        };
+      }
+    ) => void
+  ]
+>(
   () => mockSupabaseChannel
 );
 mockSupabaseChannel.subscribe = jest.fn<MockSupabaseChannel, []>(() => mockSupabaseChannel);
@@ -63,6 +95,8 @@ mockUserUsageQuery.eq = jest.fn<MockUserUsageQuery, [string, unknown]>(() => moc
 mockUserUsageQuery.maybeSingle = jest.fn(async () => ({
     data: {
       photo_note_count: mockRemoteUsage.photoNoteCount,
+      photo_note_daily_count: mockRemoteUsage.photoNoteDailyCount,
+      photo_note_daily_date: mockRemoteUsage.photoNoteDailyDate,
     },
     error: null,
   }));
@@ -79,7 +113,7 @@ jest.mock('../constants/subscription', () => {
   const { Platform } = require('react-native');
 
   return {
-    FREE_PHOTO_NOTE_LIMIT: 10,
+    FREE_PHOTO_NOTE_LIMIT: 5,
     PLUS_PHOTO_NOTE_LIMIT: null,
     REVENUECAT_PRO_ENTITLEMENT_ID: 'noto_pro',
     REVENUECAT_OFFERING_ID: 'default',
@@ -113,7 +147,8 @@ jest.mock('../constants/subscription', () => {
 
       return false;
     },
-    getPhotoNoteLimitForTier: (tier: 'free' | 'plus') => (tier === 'plus' ? null : 10),
+    getLocalPhotoUsageDateKey: () => '2026-04-13',
+    getPhotoNoteLimitForTier: (tier: 'free' | 'plus') => (tier === 'plus' ? null : 5),
   };
 });
 
@@ -176,6 +211,8 @@ describe('useSubscription', () => {
     mockConnectivityState.isInternetReachable = true;
     mockConnectivityState.lastChangedAt = null;
     mockRemoteUsage.photoNoteCount = null;
+    mockRemoteUsage.photoNoteDailyCount = null;
+    mockRemoteUsage.photoNoteDailyDate = null;
     mockSubscriptionConfig.testApiKey = '';
     mockSubscriptionConfig.iosApiKey = '';
     mockSubscriptionConfig.androidApiKey = 'android-key';
@@ -270,12 +307,25 @@ describe('useSubscription', () => {
 
   it('surfaces the remote photo note count from Supabase usage data', async () => {
     mockAuthState.user = { id: 'user-1', uid: 'user-1' };
-    mockRemoteUsage.photoNoteCount = 7;
+    mockRemoteUsage.photoNoteDailyCount = 4;
+    mockRemoteUsage.photoNoteDailyDate = '2026-04-13';
 
     const hook = renderHook(() => useSubscription(), { wrapper });
 
     await waitFor(() => {
-      expect(hook.result.current.remotePhotoNoteCount).toBe(7);
+      expect(hook.result.current.remotePhotoNoteCount).toBe(4);
+    });
+  });
+
+  it('treats a stale remote daily usage row as zero for today', async () => {
+    mockAuthState.user = { id: 'user-1', uid: 'user-1' };
+    mockRemoteUsage.photoNoteDailyCount = 5;
+    mockRemoteUsage.photoNoteDailyDate = '2026-04-12';
+
+    const hook = renderHook(() => useSubscription(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.remotePhotoNoteCount).toBe(0);
     });
   });
 

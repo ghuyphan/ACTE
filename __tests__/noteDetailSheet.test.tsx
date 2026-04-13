@@ -214,6 +214,8 @@ jest.mock('../hooks/useSubscription', () => ({
     tier: 'free',
     isPurchaseAvailable: false,
     plusPriceLabel: null,
+    remotePhotoNoteCount: 0,
+    isRemotePhotoNoteCountReady: true,
     presentPaywallIfNeeded: jest.fn(async () => ({ status: 'unavailable' })),
     restorePurchases: jest.fn(async () => ({ status: 'unavailable' })),
   }),
@@ -1264,6 +1266,7 @@ describe('NoteDetailSheet', () => {
     });
 
     expect(onClose).toHaveBeenCalled();
+    expect(onClosed).toHaveBeenCalled();
 
     rerender(
       <NoteDetailSheet noteId="note-1" visible={false} onClose={onClose} onClosed={onClosed} />
@@ -1274,7 +1277,39 @@ describe('NoteDetailSheet', () => {
     });
 
     expect(mockDeleteSharedNote).not.toHaveBeenCalled();
-    expect(onClosed).toHaveBeenCalled();
+  });
+
+  it('requests sheet close when the selected note disappears after loading', async () => {
+    const onClose = jest.fn();
+    mockGetNoteById
+      .mockResolvedValueOnce({
+        id: 'note-1',
+        type: 'text',
+        content: 'Existing note',
+        locationName: 'District 1',
+        latitude: 10.77,
+        longitude: 106.69,
+        radius: 150,
+        isFavorite: false,
+        hasDoodle: false,
+        createdAt: '2026-03-10T00:00:00.000Z',
+        updatedAt: null,
+      })
+      .mockResolvedValueOnce(null);
+
+    const { rerender, getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={onClose} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-delete')).toBeTruthy();
+    });
+
+    rerender(<NoteDetailSheet noteId="missing-note" visible onClose={onClose} />);
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 
   it('does not render the legacy share-to-room action', async () => {
