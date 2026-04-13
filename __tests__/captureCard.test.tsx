@@ -1647,7 +1647,7 @@ describe('CaptureCard doodle handle', () => {
     expect(ref.current?.getStickerSnapshot().placements[0]?.motionLocked).toBe(true);
   });
 
-  it('creates a stamp directly from the sticker source sheet', async () => {
+  it('previews and creates a stamp from the sticker source sheet', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
       canceled: false,
@@ -1674,6 +1674,12 @@ describe('CaptureCard doodle handle', () => {
     await act(async () => {
       fireEvent.press(getByTestId('sticker-source-option-create-stamp'));
     });
+    await waitFor(() => {
+      expect(getByTestId('stamp-preview-confirm')).toBeTruthy();
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('stamp-preview-confirm'));
+    });
 
     await waitFor(() => {
       expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
@@ -1682,7 +1688,7 @@ describe('CaptureCard doodle handle', () => {
     expect(ref.current?.getStickerSnapshot().placements[0]?.renderMode).toBe('stamp');
     expect(mockImportStickerAsset).toHaveBeenCalledWith(
       {
-        uri: 'file:///photo.jpg',
+        uri: 'file:///cache/photo-normalized.jpg',
         mimeType: 'image/jpeg',
         name: 'photo.jpg',
       },
@@ -1774,6 +1780,12 @@ describe('CaptureCard doodle handle', () => {
     });
     await act(async () => {
       fireEvent.press(getByTestId('sticker-source-option-create-stamp'));
+    });
+    await waitFor(() => {
+      expect(getByTestId('stamp-preview-confirm')).toBeTruthy();
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('stamp-preview-confirm'));
     });
 
     await waitFor(() => {

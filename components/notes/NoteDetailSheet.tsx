@@ -88,8 +88,11 @@ import {
 } from '../../services/polaroidExport';
 import AppSheet from '../sheets/AppSheet';
 import StampCutterEditor from '../home/capture/StampCutterEditor';
+import StampPreviewEditor from '../home/capture/StampPreviewEditor';
 import { type DoodleStroke } from './NoteDoodleCanvas';
+import type { StickerEntryAnimation } from './NoteStickerCanvas';
 import NoteDetailSheetContent from './detail/NoteDetailSheetContent';
+import type { WindowRect } from '../home/capture/stickerCreationTypes';
 
 const { width } = Dimensions.get('window');
 const CARD_SIZE = width - Layout.screenPadding * 2;
@@ -253,6 +256,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [doodleModeEnabled, setDoodleModeEnabled] = useState(false);
     const [stickerModeEnabled, setStickerModeEnabled] = useState(false);
     const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
+    const [stickerEntryAnimation, setStickerEntryAnimation] = useState<StickerEntryAnimation | null>(null);
     const [importingSticker, setImportingSticker] = useState(false);
     const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
     const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<StickerSourceIntent | null>(null);
@@ -894,6 +898,42 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setDoodleModeEnabled(false);
     }, []);
 
+    const handleCompleteStickerCreationPlacement = useCallback(
+        ({
+            placement,
+            entryDelayMs,
+            sourceRect,
+        }: {
+            placement: NoteStickerPlacement;
+            entryDelayMs?: number;
+            sourceRect: WindowRect;
+        }) => {
+            setStickerEntryAnimation({
+                placementId: placement.id,
+                sourceRect,
+                startDelayMs: entryDelayMs,
+            });
+            applyImportedSticker(placement);
+        },
+        [applyImportedSticker]
+    );
+
+    const handleStickerEntryAnimationComplete = useCallback((placementId: string) => {
+        setStickerEntryAnimation((current) => (
+            current?.placementId === placementId ? null : current
+        ));
+    }, []);
+
+    useEffect(() => {
+        if (!stickerEntryAnimation) {
+            return;
+        }
+
+        if (!editStickerPlacements.some((placement) => placement.id === stickerEntryAnimation.placementId)) {
+            setStickerEntryAnimation(null);
+        }
+    }, [editStickerPlacements, stickerEntryAnimation]);
+
     const importStickerFromSource = useCallback(async (
         source: StickerImportSource,
         intent: StickerImportIntent,
@@ -1002,10 +1042,15 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     const {
         handleCloseStampCutterEditor,
+        handleCloseStampPreviewEditor,
         handleConfirmStampCutter,
+        handleConfirmStampPreview,
         handlePrepareStampCutout,
+        handlePrepareStampPreview,
         showStampCutterEditor,
+        showStampPreviewEditor,
         stampCutterDraft,
+        stampPreviewDraft,
     } = useStampCutterFlow({
         dismissStickerUi: () => {
             dismissPastePrompt();
@@ -1114,11 +1159,22 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 return;
             }
 
+            if (nextAction === 'stamp') {
+                void handlePrepareStampPreview();
+                return;
+            }
+
             void handleImportSticker(nextAction);
         }, STICKER_SOURCE_SHEET_DISMISS_DELAY_MS);
 
         return () => clearTimeout(timer);
-    }, [handleImportSticker, handlePrepareStampCutout, pendingStickerSourceAction, showStickerSourceSheet]);
+    }, [
+        handleImportSticker,
+        handlePrepareStampCutout,
+        handlePrepareStampPreview,
+        pendingStickerSourceAction,
+        showStickerSourceSheet,
+    ]);
     const handlePasteStickerFromClipboard = useCallback(async () => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
             return;
@@ -1691,6 +1747,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             );
             blurEditorInputs();
             handleCloseStampCutterEditor();
+            handleCloseStampPreviewEditor();
+            setStickerEntryAnimation(null);
             setDoodleModeEnabled(false);
             setStickerModeEnabled(false);
             setSelectedStickerId(null);
@@ -1821,6 +1879,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             stickerModeEnabled={stickerModeEnabled}
             selectedStickerId={selectedStickerId}
             setSelectedStickerId={setSelectedStickerId}
+            stickerEntryAnimation={stickerEntryAnimation}
+            onStickerEntryAnimationComplete={handleStickerEntryAnimationComplete}
             importingSticker={importingSticker}
             pastePrompt={pastePrompt}
             interactionFeedback={interactionFeedback}
@@ -1907,10 +1967,25 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                         cancelLabel={t('common.cancel', 'Cancel')}
                         confirmLabel={t('capture.stampCutterConfirm', 'Cut stamp')}
                         onClose={handleCloseStampCutterEditor}
-                        onCompletePlacement={({ placement }) => {
-                            applyImportedSticker(placement);
-                        }}
+                        onCompletePlacement={handleCompleteStickerCreationPlacement}
                         onConfirm={handleConfirmStampCutter}
+                    />
+                ) : null}
+                {stampPreviewDraft ? (
+                    <StampPreviewEditor
+                        visible={showStampPreviewEditor}
+                        draft={stampPreviewDraft}
+                        loading={importingSticker}
+                        title={t('capture.stampPreviewTitle', 'Create stamp')}
+                        subtitle={t(
+                            'capture.stampPreviewHint',
+                            'Preview the full photo as a perforated stamp before adding it to your note.'
+                        )}
+                        cancelLabel={t('common.cancel', 'Cancel')}
+                        confirmLabel={t('capture.stampPreviewConfirm', 'Add stamp')}
+                        onClose={handleCloseStampPreviewEditor}
+                        onCompletePlacement={handleCompleteStickerCreationPlacement}
+                        onConfirm={handleConfirmStampPreview}
                     />
                 ) : null}
             </>
@@ -1943,10 +2018,25 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     cancelLabel={t('common.cancel', 'Cancel')}
                     confirmLabel={t('capture.stampCutterConfirm', 'Cut stamp')}
                     onClose={handleCloseStampCutterEditor}
-                    onCompletePlacement={({ placement }) => {
-                        applyImportedSticker(placement);
-                    }}
+                    onCompletePlacement={handleCompleteStickerCreationPlacement}
                     onConfirm={handleConfirmStampCutter}
+                />
+            ) : null}
+            {stampPreviewDraft ? (
+                <StampPreviewEditor
+                    visible={showStampPreviewEditor}
+                    draft={stampPreviewDraft}
+                    loading={importingSticker}
+                    title={t('capture.stampPreviewTitle', 'Create stamp')}
+                    subtitle={t(
+                        'capture.stampPreviewHint',
+                        'Preview the full photo as a perforated stamp before adding it to your note.'
+                    )}
+                    cancelLabel={t('common.cancel', 'Cancel')}
+                    confirmLabel={t('capture.stampPreviewConfirm', 'Add stamp')}
+                    onClose={handleCloseStampPreviewEditor}
+                    onCompletePlacement={handleCompleteStickerCreationPlacement}
+                    onConfirm={handleConfirmStampPreview}
                 />
             ) : null}
         </>

@@ -421,11 +421,17 @@ export function useCaptureCardStickerFlow({
 
   const {
     clearStampCutterDraft,
+    clearStampPreviewDraft,
     handleCloseStampCutterEditor,
+    handleCloseStampPreviewEditor,
     handleConfirmStampCutter,
+    handleConfirmStampPreview,
     handlePrepareStampCutout,
+    handlePrepareStampPreview,
     showStampCutterEditor,
+    showStampPreviewEditor,
     stampCutterDraft,
+    stampPreviewDraft,
   } = useStampCutterFlow({
     dismissStickerUi,
     enablePhotoStickers,
@@ -458,6 +464,7 @@ export function useCaptureCardStickerFlow({
     handleImportSticker,
     handlePasteStickerFromClipboard,
     handlePrepareStampCutout,
+    handlePrepareStampPreview,
     importingSticker,
     refreshStickerSourceClipboardAvailability,
     stickerSourceCanPasteFromClipboard,
@@ -491,9 +498,11 @@ export function useCaptureCardStickerFlow({
     clearStickerSourceSheetFlow();
     hideStickerActionsSheet();
     clearStampCutterDraft();
+    clearStampPreviewDraft();
     dismissOverlay();
   }, [
     clearStampCutterDraft,
+    clearStampPreviewDraft,
     clearStickerSourceSheetFlow,
     dismissOverlay,
     dismissPastePrompt,
@@ -501,10 +510,10 @@ export function useCaptureCardStickerFlow({
   ]);
 
   useEffect(() => {
-    if (importingSticker || interactionsDisabled || stampCutterDraft) {
+    if (importingSticker || interactionsDisabled || stampCutterDraft || stampPreviewDraft) {
       hideStickerSourceSheet();
     }
-  }, [hideStickerSourceSheet, importingSticker, interactionsDisabled, stampCutterDraft]);
+  }, [hideStickerSourceSheet, importingSticker, interactionsDisabled, stampCutterDraft, stampPreviewDraft]);
 
   useEffect(() => {
     if (
@@ -512,7 +521,8 @@ export function useCaptureCardStickerFlow({
       stickerModeEnabled ||
       importingSticker ||
       interactionsDisabled ||
-      stampCutterDraft
+      stampCutterDraft ||
+      stampPreviewDraft
     ) {
       dismissPastePrompt();
     }
@@ -522,6 +532,7 @@ export function useCaptureCardStickerFlow({
     importingSticker,
     interactionsDisabled,
     stampCutterDraft,
+    stampPreviewDraft,
     stickerModeEnabled,
   ]);
 
@@ -540,12 +551,16 @@ export function useCaptureCardStickerFlow({
       showStickerSourceSheet,
       handleCloseStickerSourceSheet,
       handleCloseStampCutterEditor,
+      handleCloseStampPreviewEditor,
       handleCompleteStampCutterPlacement,
       handleConfirmStampCutter,
+      handleConfirmStampPreview,
       handleShowStickerSourceOptions,
       stickerSourceActions,
       showStampCutterEditor,
+      showStampPreviewEditor,
       stampCutterDraft,
+      stampPreviewDraft,
       showStickerActionsSheet,
       handleCloseStickerActionsSheet,
       handleShowStickerActions,
@@ -563,9 +578,11 @@ export function useCaptureCardStickerFlow({
       dismissPastePrompt,
       handleCloseStickerActionsSheet,
       handleCloseStampCutterEditor,
+      handleCloseStampPreviewEditor,
       handleCompleteStampCutterPlacement,
       handleCloseStickerSourceSheet,
       handleConfirmStampCutter,
+      handleConfirmStampPreview,
       handleConfirmPasteFromPrompt,
       handleInlinePasteStickerPress,
       handleNativeInlinePasteStickerPress,
@@ -585,8 +602,10 @@ export function useCaptureCardStickerFlow({
       showInlinePasteButton,
       showStickerActionsSheet,
       showStampCutterEditor,
+      showStampPreviewEditor,
       showStickerSourceSheet,
       stampCutterDraft,
+      stampPreviewDraft,
       stickerSourceActions,
       useNativeInlinePasteButton,
     ]

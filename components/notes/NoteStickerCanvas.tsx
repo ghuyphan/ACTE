@@ -11,14 +11,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Reanimated, {
-  Easing,
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import Reanimated from 'react-native-reanimated';
 import {
   hydrateStickerPlacements,
   type NoteStickerPlacement,
@@ -31,22 +24,17 @@ import {
 } from './stickerCanvasMetrics';
 import StampStickerArtwork from './StampStickerArtwork';
 import { getStickerPlacementFrame } from './stickerPlacementLayout';
-
-interface WindowRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+import type { WindowRect } from '../home/capture/stickerCreationTypes';
+import {
+  useStickerEntryAnimation,
+  type StickerEntryAnimation,
+} from './useStickerEntryAnimation';
 
 type MeasurableView = View & {
   measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void;
 };
 
-export interface StickerEntryAnimation {
-  placementId: string;
-  sourceRect: WindowRect;
-}
+export type { StickerEntryAnimation } from './useStickerEntryAnimation';
 
 interface NoteStickerCanvasProps {
   placements: NoteStickerPlacement[];
@@ -234,7 +222,6 @@ function EditableSticker({
   const livePlacementRef = useRef(placement);
   const activeGestureCountRef = useRef(0);
   const [dragPlacement, setDragPlacement] = useState(placement);
-  const entryProgress = useSharedValue(1);
   const activePlacement = dragPlacement;
   const placementFrame = getStickerPlacementFrame(
     activePlacement,
@@ -444,78 +431,17 @@ function EditableSticker({
       normalizedScale,
     ]
   );
-  const entryMotion = useMemo(() => {
-    if (!entryAnimation || !canvasWindowRect) {
-      return null;
-    }
-
-    const targetCenterX = canvasWindowRect.x + stickerWrapStyle.left + frameWidth / 2;
-    const targetCenterY = canvasWindowRect.y + stickerWrapStyle.top + frameHeight / 2;
-    const sourceCenterX = entryAnimation.sourceRect.x + entryAnimation.sourceRect.width / 2;
-    const sourceCenterY = entryAnimation.sourceRect.y + entryAnimation.sourceRect.height / 2;
-    const renderedTargetWidth = Math.max(frameWidth * normalizedScale, 1);
-    const renderedTargetHeight = Math.max(frameHeight * normalizedScale, 1);
-    const initialScale = Math.max(
-      0.18,
-      Math.min(
-        entryAnimation.sourceRect.width / renderedTargetWidth,
-        entryAnimation.sourceRect.height / renderedTargetHeight
-      )
-    );
-
-    return {
-      translateX: sourceCenterX - targetCenterX,
-      translateY: sourceCenterY - targetCenterY,
-      scale: Number.isFinite(initialScale) ? initialScale : 1,
-    };
-  }, [canvasWindowRect, entryAnimation, frameHeight, frameWidth, normalizedScale, stickerWrapStyle.left, stickerWrapStyle.top]);
-
-  useEffect(() => {
-    if (!entryAnimationActive) {
-      entryProgress.value = 1;
-      return;
-    }
-
-    if (!entryMotion) {
-      return;
-    }
-
-    entryProgress.value = 0;
-    entryProgress.value = withTiming(
-      1,
-      {
-        duration: 380,
-        easing: Easing.out(Easing.cubic),
-      },
-      (finished) => {
-        if (finished && onEntryAnimationComplete) {
-          runOnJS(onEntryAnimationComplete)(placement.id);
-        }
-      }
-    );
-  }, [entryAnimationActive, entryMotion, entryProgress, onEntryAnimationComplete, placement.id]);
-
-  const entryAnimatedStyle = useAnimatedStyle(() => {
-    if (!entryMotion) {
-      return {
-        transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 1 }],
-      };
-    }
-
-    return {
-      transform: [
-        {
-          translateX: interpolate(entryProgress.value, [0, 1], [entryMotion.translateX, 0]),
-        },
-        {
-          translateY: interpolate(entryProgress.value, [0, 1], [entryMotion.translateY, 0]),
-        },
-        {
-          scale: interpolate(entryProgress.value, [0, 1], [entryMotion.scale, 1]),
-        },
-      ],
-    };
-  }, [entryMotion, entryProgress]);
+  const { entryAnimatedStyle } = useStickerEntryAnimation({
+    canvasWindowRect,
+    entryAnimation,
+    frameHeight,
+    frameWidth,
+    normalizedScale,
+    onComplete: onEntryAnimationComplete,
+    placementId: placement.id,
+    targetLeft: stickerWrapStyle.left,
+    targetTop: stickerWrapStyle.top,
+  });
 
   const stickerArtwork = (
     <View style={styles.stickerArtwork}>

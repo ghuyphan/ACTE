@@ -60,6 +60,8 @@ import {
 import { LiveCameraActionBar } from './capture/LiveCameraActionBar';
 import { triggerCaptureCardHaptic } from './capture/CaptureControls';
 import StampCutterEditor from './capture/StampCutterEditor';
+import StampPreviewEditor from './capture/StampPreviewEditor';
+import type { WindowRect } from './capture/stickerCreationTypes';
 import {
   CARD_SIZE,
   DOCKED_HEADER_CONTENT_OVERLAP,
@@ -103,13 +105,6 @@ const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
 ];
 const LIGHT_CAPTURE_ACTIVE_ICON_COLOR = '#FFFFFF';
 const HOME_PAGE_VISUAL_BOTTOM_INSET = 90;
-
-interface WindowRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
 
 function getCaptureTextPlaceholderVariants(t: TFunction) {
   const translated = t('capture.textPlaceholderVariants', {
@@ -560,9 +555,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     closeStickerOverlays,
     dismissPastePrompt,
     handleCloseStampCutterEditor,
+    handleCloseStampPreviewEditor,
     handleCompleteStampCutterPlacement: handleCompleteStampCutterPlacementInternal,
     handleCloseStickerSourceSheet,
     handleConfirmStampCutter,
+    handleConfirmStampPreview,
     handleConfirmPasteFromPrompt,
     handleInlinePasteStickerPress,
     handleNativeInlinePasteStickerPress,
@@ -576,8 +573,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     pastePrompt,
     showInlinePasteButton,
     showStampCutterEditor,
+    showStampPreviewEditor,
     showStickerSourceSheet,
     stampCutterDraft,
+    stampPreviewDraft,
     stickerSourceActions,
     useNativeInlinePasteButton,
   } = useCaptureCardStickerFlow({
@@ -612,14 +611,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const handleCompleteStampCutterPlacement = useCallback(
     ({
       placement,
+      entryDelayMs,
       sourceRect,
     }: {
       placement: NoteStickerPlacement;
+      entryDelayMs?: number;
       sourceRect: WindowRect;
     }) => {
       setStickerEntryAnimation({
         placementId: placement.id,
         sourceRect,
+        startDelayMs: entryDelayMs,
       });
       handleCompleteStampCutterPlacementInternal(placement);
     },
@@ -1393,6 +1395,21 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         onClose={handleCloseStampCutterEditor}
         onCompletePlacement={handleCompleteStampCutterPlacement}
         onConfirm={handleConfirmStampCutter}
+      />
+      <StampPreviewEditor
+        visible={showStampPreviewEditor}
+        draft={stampPreviewDraft}
+        loading={importingSticker}
+        title={t('capture.stampPreviewTitle', 'Create stamp')}
+        subtitle={t(
+          'capture.stampPreviewHint',
+          'Preview the full photo as a perforated stamp before adding it to your note.'
+        )}
+        cancelLabel={t('common.cancel', 'Cancel')}
+        confirmLabel={t('capture.stampPreviewConfirm', 'Add stamp')}
+        onClose={handleCloseStampPreviewEditor}
+        onCompletePlacement={handleCompleteStampCutterPlacement}
+        onConfirm={handleConfirmStampPreview}
       />
     </>
   );

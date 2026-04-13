@@ -18,6 +18,7 @@ interface UseStickerSourceSheetFlowOptions {
   handleImportSticker: (intent?: StickerImportIntent) => Promise<void>;
   handlePasteStickerFromClipboard: () => Promise<void>;
   handlePrepareStampCutout: () => Promise<void>;
+  handlePrepareStampPreview: () => Promise<void>;
   importingSticker: boolean;
   refreshStickerSourceClipboardAvailability: () => void;
   stickerSourceCanPasteFromClipboard: boolean;
@@ -31,6 +32,7 @@ export function useStickerSourceSheetFlow({
   handleImportSticker,
   handlePasteStickerFromClipboard,
   handlePrepareStampCutout,
+  handlePrepareStampPreview,
   importingSticker,
   refreshStickerSourceClipboardAvailability,
   stickerSourceCanPasteFromClipboard,
@@ -52,11 +54,22 @@ export function useStickerSourceSheetFlow({
         return;
       }
 
+      if (nextAction === 'stamp') {
+        void handlePrepareStampPreview();
+        return;
+      }
+
       void handleImportSticker(nextAction);
     }, STICKER_SOURCE_SHEET_DISMISS_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [handleImportSticker, handlePrepareStampCutout, pendingStickerSourceAction, showStickerSourceSheet]);
+  }, [
+    handleImportSticker,
+    handlePrepareStampCutout,
+    handlePrepareStampPreview,
+    pendingStickerSourceAction,
+    showStickerSourceSheet,
+  ]);
 
   const handleCloseStickerSourceSheet = useCallback(() => {
     setShowStickerSourceSheet(false);

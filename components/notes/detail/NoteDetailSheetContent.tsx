@@ -42,7 +42,7 @@ import { parseNoteStickerPlacements } from '../../../services/noteStickers';
 import { POLAROID_EXPORT_HEIGHT, POLAROID_EXPORT_WIDTH } from '../../../services/polaroidExport';
 import DynamicStickerCanvas from '../DynamicStickerCanvas';
 import NoteDoodleCanvas from '../NoteDoodleCanvas';
-import NoteStickerCanvas from '../NoteStickerCanvas';
+import NoteStickerCanvas, { type StickerEntryAnimation } from '../NoteStickerCanvas';
 import PhotoCaptionChip from '../PhotoCaptionChip';
 import PhotoMediaView from '../PhotoMediaView';
 import PremiumNoteFinishOverlay from '../../ui/PremiumNoteFinishOverlay';
@@ -161,8 +161,10 @@ type NoteDetailSheetContentProps = {
     setEditStickerPlacements: (value: NoteStickerPlacement[] | ((current: NoteStickerPlacement[]) => NoteStickerPlacement[])) => void;
     setSelectedStickerId: (value: string | null) => void;
     showPremiumColorAlert: () => void;
+    stickerEntryAnimation?: StickerEntryAnimation | null;
     stickerModeEnabled: boolean;
     t: TFunction;
+    onStickerEntryAnimationComplete?: (placementId: string) => void;
 };
 
 function getFeedbackPresentation(t: TFunction, type: InteractionFeedbackType) {
@@ -243,8 +245,10 @@ export default function NoteDetailSheetContent({
     setEditStickerPlacements,
     setSelectedStickerId,
     showPremiumColorAlert,
+    stickerEntryAnimation = null,
     stickerModeEnabled,
     t,
+    onStickerEntryAnimationComplete,
     onDownloadPolaroid,
     polaroidAnimationSuccess,
     polaroidAnimationUri,
@@ -392,6 +396,8 @@ export default function NoteDetailSheetContent({
                                 selectedPlacementId={selectedStickerId}
                                 onChangeSelectedPlacementId={setSelectedStickerId}
                                 onPressCanvas={onPressStickerCanvas}
+                                entryAnimation={stickerEntryAnimation}
+                                onEntryAnimationComplete={onStickerEntryAnimationComplete}
                                 onToggleSelectedPlacementMotionLock={(placementId) => {
                                     if (placementId === selectedStickerId) {
                                         onToggleStickerMotionLock();
@@ -576,6 +582,8 @@ export default function NoteDetailSheetContent({
                                 selectedPlacementId={selectedStickerId}
                                 onChangeSelectedPlacementId={setSelectedStickerId}
                                 onPressCanvas={onPressStickerCanvas}
+                                entryAnimation={stickerEntryAnimation}
+                                onEntryAnimationComplete={onStickerEntryAnimationComplete}
                                 onToggleSelectedPlacementMotionLock={(placementId) => {
                                     if (placementId === selectedStickerId) {
                                         onToggleStickerMotionLock();

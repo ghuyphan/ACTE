@@ -53,8 +53,10 @@ export function useStampCutterFlow({
   t,
 }: UseStampCutterFlowOptions) {
   const [stampCutterDraft, setStampCutterDraft] = useState<StampCutterDraft | null>(null);
+  const [stampPreviewDraft, setStampPreviewDraft] = useState<StampCutterDraft | null>(null);
   const subjectCutoutPrewarmRequestedRef = useRef(false);
   const stampCutterCleanupUriRef = useRef<string | null>(null);
+  const stampPreviewCleanupUriRef = useRef<string | null>(null);
   const { schedule: scheduleStampCutterDraftCleanup } = useDeferredUriCleanup({
     cleanup: cleanupStickerTempUri,
     delayMs: STAMP_CUTTER_CLEANUP_DELAY_MS,
@@ -64,7 +66,12 @@ export function useStampCutterFlow({
     stampCutterCleanupUriRef.current = stampCutterDraft?.cleanupUri ?? null;
   }, [stampCutterDraft?.cleanupUri]);
 
+  useEffect(() => {
+    stampPreviewCleanupUriRef.current = stampPreviewDraft?.cleanupUri ?? null;
+  }, [stampPreviewDraft?.cleanupUri]);
+
   const showStampCutterEditor = Boolean(stampCutterDraft);
+  const showStampPreviewEditor = Boolean(stampPreviewDraft);
 
   const handlePrepareStampCutout = useCallback(async () => {
     if (!enablePhotoStickers || importingSticker) {
@@ -108,6 +115,11 @@ export function useStampCutterFlow({
     setStampCutterDraft(null);
   }, [scheduleStampCutterDraftCleanup]);
 
+  const clearStampPreviewDraft = useCallback(() => {
+    scheduleStampCutterDraftCleanup(stampPreviewCleanupUriRef.current);
+    setStampPreviewDraft(null);
+  }, [scheduleStampCutterDraftCleanup]);
+
   const handleCloseStampCutterEditor = useCallback(() => {
     if (importingSticker) {
       return;
@@ -115,6 +127,51 @@ export function useStampCutterFlow({
 
     clearStampCutterDraft();
   }, [clearStampCutterDraft, importingSticker]);
+
+  const handleCloseStampPreviewEditor = useCallback(() => {
+    if (importingSticker) {
+      return;
+    }
+
+    clearStampPreviewDraft();
+  }, [clearStampPreviewDraft, importingSticker]);
+
+  const handlePrepareStampPreview = useCallback(async () => {
+    if (!enablePhotoStickers || importingSticker) {
+      return;
+    }
+
+    dismissStickerUi();
+
+    await runImportingStickerTask(async () => {
+      const pickedSource = await pickStickerImportSource();
+      if (!pickedSource) {
+        return;
+      }
+
+      const preparedDraft = await prepareStampCutterDraft(
+        pickedSource.source,
+        pickedSource.width,
+        pickedSource.height
+      );
+      setStampPreviewDraft(preparedDraft);
+    }).catch((error) => {
+      console.warn('[stickers] stamp preview setup failed', error);
+      showAppAlert(
+        t('capture.error', 'Error'),
+        error instanceof Error
+          ? error.message
+          : t('capture.photoImportFailed', 'We could not import that photo right now.')
+      );
+    });
+  }, [
+    dismissStickerUi,
+    enablePhotoStickers,
+    importingSticker,
+    pickStickerImportSource,
+    runImportingStickerTask,
+    t,
+  ]);
 
   const handleConfirmStampCutter = useCallback(
     async ({
@@ -167,6 +224,33 @@ export function useStampCutterFlow({
     ]
   );
 
+  const handleConfirmStampPreview = useCallback(async (): Promise<NoteStickerPlacement | null> => {
+    if (!stampPreviewDraft) {
+      return null;
+    }
+
+    return runImportingStickerTask(async () => {
+      try {
+        return await importStickerFromSource(stampPreviewDraft.source, 'stamp', {
+          apply: false,
+        });
+      } catch (error) {
+        console.warn('[stickers] stamp preview import failed', error);
+        showAppAlert(
+          t('capture.error', 'Error'),
+          getErrorMessage(error)
+        );
+        return null;
+      }
+    });
+  }, [
+    getErrorMessage,
+    importStickerFromSource,
+    runImportingStickerTask,
+    stampPreviewDraft,
+    t,
+  ]);
+
   useEffect(() => {
     if (!enablePhotoStickers || subjectCutoutPrewarmRequestedRef.current) {
       return;
@@ -179,19 +263,31 @@ export function useStampCutterFlow({
   return useMemo(
     () => ({
       clearStampCutterDraft,
+      clearStampPreviewDraft,
       handleCloseStampCutterEditor,
+      handleCloseStampPreviewEditor,
       handleConfirmStampCutter,
+      handleConfirmStampPreview,
       handlePrepareStampCutout,
+      handlePrepareStampPreview,
       showStampCutterEditor,
+      showStampPreviewEditor,
       stampCutterDraft,
+      stampPreviewDraft,
     }),
     [
       clearStampCutterDraft,
+      clearStampPreviewDraft,
       handleCloseStampCutterEditor,
+      handleCloseStampPreviewEditor,
       handleConfirmStampCutter,
+      handleConfirmStampPreview,
       handlePrepareStampCutout,
+      handlePrepareStampPreview,
       showStampCutterEditor,
+      showStampPreviewEditor,
       stampCutterDraft,
+      stampPreviewDraft,
     ]
   );
 }
