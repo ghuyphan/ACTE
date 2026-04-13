@@ -11,10 +11,7 @@ import {
     Platform,
 } from 'react-native';
 import { PAYWALL_RESULT } from 'react-native-purchases-ui';
-import StickerSourceSheet, {
-    renderStickerSourceSheetStampIcon,
-    renderStickerSourceSheetStickerIcon,
-} from '../sheets/StickerSourceSheet';
+import StickerSourceSheet from '../sheets/StickerSourceSheet';
 import {
     cancelAnimation,
     Easing,
@@ -32,7 +29,8 @@ import { useNotes } from '../../hooks/useNotes';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useAndroidKeyboardBlurOnHide } from '../../hooks/ui/useAndroidKeyboardBlurOnHide';
-import { useStampCutterFlow } from '../../hooks/ui/useStampCutterFlow';
+import { useStickerCreationFlow } from '../../hooks/ui/useStickerCreationFlow';
+import { useStickerSourceSheetFlow } from '../../hooks/ui/useStickerSourceSheetFlow';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
 import { Note } from '../../services/database';
@@ -89,6 +87,7 @@ import {
 import AppSheet from '../sheets/AppSheet';
 import StampCutterEditor from '../home/capture/StampCutterEditor';
 import StampPreviewEditor from '../home/capture/StampPreviewEditor';
+import StickerCutoutPreviewEditor from '../home/capture/StickerCutoutPreviewEditor';
 import { type DoodleStroke } from './NoteDoodleCanvas';
 import type { StickerEntryAnimation } from './NoteStickerCanvas';
 import NoteDetailSheetContent from './detail/NoteDetailSheetContent';
@@ -96,7 +95,6 @@ import type { WindowRect } from '../home/capture/stickerCreationTypes';
 
 const { width } = Dimensions.get('window');
 const CARD_SIZE = width - Layout.screenPadding * 2;
-const STICKER_SOURCE_SHEET_DISMISS_DELAY_MS = 250;
 const NOTE_DETAIL_ANDROID_SNAP_POINTS = ['92%'];
 
 type StickerPastePromptState = {
@@ -106,7 +104,6 @@ type StickerPastePromptState = {
 };
 
 type StickerImportIntent = 'sticker' | 'stamp';
-type StickerSourceIntent = StickerImportIntent | 'stamp-cut';
 
 function delay(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -186,19 +183,6 @@ function getStickerImportErrorMessage(
         : t('capture.photoImportFailed', 'We could not import that photo right now.');
 }
 
-function shouldOfferStampFallback(error: unknown) {
-    return (
-        error instanceof SubjectCutoutError &&
-        (
-            error.code === 'module-unavailable' ||
-            error.code === 'platform-unavailable' ||
-            error.code === 'model-unavailable' ||
-            error.code === 'no-subject' ||
-            error.code === 'processing-failed'
-        )
-    );
-}
-
 function logStickerImportFailure(
     stage: string,
     source: StickerImportSource,
@@ -258,8 +242,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
     const [stickerEntryAnimation, setStickerEntryAnimation] = useState<StickerEntryAnimation | null>(null);
     const [importingSticker, setImportingSticker] = useState(false);
-    const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
-    const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<StickerSourceIntent | null>(null);
     const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
     const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
@@ -661,7 +643,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setStickerModeEnabled(false);
         setSelectedStickerId(null);
         setLocationSelection(undefined);
-        setShowStickerSourceSheet(false);
         setRichDecorationsReady(false);
         resetPolaroidCaptureState();
         favoriteFillProgress.value = 0;
@@ -762,12 +743,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         onClose();
         completeClose();
     }, [completeClose, loading, note, onClose, visible]);
-
-    useEffect(() => {
-        if (!isEditing || !note || importingSticker) {
-            setShowStickerSourceSheet(false);
-        }
-    }, [importingSticker, isEditing, note]);
 
     useEffect(() => {
         if (!visible || loading || !note) {
@@ -1041,21 +1016,26 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     }, [isEditing, note, t]);
 
     const {
+        clearStickerCreationDraft,
+        handleCloseStickerCutoutPreviewEditor,
         handleCloseStampCutterEditor,
         handleCloseStampPreviewEditor,
+        handleConfirmStickerCutoutPreview,
         handleConfirmStampCutter,
         handleConfirmStampPreview,
+        handlePrepareStickerCutoutPreview,
         handlePrepareStampCutout,
         handlePrepareStampPreview,
+        showStickerCutoutPreviewEditor,
         showStampCutterEditor,
         showStampPreviewEditor,
+        stickerCutoutPreviewDraft,
         stampCutterDraft,
         stampPreviewDraft,
-    } = useStampCutterFlow({
+    } = useStickerCreationFlow({
         dismissStickerUi: () => {
             dismissPastePrompt();
             dismissEditorKeyboard();
-            setShowStickerSourceSheet(false);
         },
         enablePhotoStickers: ENABLE_PHOTO_STICKERS,
         getErrorMessage: (error) => getStickerImportErrorMessage(t, error),
@@ -1066,78 +1046,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         t,
     });
 
-    const handleImportSticker = useCallback(async (intent: StickerImportIntent = 'sticker') => {
-        if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
-            return;
-        }
-
-        dismissPastePrompt();
-        dismissEditorKeyboard();
-
-        setImportingSticker(true);
-        try {
-            const pickedSource = await pickStickerImportSource();
-            if (!pickedSource) {
-                return;
-            }
-
-            try {
-                await importStickerFromSource(pickedSource.source, intent);
-            } catch (error) {
-                logStickerImportFailure('import-sticker', pickedSource.source, intent, error);
-                if (shouldOfferStampFallback(error)) {
-                    showAppAlert(
-                        t('capture.stickerCutoutFallbackTitle', 'Could not make a sticker'),
-                        getStickerImportErrorMessage(t, error),
-                        [
-                            {
-                                text: t('capture.cancel', 'Cancel'),
-                                style: 'cancel',
-                            },
-                            {
-                                text: t('capture.importAsStamp', 'Import as stamp'),
-                                onPress: () => {
-                                    setImportingSticker(true);
-                                    void importStickerFromSource(pickedSource.source, 'stamp')
-                                        .catch((stampError) => {
-                                            logStickerImportFailure('stamp-fallback', pickedSource.source, 'stamp', stampError);
-                                            showAppAlert(
-                                                t('capture.error', 'Error'),
-                                                getStickerImportErrorMessage(t, stampError)
-                                            );
-                                        })
-                                        .finally(() => {
-                                            setImportingSticker(false);
-                                        });
-                                },
-                            },
-                        ]
-                    );
-                    return;
-                }
-
-                throw error;
-            }
-        } catch (error) {
-            logStickerImportFailure(
-                'handle-import-sticker',
-                {
-                    uri: 'unknown',
-                    mimeType: null,
-                    name: null,
-                },
-                intent,
-                error
-            );
-            showAppAlert(
-                t('capture.error', 'Error'),
-                getStickerImportErrorMessage(t, error)
-            );
-        } finally {
-            setImportingSticker(false);
-        }
-    }, [dismissEditorKeyboard, dismissPastePrompt, importStickerFromSource, importingSticker, isEditing, note, pickStickerImportSource, t]);
-
     useEffect(() => {
         if (!ENABLE_PHOTO_STICKERS || subjectCutoutPrewarmRequestedRef.current) {
             return;
@@ -1146,35 +1054,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         subjectCutoutPrewarmRequestedRef.current = true;
         void prepareStickerSubjectCutout().catch(() => undefined);
     }, []);
-    useEffect(() => {
-        if (showStickerSourceSheet || !pendingStickerSourceAction) {
-            return;
-        }
-
-        const timer = setTimeout(() => {
-            const nextAction = pendingStickerSourceAction;
-            setPendingStickerSourceAction(null);
-            if (nextAction === 'stamp-cut') {
-                void handlePrepareStampCutout();
-                return;
-            }
-
-            if (nextAction === 'stamp') {
-                void handlePrepareStampPreview();
-                return;
-            }
-
-            void handleImportSticker(nextAction);
-        }, STICKER_SOURCE_SHEET_DISMISS_DELAY_MS);
-
-        return () => clearTimeout(timer);
-    }, [
-        handleImportSticker,
-        handlePrepareStampCutout,
-        handlePrepareStampPreview,
-        pendingStickerSourceAction,
-        showStickerSourceSheet,
-    ]);
     const handlePasteStickerFromClipboard = useCallback(async () => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
             return;
@@ -1286,94 +1165,41 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         dismissPastePrompt();
         void handlePasteStickerFromClipboard();
     }, [dismissPastePrompt, handlePasteStickerFromClipboard]);
-    const handleCloseStickerSourceSheet = useCallback(() => {
-        setShowStickerSourceSheet(false);
-    }, []);
-    const handleSelectStickerSourceClipboard = useCallback(() => {
-        setShowStickerSourceSheet(false);
-        void handlePasteStickerFromClipboard();
-    }, [handlePasteStickerFromClipboard]);
-    const handleSelectStickerSourceSticker = useCallback(() => {
-        setPendingStickerSourceAction('sticker');
-        setShowStickerSourceSheet(false);
-    }, []);
-    const handleSelectStickerSourceStamp = useCallback(() => {
-        setPendingStickerSourceAction('stamp');
-        setShowStickerSourceSheet(false);
-    }, []);
-    const handleSelectStickerSourceCutStamp = useCallback(() => {
-        setPendingStickerSourceAction('stamp-cut');
-        setShowStickerSourceSheet(false);
-    }, []);
-    const handleShowStickerSourceOptions = useCallback(async () => {
-        if (!ENABLE_PHOTO_STICKERS || !isEditing || !note || importingSticker) {
-            return;
-        }
-
-        dismissPastePrompt();
-        dismissEditorKeyboard();
-        const canPasteFromClipboard = await hasClipboardStickerImage();
-        setStickerSourceCanPasteFromClipboard(canPasteFromClipboard);
-        setShowStickerSourceSheet(true);
-    }, [dismissEditorKeyboard, dismissPastePrompt, importingSticker, isEditing, note]);
-    const stickerSourceActions = useMemo(() => {
-        const actions: {
-            key: string;
-            iconName: 'images-outline' | 'scan-outline' | 'pricetag-outline' | 'clipboard-outline';
-            renderIcon?: ({ color, size }: { color: string; size: number }) => React.ReactNode;
-            label: string;
-            description: string;
-            onPress: () => void;
-            testID: string;
-        }[] = [
-            {
-                key: 'create-sticker',
-                iconName: 'images-outline',
-                renderIcon: renderStickerSourceSheetStickerIcon,
-                label: t('capture.createStickerLabel', 'Create sticker'),
-                description: t('capture.createStickerDescription', 'Transparent PNG or WebP'),
-                onPress: handleSelectStickerSourceSticker,
-                testID: 'sticker-source-option-create-sticker',
-            },
-            {
-                key: 'cut-stamp',
-                iconName: 'scan-outline',
-                label: t('capture.cutStampLabel', 'Cut stamp'),
-                description: t('capture.cutStampDescription', 'Frame just part of a photo inside the cutter'),
-                onPress: handleSelectStickerSourceCutStamp,
-                testID: 'sticker-source-option-cut-stamp',
-            },
-            {
-                key: 'create-stamp',
-                iconName: 'pricetag-outline',
-                renderIcon: renderStickerSourceSheetStampIcon,
-                label: t('capture.createStampLabel', 'Create stamp'),
-                description: t('capture.createStampDescription', 'Use the whole photo as a perforated stamp'),
-                onPress: handleSelectStickerSourceStamp,
-                testID: 'sticker-source-option-create-stamp',
-            },
-        ];
-
-        if (stickerSourceCanPasteFromClipboard) {
-            actions.push({
-                key: 'paste-sticker',
-                iconName: 'clipboard-outline',
-                label: t('capture.pasteStickerFromClipboard', 'Paste from Clipboard'),
-                description: t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.'),
-                onPress: handleSelectStickerSourceClipboard,
-                testID: 'sticker-source-option-clipboard',
+    const refreshStickerSourceClipboardAvailability = useCallback(() => {
+        void hasClipboardStickerImage()
+            .then((canPasteFromClipboard) => {
+                setStickerSourceCanPasteFromClipboard(canPasteFromClipboard);
+            })
+            .catch(() => {
+                setStickerSourceCanPasteFromClipboard(false);
             });
-        }
-
-        return actions;
-    }, [
-        handleSelectStickerSourceClipboard,
-        handleSelectStickerSourceCutStamp,
-        handleSelectStickerSourceStamp,
-        handleSelectStickerSourceSticker,
+    }, []);
+    const {
+        handleCloseStickerSourceSheet,
+        handleShowStickerSourceOptions,
+        hideStickerSourceSheet,
+        showStickerSourceSheet,
+        stickerSourceActions,
+    } = useStickerSourceSheetFlow({
+        dismissOverlay: dismissEditorKeyboard,
+        dismissPastePrompt,
+        enablePhotoStickers: ENABLE_PHOTO_STICKERS && isEditing && Boolean(note),
+        handlePasteStickerFromClipboard,
+        handlePrepareStickerCutoutPreview,
+        handlePrepareStampCutout,
+        handlePrepareStampPreview,
+        importingSticker,
+        refreshStickerSourceClipboardAvailability,
         stickerSourceCanPasteFromClipboard,
         t,
-    ]);
+    });
+
+    useEffect(() => {
+        if (!isEditing || !note || importingSticker) {
+            hideStickerSourceSheet();
+        }
+    }, [hideStickerSourceSheet, importingSticker, isEditing, note]);
+
     const handleToggleStickerMode = useCallback(() => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note) {
             return;
@@ -1746,8 +1572,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     : null
             );
             blurEditorInputs();
-            handleCloseStampCutterEditor();
-            handleCloseStampPreviewEditor();
+            clearStickerCreationDraft();
             setStickerEntryAnimation(null);
             setDoodleModeEnabled(false);
             setStickerModeEnabled(false);
@@ -1988,6 +1813,25 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                         onConfirm={handleConfirmStampPreview}
                     />
                 ) : null}
+                {stickerCutoutPreviewDraft ? (
+                    <StickerCutoutPreviewEditor
+                        visible={showStickerCutoutPreviewEditor}
+                        draft={stickerCutoutPreviewDraft}
+                        loading={importingSticker}
+                        title={t('capture.stickerCutoutPreviewTitle', 'Create sticker')}
+                        subtitle={t(
+                            'capture.stickerCutoutPreviewHint',
+                            'Keep the lifted subject, then choose whether the sticker starts with an outline.'
+                        )}
+                        cancelLabel={t('common.cancel', 'Cancel')}
+                        confirmLabel={t('capture.stickerCutoutPreviewConfirm', 'Add sticker')}
+                        outlineOnLabel={t('capture.stickerOutlineOn', 'Outline on')}
+                        outlineOffLabel={t('capture.stickerOutlineOff', 'Outline off')}
+                        onClose={handleCloseStickerCutoutPreviewEditor}
+                        onCompletePlacement={handleCompleteStickerCreationPlacement}
+                        onConfirm={handleConfirmStickerCutoutPreview}
+                    />
+                ) : null}
             </>
         );
     }
@@ -2037,6 +1881,25 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     onClose={handleCloseStampPreviewEditor}
                     onCompletePlacement={handleCompleteStickerCreationPlacement}
                     onConfirm={handleConfirmStampPreview}
+                />
+            ) : null}
+            {stickerCutoutPreviewDraft ? (
+                <StickerCutoutPreviewEditor
+                    visible={showStickerCutoutPreviewEditor}
+                    draft={stickerCutoutPreviewDraft}
+                    loading={importingSticker}
+                    title={t('capture.stickerCutoutPreviewTitle', 'Create sticker')}
+                    subtitle={t(
+                        'capture.stickerCutoutPreviewHint',
+                        'Keep the lifted subject, then choose whether the sticker starts with an outline.'
+                    )}
+                    cancelLabel={t('common.cancel', 'Cancel')}
+                    confirmLabel={t('capture.stickerCutoutPreviewConfirm', 'Add sticker')}
+                    outlineOnLabel={t('capture.stickerOutlineOn', 'Outline on')}
+                    outlineOffLabel={t('capture.stickerOutlineOff', 'Outline off')}
+                    onClose={handleCloseStickerCutoutPreviewEditor}
+                    onCompletePlacement={handleCompleteStickerCreationPlacement}
+                    onConfirm={handleConfirmStickerCutoutPreview}
                 />
             ) : null}
         </>

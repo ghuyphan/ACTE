@@ -117,7 +117,7 @@ function StampCutterEditor({
   onCompletePlacement,
   onConfirm,
 }: StampCutterEditorProps) {
-  const { colors, isDark } = useTheme();
+  const { isDark } = useTheme();
   const reduceMotionEnabled = useReducedMotion();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [stageAreaWindowRect, setStageAreaWindowRect] = useState<WindowRect | null>(null);

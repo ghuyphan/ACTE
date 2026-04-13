@@ -61,6 +61,7 @@ import { LiveCameraActionBar } from './capture/LiveCameraActionBar';
 import { triggerCaptureCardHaptic } from './capture/CaptureControls';
 import StampCutterEditor from './capture/StampCutterEditor';
 import StampPreviewEditor from './capture/StampPreviewEditor';
+import StickerCutoutPreviewEditor from './capture/StickerCutoutPreviewEditor';
 import type { WindowRect } from './capture/stickerCreationTypes';
 import {
   CARD_SIZE,
@@ -556,10 +557,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     dismissPastePrompt,
     handleCloseStampCutterEditor,
     handleCloseStampPreviewEditor,
+    handleCloseStickerCutoutPreviewEditor,
     handleCompleteStampCutterPlacement: handleCompleteStampCutterPlacementInternal,
     handleCloseStickerSourceSheet,
     handleConfirmStampCutter,
     handleConfirmStampPreview,
+    handleConfirmStickerCutoutPreview,
     handleConfirmPasteFromPrompt,
     handleInlinePasteStickerPress,
     handleNativeInlinePasteStickerPress,
@@ -574,9 +577,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     showInlinePasteButton,
     showStampCutterEditor,
     showStampPreviewEditor,
+    showStickerCutoutPreviewEditor,
     showStickerSourceSheet,
     stampCutterDraft,
     stampPreviewDraft,
+    stickerCutoutPreviewDraft,
     stickerSourceActions,
     useNativeInlinePasteButton,
   } = useCaptureCardStickerFlow({
@@ -1410,6 +1415,23 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         onClose={handleCloseStampPreviewEditor}
         onCompletePlacement={handleCompleteStampCutterPlacement}
         onConfirm={handleConfirmStampPreview}
+      />
+      <StickerCutoutPreviewEditor
+        visible={showStickerCutoutPreviewEditor}
+        draft={stickerCutoutPreviewDraft}
+        loading={importingSticker}
+        title={t('capture.stickerCutoutPreviewTitle', 'Create sticker')}
+        subtitle={t(
+          'capture.stickerCutoutPreviewHint',
+          'Keep the lifted subject, then choose whether the sticker starts with an outline.'
+        )}
+        cancelLabel={t('common.cancel', 'Cancel')}
+        confirmLabel={t('capture.stickerCutoutPreviewConfirm', 'Add sticker')}
+        outlineOnLabel={t('capture.stickerOutlineOn', 'Outline on')}
+        outlineOffLabel={t('capture.stickerOutlineOff', 'Outline off')}
+        onClose={handleCloseStickerCutoutPreviewEditor}
+        onCompletePlacement={handleCompleteStampCutterPlacement}
+        onConfirm={handleConfirmStickerCutoutPreview}
       />
     </>
   );

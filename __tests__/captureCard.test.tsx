@@ -1909,6 +1909,14 @@ describe('CaptureCard doodle handle', () => {
         mimeType: 'image/png',
         name: 'sticker.png',
       });
+      expect(getByTestId('sticker-cutout-preview-confirm')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-cutout-preview-confirm'));
+    });
+
+    await waitFor(() => {
       expect(mockImportStickerAsset).toHaveBeenCalledWith(
         {
           uri: 'file:///cache/subject-cutout.png',
@@ -1946,6 +1954,14 @@ describe('CaptureCard doodle handle', () => {
     });
     await act(async () => {
       fireEvent.press(getByTestId('sticker-source-option-create-sticker'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('sticker-cutout-preview-confirm')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-cutout-preview-confirm'));
     });
 
     await waitFor(() => {

@@ -1196,6 +1196,14 @@ describe('NoteDetailSheet', () => {
     });
 
     await waitFor(() => {
+      expect(getByTestId('sticker-cutout-preview-confirm')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-cutout-preview-confirm'));
+    });
+
+    await waitFor(() => {
       expect(mockImportStickerAsset).toHaveBeenCalledWith(
         {
           uri: 'file:///transparent-detail-sticker.png',

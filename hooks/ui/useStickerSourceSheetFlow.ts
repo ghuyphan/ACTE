@@ -8,15 +8,14 @@ import type { StickerSourceAction } from './stickerFlowTypes';
 
 const STICKER_SOURCE_SHEET_DISMISS_DELAY_MS = 250;
 
-type StickerImportIntent = 'sticker' | 'stamp';
-type StickerSourceIntent = StickerImportIntent | 'stamp-cut';
+type StickerSourceIntent = 'sticker' | 'stamp' | 'stamp-cut';
 
 interface UseStickerSourceSheetFlowOptions {
   dismissOverlay: () => void;
   dismissPastePrompt: () => void;
   enablePhotoStickers: boolean;
-  handleImportSticker: (intent?: StickerImportIntent) => Promise<void>;
   handlePasteStickerFromClipboard: () => Promise<void>;
+  handlePrepareStickerCutoutPreview: () => Promise<void>;
   handlePrepareStampCutout: () => Promise<void>;
   handlePrepareStampPreview: () => Promise<void>;
   importingSticker: boolean;
@@ -29,8 +28,8 @@ export function useStickerSourceSheetFlow({
   dismissOverlay,
   dismissPastePrompt,
   enablePhotoStickers,
-  handleImportSticker,
   handlePasteStickerFromClipboard,
+  handlePrepareStickerCutoutPreview,
   handlePrepareStampCutout,
   handlePrepareStampPreview,
   importingSticker,
@@ -59,12 +58,12 @@ export function useStickerSourceSheetFlow({
         return;
       }
 
-      void handleImportSticker(nextAction);
+      void handlePrepareStickerCutoutPreview();
     }, STICKER_SOURCE_SHEET_DISMISS_DELAY_MS);
 
     return () => clearTimeout(timer);
   }, [
-    handleImportSticker,
+    handlePrepareStickerCutoutPreview,
     handlePrepareStampCutout,
     handlePrepareStampPreview,
     pendingStickerSourceAction,
