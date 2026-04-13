@@ -285,7 +285,7 @@ export default function LoginScreen() {
   ];
   const appIconSource = isDark ? APP_ICON_DARK_SOURCE : APP_ICON_LIGHT_SOURCE;
 
-  const continueToApp = () => {
+  const continueToApp = async () => {
     if (!hasAcceptedLandingPolicy && (canOpenPrivacyPolicy || canOpenSupport)) {
       showLandingAuthMessage(
         t('auth.validationLocalPolicy', 'Review and accept the privacy policy before continuing in local mode.')
@@ -293,7 +293,17 @@ export default function LoginScreen() {
       return;
     }
 
-    router.replace('/' as Href);
+    resetMessages();
+
+    try {
+      await markOnboardingComplete();
+      router.replace('/' as Href);
+    } catch (error) {
+      console.warn('Failed to persist onboarding state for local mode:', error);
+      setAuthMessage(
+        t('auth.continueFailed', 'We could not finish setup right now. Please try again.')
+      );
+    }
   };
 
   const handleAuthSuccess = async () => {
@@ -914,7 +924,7 @@ export default function LoginScreen() {
         ) : null}
 
         <Pressable
-          onPress={activeAction ? undefined : continueToApp}
+          onPress={activeAction ? undefined : () => void continueToApp()}
           style={({ pressed }) => [styles.linkButton, pressed ? styles.linkButtonPressed : null]}
           disabled={activeAction !== null}
           testID="auth-continue-local"

@@ -89,7 +89,12 @@ export function useProfileScreenModel() {
   const canEditAvatar = Boolean(displayUser) && !isTransitioningAccount && !isUpdatingAvatar;
 
   const openSignIn = () => {
-    router.replace('/auth');
+    router.replace({
+      pathname: '/auth',
+      params: {
+        returnTo: '/auth/profile',
+      },
+    });
   };
 
   const openUsernameEditor = () => {

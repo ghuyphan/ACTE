@@ -60,7 +60,12 @@ export function useSettingsScreenModel() {
       return;
     }
 
-    router.push('/auth');
+    router.push({
+      pathname: '/auth',
+      params: {
+        returnTo: '/(tabs)/settings',
+      },
+    });
   }, [isAuthAvailable, router, user]);
 
   const openPlusScreen = () => {

@@ -249,7 +249,10 @@ export default function HomeScreen() {
   const openAuthForShare = useCallback(() => {
     router.push({
       pathname: '/auth',
-      params: { intent: 'share-note' },
+      params: {
+        intent: 'share-note',
+        returnTo: `/(tabs)?openSharedManageAt=${Date.now()}`,
+      },
     } as Href);
   }, [router]);
   const {

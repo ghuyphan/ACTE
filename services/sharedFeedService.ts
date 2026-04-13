@@ -39,10 +39,6 @@ import {
   getCachedActiveInvite,
   replaceCachedActiveInvite,
 } from './sharedFeedCache';
-import {
-  clearStoredInviteToken,
-  setStoredInviteToken,
-} from './inviteTokenStorage';
 import { sendSocialNotificationEvent } from './socialPushService';
 import {
   buildNewRemoteArtifacts,
@@ -336,17 +332,10 @@ function getReusableSharedPostCleanupArtifacts(artifacts: {
 }
 
 async function clearLocalActiveInviteState(userUid: string) {
-  await Promise.all([
-    clearStoredInviteToken(userUid).catch(() => undefined),
-    replaceCachedActiveInvite(userUid, null).catch(() => undefined),
-  ]);
+  await replaceCachedActiveInvite(userUid, null).catch(() => undefined);
 }
 
 async function persistLocalActiveInvite(userUid: string, invite: FriendInvite) {
-  await setStoredInviteToken(userUid, {
-    inviteId: invite.id,
-    token: invite.token,
-  });
   await replaceCachedActiveInvite(userUid, invite).catch(() => undefined);
 }
 

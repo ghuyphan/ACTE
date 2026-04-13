@@ -101,21 +101,20 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Invalidate the dedupe snapshot after local mutations or add a `forceFresh` path for post-mutation refreshes.
 
-### 4. PARTIAL - High - Active invite cache is split across SQLite and AsyncStorage
+### 4. FIXED - High - Active invite cache was split across SQLite and token storage
 
 - Evidence:
-  - `services/sharedFeedCache.ts:304`
-  - `services/sharedFeedCache.ts:334`
-  - `services/sharedFeedCache.ts:397`
-  - `services/inviteTokenStorage.ts:1`
+  - `services/activeInviteStorage.ts:1`
+  - `services/sharedFeedCache.ts:303`
+  - `services/sharedFeedService.ts:333`
 - Problem:
-  Invite metadata is cached in SQLite while the token is stored separately. Reads are non-atomic, cleanup is non-atomic, and `getCachedActiveInvite()` does not reject expired or revoked invite rows before reconstructing an offline invite.
+  Invite metadata used to be cached in SQLite while the token lived in a separate storage layer, so reads and cleanup could drift or leave orphaned secrets behind.
 - Impact:
-  Crashes or partial cleanup can leave stale or mismatched invite state behind, especially offline.
+  Crashes or partial cleanup could leave stale or mismatched invite state behind, especially offline.
 - Fix direction:
-  Store invite metadata and token in one durability boundary, or add validation and invalidation on every cached read.
+  Store invite metadata and token in one owning API and make global cleanup able to clear every stored invite entry.
  - Update:
-  Cache reads now invalidate stale invites and web no longer persists invite tokens to browser storage, but the storage model is still split across two durability layers.
+  Active invites now persist through `activeInviteStorage`, `sharedFeedCache` no longer reconstructs invites from split SQLite/token state, and full cache resets clear all stored invite entries.
 
 ### 5. FIXED - High - `cleanup-sticker-assets` can become effectively public
 
@@ -328,7 +327,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Split by domain behavior, not by arbitrary helper extraction. Keep a thin facade file where API stability matters.
  - Update:
-  This pass extracted startup recovery UI, root stack option builders, note deletion event plumbing, and notes-grid view-model building, but the largest service/screen files still need a dedicated decomposition pass.
+  This pass also extracted a dedicated root navigator, shared settings/profile section builders, and a standalone active-invite storage seam, but the largest service/screen files still need a dedicated decomposition pass.
 
 ### 21. PARTIAL - Medium - Startup and provider composition are too centralized
 
@@ -342,9 +341,9 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Keep the root layout focused on shell/bootstrap and move route-specific concerns closer to route groups/features.
  - Update:
-  The root layout now delegates startup recovery UI and repeated stack options to extracted helpers, and app providers are composed through one ordered provider chain instead of nested wrapper groups.
+  The root layout now delegates route chrome to `RootStackNavigator`, `AppAlertProvider` lives inside the translated provider chain, and app providers are composed through one ordered provider chain instead of nested wrapper groups.
 
-### 22. Medium - Platform screen duplication is increasing maintenance cost
+### 22. PARTIAL - Medium - Platform screen duplication is increasing maintenance cost
 
 - Evidence:
   - `components/screens/settings/SettingsScreen.ios.tsx:1`
@@ -357,8 +356,10 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
   Easy drift between platforms and more files touched for simple product changes.
 - Fix direction:
   Extract shared feature models/renderers and keep platform wrappers thin.
+ - Update:
+  Settings and profile now share section-model builders so most row/section product structure lives in one place, but the map screen and some platform-specific presentation code still need a second pass.
 
-### 23. Medium - Hook/export surface is noisier than necessary
+### 23. PARTIAL - Medium - Hook/export surface is noisier than necessary
 
 - Evidence:
   - `hooks/useNotes.ts:1`
@@ -371,6 +372,8 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
   Ownership boundaries are less obvious and import discipline gets fuzzy.
 - Fix direction:
   Standardize one public hook surface and keep internal implementation paths private.
+ - Update:
+  The repo now has a top-level `hooks/index.ts` public barrel and the root provider composition uses it, but the thin compatibility shims still exist and call sites have not all been migrated yet.
 
 ### 24. PARTIAL - Medium - Duplicate normalization logic risks behavior drift
 
@@ -385,12 +388,14 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Collapse onto one canonical normalization module with focused tests.
  - Update:
-  Preview text and optional-string trimming now share canonical helpers across notes/shared previews and grid photo hydration, but the broader normalization surface is not fully consolidated yet.
+  Core string normalization now flows through `services/stringNormalization.ts`, and both legacy modules re-export from that canonical implementation, but note-color normalization still remains a separate concern in `noteAppearance.ts`.
 
 ### 25. FIXED - Low-Medium - `useHomeFeedPagination` reads like dead abstraction
 
 - Evidence:
-  - `hooks/app/useHomeFeedPagination.ts:1`
+  - `components/screens/HomeScreen.tsx:302`
+  - `components/screens/notes/NotesScreen.tsx:251`
+  - `components/home/feedItems.ts:1`
 - Problem:
   It accepts pagination-oriented inputs but always returns `hasMore = false`, `isLoading = false`, `isLoadingMore = false`, and `loadNextPage()` just returns all current items.
 - Impact:
@@ -411,6 +416,53 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
   CI hygiene is currently not fully clean.
 - Fix direction:
   Remove the unused variables/imports or wire them back in intentionally.
+
+## Fresh Sweep Follow-Ups
+
+### 27. FIXED - Medium - Local-mode continue path did not mark onboarding complete
+
+- Evidence:
+  - `components/screens/auth/AuthScreen.tsx:288`
+  - `services/startupRouting.ts:60`
+  - `app/index.tsx:10`
+- Problem:
+  The local-only continue path entered the app without setting `HAS_LAUNCHED_KEY`, so the next cold start could bounce the same user back into onboarding.
+- Impact:
+  Local-first users could see onboarding repeatedly after already continuing into the app.
+- Fix direction:
+  Persist onboarding completion before routing into the app from the local-mode CTA.
+ - Update:
+  The local continue action now awaits `markOnboardingComplete()` and surfaces the same setup failure message used by the auth success path if persistence fails.
+
+### 28. FIXED - Medium - Signed-out settings/profile auth entrypoints dropped the return route
+
+- Evidence:
+  - `components/screens/settings/useSettingsScreenModel.ts:47`
+  - `components/screens/profile/useProfileScreenModel.ts:87`
+  - `components/screens/auth/AuthScreen.tsx:301`
+- Problem:
+  Signed-out entrypoints still navigated to plain `/auth`, while the auth screen only returns to the original destination when `returnTo` is provided.
+- Impact:
+  Users signing in from settings/profile could land back in tabs instead of the screen they came from.
+- Fix direction:
+  Pass explicit `returnTo` params from auth-gated entrypoints that expect to resume on success.
+ - Update:
+  Settings now routes back to `/(tabs)/settings` and profile now routes back to `/auth/profile` after sign-in.
+
+### 29. FIXED - Medium - Share handoff after auth dropped the pending shared-manage action
+
+- Evidence:
+  - `components/screens/HomeScreen.tsx:249`
+  - `hooks/app/useHomeSharedActions.ts:52`
+  - `components/screens/auth/AuthScreen.tsx:178`
+- Problem:
+  The signed-out share handoff only set `intent: 'share-note'` for auth copy, but never restored the pending shared-manage action after authentication.
+- Impact:
+  Users who tried to share while signed out had to manually reopen shared management after signing in.
+- Fix direction:
+  Pair the share intent with a concrete return route that reopens the shared-manage sheet.
+ - Update:
+  The share auth handoff now routes back to `/(tabs)?openSharedManageAt=...`, so Home resumes directly into the shared-manage sheet after auth.
 
 ## Test Coverage Gaps
 
@@ -434,16 +486,18 @@ Recommended additions:
 ## Suggested Remediation Order
 
 1. Continue the second-wave decomposition of the largest service/screen files.
-2. Reduce remaining platform-screen duplication, especially settings/profile.
-3. Finish collapsing duplicated normalization and presentation helpers.
-4. Add narrow tests for remaining brittle helpers and cleanup flows.
+2. Thin the remaining platform-specific seams, especially `MapScreen.ios` and any duplicated screen presentation that still sits outside shared section models.
+3. Migrate more call sites onto the explicit `hooks/index.ts` public surface and retire compatibility shims in a controlled pass.
+4. Add narrow tests for the remaining brittle helpers and cleanup flows.
 5. Revisit root provider/layout ownership only after the larger screen/service seams are thinner.
 
 ## Verification Snapshot
 
 - `npm run typecheck`: passed
-- `npm run lint:ci`: passed
+- `npm run lint`: passed
+- `npm test -- activeInviteStorage authScreen useSettingsScreenModel useProfileScreenModel`: passed
 - `npm test -- --runInBand __tests__/useNotesStore.test.tsx __tests__/useSubscription.test.tsx __tests__/sharedFeedService.test.ts __tests__/useSharedFeedStore.test.tsx`: passed
 - `npm test -- --runInBand __tests__/homeScreenCameraLifecycle.test.tsx __tests__/homeScreenShareInvite.test.tsx __tests__/homeScreenDoodleSave.test.tsx`: passed
 - `npm test -- --runInBand __tests__/notesIndexScreen.test.tsx __tests__/homeScreenArchiveFocus.test.tsx`: passed
-- Deep review method: six parallel audit tracks plus local verification of the highest-risk findings
+- `npm test -- --runInBand`: produced only passing suites during the repo-wide sweep, but the run was manually stopped after it stalled on longstanding async teardown / `act(...)` warning noise with no failing assertions observed
+- Deep review method: six original parallel audit tracks, a fresh sub-agent-assisted follow-up sweep, and local verification of the highest-risk findings

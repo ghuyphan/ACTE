@@ -2,19 +2,54 @@ import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Layout } from '../../../constants/theme';
+import { useAndroidBottomTabOverlayInset } from '../../../hooks/useAndroidBottomTabOverlayInset';
+import type { ThemeColors } from '../../../hooks/useTheme';
 import AppSheet from '../../sheets/AppSheet';
 import AppSheetAlert from '../../sheets/AppSheetAlert';
 import SettingsHapticsSheetAndroid from '../../settings/SettingsHapticsSheet.android';
 import SettingsLanguageSheetAndroid from '../../settings/SettingsLanguageSheet.android';
 import SettingsSyncSheetAndroid from '../../settings/SettingsSyncSheet.android';
 import SettingsThemeSheetAndroid from '../../settings/SettingsThemeSheet.android';
-import { useAndroidBottomTabOverlayInset } from '../../../hooks/useAndroidBottomTabOverlayInset';
-import type { ThemeColors } from '../../../hooks/useTheme';
-import { Layout } from '../../../constants/theme';
+import {
+  buildSettingsSections,
+  type SettingsIconKey,
+  type SettingsRowModel,
+} from './settingsScreenSections';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
 
 type SheetKey = 'language' | 'theme' | 'haptics' | 'sync' | null;
-const SETTINGS_BRAND_NAME = 'ノート';
+
+function getAndroidIconName(icon: SettingsIconKey): React.ComponentProps<typeof Ionicons>['name'] {
+  switch (icon) {
+    case 'account':
+      return 'person-circle-outline';
+    case 'sync':
+      return 'sync-outline';
+    case 'plus':
+      return 'sparkles-outline';
+    case 'language':
+      return 'language-outline';
+    case 'theme':
+      return 'contrast-outline';
+    case 'haptics':
+      return 'phone-portrait-outline';
+    case 'notes':
+      return 'documents-outline';
+    case 'trash':
+      return 'trash-outline';
+    case 'privacy':
+      return 'shield-checkmark-outline';
+    case 'support':
+      return 'help-circle-outline';
+    case 'accountDeletion':
+      return 'person-remove-outline';
+    case 'version':
+      return 'apps-outline';
+    case 'plusUnavailable':
+      return 'sparkles-outline';
+  }
+}
 
 function SectionTitle({
   colors,
@@ -50,43 +85,47 @@ function SettingsCard({
 
 function SettingRow({
   colors,
-  icon,
-  subtitle,
-  title,
-  value,
-  onPress,
-  destructive = false,
-  showChevron = Boolean(onPress),
+  row,
 }: {
   colors: ThemeColors;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  title: string;
-  subtitle?: string | null;
-  value?: string | null;
-  onPress?: () => void;
-  destructive?: boolean;
-  showChevron?: boolean;
+  row: SettingsRowModel;
 }) {
-  const iconColor = destructive ? colors.danger : colors.primary;
+  const iconColor = row.destructive ? colors.danger : row.icon === 'plusUnavailable' ? colors.secondaryText : colors.primary;
+  const showChevron = row.external ? false : row.showChevron ?? Boolean(row.onPress);
   const content = (
     <>
-      <View style={[styles.rowIcon, { backgroundColor: destructive ? `${colors.danger}12` : colors.primarySoft }]}>
-        <Ionicons name={icon} size={18} color={iconColor} />
+      <View
+        style={[
+          styles.rowIcon,
+          {
+            backgroundColor:
+              row.destructive
+                ? `${colors.danger}12`
+                : row.icon === 'plusUnavailable'
+                  ? `${colors.secondaryText}12`
+                  : colors.primarySoft,
+          },
+        ]}
+      >
+        <Ionicons name={getAndroidIconName(row.icon)} size={18} color={iconColor} />
       </View>
       <View style={styles.rowCopy}>
-        <Text style={[styles.rowTitle, { color: destructive ? colors.danger : colors.text }]}>{title}</Text>
-        {subtitle ? (
-          <Text style={[styles.rowSubtitle, { color: colors.secondaryText }]}>{subtitle}</Text>
+        <Text style={[styles.rowTitle, { color: row.destructive ? colors.danger : colors.text }]}>
+          {row.title}
+        </Text>
+        {row.subtitle ? (
+          <Text style={[styles.rowSubtitle, { color: colors.secondaryText }]}>{row.subtitle}</Text>
         ) : null}
       </View>
       <View style={styles.rowTrailing}>
-        {value ? <Text style={[styles.rowValue, { color: colors.secondaryText }]}>{value}</Text> : null}
+        {row.value ? <Text style={[styles.rowValue, { color: colors.secondaryText }]}>{row.value}</Text> : null}
+        {row.external ? <Ionicons name="open-outline" size={18} color={colors.secondaryText} /> : null}
         {showChevron ? <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} /> : null}
       </View>
     </>
   );
 
-  if (!onPress) {
+  if (!row.onPress) {
     return <View style={styles.row}>{content}</View>;
   }
 
@@ -94,11 +133,8 @@ function SettingRow({
     <Pressable
       accessibilityRole="button"
       android_ripple={{ color: `${colors.text}10` }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.row,
-        pressed ? styles.rowPressed : null,
-      ]}
+      onPress={row.onPress}
+      style={({ pressed }) => [styles.row, pressed ? styles.rowPressed : null]}
     >
       {content}
     </Pressable>
@@ -110,110 +146,48 @@ function CardDivider({ colors }: { colors: ThemeColors }) {
 }
 
 export default function SettingsScreenAndroid() {
-  const {
-    accountHint,
-    accountValue,
-    appVersion,
-    alertProps,
-    colors,
-    hapticsValue,
-    insets,
-    isAuthAvailable,
-    isPurchaseAvailable,
-    languageLabel,
-    notes,
-    openAccountScreen,
-    openAccountDeletionHelpLink,
-    openPlusScreen,
-    openPrivacyPolicyLink,
-    openSupportLink,
-    plusHint,
-    plusValue,
-    promptClearAll,
-    setShowHaptics,
-    setShowLanguage,
-    setShowSync,
-    setShowTheme,
-    showHaptics,
-    showLanguage,
-    showAccountDeletionLink,
-    showSync,
-    showPrivacyPolicyLink,
-    showSyncEntry,
-    showSupportLink,
-    showTheme,
-    syncValue,
-    t,
-    themeLabel,
-    user,
-  } = useSettingsScreenModel();
-  const contentTopInset = 16;
+  const model = useSettingsScreenModel();
+  const { about, sections } = buildSettingsSections(model);
   const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
-  const accountSubtitle = !isAuthAvailable
-    ? t(
-        'settings.accountUnavailableMsg',
-        'Account sign-in is unavailable right now. Your notes stay safely on this device.'
-      )
-    : !user
-      ? t(
-          'settings.accountSignedOutMsg',
-          'Sign in to back up your notes and keep them synced across your devices.'
-        )
-      : null;
-  const plusSubtitle = isPurchaseAvailable
-    ? plusHint
-    : t('settings.plusUnavailable', 'Plus is coming soon to this build.');
-  const plusEntryValue = isPurchaseAvailable
-    ? plusValue
-    : t('settings.unavailableShort', 'Unavailable');
 
   let sheetContent: React.ReactNode = null;
-  const sheetPresentation = 'edge';
-  const sheet: SheetKey = showTheme
+  const sheet: SheetKey = model.showTheme
     ? 'theme'
-    : showLanguage
+    : model.showLanguage
       ? 'language'
-      : showHaptics
+      : model.showHaptics
         ? 'haptics'
-        : showSync
+        : model.showSync
           ? 'sync'
           : null;
 
   if (sheet === 'theme') {
-    sheetContent = (
-      <SettingsThemeSheetAndroid onClose={() => setShowTheme(false)} />
-    );
+    sheetContent = <SettingsThemeSheetAndroid onClose={() => model.setShowTheme(false)} />;
   } else if (sheet === 'language') {
-    sheetContent = (
-      <SettingsLanguageSheetAndroid onClose={() => setShowLanguage(false)} />
-    );
+    sheetContent = <SettingsLanguageSheetAndroid onClose={() => model.setShowLanguage(false)} />;
   } else if (sheet === 'haptics') {
-    sheetContent = (
-      <SettingsHapticsSheetAndroid onClose={() => setShowHaptics(false)} />
-    );
+    sheetContent = <SettingsHapticsSheetAndroid onClose={() => model.setShowHaptics(false)} />;
   } else if (sheet === 'sync') {
-    sheetContent = (
-      <SettingsSyncSheetAndroid accountHint={accountHint} />
-    );
+    sheetContent = <SettingsSyncSheetAndroid accountHint={model.accountHint} />;
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: model.colors.background }]}>
       <Stack.Screen
         options={{
           headerShown: true,
           headerTransparent: false,
           headerShadowVisible: false,
-          title: t('settings.title', 'Settings'),
-          headerTintColor: colors.text,
+          title: model.t('settings.title', 'Settings'),
+          headerTintColor: model.colors.text,
           headerTitleAlign: 'left',
           headerStyle: {
-            backgroundColor: colors.background,
+            backgroundColor: model.colors.background,
           },
           headerTitleStyle: [
             styles.stackHeaderTitle,
             {
-              color: colors.text,
+              color: model.colors.text,
             },
           ],
         }}
@@ -223,164 +197,52 @@ export default function SettingsScreenAndroid() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: contentTopInset, paddingBottom: insets.bottom + 32 + bottomTabOverlayInset },
+          { paddingTop: 16, paddingBottom: model.insets.bottom + 32 + bottomTabOverlayInset },
         ]}
       >
-        <View style={styles.section}>
-          <SectionTitle colors={colors} title={t('settings.account', 'Account')} />
-          <SettingsCard colors={colors}>
-            <SettingRow
-              colors={colors}
-              icon="person-circle-outline"
-              title={t('settings.accountEntry', 'Account')}
-              subtitle={accountSubtitle}
-              value={accountValue}
-              onPress={isAuthAvailable ? openAccountScreen : undefined}
-            />
-            {showSyncEntry ? (
-              <>
-                <CardDivider colors={colors} />
-                <SettingRow
-                  colors={colors}
-                  icon="sync-outline"
-                  title={t('settings.autoSync', 'Auto sync')}
-                  value={syncValue}
-                  onPress={() => setShowSync(true)}
-                />
-                <CardDivider colors={colors} />
-              </>
-            ) : (
-              <CardDivider colors={colors} />
-            )}
-            <SettingRow
-              colors={colors}
-              icon="sparkles-outline"
-              title={t('settings.plusTitle', 'Noto Plus')}
-              subtitle={plusSubtitle}
-              value={plusEntryValue}
-              onPress={openPlusScreen}
-            />
-          </SettingsCard>
-        </View>
-
-        <View style={styles.section}>
-          <SectionTitle colors={colors} title={t('settings.appearance', 'Appearance')} />
-          <SettingsCard colors={colors}>
-            <SettingRow
-              colors={colors}
-              icon="language-outline"
-              title={t('settings.language', 'Language')}
-              value={languageLabel}
-              onPress={() => setShowLanguage(true)}
-            />
-            <CardDivider colors={colors} />
-            <SettingRow
-              colors={colors}
-              icon="contrast-outline"
-              title={t('settings.theme', 'Theme')}
-              value={themeLabel}
-              onPress={() => setShowTheme(true)}
-            />
-            <CardDivider colors={colors} />
-            <SettingRow
-              colors={colors}
-              icon="phone-portrait-outline"
-              title={t('settings.haptics', 'Haptics')}
-              value={hapticsValue}
-              onPress={() => setShowHaptics(true)}
-            />
-          </SettingsCard>
-        </View>
-
-        <View style={styles.section}>
-          <SectionTitle colors={colors} title={t('settings.notes', 'Notes')} />
-          <SettingsCard colors={colors}>
-            <SettingRow
-              colors={colors}
-              icon="documents-outline"
-              title={t('settings.noteCount', 'Saved Notes')}
-              value={`${notes.length}`}
-            />
-            <CardDivider colors={colors} />
-            <SettingRow
-              colors={colors}
-              icon="trash-outline"
-              title={t('settings.clearAll', 'Clear All Notes')}
-              subtitle={t(
-                'settings.clearAllMsg',
-                'All your food notes will be permanently deleted. This action cannot be undone.'
-              )}
-              onPress={promptClearAll}
-              destructive
-            />
-          </SettingsCard>
-        </View>
-
-        {(showPrivacyPolicyLink || showSupportLink || showAccountDeletionLink) ? (
-          <View style={styles.section}>
-            <SectionTitle colors={colors} title={t('settings.legal', 'Legal & Support')} />
-            <SettingsCard colors={colors}>
-              {showPrivacyPolicyLink ? (
-                <SettingRow
-                  colors={colors}
-                  icon="shield-checkmark-outline"
-                  title={t('settings.privacyPolicy', 'Privacy Policy')}
-                  subtitle={t('settings.privacyPolicyHint', 'Review how Noto handles your data and permissions.')}
-                  onPress={openPrivacyPolicyLink}
-                />
-              ) : null}
-              {showPrivacyPolicyLink && (showSupportLink || showAccountDeletionLink) ? (
-                <CardDivider colors={colors} />
-              ) : null}
-              {showSupportLink ? (
-                <SettingRow
-                  colors={colors}
-                  icon="help-circle-outline"
-                  title={t('settings.support', 'Support')}
-                  subtitle={t('settings.supportHint', 'Contact support if sign-in, sync, or account issues need a hand.')}
-                  onPress={openSupportLink}
-                />
-              ) : null}
-              {showSupportLink && showAccountDeletionLink ? <CardDivider colors={colors} /> : null}
-              {showAccountDeletionLink ? (
-                <SettingRow
-                  colors={colors}
-                  icon="person-remove-outline"
-                  title={t('settings.accountDeletion', 'Account deletion help')}
-                  subtitle={t('settings.accountDeletionHint', 'Open the external deletion page or support contact for your store listing.')}
-                  onPress={openAccountDeletionHelpLink}
-                />
-              ) : null}
+        {sections.map((section) => (
+          <View key={section.key} style={styles.section}>
+            <SectionTitle colors={model.colors} title={section.title} />
+            <SettingsCard colors={model.colors}>
+              {section.items.map((row, index) => (
+                <React.Fragment key={row.key}>
+                  {index > 0 ? <CardDivider colors={model.colors} /> : null}
+                  <SettingRow colors={model.colors} row={row} />
+                </React.Fragment>
+              ))}
             </SettingsCard>
           </View>
-        ) : null}
+        ))}
 
         <View style={styles.footerInfo}>
-          <View style={[styles.footerDivider, { backgroundColor: colors.border }]} />
-          <Text style={[styles.footerAppName, { color: colors.text }]}>{SETTINGS_BRAND_NAME}</Text>
-          <Text style={[styles.footerTagline, { color: colors.secondaryText }]}>
-            {t('settings.about', 'So you never forget what she likes 💛')}
+          <View style={[styles.footerDivider, { backgroundColor: model.colors.border }]} />
+          <Text style={[styles.footerAppName, { color: model.colors.text }]}>{about.brandName}</Text>
+          <Text style={[styles.footerTagline, { color: model.colors.secondaryText }]}>{about.tagline}</Text>
+          <Text style={[styles.footerVersion, { color: model.colors.secondaryText }]}>
+            {about.versionLabel} {about.versionValue}
           </Text>
-          <Text style={[styles.footerVersion, { color: colors.secondaryText }]}>
-            {t('settings.version', 'Version')} {appVersion}
-          </Text>
+          {about.plusUnavailableMessage ? (
+            <Text style={[styles.footerVersion, { color: model.colors.secondaryText }]}>
+              {about.plusUnavailableMessage}
+            </Text>
+          ) : null}
         </View>
       </ScrollView>
 
       <AppSheet
         visible={sheet !== null}
         onClose={() => {
-          setShowTheme(false);
-          setShowHaptics(false);
-          setShowLanguage(false);
-          setShowSync(false);
+          model.setShowTheme(false);
+          model.setShowHaptics(false);
+          model.setShowLanguage(false);
+          model.setShowSync(false);
         }}
-        androidPresentation={sheetPresentation}
+        androidPresentation="edge"
       >
         {sheetContent}
       </AppSheet>
 
-      <AppSheetAlert {...alertProps} />
+      <AppSheetAlert {...model.alertProps} />
     </View>
   );
 }
@@ -493,5 +355,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     opacity: 0.72,
     fontFamily: 'Noto Sans',
+    textAlign: 'center',
   },
 });

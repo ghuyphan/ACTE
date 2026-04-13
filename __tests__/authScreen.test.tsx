@@ -335,6 +335,9 @@ describe('LoginScreen', () => {
     fireEvent.press(getByTestId('auth-landing-policy-consent'));
     fireEvent.press(getByTestId('auth-continue-local'));
 
+    await waitFor(() => {
+      expect(mockMarkOnboardingComplete).toHaveBeenCalled();
+    });
     expect(mockReplace).toHaveBeenCalledWith('/');
   });
 
@@ -434,5 +437,24 @@ describe('LoginScreen', () => {
     fireEvent.press(getByTestId('auth-continue-email'));
 
     expect(getByText('Sign in to share this note.')).toBeTruthy();
+  });
+
+  it('returns to a pending share handoff route after auth success', async () => {
+    mockUseLocalSearchParams.mockReturnValue({
+      intent: 'share-note',
+      returnTo: '/(tabs)?openSharedManageAt=1712220000000',
+    });
+
+    const { getByTestId } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-landing-policy-consent'));
+    await act(async () => {
+      fireEvent.press(getByTestId('auth-google-button'));
+    });
+
+    await waitFor(() => {
+      expect(mockMarkOnboardingComplete).toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledWith('/(tabs)?openSharedManageAt=1712220000000');
+    });
   });
 });

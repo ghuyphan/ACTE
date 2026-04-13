@@ -194,8 +194,28 @@ describe('useSettingsScreenModel', () => {
       result.current.openSyncScreen();
     });
 
-    expect(mockRouterPush).toHaveBeenCalledWith('/auth');
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/auth',
+      params: {
+        returnTo: '/(tabs)/settings',
+      },
+    });
     expect(result.current.showSync).toBe(false);
+  });
+
+  it('routes signed-out account entry back to settings after auth', () => {
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    act(() => {
+      result.current.openAccountScreen();
+    });
+
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/auth',
+      params: {
+        returnTo: '/(tabs)/settings',
+      },
+    });
   });
 
   it('shows off only when a signed-in user has sync disabled', () => {

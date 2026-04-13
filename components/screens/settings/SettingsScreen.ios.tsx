@@ -1,4 +1,14 @@
-import { Button, Host, HStack, Image as SwiftUIImage, List, Section, Spacer, Text as SwiftUIText, VStack } from '@expo/ui/swift-ui';
+import {
+  Button,
+  Host,
+  HStack,
+  Image as SwiftUIImage,
+  List,
+  Section,
+  Spacer,
+  Text as SwiftUIText,
+  VStack,
+} from '@expo/ui/swift-ui';
 import {
   backgroundOverlay,
   cornerRadius,
@@ -11,397 +21,214 @@ import {
 } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { Layout } from '../../../constants/theme';
 import AppSheet from '../../sheets/AppSheet';
 import AppSheetAlert from '../../sheets/AppSheetAlert';
 import SettingsHapticsSheet from '../../settings/SettingsHapticsSheet';
 import SettingsLanguageSheet from '../../settings/SettingsLanguageSheet';
 import SettingsSyncSheet from '../../settings/SettingsSyncSheet';
 import SettingsThemeSheet from '../../settings/SettingsThemeSheet';
-import { Layout } from '../../../constants/theme';
+import { buildSettingsSections, type SettingsIconKey, type SettingsRowModel } from './settingsScreenSections';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
 
-const SETTINGS_BRAND_NAME = 'ノート';
+function getIOSSymbolName(icon: SettingsIconKey, isDark: boolean) {
+  switch (icon) {
+    case 'account':
+      return 'person';
+    case 'sync':
+      return 'arrow.triangle.2.circlepath';
+    case 'plus':
+      return 'sparkles';
+    case 'language':
+      return 'globe';
+    case 'theme':
+      return isDark ? 'moon' : 'sun.max';
+    case 'haptics':
+      return 'iphone.radiowaves.left.and.right';
+    case 'notes':
+      return 'doc.text';
+    case 'trash':
+      return 'trash';
+    case 'privacy':
+      return 'shield';
+    case 'support':
+      return 'questionmark.circle';
+    case 'accountDeletion':
+      return 'person.crop.circle.badge.minus';
+    case 'version':
+      return 'app.badge';
+    case 'plusUnavailable':
+      return 'sparkles';
+  }
+}
+
+function SettingsRowIOS({
+  colors,
+  isDark,
+  row,
+}: {
+  colors: ReturnType<typeof useSettingsScreenModel>['colors'];
+  isDark: boolean;
+  row: SettingsRowModel;
+}) {
+  const iconColor = row.destructive ? colors.danger : row.icon === 'plusUnavailable' ? colors.secondaryText : colors.primary;
+  const iconBackgroundColor = row.destructive
+    ? `${colors.danger}18`
+    : row.icon === 'plusUnavailable'
+      ? `${colors.secondaryText}14`
+      : `${colors.primary}18`;
+  const content = (
+    <HStack>
+      <HStack
+        modifiers={[
+          frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
+          backgroundOverlay({ color: iconBackgroundColor }),
+          cornerRadius(7),
+          padding({ trailing: 12 }),
+        ]}
+      >
+        <SwiftUIImage systemName={getIOSSymbolName(row.icon, isDark)} color={iconColor} size={18} />
+      </HStack>
+      <SwiftUIText
+        modifiers={[foregroundStyle(row.destructive ? colors.danger : row.icon === 'plusUnavailable' ? colors.secondaryText : colors.text)]}
+      >
+        {row.title}
+      </SwiftUIText>
+      <Spacer />
+      {row.value ? (
+        <SwiftUIText
+          modifiers={[
+            foregroundStyle(row.destructive ? colors.danger : row.icon === 'plusUnavailable' ? colors.secondaryText : colors.primary),
+            ...(row.onPress || row.external ? [padding({ trailing: 4 })] : []),
+          ]}
+        >
+          {row.value}
+        </SwiftUIText>
+      ) : null}
+      {row.external ? (
+        <SwiftUIImage systemName="arrow.up.right" color={colors.secondaryText} size={14} />
+      ) : row.onPress && row.showChevron !== false ? (
+        <SwiftUIImage systemName="chevron.right" color={colors.secondaryText} size={14} />
+      ) : null}
+    </HStack>
+  );
+
+  if (!row.onPress) {
+    return content;
+  }
+
+  return <Button onPress={row.onPress}>{content}</Button>;
+}
 
 export default function SettingsScreenIOS() {
-  const {
-    accountHint,
-    accountValue,
-    appVersion,
-    alertProps,
-    colors,
-    hapticsValue,
-    isAuthAvailable,
-    isDark,
-    isPurchaseAvailable,
-    languageLabel,
-    notes,
-    openAccountScreen,
-    openAccountDeletionHelpLink,
-    openPlusScreen,
-    openPrivacyPolicyLink,
-    openSyncScreen,
-    openSupportLink,
-    plusValue,
-    promptClearAll,
-    setShowHaptics,
-    setShowLanguage,
-    setShowSync,
-    setShowTheme,
-    showHaptics,
-    showAccountDeletionLink,
-    showLanguage,
-    showPrivacyPolicyLink,
-    showSyncEntry,
-    showSupportLink,
-    showSync,
-    showTheme,
-    tier,
-    syncValue,
-    t,
-    themeLabel,
-  } = useSettingsScreenModel();
+  const model = useSettingsScreenModel();
+  const { about, sections } = buildSettingsSections(model);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Host style={styles.container} colorScheme={isDark ? 'dark' : 'light'}>
+    <View style={[styles.container, { backgroundColor: model.colors.background }]}>
+      <Host style={styles.container} colorScheme={model.isDark ? 'dark' : 'light'}>
         <List modifiers={[scrollContentBackground('hidden')]}>
-          <Section title={t('settings.account', 'Backup & Sync')}>
-            {isAuthAvailable ? (
-              <Button onPress={openAccountScreen}>
-                <HStack>
-                  <HStack
-                    modifiers={[
-                      frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                      backgroundOverlay({ color: colors.primary + '18' }),
-                      cornerRadius(7),
-                      padding({ trailing: 12 }),
-                    ]}
-                  >
-                    <SwiftUIImage systemName="person" color={colors.primary} size={18} />
-                  </HStack>
-                  <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                    {t('settings.accountEntry', 'Account')}
-                  </SwiftUIText>
-                  <Spacer />
-                  <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{accountValue}</SwiftUIText>
-                </HStack>
-              </Button>
-            ) : (
-              <HStack>
-                <HStack
-                  modifiers={[
-                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                    backgroundOverlay({ color: colors.primary + '18' }),
-                    cornerRadius(7),
-                    padding({ trailing: 12 }),
-                  ]}
-                >
-                  <SwiftUIImage
-                    systemName="person.crop.circle.badge.exclamationmark"
-                    color={colors.primary}
-                    size={18}
-                  />
-                </HStack>
-                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                  {t('settings.accountEntry', 'Account')}
-                </SwiftUIText>
-                <Spacer />
-                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{accountValue}</SwiftUIText>
-              </HStack>
-            )}
-            {showSyncEntry ? (
-              <Button onPress={openSyncScreen}>
-                <HStack>
-                  <HStack
-                    modifiers={[
-                      frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                      backgroundOverlay({ color: colors.primary + '18' }),
-                      cornerRadius(7),
-                      padding({ trailing: 12 }),
-                    ]}
-                  >
-                    <SwiftUIImage
-                      systemName="arrow.triangle.2.circlepath"
-                      color={colors.primary}
-                      size={18}
-                    />
-                  </HStack>
-                  <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                    {t('settings.autoSync', 'Auto sync')}
-                  </SwiftUIText>
-                  <Spacer />
-                  <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{syncValue}</SwiftUIText>
-                </HStack>
-              </Button>
-            ) : null}
-            <Button onPress={openPlusScreen}>
-              <HStack>
-                <HStack
-                  modifiers={[
-                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                    backgroundOverlay({ color: colors.primary + '18' }),
-                    cornerRadius(7),
-                    padding({ trailing: 12 }),
-                  ]}
-                >
-                  <SwiftUIImage systemName="sparkles" color={colors.primary} size={18} />
-                </HStack>
-                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                  {t('settings.plusTitle', 'Noto Plus')}
-                </SwiftUIText>
-                <Spacer />
-                <SwiftUIText modifiers={[foregroundStyle(colors.primary), padding({ trailing: 4 })]}>
-                  {tier === 'plus' ? t('settings.plusActive', 'Plus') : plusValue}
-                </SwiftUIText>
-                <SwiftUIImage systemName="chevron.right" color={colors.secondaryText} size={14} />
-              </HStack>
-            </Button>
-          </Section>
-
-          <Section title={t('settings.appearance', 'Appearance')}>
-            <Button onPress={() => setShowLanguage(true)}>
-              <HStack>
-                <HStack
-                  modifiers={[
-                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                    backgroundOverlay({ color: colors.primary + '18' }),
-                    cornerRadius(7),
-                    padding({ trailing: 12 }),
-                  ]}
-                >
-                  <SwiftUIImage systemName="globe" color={colors.primary} size={18} />
-                </HStack>
-                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                  {t('settings.language', 'Language')}
-                </SwiftUIText>
-                <Spacer />
-                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{languageLabel}</SwiftUIText>
-              </HStack>
-            </Button>
-            <Button onPress={() => setShowTheme(true)}>
-              <HStack>
-                <HStack
-                  modifiers={[
-                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                    backgroundOverlay({ color: colors.primary + '18' }),
-                    cornerRadius(7),
-                    padding({ trailing: 12 }),
-                  ]}
-                >
-                  <SwiftUIImage
-                    systemName={isDark ? 'moon' : 'sun.max'}
-                    color={colors.primary}
-                    size={18}
-                  />
-                </HStack>
-                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                  {t('settings.theme', 'Theme')}
-                </SwiftUIText>
-                <Spacer />
-                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{themeLabel}</SwiftUIText>
-              </HStack>
-            </Button>
-            <Button onPress={() => setShowHaptics(true)}>
-              <HStack>
-                <HStack
-                  modifiers={[
-                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                    backgroundOverlay({ color: colors.primary + '18' }),
-                    cornerRadius(7),
-                    padding({ trailing: 12 }),
-                  ]}
-                >
-                  <SwiftUIImage systemName="iphone.radiowaves.left.and.right" color={colors.primary} size={18} />
-                </HStack>
-                <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                  {t('settings.haptics', 'Haptics')}
-                </SwiftUIText>
-                <Spacer />
-                <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{hapticsValue}</SwiftUIText>
-              </HStack>
-            </Button>
-          </Section>
-
-          <Section title={t('settings.notes', 'Notes')}>
-            <HStack>
-              <HStack
-                modifiers={[
-                  frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                  backgroundOverlay({ color: colors.primary + '18' }),
-                  cornerRadius(7),
-                  padding({ trailing: 12 }),
-                ]}
-              >
-                <SwiftUIImage systemName="doc.text" color={colors.primary} size={18} />
-              </HStack>
-              <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                {t('settings.noteCount', 'Saved Notes')}
-              </SwiftUIText>
-              <Spacer />
-              <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{`${notes.length}`}</SwiftUIText>
-            </HStack>
-            <Button onPress={promptClearAll}>
-              <HStack>
-                <HStack
-                  modifiers={[
-                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                    backgroundOverlay({ color: colors.danger + '18' }),
-                    cornerRadius(7),
-                    padding({ trailing: 12 }),
-                  ]}
-                >
-                  <SwiftUIImage systemName="trash" color={colors.danger} size={18} />
-                </HStack>
-                <SwiftUIText modifiers={[foregroundStyle(colors.danger)]}>
-                  {t('settings.clearAll', 'Clear All Notes')}
-                </SwiftUIText>
-              </HStack>
-            </Button>
-          </Section>
-
-          {(showPrivacyPolicyLink || showSupportLink || showAccountDeletionLink) ? (
-            <Section title={t('settings.supportTitle', 'Support')}>
-              {showPrivacyPolicyLink ? (
-                <Button onPress={openPrivacyPolicyLink}>
-                  <HStack>
-                    <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                      {t('settings.privacyPolicy', 'Privacy Policy')}
-                    </SwiftUIText>
-                    <Spacer />
-                    <SwiftUIImage systemName="arrow.up.right" color={colors.secondaryText} size={14} />
-                  </HStack>
-                </Button>
-              ) : null}
-              {showSupportLink ? (
-                <Button onPress={openSupportLink}>
-                  <HStack>
-                    <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                      {t('settings.support', 'Support')}
-                    </SwiftUIText>
-                    <Spacer />
-                    <SwiftUIImage systemName="arrow.up.right" color={colors.secondaryText} size={14} />
-                  </HStack>
-                </Button>
-              ) : null}
-              {showAccountDeletionLink ? (
-                <Button onPress={openAccountDeletionHelpLink}>
-                  <HStack>
-                    <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                      {t('settings.accountDeletion', 'Account deletion help')}
-                    </SwiftUIText>
-                    <Spacer />
-                    <SwiftUIImage systemName="arrow.up.right" color={colors.secondaryText} size={14} />
-                  </HStack>
-                </Button>
-              ) : null}
+          {sections.map((section) => (
+            <Section key={section.key} title={section.title}>
+              {section.items.map((row) => (
+                <SettingsRowIOS
+                  key={row.key}
+                  colors={model.colors}
+                  isDark={model.isDark}
+                  row={row}
+                />
+              ))}
             </Section>
-          ) : null}
+          ))}
 
           <Section
-            title={t('settings.aboutTitle', 'About')}
+            title={model.t('settings.aboutTitle', 'About')}
             footer={
               <HStack>
                 <Spacer />
                 <VStack alignment="center" modifiers={[padding({ top: 20, bottom: 20 })]}>
                   <SwiftUIText
                     modifiers={[
-                      foregroundStyle(colors.text),
+                      foregroundStyle(model.colors.text),
                       font({ size: 14, weight: 'medium' }),
                       multilineTextAlignment('center'),
                       padding({ bottom: 10 }),
                     ]}
                   >
-                    {SETTINGS_BRAND_NAME}
+                    {about.brandName}
                   </SwiftUIText>
                   <SwiftUIText
                     modifiers={[
-                      foregroundStyle(colors.text),
+                      foregroundStyle(model.colors.text),
                       font({ size: 14, weight: 'medium' }),
                       multilineTextAlignment('center'),
                       padding({ bottom: 10 }),
                     ]}
                   >
-                    {t('settings.about', 'So you never forget what she likes 💛')}
+                    {about.tagline}
                   </SwiftUIText>
                 </VStack>
                 <Spacer />
               </HStack>
             }
           >
-            <HStack>
-              <HStack
-                modifiers={[
-                  frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                  backgroundOverlay({ color: colors.primary + '18' }),
-                  cornerRadius(7),
-                  padding({ trailing: 12 }),
-                ]}
-              >
-                <SwiftUIImage systemName="app.badge" color={colors.primary} size={18} />
-              </HStack>
-              <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                {t('settings.version', 'Version')}
-              </SwiftUIText>
-              <Spacer />
-              <SwiftUIText modifiers={[foregroundStyle(colors.primary)]}>{appVersion}</SwiftUIText>
-            </HStack>
-            {!isPurchaseAvailable ? (
-              <HStack>
-                <HStack
-                  modifiers={[
-                    frame({ width: Layout.iconBadge, height: Layout.iconBadge, alignment: 'center' }),
-                    backgroundOverlay({ color: colors.secondaryText + '14' }),
-                    cornerRadius(7),
-                    padding({ trailing: 12 }),
-                  ]}
-                >
-                  <SwiftUIImage
-                    systemName="sparkles"
-                    color={colors.secondaryText}
-                    size={18}
-                  />
-                </HStack>
-                <SwiftUIText modifiers={[foregroundStyle(colors.secondaryText)]}>
-                  {t('settings.plusUnavailable', 'Plus is coming soon to this build.')}
-                </SwiftUIText>
-              </HStack>
+            <SettingsRowIOS
+              colors={model.colors}
+              isDark={model.isDark}
+              row={{
+                key: 'version',
+                icon: 'version',
+                title: about.versionLabel,
+                value: about.versionValue,
+              }}
+            />
+            {about.plusUnavailableMessage ? (
+              <SettingsRowIOS
+                colors={model.colors}
+                isDark={model.isDark}
+                row={{
+                  key: 'plus-unavailable',
+                  icon: 'plusUnavailable',
+                  title: about.plusUnavailableMessage,
+                }}
+              />
             ) : null}
           </Section>
         </List>
 
         <AppSheet
-          visible={showTheme}
-          onClose={() => setShowTheme(false)}
+          visible={model.showTheme}
+          onClose={() => model.setShowTheme(false)}
           iosContentType="swift-ui"
         >
           <SettingsThemeSheet />
         </AppSheet>
 
         <AppSheet
-          visible={showHaptics}
-          onClose={() => setShowHaptics(false)}
+          visible={model.showHaptics}
+          onClose={() => model.setShowHaptics(false)}
           iosContentType="swift-ui"
         >
           <SettingsHapticsSheet />
         </AppSheet>
 
         <AppSheet
-          visible={showLanguage}
-          onClose={() => setShowLanguage(false)}
+          visible={model.showLanguage}
+          onClose={() => model.setShowLanguage(false)}
           iosContentType="swift-ui"
         >
           <SettingsLanguageSheet />
         </AppSheet>
 
         <AppSheet
-          visible={showSync}
-          onClose={() => setShowSync(false)}
+          visible={model.showSync}
+          onClose={() => model.setShowSync(false)}
           iosContentType="swift-ui"
         >
-          <SettingsSyncSheet accountHint={accountHint} />
+          <SettingsSyncSheet accountHint={model.accountHint} />
         </AppSheet>
       </Host>
-      <AppSheetAlert {...alertProps} />
+      <AppSheetAlert {...model.alertProps} />
     </View>
   );
 }

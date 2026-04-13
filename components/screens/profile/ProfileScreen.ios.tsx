@@ -23,27 +23,78 @@ import {
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import ProfileAvatar from './ProfileAvatar';
-import UsernameEditSheet from './UsernameEditSheet';
+import { buildProfileSections, type ProfileIconKey, type ProfileRowModel } from './profileScreenSections';
 import { useProfileScreenModel } from './useProfileScreenModel';
+import UsernameEditSheet from './UsernameEditSheet';
+
+function getIOSSymbolName(icon: ProfileIconKey) {
+  switch (icon) {
+    case 'name':
+      return 'person';
+    case 'username':
+      return 'at';
+    case 'email':
+      return 'envelope';
+    case 'signIn':
+      return 'arrow.right.circle';
+    case 'signOut':
+      return 'rectangle.portrait.and.arrow.right';
+    case 'deleteAccount':
+      return 'trash';
+  }
+}
 
 function KeyValueRow({
   colors,
-  label,
-  value,
+  row,
 }: {
   colors: ReturnType<typeof useProfileScreenModel>['colors'];
-  label: string;
-  value: string;
+  row: ProfileRowModel;
 }) {
-  return (
+  const iconColor = row.destructive ? colors.danger : colors.primary;
+  const content = (
     <HStack>
-      <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>{label}</SwiftUIText>
-      <Spacer />
-      <SwiftUIText modifiers={[foregroundStyle(colors.secondaryText), multilineTextAlignment('trailing')]}>
-        {value}
+      <HStack
+        modifiers={[
+          frame({ width: 28, height: 28, alignment: 'center' }),
+          backgroundOverlay({ color: row.destructive ? `${colors.danger}18` : `${colors.primary}18` }),
+          cornerRadius(999),
+          padding({ trailing: 12 }),
+        ]}
+      >
+        {row.loading ? (
+          <RNHostView matchContents>
+            <View style={styles.rowSpinner}>
+              <ActivityIndicator size="small" color={iconColor} />
+            </View>
+          </RNHostView>
+        ) : (
+          <SwiftUIImage systemName={getIOSSymbolName(row.icon)} color={iconColor} size={14} />
+        )}
+      </HStack>
+      <SwiftUIText modifiers={[foregroundStyle(row.destructive ? colors.danger : colors.text)]}>
+        {row.title}
       </SwiftUIText>
+      <Spacer />
+      {row.value ? (
+        <SwiftUIText modifiers={[foregroundStyle(colors.secondaryText), multilineTextAlignment('trailing')]}>
+          {row.value}
+        </SwiftUIText>
+      ) : row.onPress ? (
+        <SwiftUIImage
+          systemName="chevron.right"
+          color={row.destructive ? colors.danger : colors.secondaryText}
+          size={14}
+        />
+      ) : null}
     </HStack>
   );
+
+  if (!row.onPress) {
+    return content;
+  }
+
+  return <Button onPress={row.onPress}>{content}</Button>;
 }
 
 function MembershipBadge({
@@ -59,7 +110,7 @@ function MembershipBadge({
     <SwiftUIText
       modifiers={[
         foregroundStyle(isPlus ? colors.primary : colors.secondaryText),
-        backgroundOverlay({ color: isPlus ? colors.primary + '14' : colors.border + '99' }),
+        backgroundOverlay({ color: isPlus ? `${colors.primary}14` : `${colors.border}99` }),
         cornerRadius(999),
         font({ size: 12, weight: 'semibold' }),
         padding({ top: 6, bottom: 6, leading: 10, trailing: 10 }),
@@ -71,159 +122,85 @@ function MembershipBadge({
 }
 
 export default function ProfileScreenIOS() {
-  const {
-    avatarLabel,
-    avatarUrl,
-    canEditAvatar,
-    canEditUsername,
-    closeUsernameEditor,
-    colors,
-    handleChangeAvatar,
-    isAuthAvailable,
-    isDark,
-    isDeletingAccount,
-    isSigningOut,
-    isSavingUsername,
-    isUpdatingAvatar,
-    isUsernameSheetVisible,
-    membershipLabel,
-    openSignIn,
-    openUsernameEditor,
-    profileName,
-    profileSecondaryLabel,
-    saveUsername,
-    setUsernameDraft,
-    t,
-    tier,
-    usernameDraft,
-    usernameErrorMessage,
-    usernameHelperText,
-    user,
-    handleDeleteAccount,
-    handleSignOut,
-  } = useProfileScreenModel();
-  const topContentPadding = 16;
+  const model = useProfileScreenModel();
+  const { signedInSections, signedOutCta } = buildProfileSections(model);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Host style={styles.container} colorScheme={isDark ? 'dark' : 'light'}>
+    <View style={[styles.container, { backgroundColor: model.colors.background }]}>
+      <Host style={styles.container} colorScheme={model.isDark ? 'dark' : 'light'}>
         <List modifiers={[scrollContentBackground('hidden')]}>
-          {user ? (
+          {model.user ? (
             <>
               <Section>
-                <HStack modifiers={[padding({ top: topContentPadding, bottom: 4 })]}>
+                <HStack modifiers={[padding({ top: 16, bottom: 4 })]}>
                   <RNHostView matchContents>
                     <View style={styles.avatarHost}>
                       <ProfileAvatar
-                        avatarLabel={avatarLabel}
-                        avatarUrl={avatarUrl}
-                        accessibilityLabel={t('profile.avatarChangeA11y', 'Change avatar')}
-                        colors={colors}
-                        disabled={!canEditAvatar}
-                        isLoading={isUpdatingAvatar}
+                        avatarLabel={model.avatarLabel}
+                        avatarUrl={model.avatarUrl}
+                        accessibilityLabel={model.t('profile.avatarChangeA11y', 'Change avatar')}
+                        colors={model.colors}
+                        disabled={!model.canEditAvatar}
+                        isLoading={model.isUpdatingAvatar}
                         size={48}
                         labelFontSize={20}
-                        onPress={handleChangeAvatar}
+                        onPress={model.handleChangeAvatar}
                       />
                     </View>
                   </RNHostView>
                   <VStack alignment="leading" modifiers={[padding({ leading: 12 })]}>
-                    <SwiftUIText modifiers={[foregroundStyle(colors.text), font({ size: 20, weight: 'semibold' })]}>
-                      {profileName}
+                    <SwiftUIText modifiers={[foregroundStyle(model.colors.text), font({ size: 20, weight: 'semibold' })]}>
+                      {model.profileName}
                     </SwiftUIText>
-                    {profileSecondaryLabel ? (
-                      <SwiftUIText modifiers={[foregroundStyle(colors.secondaryText), font({ size: 14 })]}>
-                        {profileSecondaryLabel}
+                    {model.profileSecondaryLabel ? (
+                      <SwiftUIText modifiers={[foregroundStyle(model.colors.secondaryText), font({ size: 14 })]}>
+                        {model.profileSecondaryLabel}
                       </SwiftUIText>
                     ) : null}
                   </VStack>
                   <Spacer />
-                  <MembershipBadge colors={colors} isPlus={tier === 'plus'} label={membershipLabel} />
+                  <MembershipBadge colors={model.colors} isPlus={model.tier === 'plus'} label={model.membershipLabel} />
                 </HStack>
               </Section>
 
-              <Section
-                title={t('profile.accountTitle', 'Connected account')}
-              >
-                <KeyValueRow colors={colors} label={t('profile.name', 'Name')} value={user.displayName || t('profile.noName', 'Noto account')} />
-                {user.username ? (
-                  <KeyValueRow colors={colors} label={t('profile.username', 'Username')} value={`@${user.username}`} />
-                ) : null}
-                {canEditUsername ? (
-                  <Button onPress={openUsernameEditor}>
-                    <HStack>
-                      <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                        {t('profile.usernameEditCta', 'Choose your permanent username')}
-                      </SwiftUIText>
-                    </HStack>
-                  </Button>
-                ) : null}
-                {!user.username && user.email ? (
-                  <KeyValueRow colors={colors} label={t('profile.email', 'Email')} value={user.email} />
-                ) : null}
-              </Section>
-
-              <Section title={t('profile.actionsTitle', 'Actions')}>
-                <Button onPress={handleSignOut}>
-                  <HStack>
-                    {isSigningOut && !isDeletingAccount ? (
-                      <RNHostView matchContents>
-                        <View style={styles.rowSpinner}>
-                          <ActivityIndicator size="small" color={colors.text} />
-                        </View>
-                      </RNHostView>
-                    ) : null}
-                    <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                      {t('profile.logout', 'Log out')}
-                    </SwiftUIText>
-                  </HStack>
-                </Button>
-                <Button onPress={handleDeleteAccount}>
-                  <HStack>
-                    {isDeletingAccount ? (
-                      <RNHostView matchContents>
-                        <View style={styles.rowSpinner}>
-                          <ActivityIndicator size="small" color={colors.danger} />
-                        </View>
-                      </RNHostView>
-                    ) : null}
-                    <SwiftUIText modifiers={[foregroundStyle(colors.danger)]}>
-                      {t('profile.deleteAccount', 'Delete account')}
-                    </SwiftUIText>
-                  </HStack>
-                </Button>
-              </Section>
+              {signedInSections.map((section) => (
+                <Section key={section.key} title={section.title}>
+                  {section.items.map((row) => (
+                    <KeyValueRow key={row.key} colors={model.colors} row={row} />
+                  ))}
+                </Section>
+              ))}
             </>
           ) : (
             <>
               <Section>
-                <VStack alignment="leading" modifiers={[padding({ top: topContentPadding, bottom: 8 })]}>
+                <VStack alignment="leading" modifiers={[padding({ top: 16, bottom: 8 })]}>
                   <HStack
                     modifiers={[
                       frame({ width: 48, height: 48, alignment: 'center' }),
-                      backgroundOverlay({ color: colors.primary + '18' }),
+                      backgroundOverlay({ color: `${model.colors.primary}18` }),
                       cornerRadius(24),
                     ]}
                   >
-                    <SwiftUIImage systemName="person.crop.circle.badge.exclamationmark" color={colors.primary} size={26} />
+                    <SwiftUIImage systemName="person.crop.circle.badge.exclamationmark" color={model.colors.primary} size={26} />
                   </HStack>
-                  <SwiftUIText modifiers={[foregroundStyle(colors.text), font({ size: 20, weight: 'semibold' }), padding({ top: 12 })]}>
-                    {t('profile.signedOutTitle', 'No account connected')}
+                  <SwiftUIText modifiers={[foregroundStyle(model.colors.text), font({ size: 20, weight: 'semibold' }), padding({ top: 12 })]}>
+                    {model.t('profile.signedOutTitle', 'No account connected')}
                   </SwiftUIText>
                   <SwiftUIText
                     modifiers={[
-                      foregroundStyle(colors.secondaryText),
+                      foregroundStyle(model.colors.secondaryText),
                       font({ size: 14 }),
                       multilineTextAlignment('leading'),
                       padding({ top: 8 }),
                     ]}
                   >
-                    {isAuthAvailable
-                      ? t(
+                    {model.isAuthAvailable
+                      ? model.t(
                           'profile.signedOutMsg',
                           'Sign in to back up your notes and keep them synced across your devices.'
                         )
-                      : t(
+                      : model.t(
                           'profile.unavailableMsg',
                           'Account sign-in is unavailable right now, but your notes stay safely on this device.'
                         )}
@@ -231,17 +208,9 @@ export default function ProfileScreenIOS() {
                 </VStack>
               </Section>
 
-              {isAuthAvailable ? (
-                <Section title={t('settings.accountEntry', 'Account')}>
-                  <Button onPress={openSignIn}>
-                    <HStack>
-                      <SwiftUIText modifiers={[foregroundStyle(colors.text)]}>
-                        {t('settings.login', 'Sign In')}
-                      </SwiftUIText>
-                      <Spacer />
-                      <SwiftUIImage systemName="chevron.right" color={colors.secondaryText} size={14} />
-                    </HStack>
-                  </Button>
+              {signedOutCta ? (
+                <Section title={model.t('settings.accountEntry', 'Account')}>
+                  <KeyValueRow colors={model.colors} row={signedOutCta} />
                 </Section>
               ) : null}
             </>
@@ -249,17 +218,17 @@ export default function ProfileScreenIOS() {
         </List>
       </Host>
       <UsernameEditSheet
-        visible={isUsernameSheetVisible}
-        value={usernameDraft}
-        errorMessage={usernameErrorMessage}
-        helperText={usernameHelperText}
-        isSaving={isSavingUsername}
-        onChangeValue={setUsernameDraft}
-        onClose={closeUsernameEditor}
-        onSave={saveUsername}
-        title={t('profile.usernameSheetTitle', 'Choose your username')}
-        subtitle={t('profile.usernameSheetSubtitle', 'This will be your short in-app name.')}
-        saveLabel={t('profile.usernameSave', 'Save username')}
+        visible={model.isUsernameSheetVisible}
+        value={model.usernameDraft}
+        errorMessage={model.usernameErrorMessage}
+        helperText={model.usernameHelperText}
+        isSaving={model.isSavingUsername}
+        onChangeValue={model.setUsernameDraft}
+        onClose={model.closeUsernameEditor}
+        onSave={model.saveUsername}
+        title={model.t('profile.usernameSheetTitle', 'Choose your username')}
+        subtitle={model.t('profile.usernameSheetSubtitle', 'This will be your short in-app name.')}
+        saveLabel={model.t('profile.usernameSave', 'Save username')}
       />
     </View>
   );
@@ -280,6 +249,5 @@ const styles = StyleSheet.create({
     height: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
   },
 });

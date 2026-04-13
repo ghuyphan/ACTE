@@ -1,6 +1,6 @@
 import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
 import * as SystemUI from 'expo-system-ui';
-import { SplashScreen, Stack } from 'expo-router';
+import { SplashScreen } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,7 @@ import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import AppProviders from '../components/app/AppProviders';
+import RootStackNavigator from '../components/app/RootStackNavigator';
 import StartupErrorView from '../components/app/StartupErrorView';
 import {
   createSolidBackScreenOptions,
@@ -141,50 +142,7 @@ function AppContent() {
             startupError={startupError}
           />
         ) : (
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="auth/index" options={rootScreenOptions.authEntry} />
-          <Stack.Screen name="auth/profile" options={rootScreenOptions.profile} />
-          <Stack.Screen name="plus" options={rootScreenOptions.plus} />
-          <Stack.Screen name="auth/onboarding" />
-          <Stack.Screen
-            name="(tabs)"
-            options={{
-              title: homeTitle,
-            }}
-          />
-          <Stack.Screen
-            name="friends/join"
-            options={{
-              headerShown: false,
-              presentation: 'transparentModal',
-              animation: 'fade',
-            }}
-          />
-          <Stack.Screen
-            name="note/[id]"
-            options={{
-              presentation: 'transparentModal',
-              animation: 'none',
-            }}
-          />
-          <Stack.Screen
-            name="notes/index"
-            options={{
-              ...rootScreenOptions.notesIndex,
-              animation: 'slide_from_left',
-            }}
-          />
-          <Stack.Screen name="notes/stickers" options={rootScreenOptions.stickerLibrary} />
-          <Stack.Screen name="shared/index" />
-          <Stack.Screen
-            name="shared/[id]"
-            options={{
-              presentation: 'transparentModal',
-              animation: 'none',
-            }}
-          />
-        </Stack>
+          <RootStackNavigator homeTitle={homeTitle} rootScreenOptions={rootScreenOptions} />
         )}
       </View>
     </NavThemeProvider>
