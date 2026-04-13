@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../sheets/AppSheetAlert';
 import CaptureCard, { type CaptureCardHandle } from '../home/CaptureCard';
 import {
+  buildHomeFeedItems,
   findHomeFeedItemIndex,
   getHomeFeedItemKey,
 } from '../home/feedItems';
@@ -26,7 +27,6 @@ import HomeHeaderSearch from '../home/HomeHeaderSearch';
 import NotesFeed from '../home/NotesFeed';
 import SavedNotePolaroidReveal from '../home/SavedNotePolaroidReveal';
 import SharedManageSheet from '../home/SharedManageSheet';
-import { useHomeFeedPagination } from '../../hooks/app/useHomeFeedPagination';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
@@ -72,7 +72,7 @@ import {
   isPreviewablePremiumNoteColor,
   PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
 } from '../../services/premiumNoteFinish';
-import { generateNoteId, getActiveNotesScope, LOCAL_NOTES_SCOPE, type Note } from '../../services/database';
+import { generateNoteId, type Note } from '../../services/database';
 import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
 import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition';
@@ -90,10 +90,6 @@ function logHomeFeedDebug(event: string, payload: Record<string, unknown>) {
   }
 
   console.log(`[home-feed] ${event}`, payload);
-}
-
-function resolveHomeNotesScope(userUid: string | null | undefined) {
-  return userUid ?? getActiveNotesScope() ?? LOCAL_NOTES_SCOPE;
 }
 
 export default function HomeScreen() {
@@ -307,20 +303,10 @@ export default function HomeScreen() {
     () => sharedPosts.filter((post) => post.authorUid !== user?.uid),
     [sharedPosts, user?.uid]
   );
-  const notesScope = useMemo(
-    () => resolveHomeNotesScope(user?.uid),
-    [user?.uid]
+  const homeFeedItems = useMemo(
+    () => buildHomeFeedItems(notes, sharedEnabled ? friendPosts : sharedPosts),
+    [friendPosts, notes, sharedEnabled, sharedPosts]
   );
-  const {
-    items: homeFeedItems,
-    hasMore: homeFeedHasMore,
-    loadNextPage: loadNextHomeFeedPage,
-  } = useHomeFeedPagination({
-    notesScope,
-    sharedCacheUserUid: sharedEnabled ? user?.uid ?? null : null,
-    notesSignal: notes,
-    sharedSignal: sharedPosts,
-  });
   const photoNoteCount = useMemo(
     () => Math.max(localDailyPhotoNoteCount, remotePhotoNoteCount ?? 0),
     [localDailyPhotoNoteCount, remotePhotoNoteCount]
@@ -457,12 +443,10 @@ export default function HomeScreen() {
       loadedNotesCount: notes.length,
       loading,
       sharedLoading,
-      homeFeedHasMore,
       homeFeedItemsCount: homeFeedItems.length,
       visibleFeedItemsCount: visibleFeedItems.length,
     });
   }, [
-    homeFeedHasMore,
     homeFeedItems.length,
     loading,
     notes.length,
@@ -1902,21 +1886,6 @@ export default function HomeScreen() {
           onRefresh={() => {
             void onRefresh();
           }}
-          onEndReached={
-            homeFeedHasMore
-              ? () => {
-                  logHomeFeedDebug('onEndReached', {
-                    userUid: user?.uid ?? null,
-                    loadedNotesCount: notes.length,
-                    loading,
-                    sharedLoading,
-                    homeFeedHasMore,
-                    visibleFeedItemsCount: visibleFeedItems.length,
-                  });
-                  void loadNextHomeFeedPage();
-                }
-              : undefined
-          }
           topInset={insets.top}
           snapHeight={snapHeight}
           onOpenNote={openNote}

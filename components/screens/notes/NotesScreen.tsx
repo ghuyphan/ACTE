@@ -20,7 +20,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout } from '../../../constants/theme';
 import { DOODLE_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
-import { useHomeFeedPagination } from '../../../hooks/app/useHomeFeedPagination';
 import { useAuth } from '../../../hooks/useAuth';
 import { useFeedFocus } from '../../../hooks/useFeedFocus';
 import { useNotesStore } from '../../../hooks/useNotes';
@@ -33,21 +32,16 @@ import RecapModeSwitch, {
   type RecapMode,
 } from '../../notes/recap/RecapModeSwitch';
 import StickerIcon from '../../ui/StickerIcon';
-import {
-  getGradientStickerMotionVariant,
-  getNoteColorStickerMotion,
-  getTextNoteCardGradient,
-  type StickerMotionVariant,
-} from '../../../services/noteAppearance';
-import { parseNoteDoodleStrokes } from '../../../services/noteDoodles';
-import { parseNoteStickerPlacements } from '../../../services/noteStickers';
-import { getNotePhotoUri } from '../../../services/photoStorage';
 import { SHARED_POST_MEDIA_BUCKET } from '../../../services/remoteMedia';
-import { getHomeFeedItemKey, type HomeFeedItem } from '../../home/feedItems';
-import { getActiveNotesScope, LOCAL_NOTES_SCOPE } from '../../../services/database';
+import {
+  buildHomeFeedItems,
+  getHomeFeedItemKey,
+  type HomeFeedItem,
+} from '../../home/feedItems';
 import { scheduleOnIdle } from '../../../utils/scheduleOnIdle';
 import { useNotesGridSharedPhotoHydration } from './useNotesGridSharedPhotoHydration';
 import { GlassView } from '../../ui/GlassView';
+import { buildNotesGridTileModels } from './buildNotesGridTileModels';
 
 const GRID_DOODLE_STROKE_WIDTH = 4.5;
 const GRID_STICKER_MIN_SIZE = 0;
@@ -55,10 +49,6 @@ const GRID_DECORATION_REVEAL_DELAY_MS = 180;
 const MODE_SWIPE_DISTANCE = 56;
 const MODE_SWIPE_VELOCITY = 460;
 const NOTES_BROWSE_MODE_ORDER: RecapMode[] = ['all', 'recap'];
-
-function resolveNotesArchiveScope(userUid: string | null | undefined) {
-  return userUid ?? getActiveNotesScope() ?? LOCAL_NOTES_SCOPE;
-}
 
 function triggerNotesHaptic(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
   void Haptics.impactAsync(style);
@@ -105,17 +95,15 @@ function areStringArraysEqual(left: readonly string[], right: readonly string[])
 }
 
 const GridTile = memo(function GridTile({
-  item,
+  model,
   size,
   gap,
   colors,
   onPress,
   index,
-  photoFallbackLabel,
-  showDecorations,
   sharedPhotoUri,
 }: {
-  item: HomeFeedItem;
+  model: ReturnType<typeof buildNotesGridTileModels>[number];
   size: number;
   gap: number;
   colors: {
@@ -126,59 +114,13 @@ const GridTile = memo(function GridTile({
   };
   onPress: () => void;
   index: number;
-  photoFallbackLabel: string;
-  showDecorations: boolean;
   sharedPhotoUri: string | null;
 }) {
   const imageUri =
-    item.kind === 'note'
-      ? getNotePhotoUri(item.note)
-      : item.post.type === 'photo'
-        ? sharedPhotoUri ?? ''
-        : '';
-  const isPhotoTile = (item.kind === 'note' ? item.note.type : item.post.type) === 'photo';
-  const noteId = item.kind === 'note' ? item.note.id : item.post.id;
-  const noteEmoji = item.kind === 'note' ? item.note.moodEmoji : null;
-  const noteColor = item.kind === 'note' ? item.note.noteColor : item.post.noteColor;
-  const doodleStrokesJson =
-    item.kind === 'note'
-      ? item.note.doodleStrokesJson
-      : item.post.doodleStrokesJson ?? null;
-  const doodleStrokes = useMemo(
-    () => (showDecorations ? parseNoteDoodleStrokes(doodleStrokesJson) : []),
-    [doodleStrokesJson, showDecorations]
-  );
-  const stickerPlacementsJson =
-    item.kind === 'note'
-      ? item.note.stickerPlacementsJson ?? null
-      : item.post.stickerPlacementsJson ?? null;
-  const stickerPlacements = useMemo(
-    () => (showDecorations ? parseNoteStickerPlacements(stickerPlacementsJson) : []),
-    [showDecorations, stickerPlacementsJson]
-  );
-  const text =
-    item.kind === 'note'
-      ? item.note.content.trim()
-      : (item.post.text || '').trim();
-  const textGradient = useMemo(
-    () =>
-      getTextNoteCardGradient({
-        text,
-        noteId,
-        emoji: noteEmoji,
-        noteColor,
-      }),
-    [noteColor, noteEmoji, noteId, text]
-  );
-  const stickerMotionVariant = useMemo<StickerMotionVariant>(() => {
-    if (isPhotoTile) {
-      return 'physics';
-    }
-
-    return getNoteColorStickerMotion(noteColor) ?? getGradientStickerMotionVariant(textGradient);
-  }, [isPhotoTile, noteColor, textGradient]);
-  const tileText = text || (isPhotoTile ? photoFallbackLabel : '');
-  const showPhotoPlaceholder = item.kind === 'shared-post' && item.post.type === 'photo' && !imageUri;
+    model.item.kind === 'shared-post' && model.isPhotoTile
+      ? sharedPhotoUri ?? model.baseImageUri ?? ''
+      : model.baseImageUri ?? '';
+  const showPhotoPlaceholder = model.showPhotoPlaceholder && !imageUri;
   return (
     <Pressable
       onPress={onPress}
@@ -204,20 +146,23 @@ const GridTile = memo(function GridTile({
               contentFit="cover"
               transition={120}
             />
-            {stickerPlacements.length > 0 ? (
+            {model.stickerPlacements.length > 0 ? (
               <View pointerEvents="none" style={styles.tileDoodleOverlay}>
                 <DynamicStickerCanvas
-                  placements={stickerPlacements}
-                  remoteBucket={item.kind === 'shared-post' ? SHARED_POST_MEDIA_BUCKET : undefined}
-                  sharedCache={item.kind === 'shared-post'}
+                  placements={model.stickerPlacements}
+                  remoteBucket={model.usesSharedCache ? SHARED_POST_MEDIA_BUCKET : undefined}
+                  sharedCache={model.usesSharedCache}
                   minimumBaseSize={GRID_STICKER_MIN_SIZE}
-                  motionVariant={stickerMotionVariant}
+                  motionVariant={model.stickerMotionVariant}
                 />
               </View>
             ) : null}
-            {doodleStrokes.length > 0 ? (
+            {model.doodleStrokes.length > 0 ? (
               <View pointerEvents="none" style={styles.tileDoodleOverlay}>
-                <NoteDoodleCanvas strokes={doodleStrokes} strokeWidth={GRID_DOODLE_STROKE_WIDTH} />
+                <NoteDoodleCanvas
+                  strokes={model.doodleStrokes}
+                  strokeWidth={GRID_DOODLE_STROKE_WIDTH}
+                />
               </View>
             ) : null}
           </View>
@@ -245,26 +190,34 @@ const GridTile = memo(function GridTile({
             <ActivityIndicator size="small" color={colors.primary} />
           </View>
         ) : (
-          <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.tileTextFill}>
-            {stickerPlacements.length > 0 ? (
+          <LinearGradient
+            colors={model.textGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.tileTextFill}
+          >
+            {model.stickerPlacements.length > 0 ? (
               <View pointerEvents="none" style={[styles.tileDoodleOverlay, styles.tileTextStickerOverlay]}>
                 <DynamicStickerCanvas
-                  placements={stickerPlacements}
-                  remoteBucket={item.kind === 'shared-post' ? SHARED_POST_MEDIA_BUCKET : undefined}
-                  sharedCache={item.kind === 'shared-post'}
+                  placements={model.stickerPlacements}
+                  remoteBucket={model.usesSharedCache ? SHARED_POST_MEDIA_BUCKET : undefined}
+                  sharedCache={model.usesSharedCache}
                   minimumBaseSize={GRID_STICKER_MIN_SIZE}
-                  motionVariant={stickerMotionVariant}
+                  motionVariant={model.stickerMotionVariant}
                 />
               </View>
             ) : null}
-            {doodleStrokes.length > 0 ? (
+            {model.doodleStrokes.length > 0 ? (
               <View pointerEvents="none" style={[styles.tileDoodleOverlay, styles.tileTextDoodleOverlay]}>
-                <NoteDoodleCanvas strokes={doodleStrokes} strokeWidth={GRID_DOODLE_STROKE_WIDTH} />
+                <NoteDoodleCanvas
+                  strokes={model.doodleStrokes}
+                  strokeWidth={GRID_DOODLE_STROKE_WIDTH}
+                />
               </View>
             ) : null}
-            {tileText ? (
+            {model.tileText ? (
               <Text style={styles.tileText} numberOfLines={3}>
-                {tileText}
+                {model.tileText}
               </Text>
             ) : null}
           </LinearGradient>
@@ -273,21 +226,12 @@ const GridTile = memo(function GridTile({
     </Pressable>
   );
 }, (prevProps, nextProps) => (
-  prevProps.showDecorations === nextProps.showDecorations &&
   prevProps.index === nextProps.index &&
   prevProps.size === nextProps.size &&
   prevProps.gap === nextProps.gap &&
   prevProps.colors === nextProps.colors &&
-  prevProps.photoFallbackLabel === nextProps.photoFallbackLabel &&
   prevProps.sharedPhotoUri === nextProps.sharedPhotoUri &&
-  prevProps.item.id === nextProps.item.id &&
-  prevProps.item.kind === nextProps.item.kind &&
-  prevProps.item.createdAt === nextProps.item.createdAt &&
-  (prevProps.item.kind === 'note' && nextProps.item.kind === 'note'
-    ? prevProps.item.note === nextProps.item.note
-    : prevProps.item.kind === 'shared-post' && nextProps.item.kind === 'shared-post'
-      ? prevProps.item.post === nextProps.item.post
-      : false)
+  prevProps.model === nextProps.model
 ));
 
 export default function NotesIndexScreen() {
@@ -306,21 +250,14 @@ export default function NotesIndexScreen() {
   const [isRecapPhysicsSuspended, setIsRecapPhysicsSuspended] = useState(false);
   const [visibleSharedPhotoIds, setVisibleSharedPhotoIds] = useState<string[]>([]);
 
-  const notesScope = useMemo(
-    () => resolveNotesArchiveScope(user?.uid),
-    [user?.uid]
+  const items = useMemo(
+    () =>
+      buildHomeFeedItems(
+        notes,
+        user?.uid ? sharedPosts.filter((post) => post.authorUid !== user.uid) : sharedPosts
+      ),
+    [notes, sharedPosts, user?.uid]
   );
-  const {
-    items,
-    hasMore,
-    isLoading: isArchiveInitialLoading,
-    loadNextPage,
-  } = useHomeFeedPagination({
-    notesScope,
-    sharedCacheUserUid: user?.uid ?? null,
-    notesSignal: notes,
-    sharedSignal: sharedPosts,
-  });
   const sharedPhotoPosts = useMemo(
     () =>
       items
@@ -335,11 +272,20 @@ export default function NotesIndexScreen() {
     sharedPhotoPosts,
     visibleSharedPhotoIds
   );
+  const photoFallbackLabel = t('shared.photoMemory', 'Photo memory');
+  const tileModels = useMemo(
+    () =>
+      buildNotesGridTileModels(items, {
+        photoFallbackLabel,
+        showDecorations: showGridDecorations && mode === 'all',
+      }),
+    [items, mode, photoFallbackLabel, showGridDecorations]
+  );
 
   const handleViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: { item: HomeFeedItem }[] }) => {
+    ({ viewableItems }: { viewableItems: { item: ReturnType<typeof buildNotesGridTileModels>[number] }[] }) => {
       const nextVisibleSharedPhotoIds = viewableItems
-        .map(({ item }) => item)
+        .map(({ item }) => item.item)
         .filter(
           (item): item is Extract<HomeFeedItem, { kind: 'shared-post' }> =>
             item.kind === 'shared-post' && item.post.type === 'photo'
@@ -362,8 +308,7 @@ export default function NotesIndexScreen() {
 
   const gridGap = 10;
   const gridSize = Math.floor((width - Layout.screenPadding * 2 - gridGap * 2) / 3);
-  const isLoading =
-    isArchiveInitialLoading || ((loading || sharedLoading) && items.length === 0);
+  const isLoading = (loading || sharedLoading) && items.length === 0;
   const hasRecapNotes = notes.length > 0;
   const shouldRenderRecap = hasRecapNotes && (hasPreparedRecap || mode === 'recap');
   useEffect(() => {
@@ -587,39 +532,31 @@ export default function NotesIndexScreen() {
                     </View>
                   ) : (
                     <FlashList
-                      data={items}
-                      keyExtractor={getHomeFeedItemKey}
-                      getItemType={(item) => `${item.kind}:${item.kind === 'note' ? item.note.type : item.post.type}`}
+                      data={tileModels}
+                      keyExtractor={(model) => getHomeFeedItemKey(model.item)}
+                      getItemType={(model) =>
+                        `${model.item.kind}:${model.item.kind === 'note' ? model.item.note.type : model.item.post.type}`
+                      }
                       drawDistance={gridSize * 2}
                       removeClippedSubviews={Platform.OS === 'android'}
-                      renderItem={({ item, index }) => (
+                      renderItem={({ item: model, index }) => (
                         <GridTile
-                          item={item}
+                          model={model}
                           index={index}
                           size={gridSize}
                           gap={gridGap}
                           colors={colors}
-                          photoFallbackLabel={t('shared.photoMemory', 'Photo memory')}
-                          showDecorations={showGridDecorations && mode === 'all'}
                           sharedPhotoUri={
-                            item.kind === 'shared-post'
-                              ? sharedPhotoUrisById[item.post.id] ?? item.post.photoLocalUri ?? null
+                            model.item.kind === 'shared-post'
+                              ? sharedPhotoUrisById[model.item.post.id] ?? model.baseImageUri ?? null
                               : null
                           }
-                          onPress={() => openItem(item)}
+                          onPress={() => openItem(model.item)}
                         />
                       )}
                       onViewableItemsChanged={handleViewableItemsChanged}
                       viewabilityConfig={gridViewabilityConfig}
                       numColumns={3}
-                      onEndReached={
-                        !isArchiveInitialLoading && hasMore
-                          ? () => {
-                              void loadNextPage();
-                            }
-                          : undefined
-                      }
-                      onEndReachedThreshold={0.6}
                       showsVerticalScrollIndicator={false}
                       contentContainerStyle={{
                         paddingBottom: insets.bottom + 28,

@@ -27,8 +27,11 @@ import {
   cacheSharedFeedSnapshot,
   clearSharedFeedCache,
   getCachedSharedFeedSnapshot,
+  patchCachedSharedPostMedia,
+  pruneCachedSharedPostsForSourceNotes,
 } from '../services/sharedFeedCache';
 import { getNotePairedVideoUri } from '../services/livePhotoStorage';
+import { subscribeToDeletedNotes } from '../services/noteMutationEvents';
 import { normalizeSavedTextNoteColor } from '../services/noteAppearance';
 import { formatNoteTextWithEmoji } from '../services/noteTextPresentation';
 import { getNotePhotoUri } from '../services/photoStorage';
@@ -258,6 +261,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
       const hydratedPostMap = new Map(hydratedPosts.map((post) => [post.id, post]));
       let didChange = false;
+      const mediaPatches: Array<{
+        postId: string;
+        photoLocalUri: string | null;
+        pairedVideoLocalUri: string | null;
+      }> = [];
 
       const mergedSharedPosts = sharedPostsRef.current.map((post) => {
         const hydratedPost = hydratedPostMap.get(post.id);
@@ -277,6 +285,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         }
 
         didChange = true;
+        mediaPatches.push({
+          postId: post.id,
+          photoLocalUri: nextPhotoLocalUri,
+          pairedVideoLocalUri: nextPairedVideoLocalUri,
+        });
         return {
           ...post,
           photoLocalUri: nextPhotoLocalUri,
@@ -295,13 +308,12 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       };
 
       commitSnapshot(nextSnapshot, source, updatedAt);
-      await persistSnapshot(userUid, nextSnapshot);
+      await patchCachedSharedPostMedia(userUid, mediaPatches);
       scheduleSharedFeedWidgetRefresh();
     },
     [
       commitSnapshot,
       isCurrentSharedFeedSession,
-      persistSnapshot,
       scheduleSharedFeedWidgetRefresh,
     ]
   );
@@ -323,6 +335,49 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       });
     },
     [applySnapshot, persistSnapshot, scheduleSharedFeedWidgetRefresh]
+  );
+
+  const pruneDeletedNoteProjections = useCallback(
+    (userUid: string, noteIds: string[]) => {
+      const nextNoteIds = noteIds.map((noteId) => noteId.trim()).filter(Boolean);
+      if (nextNoteIds.length === 0) {
+        return;
+      }
+
+      const noteIdSet = new Set(nextNoteIds);
+      let didChange = false;
+      const nextSharedPosts = sharedPostsRef.current.filter((post) => {
+        const shouldRemove =
+          post.authorUid === userUid &&
+          Boolean(post.sourceNoteId && noteIdSet.has(post.sourceNoteId));
+        if (shouldRemove) {
+          didChange = true;
+        }
+        return !shouldRemove;
+      });
+
+      invalidateSharedFeedRefresh(userUid);
+      if (!didChange) {
+        return;
+      }
+
+      commitSnapshot(
+        {
+          friends: friendsRef.current,
+          sharedPosts: nextSharedPosts,
+          activeInvite: activeInviteRef.current,
+        },
+        dataSource,
+        lastUpdatedAt
+      );
+      void pruneCachedSharedPostsForSourceNotes(userUid, nextNoteIds, {
+        authorUid: userUid,
+      }).catch((error) => {
+        console.warn('Failed to prune shared-feed cache after note deletion:', error);
+      });
+      scheduleSharedFeedWidgetRefresh();
+    },
+    [commitSnapshot, dataSource, lastUpdatedAt, scheduleSharedFeedWidgetRefresh]
   );
 
   const hydrateFromCache = useCallback(async (userUid: string, sessionId: number) => {
@@ -521,6 +576,20 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       subscription.remove();
     };
   }, [enabled, isOnline, isReady, refreshAll, user]);
+
+  useEffect(() => {
+    if (!enabled || !user) {
+      return;
+    }
+
+    return subscribeToDeletedNotes((event) => {
+      if (event.scope !== user.uid) {
+        return;
+      }
+
+      pruneDeletedNoteProjections(user.uid, event.noteIds);
+    });
+  }, [enabled, pruneDeletedNoteProjections, user]);
 
   const requireUser = useCallback(() => {
     if (!enabled || !user) {
@@ -793,46 +862,17 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
           return;
         }
-        const matchingPostIdSet = new Set(matchingPostIds);
-        const nextSharedPosts = sharedPostsRef.current.filter(
-          (post) =>
-            !matchingPostIdSet.has(post.id) &&
-            !(post.authorUid === activeUser.uid && post.sourceNoteId === noteId)
-        );
-        commitSnapshotAndPersist(
-          activeUser.uid,
-          {
-            friends: friendsRef.current,
-            sharedPosts: nextSharedPosts,
-            activeInvite: activeInviteRef.current,
-          },
-          new Date().toISOString()
-        );
+        pruneDeletedNoteProjections(activeUser.uid, [noteId]);
       },
       deleteSharedNotes: async (noteIds: string[]) => {
         requireOnline();
         const activeUser = requireUser();
         const sessionId = sharedFeedSessionRef.current;
-        const deletedPostIds = await deleteOwnedSharedPostsForNotes(activeUser, noteIds);
+        await deleteOwnedSharedPostsForNotes(activeUser, noteIds);
         if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
           return;
         }
-        const deletedPostIdSet = new Set(deletedPostIds);
-        const nextNoteIdSet = new Set(noteIds.filter((noteId) => noteId.trim()));
-        const nextSharedPosts = sharedPostsRef.current.filter(
-          (post) =>
-            !deletedPostIdSet.has(post.id) &&
-            !(post.authorUid === activeUser.uid && post.sourceNoteId && nextNoteIdSet.has(post.sourceNoteId))
-        );
-        commitSnapshotAndPersist(
-          activeUser.uid,
-          {
-            friends: friendsRef.current,
-            sharedPosts: nextSharedPosts,
-            activeInvite: activeInviteRef.current,
-          },
-          new Date().toISOString()
-        );
+        pruneDeletedNoteProjections(activeUser.uid, noteIds);
       },
       deleteSharedPostById: async (postId: string) => {
         requireOnline();
@@ -870,6 +910,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       ready,
       refreshAll,
       isCurrentSharedFeedSession,
+      pruneDeletedNoteProjections,
       requireOnline,
       requireUser,
       resolveOwnedPostIdsForNote,

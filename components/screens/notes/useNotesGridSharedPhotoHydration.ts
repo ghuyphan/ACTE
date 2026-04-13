@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { normalizeOptionalString } from '../../../services/normalizedStrings';
 import { SharedPost } from '../../../services/sharedFeedService';
 import {
   downloadPhotoFromStorage,
@@ -15,7 +16,7 @@ type SharedGridPhotoEntry = {
 };
 
 function normalizePath(path: string | null | undefined) {
-  const normalizedPath = typeof path === 'string' ? path.trim() : '';
+  const normalizedPath = normalizeOptionalString(path);
   return normalizedPath || null;
 }
 

@@ -4,11 +4,15 @@ import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import AppProviders from '../components/app/AppProviders';
-import PrimaryButton from '../components/ui/PrimaryButton';
+import StartupErrorView from '../components/app/StartupErrorView';
+import {
+  createSolidBackScreenOptions,
+  createTransparentBackScreenOptions,
+} from '../components/app/rootStackOptions';
 import { useHomeStartupReady } from '../hooks/app/useHomeStartupReady';
 import { useNotesStore } from '../hooks/useNotes';
 import { useTheme } from '../hooks/useTheme';
@@ -99,104 +103,54 @@ function AppContent() {
     );
   }, [isRecovering, resetStartupData, t]);
 
-  const startupErrorMessage =
-    startupError === 'database-reset-failed'
-      ? t(
-          'startup.databaseResetFailed',
-          'Noto could not reset its local database. Please restart the app and try again.'
-        )
-      : t(
-          'startup.databaseInitFailed',
-          'Noto could not open its local database. Please restart the app and try again.'
-        );
+  const settingsTitle = t('settings.title', 'Settings');
+  const homeTitle = t('tabs.home', 'Home');
+  const rootScreenOptions = useMemo(
+    () => ({
+      authEntry: createTransparentBackScreenOptions(colors, {
+        backTitle: settingsTitle,
+      }),
+      profile: createTransparentBackScreenOptions(colors, {
+        title: t('profile.title', 'Profile'),
+        backTitle: settingsTitle,
+      }),
+      plus: createTransparentBackScreenOptions(colors, {
+        backTitle: settingsTitle,
+      }),
+      notesIndex: createSolidBackScreenOptions(colors, {
+        title: t('notes.viewAllTitle', 'All notes'),
+        backTitle: homeTitle,
+      }),
+      stickerLibrary: createSolidBackScreenOptions(colors, {
+        title: t('notes.stickerLibrary.title', 'Your stickers & stamps'),
+      }),
+    }),
+    [colors, homeTitle, settingsTitle, t]
+  );
 
   return (
     <NavThemeProvider value={navTheme}>
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         {startupError ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-            <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700', textAlign: 'center' }}>
-              {t('common.error', 'Something went wrong')}
-            </Text>
-            <Text style={{ color: colors.secondaryText, fontSize: 15, marginTop: 12, textAlign: 'center' }}>
-              {startupErrorMessage}
-            </Text>
-            <Text style={{ color: colors.secondaryText, fontSize: 13, marginTop: 12, textAlign: 'center' }}>
-              {t(
-                'startup.resetLocalDataHint',
-                'Reset local data only if retrying does not help. Synced content can come back after sign-in.'
-              )}
-            </Text>
-            <View style={{ width: '100%', maxWidth: 320, gap: 12, marginTop: 24 }}>
-              <PrimaryButton
-                label={t('startup.retryAction', 'Try again')}
-                onPress={retryStartup}
-                loading={isRecovering}
-                disabled={isRecovering}
-                testID="startup-retry-button"
-              />
-              <PrimaryButton
-                label={t('startup.resetLocalDataAction', 'Reset local data')}
-                onPress={handleResetStartupData}
-                disabled={isRecovering}
-                variant="secondary"
-                testID="startup-reset-data-button"
-              />
-            </View>
-            {isRecovering ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 }}>
-                <ActivityIndicator color={colors.primary} />
-                <Text style={{ color: colors.secondaryText, fontSize: 13, textAlign: 'center' }}>
-                  {t('startup.recoveryInProgress', 'Trying to recover your local data...')}
-                </Text>
-              </View>
-            ) : null}
-          </View>
+          <StartupErrorView
+            colors={colors}
+            isRecovering={isRecovering}
+            onRetry={retryStartup}
+            onResetLocalData={handleResetStartupData}
+            startupError={startupError}
+          />
         ) : (
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
-          <Stack.Screen
-            name="auth/index"
-            options={{
-              headerShown: true,
-              headerTransparent: true,
-              headerTitle: '',
-              headerBackTitle: t('settings.title', 'Settings'),
-              headerTintColor: colors.text,
-              headerBackButtonDisplayMode: 'minimal',
-              headerBackButtonMenuEnabled: false,
-            }}
-          />
-          <Stack.Screen
-            name="auth/profile"
-            options={{
-              headerShown: true,
-              headerTransparent: true,
-              headerTitle: t('profile.title', 'Profile'),
-              headerBackTitle: t('settings.title', 'Settings'),
-              headerTintColor: colors.text,
-              headerBackButtonDisplayMode: 'minimal',
-              headerBackButtonMenuEnabled: false,
-            }}
-          />
-          <Stack.Screen
-            name="plus"
-            options={{
-              headerShown: true,
-              headerTransparent: true,
-              headerTitle: '',
-              headerBackTitle: t('settings.title', 'Settings'),
-              headerTintColor: colors.text,
-              headerBackButtonDisplayMode: 'minimal',
-              headerBackButtonMenuEnabled: false,
-            }}
-          />
+          <Stack.Screen name="auth/index" options={rootScreenOptions.authEntry} />
+          <Stack.Screen name="auth/profile" options={rootScreenOptions.profile} />
+          <Stack.Screen name="plus" options={rootScreenOptions.plus} />
           <Stack.Screen name="auth/onboarding" />
           <Stack.Screen
             name="(tabs)"
             options={{
-              title: t('tabs.home', 'Home'),
+              title: homeTitle,
             }}
           />
           <Stack.Screen
@@ -217,35 +171,11 @@ function AppContent() {
           <Stack.Screen
             name="notes/index"
             options={{
-              headerShown: true,
-              headerTransparent: false,
-              headerShadowVisible: false,
+              ...rootScreenOptions.notesIndex,
               animation: 'slide_from_left',
-              title: t('notes.viewAllTitle', 'All notes'),
-              headerBackTitle: t('tabs.home', 'Home'),
-              headerTintColor: colors.text,
-              headerBackButtonDisplayMode: 'minimal',
-              headerBackButtonMenuEnabled: false,
-              headerStyle: {
-                backgroundColor: colors.background,
-              },
             }}
           />
-          <Stack.Screen
-            name="notes/stickers"
-            options={{
-              headerShown: true,
-              headerTransparent: false,
-              headerShadowVisible: false,
-              title: t('notes.stickerLibrary.title', 'Your stickers & stamps'),
-              headerTintColor: colors.text,
-              headerBackButtonDisplayMode: 'minimal',
-              headerBackButtonMenuEnabled: false,
-              headerStyle: {
-                backgroundColor: colors.background,
-              },
-            }}
-          />
+          <Stack.Screen name="notes/stickers" options={rootScreenOptions.stickerLibrary} />
           <Stack.Screen name="shared/index" />
           <Stack.Screen
             name="shared/[id]"

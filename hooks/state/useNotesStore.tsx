@@ -31,6 +31,7 @@ import {
   syncGeofenceRegions,
 } from '../../services/geofenceService';
 import { cleanupOrphanMediaFiles } from '../../services/mediaIntegrity';
+import { emitDeletedNotesEvent } from '../../services/noteMutationEvents';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { scheduleWidgetDataUpdate } from '../../services/widgetService';
@@ -400,6 +401,10 @@ function useNotesStoreValue(): NotesStoreValue {
 
       const nextNotes = removeNoteFromCollection(notesRef.current, id);
       commitNotes(nextNotes);
+      emitDeletedNotesEvent({
+        scope,
+        noteIds: [id],
+      });
 
       await deletePhotoFileIfPresent(note);
       syncGeofencesForNotes('note deletion', nextNotes);
@@ -425,6 +430,10 @@ function useNotesStoreValue(): NotesStoreValue {
     }
 
     commitNotes([]);
+    emitDeletedNotesEvent({
+      scope,
+      noteIds: allNotes.map((note) => note.id),
+    });
 
     for (const note of allNotes) {
       await deletePhotoFileIfPresent(note);

@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Layout } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
+import { getSharedPostPreviewText } from '../../services/noteTextPresentation';
 import { SharedPost } from '../../services/sharedFeedService';
 import { SHARED_POST_MEDIA_BUCKET } from '../../services/remoteMedia';
 import ImageMemoryCard from '../notes/ImageMemoryCard';
@@ -21,9 +22,12 @@ export default function SharedPostCardVisual({
   debugTiltOverride?: SharedValue<DebugTiltState>;
 }) {
   const { colors } = useTheme();
-  const normalizedText = post.text.trim();
+  const previewText = getSharedPostPreviewText(post, {
+    photoLabel: fallbackText,
+    emptyLabel: fallbackText,
+  });
   const shouldShowFallbackText =
-    normalizedText.length === 0 &&
+    previewText === fallbackText &&
     !post.doodleStrokesJson &&
     !post.stickerPlacementsJson &&
     !post.hasStickers;
@@ -74,7 +78,7 @@ export default function SharedPostCardVisual({
 
   return (
     <TextMemoryCard
-      text={shouldShowFallbackText ? fallbackText : post.text}
+      text={shouldShowFallbackText ? fallbackText : previewText}
       noteId={post.id}
       noteColor={post.noteColor}
       doodleStrokesJson={post.doodleStrokesJson}

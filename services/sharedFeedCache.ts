@@ -3,6 +3,7 @@ import type { FriendConnection, FriendInvite, SharedFeedSnapshot, SharedPost } f
 import { getDB, withDatabaseTransaction } from './database';
 import { clearStoredInviteToken, getStoredInviteToken } from './inviteTokenStorage';
 import { hasStoredStickerPayload } from './noteStickers';
+import { getUniqueNormalizedStrings, normalizeOptionalString } from './normalizedStrings';
 
 interface FriendRow {
   friend_uid: string;
@@ -105,8 +106,8 @@ function rowToSharedPost(row: SharedPostRow): SharedPost {
 }
 
 function rowToInvite(row: InviteRow): FriendInvite {
-  const token = row.token?.trim() ?? '';
-  const url = row.url?.trim() ?? '';
+  const token = normalizeOptionalString(row.token);
+  const url = normalizeOptionalString(row.url);
   return {
     id: row.id,
     inviterUid: row.inviter_uid,
@@ -429,6 +430,73 @@ export async function clearSharedFeedCache(userUid?: string | null): Promise<voi
     await tx.runAsync('DELETE FROM shared_feed_cache_meta WHERE user_uid = ?', userUid);
   });
   await clearStoredInviteToken(userUid).catch(() => undefined);
+}
+
+export async function patchCachedSharedPostMedia(
+  userUid: string,
+  patches: Array<{
+    postId: string;
+    photoLocalUri?: string | null;
+    pairedVideoLocalUri?: string | null;
+  }>
+) {
+  const normalizedPatches = patches
+    .map((patch) => ({
+      postId: patch.postId.trim(),
+      photoLocalUri: patch.photoLocalUri ?? null,
+      pairedVideoLocalUri: patch.pairedVideoLocalUri ?? null,
+    }))
+    .filter((patch) => Boolean(patch.postId));
+
+  if (normalizedPatches.length === 0) {
+    return;
+  }
+
+  await withDatabaseTransaction(async (tx) => {
+    for (const patch of normalizedPatches) {
+      await tx.runAsync(
+        `UPDATE shared_posts_cache
+         SET photo_local_uri = ?,
+             paired_video_local_uri = ?
+         WHERE user_uid = ?
+           AND id = ?`,
+        patch.photoLocalUri,
+        patch.pairedVideoLocalUri,
+        userUid,
+        patch.postId
+      );
+    }
+  });
+}
+
+export async function pruneCachedSharedPostsForSourceNotes(
+  userUid: string,
+  noteIds: string[],
+  options: { authorUid?: string | null } = {}
+) {
+  const normalizedNoteIds = getUniqueNormalizedStrings(noteIds);
+  if (normalizedNoteIds.length === 0) {
+    return;
+  }
+
+  const placeholders = normalizedNoteIds.map(() => '?').join(', ');
+  const params = options.authorUid
+    ? [userUid, options.authorUid, ...normalizedNoteIds]
+    : [userUid, ...normalizedNoteIds];
+
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync(
+      options.authorUid
+        ? `DELETE FROM shared_posts_cache
+           WHERE user_uid = ?
+             AND author_uid = ?
+             AND source_note_id IN (${placeholders})`
+        : `DELETE FROM shared_posts_cache
+           WHERE user_uid = ?
+             AND source_note_id IN (${placeholders})`,
+      ...params
+    );
+  });
 }
 
 export async function cacheSharedFeedSnapshot(

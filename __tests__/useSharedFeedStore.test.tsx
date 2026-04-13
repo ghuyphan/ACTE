@@ -55,6 +55,8 @@ const mockUpdateSharedPost = jest.fn();
 const mockGetCachedSharedFeedSnapshot = jest.fn();
 const mockCacheSharedFeedSnapshot = jest.fn();
 const mockClearSharedFeedCache = jest.fn();
+const mockPatchCachedSharedPostMedia = jest.fn();
+const mockPruneCachedSharedPostsForSourceNotes = jest.fn();
 const mockReplaceCachedActiveInvite = jest.fn();
 const mockScheduleWidgetDataUpdate = jest.fn();
 const mockDownloadPhotoFromStorage = jest.fn();
@@ -79,6 +81,9 @@ jest.mock('../services/sharedFeedCache', () => ({
   cacheSharedFeedSnapshot: (...args: unknown[]) => mockCacheSharedFeedSnapshot(...args),
   getCachedSharedFeedSnapshot: (...args: unknown[]) => mockGetCachedSharedFeedSnapshot(...args),
   clearSharedFeedCache: (...args: unknown[]) => mockClearSharedFeedCache(...args),
+  patchCachedSharedPostMedia: (...args: unknown[]) => mockPatchCachedSharedPostMedia(...args),
+  pruneCachedSharedPostsForSourceNotes: (...args: unknown[]) =>
+    mockPruneCachedSharedPostsForSourceNotes(...args),
   replaceCachedActiveInvite: (...args: unknown[]) => mockReplaceCachedActiveInvite(...args),
 }));
 
@@ -91,6 +96,7 @@ jest.mock('../services/sharedFeedService', () => ({
   findOwnedSharedPostIdsForNote: (...args: unknown[]) => mockFindOwnedSharedPostIdsForNote(...args),
   getSharedFeedErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : typeof error === 'string' ? error : 'unknown error',
+  invalidateSharedFeedRefresh: jest.fn(),
   refreshSharedFeed: (...args: unknown[]) => mockRefreshSharedFeed(...args),
   removeFriend: (...args: unknown[]) => mockRemoveFriend(...args),
   revokeFriendInvite: (...args: unknown[]) => mockRevokeFriendInvite(...args),
@@ -110,6 +116,7 @@ jest.mock('../services/remoteMedia', () => ({
 }));
 
 import { SharedFeedProvider, useSharedFeedStore } from '../hooks/useSharedFeed';
+import { emitDeletedNotesEvent } from '../services/noteMutationEvents';
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <SharedFeedProvider>{children}</SharedFeedProvider>
@@ -245,6 +252,8 @@ describe('useSharedFeedStore', () => {
     mockUpdateSharedPost.mockResolvedValue(undefined);
     mockCacheSharedFeedSnapshot.mockResolvedValue(undefined);
     mockClearSharedFeedCache.mockResolvedValue(undefined);
+    mockPatchCachedSharedPostMedia.mockResolvedValue(undefined);
+    mockPruneCachedSharedPostsForSourceNotes.mockResolvedValue(undefined);
     mockReplaceCachedActiveInvite.mockResolvedValue(undefined);
     jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener: (state: AppStateStatus) => void) => {
       appStateListener = listener;
@@ -366,7 +375,7 @@ describe('useSharedFeedStore', () => {
     });
   });
 
-  it('hydrates shared photo media into local state and persists the enriched snapshot', async () => {
+  it('hydrates shared photo media into local state and patches the cached media fields', async () => {
     mockCachedSnapshot = {
       friends: [],
       sharedPosts: [
@@ -414,17 +423,64 @@ describe('useSharedFeedStore', () => {
       'friend-1/friend-photo-1.mov',
       'friend-photo-1-motion'
     );
-    expect(mockCacheSharedFeedSnapshot).toHaveBeenCalledWith(
+    expect(mockPatchCachedSharedPostMedia).toHaveBeenCalledWith(
+      'me',
+      [
+        {
+          postId: 'friend-photo-1',
+          photoLocalUri: 'file:///shared/friend-photo-1.jpg',
+          pairedVideoLocalUri: 'file:///shared/friend-photo-1.mov',
+        },
+      ]
+    );
+    expect(mockCacheSharedFeedSnapshot).not.toHaveBeenCalledWith(
       'me',
       expect.objectContaining({
         sharedPosts: [
           expect.objectContaining({
             id: 'friend-photo-1',
             photoLocalUri: 'file:///shared/friend-photo-1.jpg',
-            pairedVideoLocalUri: 'file:///shared/friend-photo-1.mov',
           }),
         ],
       })
+    );
+  });
+
+  it('prunes authored shared projections when local notes are deleted', async () => {
+    mockCachedSnapshot = {
+      friends: [],
+      sharedPosts: [
+        createSharedPost({ id: 'shared-note-1', authorUid: 'me', sourceNoteId: 'note-1' }),
+        createSharedPost({ id: 'friend-post-1', authorUid: 'friend-1', sourceNoteId: 'friend-note-1' }),
+      ],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-24T00:00:00.000Z',
+    };
+
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+      expect(result.current.sharedPosts).toHaveLength(2);
+    });
+
+    act(() => {
+      emitDeletedNotesEvent({
+        scope: 'me',
+        noteIds: ['note-1'],
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.sharedPosts).toEqual([
+        expect.objectContaining({ id: 'friend-post-1', authorUid: 'friend-1' }),
+      ]);
+    });
+
+    expect(mockPruneCachedSharedPostsForSourceNotes).toHaveBeenCalledWith(
+      'me',
+      ['note-1'],
+      { authorUid: 'me' }
     );
   });
 
@@ -826,15 +882,10 @@ describe('useSharedFeedStore', () => {
         authorUid: 'friend-1',
       }),
     ]);
-    expect(mockCacheSharedFeedSnapshot).toHaveBeenCalledWith(
+    expect(mockPruneCachedSharedPostsForSourceNotes).toHaveBeenCalledWith(
       'me',
-      expect.objectContaining({
-        sharedPosts: [
-          expect.objectContaining({
-            id: 'shared-other',
-          }),
-        ],
-      })
+      ['note-1', 'note-2'],
+      { authorUid: 'me' }
     );
   });
 

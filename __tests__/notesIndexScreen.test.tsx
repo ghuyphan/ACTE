@@ -220,17 +220,6 @@ jest.mock('../hooks/useFeedFocus', () => ({
   }),
 }));
 
-jest.mock('../hooks/app/useHomeFeedPagination', () => ({
-  useHomeFeedPagination: () => ({
-    items: mockBuildArchiveItems(),
-    hasMore: false,
-    isLoading: false,
-    isLoadingMore: false,
-    loadNextPage: () => mockLoadNextArchivePage(),
-    ensureTargetLoaded: jest.fn(async () => -1),
-  }),
-}));
-
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
     loading: false,

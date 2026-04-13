@@ -1,5 +1,7 @@
+import { normalizeOptionalString } from './normalizedStrings';
+
 export function formatNoteTextWithEmoji(text: string, _emoji?: string | null) {
-  const trimmedText = typeof text === 'string' ? text.trim() : '';
+  const trimmedText = normalizeOptionalString(text);
   return trimmedText;
 }
 
@@ -25,11 +27,11 @@ export function getNotePreviewText(
   }
 ) {
   if (note.type === 'photo') {
-    const caption = note.caption?.trim();
+    const caption = normalizeOptionalString(note.caption);
     return truncatePreviewText(caption?.length ? caption : options.photoLabel, options.maxLength);
   }
 
-  const normalized = note.content.trim();
+  const normalized = normalizeOptionalString(note.content);
   if (!normalized) {
     return options.emptyLabel;
   }
@@ -51,7 +53,7 @@ export function getSharedPostPreviewText(
     maxLength?: number;
   }
 ) {
-  const normalized = post.text.trim();
+  const normalized = normalizeOptionalString(post.text);
   if (!normalized) {
     return options.photoLabel && post.type === 'photo' ? options.photoLabel : options.emptyLabel;
   }

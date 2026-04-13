@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { I18nextProvider } from 'react-i18next';
 import i18n from '../../constants/i18n';
@@ -22,59 +22,37 @@ type AppProvidersProps = {
   children: ReactNode;
 };
 
-function CoreProviders({ children }: AppProvidersProps) {
-  return (
-    <I18nextProvider i18n={i18n}>
-      <ThemeProvider>
-        <HapticsProvider>
-          <ConnectivityProvider>
-            <AuthProvider>
-              <SubscriptionProvider>{children}</SubscriptionProvider>
-            </AuthProvider>
-          </ConnectivityProvider>
-        </HapticsProvider>
-      </ThemeProvider>
-    </I18nextProvider>
-  );
-}
+type ProviderComponent = ComponentType<AppProvidersProps>;
 
-function FeatureProviders({ children }: AppProvidersProps) {
-  return (
-    <ActiveNoteProvider>
-      <ActiveFeedTargetProvider>
-        <FeedFocusProvider>
-          <HomeStartupReadyProvider>
-            <NotesProvider>
-              <SyncStatusProvider>
-                <SharedFeedProvider>
-                  <NoteDetailSheetProvider>{children}</NoteDetailSheetProvider>
-                </SharedFeedProvider>
-              </SyncStatusProvider>
-            </NotesProvider>
-          </HomeStartupReadyProvider>
-        </FeedFocusProvider>
-      </ActiveFeedTargetProvider>
-    </ActiveNoteProvider>
-  );
-}
-
-function UiProviders({ children }: AppProvidersProps) {
-  return (
-    <BottomSheetModalProvider>
-      <SavedNoteRevealUiProvider>
-        <AppAlertProvider />
-        {children}
-      </SavedNoteRevealUiProvider>
-    </BottomSheetModalProvider>
-  );
-}
+const providerChain: ProviderComponent[] = [
+  ({ children }) => <I18nextProvider i18n={i18n}>{children}</I18nextProvider>,
+  ThemeProvider,
+  HapticsProvider,
+  ConnectivityProvider,
+  AuthProvider,
+  SubscriptionProvider,
+  ActiveNoteProvider,
+  ActiveFeedTargetProvider,
+  FeedFocusProvider,
+  HomeStartupReadyProvider,
+  NotesProvider,
+  SyncStatusProvider,
+  SharedFeedProvider,
+  NoteDetailSheetProvider,
+  BottomSheetModalProvider,
+  SavedNoteRevealUiProvider,
+];
 
 export default function AppProviders({ children }: AppProvidersProps) {
+  const content = providerChain.reduceRight<ReactNode>(
+    (wrappedChildren, Provider) => <Provider>{wrappedChildren}</Provider>,
+    children
+  );
+
   return (
-    <CoreProviders>
-      <FeatureProviders>
-        <UiProviders>{children}</UiProviders>
-      </FeatureProviders>
-    </CoreProviders>
+    <>
+      <AppAlertProvider />
+      {content}
+    </>
   );
 }

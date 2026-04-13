@@ -159,17 +159,6 @@ jest.mock('../hooks/useNotes', () => ({
   }),
 }));
 
-jest.mock('../hooks/app/useHomeFeedPagination', () => ({
-  useHomeFeedPagination: () => ({
-    items: [],
-    hasMore: false,
-    isLoading: false,
-    isLoadingMore: false,
-    loadNextPage: jest.fn(async () => []),
-    ensureTargetLoaded: jest.fn(async () => -1),
-  }),
-}));
-
 jest.mock('../hooks/useSubscription', () => ({
   useSubscription: () => ({
     tier: 'free',

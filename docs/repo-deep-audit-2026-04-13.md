@@ -20,8 +20,36 @@ Notes:
 
 - This is a code review and architecture audit, not a runtime pentest.
 - `ios/` and `android/` are git-ignored in this repo, so the review focused on checked-in sources that survive prebuild.
-- `npm run typecheck` passed during this audit.
-- `npm run lint:ci` failed with 2 warnings in `components/screens/HomeScreen.tsx` and `components/screens/MapScreen.ios.tsx`.
+- This file now includes a post-audit implementation update from the remediation pass.
+
+## Status Legend
+
+- `FIXED`: implemented in this remediation pass
+- `PARTIAL`: mitigated, but more cleanup or follow-up is still warranted
+- `OPEN`: still outstanding
+
+## Implementation Update
+
+The highest-risk correctness, security, and performance issues were addressed after the original audit.
+
+Implemented and verified in this pass:
+
+- scope-safe note mutations
+- subscription snapshot hydration gating
+- shared-feed dedupe invalidation and post-mutation fresh refresh behavior
+- cached invite validation and safer invite-token handling on web
+- geofence skip-enter ordering hardening
+- widget/media payload and decode pressure reduction
+- Supabase cleanup/send-notification edge hardening
+- friend invite acceptance hardening and social notification idempotency
+- small UI race/hygiene fixes in map/search/home
+
+Still intentionally left for a later phase:
+
+- large monolith file decomposition
+- deeper provider/layout architecture cleanup
+- deeper DRY unification across platform screen pairs
+- broader performance refactors in render-heavy screens beyond the targeted fixes here
 
 ## Executive Summary
 
@@ -34,7 +62,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 
 ## Highest-Priority Findings
 
-### 1. High - Note mutations are not scope-stable across auth/scope changes
+### 1. FIXED - High - Note mutations are not scope-stable across auth/scope changes
 
 - Evidence:
   - `hooks/state/useNotesStore.tsx:261`
@@ -49,7 +77,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Pass explicit scope through every note mutation API and remove implicit `getCurrentScope()` reads from mutation paths.
 
-### 2. High - Subscription snapshot persistence can clobber cached state on startup
+### 2. FIXED - High - Subscription snapshot persistence can clobber cached state on startup
 
 - Evidence:
   - `hooks/useSubscription.tsx:240`
@@ -61,7 +89,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Gate persistence behind a hydration-complete flag and avoid writing defaults until the initial cache load finishes.
 
-### 3. High - Shared feed refresh dedupe can replay stale data right after mutations
+### 3. FIXED - High - Shared feed refresh dedupe can replay stale data right after mutations
 
 - Evidence:
   - `services/sharedFeedService.ts:748`
@@ -73,7 +101,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Invalidate the dedupe snapshot after local mutations or add a `forceFresh` path for post-mutation refreshes.
 
-### 4. High - Active invite cache is split across SQLite and AsyncStorage
+### 4. PARTIAL - High - Active invite cache is split across SQLite and AsyncStorage
 
 - Evidence:
   - `services/sharedFeedCache.ts:304`
@@ -86,8 +114,10 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
   Crashes or partial cleanup can leave stale or mismatched invite state behind, especially offline.
 - Fix direction:
   Store invite metadata and token in one durability boundary, or add validation and invalidation on every cached read.
+ - Update:
+  Cache reads now invalidate stale invites and web no longer persists invite tokens to browser storage, but the storage model is still split across two durability layers.
 
-### 5. High - `cleanup-sticker-assets` can become effectively public
+### 5. FIXED - High - `cleanup-sticker-assets` can become effectively public
 
 - Evidence:
   - `supabase/functions/cleanup-sticker-assets/index.ts:99`
@@ -99,7 +129,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Fail closed when the secret is missing, or require JWT plus server-side authorization instead of optional shared-secret auth.
 
-### 6. High - Username lookup bypasses the newer profile privacy model
+### 6. FIXED - High - Username lookup bypasses the newer profile privacy model
 
 - Evidence:
   - `supabase/migrations/20260402113000_harden_profile_visibility_and_invite_tokens.sql:1`
@@ -111,7 +141,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Re-scope the RPC to the intended privacy model, reduce returned fields, and explicitly enforce discoverability rules inside the function.
 
-### 7. High - Immediate geofence reminder suppression is racy for new notes
+### 7. FIXED - High - Immediate geofence reminder suppression is racy for new notes
 
 - Evidence:
   - `hooks/state/useNotesStore.tsx:261`
@@ -124,7 +154,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Make suppression persistence happen before geofence sync, or fold both into one ordered transaction.
 
-### 8. High - Widget image fallback can explode payload size and memory usage
+### 8. FIXED - High - Widget image fallback can explode payload size and memory usage
 
 - Evidence:
   - `services/widget/media.ts:304`
@@ -142,19 +172,20 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 
 ## Medium-Priority Findings
 
-### 9. Medium-High - Invite acceptance is not atomic
+### 9. FIXED - Medium-High - Invite acceptance is not atomic
 
 - Evidence:
   - `supabase/migrations/20260402113000_harden_profile_visibility_and_invite_tokens.sql:55`
-  - `supabase/migrations/20260402113000_harden_profile_visibility_and_invite_tokens.sql:181`
 - Problem:
-  Invite rows are read and validated before membership rows are inserted, then marked consumed later. There is no lock or atomic consume step.
+  Friend invite rows were read and validated before membership rows were inserted, then marked consumed later. There was no lock or atomic consume step.
 - Impact:
-  Two concurrent requests can potentially redeem the same single-use invite.
+  Two concurrent requests could potentially redeem the same single-use friend invite.
 - Fix direction:
   Use `SELECT ... FOR UPDATE`, or consume the invite in a single conditional update before inserting membership rows.
+ - Update:
+  This is now hardened for `accept_friend_invite`. Room invites were not changed here because the room-invite model appears intentionally reusable in this schema.
 
-### 10. Medium - Web invite tokens are stored in JS-accessible storage
+### 10. FIXED - Medium - Web invite tokens are stored in JS-accessible storage
 
 - Evidence:
   - `utils/secureStorage.ts:1`
@@ -166,7 +197,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Avoid persisting invite bearer tokens on web, or move to a server-mediated flow that does not rely on long-lived client-side invite secrets.
 
-### 11. Medium - Social push delivery lacks idempotency or rate limiting
+### 11. FIXED - Medium - Social push delivery lacks idempotency or rate limiting
 
 - Evidence:
   - `supabase/config.toml:44`
@@ -178,7 +209,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Add server-side idempotency keys, event tables, or per-user/per-event rate limiting.
 
-### 12. Medium - Shared invite suppression flag can hide valid future invites
+### 12. FIXED - Medium - Shared invite suppression flag can hide valid future invites
 
 - Evidence:
   - `hooks/useSharedFeedStore.tsx:145`
@@ -190,7 +221,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Reset suppression when the server snapshot changes or scope it only to the specific revoked invite id.
 
-### 13. Medium - Cached geofence refresh can update state after the hook should stop caring
+### 13. FIXED - Medium - Cached geofence refresh can update state after the hook should stop caring
 
 - Evidence:
   - `hooks/useGeofence.ts:136`
@@ -201,7 +232,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Add cancellation/active guards around the deferred refresh path.
 
-### 14. Medium - Local note deletion does not directly invalidate shared-feed projections
+### 14. FIXED - Medium - Local note deletion does not directly invalidate shared-feed projections
 
 - Evidence:
   - `hooks/state/useNotesStore.tsx:375`
@@ -213,8 +244,10 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
   Shared moments can remain visible locally until a later refresh.
 - Fix direction:
   Route note delete/deleteAll through shared deletion helpers or trigger an immediate shared projection invalidation.
+ - Update:
+  Note delete and delete-all mutations now emit a shared-feed invalidation event, and the shared-feed store immediately prunes owned projections plus cached rows for the active scope.
 
-### 15. Medium - Shared-feed photo hydration rewrites the whole cache too aggressively
+### 15. FIXED - Medium - Shared-feed photo hydration rewrites the whole cache too aggressively
 
 - Evidence:
   - `hooks/useSharedFeedStore.tsx:284`
@@ -225,8 +258,10 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
   Large feeds incur unnecessary SQLite churn and more widget refresh work than necessary.
 - Fix direction:
   Persist only authoritative snapshots or patch just the changed media fields.
+ - Update:
+  Shared photo hydration now patches only the affected media columns in `shared_posts_cache` instead of rewriting the full feed snapshot.
 
-### 16. Medium - Search query state is split across screen and tab shell on Android
+### 16. FIXED - Medium - Search query state is split across screen and tab shell on Android
 
 - Evidence:
   - `components/navigation/AndroidFloatingTabBar.tsx:202`
@@ -238,7 +273,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Choose one source of truth for the search query and make the other layer purely presentational.
 
-### 17. Medium - `MapScreen.ios` has an untracked delayed state update
+### 17. FIXED - Medium - `MapScreen.ios` has an untracked delayed state update
 
 - Evidence:
   - `components/screens/MapScreen.ios.tsx:672`
@@ -249,7 +284,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Store the timer in a ref and clear it on reschedule and unmount.
 
-### 18. Medium - Capture photo filtering does full-resolution work inline
+### 18. FIXED - Medium - Capture photo filtering does full-resolution work inline
 
 - Evidence:
   - `services/photoFilters.ts:102`
@@ -261,7 +296,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Downsample before decode/render and cap output dimensions.
 
-### 19. Medium - Notes grid cells do too much parsing and derived work per render
+### 19. FIXED - Medium - Notes grid cells do too much parsing and derived work per render
 
 - Evidence:
   - `components/screens/notes/NotesScreen.tsx:107`
@@ -271,10 +306,12 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
   Avoidable JS work during grid renders and harder-to-reason-about cell performance.
 - Fix direction:
   Precompute lightweight tile view models before render and keep tile props primitive.
+ - Update:
+  The notes grid now precomputes tile render models so parsing, preview-text selection, gradients, and motion variants are derived outside the mounted cell.
 
 ## Structural / DRY / Simplification Findings
 
-### 20. Medium - Several core files are monoliths and mix too many responsibilities
+### 20. PARTIAL - Medium - Several core files are monoliths and mix too many responsibilities
 
 - Evidence:
   - `services/syncService.ts:1` (~2239 LOC)
@@ -290,8 +327,10 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
   Reviews get harder, regressions hide more easily, and team ownership becomes fuzzy.
 - Fix direction:
   Split by domain behavior, not by arbitrary helper extraction. Keep a thin facade file where API stability matters.
+ - Update:
+  This pass extracted startup recovery UI, root stack option builders, note deletion event plumbing, and notes-grid view-model building, but the largest service/screen files still need a dedicated decomposition pass.
 
-### 21. Medium - Startup and provider composition are too centralized
+### 21. PARTIAL - Medium - Startup and provider composition are too centralized
 
 - Evidence:
   - `components/app/AppProviders.tsx:1`
@@ -302,6 +341,8 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
   Global change blast radius is larger than it needs to be.
 - Fix direction:
   Keep the root layout focused on shell/bootstrap and move route-specific concerns closer to route groups/features.
+ - Update:
+  The root layout now delegates startup recovery UI and repeated stack options to extracted helpers, and app providers are composed through one ordered provider chain instead of nested wrapper groups.
 
 ### 22. Medium - Platform screen duplication is increasing maintenance cost
 
@@ -331,7 +372,7 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
 - Fix direction:
   Standardize one public hook surface and keep internal implementation paths private.
 
-### 24. Medium - Duplicate normalization logic risks behavior drift
+### 24. PARTIAL - Medium - Duplicate normalization logic risks behavior drift
 
 - Evidence:
   - `services/textNormalization.ts:1`
@@ -343,8 +384,10 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
   Search, ranking, and display behavior can drift subtly over time.
 - Fix direction:
   Collapse onto one canonical normalization module with focused tests.
+ - Update:
+  Preview text and optional-string trimming now share canonical helpers across notes/shared previews and grid photo hydration, but the broader normalization surface is not fully consolidated yet.
 
-### 25. Low-Medium - `useHomeFeedPagination` reads like dead abstraction
+### 25. FIXED - Low-Medium - `useHomeFeedPagination` reads like dead abstraction
 
 - Evidence:
   - `hooks/app/useHomeFeedPagination.ts:1`
@@ -354,8 +397,10 @@ The codebase has strong feature coverage and a lot of defensive logic already, b
   The code suggests a paging system that does not exist, increasing conceptual overhead.
 - Fix direction:
   Either implement real paging or inline/remove the abstraction.
+ - Update:
+  The hook and its dedicated test were removed, and Home/Notes now derive feed items directly from `buildHomeFeedItems`.
 
-### 26. Low - Strict lint is currently red
+### 26. FIXED - Low - Strict lint is currently red
 
 - Evidence:
   - `components/screens/HomeScreen.tsx:146`
@@ -381,20 +426,24 @@ Recommended additions:
 
 - mutation ordering and scope invariants
 - invite cache validation and cleanup behavior
+- note deletion to shared-feed projection invalidation
 - widget payload size / image fallback behavior
 - rate-limit or duplicate-send behavior around social pushes
 - filter rendering bounds and downsample expectations
 
 ## Suggested Remediation Order
 
-1. Fix the security issues in Supabase functions and RPCs.
-2. Remove implicit scope reads from note mutations.
-3. Fix startup/shared-feed race conditions.
-4. Reduce widget/media payload size and full-resolution processing.
-5. Split the worst monolith files and remove dead abstractions.
+1. Continue the second-wave decomposition of the largest service/screen files.
+2. Reduce remaining platform-screen duplication, especially settings/profile.
+3. Finish collapsing duplicated normalization and presentation helpers.
+4. Add narrow tests for remaining brittle helpers and cleanup flows.
+5. Revisit root provider/layout ownership only after the larger screen/service seams are thinner.
 
 ## Verification Snapshot
 
 - `npm run typecheck`: passed
-- `npm run lint:ci`: failed due to 2 warnings
+- `npm run lint:ci`: passed
+- `npm test -- --runInBand __tests__/useNotesStore.test.tsx __tests__/useSubscription.test.tsx __tests__/sharedFeedService.test.ts __tests__/useSharedFeedStore.test.tsx`: passed
+- `npm test -- --runInBand __tests__/homeScreenCameraLifecycle.test.tsx __tests__/homeScreenShareInvite.test.tsx __tests__/homeScreenDoodleSave.test.tsx`: passed
+- `npm test -- --runInBand __tests__/notesIndexScreen.test.tsx __tests__/homeScreenArchiveFocus.test.tsx`: passed
 - Deep review method: six parallel audit tracks plus local verification of the highest-risk findings
