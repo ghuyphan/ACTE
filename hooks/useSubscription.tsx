@@ -192,7 +192,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const snapshotLoadRequestIdRef = useRef(0);
   const receivedLiveRemotePhotoNoteCountRef = useRef(false);
   const cachedSnapshotRef = useRef<SubscriptionSnapshot | null>(null);
+  const snapshotHydratedRef = useRef(false);
   const isMountedRef = useRef(true);
+  const [isSnapshotHydrated, setIsSnapshotHydrated] = useState(false);
   const userId = user?.id ?? null;
   const snapshotStorageKey = `${SUBSCRIPTION_SNAPSHOT_KEY_PREFIX}${user?.uid ?? 'anonymous'}`;
   const availablePackages = useMemo(
@@ -242,9 +244,20 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     receivedLiveRemotePhotoNoteCountRef.current = false;
     cachedSnapshotRef.current = null;
+    snapshotHydratedRef.current = false;
     setCachedSnapshot(null);
     setRemotePhotoNoteCount(null);
     setIsRemotePhotoNoteCountReady(false);
+    setIsSnapshotHydrated(false);
+
+    const finalizeSnapshotHydration = () => {
+      if (cancelled || snapshotLoadRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      snapshotHydratedRef.current = true;
+      setIsSnapshotHydrated(true);
+    };
 
     void getPersistentItem(snapshotStorageKey)
       .then((rawValue) => {
@@ -255,6 +268,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         if (!rawValue) {
           cachedSnapshotRef.current = null;
           setCachedSnapshot(null);
+          finalizeSnapshotHydration();
           return;
         }
 
@@ -276,9 +290,12 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
             normalizedCachedRemoteCount !== null || parsed.remotePhotoNoteUsageDate !== null
           );
         }
+
+        finalizeSnapshotHydration();
       })
       .catch((error) => {
         console.warn('[subscription] Failed to load cached subscription snapshot:', error);
+        finalizeSnapshotHydration();
       });
 
     return () => {
@@ -520,6 +537,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     availablePackages.find((item) => item.packageType === PACKAGE_TYPE.LIFETIME) ?? null;
 
   useEffect(() => {
+    if (!isSnapshotHydrated || !snapshotHydratedRef.current) {
+      return;
+    }
+
     const nextSnapshot: SubscriptionSnapshot = {
       tier,
       remotePhotoNoteCount,
@@ -536,6 +557,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   }, [
     cachedPlusPackageTitle,
     cachedPlusPriceLabel,
+    isSnapshotHydrated,
     remotePhotoNoteCount,
     selectedPackage,
     snapshotStorageKey,

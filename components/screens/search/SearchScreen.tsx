@@ -63,14 +63,6 @@ export default function SearchScreen() {
   }, [notes]);
 
   useEffect(() => {
-    if (Platform.OS !== 'android') {
-      return;
-    }
-
-    setQuery(androidTabSearchQuery);
-  }, [androidTabSearchQuery]);
-
-  useEffect(() => {
     if (!hasDeferredQuery) {
       setFilteredNotes([]);
       setSearchFailed(false);

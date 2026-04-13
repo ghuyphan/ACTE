@@ -52,6 +52,12 @@ type SharedPostRow = {
   place_name: string | null;
 };
 
+type NotificationEventRow = {
+  event_type: string;
+  actor_user_id: string;
+  resource_id: string;
+};
+
 const ANDROID_SOCIAL_CHANNEL_ID = 'social-v2';
 const EXPO_PUSH_API_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -266,6 +272,41 @@ async function prunePushTokens(
   }
 }
 
+async function recordNotificationEvent(
+  adminClient: ReturnType<typeof createClient>,
+  actorUserId: string,
+  body: Partial<SocialNotificationRequest>
+) {
+  const resourceId =
+    body.type === 'friend_accepted'
+      ? body.friendUserId?.trim() ?? ''
+      : body.type === 'shared_post_created'
+        ? body.postId?.trim() ?? ''
+        : '';
+
+  if (!body.type || !resourceId) {
+    return false;
+  }
+
+  const { error } = await adminClient
+    .from('social_notification_events')
+    .insert({
+      event_type: body.type,
+      actor_user_id: actorUserId,
+      resource_id: resourceId,
+    } satisfies NotificationEventRow);
+
+  if (!error) {
+    return true;
+  }
+
+  if (typeof error === 'object' && error && 'code' in error && String(error.code) === '23505') {
+    return false;
+  }
+
+  throw error;
+}
+
 async function sendExpoPushMessages(
   messages: PushMessage[],
   expoAccessToken: string
@@ -379,6 +420,15 @@ Deno.serve(async (request) => {
         },
         400
       );
+    }
+
+    const shouldDeliver = await recordNotificationEvent(adminClient, user.id, body);
+    if (!shouldDeliver) {
+      return jsonResponse({
+        success: true,
+        recipients: payload.recipientUserIds.length,
+        delivered: 0,
+      });
     }
 
     const pushTargets = await loadPushTargets(adminClient, payload.recipientUserIds);

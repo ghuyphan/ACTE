@@ -122,6 +122,16 @@ function rowToInvite(row: InviteRow): FriendInvite {
   };
 }
 
+function isActiveInviteRowUsable(row: InviteRow) {
+  const expiresAt = row.expires_at ? new Date(row.expires_at).getTime() : null;
+  return (
+    !row.revoked_at &&
+    !row.accepted_by_uid &&
+    !row.accepted_at &&
+    (expiresAt === null || (Number.isFinite(expiresAt) && expiresAt > Date.now()))
+  );
+}
+
 export async function getCachedSharedFriends(userUid: string): Promise<FriendConnection[]> {
   const db = await getDB();
   const rows = await db.getAllAsync<FriendRow>(
@@ -314,8 +324,15 @@ export async function getCachedActiveInvite(userUid: string): Promise<FriendInvi
     return null;
   }
 
+  if (!isActiveInviteRowUsable(row)) {
+    await replaceCachedActiveInvite(userUid, null).catch(() => undefined);
+    await clearStoredInviteToken(userUid).catch(() => undefined);
+    return null;
+  }
+
   const storedToken = await getStoredInviteToken(userUid);
   if (!storedToken || storedToken.inviteId !== row.id) {
+    await replaceCachedActiveInvite(userUid, null).catch(() => undefined);
     return null;
   }
 

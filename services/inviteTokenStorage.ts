@@ -1,6 +1,8 @@
+import { Platform } from 'react-native';
 import { getSecureItem, removeSecureItem, setSecureItem } from '../utils/secureStorage';
 
 const ACTIVE_INVITE_TOKEN_STORAGE_KEY_PREFIX = 'shared.activeInviteToken.';
+const inviteTokenMemoryStore = new Map<string, StoredInviteToken>();
 
 interface StoredInviteToken {
   inviteId: string;
@@ -12,6 +14,10 @@ function getInviteTokenStorageKey(userUid: string) {
 }
 
 export async function getStoredInviteToken(userUid: string): Promise<StoredInviteToken | null> {
+  if (Platform.OS === 'web') {
+    return inviteTokenMemoryStore.get(userUid) ?? null;
+  }
+
   const rawValue = await getSecureItem(getInviteTokenStorageKey(userUid));
   if (!rawValue) {
     return null;
@@ -42,6 +48,14 @@ export async function setStoredInviteToken(
   userUid: string,
   value: StoredInviteToken
 ): Promise<void> {
+  if (Platform.OS === 'web') {
+    inviteTokenMemoryStore.set(userUid, {
+      inviteId: value.inviteId.trim(),
+      token: value.token.trim(),
+    });
+    return;
+  }
+
   await setSecureItem(
     getInviteTokenStorageKey(userUid),
     JSON.stringify({
@@ -52,5 +66,10 @@ export async function setStoredInviteToken(
 }
 
 export async function clearStoredInviteToken(userUid: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    inviteTokenMemoryStore.delete(userUid);
+    return;
+  }
+
   await removeSecureItem(getInviteTokenStorageKey(userUid));
 }

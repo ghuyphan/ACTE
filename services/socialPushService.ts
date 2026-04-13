@@ -368,27 +368,12 @@ export async function sendSocialNotificationEvent(event: SocialNotificationEvent
     return;
   }
 
-  console.log('[social-push] Invoking send-social-notifications:', {
-    type: event.type,
-  });
-
   const accessToken = await getFreshSupabaseAccessToken(supabase).catch((sessionError) => {
     console.warn('[social-push] Failed to load a fresh Supabase access token before invoking edge function.', {
       type: event.type,
       sessionError,
     });
     return null;
-  });
-
-  const { data: authUserData, error: authUserError } = accessToken
-    ? await supabase.auth.getUser(accessToken)
-    : { data: { user: null }, error: null };
-
-  console.log('[social-push] Access token diagnostics before edge function:', {
-    type: event.type,
-    hasAccessToken: Boolean(accessToken),
-    authUserId: authUserData.user?.id ?? null,
-    authUserError: authUserError ? getSupabaseErrorMessage(authUserError) : null,
   });
 
   const functionsClient = supabase.functions;
@@ -403,19 +388,6 @@ export async function sendSocialNotificationEvent(event: SocialNotificationEvent
           Authorization: `Bearer ${accessToken}`,
         }
       : undefined,
-  });
-
-  console.log('[social-push] send-social-notifications response:', {
-    type: event.type,
-    success:
-      data &&
-      typeof data === 'object' &&
-      'success' in data &&
-      typeof (data as { success?: unknown }).success === 'boolean'
-        ? (data as { success: boolean }).success
-        : null,
-    error: error ? getSupabaseErrorMessage(error) : null,
-    hasAccessToken: Boolean(accessToken),
   });
 
   if (error && isFunctionsHttpStatus(error, 401) && accessToken) {

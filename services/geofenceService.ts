@@ -5,8 +5,8 @@ import { Platform } from 'react-native';
 import { Note, getNotesForReminderSelection } from './database';
 import { getReminderPlaceGroups } from './reminderSelection';
 import { GEOFENCE_TASK_NAME } from '../utils/backgroundGeofence';
-import { getSkipNextEnterKey } from '../utils/geofenceKeys';
 import { getPersistentItem, removePersistentItem, setPersistentItem } from '../utils/appStorage';
+import { markSkipImmediateReminder } from '../utils/geofenceSkipEnter';
 
 export interface ReminderPermissionState {
   foregroundGranted: boolean;
@@ -191,7 +191,7 @@ export async function skipImmediateReminderForNewNote(noteId: string): Promise<v
     return;
   }
 
-  await setPersistentItem(getSkipNextEnterKey(noteId), '1');
+  await markSkipImmediateReminder(noteId);
 }
 
 export async function clearGeofenceRegions(): Promise<void> {

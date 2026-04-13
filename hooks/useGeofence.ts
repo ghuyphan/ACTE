@@ -57,6 +57,15 @@ export function useGeofence() {
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
     const locationRef = useRef<Location.LocationObject | null>(null);
     const foregroundLocationRequestRef = useRef<Promise<ForegroundLocationRequestResult> | null>(null);
+    const isMountedRef = useRef(true);
+    const backgroundRefreshRequestIdRef = useRef(0);
+
+    useEffect(() => {
+        return () => {
+            isMountedRef.current = false;
+            backgroundRefreshRequestIdRef.current += 1;
+        };
+    }, []);
 
     useEffect(() => {
         locationRef.current = location;
@@ -134,9 +143,14 @@ export function useGeofence() {
                 commitLocation(known);
                 if (preferCached) {
                     if (backgroundRefreshIfCached) {
+                        const backgroundRefreshRequestId = ++backgroundRefreshRequestIdRef.current;
                         void resolveCurrentPosition()
                             .then((currentLocation) => {
-                                if (currentLocation) {
+                                if (
+                                    currentLocation &&
+                                    isMountedRef.current &&
+                                    backgroundRefreshRequestId === backgroundRefreshRequestIdRef.current
+                                ) {
                                     commitLocation(currentLocation);
                                 }
                             })

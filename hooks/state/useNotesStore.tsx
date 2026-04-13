@@ -11,6 +11,7 @@ import {
   getAllNotesForScope,
   getNotesPageForScope,
   getNoteById as dbGetById,
+  getNoteByIdForScope as dbGetByIdForScope,
   Note,
   NoteUpdates,
   searchNotes as dbSearchNotes,
@@ -264,6 +265,7 @@ function useNotesStoreValue(): NotesStoreValue {
       const scopeRevision = activeScopeRevisionRef.current;
       const timestamp = new Date().toISOString();
       const note = await dbCreate(input, {
+        scope,
         syncChange: {
           type: 'create',
           entity: 'note',
@@ -293,6 +295,7 @@ function useNotesStoreValue(): NotesStoreValue {
       const scope = activeScopeRef.current;
       const scopeRevision = activeScopeRevisionRef.current;
       await dbUpdate(id, updates, {
+        scope,
         syncChange: {
           type: 'update',
           entity: 'note',
@@ -320,6 +323,7 @@ function useNotesStoreValue(): NotesStoreValue {
       const nextFavoriteValue = currentNote ? !currentNote.isFavorite : true;
       const timestamp = new Date().toISOString();
       const newValue = await dbToggleFav(id, {
+        scope,
         syncChange: {
           type: 'update',
           entity: 'note',
@@ -376,9 +380,13 @@ function useNotesStoreValue(): NotesStoreValue {
     async (id: string) => {
       const scope = activeScopeRef.current;
       const scopeRevision = activeScopeRevisionRef.current;
-      const note = await dbGetById(id);
+      const note =
+        typeof dbGetByIdForScope === 'function'
+          ? await dbGetByIdForScope(id, scope)
+          : await dbGetById(id);
 
       await dbDelete(id, {
+        scope,
         syncChange: {
           type: 'delete',
           entity: 'note',
@@ -402,9 +410,10 @@ function useNotesStoreValue(): NotesStoreValue {
   const deleteAllNotes = useCallback(async () => {
     const scope = activeScopeRef.current;
     const scopeRevision = activeScopeRevisionRef.current;
-    const allNotes = await getAllNotesForScope(activeScopeRef.current);
+    const allNotes = await getAllNotesForScope(scope);
 
     await dbDeleteAll({
+      scope,
       syncChange: {
         type: 'deleteAll',
         entity: 'note',
@@ -429,7 +438,9 @@ function useNotesStoreValue(): NotesStoreValue {
     if (inMemory) {
       return inMemory;
     }
-    return dbGetById(id);
+    return typeof dbGetByIdForScope === 'function'
+      ? dbGetByIdForScope(id, activeScopeRef.current)
+      : dbGetById(id);
   }, []);
 
   return {

@@ -109,17 +109,25 @@ Deno.serve(async (request) => {
       );
     }
 
-    if (cleanupSecret) {
-      const authorization = request.headers.get('Authorization') ?? '';
-      if (authorization !== `Bearer ${cleanupSecret}`) {
-        return jsonResponse(
-          {
-            success: false,
-            error: 'Unauthorized.',
-          },
-          401
-        );
-      }
+    if (!cleanupSecret) {
+      return jsonResponse(
+        {
+          success: false,
+          error: 'Cleanup secret is required for this function.',
+        },
+        500
+      );
+    }
+
+    const authorization = request.headers.get('Authorization') ?? '';
+    if (authorization !== `Bearer ${cleanupSecret}`) {
+      return jsonResponse(
+        {
+          success: false,
+          error: 'Unauthorized.',
+        },
+        401
+      );
     }
 
     const requestBody =

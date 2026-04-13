@@ -1158,7 +1158,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         }
 
         if (!normalizedPath.isNullOrBlank()) {
-          BitmapFactory.decodeFile(normalizedPath)?.let { bitmap ->
+          decodeSampledBitmapFromFile(normalizedPath, targetSizePx, targetSizePx)?.let { bitmap ->
             return createCircularBitmap(bitmap, targetSizePx)
           }
         }
@@ -1167,7 +1167,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       snapshot.authorAvatarImageBase64?.let { base64 ->
         return runCatching {
           val bytes = Base64.decode(base64, Base64.DEFAULT)
-          BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { bitmap ->
+          decodeSampledBitmapFromBytes(bytes, targetSizePx, targetSizePx)?.let { bitmap ->
             createCircularBitmap(bitmap, targetSizePx)
           }
         }.getOrNull()
@@ -1190,7 +1190,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         }
 
         if (!normalizedPath.isNullOrBlank()) {
-          val bitmap = BitmapFactory.decodeFile(normalizedPath)
+          val bitmap = decodeSampledBitmapFromFile(normalizedPath, targetWidthPx, targetHeightPx)
           if (bitmap != null) {
             val normalizedBitmap = normalizeBitmapOrientation(bitmap, readExifOrientationFromPath(normalizedPath))
             return createRoundedBitmap(normalizedBitmap, targetWidthPx, targetHeightPx, cornerRadiusPx)
@@ -1202,7 +1202,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         return runCatching {
           val bytes = Base64.decode(base64, Base64.DEFAULT)
           val orientation = readExifOrientationFromBytes(bytes)
-          BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { bitmap ->
+          decodeSampledBitmapFromBytes(bytes, targetWidthPx, targetHeightPx)?.let { bitmap ->
             val normalizedBitmap = normalizeBitmapOrientation(bitmap, orientation)
             createRoundedBitmap(normalizedBitmap, targetWidthPx, targetHeightPx, cornerRadiusPx)
           }
@@ -1210,6 +1210,65 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
 
       return null
+    }
+
+    private fun calculateInSampleSize(
+      sourceWidth: Int,
+      sourceHeight: Int,
+      targetWidthPx: Int,
+      targetHeightPx: Int
+    ): Int {
+      val safeTargetWidth = max(targetWidthPx, 1)
+      val safeTargetHeight = max(targetHeightPx, 1)
+      var inSampleSize = 1
+      var halfWidth = sourceWidth / 2
+      var halfHeight = sourceHeight / 2
+
+      while (halfWidth / inSampleSize >= safeTargetWidth && halfHeight / inSampleSize >= safeTargetHeight) {
+        inSampleSize *= 2
+      }
+
+      return max(inSampleSize, 1)
+    }
+
+    private fun decodeSampledBitmapFromFile(
+      path: String,
+      targetWidthPx: Int,
+      targetHeightPx: Int
+    ): Bitmap? {
+      val bounds = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+      }
+      BitmapFactory.decodeFile(path, bounds)
+      val options = BitmapFactory.Options().apply {
+        inSampleSize = calculateInSampleSize(
+          max(bounds.outWidth, 1),
+          max(bounds.outHeight, 1),
+          targetWidthPx,
+          targetHeightPx
+        )
+      }
+      return BitmapFactory.decodeFile(path, options)
+    }
+
+    private fun decodeSampledBitmapFromBytes(
+      bytes: ByteArray,
+      targetWidthPx: Int,
+      targetHeightPx: Int
+    ): Bitmap? {
+      val bounds = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+      }
+      BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+      val options = BitmapFactory.Options().apply {
+        inSampleSize = calculateInSampleSize(
+          max(bounds.outWidth, 1),
+          max(bounds.outHeight, 1),
+          targetWidthPx,
+          targetHeightPx
+        )
+      }
+      return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
     }
 
     private fun readExifOrientationFromPath(path: String): Int {

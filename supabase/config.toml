@@ -42,4 +42,4 @@ enabled = true
 verify_jwt = false
 
 [functions.send-social-notifications]
-verify_jwt = false
+verify_jwt = true

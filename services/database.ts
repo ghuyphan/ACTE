@@ -111,6 +111,7 @@ type DatabaseSyncChange = Pick<SyncChange, 'entity' | 'entityId' | 'payload' | '
 
 interface DatabaseMutationOptions {
     syncChange?: DatabaseSyncChange;
+    scope?: string;
 }
 
 interface NoteRow {
@@ -1258,7 +1259,7 @@ export async function createNote(
     input: CreateNoteInput,
     options: DatabaseMutationOptions = {}
 ): Promise<Note> {
-    const scope = getCurrentScope();
+    const scope = options.scope ?? getCurrentScope();
     const id = input.id ?? generateNoteId();
     const now = new Date().toISOString();
     const photoLocalUri =
@@ -1449,7 +1450,7 @@ export async function updateNote(
     updates: NoteUpdates,
     options: DatabaseMutationOptions = {}
 ): Promise<void> {
-    const scope = getCurrentScope();
+    const scope = options.scope ?? getCurrentScope();
     const existing = await getNoteByIdForScope(id, scope);
     if (!existing) {
         return;
@@ -1611,7 +1612,7 @@ export async function toggleFavorite(
     options: DatabaseMutationOptions = {}
 ): Promise<boolean> {
     const database = await getDB();
-    const scope = getCurrentScope();
+    const scope = options.scope ?? getCurrentScope();
     const row = await database.getFirstAsync<{ is_favorite: number }>(
         'SELECT is_favorite FROM notes WHERE id = ? AND owner_uid = ?',
         id,
@@ -1688,7 +1689,7 @@ export async function getNotesForReminderSelection(): Promise<Note[]> {
 
 export async function deleteNote(id: string, options: DatabaseMutationOptions = {}): Promise<void> {
     const database = await getDB();
-    const scope = getCurrentScope();
+    const scope = options.scope ?? getCurrentScope();
     await deleteNoteForScope(id, scope, database, options);
 }
 
@@ -1724,7 +1725,7 @@ export async function deleteNoteForScope(
 }
 
 export async function deleteAllNotes(options: DatabaseMutationOptions = {}): Promise<void> {
-    const scope = getCurrentScope();
+    const scope = options.scope ?? getCurrentScope();
     await deleteAllNotesForScope(scope, options);
 }
 

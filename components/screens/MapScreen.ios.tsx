@@ -9,7 +9,6 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import Reanimated, {
@@ -131,6 +130,7 @@ export default function MapScreenIOS() {
   const [settledRegion, setSettledRegion] = useState<Region | null>(null);
   const hasCenteredRef = useRef(false);
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openFriendsPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingProgrammaticRegionRef = useRef<Region | null>(null);
   const nearbyPreviewFocusGuardUntilRef = useRef(0);
 
@@ -359,6 +359,9 @@ export default function MapScreenIOS() {
     return () => {
       if (markerPulseTimerRef.current) {
         clearTimeout(markerPulseTimerRef.current);
+      }
+      if (openFriendsPreviewTimerRef.current) {
+        clearTimeout(openFriendsPreviewTimerRef.current);
       }
     };
   }, []);
@@ -701,10 +704,18 @@ export default function MapScreenIOS() {
       const shouldOpenPreview = options?.openPreview ?? true;
       if (shouldOpenPreview) {
         if (options?.animate !== false && !reduceMotionEnabled && !showFriendsPreview) {
-          setTimeout(() => {
+          if (openFriendsPreviewTimerRef.current) {
+            clearTimeout(openFriendsPreviewTimerRef.current);
+          }
+          openFriendsPreviewTimerRef.current = setTimeout(() => {
             openFriendsPreview();
+            openFriendsPreviewTimerRef.current = null;
           }, 150);
         } else {
+          if (openFriendsPreviewTimerRef.current) {
+            clearTimeout(openFriendsPreviewTimerRef.current);
+            openFriendsPreviewTimerRef.current = null;
+          }
           openFriendsPreview();
         }
       }

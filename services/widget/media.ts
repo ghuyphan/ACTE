@@ -260,22 +260,6 @@ export async function getReadablePhotoUri(photoUri: string): Promise<string | un
   return undefined;
 }
 
-async function encodePhotoForWidget(photoUri: string): Promise<string | undefined> {
-  const normalizedPhotoUri = typeof photoUri === 'string' ? photoUri.trim() : '';
-  if (!normalizedPhotoUri) {
-    return undefined;
-  }
-
-  try {
-    return await FileSystem.readAsStringAsync(normalizedPhotoUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-  } catch (error) {
-    console.warn('[widgetService] Failed to encode widget photo:', error);
-    return undefined;
-  }
-}
-
 async function resolveReadablePhotoUriForCandidate(candidate: WidgetCandidate) {
   if (candidate.photoLocalUri?.trim()) {
     const readableLocalUri = await getReadablePhotoUri(candidate.photoLocalUri);
@@ -341,13 +325,6 @@ export async function resolveWidgetPhotoProps(
   if (copiedPhotoUri) {
     return {
       backgroundImageUrl: copiedPhotoUri,
-    };
-  }
-
-  const photoBase64 = await encodePhotoForWidget(readablePhotoUri);
-  if (photoBase64) {
-    return {
-      backgroundImageBase64: photoBase64,
     };
   }
 
@@ -475,13 +452,6 @@ export async function resolveWidgetAuthorAvatarProps(candidate: WidgetCandidate)
   if (copiedAvatarUri) {
     return {
       authorAvatarImageUrl: copiedAvatarUri,
-    };
-  }
-
-  const avatarBase64 = await encodePhotoForWidget(readableAvatarUri);
-  if (avatarBase64) {
-    return {
-      authorAvatarImageBase64: avatarBase64,
     };
   }
 

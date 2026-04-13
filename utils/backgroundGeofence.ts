@@ -8,6 +8,7 @@ import {
     getPersistedActiveNotesScope,
     LOCAL_NOTES_SCOPE,
 } from '../services/database';
+import { consumeSkippedImmediateReminder } from './geofenceSkipEnter';
 import {
     buildNearbyReminderCopy,
     buildReminderNotificationContent,
@@ -15,7 +16,7 @@ import {
 } from '../services/notificationService';
 import { buildReminderTextExcerpt, findReminderPlaceGroupByNoteId } from '../services/reminderSelection';
 import { updateWidgetData } from '../services/widgetService';
-import { getGeofenceCooldownKey, getLocationCooldownId, getSkipNextEnterKey } from './geofenceKeys';
+import { getGeofenceCooldownKey, getLocationCooldownId } from './geofenceKeys';
 import { getPersistentItem, removePersistentItem, setPersistentItem } from './appStorage';
 
 export const GEOFENCE_TASK_NAME = 'BACKGROUND_GEOFENCE_TASK';
@@ -132,10 +133,8 @@ if (
                 const regionId = region.identifier ?? '';
 
                 if (regionId) {
-                    const skipNextEnterKey = getSkipNextEnterKey(regionId);
-                    const shouldSkip = await getPersistentItem(skipNextEnterKey);
-                    if (shouldSkip === '1') {
-                        await removePersistentItem(skipNextEnterKey);
+                    const shouldSkip = await consumeSkippedImmediateReminder(regionId);
+                    if (shouldSkip) {
                         return;
                     }
                 }

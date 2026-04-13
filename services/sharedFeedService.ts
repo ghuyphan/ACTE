@@ -202,6 +202,15 @@ const sharedFeedRefreshState = new Map<
   }
 >();
 
+export function invalidateSharedFeedRefresh(userUid: string | null | undefined) {
+  const normalizedUserUid = typeof userUid === 'string' ? userUid.trim() : '';
+  if (!normalizedUserUid) {
+    return;
+  }
+
+  sharedFeedRefreshState.delete(normalizedUserUid);
+}
+
 function requireSupabase() {
   const supabase = getSupabase();
   if (!supabase) {
@@ -745,13 +754,17 @@ async function performSharedFeedRefresh(user: AppUser): Promise<SharedFeedSnapsh
   return snapshot;
 }
 
-export async function refreshSharedFeed(user: AppUser): Promise<SharedFeedSnapshot> {
+export async function refreshSharedFeed(
+  user: AppUser,
+  options: { force?: boolean } = {}
+): Promise<SharedFeedSnapshot> {
   const existingState = sharedFeedRefreshState.get(user.id);
   if (existingState?.promise) {
     return existingState.promise;
   }
 
   if (
+    !options.force &&
     existingState?.lastSnapshot &&
     Date.now() - existingState.lastResolvedAt < SHARED_FEED_REFRESH_DEDUPE_WINDOW_MS
   ) {
@@ -884,6 +897,7 @@ export function subscribeToSharedFeed(
 
 export async function createFriendInvite(user: AppUser): Promise<FriendInvite> {
   await ensureSupabaseSessionMatchesUser(user.id);
+  invalidateSharedFeedRefresh(user.id);
 
   const supabase = requireSupabase();
 
@@ -956,6 +970,7 @@ export async function findFriendByUsername(
 }
 
 export async function revokeFriendInvite(user: AppUser, inviteId: string): Promise<void> {
+  invalidateSharedFeedRefresh(user.id);
   const supabase = requireSupabase();
   const { error } = await supabase
     .from('friend_invites')
@@ -976,6 +991,7 @@ export async function acceptFriendInvite(
   user: AppUser,
   inviteValue: string
 ): Promise<FriendConnection> {
+  invalidateSharedFeedRefresh(user.id);
   const { inviteId, token } = parseInvitePayload(inviteValue);
 
   if (!inviteId && !token) {
@@ -1028,6 +1044,7 @@ export async function acceptFriendInvite(
 }
 
 export async function removeFriend(user: AppUser, friendUid: string): Promise<void> {
+  invalidateSharedFeedRefresh(user.id);
   const { error } = await requireSupabase().rpc('remove_friend', {
     friend_user_id: friendUid,
   });
@@ -1042,6 +1059,7 @@ export async function addFriendByUsername(
   username: string
 ): Promise<FriendConnection> {
   await ensureSupabaseSessionMatchesUser(user.id);
+  invalidateSharedFeedRefresh(user.id);
 
   const normalizedUsername = normalizeUsernameInput(username);
   if (!normalizedUsername) {
@@ -1085,6 +1103,7 @@ export async function createSharedPost(
   audienceUserIds: string[]
 ): Promise<SharedPost> {
   await ensureSupabaseSessionMatchesUser(user.id);
+  invalidateSharedFeedRefresh(user.id);
 
   const supabase = requireSupabase();
   const shareableNote = await hydrateShareableNote(note);
@@ -1172,12 +1191,6 @@ export async function createSharedPost(
         .in('friend_user_id', friendRefs);
     }
 
-    console.log('[shared-feed] Triggering shared post notification event:', {
-      postId,
-      authorUserId: user.id,
-      audienceUserIds: dedupedAudience,
-    });
-
     void sendSocialNotificationEvent({
       type: 'shared_post_created',
       postId,
@@ -1210,6 +1223,7 @@ export async function updateSharedPost(
   postId: string,
   note: Note
 ): Promise<void> {
+  invalidateSharedFeedRefresh(user.id);
   const shareableNote = await hydrateShareableNote(note);
   const supabase = requireSupabase();
   const { data: existing, error: fetchError } = await supabase
@@ -1374,6 +1388,7 @@ export async function deleteOwnedSharedPostsForNotes(
   user: AppUser,
   noteIds: string[]
 ): Promise<string[]> {
+  invalidateSharedFeedRefresh(user.id);
   const dedupedNoteIds = normalizeRemoteEntityIds(noteIds);
   if (dedupedNoteIds.length === 0) {
     return [];
@@ -1464,6 +1479,7 @@ export async function deleteSharedPost(
   user: AppUser,
   postId: string
 ): Promise<void> {
+  invalidateSharedFeedRefresh(user.id);
   const supabase = requireSupabase();
   const { data: existing, error: fetchError } = await supabase
     .from('shared_posts')

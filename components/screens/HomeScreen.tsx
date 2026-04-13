@@ -143,7 +143,6 @@ export default function HomeScreen() {
   const {
     clearFeedFocus,
     peekFeedFocus,
-    consumeFeedFocus,
   } = useFeedFocus();
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();

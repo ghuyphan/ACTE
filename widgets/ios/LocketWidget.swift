@@ -1,6 +1,7 @@
 import WidgetKit
 import SwiftUI
 import UIKit
+import ImageIO
 
 private func widgetLocalized(_ key: String, fallback: String) -> String {
     NSLocalizedString(key, tableName: nil, bundle: .main, value: fallback, comment: "")
@@ -1884,18 +1885,24 @@ private struct LocketWidgetEntryView: View {
             return nil
         }
 
-        if normalizedPath.hasPrefix("file://"), let url = URL(string: normalizedPath) {
-            if let image = UIImage(contentsOfFile: url.path) {
-                return normalizeWidgetImageOrientation(image)
-            }
+        let resolvedUrl: URL?
+        if normalizedPath.hasPrefix("file://") {
+            resolvedUrl = URL(string: normalizedPath)
+        } else {
+            resolvedUrl = URL(fileURLWithPath: normalizedPath)
+        }
+
+        guard let url = resolvedUrl,
+              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 2048,
+              ] as CFDictionary) else {
             return nil
         }
 
-        if let image = UIImage(contentsOfFile: normalizedPath) {
-            return normalizeWidgetImageOrientation(image)
-        }
-
-        return nil
+        return normalizeWidgetImageOrientation(UIImage(cgImage: cgImage))
     }
 
     private func loadImage(fromBase64 base64: String) -> UIImage? {
@@ -1903,11 +1910,16 @@ private struct LocketWidgetEntryView: View {
             return nil
         }
 
-        if let image = UIImage(data: data) {
-            return normalizeWidgetImageOrientation(image)
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 2048,
+              ] as CFDictionary) else {
+            return nil
         }
 
-        return nil
+        return normalizeWidgetImageOrientation(UIImage(cgImage: cgImage))
     }
 }
 

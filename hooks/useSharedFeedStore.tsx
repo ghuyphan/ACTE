@@ -15,6 +15,7 @@ import {
   FriendConnection,
   FriendInvite,
   getSharedFeedErrorMessage,
+  invalidateSharedFeedRefresh,
   refreshSharedFeed as fetchSharedFeed,
   removeFriend as deleteFriend,
   revokeFriendInvite as revokeInvite,
@@ -94,7 +95,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const friendsRef = useRef<FriendConnection[]>([]);
   const sharedPostsRef = useRef<SharedPost[]>([]);
   const activeInviteRef = useRef<FriendInvite | null>(null);
-  const suppressActiveInviteRef = useRef(false);
+  const suppressedActiveInviteIdRef = useRef<string | null>(null);
   const createInvitePromiseRef = useRef<Promise<FriendInvite> | null>(null);
   const previousUserUidRef = useRef<string | null>(null);
   const sharedFeedSessionRef = useRef(0);
@@ -139,11 +140,23 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       source: 'live' | 'cache',
       updatedAt: string | null
     ) => {
+      const incomingActiveInviteId = snapshot.activeInvite?.id ?? null;
+      const suppressedActiveInviteId = suppressedActiveInviteIdRef.current;
+      const shouldSuppressActiveInvite =
+        Boolean(incomingActiveInviteId && suppressedActiveInviteId === incomingActiveInviteId);
+
+      if (
+        incomingActiveInviteId &&
+        suppressedActiveInviteId &&
+        suppressedActiveInviteId !== incomingActiveInviteId
+      ) {
+        suppressedActiveInviteIdRef.current = null;
+      }
+
       commitSnapshot(
         {
           ...snapshot,
-          activeInvite:
-            suppressActiveInviteRef.current && snapshot.activeInvite ? null : snapshot.activeInvite,
+          activeInvite: shouldSuppressActiveInvite ? null : snapshot.activeInvite,
         },
         source,
         updatedAt
@@ -329,7 +342,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     return true;
   }, [applySnapshot, hydrateSharedPostMedia, isCurrentSharedFeedSession]);
 
-  const refreshAll = useCallback(async () => {
+  const refreshAll = useCallback(async (options?: { force?: boolean }) => {
     if (!enabled || !user) {
       commitSnapshot(
         {
@@ -340,7 +353,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         'cache',
         null
       );
-      suppressActiveInviteRef.current = false;
+      suppressedActiveInviteIdRef.current = null;
       createInvitePromiseRef.current = null;
       setLoading(false);
       setReady(true);
@@ -357,7 +370,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     const userUid = user.uid;
     const sessionId = sharedFeedSessionRef.current;
     try {
-      const snapshot = await fetchSharedFeed(user);
+      const snapshot = await fetchSharedFeed(user, options);
       if (!isCurrentSharedFeedSession(sessionId, userUid)) {
         return;
       }
@@ -423,12 +436,13 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         'cache',
         null
       );
-      suppressActiveInviteRef.current = false;
+      suppressedActiveInviteIdRef.current = null;
       createInvitePromiseRef.current = null;
       setLoading(false);
       setReady(true);
       if (previousUserUidRef.current) {
         void clearSharedFeedCache(previousUserUidRef.current);
+        invalidateSharedFeedRefresh(previousUserUidRef.current);
       }
       previousUserUidRef.current = null;
       return;
@@ -446,6 +460,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     );
     setLoading(true);
     setReady(false);
+    suppressedActiveInviteIdRef.current = null;
     void hydrateFromCache(user.uid, sessionId)
       .catch(() => undefined)
       .finally(() => {
@@ -499,7 +514,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         return;
       }
 
-      void refreshAll().catch(() => undefined);
+      void refreshAll({ force: true }).catch(() => undefined);
     });
 
     return () => {
@@ -555,7 +570,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
               return invite;
             }
 
-            suppressActiveInviteRef.current = false;
+            suppressedActiveInviteIdRef.current = null;
             commitSnapshotAndPersist(
               activeUser.uid,
               {
@@ -582,7 +597,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
           return;
         }
-        suppressActiveInviteRef.current = true;
+        suppressedActiveInviteIdRef.current = inviteId;
         commitSnapshotAndPersist(
           activeUser.uid,
           {
@@ -611,7 +626,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           },
           new Date().toISOString()
         );
-        void refreshAll().catch(() => undefined);
+        void refreshAll({ force: true }).catch(() => undefined);
       },
       findFriendByUsername: async (username: string) => {
         requireOnline();
@@ -636,7 +651,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           },
           new Date().toISOString()
         );
-        void refreshAll().catch(() => undefined);
+        void refreshAll({ force: true }).catch(() => undefined);
       },
       removeFriend: async (friendUid: string) => {
         requireOnline();
@@ -684,7 +699,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           },
           new Date().toISOString()
         );
-        void refreshAll().catch(() => undefined);
+        void refreshAll({ force: true }).catch(() => undefined);
       },
       createSharedPost: async (note: Note, audienceUserIds?: string[]) => {
         requireOnline();
