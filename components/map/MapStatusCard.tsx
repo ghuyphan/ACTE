@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { GlassView } from '../ui/GlassView';
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
@@ -23,9 +23,18 @@ interface MapStatusCardProps {
   onAction?: () => void;
   onInteraction?: () => void;
   reduceMotionEnabled: boolean;
+  shadowVisible?: boolean;
 }
 
 const PREVIEW_HORIZONTAL_INSET = 14;
+
+function getNoShadowBorderColor(isDark: boolean) {
+  if (Platform.OS === 'android') {
+    return isDark ? 'rgba(255,255,255,0.16)' : 'rgba(113,86,26,0.24)';
+  }
+
+  return isDark ? 'rgba(255,255,255,0.2)' : 'rgba(17,24,39,0.12)';
+}
 
 export default function MapStatusCard({
   visible,
@@ -38,6 +47,7 @@ export default function MapStatusCard({
   onAction,
   onInteraction,
   reduceMotionEnabled,
+  shadowVisible = true,
 }: MapStatusCardProps) {
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -64,11 +74,11 @@ export default function MapStatusCard({
       styles.surface,
       {
         width: shellWidth,
-        borderColor: getOverlayBorderColor(isDark),
+        borderColor: shadowVisible ? getOverlayBorderColor(isDark) : getNoShadowBorderColor(isDark),
         backgroundColor: getOverlayFallbackColor(isDark),
       },
     ],
-    [isDark, shellWidth]
+    [isDark, shadowVisible, shellWidth]
   );
 
   if ((!isMounted && !visible) || (!title && !actionLabel)) {
@@ -90,7 +100,10 @@ export default function MapStatusCard({
       handleVisible={false}
     >
       <View style={styles.surfaceHost} pointerEvents="box-none">
-        <View style={shellStyle}>
+        <View
+          testID="map-status-surface"
+          style={[shellStyle, shadowVisible ? null : styles.surfaceNoShadow]}
+        >
           <GlassView
             pointerEvents="none"
             glassEffectStyle="regular"
@@ -206,6 +219,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: mapOverlayTokens.overlayPadding,
     paddingVertical: 16,
     ...mapOverlayTokens.overlayShadow,
+  },
+  surfaceNoShadow: {
+    borderWidth: 1,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   content: {
     gap: 10,

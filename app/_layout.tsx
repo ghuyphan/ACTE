@@ -14,7 +14,6 @@ import {
   createSolidBackScreenOptions,
   createTransparentBackScreenOptions,
 } from '../components/app/rootStackOptions';
-import { useHomeStartupReady } from '../hooks/app/useHomeStartupReady';
 import { useNotesStore } from '../hooks/useNotes';
 import { useTheme } from '../hooks/useTheme';
 import { useAppSplashGate } from '../hooks/app/useAppSplashGate';
@@ -34,12 +33,10 @@ SplashScreen.preventAutoHideAsync();
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
   const { initialLoadComplete } = useNotesStore();
-  const { homeFeedReady } = useHomeStartupReady();
   const { t } = useTranslation();
   const {
     isDatabaseReady,
     isRecovering,
-    startupRoute,
     isStartupRouteReady,
     resetStartupData,
     retryStartup,
@@ -52,8 +49,6 @@ function AppContent() {
     isDatabaseReady,
     isStartupRouteReady,
     notesReady: initialLoadComplete,
-    requiresHomeFeedReady: startupRoute === '/',
-    homeFeedReady,
     startupError,
     themeReady,
   });

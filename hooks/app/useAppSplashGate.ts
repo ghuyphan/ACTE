@@ -6,8 +6,6 @@ interface UseAppSplashGateOptions {
   isDatabaseReady: boolean;
   isStartupRouteReady: boolean;
   notesReady: boolean;
-  requiresHomeFeedReady: boolean;
-  homeFeedReady: boolean;
   startupError: string | null;
   themeReady: boolean;
 }
@@ -16,8 +14,6 @@ export function useAppSplashGate({
   isDatabaseReady,
   isStartupRouteReady,
   notesReady,
-  requiresHomeFeedReady,
-  homeFeedReady,
   startupError,
   themeReady,
 }: UseAppSplashGateOptions) {
@@ -53,8 +49,7 @@ export function useAppSplashGate({
       Boolean(startupError) ||
       (
         isDatabaseReady &&
-        notesReady &&
-        (!requiresHomeFeedReady || homeFeedReady)
+        notesReady
       )
     );
 

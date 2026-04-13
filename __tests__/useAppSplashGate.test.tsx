@@ -37,8 +37,6 @@ describe('useAppSplashGate', () => {
           isDatabaseReady: false,
           isStartupRouteReady: false,
           notesReady: false,
-          requiresHomeFeedReady: true,
-          homeFeedReady: false,
           startupError: null,
           themeReady: false,
         },
@@ -52,8 +50,6 @@ describe('useAppSplashGate', () => {
       isDatabaseReady: true,
       isStartupRouteReady: true,
       notesReady: true,
-      requiresHomeFeedReady: true,
-      homeFeedReady: true,
       startupError: null,
       themeReady: true,
     });
@@ -69,8 +65,6 @@ describe('useAppSplashGate', () => {
         isDatabaseReady: false,
         isStartupRouteReady: true,
         notesReady: false,
-        requiresHomeFeedReady: true,
-        homeFeedReady: false,
         startupError: 'database-init-failed',
         themeReady: true,
       })

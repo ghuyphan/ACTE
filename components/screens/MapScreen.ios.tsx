@@ -991,6 +991,7 @@ export default function MapScreenIOS() {
           }}
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
+          shadowVisible={bottomOverlayKind !== 'no-notes'}
         />
       ) : null}
 

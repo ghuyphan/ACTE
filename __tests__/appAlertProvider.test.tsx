@@ -1,4 +1,5 @@
 import React from 'react';
+import { Text } from 'react-native';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 import { AppAlertProvider } from '../components/ui/AppAlertProvider';
@@ -41,8 +42,25 @@ describe('AppAlertProvider', () => {
     latestAppSheetAlertProps = null;
   });
 
+  it('keeps rendering wrapped app content when no android alert is active', () => {
+    const { getByText } = render(
+      <AppAlertProvider>
+        <Text>App content</Text>
+      </AppAlertProvider>
+    );
+
+    expect(getByText('App content')).toBeTruthy();
+    expect(latestAppSheetAlertProps).toBeNull();
+  });
+
   it('runs the button callback before clearing the active android alert', async () => {
-    render(<AppAlertProvider />);
+    const { getByText } = render(
+      <AppAlertProvider>
+        <Text>App content</Text>
+      </AppAlertProvider>
+    );
+
+    expect(getByText('App content')).toBeTruthy();
 
     await act(async () => {
       showAppAlert('First alert', 'First message', [

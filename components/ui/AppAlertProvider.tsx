@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { type ReactNode, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import { appAlertManager, AppAlertOptions } from '../../utils/alert';
 import { useTranslation } from 'react-i18next';
@@ -6,7 +6,7 @@ import AppSheetAlert, { type AppSheetAlertAction } from '../sheets/AppSheetAlert
 
 type AppAlertButton = NonNullable<AppAlertOptions['buttons']>[number];
 
-export function AppAlertProvider() {
+export function AppAlertProvider({ children }: { children?: ReactNode }) {
   const { t } = useTranslation();
   const [alertState, setAlertState] = useState<AppAlertOptions | null>(null);
 
@@ -21,11 +21,11 @@ export function AppAlertProvider() {
   }, []);
 
   if (Platform.OS !== 'android') {
-    return null;
+    return <>{children}</>;
   }
 
   if (!alertState) {
-    return null;
+    return <>{children}</>;
   }
 
   const defaultOkText = t('common.ok', 'OK');
@@ -76,15 +76,18 @@ export function AppAlertProvider() {
     : mappedNonCancelActions;
 
   return (
-    <AppSheetAlert
-      visible
-      variant={hasDestructiveAction ? 'error' : 'info'}
-      title={alertState.title || ''}
-      message={alertState.message || ''}
-      actions={actions}
-      dismissible={Boolean(dismissButton) || buttons.length <= 1}
-      closeOnAction={false}
-      onClose={handleDismiss}
-    />
+    <>
+      {children}
+      <AppSheetAlert
+        visible
+        variant={hasDestructiveAction ? 'error' : 'info'}
+        title={alertState.title || ''}
+        message={alertState.message || ''}
+        actions={actions}
+        dismissible={Boolean(dismissButton) || buttons.length <= 1}
+        closeOnAction={false}
+        onClose={handleDismiss}
+      />
+    </>
   );
 }

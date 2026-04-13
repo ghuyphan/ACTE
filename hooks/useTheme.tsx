@@ -260,12 +260,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const isDark = resolvedTheme === 'dark';
     const colors = isDark ? Colors.dark : Colors.light;
 
-    // Block rendering until the saved theme is loaded to prevent
-    // the white flash when the theme snaps from default to saved value
-    if (!themeReady) {
-        return null;
-    }
-
     return (
         <ThemeContext.Provider value={{ theme, isDark, setTheme, colors, themeReady }}>
             {children}

@@ -7,6 +7,7 @@ jest.mock('../utils/appStorage', () => ({
 }));
 
 import {
+  __resetStartupRouteCacheForTests,
   getCachedStartupRoute,
   HAS_LAUNCHED_KEY,
   loadStartupRoute,
@@ -15,6 +16,7 @@ import {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  __resetStartupRouteCacheForTests();
 });
 
 describe('startupRouting', () => {
@@ -46,6 +48,16 @@ describe('startupRouting', () => {
 
     await expect(loadStartupRoute('entry')).resolves.toBe('/');
     await expect(loadStartupRoute('index')).resolves.toBe('/(tabs)');
+  });
+
+  it('warms the sync cache after async route loading', async () => {
+    mockGetPersistentItemSync.mockReturnValue(undefined);
+    mockGetPersistentItem.mockResolvedValue('true');
+
+    expect(getCachedStartupRoute('index')).toBeNull();
+
+    await expect(loadStartupRoute('entry')).resolves.toBe('/');
+    expect(getCachedStartupRoute('index')).toBe('/(tabs)');
   });
 
   it('falls back to the app route when async storage lookup fails', async () => {

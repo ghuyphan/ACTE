@@ -396,9 +396,14 @@ describe('MapScreen', () => {
     resetMockSharedPosts();
     mockSharedPosts.splice(0, mockSharedPosts.length);
 
-    const { findByText, queryByTestId } = render(<MapScreen />);
+    const { findByText, getByTestId, queryByTestId } = render(<MapScreen />);
 
     expect(await findByText('No notes')).toBeTruthy();
+    const statusSurfaceStyle = StyleSheet.flatten(getByTestId('map-status-surface').props.style);
+    expect(statusSurfaceStyle.borderWidth).toBe(1);
+    expect(statusSurfaceStyle.borderColor).toBe('rgba(17,24,39,0.12)');
+    expect(statusSurfaceStyle.shadowOpacity).toBe(0);
+    expect(statusSurfaceStyle.elevation).toBe(0);
     expect(queryByTestId('map-create-first-note')).toBeNull();
   });
 
