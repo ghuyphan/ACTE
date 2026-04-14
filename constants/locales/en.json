@@ -11,7 +11,7 @@
         "count": "{{count}} memories saved",
         "count_one": "{{count}} memory saved",
         "emptyTitle": "Your journal is empty",
-        "emptySubtitle": "Write down what she likes or dislikes\nat each restaurant. We'll remind you next time.",
+        "emptySubtitle": "Write down what she likes or dislikes at each restaurant. We'll remind you next time.",
         "createFirst": "Save your first memory",
         "unknownLocation": "Unknown location",
         "searchPlaceholder": "Search your journal...",

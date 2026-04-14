@@ -121,7 +121,7 @@ beforeEach(() => {
     async ({ locationName, noteBody, noteType }: { locationName?: string | null; noteBody?: string | null; noteType: 'text' | 'photo' }) => ({
       title: locationName?.trim() ? `Này, ${locationName.trim()} quen không?` : 'Nearby reminder',
       body: noteBody?.trim() || (noteType === 'photo'
-        ? 'Có một kỷ niệm từ nơi này đang chờ bạn.'
+        ? 'Có một trang nhật ký ảnh từ nơi này đang chờ bạn.'
         : 'A note is ready when you open Noto.'),
     })
   );
@@ -309,7 +309,7 @@ describe('backgroundGeofence', () => {
     expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
       content: {
         title: 'Này, District 1 quen không?',
-        body: 'Có một kỷ niệm từ nơi này đang chờ bạn.',
+        body: 'Có một trang nhật ký ảnh từ nơi này đang chờ bạn.',
         data: { noteId: 'photo-note' },
       },
       trigger: null,

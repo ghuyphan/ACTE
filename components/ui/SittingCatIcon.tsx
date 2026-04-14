@@ -24,9 +24,9 @@ const PATHS = [
 ];
 
 function SittingCatIcon({
-  size = 44,
+  size = 42,
   color = '#111111',
-  strokeWidth = 1.55,
+  strokeWidth = 1.08,
 }: SittingCatIconProps) {
   const scale = size / VIEWBOX_SIZE;
 

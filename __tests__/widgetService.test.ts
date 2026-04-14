@@ -26,13 +26,13 @@ jest.mock('../constants/i18n', () => {
     if (key === 'widget.countBadgeOne' || key === 'widget.countBadgeOther') {
       const count = options?.count ?? 0;
       if (currentLanguage === 'vi') {
-        return `${count} ghi chú`;
+        return `${count} trang nhat ky`;
       }
       return key === 'widget.countBadgeOne' ? `${count} note` : `${count} notes`;
     }
     if (key === 'widget.idleText') {
       return currentLanguage === 'vi'
-        ? 'Noto se hien dung ghi chu khi ban o gan.'
+        ? 'Noto se hien dung trang nhat ky khi ban o gan.'
         : "The right note will appear when you're nearby.";
     }
     if (key === 'widget.memoryReminder') {
@@ -42,7 +42,7 @@ jest.mock('../constants/i18n', () => {
     }
     if (key === 'widget.modeNearest') {
       return currentLanguage === 'vi'
-        ? 'Ky niem gan ban nhat luc nay.'
+        ? 'Trang nhat ky gan ban nhat luc nay.'
         : 'Closest memory right now.';
     }
     if (key === 'widget.modePhoto') {
@@ -63,7 +63,7 @@ jest.mock('../constants/i18n', () => {
       return key === 'widget.nearbyPlaceOne' ? `${count} place nearby` : `${count} places nearby`;
     }
     if (key === 'widget.accessorySaveMemory') {
-      return currentLanguage === 'vi' ? 'Luu mot ky niem' : 'Save a memory';
+      return currentLanguage === 'vi' ? 'Luu nhat ky' : 'Save a memory';
     }
     if (key === 'widget.accessoryAddFirstPlace') {
       return currentLanguage === 'vi' ? 'Them dia diem dau tien' : 'Add your first place';
@@ -983,8 +983,8 @@ describe('widgetService', () => {
     expect(entries[0]?.props.props).toEqual(
       expect.objectContaining({
         noteCount: 2,
-        savedCountText: '2 ghi chú',
-        accessorySaveMemoryText: 'Luu mot ky niem',
+        savedCountText: '2 trang nhat ky',
+        accessorySaveMemoryText: 'Luu nhat ky',
         accessorySavedLabelText: 'Da luu',
         accessoryOpenAppText: 'Mo Noto',
       })

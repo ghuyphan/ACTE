@@ -542,7 +542,7 @@ export default function NotesIndexScreen() {
                           {t('home.emptyTitle', 'No notes yet')}
                         </Text>
                         <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-                          {t('home.emptySubtitle', 'Write down what she likes or dislikes\nat each restaurant — we\'ll remind you!')}
+                          {t('home.emptySubtitle', 'Write down what she likes or dislikes at each restaurant. We\'ll remind you next time.')}
                         </Text>
                       </View>
                     </View>
@@ -750,6 +750,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: 'Noto Sans',
     marginTop: 8,
-    maxWidth: 240,
+    maxWidth: 280,
   },
 });

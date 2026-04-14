@@ -24,9 +24,9 @@ const PATHS = [
 ];
 
 function CatBoxIcon({
-  size = 44,
+  size = 42,
   color = '#111111',
-  strokeWidth = 1.55,
+  strokeWidth = 1.08,
 }: CatBoxIconProps) {
   const scale = size / VIEWBOX_SIZE;
 

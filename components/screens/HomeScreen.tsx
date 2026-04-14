@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useIsFocused, useScrollToTop } from '@react-navigation/native';
 import * as FileSystem from '../../utils/fileSystem';
 import * as Haptics from '../../hooks/useHaptics';
@@ -7,13 +6,11 @@ import { Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  ActivityIndicator,
   AppState,
   Keyboard,
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -22,16 +19,16 @@ import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../sheets/AppSheetAlert';
 import CaptureCard, { type CaptureCardHandle } from '../home/CaptureCard';
-import CatBoxIcon from '../ui/CatBoxIcon';
 import {
-  buildHomeFeedItems,
   findHomeFeedItemIndex,
   getHomeFeedItemKey,
 } from '../home/feedItems';
+import HomeFeedEmptyState from '../home/HomeFeedEmptyState';
 import HomeHeaderSearch from '../home/HomeHeaderSearch';
 import NotesFeed from '../home/NotesFeed';
 import SavedNotePolaroidReveal from '../home/SavedNotePolaroidReveal';
 import SharedManageSheet from '../home/SharedManageSheet';
+import { useHomeFeedViewModel } from '../../hooks/app/useHomeFeedViewModel';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
@@ -48,6 +45,7 @@ import { showAppAlert } from '../../utils/alert';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
+import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
 import { useBottomTabVisualInset } from '../../hooks/useBottomTabVisualInset';
@@ -122,6 +120,7 @@ export default function HomeScreen() {
     removeFriend,
     createSharedPost,
   } = useSharedFeedStore();
+  const { isInitialSyncPending, status: syncStatus } = useSyncStatus();
   const {
     tier,
     isConfigured: isPlusConfigured,
@@ -184,7 +183,6 @@ export default function HomeScreen() {
   const [pendingSavedNoteScrollTargetId, setPendingSavedNoteScrollTargetId] = useState<string | null>(null);
   const [hasSeenLivePhotoCameraHint, setHasSeenLivePhotoCameraHint] = useState<boolean | null>(null);
   const [showLivePhotoCameraHint, setShowLivePhotoCameraHint] = useState(false);
-  const previousUserUidRef = useRef<string | null>(user?.uid ?? null);
 
   const searchAnim = useSharedValue(0);
   const flatListRef = useRef<any>(null);
@@ -309,14 +307,6 @@ export default function HomeScreen() {
   const snapHeight =
     shouldLockCapturePage && lockedCaptureSnapHeight != null ? lockedCaptureSnapHeight : liveSnapHeight;
 
-  const friendPosts = useMemo(
-    () => sharedPosts.filter((post) => post.authorUid !== user?.uid),
-    [sharedPosts, user?.uid]
-  );
-  const homeFeedItems = useMemo(
-    () => buildHomeFeedItems(notes, sharedEnabled ? friendPosts : sharedPosts),
-    [friendPosts, notes, sharedEnabled, sharedPosts]
-  );
   const photoNoteCount = useMemo(
     () => Math.max(localDailyPhotoNoteCount, remotePhotoNoteCount ?? 0),
     [localDailyPhotoNoteCount, remotePhotoNoteCount]
@@ -384,119 +374,33 @@ export default function HomeScreen() {
     capturedPhoto,
     hasSeenLivePhotoCameraHint,
   ]);
-  const suppressedHomeNoteIdSet = useMemo(
-    () => new Set(suppressedHomeNoteIds),
-    [suppressedHomeNoteIds]
-  );
-  const isFriendsFilterActive = useMemo(
-    () => isFriendsFilterEnabled,
-    [isFriendsFilterEnabled]
-  );
-
   const cameraPermissionRequiresSettings =
     captureMode === 'camera' &&
     permission?.granted === false &&
     permission.canAskAgain === false;
-  const ownedSharedNoteIds = useMemo(
-    () => (
-      user
-        ? Array.from(
-            new Set(
-              sharedPosts
-                .filter((post) => post.authorUid === user.uid && typeof post.sourceNoteId === 'string' && post.sourceNoteId.trim().length > 0)
-                .map((post) => post.sourceNoteId as string)
-            )
-          )
-        : []
-    ),
-    [sharedPosts, user]
-  );
-  const savedNoteRevealIsSharedByMe = useMemo(
-    () => Boolean(savedNoteRevealNote && ownedSharedNoteIds.includes(savedNoteRevealNote.id)),
-    [ownedSharedNoteIds, savedNoteRevealNote]
-  );
-  const visibleFeedItems = useMemo(
-    () => {
-      if (isFriendsFilterActive) {
-        return homeFeedItems.filter((item) => item.kind === 'shared-post');
-      }
-
-      return homeFeedItems.filter((item) => {
-        if (item.kind === 'note') {
-          return !suppressedHomeNoteIdSet.has(item.id);
-        }
-
-        return true;
-      });
-    },
-    [homeFeedItems, isFriendsFilterActive, suppressedHomeNoteIdSet]
-  );
-  const currentUserUid = user?.uid ?? null;
-  const authUserChanged = previousUserUidRef.current !== currentUserUid;
-  const shouldHoldSignedInEmptyState = useMemo(
-    () => (
-      Boolean(currentUserUid) &&
-      (authUserChanged || !notesInitialLoadComplete || loading || sharedLoading || !sharedReady)
-    ),
-    [
-      authUserChanged,
-      currentUserUid,
-      loading,
-      notesInitialLoadComplete,
-      sharedLoading,
-      sharedReady,
-    ]
-  );
-  const isPostLoginSyncingEmpty = useMemo(
-    () => (
-      Boolean(currentUserUid) &&
-      notes.length === 0 &&
-      sharedPosts.length === 0 &&
-      shouldHoldSignedInEmptyState
-    ),
-    [currentUserUid, notes.length, sharedPosts.length, shouldHoldSignedInEmptyState]
-  );
-  const isFirstNoteEmpty = useMemo(
-    () => (
-      visibleFeedItems.length === 0 &&
-      !isFriendsFilterActive &&
-      !isPostLoginSyncingEmpty &&
-      !authUserChanged &&
-      notesInitialLoadComplete &&
-      !loading &&
-      !sharedLoading &&
-      (!currentUserUid || sharedReady)
-    ),
-    [
-      authUserChanged,
-      currentUserUid,
-      isFriendsFilterActive,
-      isPostLoginSyncingEmpty,
-      loading,
-      notesInitialLoadComplete,
-      sharedLoading,
-      sharedReady,
-      visibleFeedItems.length,
-    ]
-  );
-  useEffect(() => {
-    previousUserUidRef.current = currentUserUid;
-  }, [currentUserUid]);
-  useEffect(() => {
-    if (!notesInitialLoadComplete) {
-      resetHomeFeedReady();
-      return;
-    }
-
-    if (visibleFeedItems.length === 0) {
-      markHomeFeedReady();
-    }
-  }, [
-    markHomeFeedReady,
+  const {
+    feedMode,
+    homeFeedItemsCount,
+    visibleFeedItems,
+    ownedSharedNoteIds,
+    savedNoteRevealIsSharedByMe,
+    isFriendsFilterActive,
+  } = useHomeFeedViewModel({
+    userUid: user?.uid,
+    notes,
+    notesLoading: loading,
     notesInitialLoadComplete,
+    sharedEnabled,
+    sharedReady,
+    sharedPosts,
+    isInitialSyncPending,
+    syncStatus,
+    isFriendsFilterEnabled,
+    suppressedHomeNoteIds,
+    savedNoteRevealNoteId: savedNoteRevealNote?.id ?? null,
+    markHomeFeedReady,
     resetHomeFeedReady,
-    visibleFeedItems.length,
-  ]);
+  });
 
   useEffect(() => {
     logHomeFeedDebug('state', {
@@ -504,11 +408,11 @@ export default function HomeScreen() {
       loadedNotesCount: notes.length,
       loading,
       sharedLoading,
-      homeFeedItemsCount: homeFeedItems.length,
+      homeFeedItemsCount,
       visibleFeedItemsCount: visibleFeedItems.length,
     });
   }, [
-    homeFeedItems.length,
+    homeFeedItemsCount,
     loading,
     notes.length,
     sharedLoading,
@@ -517,114 +421,25 @@ export default function HomeScreen() {
   ]);
 
   const homeFeedEmptyState = useMemo(() => {
-    if (!(isFriendsFilterActive || isPostLoginSyncingEmpty || isFirstNoteEmpty)) {
+    if (feedMode === 'content') {
       return null;
     }
 
     return (
-      <View style={styles.friendsFilterEmptyState} testID="home-feed-empty-state">
-        <View style={styles.friendsFilterEmptyIconWrap}>
-          {isPostLoginSyncingEmpty ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : isFriendsFilterActive ? (
-            <Ionicons name="people-outline" size={44} color={colors.secondaryText} />
-          ) : (
-            <CatBoxIcon size={50} color={colors.secondaryText} />
-          )}
-        </View>
-        <Text style={[styles.friendsFilterEmptyTitle, { color: colors.text }]}>
-          {isPostLoginSyncingEmpty
-            ? t('home.syncingEmptyTitle', 'Syncing your memories')
-            : isFriendsFilterActive
-              ? t('shared.emptyFriendPostsTitle', 'No friend posts yet')
-              : t('home.firstNoteEmptyTitle', 'Your journal is waiting')}
-        </Text>
-        <Text style={[styles.friendsFilterEmptyBody, { color: colors.secondaryText }]}>
-          {isPostLoginSyncingEmpty
-            ? t(
-                'home.syncingEmptyBody',
-                'We are pulling in your notes and shared memories now. This usually takes just a moment.'
-              )
-            : isFriendsFilterActive
-              ? t(
-                  'shared.emptyFriendPostsBody',
-                  'When friends share a memory, it will appear here. Switch back to All to see your notes.'
-                )
-              : t(
-                  'home.firstNoteEmptyBody',
-                  'Save your first note or photo to start filling this space.'
-                )}
-        </Text>
-        {isFriendsFilterActive ? (
-          <View style={styles.friendsFilterEmptyActions}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setIsFriendsFilterEnabled(false);
-              }}
-              style={({ pressed }) => [
-                styles.friendsFilterEmptyButton,
-                {
-                  opacity: pressed ? 0.72 : 1,
-                },
-              ]}
-            >
-              <Text style={[styles.friendsFilterEmptyButtonText, { color: colors.primary }]}>
-                {t('home.feedFilterAll', 'All')}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                presentSharedManageSheet();
-              }}
-              style={({ pressed }) => [
-                styles.friendsFilterEmptyButton,
-                {
-                  opacity: pressed ? 0.72 : 1,
-                },
-              ]}
-            >
-              <Text style={[styles.friendsFilterEmptyButtonText, { color: colors.primary }]}>
-                {t('shared.manageTitle', 'Friends')}
-              </Text>
-            </Pressable>
-          </View>
-        ) : isFirstNoteEmpty ? (
-          <View style={styles.friendsFilterEmptyActions}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-              }}
-              style={({ pressed }) => [
-                styles.friendsFilterEmptyButton,
-                {
-                  opacity: pressed ? 0.72 : 1,
-                },
-              ]}
-            >
-              <Text style={[styles.friendsFilterEmptyButtonText, { color: colors.primary }]}>
-                {t('home.createFirst', 'Save your first memory')}
-              </Text>
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
+      <HomeFeedEmptyState
+        mode={feedMode}
+        colors={colors}
+        t={t}
+        onDisableFriendsFilter={() => {
+          setIsFriendsFilterEnabled(false);
+        }}
+        onOpenFriends={presentSharedManageSheet}
+        onCreateFirstMemory={() => {
+          flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        }}
+      />
     );
-  }, [
-    colors.primary,
-    colors.secondaryText,
-    colors.text,
-    isFirstNoteEmpty,
-    isFriendsFilterActive,
-    isPostLoginSyncingEmpty,
-    presentSharedManageSheet,
-    t,
-  ]);
+  }, [colors, feedMode, presentSharedManageSheet, t]);
 
   const handleRequestCameraPermission = useCallback(async () => {
     showAlert({
@@ -2149,49 +1964,5 @@ const styles = StyleSheet.create({
   },
   captureItemWrapper: {
     width: '100%',
-  },
-  friendsFilterEmptyState: {
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  friendsFilterEmptyIconWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  friendsFilterEmptyTitle: {
-    fontSize: 22,
-    fontWeight: '600',
-    textAlign: 'center',
-    fontFamily: 'Noto Sans',
-  },
-  friendsFilterEmptyBody: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-    fontFamily: 'Noto Sans',
-    maxWidth: 240,
-  },
-  friendsFilterEmptyButton: {
-    marginTop: 16,
-    minHeight: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  friendsFilterEmptyActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 18,
-    marginTop: 4,
-  },
-  friendsFilterEmptyButtonText: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '800',
-    fontFamily: 'Noto Sans',
   },
 });

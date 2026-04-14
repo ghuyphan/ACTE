@@ -23,7 +23,7 @@ const DEFAULT_REMINDER_TITLES_WITH_LOCATION = {
     '{{location}} vẫn còn nhớ bạn',
     'Alo, {{location}} gọi',
     'Bạn vừa đi ngang {{location}}',
-    '{{location}} có một ghi chú đang đợi bạn',
+    '{{location}} có một trang nhật ký đang đợi bạn',
   ],
 } as const;
 
@@ -37,10 +37,10 @@ const DEFAULT_REMINDER_TITLES_GENERIC = {
   ],
   vi: [
     'Alo, quá khứ gọi',
-    'Bạn đang ở gần một ghi chú',
+    'Bạn đang ở gần một trang nhật ký',
     'Có một mẩu ký ức ở gần đây',
     'Này, có gì đó đang đợi bạn',
-    'Ghi chú cũ vừa vẫy tay',
+    'Trang nhật ký cũ vừa vẫy tay',
   ],
 } as const;
 
@@ -53,11 +53,11 @@ const DEFAULT_REMINDER_TEXT_BODIES = {
     'Your past self left a note here for a reason.',
   ],
   vi: [
-    'Có một ghi chú nhỏ đang đợi bạn mở lại.',
+    'Có một trang nhật ký nhỏ đang đợi bạn mở lại.',
     'Một mẩu ký ức ở đây vừa gặp lại bạn.',
     'Mở Noto xem bạn từng để lại gì ở nơi này nhé.',
     'Có đôi dòng ngày trước đang chờ bạn.',
-    'Nơi này vẫn giữ một ghi chú của bạn.',
+    'Nơi này vẫn giữ một trang nhật ký của bạn.',
   ],
 } as const;
 
@@ -70,7 +70,7 @@ const DEFAULT_REMINDER_PHOTO_BODIES = {
     'This place is holding on to one of your memories.',
   ],
   vi: [
-    'Có một kỷ niệm từ nơi này đang chờ bạn.',
+    'Có một trang nhật ký ảnh từ nơi này đang chờ bạn.',
     'Nơi này còn giữ một khoảnh khắc của bạn.',
     'Bạn từng để lại một mẩu chuyện ở đây đó.',
     'Có một tấm ảnh cũ đang chờ được mở lại.',
