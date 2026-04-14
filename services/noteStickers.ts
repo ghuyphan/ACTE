@@ -156,9 +156,10 @@ const SUPPORTED_STICKER_MIME_TYPES = new Set([
   'image/heic',
   'image/heif',
 ]);
-const MAX_STICKER_FILE_SIZE_BYTES = 360 * 1024;
+const MAX_STICKER_FILE_SIZE_BYTES = 240 * 1024;
 const MAX_STICKER_DIMENSION_PX = 1024;
 const STICKER_IMPORT_OPTIMIZATION_PRESETS = [
+  { maxDimension: 1024, compress: 0.9 },
   { maxDimension: 1024, compress: 0.86 },
   { maxDimension: 768, compress: 0.78 },
   { maxDimension: 512, compress: 0.68 },
@@ -716,25 +717,20 @@ async function optimizeStickerForImport(
   const originalInfo = await getStickerFileInfo(uri);
   const targetMimeType: StickerOptimizationTargetMimeType =
     suggestedRenderMode === 'stamp' ? 'image/jpeg' : 'image/webp';
-  const shouldNormalizeStampFormat =
-    suggestedRenderMode === 'stamp' && mimeType !== 'image/jpeg';
-  if (!needsStickerOptimization(originalInfo)) {
-    if (!shouldNormalizeStampFormat) {
-      return {
-        uri,
-        mimeType,
-        cleanupUris: [] as string[],
-      };
-    }
-
-    const normalizedStamp = await manipulateAsync(uri, [], {
-      compress: 0.9,
-      format: getStickerOptimizationSaveFormat(targetMimeType),
-    });
+  const shouldNormalizeFormat = mimeType !== targetMimeType;
+  if (!originalInfo) {
     return {
-      uri: normalizedStamp.uri,
-      mimeType: targetMimeType,
-      cleanupUris: normalizedStamp.uri !== uri ? [normalizedStamp.uri] : [],
+      uri,
+      mimeType,
+      cleanupUris: [] as string[],
+    };
+  }
+
+  if (!needsStickerOptimization(originalInfo) && !shouldNormalizeFormat) {
+    return {
+      uri,
+      mimeType,
+      cleanupUris: [] as string[],
     };
   }
 
@@ -786,6 +782,7 @@ async function optimizeStickerForImport(
     (typeof originalInfo.size !== 'number' ||
       bestSize === null ||
       bestSize < originalInfo.size ||
+      shouldNormalizeFormat ||
       originalInfo.width > MAX_STICKER_DIMENSION_PX ||
       originalInfo.height > MAX_STICKER_DIMENSION_PX)
   ) {

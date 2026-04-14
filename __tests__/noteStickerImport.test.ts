@@ -218,13 +218,17 @@ describe('importStickerAsset', () => {
     jest.restoreAllMocks();
   });
 
-  it('keeps small stickers in their original format', async () => {
+  it('normalizes small transparent stickers into webp', async () => {
     jest.spyOn(Date, 'now').mockReturnValue(1762479839534);
     const importStickerAsset = loadImportStickerAsset();
 
     mockGetInfoAsync.mockImplementation(async (uri: string) => {
       if (uri === 'file:///imports/small-sticker.png') {
         return { exists: true, isDirectory: false, size: 80 * 1024 };
+      }
+
+      if (uri === 'file:///cache/optimized-sticker.webp') {
+        return { exists: true, isDirectory: false, size: 42 * 1024 };
       }
 
       return { exists: true, isDirectory: false, size: 80 * 1024 };
@@ -236,15 +240,23 @@ describe('importStickerAsset', () => {
       name: 'small-sticker.png',
     });
 
-    expect(mockManipulateAsync).not.toHaveBeenCalled();
-    expect(mockCopyAsync).toHaveBeenCalledWith(
+    expect(mockManipulateAsync).toHaveBeenCalledWith(
+      'file:///imports/small-sticker.png',
+      [],
       expect.objectContaining({
-        from: 'file:///imports/small-sticker.png',
-        to: 'file:///documents/stickers/sticker-1762479839534-test-uui.png',
+        compress: 0.9,
+        format: 'webp',
       })
     );
-    expect(asset.mimeType).toBe('image/png');
-    expect(asset.localUri.endsWith('.png')).toBe(true);
+    expect(mockCopyAsync).toHaveBeenCalledWith({
+      from: 'file:///cache/optimized-sticker.webp',
+      to: 'file:///documents/stickers/sticker-1762479839534-test-uui.webp',
+    });
+    expect(mockDeleteAsync).toHaveBeenCalledWith('file:///cache/optimized-sticker.webp', {
+      idempotent: true,
+    });
+    expect(asset.mimeType).toBe('image/webp');
+    expect(asset.localUri.endsWith('.webp')).toBe(true);
     expect(asset.suggestedRenderMode).toBe('default');
   });
 
@@ -289,7 +301,7 @@ describe('importStickerAsset', () => {
       'file:///imports/large-sticker.png',
       [{ resize: { width: 1024 } }],
       expect.objectContaining({
-        compress: 0.86,
+        compress: 0.9,
         format: 'webp',
       })
     );

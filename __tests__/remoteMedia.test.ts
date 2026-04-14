@@ -21,6 +21,7 @@ const mockReadPhotoAsArrayBuffer = jest.fn(async (_uri: string) => Uint8Array.fr
 const mockReadPairedVideoAsArrayBuffer = jest.fn(
   async (_uri: string) => Uint8Array.from([4, 5, 6]).buffer
 );
+const mockManipulateAsync = jest.fn();
 
 jest.mock('../utils/fileSystem', () => ({
   getInfoAsync: (uri: string) => mockGetInfoAsync(uri),
@@ -29,7 +30,7 @@ jest.mock('../utils/fileSystem', () => ({
 }));
 
 jest.mock('expo-image-manipulator', () => ({
-  manipulateAsync: jest.fn(),
+  manipulateAsync: (...args: unknown[]) => mockManipulateAsync(...args),
   SaveFormat: {
     JPEG: 'jpeg',
   },
@@ -90,6 +91,9 @@ describe('remoteMedia uploads', () => {
       isDirectory: false,
       size: 128 * 1024,
       uri: 'file:///media/mock.jpg',
+    });
+    mockManipulateAsync.mockResolvedValue({
+      uri: 'file:///cache/optimized-photo.jpg',
     });
     mockReadPhotoAsArrayBuffer.mockResolvedValue(Uint8Array.from([1, 2, 3]).buffer);
     mockReadPairedVideoAsArrayBuffer.mockResolvedValue(Uint8Array.from([4, 5, 6]).buffer);
@@ -200,6 +204,24 @@ describe('remoteMedia uploads', () => {
   });
 
   it('uploads photos using raw array buffers instead of base64 payloads', async () => {
+    mockGetInfoAsync.mockImplementation(async (uri: string) => {
+      if (uri === 'file:///cache/optimized-photo.jpg') {
+        return {
+          exists: true,
+          isDirectory: false,
+          size: 96 * 1024,
+          uri,
+        };
+      }
+
+      return {
+        exists: true,
+        isDirectory: false,
+        size: 128 * 1024,
+        uri,
+      };
+    });
+
     const result = await uploadPhotoToStorage(
       'note-media',
       'user-1/note-1',
@@ -207,7 +229,15 @@ describe('remoteMedia uploads', () => {
     );
 
     expect(result).toBe('user-1/note-1');
-    expect(mockReadPhotoAsArrayBuffer).toHaveBeenCalledWith('file:///media/mock.jpg');
+    expect(mockManipulateAsync).toHaveBeenCalledWith(
+      'file:///media/mock.jpg',
+      [],
+      expect.objectContaining({
+        compress: 0.72,
+        format: 'jpeg',
+      })
+    );
+    expect(mockReadPhotoAsArrayBuffer).toHaveBeenCalledWith('file:///cache/optimized-photo.jpg');
     expect(mockUpload).toHaveBeenCalledWith(
       'user-1/note-1',
       expect.any(ArrayBuffer),
@@ -216,6 +246,9 @@ describe('remoteMedia uploads', () => {
         upsert: false,
       })
     );
+    expect(mockDeleteAsync).toHaveBeenCalledWith('file:///cache/optimized-photo.jpg', {
+      idempotent: true,
+    });
   });
 
   it('uploads live photo motion clips as raw bytes with the correct content type', async () => {

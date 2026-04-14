@@ -96,6 +96,43 @@ jest.mock('@shopify/flash-list', () => {
   };
 });
 
+jest.mock('@gorhom/bottom-sheet', () => {
+  const React = require('react');
+  const { FlatList, ScrollView, TextInput, View } = require('react-native');
+
+  const BottomSheetModal = React.forwardRef(({ children }: any, ref: any) => {
+    React.useImperativeHandle(ref, () => ({
+      present: jest.fn(),
+      dismiss: jest.fn(),
+    }));
+
+    return React.createElement(View, null, children);
+  });
+
+  const BottomSheetBackdrop = ({ children }: any) => React.createElement(View, null, children);
+  const BottomSheetView = ({ children, ...props }: any) => React.createElement(View, props, children);
+  const BottomSheetModalProvider = ({ children }: any) => React.createElement(View, null, children);
+  const BottomSheetFlatList = React.forwardRef((props: any, ref: any) =>
+    React.createElement(FlatList, { ...props, ref })
+  );
+  const BottomSheetScrollView = React.forwardRef((props: any, ref: any) =>
+    React.createElement(ScrollView, { ...props, ref })
+  );
+  const BottomSheetTextInput = React.forwardRef((props: any, ref: any) =>
+    React.createElement(TextInput, { ...props, ref })
+  );
+
+  return {
+    BottomSheetBackdrop,
+    BottomSheetFlatList,
+    BottomSheetModal,
+    BottomSheetModalProvider,
+    BottomSheetScrollView,
+    BottomSheetTextInput,
+    BottomSheetView,
+  };
+});
+
 jest.mock('react-native-mmkv', () => ({
   MMKV: class MockMMKV {
     private store = new Map<string, string>();

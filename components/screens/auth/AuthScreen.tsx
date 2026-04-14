@@ -1,9 +1,10 @@
 import { environment, presentationDetents, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { usePreventRemove } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Href, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Image,
@@ -29,9 +30,10 @@ import AppSheet from '../../sheets/AppSheet';
 import AppBackButton from '../../ui/AppBackButton';
 import OfflineNotice from '../../ui/OfflineNotice';
 import PrimaryButton from '../../ui/PrimaryButton';
-import { Layout, Shadows, Typography } from '../../../constants/theme';
+import { Layout, Typography } from '../../../constants/theme';
 import { EmailRegistrationInput, useAuth } from '../../../hooks/useAuth';
 import { useConnectivity } from '../../../hooks/useConnectivity';
+import { useAndroidKeyboardBlurOnHide } from '../../../hooks/ui/useAndroidKeyboardBlurOnHide';
 import { useTheme } from '../../../hooks/useTheme';
 import { hasPrivacyPolicyLink, hasSupportLink, openPrivacyPolicy, openSupport } from '../../../services/legalLinks';
 import { completeOnboardingAndEnterApp, markOnboardingComplete } from '../../../services/startupRouting';
@@ -42,6 +44,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_DISPLAY_NAME_LENGTH = 40;
 const APP_ICON_LIGHT_SOURCE = require('../../../assets/images/icon/icon-default.png');
 const APP_ICON_DARK_SOURCE = require('../../../assets/images/icon/icon-dark.png');
+const SheetTextInput = Platform.OS === 'android' ? BottomSheetTextInput : TextInput;
 const FORM_LAYOUT_TRANSITION = CurvedTransition.duration(220)
   .easingX(Easing.out(Easing.cubic))
   .easingY(Easing.out(Easing.cubic))
@@ -60,6 +63,7 @@ function AuthField({
   autoComplete,
   returnKeyType,
   onSubmitEditing,
+  inputRef,
   testID,
 }: {
   label: string;
@@ -79,6 +83,7 @@ function AuthField({
   autoComplete?: 'email' | 'password' | 'name' | 'off' | 'new-password';
   returnKeyType?: 'done' | 'go' | 'next' | 'send';
   onSubmitEditing?: () => void;
+  inputRef?: (node: any) => void;
   testID: string;
 }) {
   const { colors } = useTheme();
@@ -86,7 +91,8 @@ function AuthField({
   return (
     <View style={styles.fieldGroup}>
       <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>{label}</Text>
-      <TextInput
+      <SheetTextInput
+        ref={inputRef}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -167,14 +173,18 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [hasAcceptedPrivacyPolicy, setHasAcceptedPrivacyPolicy] = useState(true);
-  const [hasAcceptedLandingPolicy, setHasAcceptedLandingPolicy] = useState(true);
+  const [hasAcceptedPrivacyPolicy, setHasAcceptedPrivacyPolicy] = useState(false);
+  const [hasAcceptedLandingPolicy, setHasAcceptedLandingPolicy] = useState(false);
   const [authMessage, setAuthMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<'google' | 'signIn' | 'register' | 'reset' | null>(null);
   const [formContentHeight, setFormContentHeight] = useState(0);
   const [previousFormContentHeight, setPreviousFormContentHeight] = useState(0);
   const formProgress = useSharedValue(0);
+  const displayNameInputRef = useRef<{ blur?: () => void; focus?: () => void; isFocused?: () => boolean } | null>(null);
+  const emailInputRef = useRef<{ blur?: () => void; focus?: () => void; isFocused?: () => boolean } | null>(null);
+  const passwordInputRef = useRef<{ blur?: () => void; focus?: () => void; isFocused?: () => boolean } | null>(null);
+  const confirmPasswordInputRef = useRef<{ blur?: () => void; focus?: () => void; isFocused?: () => boolean } | null>(null);
   const isShareIntent = intent === 'share-note';
   const returnToRoute = typeof returnTo === 'string' && returnTo.trim() ? returnTo.trim() : null;
   const canOpenPrivacyPolicy = hasPrivacyPolicyLink();
@@ -182,6 +192,11 @@ export default function LoginScreen() {
 
   const isFormVisible = screenMode !== 'landing';
   const showLandingToast = Platform.OS === 'android';
+
+  useAndroidKeyboardBlurOnHide({
+    enabled: isFormVisible,
+    refs: [displayNameInputRef, emailInputRef, passwordInputRef, confirmPasswordInputRef],
+  });
 
   const resetMessages = useCallback(() => {
     setAuthMessage(null);
@@ -204,7 +219,7 @@ export default function LoginScreen() {
   const openForm = useCallback(
     (mode: Exclude<AuthScreenMode, 'landing'>) => {
       resetMessages();
-      setHasAcceptedPrivacyPolicy(true);
+      setHasAcceptedPrivacyPolicy(false);
       setScreenMode(mode);
     },
     [resetMessages]
@@ -212,7 +227,7 @@ export default function LoginScreen() {
 
   const goBackInFlow = useCallback(() => {
     resetMessages();
-    setHasAcceptedPrivacyPolicy(true);
+    setHasAcceptedPrivacyPolicy(false);
     setScreenMode((currentMode) => {
       if (currentMode === 'register' || currentMode === 'resetPassword') {
         return 'signIn';
@@ -224,7 +239,7 @@ export default function LoginScreen() {
 
   const dismissForm = useCallback(() => {
     resetMessages();
-    setHasAcceptedPrivacyPolicy(true);
+    setHasAcceptedPrivacyPolicy(false);
     setScreenMode('landing');
   }, [resetMessages]);
 
@@ -254,15 +269,6 @@ export default function LoginScreen() {
   const landingAnimatedStyle = useAnimatedStyle(() => ({
     opacity: 1 - formProgress.value * 0.1,
     transform: [{ translateY: formProgress.value * -28 }],
-  }));
-
-  const formPanelAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: formProgress.value,
-    transform: [{ translateY: (1 - formProgress.value) * 360 }],
-  }));
-
-  const formBackdropAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: formProgress.value * 0.08,
   }));
 
   const gradientColors: [string, string, string] = isDark
@@ -592,6 +598,10 @@ export default function LoginScreen() {
             textContentType="name"
             autoComplete="name"
             returnKeyType="next"
+            onSubmitEditing={() => emailInputRef.current?.focus?.()}
+            inputRef={(node) => {
+              displayNameInputRef.current = node ?? null;
+            }}
             testID="auth-display-name-input"
           />
         </Animated.View>
@@ -607,7 +617,14 @@ export default function LoginScreen() {
           textContentType="emailAddress"
           autoComplete="email"
           returnKeyType={screenMode === 'resetPassword' ? 'send' : 'next'}
-          onSubmitEditing={screenMode === 'resetPassword' ? () => void submitForm() : undefined}
+          onSubmitEditing={
+            screenMode === 'resetPassword'
+              ? () => void submitForm()
+              : () => passwordInputRef.current?.focus?.()
+          }
+          inputRef={(node) => {
+            emailInputRef.current = node ?? null;
+          }}
           testID="auth-email-input"
         />
       </Animated.View>
@@ -623,7 +640,14 @@ export default function LoginScreen() {
             textContentType={screenMode === 'register' ? 'newPassword' : 'password'}
             autoComplete={screenMode === 'register' ? 'new-password' : 'password'}
             returnKeyType={screenMode === 'register' ? 'next' : 'go'}
-            onSubmitEditing={screenMode === 'register' ? undefined : () => void submitForm()}
+            onSubmitEditing={
+              screenMode === 'register'
+                ? () => confirmPasswordInputRef.current?.focus?.()
+                : () => void submitForm()
+            }
+            inputRef={(node) => {
+              passwordInputRef.current = node ?? null;
+            }}
             testID="auth-password-input"
           />
         </Animated.View>
@@ -641,6 +665,9 @@ export default function LoginScreen() {
             autoComplete="new-password"
             returnKeyType="done"
             onSubmitEditing={() => void submitForm()}
+            inputRef={(node) => {
+              confirmPasswordInputRef.current = node ?? null;
+            }}
             testID="auth-confirm-password-input"
           />
         </Animated.View>
@@ -800,6 +827,7 @@ export default function LoginScreen() {
       return (
         <ScrollView
           bounces={false}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.formContent}
           showsVerticalScrollIndicator={false}
@@ -977,51 +1005,19 @@ export default function LoginScreen() {
         ) : null}
       </Animated.View>
 
-      {Platform.OS === 'ios' ? (
-        <AppSheet
-          visible={isFormVisible}
-          onClose={dismissForm}
-          fitToContents={formContentHeight === 0}
-          iosGroupModifiers={nativeSheetModifiers}
-        >
-          <KeyboardAvoidingView behavior="padding">
-            <View testID="auth-form-panel" style={styles.nativeFormSurface}>
-              {renderFormContent(false)}
-            </View>
-          </KeyboardAvoidingView>
-        </AppSheet>
-      ) : (
-        <KeyboardAvoidingView
-          style={StyleSheet.absoluteFill}
-          behavior={undefined}
-          pointerEvents="box-none"
-        >
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.formBackdrop,
-              { backgroundColor: colors.text },
-              formBackdropAnimatedStyle,
-            ]}
-          />
-          <Animated.View
-            pointerEvents={isFormVisible ? 'auto' : 'none'}
-            layout={FORM_LAYOUT_TRANSITION}
-            style={[
-              styles.formPanel,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                paddingBottom: insets.bottom + 24,
-              },
-              formPanelAnimatedStyle,
-            ]}
-            testID="auth-form-panel"
-          >
-            {renderFormContent(true)}
-          </Animated.View>
+      <AppSheet
+        visible={isFormVisible}
+        onClose={dismissForm}
+        fitToContents={formContentHeight === 0}
+        iosGroupModifiers={nativeSheetModifiers}
+        androidKeyboardInputMode="adjustPan"
+      >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View testID="auth-form-panel" style={styles.nativeFormSurface}>
+            {renderFormContent(Platform.OS === 'android')}
+          </View>
         </KeyboardAvoidingView>
-      )}
+      </AppSheet>
     </View>
   );
 }
@@ -1101,23 +1097,8 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 15,
   },
-  formPanel: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderTopLeftRadius: 34,
-    borderTopRightRadius: 34,
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    minHeight: 380,
-    ...Shadows.card,
-  },
   nativeFormSurface: {
     backgroundColor: 'transparent',
-  },
-  formBackdrop: {
-    ...StyleSheet.absoluteFill,
   },
   formContent: {
     paddingHorizontal: Layout.screenPadding,

@@ -26,10 +26,12 @@ export const NOTE_MEDIA_BUCKET = 'note-media';
 export const SHARED_POST_MEDIA_BUCKET = 'shared-post-media';
 export const ROOM_POST_MEDIA_BUCKET = 'room-post-media';
 const UPLOAD_RETRY_DELAYS_MS = [250];
+const PHOTO_UPLOAD_BASELINE_COMPRESS = 0.72;
 const PHOTO_UPLOAD_OPTIMIZATION_PRESETS = [
-  { width: 1200, compress: 0.6 },
-  { width: 960, compress: 0.4 },
-  { width: 800, compress: 0.3 },
+  { width: 1600, compress: 0.68 },
+  { width: 1280, compress: 0.58 },
+  { width: 960, compress: 0.46 },
+  { width: 800, compress: 0.36 },
 ];
 interface UploadStorageOptions {
   allowOverwrite?: boolean;
@@ -117,18 +119,28 @@ async function optimizePhotoForUpload(photoUri: string) {
     throw new Error('Photo file is unavailable locally. Please retry after reopening the note.');
   }
 
-  if (
-    typeof originalInfo.size !== 'number' ||
-    originalInfo.size <= MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES
-  ) {
-    return {
-      uri: originalInfo.uri,
-      cleanupUri: null as string | null,
-    };
+  const normalized = await manipulateAsync(originalInfo.uri, [], {
+    compress: PHOTO_UPLOAD_BASELINE_COMPRESS,
+    format: SaveFormat.JPEG,
+  });
+
+  let currentUri = normalized.uri;
+  let cleanupUri: string | null = null;
+  if (normalized.uri !== originalInfo.uri) {
+    cleanupUri = normalized.uri;
   }
 
-  let currentUri = originalInfo.uri;
-  let cleanupUri: string | null = null;
+  const normalizedInfo = await getLocalPhotoInfo(currentUri);
+  if (
+    normalizedInfo &&
+    (typeof normalizedInfo.size !== 'number' ||
+      normalizedInfo.size <= MAX_SYNCABLE_PHOTO_FILE_SIZE_BYTES)
+  ) {
+    return {
+      uri: currentUri,
+      cleanupUri,
+    };
+  }
 
   for (const preset of PHOTO_UPLOAD_OPTIMIZATION_PRESETS) {
     const result = await manipulateAsync(
