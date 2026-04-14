@@ -1,9 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
-import type { ReactNode } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, useWindowDimensions, View, ViewStyle } from 'react-native';
-import { useSharedValue } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { Layout, Radii, Typography } from '../../constants/theme';
 import { useRelativeTimeNow } from '../../hooks/useRelativeTimeNow';
 import { Note } from '../../services/database';
@@ -99,6 +104,142 @@ function MetadataAction({
   );
 }
 
+const BADGE_COLLAPSED_SIZE = 36;
+const BADGE_GLYPH_BOX = 18;
+const BADGE_HORIZONTAL_PADDING = 10;
+const BADGE_LABEL_GAP = 6;
+const BADGE_EXPAND_IN_DURATION_MS = 180;
+const BADGE_EXPAND_OUT_DURATION_MS = 140;
+
+function estimateBadgeLabelWidth(label: string) {
+  return Math.max(32, Math.ceil(label.trim().length * 7.6));
+}
+
+function ExpandableStatusBadge({
+  accessibilityHint,
+  accessibilityLabel,
+  backgroundColor,
+  expanded,
+  icon,
+  label,
+  labelColor,
+  onPress,
+  side,
+  testID,
+}: {
+  accessibilityHint: string;
+  accessibilityLabel: string;
+  backgroundColor: string;
+  expanded: boolean;
+  icon: ReactNode;
+  label: string;
+  labelColor: string;
+  onPress: () => void;
+  side: 'left' | 'right';
+  testID: string;
+}) {
+  const [labelWidth, setLabelWidth] = useState(0);
+  const progress = useSharedValue(expanded ? 1 : 0);
+  const estimatedLabelWidth = useMemo(() => estimateBadgeLabelWidth(label), [label]);
+
+  useEffect(() => {
+    setLabelWidth(0);
+  }, [label]);
+
+  useEffect(() => {
+    progress.value = withTiming(expanded ? 1 : 0, {
+      duration: expanded ? BADGE_EXPAND_IN_DURATION_MS : BADGE_EXPAND_OUT_DURATION_MS,
+      easing: expanded ? Easing.out(Easing.cubic) : Easing.inOut(Easing.quad),
+    });
+  }, [expanded, progress]);
+
+  const resolvedLabelWidth = labelWidth > 0 ? labelWidth : estimatedLabelWidth;
+
+  const targetExpandedWidth = Math.max(
+    BADGE_COLLAPSED_SIZE,
+    BADGE_HORIZONTAL_PADDING * 2 + BADGE_GLYPH_BOX + BADGE_LABEL_GAP + resolvedLabelWidth
+  );
+  const handleMeasureLabel = useCallback((event: { nativeEvent: { layout: { width: number } } }) => {
+    const nextWidth = Math.ceil(event.nativeEvent.layout.width);
+    setLabelWidth((currentWidth) => (nextWidth > currentWidth ? nextWidth : currentWidth));
+  }, []);
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    width:
+      BADGE_COLLAPSED_SIZE + (targetExpandedWidth - BADGE_COLLAPSED_SIZE) * progress.value,
+    paddingHorizontal: BADGE_HORIZONTAL_PADDING * progress.value,
+  }));
+
+  const animatedLabelStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    width: resolvedLabelWidth * progress.value,
+    marginLeft: side === 'left' ? BADGE_LABEL_GAP * progress.value : 0,
+    marginRight: side === 'right' ? BADGE_LABEL_GAP * progress.value : 0,
+    transform: [
+      {
+        translateX: side === 'right' ? -6 * (1 - progress.value) : 6 * (1 - progress.value),
+      },
+    ],
+  }));
+
+  return (
+    <Pressable
+      accessibilityHint={accessibilityHint}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      accessibilityState={{ expanded }}
+      hitSlop={8}
+      onPress={onPress}
+      testID={testID}
+      style={({ pressed }) => [styles.badgePressable, pressed ? styles.badgePressablePressed : null]}
+    >
+      <Animated.View
+        style={[
+          styles.badge,
+          styles.expandableBadge,
+          expanded
+            ? side === 'right'
+              ? styles.rightExpandableBadgeExpanded
+              : styles.leftExpandableBadgeExpanded
+            : null,
+          animatedContainerStyle,
+          { backgroundColor },
+        ]}
+      >
+        {side === 'right' ? (
+          <>
+            <Animated.View style={[styles.badgeLabelWrap, animatedLabelStyle]}>
+              <Text numberOfLines={1} style={[styles.expandableBadgeText, { color: labelColor }]}>
+                {label}
+              </Text>
+            </Animated.View>
+            <View style={styles.badgeGlyph}>{icon}</View>
+          </>
+        ) : (
+          <>
+            <View style={styles.badgeGlyph}>{icon}</View>
+            <Animated.View style={[styles.badgeLabelWrap, animatedLabelStyle]}>
+              <Text numberOfLines={1} style={[styles.expandableBadgeText, { color: labelColor }]}>
+                {label}
+              </Text>
+            </Animated.View>
+          </>
+        )}
+      </Animated.View>
+      <View
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+        pointerEvents="none"
+        style={styles.badgeMeasure}
+      >
+        <Text onLayout={handleMeasureLabel} style={styles.expandableBadgeText}>
+          {label}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
 export function NoteMemoryCard({
   note,
   colors,
@@ -115,6 +256,17 @@ export function NoteMemoryCard({
   const dateStr = formatNoteTimestamp(note.createdAt, 'card', now);
   const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
   const locationLabel = note.locationName ?? t('home.unknownLocation', 'Unknown location');
+  const [expandedBadgeKey, setExpandedBadgeKey] = useState<'shared' | 'live-photo' | 'favorite' | null>(null);
+  const sharedStatusLabel = t('home.noteStatusShared', 'Shared');
+  const sharedStatusA11yLabel = t('home.noteStatusSharedA11y', 'Shared with friends');
+  const livePhotoPreviewHintLabel = t('home.noteStatusLivePhotoHint', 'Hold to preview');
+  const livePhotoStatusA11yLabel = t('home.noteStatusLivePhotoA11y', 'Live Photo memory');
+  const favoriteStatusLabel = t('home.noteStatusFavorite', 'Favorite');
+  const favoriteStatusA11yLabel = t('home.noteStatusFavoriteA11y', 'Marked as favorite');
+  const statusDisclosureHint = t('home.noteStatusShowHint', 'Shows what this badge means');
+  const toggleExpandedBadge = (key: 'shared' | 'live-photo' | 'favorite') => {
+    setExpandedBadgeKey((current) => (current === key ? null : key));
+  };
   const noteMetadata = (
     <View style={styles.metadataPillContent}>
       <View style={styles.metadataPillMain}>
@@ -176,25 +328,50 @@ export function NoteMemoryCard({
 
         {note.isFavorite || note.isLivePhoto ? (
           <View style={styles.badgeStack}>
-            {note.isLivePhoto ? (
-              <View testID="note-memory-live-badge" style={[styles.badge, { backgroundColor: colors.card }]}>
-                <LivePhotoIcon size={18} color={colors.primary} />
-              </View>
-            ) : null}
             {note.isFavorite ? (
-              <View testID="note-memory-favorite-badge" style={[styles.badge, { backgroundColor: colors.card }]}>
-                <Ionicons name="heart" size={16} color={colors.danger} />
-              </View>
+              <ExpandableStatusBadge
+                accessibilityHint={statusDisclosureHint}
+                accessibilityLabel={favoriteStatusA11yLabel}
+                backgroundColor={colors.card}
+                expanded={expandedBadgeKey === 'favorite'}
+                icon={<Ionicons name="heart" size={16} color={colors.danger} />}
+                label={favoriteStatusLabel}
+                labelColor={colors.danger}
+                onPress={() => toggleExpandedBadge('favorite')}
+                side="right"
+                testID="note-memory-favorite-badge"
+              />
+            ) : null}
+            {note.isLivePhoto ? (
+              <ExpandableStatusBadge
+                accessibilityHint={statusDisclosureHint}
+                accessibilityLabel={livePhotoStatusA11yLabel}
+                backgroundColor={colors.card}
+                expanded={expandedBadgeKey === 'live-photo'}
+                icon={<LivePhotoIcon size={16} color={colors.primary} />}
+                label={livePhotoPreviewHintLabel}
+                labelColor={colors.primary}
+                onPress={() => toggleExpandedBadge('live-photo')}
+                side="right"
+                testID="note-memory-live-badge"
+              />
             ) : null}
           </View>
         ) : null}
         {isSharedByMe ? (
-          <View
-            testID="note-memory-shared-badge"
-            pointerEvents="none"
-            style={[styles.badge, styles.leftBadge, { backgroundColor: colors.card }]}
-          >
-            <Ionicons name="people-outline" size={16} color={colors.secondaryText} />
+          <View style={styles.leftBadge}>
+            <ExpandableStatusBadge
+              accessibilityHint={statusDisclosureHint}
+              accessibilityLabel={sharedStatusA11yLabel}
+              backgroundColor={colors.card}
+              expanded={expandedBadgeKey === 'shared'}
+              icon={<Ionicons name="people-outline" size={16} color={colors.secondaryText} />}
+              label={sharedStatusLabel}
+              labelColor={colors.secondaryText}
+              onPress={() => toggleExpandedBadge('shared')}
+              side="left"
+              testID="note-memory-shared-badge"
+            />
           </View>
         ) : null}
       </View>
@@ -337,8 +514,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badge: {
-    width: 36,
     height: 36,
+    minWidth: 36,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
@@ -349,11 +526,18 @@ const styles = StyleSheet.create({
     elevation: 3,
     backgroundColor: '#fff',
   },
+  badgePressable: {
+    borderRadius: 18,
+  },
+  badgePressablePressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.96 }],
+  },
   badgeStack: {
     position: 'absolute',
     top: 18,
     right: 24,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 8,
   },
@@ -368,6 +552,43 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 56,
     paddingTop: 16,
+  },
+  expandableBadge: {
+    width: BADGE_COLLAPSED_SIZE,
+    minWidth: BADGE_COLLAPSED_SIZE,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  leftExpandableBadgeExpanded: {
+    justifyContent: 'flex-start',
+  },
+  rightExpandableBadgeExpanded: {
+    justifyContent: 'flex-end',
+  },
+  badgeGlyph: {
+    width: BADGE_GLYPH_BOX,
+    height: BADGE_GLYPH_BOX,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeLabelWrap: {
+    overflow: 'hidden',
+    flexShrink: 1,
+  },
+  badgeMeasure: {
+    position: 'absolute',
+    opacity: 0,
+    left: -9999,
+    top: -9999,
+  },
+  expandableBadgeText: {
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
   },
   sharedCardWrap: {
     alignSelf: 'center',

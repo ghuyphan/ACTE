@@ -221,6 +221,69 @@ describe('NoteMemoryCard', () => {
     expect(getByTestId('note-memory-live-badge')).toBeTruthy();
   });
 
+  it('expands only the tapped badge into a labeled chip', () => {
+    const note = {
+      id: 'note-legend-1',
+      type: 'photo',
+      content: '',
+      caption: null,
+      photoLocalUri: 'file:///photo.jpg',
+      photoSyncedLocalUri: null,
+      photoRemoteBase64: null,
+      isLivePhoto: true,
+      pairedVideoLocalUri: 'file:///photo.mov',
+      pairedVideoSyncedLocalUri: null,
+      pairedVideoRemotePath: null,
+      locationName: 'District 1',
+      promptId: null,
+      promptTextSnapshot: null,
+      promptAnswer: null,
+      moodEmoji: null,
+      noteColor: null,
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: true,
+      hasDoodle: false,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      createdAt: '2026-04-10T02:00:00.000Z',
+      updatedAt: null,
+    } as any;
+
+    const { getByTestId } = render(
+      <NoteMemoryCard
+        note={note}
+        colors={colors}
+        t={mockT}
+        isSharedByMe
+      />
+    );
+
+    expect(getByTestId('note-memory-live-badge').props.accessibilityState).toEqual({ expanded: false });
+    expect(getByTestId('note-memory-shared-badge').props.accessibilityState).toEqual({ expanded: false });
+    expect(getByTestId('note-memory-favorite-badge').props.accessibilityState).toEqual({ expanded: false });
+
+    fireEvent.press(getByTestId('note-memory-live-badge'));
+
+    expect(getByTestId('note-memory-live-badge').props.accessibilityState).toEqual({ expanded: true });
+    expect(getByTestId('note-memory-shared-badge').props.accessibilityState).toEqual({ expanded: false });
+    expect(getByTestId('note-memory-favorite-badge').props.accessibilityState).toEqual({ expanded: false });
+
+    fireEvent.press(getByTestId('note-memory-shared-badge'));
+
+    expect(getByTestId('note-memory-live-badge').props.accessibilityState).toEqual({ expanded: false });
+    expect(getByTestId('note-memory-shared-badge').props.accessibilityState).toEqual({ expanded: true });
+    expect(getByTestId('note-memory-favorite-badge').props.accessibilityState).toEqual({ expanded: false });
+
+    fireEvent.press(getByTestId('note-memory-shared-badge'));
+
+    expect(getByTestId('note-memory-live-badge').props.accessibilityState).toEqual({ expanded: false });
+    expect(getByTestId('note-memory-shared-badge').props.accessibilityState).toEqual({ expanded: false });
+    expect(getByTestId('note-memory-favorite-badge').props.accessibilityState).toEqual({ expanded: false });
+  });
+
   it('renders the text card branch and exposes the metadata press action', () => {
     const onPress = jest.fn();
     const note = {
