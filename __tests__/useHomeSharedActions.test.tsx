@@ -1,14 +1,21 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { Share } from 'react-native';
-import { useHomeSharedActions } from '../hooks/app/useHomeSharedActions';
+import { buildFriendInviteSharePayload, useHomeSharedActions } from '../hooks/app/useHomeSharedActions';
 
 const mockShowAppAlert = jest.fn();
+const mockBuildPublicSiteUrl = jest.fn();
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, fallback?: string, options?: Record<string, string>) =>
-      options?.url ? (fallback ?? key).replace('{{url}}', options.url) : (fallback ?? key),
+      (fallback ?? key)
+        .replace('{{url}}', options?.url ?? '')
+        .replace('{{code}}', options?.code ?? ''),
   }),
+}));
+
+jest.mock('../services/legalLinks', () => ({
+  buildPublicSiteUrl: (...args: unknown[]) => mockBuildPublicSiteUrl(...args),
 }));
 
 jest.mock('expo-haptics', () => ({
@@ -67,6 +74,13 @@ describe('useHomeSharedActions', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockShowAppAlert.mockReset();
+    mockBuildPublicSiteUrl.mockReset();
+    mockBuildPublicSiteUrl.mockImplementation((_pathname, queryParams) => {
+      const params = queryParams as Record<string, string | undefined> | undefined;
+      const inviteId = params?.inviteId ?? '';
+      const invite = params?.invite ?? '';
+      return `https://noto.app/friends/join/?inviteId=${inviteId}&invite=${invite}`;
+    });
     jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as never);
   });
 
@@ -93,6 +107,62 @@ describe('useHomeSharedActions', () => {
     expect(options.createFriendInvite).toHaveBeenCalledTimes(1);
     expect(options.dismissSharedManageSheet).not.toHaveBeenCalled();
     expect(Share.share).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds a public share link when the cached invite url is still a deep link', () => {
+    const payload = buildFriendInviteSharePayload(
+      {
+        id: 'invite-1',
+        inviterUid: 'user-1',
+        inviterDisplayNameSnapshot: 'User One',
+        inviterPhotoURLSnapshot: null,
+        token: '7f0afd3f-b084-4508-ba1d-6f2e6bcb8167',
+        createdAt: '2026-04-14T00:00:00.000Z',
+        revokedAt: null,
+        acceptedByUid: null,
+        acceptedAt: null,
+        expiresAt: null,
+        url: 'noto://friends/join?invite=7f0afd3f-b084-4508-ba1d-6f2e6bcb8167',
+      },
+      (key, fallback, options) =>
+        (fallback ?? key)
+          .replace('{{url}}', options?.url ?? '')
+          .replace('{{code}}', options?.code ?? '')
+    );
+
+    expect(payload).toEqual({
+      message:
+        'Join me on Noto.\nhttps://noto.app/friends/join/?inviteId=invite-1&invite=7f0afd3f-b084-4508-ba1d-6f2e6bcb8167',
+      url: 'https://noto.app/friends/join/?inviteId=invite-1&invite=7f0afd3f-b084-4508-ba1d-6f2e6bcb8167',
+    });
+  });
+
+  it('falls back to invite code when no public invite url is available', () => {
+    mockBuildPublicSiteUrl.mockReturnValueOnce('');
+
+    const payload = buildFriendInviteSharePayload(
+      {
+        id: 'invite-1',
+        inviterUid: 'user-1',
+        inviterDisplayNameSnapshot: 'User One',
+        inviterPhotoURLSnapshot: null,
+        token: '7f0afd3f-b084-4508-ba1d-6f2e6bcb8167',
+        createdAt: '2026-04-14T00:00:00.000Z',
+        revokedAt: null,
+        acceptedByUid: null,
+        acceptedAt: null,
+        expiresAt: null,
+        url: 'noto://friends/join?invite=7f0afd3f-b084-4508-ba1d-6f2e6bcb8167',
+      },
+      (key, fallback, options) =>
+        (fallback ?? key)
+          .replace('{{url}}', options?.url ?? '')
+          .replace('{{code}}', options?.code ?? '')
+    );
+
+    expect(payload).toEqual({
+      message: 'Join me on Noto.\nInvite code: 7f0afd3f-b084-4508-ba1d-6f2e6bcb8167',
+    });
   });
 
   it('ignores duplicate share taps while invite sharing is already in flight', async () => {
@@ -131,7 +201,7 @@ describe('useHomeSharedActions', () => {
 
     expect(Share.share).toHaveBeenCalledTimes(1);
     expect(Share.share).toHaveBeenCalledWith({
-      message: 'Join my Noto shared feed: https://noto.app/invite-1',
+      message: 'Join me on Noto.\nhttps://noto.app/invite-1',
       url: 'https://noto.app/invite-1',
     });
   });

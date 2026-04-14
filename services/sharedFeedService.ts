@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
 import { AppUser, getUserSocialName } from '../utils/appUser';
+import { buildPublicSiteUrl } from './legalLinks';
 import {
   getCurrentSupabaseSession,
   getSupabase,
@@ -491,13 +492,21 @@ async function getInviteTokenHash(token: string) {
   );
 }
 
-function buildInviteUrl(inviteId: string, token: string) {
-  return Linking.createURL('/friends/join', {
-    queryParams: {
-      inviteId,
-      invite: token,
-    },
-  });
+function buildInviteUrl(inviteId: string | null | undefined, token: string) {
+  const queryParams: Record<string, string> = {
+    invite: token,
+  };
+
+  if (typeof inviteId === 'string' && inviteId.trim()) {
+    queryParams.inviteId = inviteId.trim();
+  }
+
+  const publicInviteUrl = buildPublicSiteUrl('/friends/join/', queryParams);
+  if (publicInviteUrl) {
+    return publicInviteUrl;
+  }
+
+  return Linking.createURL('/friends/join', { queryParams });
 }
 
 function mapInvite(record: FriendInviteRow, token: string): FriendInvite {
@@ -550,27 +559,149 @@ function shouldIncludeSharedPostInFeed(post: SharedPost, viewerUid: string, frie
   return friendUids.has(post.authorUid) && post.audienceUserIds.includes(viewerUid);
 }
 
+function safelyDecodeInviteText(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function sanitizeInviteCandidate(value: string) {
+  let normalized = value.trim();
+
+  while (normalized && `"'([{<`.includes(normalized.charAt(0))) {
+    normalized = normalized.slice(1).trimStart();
+  }
+
+  while (normalized && `"'.,!?;:)]}>`.includes(normalized.charAt(normalized.length - 1))) {
+    normalized = normalized.slice(0, -1).trimEnd();
+  }
+
+  return normalized;
+}
+
+function readInviteQueryParams(candidate: string) {
+  const parsed = typeof Linking.parse === 'function'
+    ? Linking.parse(candidate)
+    : { queryParams: undefined };
+  const maybeInviteId =
+    typeof parsed.queryParams?.inviteId === 'string' ? parsed.queryParams.inviteId.trim() : '';
+  const maybeToken =
+    typeof parsed.queryParams?.invite === 'string' ? parsed.queryParams.invite.trim() : '';
+
+  if (maybeInviteId || maybeToken) {
+    return {
+      inviteId: maybeInviteId,
+      token: maybeToken,
+    };
+  }
+
+  const inviteIdMatch = candidate.match(/(?:^|[?&#])inviteId=([^&#\s]+)/i);
+  const tokenMatch = candidate.match(/(?:^|[?&#])invite=([^&#\s]+)/i);
+
+  return {
+    inviteId: inviteIdMatch ? safelyDecodeInviteText(inviteIdMatch[1] ?? '').trim() : '',
+    token: tokenMatch ? safelyDecodeInviteText(tokenMatch[1] ?? '').trim() : '',
+  };
+}
+
+function extractInviteCandidates(rawValue: string) {
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const rawVariants = [trimmed];
+  const decodedTrimmed = safelyDecodeInviteText(trimmed);
+
+  if (decodedTrimmed !== trimmed) {
+    rawVariants.push(decodedTrimmed);
+  }
+
+  const pushCandidate = (value: string) => {
+    const normalized = sanitizeInviteCandidate(value);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+
+    seen.add(normalized);
+    candidates.push(normalized);
+  };
+
+  for (const variant of rawVariants) {
+    pushCandidate(variant);
+
+    for (const match of variant.matchAll(/\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>"'`]+/gi)) {
+      pushCandidate(match[0] ?? '');
+    }
+
+    const queryMatch = variant.match(/(?:inviteId=[^&#\s]+(?:&invite=[^&#\s]+)?|invite=[^&#\s]+)/i);
+    if (queryMatch?.[0]) {
+      pushCandidate(queryMatch[0]);
+    }
+  }
+
+  return candidates;
+}
+
+function extractInviteTokenFromText(rawValue: string) {
+  const labeledTokenMatch = rawValue.match(
+    /(?:invite code|invite token|invite|ma moi|mã mời)\s*[:#-]?\s*([a-z0-9-]{6,})/i
+  );
+
+  if (labeledTokenMatch?.[1]) {
+    return labeledTokenMatch[1].trim();
+  }
+
+  const tokenMatch = rawValue.match(
+    /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i
+  );
+
+  return tokenMatch?.[0]?.trim() ?? '';
+}
+
 function parseInvitePayload(rawValue: string) {
   const trimmed = rawValue.trim();
   if (!trimmed) {
     return { inviteId: '', token: '' };
   }
 
-  const parsed = Linking.parse(trimmed);
-  const maybeInviteId = parsed.queryParams?.inviteId;
-  const maybeToken = parsed.queryParams?.invite;
+  for (const candidate of extractInviteCandidates(trimmed)) {
+    const payload = readInviteQueryParams(candidate);
+    if (payload.inviteId || payload.token) {
+      return payload;
+    }
+  }
 
-  if (typeof maybeInviteId === 'string' && maybeInviteId.trim()) {
+  const tokenFromText = extractInviteTokenFromText(trimmed);
+  if (tokenFromText) {
     return {
-      inviteId: maybeInviteId.trim(),
-      token: typeof maybeToken === 'string' ? maybeToken.trim() : '',
+      inviteId: '',
+      token: tokenFromText,
     };
   }
 
   return {
     inviteId: '',
-    token: trimmed,
+    token: /\s/.test(trimmed) ? '' : trimmed,
   };
+}
+
+export function normalizeFriendInviteInput(rawValue: string) {
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const { inviteId, token } = parseInvitePayload(trimmed);
+  if (token) {
+    return buildInviteUrl(inviteId || undefined, token);
+  }
+
+  return trimmed;
 }
 
 function getSharedPostChangeField(

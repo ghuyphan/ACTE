@@ -98,6 +98,30 @@ function assertProductionConfig() {
 
 assertProductionConfig();
 
+function resolvePublicSiteBaseUrl() {
+  const referenceUrl = [supportUrl, privacyPolicyUrl, accountDeletionUrl].find((value) => value?.trim());
+  if (!referenceUrl) {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(referenceUrl);
+    const normalizedPath = parsed.pathname.endsWith('/')
+      ? parsed.pathname
+      : parsed.pathname.replace(/[^/]*$/, '');
+
+    parsed.pathname = normalizedPath || '/';
+    parsed.search = '';
+    parsed.hash = '';
+
+    return parsed.toString();
+  } catch {
+    return '';
+  }
+}
+
+const publicSiteBaseUrl = resolvePublicSiteBaseUrl();
+
 const config = {
   name: 'Noto',
   slug: 'noto',
@@ -283,6 +307,11 @@ const config = {
       projectId: easProjectId,
     },
     enablePlaceReminders,
+    publicSiteBaseUrl,
+    supportUrl,
+    privacyPolicyUrl,
+    accountDeletionUrl,
+    supportEmail,
   },
 };
 

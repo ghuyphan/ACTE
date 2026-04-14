@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { showAppAlert } from '../utils/alert';
 import { useAuth } from './useAuth';
 import { useSharedFeedStore } from './useSharedFeed';
-import { getSharedFeedErrorMessage } from '../services/sharedFeedService';
+import { getSharedFeedErrorMessage, normalizeFriendInviteInput } from '../services/sharedFeedService';
 
 type UseFriendInviteJoinOptions = {
   inviteValue: string;
@@ -55,7 +55,7 @@ export function useFriendInviteJoin({
 
   const joinInvite = useCallback(
     async (value = inviteValue) => {
-      const normalizedValue = value.trim();
+      const normalizedValue = normalizeFriendInviteInput(value);
 
       if (!normalizedValue) {
         showAppAlert(

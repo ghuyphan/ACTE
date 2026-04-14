@@ -8,16 +8,8 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import Reanimated, {
-  Easing,
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
+import Reanimated from 'react-native-reanimated';
 import { Radii, Typography } from '../../../constants/theme';
-import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
 import type { StickerCutoutPreviewDraft } from '../../../hooks/ui/useStickerCreationFlow';
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
@@ -40,16 +32,6 @@ const STICKER_PREVIEW_OUTLINE_OFFSETS = [
   { x: 0.72, y: -0.72 },
   { x: -0.72, y: 0.72 },
   { x: 0.72, y: 0.72 },
-] as const;
-const STICKER_PREVIEW_GLOW_OFFSETS = [
-  { x: -0.5, y: 0 },
-  { x: 0.5, y: 0 },
-  { x: 0, y: -0.5 },
-  { x: 0, y: 0.5 },
-  { x: -0.36, y: -0.36 },
-  { x: 0.36, y: -0.36 },
-  { x: -0.36, y: 0.36 },
-  { x: 0.36, y: 0.36 },
 ] as const;
 
 type MeasurableView = View & {
@@ -124,12 +106,10 @@ function StickerCutoutPreviewEditor({
   onConfirm,
 }: StickerCutoutPreviewEditorProps) {
   const { colors, isDark } = useTheme();
-  const reduceMotionEnabled = useReducedMotion();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const previewRef = useRef<View | null>(null);
   const [previewWindowRect, setPreviewWindowRect] = useState<WindowRect | null>(null);
   const [outlineEnabled, setOutlineEnabled] = useState(true);
-  const highlightProgress = useSharedValue(0);
   const sourceUri = draft?.source.uri ?? null;
   const cutoutUri = draft?.cutoutSource.uri ?? null;
   const sourceSize = useMemo(
@@ -171,13 +151,10 @@ function StickerCutoutPreviewEditor({
     () => Math.max(4, Math.min(8, Math.min(previewSize.width, previewSize.height) * 0.025)),
     [previewSize.height, previewSize.width]
   );
-  const glowSize = useMemo(
-    () => Math.max(1.6, outlineSize * 0.52),
-    [outlineSize]
-  );
+  const backgroundPreviewEnabled = draft?.backgroundVisible ?? false;
   const stickerDisplaySize = useMemo(() => {
-    const maxWidth = previewSize.width * (draft?.backgroundVisible ? 0.7 : 0.76);
-    const maxHeight = previewSize.height * (draft?.backgroundVisible ? 0.62 : 0.72);
+    const maxWidth = previewSize.width * 0.82;
+    const maxHeight = previewSize.height * 0.76;
     const sourceAspect = sourceSize.width / sourceSize.height;
     let width = maxWidth;
     let height = width / sourceAspect;
@@ -191,7 +168,7 @@ function StickerCutoutPreviewEditor({
       width: Math.max(96, width),
       height: Math.max(96, height),
     };
-  }, [draft?.backgroundVisible, previewSize.height, previewSize.width, sourceSize.height, sourceSize.width]);
+  }, [previewSize.height, previewSize.width, sourceSize.height, sourceSize.width]);
 
   const resolvePreviewFallbackRect = useCallback(() => ({
     x: (windowWidth - previewSize.width) / 2,
@@ -263,78 +240,6 @@ function StickerCutoutPreviewEditor({
     schedulePreviewMeasurement();
   }, [draft?.cutoutSource.uri, schedulePreviewMeasurement, visible]);
 
-  useEffect(() => {
-    if (!visible || reduceMotionEnabled) {
-      cancelAnimation(highlightProgress);
-      highlightProgress.value = 0;
-      return;
-    }
-
-    highlightProgress.value = 0;
-    highlightProgress.value = withRepeat(
-      withTiming(1, {
-        duration: 1800,
-        easing: Easing.linear,
-      }),
-      -1,
-      false
-    );
-
-    return () => {
-      cancelAnimation(highlightProgress);
-    };
-  }, [highlightProgress, reduceMotionEnabled, visible]);
-
-  const stickerFloatAnimatedStyle = useAnimatedStyle(() => {
-    const angle = highlightProgress.value * Math.PI * 2;
-    return {
-      transform: [
-        { translateY: reduceMotionEnabled ? -8 : -12 + Math.sin(angle) * 3 },
-        { scale: reduceMotionEnabled ? 1 : 1.01 + Math.sin(angle) * 0.01 },
-      ],
-    };
-  });
-
-  const stickerShadowAnimatedStyle = useAnimatedStyle(() => {
-    const angle = highlightProgress.value * Math.PI * 2;
-    return {
-      opacity: reduceMotionEnabled ? 0.22 : 0.18 + (1 - Math.sin(angle) * 0.5) * 0.14,
-      transform: [
-        { scaleX: reduceMotionEnabled ? 1 : 0.96 + Math.sin(angle) * 0.03 },
-        { scaleY: reduceMotionEnabled ? 1 : 0.88 - Math.sin(angle) * 0.04 },
-      ],
-    };
-  });
-
-  const stickerHaloAnimatedStyle = useAnimatedStyle(() => {
-    const angle = highlightProgress.value * Math.PI * 2 + Math.PI * 0.45;
-    return {
-      opacity: reduceMotionEnabled ? 0.24 : 0.22 + Math.cos(angle) * 0.06,
-      transform: [
-        { scale: reduceMotionEnabled ? 1 : 0.98 + Math.cos(angle) * 0.04 },
-      ],
-    };
-  });
-
-  const stickerGlowAnimatedStyle = useAnimatedStyle(() => {
-    const angle = highlightProgress.value * Math.PI * 2 + Math.PI * 0.18;
-    return {
-      opacity: reduceMotionEnabled ? 0.16 : 0.12 + (Math.cos(angle) + 1) * 0.06,
-      transform: [
-        { scale: reduceMotionEnabled ? 1 : 0.996 + Math.cos(angle) * 0.01 },
-      ],
-    };
-  });
-
-  const sourcePhotoAnimatedStyle = useAnimatedStyle(() => {
-    const angle = highlightProgress.value * Math.PI * 2;
-    return {
-      transform: [
-        { scale: reduceMotionEnabled ? 1 : 1.01 + Math.cos(angle) * 0.006 },
-      ],
-    };
-  });
-
   if (!draft || !sourceUri || !cutoutUri) {
     return null;
   }
@@ -342,11 +247,9 @@ function StickerCutoutPreviewEditor({
   const renderStage = ({
     busy,
     contentAnimatedStyle,
-    focusAnimatedStyle,
   }: {
     busy: boolean;
     contentAnimatedStyle: StickerCreationAnimatedStyle;
-    focusAnimatedStyle: StickerCreationAnimatedStyle;
   }) => (
     <View style={styles.stageArea}>
       <Reanimated.View style={[styles.stageStack, contentAnimatedStyle]}>
@@ -384,16 +287,16 @@ function StickerCutoutPreviewEditor({
             ))}
           </View>
 
-          {draft.backgroundVisible ? (
+          {backgroundPreviewEnabled ? (
             <>
-              <Reanimated.View style={[styles.photoLayer, sourcePhotoAnimatedStyle]}>
+              <View style={styles.photoLayer}>
                 <ExpoImage
                   source={{ uri: sourceUri }}
                   style={styles.previewImage}
                   contentFit="contain"
                   transition={0}
                 />
-              </Reanimated.View>
+              </View>
               <View
                 pointerEvents="none"
                 style={[
@@ -410,132 +313,52 @@ function StickerCutoutPreviewEditor({
             <View
               pointerEvents="none"
               style={[
-                styles.stageFloatField,
+                styles.stickerPreviewLayer,
                 {
                   width: stickerDisplaySize.width,
                   height: stickerDisplaySize.height,
                 },
               ]}
             >
-              <View pointerEvents="none" style={styles.stageCenteredContent}>
-                <Reanimated.View
+              {outlineEnabled ? (
+                <View
                   pointerEvents="none"
-                  style={[
-                    styles.stickerHalo,
-                    focusAnimatedStyle,
-                    stickerHaloAnimatedStyle,
-                    {
-                      left: -19,
-                      top: -19,
-                      width: stickerDisplaySize.width + 38,
-                      height: stickerDisplaySize.height + 38,
-                    },
-                  ]}
+                  style={styles.outlinePreviewTestHook}
+                  testID="sticker-cutout-preview-outline"
                 />
-                <Reanimated.View
+              ) : null}
+              {outlineEnabled ? (
+                <View
                   pointerEvents="none"
-                  style={[styles.stickerLiftStage, stickerFloatAnimatedStyle]}
+                  style={styles.outlinePreviewLayer}
                 >
-                  <View
-                    style={[
-                      styles.stickerLiftWrap,
-                      {
-                        width: stickerDisplaySize.width,
-                        height: stickerDisplaySize.height,
-                      },
-                    ]}
-                  >
-                    <View
-                      pointerEvents="none"
+                  {STICKER_PREVIEW_OUTLINE_OFFSETS.map((offset, index) => (
+                    <ExpoImage
+                      key={`outline-${index}`}
+                      source={{ uri: cutoutUri }}
                       style={[
-                        styles.stickerLiftBackdrop,
+                        styles.previewImage,
                         {
-                          backgroundColor: draft.backgroundVisible
-                            ? (isDark ? 'rgba(20,22,24,0.34)' : 'rgba(255,255,255,0.26)')
-                            : 'transparent',
+                          tintColor: '#FFFFFF',
+                          opacity: 0.98,
+                          transform: [
+                            { translateX: offset.x * outlineSize },
+                            { translateY: offset.y * outlineSize },
+                          ],
                         },
                       ]}
-                    />
-                    {outlineEnabled ? (
-                      <View
-                        pointerEvents="none"
-                        style={styles.outlinePreviewLayer}
-                        testID="sticker-cutout-preview-outline"
-                      >
-                        {STICKER_PREVIEW_OUTLINE_OFFSETS.map((offset, index) => (
-                          <ExpoImage
-                            key={`outline-${index}`}
-                            source={{ uri: cutoutUri }}
-                            style={[
-                              styles.previewImage,
-                              {
-                                tintColor: '#FFFFFF',
-                                opacity: 0.98,
-                                transform: [
-                                  { translateX: offset.x * outlineSize },
-                                  { translateY: offset.y * outlineSize },
-                                ],
-                              },
-                            ]}
-                            contentFit="contain"
-                            transition={0}
-                          />
-                        ))}
-                      </View>
-                    ) : null}
-                    <Reanimated.View
-                      pointerEvents="none"
-                      style={[styles.glowPreviewLayer, stickerGlowAnimatedStyle]}
-                    >
-                      {STICKER_PREVIEW_GLOW_OFFSETS.map((offset, index) => (
-                        <ExpoImage
-                          key={`glow-${index}`}
-                          source={{ uri: cutoutUri }}
-                          style={[
-                            styles.previewImage,
-                            {
-                              tintColor: '#7EDCFF',
-                              opacity: 0.92,
-                              transform: [
-                                { translateX: offset.x * glowSize },
-                                { translateY: offset.y * glowSize },
-                              ],
-                            },
-                          ]}
-                          contentFit="contain"
-                          transition={0}
-                        />
-                      ))}
-                    </Reanimated.View>
-                    <ExpoImage
-                      source={{ uri: cutoutUri }}
-                      style={styles.previewImage}
                       contentFit="contain"
                       transition={0}
                     />
-                  </View>
-                </Reanimated.View>
-              </View>
-              <View
-                pointerEvents="none"
-                style={[
-                  styles.shadowRow,
-                  {
-                    top: stickerDisplaySize.height + 18,
-                  },
-                ]}
-              >
-                <Reanimated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.stickerShadow,
-                    stickerShadowAnimatedStyle,
-                    {
-                      width: stickerDisplaySize.width * 0.76,
-                    },
-                  ]}
-                />
-              </View>
+                  ))}
+                </View>
+              ) : null}
+              <ExpoImage
+                source={{ uri: cutoutUri }}
+                style={styles.previewImage}
+                contentFit="contain"
+                transition={0}
+              />
             </View>
           </View>
         </View>
@@ -646,50 +469,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stageFloatField: {
+  stickerPreviewLayer: {
     position: 'relative',
-    overflow: 'visible',
-  },
-  stageCenteredContent: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stickerLiftStage: {
-    ...StyleSheet.absoluteFillObject,
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stickerLiftWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   outlinePreviewLayer: {
     ...StyleSheet.absoluteFillObject,
   },
-  glowPreviewLayer: {
+  outlinePreviewTestHook: {
     ...StyleSheet.absoluteFillObject,
-  },
-  stickerLiftBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: Radii.md,
-  },
-  stickerShadow: {
-    height: 26,
-    backgroundColor: 'rgba(0,0,0,0.46)',
-    borderRadius: 999,
-  },
-  shadowRow: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  stickerHalo: {
-    position: 'absolute',
-    borderRadius: 999,
-    backgroundColor: 'rgba(121,224,255,0.18)',
+    opacity: 0,
   },
   outlineToggle: {
     minHeight: 42,

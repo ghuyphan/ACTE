@@ -28,8 +28,9 @@ type ProviderComponent = ComponentType<AppProvidersProps>;
 
 const providerChain: ProviderComponent[] = [
   ({ children }) => <I18nextProvider i18n={i18n}>{children}</I18nextProvider>,
-  AppAlertProvider,
   ThemeProvider,
+  BottomSheetModalProvider,
+  AppAlertProvider,
   HapticsProvider,
   ConnectivityProvider,
   AuthProvider,
@@ -42,7 +43,6 @@ const providerChain: ProviderComponent[] = [
   SyncStatusProvider,
   SharedFeedProvider,
   NoteDetailSheetProvider,
-  BottomSheetModalProvider,
   SavedNoteRevealUiProvider,
 ];
 

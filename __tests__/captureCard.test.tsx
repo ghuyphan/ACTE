@@ -151,6 +151,40 @@ jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
 }));
 
+jest.mock('@shopify/react-native-skia', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  return {
+    BlendColor: ({ children }: any) => <>{children}</>,
+    Canvas: ({ children, ...props }: any) => <View {...props}>{children}</View>,
+    Circle: (props: any) => <View {...props} />,
+    Group: ({ children }: any) => <>{children}</>,
+    Image: (props: any) => <View {...props} />,
+    Path: (props: any) => <View {...props} />,
+    PathOp: {
+      Difference: 'difference',
+    },
+    Paint: ({ children }: any) => <>{children}</>,
+    Skia: {
+      Path: {
+        Make: () => ({
+          addRRect: jest.fn(),
+          addRect: jest.fn(),
+          addCircle: jest.fn(),
+          moveTo: jest.fn(),
+          lineTo: jest.fn(),
+          quadTo: jest.fn(),
+          cubicTo: jest.fn(),
+          close: jest.fn(),
+          op: jest.fn(),
+        }),
+      },
+    },
+    useImage: jest.fn(() => ({ mock: 'image' })),
+  };
+});
+
 jest.mock('expo-linear-gradient', () => {
   const React = require('react');
   const { View } = require('react-native');

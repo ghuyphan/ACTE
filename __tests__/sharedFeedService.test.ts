@@ -933,6 +933,41 @@ describe('sharedFeedService', () => {
     });
   });
 
+  it('accepts an invite pasted from share text instead of only a raw deeplink', async () => {
+    const invite = await createFriendInvite(ownerUser);
+    const connection = await acceptFriendInvite(
+      friendUser,
+      `Join me on Noto.\n${invite.url}`
+    );
+
+    expect(connection.userId).toBe(ownerUser.id);
+    expect(mockEnsureFriendMap(friendUser.id).get(ownerUser.id)).toEqual(
+      expect.objectContaining({
+        created_by_invite_id: invite.id,
+      })
+    );
+  });
+
+  it('accepts an invite when pasted text includes trailing punctuation', async () => {
+    const invite = await createFriendInvite(ownerUser);
+    const connection = await acceptFriendInvite(
+      friendUser,
+      `"${invite.url}!"`
+    );
+
+    expect(connection.userId).toBe(ownerUser.id);
+  });
+
+  it('accepts an invite code pasted from chat copy', async () => {
+    const invite = await createFriendInvite(ownerUser);
+    const connection = await acceptFriendInvite(
+      friendUser,
+      `Join me on Noto.\nInvite code: ${invite.token}`
+    );
+
+    expect(connection.userId).toBe(ownerUser.id);
+  });
+
   it('finds and adds a friend by exact username', async () => {
     const result = await findFriendByUsername(ownerUser, '@friend');
     expect(result).toEqual(

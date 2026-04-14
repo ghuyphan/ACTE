@@ -323,7 +323,7 @@ describe('HomeScreen share invite handoff', () => {
 
     await waitFor(() => {
       expect(Share.share).toHaveBeenCalledWith({
-        message: 'Join my Noto shared feed: https://noto.app/invite-1',
+        message: 'Join me on Noto.\nhttps://noto.app/invite-1',
         url: 'https://noto.app/invite-1',
       });
     });

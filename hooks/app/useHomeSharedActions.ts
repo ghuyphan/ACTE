@@ -2,6 +2,7 @@ import * as Haptics from '../useHaptics';
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform, Share } from 'react-native';
+import { buildPublicSiteUrl } from '../../services/legalLinks';
 import { getSharedFeedErrorMessage, type FriendInvite } from '../../services/sharedFeedService';
 import { showAppAlert } from '../../utils/alert';
 import type { AppUser } from '../../utils/appUser';
@@ -10,6 +11,50 @@ const SHARED_MANAGE_SHEET_SHARE_DELAY_MS = Platform.OS === 'ios' ? 220 : 0;
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isPublicInviteUrl(url: string) {
+  return /^https?:\/\//i.test(url.trim());
+}
+
+function getFriendInviteShareUrl(invite: FriendInvite) {
+  const normalizedUrl = invite.url.trim();
+  if (isPublicInviteUrl(normalizedUrl)) {
+    return normalizedUrl;
+  }
+
+  const rebuiltUrl = buildPublicSiteUrl('/friends/join/', {
+    inviteId: invite.id,
+    invite: invite.token,
+  }).trim();
+
+  return rebuiltUrl;
+}
+
+export function buildFriendInviteSharePayload(
+  invite: FriendInvite,
+  t: (...args: any[]) => unknown,
+) {
+  const shareUrl = getFriendInviteShareUrl(invite);
+
+  if (!isPublicInviteUrl(shareUrl)) {
+    return {
+      message: String(
+        t('shared.inviteShareCodeMessage', 'Join me on Noto.\nInvite code: {{code}}', {
+          code: invite.token,
+        })
+      ),
+    };
+  }
+
+  return {
+    message: String(
+      t('shared.inviteShareMessage', 'Join me on Noto.\n{{url}}', {
+        url: shareUrl,
+      })
+    ),
+    url: shareUrl,
+  };
 }
 
 type InviteAction = 'create' | 'share' | 'revoke';
@@ -180,12 +225,7 @@ export function useHomeSharedActions({
       const invite = await resolveInvite();
       dismissSharedManageSheet();
       await wait(SHARED_MANAGE_SHEET_SHARE_DELAY_MS);
-      await Share.share({
-        message: t('shared.inviteShareMessage', 'Join my Noto shared feed: {{url}}', {
-          url: invite.url,
-        }),
-        url: invite.url,
-      });
+      await Share.share(buildFriendInviteSharePayload(invite, t));
     } catch (error) {
       handleInviteActionError(error);
     } finally {

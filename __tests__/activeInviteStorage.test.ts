@@ -39,7 +39,7 @@ function createInvite(overrides: Partial<FriendInvite> = {}): FriendInvite {
     acceptedByUid: null,
     acceptedAt: null,
     expiresAt: '2026-04-20T10:00:00.000Z',
-    url: 'noto://friends/join?inviteId=invite-1&invite=token-1',
+    url: 'https://example.com/friends/join/?inviteId=invite-1&invite=token-1',
     ...overrides,
   };
 }
@@ -57,7 +57,7 @@ describe('activeInviteStorage', () => {
       expect.objectContaining({
         id: 'invite-1',
         token: 'token-1',
-        url: 'noto://friends/join?inviteId=invite-1&invite=token-1',
+        url: 'https://example.com/friends/join/?inviteId=invite-1&invite=token-1',
       })
     );
   });
@@ -82,7 +82,7 @@ describe('activeInviteStorage', () => {
         id: 'invite-2',
         inviterUid: 'user-2',
         token: 'token-2',
-        url: 'noto://friends/join?inviteId=invite-2&invite=token-2',
+        url: 'https://example.com/friends/join/?inviteId=invite-2&invite=token-2',
       })
     );
 

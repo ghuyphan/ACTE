@@ -5,7 +5,7 @@ import {
   type ReactNode,
   useCallback,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useState,
 } from 'react';
 import {
@@ -18,6 +18,8 @@ import {
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Reanimated, {
   Easing,
+  Extrapolation,
+  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -33,10 +35,12 @@ import type {
 } from './stickerCreationTypes';
 
 const SCREEN_HORIZONTAL_PADDING = 18;
-const ENTER_DURATION_MS = 240;
-const ENTER_DURATION_REDUCED_MS = 140;
-const EXIT_DURATION_MS = 140;
-const EXIT_DURATION_REDUCED_MS = 80;
+const ENTER_DURATION_MS = 320;
+const ENTER_DURATION_REDUCED_MS = 180;
+const EXIT_DURATION_MS = 180;
+const EXIT_DURATION_REDUCED_MS = 110;
+const ENTER_EASING = Easing.bezier(0.22, 1, 0.36, 1);
+const EXIT_EASING = Easing.bezier(0.4, 0, 0.2, 1);
 
 export type StickerCreationAnimatedStyle = ComponentProps<typeof Reanimated.View>['style'];
 
@@ -97,15 +101,7 @@ function StickerCreationOverlay({
   const safeAreaInsets = useContext(SafeAreaInsetsContext);
   const insets = safeAreaInsets ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const [animating, setAnimating] = useState(false);
-  const backdropOpacity = useSharedValue(1);
-  const contentOpacity = useSharedValue(1);
-  const contentScale = useSharedValue(1);
-  const contentTranslateY = useSharedValue(0);
-  const focusOpacity = useSharedValue(1);
-  const headerOpacity = useSharedValue(1);
-  const headerTranslateY = useSharedValue(0);
-  const controlsOpacity = useSharedValue(1);
-  const controlsTranslateY = useSharedValue(0);
+  const overlayProgress = useSharedValue(1);
   const busy = loading || animating;
   const exitDuration = reduceMotionEnabled
     ? EXIT_DURATION_REDUCED_MS
@@ -114,52 +110,25 @@ function StickerCreationOverlay({
     ? ENTER_DURATION_REDUCED_MS
     : ENTER_DURATION_MS;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!visible) {
+      overlayProgress.value = 0;
       setAnimating(false);
       return;
     }
 
-    backdropOpacity.value = 0;
-    contentOpacity.value = 0;
-    contentScale.value = reduceMotionEnabled ? 0.994 : 0.96;
-    contentTranslateY.value = reduceMotionEnabled ? 4 : 18;
-    focusOpacity.value = 0;
-    headerOpacity.value = 0;
-    headerTranslateY.value = reduceMotionEnabled ? -4 : -12;
-    controlsOpacity.value = 0;
-    controlsTranslateY.value = reduceMotionEnabled ? 6 : 18;
+    overlayProgress.value = 0;
     setAnimating(false);
 
-    const primaryAnimationConfig = {
+    const animationConfig = {
       duration: enterDuration,
-      easing: Easing.out(Easing.cubic),
-    };
-    const secondaryAnimationConfig = {
-      duration: reduceMotionEnabled ? enterDuration : enterDuration + 40,
-      easing: Easing.out(Easing.cubic),
+      easing: ENTER_EASING,
     };
 
-    backdropOpacity.value = withTiming(1, primaryAnimationConfig);
-    contentOpacity.value = withTiming(1, secondaryAnimationConfig);
-    contentScale.value = withTiming(1, secondaryAnimationConfig);
-    contentTranslateY.value = withTiming(0, secondaryAnimationConfig);
-    focusOpacity.value = withTiming(1, secondaryAnimationConfig);
-    headerOpacity.value = withTiming(1, primaryAnimationConfig);
-    headerTranslateY.value = withTiming(0, primaryAnimationConfig);
-    controlsOpacity.value = withTiming(1, secondaryAnimationConfig);
-    controlsTranslateY.value = withTiming(0, secondaryAnimationConfig);
+    overlayProgress.value = withTiming(1, animationConfig);
   }, [
-    backdropOpacity,
-    contentOpacity,
-    contentScale,
-    contentTranslateY,
-    controlsOpacity,
-    controlsTranslateY,
     enterDuration,
-    focusOpacity,
-    headerOpacity,
-    headerTranslateY,
+    overlayProgress,
     reduceMotionEnabled,
     resetKey,
     visible,
@@ -168,64 +137,25 @@ function StickerCreationOverlay({
   const playExitAnimation = useCallback(async () => {
     const animationConfig = {
       duration: exitDuration,
-      easing: Easing.out(Easing.cubic),
+      easing: EXIT_EASING,
     };
 
-    backdropOpacity.value = withTiming(0, animationConfig);
-    contentOpacity.value = withTiming(0, animationConfig);
-    contentScale.value = withTiming(reduceMotionEnabled ? 0.995 : 0.985, animationConfig);
-    contentTranslateY.value = withTiming(reduceMotionEnabled ? 4 : 14, animationConfig);
-    focusOpacity.value = withTiming(0, animationConfig);
-    headerOpacity.value = withTiming(0, animationConfig);
-    headerTranslateY.value = withTiming(reduceMotionEnabled ? 4 : 10, animationConfig);
-    controlsOpacity.value = withTiming(0, animationConfig);
-    controlsTranslateY.value = withTiming(reduceMotionEnabled ? 4 : 10, animationConfig);
+    overlayProgress.value = withTiming(0, animationConfig);
 
     await delay(exitDuration);
-  }, [
-    backdropOpacity,
-    contentOpacity,
-    contentScale,
-    contentTranslateY,
-    controlsOpacity,
-    controlsTranslateY,
-    exitDuration,
-    focusOpacity,
-    headerOpacity,
-    headerTranslateY,
-    reduceMotionEnabled,
-  ]);
+  }, [exitDuration, overlayProgress]);
 
   const playRestoreAnimation = useCallback(async () => {
     const restoreDuration = reduceMotionEnabled ? 120 : 220;
     const animationConfig = {
       duration: restoreDuration,
-      easing: Easing.out(Easing.cubic),
+      easing: ENTER_EASING,
     };
 
-    backdropOpacity.value = withTiming(1, animationConfig);
-    contentOpacity.value = withTiming(1, animationConfig);
-    contentScale.value = withTiming(1, animationConfig);
-    contentTranslateY.value = withTiming(0, animationConfig);
-    focusOpacity.value = withTiming(1, animationConfig);
-    headerOpacity.value = withTiming(1, animationConfig);
-    headerTranslateY.value = withTiming(0, animationConfig);
-    controlsOpacity.value = withTiming(1, animationConfig);
-    controlsTranslateY.value = withTiming(0, animationConfig);
+    overlayProgress.value = withTiming(1, animationConfig);
 
     await delay(restoreDuration);
-  }, [
-    backdropOpacity,
-    contentOpacity,
-    contentScale,
-    contentTranslateY,
-    controlsOpacity,
-    controlsTranslateY,
-    focusOpacity,
-    headerOpacity,
-    headerTranslateY,
-    reduceMotionEnabled,
-  ]);
+  }, [overlayProgress, reduceMotionEnabled]);
 
   const runConfirm = useCallback(async () => {
     if (busy) {
@@ -270,29 +200,82 @@ function StickerCreationOverlay({
   ]);
 
   const backdropAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: backdropOpacity.value,
+    opacity: interpolate(
+      overlayProgress.value,
+      [0, 1],
+      [0, 1],
+      Extrapolation.CLAMP
+    ),
   }));
 
   const contentAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: contentOpacity.value,
+    opacity: interpolate(
+      overlayProgress.value,
+      [0, 0.18, 1],
+      [0, 0.28, 1],
+      Extrapolation.CLAMP
+    ),
     transform: [
-      { translateY: contentTranslateY.value },
-      { scale: contentScale.value },
+      {
+        translateY: interpolate(
+          overlayProgress.value,
+          [0, 1],
+          [reduceMotionEnabled ? 6 : 20, 0],
+          Extrapolation.CLAMP
+        ),
+      },
+      {
+        scale: interpolate(
+          overlayProgress.value,
+          [0, 1],
+          [reduceMotionEnabled ? 0.992 : 0.965, 1],
+          Extrapolation.CLAMP
+        ),
+      },
     ],
   }));
 
   const focusAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: focusOpacity.value,
+    opacity: interpolate(
+      overlayProgress.value,
+      [0, 0.22, 1],
+      [0, 0.18, 1],
+      Extrapolation.CLAMP
+    ),
   }));
 
   const headerAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: headerOpacity.value,
-    transform: [{ translateY: headerTranslateY.value }],
+    opacity: interpolate(
+      overlayProgress.value,
+      [0, 0.45, 1],
+      [0, 0.75, 1],
+      Extrapolation.CLAMP
+    ),
+    transform: [{
+      translateY: interpolate(
+        overlayProgress.value,
+        [0, 1],
+        [reduceMotionEnabled ? -4 : -10, 0],
+        Extrapolation.CLAMP
+      ),
+    }],
   }));
 
   const controlsAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: controlsOpacity.value,
-    transform: [{ translateY: controlsTranslateY.value }],
+    opacity: interpolate(
+      overlayProgress.value,
+      [0, 0.28, 1],
+      [0, 0.2, 1],
+      Extrapolation.CLAMP
+    ),
+    transform: [{
+      translateY: interpolate(
+        overlayProgress.value,
+        [0, 1],
+        [reduceMotionEnabled ? 6 : 16, 0],
+        Extrapolation.CLAMP
+      ),
+    }],
   }));
 
   const textColor = colors.text ?? '#1C1C1E';
@@ -522,5 +505,8 @@ const styles = StyleSheet.create({
   confirmButton: {
     flex: 1,
     minHeight: 48,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
 });

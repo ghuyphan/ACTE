@@ -18,7 +18,10 @@ import { useFriendInviteJoin } from '../../../hooks/useFriendInviteJoin';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useTheme } from '../../../hooks/useTheme';
 import { normalizeUsernameInput } from '../../../services/publicProfileService';
-import { getSharedFeedErrorMessage } from '../../../services/sharedFeedService';
+import {
+  getSharedFeedErrorMessage,
+  normalizeFriendInviteInput,
+} from '../../../services/sharedFeedService';
 import { showAppAlert } from '../../../utils/alert';
 
 function buildReturnToJoinHref(
@@ -30,7 +33,7 @@ function buildReturnToJoinHref(
 ) {
   const queryParams: string[] = [];
   const normalizedInviteId = inviteId?.trim();
-  const normalizedInvite = invite?.trim() || fallbackInviteValue.trim();
+  const normalizedInvite = invite?.trim() || normalizeFriendInviteInput(fallbackInviteValue);
   const normalizedUsername = normalizeUsernameInput(usernameValue);
 
   if (mode === 'invite') {
@@ -84,20 +87,20 @@ export default function FriendJoinScreen() {
     const hasUsername = typeof username === 'string' && normalizeUsernameInput(username).length > 0;
 
     if (hasInviteId && hasInvite) {
-      setInviteValue(
+      setInviteValue(normalizeFriendInviteInput(
         Linking.createURL('/friends/join', {
           queryParams: {
             inviteId: inviteId!.trim(),
             invite: invite!.trim(),
           },
         })
-      );
+      ));
       setJoinMode('invite');
       return;
     }
 
     if (hasInvite) {
-      setInviteValue(invite!.trim());
+      setInviteValue(normalizeFriendInviteInput(invite!.trim()));
       setJoinMode('invite');
       return;
     }
@@ -349,7 +352,9 @@ export default function FriendJoinScreen() {
             onChangeMode={(nextMode) => {
               setJoinMode(nextMode);
             }}
-            onChangeInvite={setInviteValue}
+            onChangeInvite={(nextValue) => {
+              setInviteValue(normalizeFriendInviteInput(nextValue));
+            }}
             onChangeUsername={handleUsernameChange}
             onSubmitInvite={() => {
               void joinInvite();

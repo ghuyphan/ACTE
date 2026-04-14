@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import type { FriendInvite } from './sharedFeedService';
+import { buildPublicSiteUrl } from './legalLinks';
 import { normalizeOptionalString } from './stringNormalization';
 import { getSecureItem, removeSecureItem, setSecureItem } from '../utils/secureStorage';
 
@@ -14,6 +15,15 @@ function getActiveInviteStorageKey(userUid: string) {
 }
 
 function buildInviteUrl(invite: StoredActiveInvite) {
+  const publicInviteUrl = buildPublicSiteUrl('/friends/join/', {
+    inviteId: invite.id,
+    invite: invite.token,
+  });
+
+  if (publicInviteUrl) {
+    return publicInviteUrl;
+  }
+
   return `noto://friends/join?inviteId=${encodeURIComponent(invite.id)}&invite=${encodeURIComponent(invite.token)}`;
 }
 

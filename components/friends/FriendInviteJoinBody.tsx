@@ -5,6 +5,7 @@ import * as Haptics from '../../hooks/useHaptics';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Keyboard,
   Platform,
   Pressable,
   StyleProp,
@@ -147,6 +148,12 @@ export default function FriendInviteJoinBody({
       : !inviteValue.trim()
     : !isAuthAvailable;
 
+  const dismissKeyboard = () => {
+    usernameInputRef.current?.blur();
+    inviteInputRef.current?.blur();
+    Keyboard.dismiss();
+  };
+
   useAndroidKeyboardBlurOnHide({
     refs: [usernameInputRef, inviteInputRef],
   });
@@ -159,7 +166,10 @@ export default function FriendInviteJoinBody({
           return (
             <Pressable
               key={option}
-              onPress={() => onChangeMode(option)}
+              onPress={() => {
+                dismissKeyboard();
+                onChangeMode(option);
+              }}
               style={({ pressed }) => [
                 styles.segmentedButton,
                 {
@@ -219,7 +229,10 @@ export default function FriendInviteJoinBody({
               <SearchResultCard
                 result={searchResult}
                 addingFriend={addingFriend}
-                onAddFriend={onAddFriend}
+                onAddFriend={() => {
+                  dismissKeyboard();
+                  onAddFriend();
+                }}
               />
             ) : null}
           </>
@@ -258,6 +271,8 @@ export default function FriendInviteJoinBody({
       <PrimaryButton
         label={primaryLabel}
         onPress={() => {
+          dismissKeyboard();
+
           if (user) {
             if (isUsernameMode) {
               onSearchByUsername();

@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import { Linking } from 'react-native';
 
@@ -20,16 +21,91 @@ function resolveLegalValue(value: string | undefined, fallback: string) {
   return __DEV__ ? fallback : '';
 }
 
+function getExpoExtra() {
+  return (Constants.expoConfig?.extra as
+    | {
+        publicSiteBaseUrl?: string;
+        supportUrl?: string;
+        privacyPolicyUrl?: string;
+        accountDeletionUrl?: string;
+        supportEmail?: string;
+      }
+    | undefined) ?? undefined;
+}
+
 export const PRIVACY_POLICY_URL = resolveLegalValue(
-  process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL,
+  getExpoExtra()?.privacyPolicyUrl ?? process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL,
   DEV_PRIVACY_POLICY_URL
 );
-export const SUPPORT_URL = resolveLegalValue(process.env.EXPO_PUBLIC_SUPPORT_URL, DEV_SUPPORT_URL);
+export const SUPPORT_URL = resolveLegalValue(
+  getExpoExtra()?.supportUrl ?? process.env.EXPO_PUBLIC_SUPPORT_URL,
+  DEV_SUPPORT_URL
+);
 export const ACCOUNT_DELETION_URL = resolveLegalValue(
-  process.env.EXPO_PUBLIC_ACCOUNT_DELETION_URL,
+  getExpoExtra()?.accountDeletionUrl ?? process.env.EXPO_PUBLIC_ACCOUNT_DELETION_URL,
   DEV_ACCOUNT_DELETION_URL
 );
-export const SUPPORT_EMAIL = resolveLegalValue(process.env.EXPO_PUBLIC_SUPPORT_EMAIL, DEV_SUPPORT_EMAIL);
+export const SUPPORT_EMAIL = resolveLegalValue(
+  getExpoExtra()?.supportEmail ?? process.env.EXPO_PUBLIC_SUPPORT_EMAIL,
+  DEV_SUPPORT_EMAIL
+);
+
+function getPublicSiteReferenceUrl() {
+  return [SUPPORT_URL, PRIVACY_POLICY_URL, ACCOUNT_DELETION_URL].find(Boolean) ?? '';
+}
+
+function getPublicSiteBaseUrl() {
+  const extraBaseUrl = normalizeUrl(getExpoExtra()?.publicSiteBaseUrl);
+  if (extraBaseUrl) {
+    return extraBaseUrl;
+  }
+
+  const referenceUrl = getPublicSiteReferenceUrl();
+  if (!referenceUrl) {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(referenceUrl);
+    const normalizedPath = parsed.pathname.endsWith('/')
+      ? parsed.pathname
+      : parsed.pathname.replace(/[^/]*$/, '');
+
+    parsed.pathname = normalizedPath || '/';
+    parsed.search = '';
+    parsed.hash = '';
+
+    return parsed.toString();
+  } catch {
+    return '';
+  }
+}
+
+export function buildPublicSiteUrl(
+  pathname: string,
+  queryParams?: Record<string, string | null | undefined>
+) {
+  const baseUrl = getPublicSiteBaseUrl();
+  if (!baseUrl) {
+    return '';
+  }
+
+  try {
+    const nextUrl = new URL(pathname.replace(/^\//, ''), baseUrl);
+
+    Object.entries(queryParams ?? {}).forEach(([key, value]) => {
+      const normalizedValue = value?.trim();
+      if (!normalizedValue) {
+        return;
+      }
+      nextUrl.searchParams.set(key, normalizedValue);
+    });
+
+    return nextUrl.toString();
+  } catch {
+    return '';
+  }
+}
 
 function buildMailtoUrl(address: string, subject: string) {
   return `mailto:${address}?subject=${encodeURIComponent(subject)}`;
